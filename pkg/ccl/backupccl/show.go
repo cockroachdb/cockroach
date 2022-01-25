@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
@@ -248,22 +247,24 @@ func showBackupPlanHook(
 			return err
 		}
 
+		fullyResolvedDest := dest
 		if subdir != "" {
-			parsed, err := url.Parse(dest)
-			if err != nil {
-				return err
-			}
-			if strings.EqualFold(subdir, "LATEST") {
+			if strings.EqualFold(subdir, latestFileName) {
 				subdir, err = readLatestFile(ctx, dest, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 				if err != nil {
 					return errors.Wrap(err, "read LATEST path")
 				}
 			}
-			parsed.Path = path.Join(parsed.Path, subdir)
-			dest = parsed.String()
+			parsed, err := url.Parse(dest)
+			if err != nil {
+				return err
+			}
+			initialPath := parsed.Path
+			parsed.Path = JoinURLPath(initialPath, subdir)
+			fullyResolvedDest = parsed.String()
 		}
 
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, dest, p.User())
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, fullyResolvedDest, p.User())
 		if err != nil {
 			return errors.Wrapf(err, "make storage")
 		}
@@ -303,36 +304,45 @@ func showBackupPlanHook(
 				KMSInfo: defaultKMSInfo,
 			}
 		}
-		var incPaths []string
-		incStore := store
-		if incDest, ok := opts[backupOptIncStorage]; ok {
-			if subdir != "" {
-				parsed, err := url.Parse(incDest)
-				if err != nil {
-					return err
-				}
-				parsed.Path = path.Join(parsed.Path, subdir)
-				incDest = parsed.String()
-			}
-			incStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incDest, p.User())
-			if err != nil {
-				return errors.Wrapf(err, "make incremental storage")
-			}
-			defer incStore.Close()
+		explicitIncPaths := make([]string, 0)
+		explicitIncPath := opts[backupOptIncStorage]
+		if len(explicitIncPath) > 0 {
+			explicitIncPaths = append(explicitIncPaths, explicitIncPath)
 		}
-		incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
-
+		incLocations, err := resolveIncrementalsBackupLocation(
+			ctx,
+			p.User(),
+			p.ExecCfg(),
+			explicitIncPaths,
+			[]string{dest},
+			subdir,
+		)
+		var incPaths []string
+		var incStore cloud.ExternalStorage
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
-				// If we do not support listing, we have to just assume there are none
-				// and show the specified base.
-				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStore)
-				incPaths = nil
+				// We can proceed with base backups here just fine, so log a warning and move on.
+				// Note that actually _writing_ an incremental backup to this location would fail loudly.
+				log.Warningf(
+					ctx, "storage sink %v does not support listing, only showing the base backup", explicitIncPaths)
 			} else {
 				return err
 			}
-		}
+		} else if len(incLocations) > 0 {
+			// There was no error, so check for incrementals.
+			//
+			// If there are incrementals, find the backup paths and return them with the store.
+			// Otherwise, use the vacuous placeholders above.
 
+			incStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incLocations[0], p.User())
+			if err != nil {
+				return err
+			}
+			incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
+			if err != nil {
+				return errors.Wrapf(err, "make incremental storage")
+			}
+		}
 		mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 		defer mem.Close(ctx)
 

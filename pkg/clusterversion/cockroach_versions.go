@@ -305,7 +305,9 @@ const (
 	// stop overwriting the LATEST and checkpoint files during backup execution.
 	// Instead, it writes new files alongside the old in reserved subdirectories.
 	BackupDoesNotOverwriteLatestAndCheckpoint
-
+	// IncrementalBackupSubdir enables backing up new incremental backups to a
+	// dedicated subdirectory, to make it easier to apply a different ttl.
+	IncrementalBackupSubdir
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -500,7 +502,10 @@ var versionsSingleton = keyedVersions{
 		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
-
+	{
+		Key:     IncrementalBackupSubdir,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 86},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

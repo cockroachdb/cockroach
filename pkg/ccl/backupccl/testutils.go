@@ -106,6 +106,12 @@ func backupRestoreTestSetupWithParams(
 	return tc, sqlDB, dir, cleanupFn
 }
 
+func backupDestinationTestSetup(
+	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+}
+
 func backupRestoreTestSetup(
 	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
