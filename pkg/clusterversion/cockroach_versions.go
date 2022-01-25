@@ -307,6 +307,12 @@ const (
 	// for raft log truncation, by allowing each replica to treat a truncation
 	// proposal as an upper bound on what should be truncated.
 	LooselyCoupledRaftLogTruncation
+	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
+	// range tombstones.
+	ExperimentalMVCCRangeTombstones
+	// ChangefeedIdleness is the version where changefeed aggregators forward
+	// idleness-related information alnog with resolved spans to the frontier
+	ChangefeedIdleness
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -500,6 +506,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     LooselyCoupledRaftLogTruncation,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
+	},
+	{
+		Key:     ChangefeedIdleness,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
 	},
 
 	// *************************************************
