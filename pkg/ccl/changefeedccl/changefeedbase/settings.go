@@ -59,6 +59,16 @@ var SlowSpanLogThreshold = settings.RegisterDurationSetting(
 	settings.NonNegativeDuration,
 )
 
+// IdleTimeout controls how long the changefeed will wait for a new KV being
+// emitted before marking itself as idle
+var IdleTimeout = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.idle_timeout",
+	"a changefeed will mark itself idle if no changes have been emitted for greater than this duration; if 0, the changefeed will never be marked idle",
+	10*time.Minute,
+	settings.NonNegativeDuration,
+)
+
 // FrontierCheckpointFrequency controls the frequency of frontier checkpoints.
 var FrontierCheckpointFrequency = settings.RegisterDurationSetting(
 	settings.TenantWritable,

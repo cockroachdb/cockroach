@@ -56,7 +56,7 @@ func createProtectedTimestampRecord(
 	txn *kv.Txn,
 	jobID jobspb.JobID,
 	targets jobspb.ChangefeedTargets,
-	resolved hlc.Timestamp,
+	timestamp hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
 ) error {
 	if !codec.ForSystemTenant() {
@@ -65,11 +65,11 @@ func createProtectedTimestampRecord(
 
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
-		progress.ProtectedTimestampRecord, resolved)
+		progress.ProtectedTimestampRecord, timestamp)
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
 	rec := jobsprotectedts.MakeRecord(
-		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
+		progress.ProtectedTimestampRecord, int64(jobID), timestamp, deprecatedSpansToProtect,
 		jobsprotectedts.Jobs, targetToProtect)
 	return pts.Protect(ctx, txn, rec)
 }

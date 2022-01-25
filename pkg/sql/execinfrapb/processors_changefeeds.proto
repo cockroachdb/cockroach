@@ -56,7 +56,6 @@ message ChangeAggregatorSpec {
      (gogoproto.customname) = "JobID",
      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
   ];
-
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -81,4 +80,9 @@ message ChangeFrontierSpec {
   // User who initiated the changefeed. This is used to check access privileges
   // when using FileTable ExternalStorage.
   optional string user_proto = 4 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security.SQLUsernameProto"];
+}
+
+message AggregatorProgressUpdate {
+  repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 1 [(gogoproto.nullable) = false];
+  optional uint64 recent_kv_count = 2 [(gogoproto.nullable) = false];
 }
