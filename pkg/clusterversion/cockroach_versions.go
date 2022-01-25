@@ -263,6 +263,8 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
+	// Rangefeed use 1 stream per node
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -407,7 +409,6 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
-
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
@@ -416,7 +417,10 @@ var versionsSingleton = keyedVersions{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
 	},
-
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
