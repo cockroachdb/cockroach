@@ -697,7 +697,7 @@ var repairedDescriptor = `'{
       "type": "FORWARD",
       "unique": true,
       "version": 4,
-			"constraintId": 1
+      "constraintId": 1
     },
     "privileges": {
       "owner_proto": "root",
