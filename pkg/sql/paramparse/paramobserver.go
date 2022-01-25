@@ -55,7 +55,7 @@ func SetStorageParameters(
 			return err
 		}
 
-		if err := paramObserver.onSet(evalCtx, key, datum); err != nil {
+		if err := paramObserver.onSet(ctx, semaCtx, evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
@@ -82,7 +82,7 @@ func ResetStorageParameters(
 type StorageParamObserver interface {
 	// onSet is called during CREATE [TABLE | INDEX] ... WITH (...) or
 	// ALTER [TABLE | INDEX] ... WITH (...).
-	onSet(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	// onReset is called during ALTER [TABLE | INDEX] ... RESET (...)
 	onReset(evalCtx *tree.EvalContext, key string) error
 	// runPostChecks is called after all storage parameters have been set.
@@ -102,13 +102,13 @@ func (po *TableStorageParamObserver) runPostChecks() error {
 }
 
 type tableParam struct {
-	onSet   func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
 }
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
-		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			return setFillFactorStorageParam(evalCtx, key, datum)
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -117,7 +117,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`autovacuum_enabled`: {
-		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			var boolVal bool
 			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
 				boolVal, err = ParseBoolVar(key, stringVal)
@@ -177,7 +177,7 @@ func init() {
 		`user_catalog_table`,
 	} {
 		tableParams[param] = tableParam{
-			onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
 			onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -189,10 +189,14 @@ func init() {
 
 // onSet implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onSet(
-	evalCtx *tree.EvalContext, key string, datum tree.Datum,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
 ) error {
 	if p, ok := tableParams[key]; ok {
-		return p.onSet(po, evalCtx, key, datum)
+		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
@@ -304,7 +308,11 @@ func (po *IndexStorageParamObserver) applyGeometryIndexSetting(
 
 // onSet implements the StorageParamObserver interface.
 func (po *IndexStorageParamObserver) onSet(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	expr tree.Datum,
 ) error {
 	switch key {
 	case `fillfactor`:
