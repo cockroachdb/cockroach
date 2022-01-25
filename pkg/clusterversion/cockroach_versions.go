@@ -301,6 +301,8 @@ const (
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
+	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -491,6 +493,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
+	},
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
 
 	// *************************************************
