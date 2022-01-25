@@ -54,11 +54,11 @@ public  kv     table  root  0  NULL
 public  new_v  view   root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTTT
+query TTTTTB
 SHOW GRANTS ON new_v
 ----
-test  public new_v  admin  ALL
-test  public new_v  root   ALL
+test  public  new_v  admin  ALL  false
+test  public  new_v  root   ALL  false
 
 statement error invalid table name: ""
 ALTER VIEW "" RENAME TO foo

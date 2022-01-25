@@ -446,16 +446,16 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		sqlDB.CheckQueryResults(t, `show grants on database test`, testDBGrants)
 
 		testTableGrants := [][]string{
-			{"test", "public", "test_table", "admin", "ALL"},
-			{"test", "public", "test_table", "root", "ALL"},
-			{"test", "public", "test_table", "testuser", "ZONECONFIG"},
+			{"test", "public", "test_table", "admin", "ALL", "false"},
+			{"test", "public", "test_table", "root", "ALL", "false"},
+			{"test", "public", "test_table", "testuser", "ZONECONFIG", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on test.test_table`, testTableGrants)
 
 		testTable2Grants := [][]string{
-			{"test", "public", "test_table2", "admin", "ALL"},
-			{"test", "public", "test_table2", "root", "ALL"},
-			{"test", "public", "test_table2", "testuser", "ALL"},
+			{"test", "public", "test_table2", "admin", "ALL", "false"},
+			{"test", "public", "test_table2", "root", "ALL", "false"},
+			{"test", "public", "test_table2", "testuser", "ALL", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on test.test_table2`, testTable2Grants)
 	}
