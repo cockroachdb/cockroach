@@ -44,15 +44,23 @@ const TimeScaleDropdownWithSearchParams = (
         currentWindow.start?.utc() ||
         moment(now).subtract(10, "minutes");
       const seconds = end.diff(start, "seconds");
-      const timeScale = findClosestTimeScale(defaultTimeScaleOptions, seconds);
+
+      // Find the closest time scale just by window size.
+      // And temporarily assume the end is "now" with fixedWindowEnd=false.
+      const timeScale: TimeScale = {
+        ...findClosestTimeScale(defaultTimeScaleOptions, seconds),
+        windowSize: moment.duration(end.diff(start)),
+        windowEnd: null,
+      };
+      // Check if the end is close to now, with "close" defined as being no more than `sampleSize` behind.
       if (
         moment.duration(now.diff(end)).asMinutes() >
         timeScale.sampleSize.asMinutes()
       ) {
+        // The end is far enough away from now, thus this is a custom selection.
         timeScale.key = "Custom";
+        timeScale.windowEnd = end;
       }
-      timeScale.windowEnd = null;
-      timeScale.windowSize = moment.duration(end.diff(start));
       props.setTimeScale(timeScale);
     };
 
