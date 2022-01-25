@@ -20,5 +20,6 @@ go_library(
 stringer(
     name = "gen-option-stringer",
     src = "role_option.go",
+    additional_args = ["-linecomment"],
     typ = "Option",
 )

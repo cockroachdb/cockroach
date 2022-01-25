@@ -1,6 +1,6 @@
 # stringer lets us define the equivalent of `//go:generate stringer` files
 # within bazel sandbox.
-def stringer(src, typ, name):
+def stringer(src, typ, name, additional_args=[]):
     native.genrule(
         name = name,
         srcs = [src],  # Accessed below using `$<`.
@@ -14,8 +14,8 @@ def stringer(src, typ, name):
          GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
          # Set GOPATH to something to workaround https://github.com/golang/go/issues/43938
          env PATH=$$GO_ABS_PATH HOME=$(GENDIR) GOPATH=/nonexist-gopath \
-         $(location @com_github_cockroachdb_tools//cmd/stringer:stringer) -output=$@ -type={} $<
-      """.format(typ),
+         $(location @com_github_cockroachdb_tools//cmd/stringer:stringer) -output=$@ -type={} {} $<
+      """.format(typ, " ".join(additional_args)),
         tools = [
             "@go_sdk//:bin/go",
             "@com_github_cockroachdb_tools//cmd/stringer",
