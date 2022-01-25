@@ -1626,43 +1626,9 @@ func restorePlanHook(
 				return err
 			}
 		}
-		if subdir != "" {
-			if strings.EqualFold(subdir, "LATEST") {
-				// set subdir to content of latest file
-				latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
-				if err != nil {
-					return err
-				}
-				subdir = latest
-			}
-			if len(from) != 1 {
-				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
-			}
-
-			appendPaths := func(uris []string, tailDir string) error {
-				for i, uri := range uris {
-					parsed, err := url.Parse(uri)
-					if err != nil {
-						return err
-					}
-					parsed.Path = path.Join(parsed.Path, tailDir)
-					uris[i] = parsed.String()
-				}
-				return nil
-			}
-
-			if err = appendPaths(from[0][:], subdir); err != nil {
-				return err
-			}
-			if len(incFrom) != 0 {
-				if err = appendPaths(incFrom[:], subdir); err != nil {
-					return err
-				}
-			}
-		}
 
 		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
-			newDBName, endTime, resultsCh)
+			newDBName, endTime, resultsCh, subdir)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1776,6 +1742,19 @@ func checkClusterRegions(
 	return nil
 }
 
+func appendPaths(uris []string, tailDir string) ([]string, error) {
+	retval := make([]string, len(uris))
+	for i, uri := range uris {
+		parsed, err := url.Parse(uri)
+		if err != nil {
+			return nil, err
+		}
+		parsed.Path = path.Join(parsed.Path, tailDir)
+		retval[i] = parsed.String()
+	}
+	return retval, nil
+}
+
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -1788,9 +1767,43 @@ func doRestorePlan(
 	newDBName string,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
+	subdir string,
 ) error {
 	if len(from) < 1 || len(from[0]) < 1 {
 		return errors.New("invalid base backup specified")
+	}
+
+	var defaultIncFrom []string
+	var err error
+	if subdir == "" {
+		if defaultIncFrom, err = appendPaths(from[0][:], DefaultIncrementalsSubdir); err != nil {
+			return err
+		}
+	} else {
+		if strings.EqualFold(subdir, "LATEST") {
+			// set subdir to content of latest file
+			latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+			if err != nil {
+				return err
+			}
+			subdir = latest
+		}
+		if len(from) != 1 {
+			return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
+		}
+
+		if defaultIncFrom, err = appendPaths(from[0][:], path.Join(DefaultIncrementalsSubdir, subdir)); err != nil {
+			return err
+		}
+		if from[0], err = appendPaths(from[0][:], subdir); err != nil {
+			return err
+		}
+
+		if len(incFrom) != 0 {
+			if incFrom, err = appendPaths(incFrom[:], subdir); err != nil {
+				return err
+			}
+		}
 	}
 
 	baseStores := make([]cloud.ExternalStorage, len(from[0]))
@@ -1834,10 +1847,12 @@ func doRestorePlan(
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
+	// get base from here.
 	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := resolveBackupManifests(
 		ctx, &mem, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
-		incFrom, endTime, encryption, p.User(),
+		incFrom, defaultIncFrom, endTime, encryption, p.User(),
 	)
+
 	if err != nil {
 		return err
 	}
@@ -2058,9 +2073,15 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, incFrom, restoreStmt.Options,
+	description, err := restoreJobDescription(
+		p,
+		restoreStmt,
+		from,
+		incFrom,
+		restoreStmt.Options,
 		intoDB,
-		newDBName, kms)
+		newDBName,
+		kms)
 	if err != nil {
 		return err
 	}

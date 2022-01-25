@@ -163,6 +163,15 @@ func (m manifestInfoReader) showBackup(
 	return nil
 }
 
+func incFromDest(dest string) (string, error) {
+	parsed, err := url.Parse(dest)
+	if err != nil {
+		return "", err
+	}
+	parsed.Path = path.Join(parsed.Path, DefaultIncrementalsSubdir)
+	return parsed.String(), nil
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -233,12 +242,21 @@ func showBackupPlanHook(
 		if err != nil {
 			return err
 		}
+		incDefaultDest, err := incFromDest(dest)
+
+		if err != nil {
+			return err
+		}
 
 		var subdir string
 
 		if inColFn != nil {
 			subdir = dest
 			dest, err = inColFn()
+			if err != nil {
+				return err
+			}
+			incDefaultDest, err = incFromDest(dest)
 			if err != nil {
 				return err
 			}
@@ -249,18 +267,22 @@ func showBackupPlanHook(
 		}
 
 		if subdir != "" {
-			parsed, err := url.Parse(dest)
-			if err != nil {
-				return err
-			}
 			if strings.EqualFold(subdir, "LATEST") {
 				subdir, err = readLatestFile(ctx, dest, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
 				if err != nil {
 					return errors.Wrap(err, "read LATEST path")
 				}
 			}
-			parsed.Path = path.Join(parsed.Path, subdir)
+			parsed, err := url.Parse(dest)
+			if err != nil {
+				return err
+			}
+			initialPath := parsed.Path
+			parsed.Path = path.Join(initialPath, subdir)
 			dest = parsed.String()
+
+			parsed.Path = path.Join(initialPath, DefaultIncrementalsSubdir, subdir)
+			incDefaultDest = parsed.String()
 		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, dest, p.User())
@@ -310,8 +332,19 @@ func showBackupPlanHook(
 				return errors.Wrapf(err, "make incremental storage")
 			}
 			defer incStore.Close()
+			incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
+		} else {
+			incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
+			if err != nil || len(incPaths) == 0 {
+				incStore, err = p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, incDefaultDest, p.User())
+
+				if err != nil {
+					return err
+				}
+				defer incStore.Close()
+				incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
+			}
 		}
-		incPaths, err = FindPriorBackups(ctx, incStore, IncludeManifest)
 
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {

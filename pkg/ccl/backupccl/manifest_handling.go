@@ -722,6 +722,7 @@ func resolveBackupManifests(
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
 	incFrom []string,
+	defaultIncFrom []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	user security.SQLUsername,
@@ -784,8 +785,9 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-
 		var incStores []cloud.ExternalStorage
+		var prev []string
+		var err error
 		if len(incFrom) != 0 {
 			incStores = make([]cloud.ExternalStorage, len(incFrom))
 			for i := range incFrom {
@@ -796,12 +798,27 @@ func resolveBackupManifests(
 				defer store.Close()
 				incStores[i] = store
 			}
+			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
 		} else {
-			incFrom = from[0]
-			incStores = baseStores
+			incStores = make([]cloud.ExternalStorage, len(defaultIncFrom))
+			for i := range defaultIncFrom {
+				store, err := mkStore(ctx, defaultIncFrom[i], user)
+				if err != nil {
+					return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
+				}
+				defer store.Close()
+				incStores[i] = store
+			}
+			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+			if len(prev) > 0 {
+				incFrom = defaultIncFrom
+			} else {
+				incFrom = from[0]
+				incStores = baseStores
+				prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+			}
 		}
 
-		prev, err := FindPriorBackups(ctx, incStores[0], IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStores[0])
