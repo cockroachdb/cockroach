@@ -409,6 +409,8 @@ crdb_internal       cluster_inflight_traces
 crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
+crdb_internal       cluster_statement_statistics
+crdb_internal       cluster_transaction_statistics
 crdb_internal       cluster_transactions
 crdb_internal       create_schema_statements
 crdb_internal       create_statements
@@ -726,6 +728,8 @@ cluster_inflight_traces
 cluster_queries
 cluster_sessions
 cluster_settings
+cluster_statement_statistics
+cluster_transaction_statistics
 cluster_transactions
 create_schema_statements
 create_statements
@@ -1081,6 +1085,8 @@ system         crdb_internal       cluster_inflight_traces                SYSTEM
 system         crdb_internal       cluster_queries                        SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_sessions                       SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                       SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_statement_statistics           SYSTEM VIEW  NO                  1
+system         crdb_internal       cluster_transaction_statistics         SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_transactions                   SYSTEM VIEW  NO                  1
 system         crdb_internal       create_schema_statements               SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                      SYSTEM VIEW  NO                  1
@@ -2598,7 +2604,7 @@ public   other_db       public              USAGE           NULL
 root     other_db       public              ALL             NULL
 
 statement ok
-GRANT SELECT ON DATABASE other_db TO testuser
+GRANT CONNECT ON DATABASE other_db TO testuser
 
 query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
@@ -2662,6 +2668,8 @@ NULL     public   system         crdb_internal       cluster_inflight_traces    
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_statement_statistics           SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_transaction_statistics         SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_schema_statements               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
@@ -3267,6 +3275,8 @@ NULL     public   system         crdb_internal       cluster_inflight_traces    
 NULL     public   system         crdb_internal       cluster_queries                        SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_sessions                       SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_settings                       SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_statement_statistics           SELECT          NULL          YES
+NULL     public   system         crdb_internal       cluster_transaction_statistics         SELECT          NULL          YES
 NULL     public   system         crdb_internal       cluster_transactions                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_schema_statements               SELECT          NULL          YES
 NULL     public   system         crdb_internal       create_statements                      SELECT          NULL          YES
@@ -3856,7 +3866,14 @@ NULL     root     system         public              span_configurations        
 NULL     root     system         public              span_configurations                    UPDATE          NULL          NO
 
 statement ok
+USE other_db;
+ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
+
+statement ok
 CREATE TABLE other_db.xyz (i INT)
+
+statement ok
+USE test;
 
 statement ok
 CREATE VIEW other_db.abc AS SELECT i from other_db.xyz

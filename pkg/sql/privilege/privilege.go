@@ -77,25 +77,11 @@ var (
 	AllPrivileges    = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, USAGE, ZONECONFIG}
 	ReadData         = List{GRANT, SELECT}
 	ReadWriteData    = List{GRANT, SELECT, INSERT, DELETE, UPDATE}
-	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
+	DBPrivileges     = List{ALL, CONNECT, CREATE, DROP, GRANT, ZONECONFIG}
 	TablePrivileges  = List{ALL, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG}
 	SchemaPrivileges = List{ALL, GRANT, CREATE, USAGE}
 	TypePrivileges   = List{ALL, GRANT, USAGE}
 )
-
-// PGIncompatibleDBPrivileges represents the privileges CockroachDB
-// supports on the database that are not supported in Postgres.
-// In 21.2, these privileges will be translated to ALTER DEFAULT PRIVILEGES FOR
-// ALL ROLES on the database instead of being granted as privileges on the
-// database itself.
-// We will also hint that the GRANT syntax for these privileges are being
-// deprecated and instead run the equivalent ALTER DEFAULT PRIVILEGES FOR ALL
-// ROLES.
-// TODO(richardcai): Remove this and the syntax for granting these privileges
-//    to databases in 22.1. In 22.1, we should have a long-running migration
-//    to convert incompatible privileges into default privileges.
-//    See: https://github.com/cockroachdb/cockroach/issues/68731
-var PGIncompatibleDBPrivileges = List{SELECT, INSERT, UPDATE, DELETE}
 
 // Mask returns the bitmask for a given privilege.
 func (k Kind) Mask() uint32 {

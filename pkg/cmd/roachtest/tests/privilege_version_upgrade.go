@@ -95,9 +95,7 @@ func runPrivilegeVersionUpgrade(
 	allPrivs := privilege.List{privilege.ALL}
 	upgradeTest(allPrivs, allPrivs, allPrivs, allPrivs).run(ctx, t)
 
-	allDBPrivs := privilege.GetValidPrivilegesForObject(privilege.Database)
-	validDBPrivBits := allDBPrivs.ToBitField() &^ privilege.PGIncompatibleDBPrivileges.ToBitField()
-	validDBPrivs := privilege.ListFromBitField(validDBPrivBits, privilege.Database)
+	validDBPrivs := privilege.GetValidPrivilegesForObject(privilege.Database)
 
 	// Split privileges into two sets so they aren't folded into "ALL".
 	dbPrivsSetOne, dbPrivsSetTwo := splitPrivilegeListHelper(validDBPrivs)

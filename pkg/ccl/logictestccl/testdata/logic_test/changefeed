@@ -16,7 +16,7 @@ user root
 # Test granting CONTROLCHANGEFEED.
 statement ok
 ALTER USER testuser CONTROLCHANGEFEED;
-GRANT SELECT ON DATABASE test TO testuser
+GRANT CONNECT ON DATABASE test TO testuser
 
 user testuser
 

@@ -173,6 +173,7 @@ func (s *Statistics) stringImpl(includeHistograms bool) string {
 	for _, col := range colStats {
 		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
 		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
+		fmt.Fprintf(&buf, ", avgsize%s=%.9g", col.Cols.String(), col.AvgSize)
 	}
 	buf.WriteString("]")
 	if includeHistograms {
@@ -215,6 +216,10 @@ type ColumnStatistic struct {
 	// columns for this expression. For multi-column stats, this null
 	// count tracks only the rows in which all columns in the set are null.
 	NullCount float64
+
+	// AvgSize is the estimated average size of this set of columns in bytes. For
+	// multi-column stats, it is the combined width of all columns.
+	AvgSize float64
 
 	// Histogram is only used when the size of Cols is one. It contains
 	// the approximate distribution of values for that column, represented

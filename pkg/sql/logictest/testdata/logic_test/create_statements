@@ -311,6 +311,42 @@ CREATE TABLE crdb_internal.cluster_settings (
    public BOOL NOT NULL,
    description STRING NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.cluster_transactions (
    id UUID NULL,
    node_id INT8 NULL,
@@ -1261,27 +1297,115 @@ CREATE TABLE crdb_internal.session_variables (
    value STRING NOT NULL,
    hidden BOOL NOT NULL
 )  {}  {}
-CREATE TABLE crdb_internal.statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  {}  {}
+CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(statistics)),
+    max(sampled_plan),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval
+        FROM
+          system.statement_statistics
+    )
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(statistics)),
+    max(sampled_plan),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval
+        FROM
+          system.statement_statistics
+    )
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  {}  {}
 CREATE TABLE crdb_internal.table_columns (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,
@@ -1421,21 +1545,61 @@ CREATE VIEW crdb_internal.tenant_usage_details (
        WHERE
            instance_id = 0
     )  {}  {}
-CREATE TABLE crdb_internal.transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  {}  {}
+CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  {}  {}
 CREATE TABLE crdb_internal.zones (
    zone_id INT8 NOT NULL,
    subzone_id INT8 NOT NULL,

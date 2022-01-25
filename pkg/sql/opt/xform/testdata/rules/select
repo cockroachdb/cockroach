@@ -263,7 +263,7 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~16KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~17KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
@@ -787,7 +787,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~6KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -849,7 +849,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -1299,7 +1299,7 @@ memo (optimized, ~8KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~7KB, required=[presentation: i:2,k:1])
+memo (optimized, ~8KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
@@ -1710,7 +1710,7 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~20KB, required=[presentation: i:2])
+memo (optimized, ~21KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
@@ -4476,7 +4476,7 @@ CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
 memo expect-not=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'baz'
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~8KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (select G2 G3)
@@ -5263,7 +5263,7 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~15KB, required=[presentation: q:2,r:3])
+memo (optimized, ~16KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
@@ -5912,7 +5912,7 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~35KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~37KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
@@ -6043,7 +6043,7 @@ memo (optimized, ~10KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~7KB, required=[presentation: c:3])
+memo (optimized, ~8KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
@@ -7806,7 +7806,7 @@ CREATE TABLE t58390 (
 memo
 SELECT * FROM t58390 WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~21KB, required=[presentation: k:1,a:2,b:3,c:4])
+memo (optimized, ~22KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1)) (distinct-on G5 G6 cols=(1),ordering=+1)
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
@@ -7921,7 +7921,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~32KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~33KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)

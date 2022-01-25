@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/alessio/shellescape"
@@ -26,6 +27,7 @@ import (
 
 const (
 	buildSubcmd         = "build"
+	runSubcmd           = "run"
 	testSubcmd          = "test"
 	mergeTestXMLsSubcmd = "merge-test-xmls"
 	mungeTestXMLSubcmd  = "munge-test-xml"
@@ -100,8 +102,8 @@ func parseArgs(args []string, argsLenAtDash int) (*parsedArgs, error) {
 	if len(args) < 2 {
 		return nil, errUsage
 	}
-	if args[0] != buildSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
-		return nil, errors.Newf("First argument must be `build`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
+	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
+		return nil, errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 	var splitLoc int
 	if argsLenAtDash < 0 {
@@ -138,11 +140,21 @@ type buildInfo struct {
 	// into their component tests and all put in this list, so this may be
 	// considerably longer than the argument list.
 	tests []string
+	// Expanded set of go_transition_test targets to be run. The map is the full test target
+	// name -> the location of the corresponding `bazel-testlogs` directory for this test.
+	transitionTests map[string]string
 }
 
 func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 	if subcmd != "query" {
-		arg = append(configArgList(), arg...)
+		var configArgs []string
+		// The `test` config is implied in this case.
+		if subcmd == "cquery" {
+			configArgs = configArgList("test")
+		} else {
+			configArgs = configArgList()
+		}
+		arg = append(configArgs, arg...)
 		arg = append(arg, "-c", compilationMode)
 	}
 	arg = append([]string{subcmd}, arg...)
@@ -155,7 +167,7 @@ func runBazelReturningStdout(subcmd string, arg ...string) (string, error) {
 }
 
 func getBuildInfo(args parsedArgs) (buildInfo, error) {
-	if args.subcmd != buildSubcmd && args.subcmd != testSubcmd {
+	if args.subcmd != buildSubcmd && args.subcmd != runSubcmd && args.subcmd != testSubcmd {
 		return buildInfo{}, errors.Newf("Unexpected subcommand %s. This is a bug!", args.subcmd)
 	}
 	binDir, err := runBazelReturningStdout("info", "bazel-bin")
@@ -168,8 +180,9 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 	}
 
 	ret := buildInfo{
-		binDir:      binDir,
-		testlogsDir: testlogsDir,
+		binDir:          binDir,
+		testlogsDir:     testlogsDir,
+		transitionTests: make(map[string]string),
 	}
 
 	for _, target := range args.targets {
@@ -194,6 +207,33 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
 		case "go_test":
 			ret.tests = append(ret.tests, fullTarget)
+		case "go_transition_test":
+			// Run cquery to get the hash of the config.
+			res, err := runBazelReturningStdout("cquery", fullTarget, "--output=label_kind")
+			if err != nil {
+				return buildInfo{}, err
+			}
+			configHash := strings.Fields(res)[3]
+			// The hash will start be surrounded with (), so trim those.
+			configHash = strings.TrimPrefix(configHash, "(")
+			configHash = strings.TrimSuffix(configHash, ")")
+			res, err = runBazelReturningStdout("config", configHash)
+			if err != nil {
+				return buildInfo{}, err
+			}
+			var testlogsDir string
+			for _, line := range strings.Split(res, "\n") {
+				if strings.Contains(line, "transition directory name fragment") {
+					fragmentLine := strings.Split(line, ":")
+					fragment := strings.TrimSpace(fragmentLine[1])
+					testlogsDir = filepath.Join(filepath.Dir(ret.testlogsDir)+"-"+fragment, filepath.Base(ret.testlogsDir))
+					break
+				}
+			}
+			if testlogsDir == "" {
+				return buildInfo{}, errors.Newf("could not find transition directory name fragment for target %s", fullTarget)
+			}
+			ret.transitionTests[fullTarget] = testlogsDir
 		case "test_suite":
 			// Expand the list of tests from the test suite with another query.
 			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")
@@ -289,10 +329,21 @@ func mergeTestXMLs(args parsedArgs) error {
 	return bazelutil.MergeTestXMLs(xmlsToMerge, os.Stdout)
 }
 
-func configArgList() []string {
+// Return a list of the form --config=$CONFIG for every $CONFIG in configs,
+// with the exception of every config in `exceptions`.
+func configArgList(exceptions ...string) []string {
 	ret := []string{}
 	for _, config := range configs {
-		ret = append(ret, "--config="+config)
+		keep := true
+		for _, exception := range exceptions {
+			if config == exception {
+				keep = false
+				break
+			}
+		}
+		if keep {
+			ret = append(ret, "--config="+config)
+		}
 	}
 	return ret
 }
