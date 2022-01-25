@@ -334,11 +334,6 @@ func (desc *wrapper) FindIndexWithID(id descpb.IndexID) (catalog.Index, error) {
 	}); idx != nil {
 		return idx, nil
 	}
-	for _, m := range desc.GCMutations {
-		if m.IndexID == id {
-			return nil, ErrIndexGCMutationsList
-		}
-	}
 	return nil, errors.Errorf("index-id \"%d\" does not exist", id)
 }
 

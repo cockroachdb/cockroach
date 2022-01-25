@@ -1118,13 +1118,8 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if tableDesc := catalogkv.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv"); len(tableDesc.GetGCMutations()) != 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GetGCMutations()))
-		}
-		return nil
+		return tests.CheckKeyCountE(t, kvDB, tableSpan, 2)
 	})
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, 2)
 
 	// TODO(erik, vivek): Transactions using old descriptors should fail and
 	// rollback when the index keys have been removed by ClearRange

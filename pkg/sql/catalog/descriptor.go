@@ -533,8 +533,6 @@ type TableDescriptor interface {
 	MakePublic() TableDescriptor
 	// AllMutations returns all of the table descriptor's mutations.
 	AllMutations() []Mutation
-	// GetGCMutations returns the table descriptor's GC mutations.
-	GetGCMutations() []descpb.TableDescriptor_GCDescriptorMutation
 	// GetMutationJobs returns the table descriptor's mutation jobs.
 	GetMutationJobs() []descpb.TableDescriptor_MutationJob
 
