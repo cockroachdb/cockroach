@@ -1265,6 +1265,15 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.PartitionByTable != nil {
 		clauses = append(clauses, p.Doc(node.PartitionByTable))
 	}
+	if node.StorageParams != nil {
+		clauses = append(
+			clauses,
+			pretty.ConcatSpace(
+				pretty.Keyword(`WITH`),
+				p.bracket(`(`, p.Doc(&node.StorageParams), `)`),
+			),
+		)
+	}
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
 	}
