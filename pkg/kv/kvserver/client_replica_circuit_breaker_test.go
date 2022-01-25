@@ -12,6 +12,9 @@ package kvserver_test
 
 import (
 	"context"
+	"math/rand"
+	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -624,4 +628,71 @@ func (cbt *circuitBreakerTest) writeViaRepl(repl *kvserver.Replica) error {
 func (cbt *circuitBreakerTest) readViaRepl(repl *kvserver.Replica) error {
 	get := roachpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
 	return cbt.sendViaRepl(repl, get)
+}
+
+type replicaCircuitBreakerBench struct {
+	*testcluster.TestCluster
+	pool *sync.Pool // *BatchRequest
+}
+
+func (tc *replicaCircuitBreakerBench) repl(b *testing.B) *kvserver.Replica {
+	return tc.GetFirstStoreFromServer(b, 0).LookupReplica(keys.MustAddr(tc.ScratchRange(b)))
+}
+
+func setupCircuitBreakerReplicaBench(
+	b *testing.B, breakerEnabled bool,
+) (*replicaCircuitBreakerBench, *stop.Stopper) {
+	b.Helper()
+	var args base.TestClusterArgs
+	tc := testcluster.StartTestCluster(b, 1, args)
+
+	stmt := `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '1000s'`
+	if !breakerEnabled {
+		stmt = `SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '0s'`
+	}
+	_, err := tc.ServerConn(0).Exec(stmt)
+	require.NoError(b, err)
+	wtc := &replicaCircuitBreakerBench{
+		TestCluster: tc,
+	}
+	wtc.pool = &sync.Pool{
+		New: func() interface{} {
+			repl := wtc.repl(b)
+			var ba roachpb.BatchRequest
+			ba.RangeID = repl.RangeID
+			ba.Timestamp = repl.Clock().NowAsClockTimestamp().ToTimestamp()
+			var k roachpb.Key
+			k = append(k, repl.Desc().StartKey.AsRawKey()...)
+			k = encoding.EncodeUint64Ascending(k, uint64(rand.Intn(1000)))
+			ba.Add(roachpb.NewGet(k, false))
+			return &ba
+		},
+	}
+	return wtc, tc.Stopper()
+}
+
+func BenchmarkReplicaCircuitBreakerSendOverhead(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+
+	for _, enabled := range []bool{false, true} {
+		b.Run("enabled="+strconv.FormatBool(enabled), func(b *testing.B) {
+			tc, stopper := setupCircuitBreakerReplicaBench(b, enabled)
+			defer stopper.Stop(ctx)
+
+			repl := tc.repl(b)
+
+			b.RunParallel(func(pb *testing.PB) {
+				for pb.Next() {
+					ba := tc.pool.Get().(*roachpb.BatchRequest)
+					_, err := repl.Send(ctx, *ba)
+					tc.pool.Put(ba)
+					if err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
+		})
+	}
 }

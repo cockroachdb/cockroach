@@ -79,9 +79,14 @@ type replicaCircuitBreaker struct {
 func (br *replicaCircuitBreaker) Register(
 	ctx context.Context, cancel func(),
 ) (_token interface{}, _ signaller, _ error) {
-	// We intentionally lock over the Signal() call and Err() check to avoid races
-	// where the breaker trips but the cancel() function is not invoked. Both of
-	// these calls are cheap and do not allocate.
+	// We intentionally lock over the Signal() call and Err() check to prevent
+	// the situation in which the breaker trips and cancels everyone but the
+	// current cancel is added after the fact (and will linger). With the lock
+	// held before the Signal() call, we know that if the breaker is not tripped
+	// when we check, even if it does trip, our cancel will be seen by the probe
+	// when it cancels everything in the registry.
+	//
+	// Both calls are cheap and do not allocate.
 	br.cancels.Lock()
 	defer br.cancels.Unlock()
 
@@ -147,25 +152,13 @@ func (br *replicaCircuitBreaker) visitCancels(f func(context.Context)) {
 	br.cancels.Unlock()
 }
 
-func (br *replicaCircuitBreaker) cancelAllTrackedProposals() error {
+func (br *replicaCircuitBreaker) cancelAllTrackedProposals() {
 	br.cancels.Lock()
 	defer br.cancels.Unlock()
-	// NB: this intentionally consults the wrapped Signal(), which does not check
-	// the breaker cluster setting.
-	if br.wrapped.Signal().Err() == nil {
-		// TODO(tbg): in the future, we may want to trigger the probe even if
-		// the breaker is not tripped. For example, if we *suspect* that there
-		// might be something wrong with the range but we're not quite sure,
-		// we would like to let the probe decide whether to trip. Once/if we
-		// do this, this code may need to become more permissive and we'll
-		// have to re-work where the cancellation actually occurs.
-		return errors.AssertionFailedf("asked to cancel all proposals, but breaker is not tripped")
-	}
 	for _, cancel := range br.cancels.m {
 		cancel()
 	}
 	br.cancels.m = map[context.Context]func(){}
-	return nil
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
@@ -277,10 +270,7 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 			return
 		}
 
-		if err := br.cancelAllTrackedProposals(); err != nil {
-			log.Errorf(ctx, "%s", err)
-			// Proceed.
-		}
+		br.cancelAllTrackedProposals()
 		err := sendProbe(ctx, br.r)
 		report(err)
 	}); err != nil {
