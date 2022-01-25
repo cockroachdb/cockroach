@@ -192,69 +192,104 @@ func (s *Store) Send(
 		return br, nil
 	}
 
-	// Augment error if necessary and return.
-	switch t := pErr.GetDetail().(type) {
-	case *roachpb.RangeKeyMismatchError:
-		// TODO(andrei): It seems silly that, if the client specified a RangeID that
-		// doesn't match the keys it wanted to access, but this node can serve those
-		// keys anyway, we still return a RangeKeyMismatchError to the client
-		// instead of serving the request. Particularly since we have the mechanism
-		// to communicate correct range information to the client when returning a
-		// successful response (i.e. br.RangeInfos).
+	// Force a retry loop on range key errors, if we are able to redirect the request
+	// to the correct range on this store on a RangeKeyMismatchError
 
-		// On a RangeKeyMismatchError where the batch didn't even overlap
-		// the start of the mismatched Range, try to suggest a more suitable
-		// Range from this Store.
-		rSpan, err := keys.Range(ba.Requests)
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
+	// Always run the loop once to error check, run a second time in the case that
+	// a retry is attempted
+	var rangeInfos []roachpb.RangeInfo
+	for retries, isRetriableRangeKeyMismatch := 0, true; retries < 2 && isRetriableRangeKeyMismatch; retries++ {
 
-		// The kvclient thought that a particular range id covers rSpans. It was
-		// wrong; the respective range doesn't cover all of rSpan, or perhaps it
-		// doesn't even overlap it. Clearly the client has a stale range cache.
-		// We'll return info on the range that the request ended up being routed to
-		// and, to the extent that we have the info, the ranges containing the keys
-		// that the client requested, and all the ranges in between.
-		ri, err := t.MismatchedRange()
-		if err != nil {
-			return nil, roachpb.NewError(err)
-		}
-		skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
-		startKey := ri.Desc.StartKey
-		if rSpan.Key.Less(startKey) {
-			startKey = rSpan.Key
-		}
-		endKey := ri.Desc.EndKey
-		if endKey.Less(rSpan.EndKey) {
-			endKey = rSpan.EndKey
-		}
-		var ris []roachpb.RangeInfo
-		if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
-			// Note that we return the lease even if it's expired. The kvclient can
-			// use it as it sees fit.
-			ri := repl.GetRangeInfo(ctx)
-			if ri.Desc.RangeID == skipRID {
-				return nil
+		isRetriableRangeKeyMismatch = false
+		if retries == 1 {
+			br, retriedErr := repl.Send(ctx, ba)
+
+			// When there is no error, after redirecting to the correct range
+			// return the range infos, so that the client can update their range cache
+			if retriedErr == nil {
+				// we possibly have overlapping ranges from the BatchResponse
+				// and the rangeInfos accumulated for retries. Here we allow
+				// possibly overlapping RangeInfos with distinct Generations.
+				// when passed back to the sender, these conflicts are resolved
+				// within the range_cache of the DistSender.
+				br.RangeInfos = append(br.RangeInfos, rangeInfos...)
+				return br, nil
 			}
-			ris = append(ris, ri)
-			return nil
-		}); err != nil {
-			// Errors here should not be possible, but if there is one, it is ignored
-			// as attaching RangeInfo is optional.
-			log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
-			ris = nil // just to be safe
+			pErr = retriedErr
 		}
-		for _, ri := range ris {
-			t.AppendRangeInfo(ctx, ri.Desc, ri.Lease)
+
+		// Augment error if necessary and return.
+		switch t := pErr.GetDetail().(type) {
+		case *roachpb.RangeKeyMismatchError:
+			// TODO(andrei): It seems silly that, if the client specified a RangeID that
+			// doesn't match the keys it wanted to access, but this node can serve those
+			// keys anyway, we still return a RangeKeyMismatchError to the client
+			// instead of serving the request. Particularly since we have the mechanism
+			// to communicate correct range information to the client when returning a
+			// successful response (i.e. br.RangeInfos).
+
+			// On a RangeKeyMismatchError where the batch didn't even overlap
+			// the start of the mismatched Range, try to suggest a more suitable
+			// Range from this Store.
+			rSpan, err := keys.Range(ba.Requests)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+
+			// The kvclient thought that a particular range id covers rSpans. It was
+			// wrong; the respective range doesn't cover all of rSpan, or perhaps it
+			// doesn't even overlap it. Clearly the client has a stale range cache.
+			// We'll return info on the range that the request ended up being routed to
+			// and, to the extent that we have the info, the ranges containing the keys
+			// that the client requested, and all the ranges in between.
+			ri, err := t.MismatchedRange()
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+			skipRID := ri.Desc.RangeID // We already have info on one range, so don't add it again below.
+			startKey := ri.Desc.StartKey
+			if rSpan.Key.Less(startKey) {
+				startKey = rSpan.Key
+			}
+			endKey := ri.Desc.EndKey
+			if endKey.Less(rSpan.EndKey) {
+				endKey = rSpan.EndKey
+			}
+			var ris []roachpb.RangeInfo
+			if err := s.visitReplicasByKey(ctx, startKey, endKey, AscendingKeyOrder, func(ctx context.Context, repl *Replica) error {
+				// Note that we return the lease even if it's expired. The kvclient can use it as it sees fit.
+				ri := repl.GetRangeInfo(ctx)
+				if ri.Desc.RangeID == skipRID {
+					return nil
+				}
+				ris = append(ris, ri)
+				return nil
+			}); err != nil {
+				// Errors here should not be possible, but if there is one, it is ignored
+				// as attaching RangeInfo is optional
+				log.Warningf(ctx, "unexpected error visiting replicas: %s", err)
+				ris = nil // just to be safe
+			}
+			for _, ri := range ris {
+				t.AppendRangeInfo(ctx, ri)
+
+				// Check if the original batch request rSpan exists entirely within any known
+				// ranges stored on this replica, if so update repl and set retriable to true.
+				if ri.Desc.RSpan().ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+					isRetriableRangeKeyMismatch = true
+					// Add ranges information so that it may be used for client cached invalidation
+					repl = s.GetReplicaIfExists(ri.Desc.RangeID)
+				}
+			}
+			// We have to write `t` back to `pErr` so that it picks up the changes.
+			rangeInfos = t.Ranges
+			pErr = roachpb.NewError(t)
+		case *roachpb.RaftGroupDeletedError:
+			// This error needs to be converted appropriately so that clients
+			// will retry.
+			err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
+			pErr = roachpb.NewError(err)
 		}
-		// We have to write `t` back to `pErr` so that it picks up the changes.
-		pErr = roachpb.NewError(t)
-	case *roachpb.RaftGroupDeletedError:
-		// This error needs to be converted appropriately so that clients
-		// will retry.
-		err := roachpb.NewRangeNotFoundError(repl.RangeID, repl.store.StoreID())
-		pErr = roachpb.NewError(err)
 	}
 	return nil, pErr
 }

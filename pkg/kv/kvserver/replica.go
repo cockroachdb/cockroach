@@ -821,12 +821,17 @@ func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+// ClosedTimestampPolicy returns the closed timestamp policy of the range, which
+// is updated asynchronously through gossip of zone configurations.
+func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.closedTimestampPolicyRLocked()
+}
+
 // closedTimestampPolicyRLocked returns the closed timestamp policy of the
 // range, which is updated asynchronously by listening in on span configuration
 // changes.
-//
-// NOTE: an exported version of this method which does not require the replica
-// lock exists in helpers_test.go. Move here if needed.
 func (r *Replica) closedTimestampPolicyRLocked() roachpb.RangeClosedTimestampPolicy {
 	if r.mu.conf.GlobalReads {
 		if !r.mu.state.Desc.ContainsKey(roachpb.RKey(keys.NodeLivenessPrefix)) {
@@ -1489,8 +1494,7 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 		return nil
 	}
 	return roachpb.NewRangeKeyMismatchError(
-		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease,
-	)
+		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease, r.ClosedTimestampPolicy())
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by

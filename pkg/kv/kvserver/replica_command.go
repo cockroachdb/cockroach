@@ -335,7 +335,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			// correct range.
 			if !kvserverbase.ContainsKey(desc, args.Key) {
 				l, _ := r.GetLease()
-				return reply, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.Key, desc, &l)
+				return reply, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.Key, desc, &l, r.ClosedTimestampPolicy())
 			}
 			foundSplitKey = args.SplitKey
 		}

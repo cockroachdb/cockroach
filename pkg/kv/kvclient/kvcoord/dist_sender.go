@@ -1187,7 +1187,13 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// turning single-range queries into multi-range queries for no good
 	// reason.
 	if ba.IsUnsplittable() {
-		mismatch := roachpb.NewRangeKeyMismatchError(ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc(), nil /* lease */)
+		mismatch := roachpb.NewRangeKeyMismatchError(ctx,
+			rs.Key.AsRawKey(),
+			rs.EndKey.AsRawKey(),
+			ri.Desc(),
+			nil, /* lease */
+			ri.ClosedTimestampPolicy(),
+		)
 		return nil, roachpb.NewError(mismatch)
 	}
 	// If there's no transaction and ba spans ranges, possibly re-run as part of

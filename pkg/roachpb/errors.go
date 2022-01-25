@@ -556,7 +556,11 @@ func IsRangeNotFoundError(err error) bool {
 // Note that more range info is commonly added to the error after the error is
 // created.
 func NewRangeKeyMismatchError(
-	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+	ctx context.Context,
+	start, end Key,
+	desc *RangeDescriptor,
+	lease *Lease,
+	ctspol RangeClosedTimestampPolicy,
 ) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
@@ -578,8 +582,13 @@ func NewRangeKeyMismatchError(
 		RequestStartKey: start,
 		RequestEndKey:   end,
 	}
+	ri := RangeInfo{
+		Desc:                  *desc,
+		Lease:                 l,
+		ClosedTimestampPolicy: ctspol,
+	}
 	// More ranges are sometimes added to rangesInternal later.
-	e.AppendRangeInfo(ctx, *desc, l)
+	e.AppendRangeInfo(ctx, ri)
 	return e
 }
 
@@ -617,18 +626,13 @@ func (e *RangeKeyMismatchError) MismatchedRange() (RangeInfo, error) {
 //
 // l can be empty. Otherwise, the leaseholder is asserted to be a replica in
 // desc.
-func (e *RangeKeyMismatchError) AppendRangeInfo(
-	ctx context.Context, desc RangeDescriptor, l Lease,
-) {
-	if !l.Empty() {
-		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
+func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ri RangeInfo) {
+	if !ri.Lease.Empty() {
+		if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
+			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
 		}
 	}
-	e.Ranges = append(e.Ranges, RangeInfo{
-		Desc:  desc,
-		Lease: l,
-	})
+	e.Ranges = append(e.Ranges, ri)
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
