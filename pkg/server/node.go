@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1191,6 +1192,12 @@ func (n *Node) RangeLookup(
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
+	return n.singleRangeFeed(args, stream)
+}
+
+func (n *Node) singleRangeFeed(
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+) error {
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -1200,6 +1207,62 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+// setRangeIDEventSink annotates each response with range and stream IDs.
+// This is used by MuxRangeFeed.
+// TODO: This code can be removed in 22.2 once MuxRangeFeed is the default, and
+// the old style RangeFeed deprecated.
+type setRangeIDEventSink struct {
+	ctx      context.Context
+	rangeID  roachpb.RangeID
+	streamID int64
+	wrapped  roachpb.Internal_MuxRangeFeedServer
+}
+
+func (s *setRangeIDEventSink) Context() context.Context {
+	return s.ctx
+}
+
+func (s *setRangeIDEventSink) Send(event *roachpb.RangeFeedEvent) error {
+	response := &roachpb.MuxRangeFeedEvent{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+		StreamID:       s.streamID,
+	}
+	return s.wrapped.Send(response)
+}
+
+var _ roachpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+
+func (n *Node) asyncRangeFeed(
+	args roachpb.RangeFeedRequest, stream roachpb.Internal_MuxRangeFeedServer,
+) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		sink := setRangeIDEventSink{
+			ctx:      ctx,
+			rangeID:  args.RangeID,
+			streamID: args.StreamID,
+			wrapped:  stream,
+		}
+		return n.singleRangeFeed(&args, &sink)
+	}
+}
+
+// MuxRangeFeed implements the roachpb.InternalServer interface.
+func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
+	ctx, cancelFeeds := n.stopper.WithCancelOnQuiesce(stream.Context())
+	defer cancelFeeds()
+	rfGrp := ctxgroup.WithContext(ctx)
+
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			cancelFeeds()
+			return errors.CombineErrors(err, rfGrp.Wait())
+		}
+		rfGrp.GoCtx(n.asyncRangeFeed(*req, stream))
+	}
 }
 
 // ResetQuorum implements the roachpb.InternalServer interface.
