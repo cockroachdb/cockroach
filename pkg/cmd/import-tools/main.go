@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	_ "github.com/aws/aws-sdk-go-v2"
+	_ "github.com/buchgr/bazel-remote"
 	_ "github.com/bufbuild/buf/cmd/buf"
 	_ "github.com/client9/misspell/cmd/misspell"
 	_ "github.com/cockroachdb/crlfmt"
