@@ -5,8 +5,36 @@ statement error value of "expire_after" must be at least zero
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '-10 minutes')
 
 statement ok
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '10 minutes')
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (expire_after = '10 minutes')
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl                                            CREATE TABLE public.tbl (
+                                               id INT8 NOT NULL,
+                                               text STRING NULL,
+                                               CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                               FAMILY fam_0_id_text (id, text)
+) WITH (expire_after = '00:10:00':::INTERVAL)
 
 statement ok
 DROP TABLE tbl;
-CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (expire_after = '10 minutes'::interval)
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (expire_after = '10 minutes'::interval)
+
+query TT
+SHOW CREATE TABLE tbl
+----
+tbl                                            CREATE TABLE public.tbl (
+                                               id INT8 NOT NULL,
+                                               text STRING NULL,
+                                               CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                               FAMILY fam_0_id_text (id, text)
+) WITH (expire_after = '00:10:00':::INTERVAL)
