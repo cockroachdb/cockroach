@@ -103,6 +103,10 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureCommentsHaveNonDroppedIndexes,
 	),
+	migration.NewTenantMigration("add constraint IDs to tables",
+		toCV(clusterversion.ConstraintIDsForTableDescs),
+		NoPrecondition,
+		ensureTablesHasConstraintID),
 }
 
 func init() {
