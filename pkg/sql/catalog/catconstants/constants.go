@@ -10,7 +10,11 @@
 
 package catconstants
 
-import "math"
+import (
+	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+)
 
 // ReportableAppNamePrefix indicates that the application name can be
 // reported in telemetry without scrubbing. (Note this only applies to
@@ -370,3 +374,14 @@ const (
 	PgExtensionSpatialRefSysTableID
 	MinVirtualID = PgExtensionSpatialRefSysTableID
 )
+
+// DefaultHashShardedIndexBucketCount is the cluster setting of default bucket
+// count for hash sharded index when bucket count is not specified in index
+// definition.
+var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"sql.defaults.default_hash_sharded_index_bucket_count",
+	"used as bucket count if bucket count is not specified in hash sharded index definition",
+	8,
+	settings.NonNegativeInt,
+).WithPublic()

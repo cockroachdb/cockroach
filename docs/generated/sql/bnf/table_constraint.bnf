@@ -5,6 +5,7 @@ table_constraint ::=
 	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_partition_by_index opt_where_clause
 	| 'CONSTRAINT' constraint_name 'UNIQUE' '(' index_params ')'  opt_partition_by_index opt_where_clause
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH'
 	| 'CONSTRAINT' constraint_name 'PRIMARY' 'KEY' '(' index_params ')' 
 	| 'CONSTRAINT' constraint_name 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 	| 'CHECK' '(' a_expr ')'
@@ -13,5 +14,6 @@ table_constraint ::=
 	| 'UNIQUE' '(' index_params ')' 'INCLUDE' '(' name_list ')' opt_partition_by_index opt_where_clause
 	| 'UNIQUE' '(' index_params ')'  opt_partition_by_index opt_where_clause
 	| 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' n_buckets
+	| 'PRIMARY' 'KEY' '(' index_params ')' 'USING' 'HASH'
 	| 'PRIMARY' 'KEY' '(' index_params ')' 
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions

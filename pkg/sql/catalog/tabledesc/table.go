@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -221,18 +222,24 @@ func MakeColumnDefDescs(
 func EvalShardBucketCount(
 	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
 ) (int32, error) {
+	var buckets int64
 	const invalidBucketCountMsg = `BUCKET_COUNT must be a 32-bit integer greater than 1, got %v`
-	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
-		ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
-	)
-	if err != nil {
-		return 0, err
+	// If shardBuckets is not specified, use default bucket count from cluster setting.
+	if _, ok := shardBuckets.(tree.DefaultVal); ok {
+		buckets = catconstants.DefaultHashShardedIndexBucketCount.Get(&evalCtx.Settings.SV)
+	} else {
+		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
+		)
+		if err != nil {
+			return 0, err
+		}
+		d, err := typedExpr.Eval(evalCtx)
+		if err != nil {
+			return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
+		}
+		buckets = int64(tree.MustBeDInt(d))
 	}
-	d, err := typedExpr.Eval(evalCtx)
-	if err != nil {
-		return 0, pgerror.Wrapf(err, pgcode.InvalidParameterValue, invalidBucketCountMsg, typedExpr)
-	}
-	buckets := tree.MustBeDInt(d)
 	if buckets < 2 {
 		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
