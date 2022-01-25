@@ -633,6 +633,8 @@ type TableDescriptor interface {
 	// GetRegionalByRowTableRegionColumnName returns the region column name of a
 	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
+	// GetRowLevelTTL returns the row-level TTL config for the table.
+	GetRowLevelTTL() *descpb.TableDescriptor_RowLevelTTL
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
