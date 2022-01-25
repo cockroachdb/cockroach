@@ -186,8 +186,8 @@ func (r *Replica) protectedTimestampRecordCurrentlyApplies(
 	// correct range.
 	desc := r.descRLocked()
 	if !kvserverbase.ContainsKeyRange(desc, args.Key, args.EndKey) {
-		return false, false, "", roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.EndKey, desc,
-			r.mu.state.Lease)
+		return false, false, "", roachpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.EndKey, desc,
+			r.mu.state.Lease, r.closedTimestampPolicyRLocked())
 	}
 	if args.Protected.LessEq(*r.mu.state.GCThreshold) {
 		gcReason := fmt.Sprintf("protected ts: %s is less than equal to the GCThreshold: %s for the"+
