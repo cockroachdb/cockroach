@@ -388,6 +388,13 @@ func (f *kvFeed) runUntilTableEvent(
 		// We'll need to do this to ensure that a resolved timestamp propagates
 		// when we're trying to exit.
 		return tErr.Timestamp().Prev(), nil
+	} else if kvcoord.IsSendError(err) {
+		// During node shutdown it is possible for all outgoing transports used by
+		// the kvfeed to expire, producing a SendError that the node is still able
+		// to propagate to the frontier. This has been known to happen during
+		// cluster upgrades. This scenario should not fail the changefeed.
+		err = changefeedbase.MarkRetryableError(err)
+		return hlc.Timestamp{}, err
 	} else {
 		return hlc.Timestamp{}, err
 	}
