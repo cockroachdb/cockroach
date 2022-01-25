@@ -24,7 +24,7 @@ import (
 
 // ChangefeedResultTypes is the types returned by changefeed stream.
 var ChangefeedResultTypes = []*types.T{
-	types.Bytes,  // resolved span
+	types.Bytes,  // aggregator progress update
 	types.String, // topic
 	types.Bytes,  // key
 	types.Bytes,  // value
