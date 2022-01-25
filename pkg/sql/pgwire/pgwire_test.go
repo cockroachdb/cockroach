@@ -548,16 +548,16 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", security.NodeUser),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE").
-				Results("system", "public", "users", security.AdminRole, "GRANT").
-				Results("system", "public", "users", security.AdminRole, "INSERT").
-				Results("system", "public", "users", security.AdminRole, "SELECT").
-				Results("system", "public", "users", security.AdminRole, "UPDATE").
-				Results("system", "public", "users", security.RootUser, "DELETE").
-				Results("system", "public", "users", security.RootUser, "GRANT").
-				Results("system", "public", "users", security.RootUser, "INSERT").
-				Results("system", "public", "users", security.RootUser, "SELECT").
-				Results("system", "public", "users", security.RootUser, "UPDATE"),
+			baseTest.Results("system", "public", "users", security.AdminRole, "DELETE", true).
+				Results("system", "public", "users", security.AdminRole, "GRANT", true).
+				Results("system", "public", "users", security.AdminRole, "INSERT", true).
+				Results("system", "public", "users", security.AdminRole, "SELECT", true).
+				Results("system", "public", "users", security.AdminRole, "UPDATE", true).
+				Results("system", "public", "users", security.RootUser, "DELETE", true).
+				Results("system", "public", "users", security.RootUser, "GRANT", true).
+				Results("system", "public", "users", security.RootUser, "INSERT", true).
+				Results("system", "public", "users", security.RootUser, "SELECT", true).
+				Results("system", "public", "users", security.RootUser, "UPDATE", true),
 		}},
 		{"SHOW INDEXES FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", false, 1, "username", "ASC", false, false).
@@ -841,9 +841,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
 		//   as top-level constants, and instead are simply resolved to their natural type.
-		//{"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
+		// {"SELECT (CASE a WHEN 10 THEN 'one' WHEN 11 THEN (CASE 'en' WHEN 'en' THEN $1 END) END) AS ret FROM d.T ORDER BY ret DESC LIMIT 2",  []preparedQueryTest{
 		// 	baseTest.SetArgs("hello").Results("one").Results("hello"),
-		//}},
+		// }},
 	}
 
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})

@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1020,11 +1021,11 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
 							if err := addRow(
-								userNameStr,           // grantee
-								dbNameStr,             // type_catalog
-								scNameStr,             // type_schema
-								typeNameStr,           // type_name
-								tree.NewDString(priv), // privilege_type
+								userNameStr,                         // grantee
+								dbNameStr,                           // type_catalog
+								scNameStr,                           // type_schema
+								typeNameStr,                         // type_name
+								tree.NewDString(priv.Kind.String()), // privilege_type
 							); err != nil {
 								return err
 							}
@@ -1045,7 +1046,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
-					var privs []descpb.UserPrivilegeString
+					var privs []descpb.UserPrivilege
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						// User defined schemas have their own privileges.
 						privs = sc.GetPrivileges().Show(privilege.Schema)
@@ -1062,24 +1063,24 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
-							privKind := privilege.ByName[priv]
+							privKind := priv.Kind
 							// Non-user defined schemas inherit privileges from the database,
 							// but the USAGE privilege is conferred by having SELECT privilege
 							// on the database. (There is no SELECT privilege on schemas.)
 							if sc.SchemaKind() != catalog.SchemaUserDefined {
-								if privKind == privilege.SELECT {
-									priv = privilege.USAGE.String()
+								if priv.Kind == privilege.SELECT {
+									privKind = privilege.USAGE
 								} else if !privilege.SchemaPrivileges.Contains(privKind) {
 									continue
 								}
 							}
 
 							if err := addRow(
-								userNameStr,           // grantee
-								dbNameStr,             // table_catalog
-								scNameStr,             // table_schema
-								tree.NewDString(priv), // privilege_type
-								tree.DNull,            // is_grantable
+								userNameStr,                        // grantee
+								dbNameStr,                          // table_catalog
+								scNameStr,                          // table_schema
+								tree.NewDString(privKind.String()), // privilege_type
+								tree.DNull,                         // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1365,17 +1366,25 @@ func populateTablePrivileges(
 			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
+			populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 			for _, u := range table.GetPrivileges().Show(privilege.Table) {
+				granteeNameStr := tree.NewDString(u.User.Normalized())
 				for _, priv := range u.Privileges {
+					var isGrantable tree.Datum
+					if populateGrantOption {
+						isGrantable = yesOrNoDatum(priv.GrantOption)
+					} else {
+						isGrantable = tree.DNull
+					}
 					if err := addRow(
-						tree.DNull,                           // grantor
-						tree.NewDString(u.User.Normalized()), // grantee
-						dbNameStr,                            // table_catalog
-						scNameStr,                            // table_schema
-						tbNameStr,                            // table_name
-						tree.NewDString(priv),                // privilege_type
-						tree.DNull,                           // is_grantable
-						yesOrNoDatum(priv == "SELECT"),       // with_hierarchy
+						tree.DNull,                          // grantor
+						granteeNameStr,                      // grantee
+						dbNameStr,                           // table_catalog
+						scNameStr,                           // table_schema
+						tbNameStr,                           // table_name
+						tree.NewDString(priv.Kind.String()), // privilege_type
+						isGrantable,                         // is_grantable
+						yesOrNoDatum(priv.Kind == privilege.SELECT), // with_hierarchy
 					); err != nil {
 						return err
 					}

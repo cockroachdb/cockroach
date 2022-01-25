@@ -617,7 +617,7 @@ func showPrivileges(descriptor *descpb.Descriptor) string {
 			if j != 0 {
 				privStringBuilder.WriteString(", ")
 			}
-			privStringBuilder.WriteString(priv)
+			privStringBuilder.WriteString(priv.Kind.String())
 		}
 		privStringBuilder.WriteString(" ON ")
 		privStringBuilder.WriteString(descpb.GetDescriptorName(descriptor))

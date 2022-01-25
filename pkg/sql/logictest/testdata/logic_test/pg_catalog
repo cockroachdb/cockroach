@@ -332,11 +332,11 @@ SHOW CONSTRAINTS FROM pg_catalog.pg_namespace
 ----
 table_name  constraint_name  constraint_type  details  validated
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON pg_catalog.pg_namespace
 ----
-database_name  schema_name  table_name    grantee  privilege_type
-test           pg_catalog   pg_namespace  public   SELECT
+database_name  schema_name  table_name    grantee  privilege_type  is_grantable
+test           pg_catalog   pg_namespace  public   SELECT          false
 
 
 # Verify selecting from pg_catalog.

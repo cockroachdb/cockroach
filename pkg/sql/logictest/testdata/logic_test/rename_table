@@ -44,11 +44,11 @@ SHOW TABLES
 public  new_kv  table  root  0  NULL
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTTT
+query TTTTTB
 SHOW GRANTS ON TABLE new_kv
 ----
-test  public new_kv  admin  ALL
-test  public new_kv  root   ALL
+test  public  new_kv  admin  ALL  true
+test  public  new_kv  root   ALL  true
 
 statement error invalid table name: ""
 ALTER TABLE "" RENAME TO foo

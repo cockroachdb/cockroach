@@ -11,6 +11,7 @@
 package descpb
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -30,82 +31,89 @@ func TestPrivilege(t *testing.T) {
 	testCases := []struct {
 		grantee       security.SQLUsername // User to grant/revoke privileges on.
 		grant, revoke privilege.List
-		show          []UserPrivilegeString
+		show          []UserPrivilege
 		objectType    privilege.ObjectType
 	}{
 		{security.SQLUsername{}, nil, nil,
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
 		{security.RootUserName(), privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
 		{security.RootUserName(), privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
 		{testUser, privilege.List{privilege.INSERT, privilege.DROP}, nil,
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
-				{testUser, []string{"DROP", "INSERT"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.DROP}, {Kind: privilege.INSERT}}},
 			},
 			privilege.Table,
 		},
 		{barUser, nil, privilege.List{privilege.INSERT, privilege.ALL},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
-				{testUser, []string{"DROP", "INSERT"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.DROP}, {Kind: privilege.INSERT}}},
 			},
 			privilege.Table,
 		},
 		{testUser, privilege.List{privilege.ALL}, nil,
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
-				{testUser, []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.ALL}}},
 			},
 			privilege.Table,
 		},
 		{testUser, nil, privilege.List{privilege.SELECT, privilege.INSERT},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
-				{testUser, []string{"CREATE", "DELETE", "DROP", "GRANT", "UPDATE", "ZONECONFIG"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{testUser, []privilege.Privilege{
+					{Kind: privilege.CREATE},
+					{Kind: privilege.DELETE},
+					{Kind: privilege.DROP},
+					{Kind: privilege.GRANT},
+					{Kind: privilege.UPDATE},
+					{Kind: privilege.ZONECONFIG},
+				}},
 			},
 			privilege.Table,
 		},
 		{testUser, nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{security.RootUserName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
 		// Validate checks that root still has ALL privileges, but we do not call it here.
 		{security.RootUserName(), nil, privilege.List{privilege.ALL},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
 		// Ensure revoking USAGE from a user with ALL privilege on a type
 		// leaves the user with only GRANT privilege.
 		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
-				{testUser, []string{"GRANT"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.GRANT}}},
 			},
 			privilege.Type,
 		},
@@ -113,8 +121,8 @@ func TestPrivilege(t *testing.T) {
 		// leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL}, privilege.List{privilege.USAGE, privilege.GRANT},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Type,
 		},
@@ -124,8 +132,8 @@ func TestPrivilege(t *testing.T) {
 			privilege.List{privilege.ALL}, privilege.List{privilege.CREATE, privilege.DROP,
 				privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE,
 				privilege.ZONECONFIG},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
@@ -135,8 +143,8 @@ func TestPrivilege(t *testing.T) {
 			privilege.List{privilege.ALL}, privilege.List{privilege.CONNECT, privilege.CREATE,
 				privilege.DROP, privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE,
 				privilege.UPDATE, privilege.ZONECONFIG},
-			[]UserPrivilegeString{
-				{security.AdminRoleName(), []string{"ALL"}},
+			[]UserPrivilege{
+				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Database,
 		},
@@ -157,7 +165,7 @@ func TestPrivilege(t *testing.T) {
 				tcNum, descriptor, show, tc.show)
 		}
 		for i := 0; i < len(show); i++ {
-			if show[i].User != tc.show[i].User || show[i].PrivilegeString() != tc.show[i].PrivilegeString() {
+			if !reflect.DeepEqual(show[i], tc.show[i]) {
 				t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
 					tcNum, descriptor, show, tc.show)
 			}
