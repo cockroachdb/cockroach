@@ -36,8 +36,8 @@ export interface TimeScale {
   windowValid?: moment.Duration;
   // The expected duration of individual samples for queries at this time scale.
   sampleSize: moment.Duration;
-  // The end time of the window if it isn't the present
-  windowEnd?: moment.Moment;
+  // The end time of the window, or null if it should be a dynamically moving "now".
+  windowEnd: moment.Moment | null;
 }
 
 export class TimeWindowState {
@@ -49,15 +49,20 @@ export class TimeWindowState {
   scaleChanged: boolean;
   useTimeRange: boolean;
   constructor() {
-    this.scale = defaultTimeScaleOptions["Past 10 Minutes"];
-    this.scale.key = "Past 10 Minutes";
+    this.scale = {
+      ...defaultTimeScaleOptions["Past 10 Minutes"],
+      windowEnd: null,
+      key: "Past 10 Minutes",
+    };
     this.useTimeRange = false;
     this.scaleChanged = false;
   }
 }
 
-export interface TimeScaleCollection {
-  [key: string]: TimeScale;
+export type TimeScaleOption = Omit<TimeScale, "windowEnd">;
+
+export interface TimeScaleOptions {
+  [key: string]: TimeScaleOption;
 }
 
 export type TimeRangeTitle =

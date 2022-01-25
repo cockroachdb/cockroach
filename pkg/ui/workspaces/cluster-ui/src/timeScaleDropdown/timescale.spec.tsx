@@ -91,10 +91,12 @@ describe("<TimeScaleDropdown>", function() {
   it("Past 10 minutes must be render", () => {
     const wrapper = makeTimeScaleDropdown(state);
     wrapper.setProps({ currentScale: state.currentScale });
-    assert.equal(
-      wrapper.props().currentScale,
-      defaultTimeScaleOptions["Past 10 Minutes"],
-    );
+    const expected: TimeScale = {
+      key: "Past 10 Minutes",
+      ...defaultTimeScaleOptions["Past 10 Minutes"],
+      windowEnd: null,
+    };
+    assert.deepEqual(wrapper.props().currentScale, expected);
   });
 
   it("getTimeRangeTitle must return title Past 10 Minutes", () => {

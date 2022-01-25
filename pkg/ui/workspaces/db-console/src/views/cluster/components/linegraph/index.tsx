@@ -38,7 +38,7 @@ import {
   QueryTimeInfo,
 } from "src/views/shared/components/metricQuery";
 import Visualization from "src/views/cluster/components/visualization";
-import { util } from "@cockroachlabs/cluster-ui";
+import { TimeScale, util } from "@cockroachlabs/cluster-ui";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import Long from "long";
@@ -458,11 +458,11 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       start: moment.unix(start),
       end: moment.unix(end),
     };
-    let newTimeScale = findClosestTimeScale(
-      defaultTimeScaleOptions,
-      end - start,
-      start,
-    );
+    let newTimeScale: TimeScale = {
+      ...findClosestTimeScale(defaultTimeScaleOptions, end - start, start),
+      key: "Custom",
+      windowEnd: moment.unix(end),
+    };
     if (this.props.adjustTimeScaleOnChange) {
       newTimeScale = this.props.adjustTimeScaleOnChange(
         newTimeScale,

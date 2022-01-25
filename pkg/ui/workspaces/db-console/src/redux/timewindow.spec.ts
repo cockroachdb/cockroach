@@ -36,6 +36,7 @@ describe("time window reducer", function() {
         windowSize: moment.duration(10, "s"),
         windowValid: moment.duration(10, "s"),
         sampleSize: moment.duration(10, "s"),
+        windowEnd: null,
       };
       assert.deepEqual(timewindow.setTimeScale(payload), {
         type: timewindow.SET_SCALE,
@@ -50,10 +51,11 @@ describe("time window reducer", function() {
         timewindow.timeWindowReducer(undefined, { type: "unknown" }),
         new timewindow.TimeWindowState(),
       );
-      assert.deepEqual(
-        new timewindow.TimeWindowState().scale,
-        defaultTimeScaleOptions["Past 10 Minutes"],
-      );
+      assert.deepEqual(new timewindow.TimeWindowState().scale, {
+        ...defaultTimeScaleOptions["Past 10 Minutes"],
+        key: "Past 10 Minutes",
+        windowEnd: null,
+      });
     });
 
     describe("setTimeWindow", () => {
@@ -86,6 +88,7 @@ describe("time window reducer", function() {
           windowSize: newSize,
           windowValid: newValid,
           sampleSize: newSample,
+          windowEnd: null,
         };
         expected.scaleChanged = true;
         assert.deepEqual(
@@ -95,6 +98,7 @@ describe("time window reducer", function() {
               windowSize: newSize,
               windowValid: newValid,
               sampleSize: newSample,
+              windowEnd: null,
             }),
           ),
           expected,
