@@ -33,28 +33,37 @@ import (
 // * tableoid: A Postgres system column that contains the ID of the table
 //   that a particular row came from.
 
+const (
+	// MVCCTimestampColumnID is the ColumnID of the MVCC timestamp column.
+	MVCCTimestampColumnID descpb.ColumnID = math.MaxUint32 - iota
+
+	// TableOIDColumnID is the ID of the tableoid system column.
+	TableOIDColumnID
+
+	numSystemColumns = iota
+)
+
+func init() {
+	if len(AllSystemColumnDescs) != numSystemColumns {
+		panic("need to update system column IDs or descriptors")
+	}
+	if catalog.NumSystemColumns != numSystemColumns {
+		panic("need to update catalog.NumSystemColumns")
+	}
+	if catalog.SmallestSystemColumnColumnID != math.MaxUint32-numSystemColumns+1 {
+		panic("need to update catalog.SmallestSystemColumnColumnID")
+	}
+	for _, desc := range AllSystemColumnDescs {
+		if desc.SystemColumnKind != GetSystemColumnKindFromColumnID(desc.ID) {
+			panic("system column ID ordering must match SystemColumnKind value ordering")
+		}
+	}
+}
+
 // AllSystemColumnDescs contains all registered system columns.
 var AllSystemColumnDescs = []descpb.ColumnDescriptor{
 	MVCCTimestampColumnDesc,
 	TableOIDColumnDesc,
-}
-
-// MVCCTimestampColumnID is the ColumnID of the MVCC timesatmp column. Future
-// system columns will have ID's that decrement from this value.
-const MVCCTimestampColumnID = math.MaxUint32
-
-// TableOIDColumnID is the ID of the tableoid system column.
-const TableOIDColumnID = MVCCTimestampColumnID - 1
-
-func init() {
-	if len(AllSystemColumnDescs) != catalog.NumSystemColumns {
-		panic("need to update catalog.NumSystemColumns")
-	}
-	for _, desc := range AllSystemColumnDescs {
-		if desc.ID < catalog.SmallestSystemColumnColumnID {
-			panic("need to update catalog.SmallestSystemColumnColumnID")
-		}
-	}
 }
 
 // MVCCTimestampColumnDesc is a column descriptor for the MVCC system column.
@@ -88,18 +97,17 @@ const TableOIDColumnName = "tableoid"
 
 // IsColIDSystemColumn returns whether a column ID refers to a system column.
 func IsColIDSystemColumn(colID descpb.ColumnID) bool {
-	return GetSystemColumnKindFromColumnID(colID) != catpb.SystemColumnKind_NONE
+	return colID > math.MaxUint32-numSystemColumns
 }
 
 // GetSystemColumnKindFromColumnID returns the kind of system column that colID
 // refers to.
 func GetSystemColumnKindFromColumnID(colID descpb.ColumnID) catpb.SystemColumnKind {
-	for i := range AllSystemColumnDescs {
-		if AllSystemColumnDescs[i].ID == colID {
-			return AllSystemColumnDescs[i].SystemColumnKind
-		}
+	i := math.MaxUint32 - uint32(colID)
+	if i >= numSystemColumns {
+		return catpb.SystemColumnKind_NONE
 	}
-	return catpb.SystemColumnKind_NONE
+	return catpb.SystemColumnKind_NONE + 1 + catpb.SystemColumnKind(i)
 }
 
 // IsSystemColumnName returns whether or not a name is a reserved system
