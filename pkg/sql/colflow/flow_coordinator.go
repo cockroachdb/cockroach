@@ -254,14 +254,6 @@ func (f *BatchFlowCoordinator) pushError(err error) execinfra.ConsumerStatus {
 // then shuts it down.
 func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	status := execinfra.NeedMoreRows
-	// Make sure that we close the coordinator and notify the batch receiver in
-	// all cases.
-	defer func() {
-		if err := f.close(); err != nil && status != execinfra.ConsumerClosed {
-			f.pushError(err)
-		}
-		f.output.ProducerDone()
-	}()
 
 	ctx, span := execinfra.ProcessorSpan(ctx, "batch flow coordinator")
 	if span != nil {
@@ -271,6 +263,17 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 		}
 		defer span.Finish()
 	}
+
+	// Make sure that we close the coordinator and notify the batch receiver in
+	// all cases. Note that f.close is only safe to call before finishing the
+	// tracing span because some components might still use the span when they
+	// are being closed.
+	defer func() {
+		if err := f.close(); err != nil && status != execinfra.ConsumerClosed {
+			f.pushError(err)
+		}
+		f.output.ProducerDone()
+	}()
 
 	if err := f.init(ctx); err != nil {
 		f.pushError(err)
