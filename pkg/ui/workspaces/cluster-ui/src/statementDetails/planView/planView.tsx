@@ -56,6 +56,24 @@ function warnForAttribute(attr: IAttr): boolean {
   return false;
 }
 
+// planNodeAttrsToString converts an array of FlatPlanNodeAttribute[] into a string.
+export function planNodeAttrsToString(attrs: FlatPlanNodeAttribute[]): string {
+  return attrs.map(attr => `${attr.key} ${attr.values.join(" ")}`).join(" ");
+}
+
+// planNodeToString recursively converts a FlatPlanNode into a string.
+export function planNodeToString(plan: FlatPlanNode): string {
+  const str = `${plan.name} ${planNodeAttrsToString(plan.attrs)}`;
+
+  if (plan.children.length > 0) {
+    return `${str} ${plan.children
+      .map(child => planNodeToString(child))
+      .join(" ")}`;
+  }
+
+  return str;
+}
+
 // flattenAttributes takes a list of attrs (IAttr[]) and collapses
 // all the values for the same key (FlatPlanNodeAttribute). For example,
 // if attrs was:

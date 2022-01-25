@@ -76,6 +76,7 @@ import {
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
+import { flattenTreeAttributes, planNodeToString } from "../statementDetails";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -144,6 +145,25 @@ function statementsRequestFromProps(
     start: Long.fromNumber(start.unix()),
     end: Long.fromNumber(end.unix()),
   });
+}
+
+// filterBySearchQuery returns true if a search query matches the statement.
+export function filterBySearchQuery(
+  statement: AggregateStatistics,
+  search: string,
+): boolean {
+  const label = statement.label;
+  const plan = planNodeToString(
+    flattenTreeAttributes(
+      statement.stats.sensitive_info &&
+        statement.stats.sensitive_info.most_recent_plan_description,
+    ),
+  );
+  const matchString = `${label} ${plan}`.toLowerCase();
+  return search
+    .toLowerCase()
+    .split(" ")
+    .every(val => matchString.includes(val));
 }
 
 export class StatementsPage extends React.Component<
@@ -408,15 +428,6 @@ export class StatementsPage extends React.Component<
           databases.length == 0 || databases.includes(statement.database),
       )
       .filter(statement => (filters.fullScan ? statement.fullScan : true))
-      .filter(statement =>
-        search
-          ? search
-              .split(" ")
-              .every(val =>
-                statement.label.toLowerCase().includes(val.toLowerCase()),
-              )
-          : true,
-      )
       .filter(
         statement =>
           statement.stats.service_lat.mean >= timeValue ||
@@ -456,6 +467,9 @@ export class StatementsPage extends React.Component<
               statement.stats.nodes.map(node => "n" + node),
               nodes,
             )),
+      )
+      .filter(statement =>
+        search ? filterBySearchQuery(statement, search) : true,
       );
   };
 
