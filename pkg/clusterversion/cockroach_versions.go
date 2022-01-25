@@ -316,6 +316,8 @@ const (
 	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	WaitedForDelRangeInGCJob
+	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -530,6 +532,11 @@ var versionsSingleton = keyedVersions{
 		Key:     WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
