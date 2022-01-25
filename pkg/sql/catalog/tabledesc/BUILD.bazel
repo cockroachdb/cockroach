@@ -89,6 +89,7 @@ go_test(
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/privilege",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
