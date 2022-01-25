@@ -2588,16 +2588,12 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
+public   other_db       crdb_internal       USAGE           NULL
+public   other_db       information_schema  USAGE           NULL
 admin    other_db       other_schema        ALL             NULL
 root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
+public   other_db       pg_catalog          USAGE           NULL
+public   other_db       pg_extension        USAGE           NULL
 admin    other_db       public              ALL             NULL
 public   other_db       public              CREATE          NULL
 public   other_db       public              USAGE           NULL
@@ -2610,16 +2606,12 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
+public   other_db       crdb_internal       USAGE           NULL
+public   other_db       information_schema  USAGE           NULL
 admin    other_db       other_schema        ALL             NULL
 root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
+public   other_db       pg_catalog          USAGE           NULL
+public   other_db       pg_extension        USAGE           NULL
 admin    other_db       public              ALL             NULL
 public   other_db       public              CREATE          NULL
 public   other_db       public              USAGE           NULL
@@ -2632,17 +2624,13 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema        privilege_type  is_grantable
-admin     other_db       crdb_internal       ALL             NULL
-root      other_db       crdb_internal       ALL             NULL
-admin     other_db       information_schema  ALL             NULL
-root      other_db       information_schema  ALL             NULL
+public    other_db       crdb_internal       USAGE           NULL
+public    other_db       information_schema  USAGE           NULL
 admin     other_db       other_schema        ALL             NULL
 root      other_db       other_schema        ALL             NULL
 testuser  other_db       other_schema        CREATE          NULL
-admin     other_db       pg_catalog          ALL             NULL
-root      other_db       pg_catalog          ALL             NULL
-admin     other_db       pg_extension        ALL             NULL
-root      other_db       pg_extension        ALL             NULL
+public    other_db       pg_catalog          USAGE           NULL
+public    other_db       pg_extension        USAGE           NULL
 admin     other_db       public              ALL             NULL
 public    other_db       public              CREATE          NULL
 public    other_db       public              USAGE           NULL

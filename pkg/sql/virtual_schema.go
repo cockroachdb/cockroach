@@ -178,7 +178,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
+		descpb.NewVirtualTablePrivilegeDescriptor(),
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
 		nil,                        /* evalCtx */
@@ -256,7 +256,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		id,
 		columns,
 		startTime, /* creationTime */
-		descpb.NewPublicSelectPrivilegeDescriptor(),
+		descpb.NewVirtualTablePrivilegeDescriptor(),
 		nil, /* semaCtx */
 		nil, /* evalCtx */
 		tree.PersistencePermanent,

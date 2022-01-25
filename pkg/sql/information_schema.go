@@ -1046,16 +1046,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
-					var privs []descpb.UserPrivilege
-					if sc.SchemaKind() == catalog.SchemaUserDefined {
-						// User defined schemas have their own privileges.
-						privs = sc.GetPrivileges().Show(privilege.Schema)
-					} else {
-						// Other schemas inherit from the parent database.
-						// TODO(ajwerner): Fix this because it's bogus for everything other
-						// than public.
-						privs = db.GetPrivileges().Show(privilege.Database)
-					}
+					privs := sc.GetPrivileges().Show(privilege.Schema)
 					dbNameStr := tree.NewDString(db.GetName())
 					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
@@ -1064,17 +1055,6 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
 							privKind := priv.Kind
-							// Non-user defined schemas inherit privileges from the database,
-							// but the USAGE privilege is conferred by having SELECT privilege
-							// on the database. (There is no SELECT privilege on schemas.)
-							if sc.SchemaKind() != catalog.SchemaUserDefined {
-								if priv.Kind == privilege.SELECT {
-									privKind = privilege.USAGE
-								} else if !privilege.SchemaPrivileges.Contains(privKind) {
-									continue
-								}
-							}
-
 							if err := addRow(
 								userNameStr,                        // grantee
 								dbNameStr,                          // table_catalog
