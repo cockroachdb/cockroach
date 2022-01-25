@@ -392,6 +392,7 @@ func (f rawEventFeed) run(
 	spans []kvcoord.SpanTimePair,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
 	var startAfter hlc.Timestamp
 	for _, s := range spans {

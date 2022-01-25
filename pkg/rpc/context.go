@@ -900,17 +900,36 @@ var rangefeedStreamInfo = &grpc.StreamServerInfo{
 	IsServerStream: true,
 }
 
+var muxRangeFeedDesc = &grpc.StreamDesc{
+	StreamName:    "MuxRangeFeed",
+	ServerStreams: true,
+	ClientStreams: true,
+}
+
+const muxRangefeedMethodName = "/cockroach.roachpb.Internal/MuxRangeFeed"
+
+var muxRangefeedStreamInfo = &grpc.StreamServerInfo{
+	FullMethod:     muxRangefeedMethodName,
+	IsClientStream: true,
+	IsServerStream: true,
+}
+
 // RangeFeed implements the RestrictedInternalClient interface.
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
-	// Create a pipe between the server-side sender and the client-side receiver.
-	// On the server side, this pipe will be possibly wrapped by server-side
-	// interceptors providing their own implementation of grpc.ServerStream, and
-	// then it will be in turn wrapped by a rangeFeedServerAdapter before being
-	// passed to the RangeFeed RPC handler (i.e. Node.RangeFeed).
+	// RangeFeed is a server-streaming RPC, so we'll use a pipe between the
+	// server-side sender and the client-side receiver. The two ends of this pipe
+	// are wrapped in a client stream (rawClientStream) and a server stream
+	// (rawServerStream).
 	//
-	// On the client side, this pipe will be returned at the bottom of the
+	// On the server side, the rawServerStream will be possibly wrapped by
+	// server-side interceptors providing their own implementation of
+	// grpc.ServerStream, and then it will be in turn wrapped by a
+	// rangeFeedServerAdapter before being passed to the RangeFeed RPC handler
+	// (i.e. Node.RangeFeed).
+	//
+	// On the client side, the rawClientStream will be returned at the bottom of the
 	// interceptor chain. The client-side interceptors might wrap it in their own
 	// ClientStream implementations, so it might not be the stream that we
 	// ultimately return to callers. Similarly, the server-side interceptors might
@@ -920,17 +939,37 @@ func (a internalClientAdapter) RangeFeed(
 	//   RPC handler (i.e. Node.RangeFeed) ->
 	//    -> rangeFeedServerAdapter
 	//    -> grpc.ServerStream implementations provided by server-side interceptors
-	//    -> rfPipe
+	//    -> rawServerStream
+	//        | the pipe
+	//        v
+	//    -> rawClientStream
 	//    -> grpc.ClientStream implementations provided by client-side interceptors
 	//    -> rangeFeedClientAdapter
+	//    -> rawClientStream
 	//    -> RPC caller
-	rfPipe := newRangeFeedPipe(grpcutil.NewLocalRequestContext(ctx))
+	writer, reader := makePipe(func(dst interface{}, src interface{}) {
+		*dst.(*roachpb.RangeFeedEvent) = *src.(*roachpb.RangeFeedEvent)
+	})
+	rawClientStream := &clientStream{
+		ctx:      ctx,
+		receiver: reader,
+		// RangeFeed is a server-streaming RPC, so the client does not send
+		// anything.
+		sender: pipeWriter{},
+	}
+	rawServerStream := &serverStream{
+		ctx: grpcutil.NewLocalRequestContext(ctx),
+		// RangeFeed is a server-streaming RPC, so the server does not receive
+		// anything.
+		receiver: pipeReader{},
+		sender:   writer,
+	}
 
 	// Mark this request as originating locally.
 	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 
 	// Spawn a goroutine running the server-side handler. This goroutine
-	// communicates with the client stream through rangeFeedPipe.
+	// communicates with the client stream through rfPipe.
 	go func() {
 		// Handler adapts the ServerStream to the typed interface expected by the
 		// RPC handler (Node.RangeFeed). `stream` might be `rfPipe` which we
@@ -943,11 +982,11 @@ func (a internalClientAdapter) RangeFeed(
 		// Run the server interceptors, which will bottom out by running `handler`
 		// (defined just above), which runs Node.RangeFeed (our RPC handler).
 		// This call is blocking.
-		err := a.serverStreamInterceptors.run(a.server, rfPipe, rangefeedStreamInfo, handler)
+		err := a.serverStreamInterceptors.run(a.server, rawServerStream, rangefeedStreamInfo, handler)
 		if err == nil {
 			err = io.EOF
 		}
-		rfPipe.errC <- err
+		rawServerStream.sendError(err)
 	}()
 
 	// Run the client-side interceptors, which produce a gprc.ClientStream.
@@ -966,7 +1005,7 @@ func (a internalClientAdapter) RangeFeed(
 		func(
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption,
 		) (grpc.ClientStream, error) {
-			return rfPipe, nil
+			return rawClientStream, nil
 		},
 		opts...)
 	if err != nil {
@@ -992,86 +1031,311 @@ func (x rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
 	return m, nil
 }
 
-// rangeFeedPipe is a (uni-directional) pipe of *RangeFeedEvent that implements
-// the grpc.ClientStream and grpc.ServerStream interfaces.
-type rangeFeedPipe struct {
-	ctx   context.Context
+// MuxRangeFeed implements the RestrictedInternalClient interface.
+//
+// This is a bi-directional streaming RPC, as opposed to RangeFeed which is
+// uni-directional. This is why this implementation is a bit different.
+func (a internalClientAdapter) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (roachpb.Internal_MuxRangeFeedClient, error) {
+	// MuxRangeFeed is a bi-directional RPC, so we have to deal with two streams:
+	// the client stream and the server stream. The client stream sends
+	// RangeFeedRequests and receives MuxRangeFeedEvents, whereas the server
+	// stream does the reverse: it sends MuxRangeFeedEvents and receives
+	// RangeFeedRequests. These streams use two pipes - one for MuxRangeFeedEvents
+	// and one for RangeFeedRequests. The client stream uses the writing end of
+	// the RangeFeedRequest pipe and the reading end of the MuxRangeFeedEvents
+	// pipe, and the server stream does the reverse.
+	//
+	// The flow of data through the streams, from server to client (or, read in
+	// reverse, from client to server) looks like:
+	//   RPC handler (i.e. Node.RangeFeed) ->
+	//    -> rangeFeedServerAdapter
+	//    -> grpc.ServerStream implementations provided by server-side interceptors
+	//    -> rawServerStream
+	//        ^
+	//        | the two pipes
+	//        v
+	//    -> rawClientStream
+	//    -> grpc.ClientStream implementations provided by client-side interceptors
+	//    -> rangeFeedClientAdapter
+	//    -> rawClientStream
+	//    -> RPC caller
+
+	eventWriter, eventReader := makePipe(func(dst interface{}, src interface{}) {
+		*dst.(*roachpb.MuxRangeFeedEvent) = *src.(*roachpb.MuxRangeFeedEvent)
+	})
+	requestWriter, requestReader := makePipe(func(dst interface{}, src interface{}) {
+		*dst.(*roachpb.RangeFeedRequest) = *src.(*roachpb.RangeFeedRequest)
+	})
+	rawClientStream := &clientStream{
+		ctx:      ctx,
+		receiver: eventReader,
+		sender:   requestWriter,
+	}
+	rawServerStream := &serverStream{
+		ctx:      grpcutil.NewLocalRequestContext(ctx),
+		receiver: requestReader,
+		sender:   eventWriter,
+	}
+
+	go func() {
+		// Handler adapts the ServerStream to the typed interface expected by the
+		// RPC handler (Node.MuxRangeFeed). `stream` might be `rawServerStream` which we
+		// pass to the interceptor chain below, or it might be another
+		// implementation of `ServerStream` that wraps it; in practice it will be
+		// tracing.grpcinterceptor.StreamServerInterceptor.
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			adapter := muxRangeFeedServerAdapter{
+				ServerStream: stream,
+			}
+			return a.server.MuxRangeFeed(adapter)
+		}
+		// Run the server interceptors, which will bottom out by running `handler`
+		// (defined just above), which runs Node.MuxRangeFeed (our RPC handler).
+		// This call is blocking.
+		err := a.serverStreamInterceptors.run(a.server, rawServerStream, muxRangefeedStreamInfo, handler)
+		if err == nil {
+			err = io.EOF
+		}
+		// Notify client side that server exited.
+		rawServerStream.sendError(err)
+	}()
+
+	// Run the client-side interceptors, which produce a gprc.ClientStream.
+	// clientSide might end up being rfPipe, or it might end up being another
+	// grpc.ClientStream implementation that wraps it.
+	//
+	// NOTE: For actual RPCs, going to a remote note, there's a tracing client
+	// interceptor producing a tracing.grpcinterceptor.tracingClientStream
+	// implementation of ClientStream. That client interceptor does not run for
+	// these local requests handled by the internalClientAdapter (as opposed to
+	// the tracing server interceptor, which does run).
+	clientStream, err := a.clientStreamInterceptors.run(ctx, muxRangeFeedDesc, nil /* ClientConn */, muxRangefeedMethodName,
+		// This function runs at the bottom of the client interceptor stack,
+		// pretending to actually make an RPC call. We don't make any calls, but
+		// return the pipe on which messages from the server will come.
+		func(
+			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption,
+		) (grpc.ClientStream, error) {
+			return rawClientStream, nil
+		},
+		opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return muxRangeFeedClientAdapter{
+		ClientStream: clientStream,
+	}, nil
+}
+
+type muxRangeFeedClientAdapter struct {
+	grpc.ClientStream
+}
+
+var _ roachpb.Internal_MuxRangeFeedClient = muxRangeFeedClientAdapter{}
+
+func (a muxRangeFeedClientAdapter) Send(request *roachpb.RangeFeedRequest) error {
+	// Mark this request as originating locally.
+	request.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+	return a.SendMsg(request)
+}
+
+func (a muxRangeFeedClientAdapter) Recv() (*roachpb.MuxRangeFeedEvent, error) {
+	m := new(roachpb.MuxRangeFeedEvent)
+	if err := a.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+type muxRangeFeedServerAdapter struct {
+	grpc.ServerStream
+}
+
+var _ roachpb.Internal_MuxRangeFeedServer = muxRangeFeedServerAdapter{}
+
+func (a muxRangeFeedServerAdapter) Send(event *roachpb.MuxRangeFeedEvent) error {
+	return a.SendMsg(event)
+}
+
+func (a muxRangeFeedServerAdapter) Recv() (*roachpb.RangeFeedRequest, error) {
+	m := new(roachpb.RangeFeedRequest)
+	if err := a.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// pipe represents a uni-directional pipe. Datums can be written through send(),
+// and received through recv(). Errors can also be sent through sendError();
+// they'll be received through recv() without ordering guarantees in
+// relationship to the other datums.
+type pipe struct {
 	respC chan interface{}
 	errC  chan error
 }
 
-var _ grpc.ClientStream = &rangeFeedPipe{}
-var _ grpc.ServerStream = &rangeFeedPipe{}
-
-// newRangeFeedPipe creates a rangeFeedPipe. The pipe is returned as a pointer
-// for convenience, because it's used as a grpc.ClientStream and
-// grpc.ServerStream, and these interfaces are implemented on the pointer
-// receiver.
-func newRangeFeedPipe(ctx context.Context) *rangeFeedPipe {
-	return &rangeFeedPipe{
-		ctx:   ctx,
+// makePipe creates a pipe and return it as its two ends.
+//
+// assignPtr is a function that implements *dst = *src for the type of the
+// datums that flow through this pipe. This is needed because the
+// pipeReader.recv(m) method wants to assign to its argument in order to match
+// the gRPC stream interface. However, the pipe is implemented in a generic
+// (i.e. interface{}) way.
+func makePipe(assignPtr func(dst interface{}, src interface{})) (pipeWriter, pipeReader) {
+	p := &pipe{
 		respC: make(chan interface{}, 128),
 		errC:  make(chan error, 1),
 	}
+	w := pipeWriter{pipe: p}
+	r := pipeReader{
+		pipe:      p,
+		assignPtr: assignPtr,
+	}
+	return w, r
 }
 
-// grpc.ClientStream methods.
-func (*rangeFeedPipe) Header() (metadata.MD, error) { panic("unimplemented") }
-func (*rangeFeedPipe) Trailer() metadata.MD         { panic("unimplemented") }
-func (*rangeFeedPipe) CloseSend() error             { panic("unimplemented") }
-
-// grpc.ServerStream methods.
-func (*rangeFeedPipe) SetHeader(metadata.MD) error  { panic("unimplemented") }
-func (*rangeFeedPipe) SendHeader(metadata.MD) error { panic("unimplemented") }
-func (*rangeFeedPipe) SetTrailer(metadata.MD)       { panic("unimplemented") }
-
-// Common grpc.{Client,Server}Stream methods.
-func (p *rangeFeedPipe) Context() context.Context { return p.ctx }
-
-// SendMsg is part of the grpc.ServerStream interface. It is also part of the
-// grpc.ClientStream interface but, in the case of the RangeFeed RPC (which is
-// only server-streaming, not bi-directional), only the server sends.
-func (p *rangeFeedPipe) SendMsg(m interface{}) error {
+func (s *pipe) send(ctx context.Context, m interface{}) error {
 	select {
-	case p.respC <- m:
+	case s.respC <- m:
 		return nil
-	case <-p.ctx.Done():
-		return p.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
-// RecvMsg is part of the grpc.ClientStream interface. It is also technically
-// part of the grpc.ServerStream interface but, in the case of the RangeFeed RPC
-// (which is only server-streaming, not bi-directional), only the client
-// receives.
-func (p *rangeFeedPipe) RecvMsg(m interface{}) error {
-	out := m.(*roachpb.RangeFeedEvent)
-	msg, err := p.recvInternal()
-	if err != nil {
-		return err
-	}
-	*out = *msg.(*roachpb.RangeFeedEvent)
-	return nil
+func (s *pipe) sendError(err error) {
+	s.errC <- err
 }
 
-// recvInternal is the implementation of RecvMsg.
-func (p *rangeFeedPipe) recvInternal() (interface{}, error) {
+func (s *pipe) recv(ctx context.Context) (interface{}, error) {
 	// Prioritize respC. Both channels are buffered and the only guarantee we
 	// have is that once an error is sent on errC no other events will be sent
 	// on respC again.
 	select {
-	case e := <-p.respC:
+	case e := <-s.respC:
 		return e, nil
-	case err := <-p.errC:
+	case err := <-s.errC:
 		select {
-		case e := <-p.respC:
-			p.errC <- err
+		case e := <-s.respC:
+			s.errC <- err
 			return e, nil
 		default:
 			return nil, err
 		}
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
+
+// pipeWriter represents the writing end of a pipe.
+type pipeWriter struct {
+	pipe *pipe
+}
+
+func (w pipeWriter) send(ctx context.Context, m interface{}) error {
+	return w.pipe.send(ctx, m)
+}
+
+func (w pipeWriter) sendError(err error) {
+	w.pipe.sendError(err)
+}
+
+// pipeReader represents the reading end of a pipe.
+type pipeReader struct {
+	pipe      *pipe
+	assignPtr func(dst interface{}, src interface{})
+}
+
+func (r pipeReader) recv(ctx context.Context, dst interface{}) error {
+	m, err := r.pipe.recv(ctx)
+	if err != nil {
+		return err
+	}
+	r.assignPtr(dst, m)
+	return nil
+}
+
+// clientStream is an implementation of grpc.ClientStream that send messages on
+// one pipe and receives messages from another pipe.
+//
+// Both the sending and the receiving are optional; they can be disabled by not
+// initializing the respective pipe end. A clientStream for a server-streaming
+// RPC will be able to receive only; a clientStream for a client-streaming RPC
+// will be able to send only. A clientStream for a bi-directional RPC will be
+// able to both send and receive different types of Datums. A clientStream that
+// can't send and can't receive is non-sensical.
+type clientStream struct {
+	// ctx is used to interrupt sends and receives. clientStream captures a ctx to
+	// use throughout because the gRPC interface doesn't take a ctx.
+	ctx      context.Context
+	receiver pipeReader
+	sender   pipeWriter
+}
+
+var _ grpc.ClientStream = clientStream{}
+
+func (c clientStream) Header() (metadata.MD, error) {
+	panic("unimplemented")
+}
+
+func (c clientStream) Trailer() metadata.MD {
+	panic("unimplemented")
+}
+
+func (c clientStream) CloseSend() error {
+	panic("unimplemented")
+}
+
+func (c clientStream) Context() context.Context {
+	return c.ctx
+}
+
+func (c clientStream) SendMsg(m interface{}) error {
+	return c.sender.send(c.ctx, m)
+}
+
+func (c clientStream) RecvMsg(m interface{}) error {
+	return c.receiver.recv(c.ctx, m)
+}
+
+type serverStream struct {
+	ctx      context.Context
+	receiver pipeReader
+	sender   pipeWriter
+}
+
+func (s serverStream) SetHeader(md metadata.MD) error {
+	panic("unimplemented")
+}
+
+func (s serverStream) SendHeader(md metadata.MD) error {
+	panic("unimplemented")
+}
+
+func (s serverStream) SetTrailer(md metadata.MD) {
+	panic("unimplemented")
+}
+
+func (s serverStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s serverStream) SendMsg(m interface{}) error {
+	return s.sender.send(s.ctx, m)
+}
+
+func (s serverStream) RecvMsg(m interface{}) error {
+	return s.receiver.recv(s.ctx, m)
+}
+
+func (s serverStream) sendError(err error) {
+	s.sender.sendError(err)
+}
+
+var _ grpc.ServerStream = serverStream{}
 
 // rangeFeedServerAdapter adapts an untyped ServerStream to the typed
 // roachpb.Internal_RangeFeedServer interface, expected by the RangeFeed RPC
