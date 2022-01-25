@@ -68,8 +68,12 @@ func TestProtectedTimestamps(t *testing.T) {
 	_, err = conn.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms';")
 	require.NoError(t, err)
 
-	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING " +
-		"gc.ttlseconds = 1, range_max_bytes = 1<<18, range_min_bytes = 1<<10;")
+	_, err = conn.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'") // speeds up the test
+	require.NoError(t, err)
+
+	const tableRangeMaxBytes = 1 << 18
+	_, err = conn.Exec("ALTER TABLE foo CONFIGURE ZONE USING "+
+		"gc.ttlseconds = 1, range_max_bytes = $1, range_min_bytes = 1<<10;", tableRangeMaxBytes)
 	require.NoError(t, err)
 
 	rRand, _ := randutil.NewTestRand()
@@ -86,7 +90,25 @@ func TestProtectedTimestamps(t *testing.T) {
 	const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
 	processedRegexp := regexp.MustCompile(processedPattern)
 
-	getTableStartKey := func(table string) roachpb.Key {
+	waitForTableSplit := func() {
+		testutils.SucceedsSoon(t, func() error {
+			count := 0
+			if err := conn.QueryRow(
+				"SELECT count(*) "+
+					"FROM crdb_internal.ranges_no_leases "+
+					"WHERE table_name = $1 "+
+					"AND database_name = current_database()",
+				"foo").Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return errors.New("waiting for table split")
+			}
+			return nil
+		})
+	}
+
+	getTableStartKey := func() roachpb.Key {
 		row := conn.QueryRow(
 			"SELECT start_key "+
 				"FROM crdb_internal.ranges_no_leases "+
@@ -102,7 +124,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	}
 
 	getStoreAndReplica := func() (*kvserver.Store, *kvserver.Replica) {
-		startKey := getTableStartKey("foo")
+		startKey := getTableStartKey()
 		// Okay great now we have a key and can go find replicas and stores and what not.
 		r := tc.LookupRangeOrFatal(t, startKey)
 		l, _, err := tc.FindRangeLease(r, nil)
@@ -110,6 +132,16 @@ func TestProtectedTimestamps(t *testing.T) {
 
 		lhServer := tc.Server(int(l.Replica.NodeID) - 1)
 		return getFirstStoreReplica(t, lhServer, startKey)
+	}
+
+	waitForRangeMaxBytes := func(maxBytes int64) {
+		testutils.SucceedsSoon(t, func() error {
+			_, r := getStoreAndReplica()
+			if r.GetMaxBytes() != maxBytes {
+				return errors.New("waiting for range_max_bytes to be applied")
+			}
+			return nil
+		})
 	}
 
 	gcSoon := func() {
@@ -134,13 +166,16 @@ func TestProtectedTimestamps(t *testing.T) {
 		return thresh
 	}
 
+	waitForTableSplit()
+	waitForRangeMaxBytes(tableRangeMaxBytes)
+
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
 	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
 		nil /* knobs */)
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
-	startKey := getTableStartKey("foo")
+	startKey := getTableStartKey()
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),

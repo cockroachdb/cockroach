@@ -288,11 +288,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: "1253500548539870016",
       label:
-        "SELECT IFNULL(a, b)\n" +
-        "    FROM (\n" +
-        "          SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a,\n" +
-        "                 (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b\n" +
-        "         )",
+        "SELECT IFNULL(a, b) FROM (SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a, (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b)",
       summary: "SELECT IFNULL(a, b) FROM (SELECT)",
       aggregatedTs,
       aggregationInterval,
@@ -315,11 +311,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: "13649565517143827225",
       label:
-        "SELECT IFNULL(a, b)\n" +
-        "    FROM (\n" +
-        "          SELECT (SELECT id FROM users WHERE city = $1 AND id > $2 ORDER BY id LIMIT _) AS a,\n" +
-        "                 (SELECT id FROM users WHERE city = $1 ORDER BY id LIMIT _) AS b\n" +
-        "         )",
+        "SELECT IFNULL(a, b) FROM (SELECT (SELECT id FROM users WHERE (city = $1) AND (id > $2) ORDER BY id LIMIT _) AS a, (SELECT id FROM users WHERE city = $1 ORDER BY id LIMIT _) AS b)",
       summary: "SELECT IFNULL(a, b) FROM (SELECT)",
       aggregatedTs,
       aggregationInterval,
@@ -470,14 +462,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '11195381626529102926',
       label:
-        "CREATE TABLE IF NOT EXISTS promo_codes (\n" +
-        "      code            VARCHAR NOT NULL,\n" +
-        "      description     VARCHAR NULL,\n" +
-        "      creation_time   TIMESTAMP NULL,\n" +
-        "      expiration_time TIMESTAMP NULL,\n" +
-        "      rules           JSONB NULL,\n" +
-        "      PRIMARY KEY (code ASC)\n" +
-        "  )",
+        "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
       summary:
         "CREATE TABLE IF NOT EXISTS promo_codes (code VARCHAR NOT NULL, description VARCHAR NULL, creation_time TIMESTAMP NULL, expiration_time TIMESTAMP NULL, rules JSONB NULL, PRIMARY KEY (code ASC))",
       aggregatedTs,
@@ -525,14 +510,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '13217779306501326587',
       label:
-        'CREATE TABLE IF NOT EXISTS user_promo_codes (\n' +
-        '      city        VARCHAR NOT NULL,\n' +
-        '      user_id     UUID NOT NULL,\n' +
-        '      code        VARCHAR NOT NULL,\n' +
-        '      "timestamp" TIMESTAMP NULL,\n' +
-        '      usage_count INT8 NULL,\n' +
-        '      PRIMARY KEY (city ASC, user_id ASC, code ASC)\n' +
-        '  )',
+        'CREATE TABLE IF NOT EXISTS user_promo_codes (city VARCHAR NOT NULL, user_id UUID NOT NULL, code VARCHAR NOT NULL, "timestamp" TIMESTAMP NULL, usage_count INT8 NULL, PRIMARY KEY (city ASC, user_id ASC, code ASC))',
       summary:
         'CREATE TABLE IF NOT EXISTS user_promo_codes (city VARCHAR NOT NULL, user_id UUID NOT NULL, code VARCHAR NOT NULL, "timestamp" TIMESTAMP NULL, usage_count INT8 NULL, PRIMARY KEY (city ASC, user_id ASC, code ASC))',
       aggregatedTs,
@@ -591,22 +569,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '2695725667586429780',
       label:
-        "CREATE TABLE IF NOT EXISTS rides (\n" +
-        "      id            UUID NOT NULL,\n" +
-        "      city          VARCHAR NOT NULL,\n" +
-        "      vehicle_city  VARCHAR NULL,\n" +
-        "      rider_id      UUID NULL,\n" +
-        "      vehicle_id    UUID NULL,\n" +
-        "      start_address VARCHAR NULL,\n" +
-        "      end_address   VARCHAR NULL,\n" +
-        "      start_time    TIMESTAMP NULL,\n" +
-        "      end_time      TIMESTAMP NULL,\n" +
-        "      revenue       DECIMAL(10,2) NULL,\n" +
-        "      PRIMARY KEY (city ASC, id ASC),\n" +
-        "      INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),\n" +
-        "      INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),\n" +
-        "      CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)\n" +
-        "  )",
+        "CREATE TABLE IF NOT EXISTS rides (id UUID NOT NULL, city VARCHAR NOT NULL, vehicle_city VARCHAR NULL, rider_id UUID NULL, vehicle_id UUID NULL, start_address VARCHAR NULL, end_address VARCHAR NULL, start_time TIMESTAMP NULL, end_time TIMESTAMP NULL, revenue DECIMAL(10,2) NULL, PRIMARY KEY (city ASC, id ASC), INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC), INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC), CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city))",
       summary:
         "CREATE TABLE IF NOT EXISTS rides (id UUID NOT NULL, city VARCHAR NOT NULL, vehicle_city VARCHAR NULL, rider_id UUID NULL, vehicle_id UUID NULL, start_address VARCHAR NULL, end_address VARCHAR NULL, start_time TIMESTAMP NULL, end_time TIMESTAMP NULL, revenue DECIMAL(10,2) NULL, PRIMARY KEY (city ASC, id ASC), INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC), INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC), CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city))",
       aggregatedTs,
@@ -619,18 +582,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '6754865160812330169',
       label:
-        "CREATE TABLE IF NOT EXISTS vehicles (\n" +
-        "      id               UUID NOT NULL,\n" +
-        "      city             VARCHAR NOT NULL,\n" +
-        "      type             VARCHAR NULL,\n" +
-        "      owner_id         UUID NULL,\n" +
-        "      creation_time    TIMESTAMP NULL,\n" +
-        "      status           VARCHAR NULL,\n" +
-        "      current_location VARCHAR NULL,\n" +
-        "      ext              JSONB NULL,\n" +
-        "      PRIMARY KEY (city ASC, id ASC),\n" +
-        "      INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)\n" +
-        "  )",
+        "CREATE TABLE IF NOT EXISTS vehicles (id UUID NOT NULL, city VARCHAR NOT NULL, type VARCHAR NULL, owner_id UUID NULL, creation_time TIMESTAMP NULL, status VARCHAR NULL, current_location VARCHAR NULL, ext JSONB NULL, PRIMARY KEY (city ASC, id ASC), INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC))",
       summary:
         "CREATE TABLE IF NOT EXISTS vehicles (id UUID NOT NULL, city VARCHAR NOT NULL, type VARCHAR NULL, owner_id UUID NULL, creation_time TIMESTAMP NULL, status VARCHAR NULL, current_location VARCHAR NULL, ext JSONB NULL, PRIMARY KEY (city ASC, id ASC), INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC))",
       aggregatedTs,
@@ -676,14 +628,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '8695470234690735168',
       label:
-        "CREATE TABLE IF NOT EXISTS users (\n" +
-        "      id          UUID NOT NULL,\n" +
-        "      city        VARCHAR NOT NULL,\n" +
-        "      name        VARCHAR NULL,\n" +
-        "      address     VARCHAR NULL,\n" +
-        "      credit_card VARCHAR NULL,\n" +
-        "      PRIMARY KEY (city ASC, id ASC)\n" +
-        "  )",
+        "CREATE TABLE IF NOT EXISTS users (id UUID NOT NULL, city VARCHAR NOT NULL, name VARCHAR NULL, address VARCHAR NULL, credit_card VARCHAR NULL, PRIMARY KEY (city ASC, id ASC))",
       summary:
         "CREATE TABLE IF NOT EXISTS users (id UUID NOT NULL, city VARCHAR NOT NULL, name VARCHAR NULL, address VARCHAR NULL, credit_card VARCHAR NULL, PRIMARY KEY (city ASC, id ASC))",
       aggregatedTs,
@@ -696,14 +641,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
     {
       aggregatedFingerprintID: '9261848985398568228',
       label:
-        'CREATE TABLE IF NOT EXISTS vehicle_location_histories (\n' +
-        '      city        VARCHAR NOT NULL,\n' +
-        '      ride_id     UUID NOT NULL,\n' +
-        '      "timestamp" TIMESTAMP NOT NULL,\n' +
-        '      lat         FLOAT8 NULL,\n' +
-        '      long        FLOAT8 NULL,\n' +
-        '      PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC)\n' +
-        '  )',
+        'CREATE TABLE IF NOT EXISTS vehicle_location_histories (city VARCHAR NOT NULL, ride_id UUID NOT NULL, "timestamp" TIMESTAMP NOT NULL, lat FLOAT8 NULL, long FLOAT8 NULL, PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC))',
       summary:
         'CREATE TABLE IF NOT EXISTS vehicle_location_histories (city VARCHAR NOT NULL, ride_id UUID NOT NULL, "timestamp" TIMESTAMP NOT NULL, lat FLOAT8 NULL, long FLOAT8 NULL, PRIMARY KEY (city ASC, ride_id ASC, "timestamp" ASC))',
       aggregatedTs,
