@@ -2707,11 +2707,15 @@ func (s *adminServer) SendKVBatch(
 	}
 	log.StructuredEvent(ctx, event)
 
-	// Send the batch to KV.
+	ctx, finishSpan := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
+	var br *roachpb.BatchResponse
+	defer func() { finishSpan(ctx, br) }()
 	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
 	if pErr != nil {
-		return nil, pErr.GoError()
+		br = &roachpb.BatchResponse{}
+		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
 	}
+	br.Error = pErr
 	return br, nil
 }
 
