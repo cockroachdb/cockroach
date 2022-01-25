@@ -835,26 +835,19 @@ func (s *TestState) DeleteDescriptorComment(
 
 //UpsertConstraintComment updates a comment associated with a constraint.
 func (s *TestState) UpsertConstraintComment(
-	desc catalog.TableDescriptor,
-	_ string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
-	comment string,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
 ) error {
-	s.LogSideEffectf("upsert comment %s for constraint on #%d, name: %s, type: %s"+
-		comment, desc.GetID(), constraintName, constraintType)
+	s.LogSideEffectf("upsert comment %s for constraint on #%d, constraint id: %d"+
+		comment, desc.GetID(), constraintID)
 	return nil
 }
 
 //DeleteConstraintComment deletes a comment associated with a constraint.
 func (s *TestState) DeleteConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
-	s.LogSideEffectf("delete comment for constraint on #%d, name: %s, type: %s",
-		desc.GetID(), constraintName, constraintType)
+	s.LogSideEffectf("delete comment for constraint on #%d, constraint id: %d",
+		desc.GetID(), constraintID)
 	return nil
 }
 

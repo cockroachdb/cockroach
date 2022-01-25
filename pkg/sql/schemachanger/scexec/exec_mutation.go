@@ -363,9 +363,7 @@ func (mvs *mutationVisitorState) DeleteComment(
 }
 
 func (mvs *mutationVisitorState) DeleteConstraintComment(
-	ctx context.Context,
-	tbl catalog.TableDescriptor,
-	constraintID descpb.ConstraintID,
+	ctx context.Context, tbl catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
 	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
 		constraintCommentToUpdate{

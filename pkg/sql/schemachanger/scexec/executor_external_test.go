@@ -539,21 +539,14 @@ func (noopCommentUpdater) DeleteDescriptorComment(
 
 //UpsertConstraintComment upsersts a comment associated with a constraint.
 func (noopCommentUpdater) UpsertConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
-	comment string,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
 ) error {
 	return nil
 }
 
 //DeleteConstraintComment deletes a comment associated with a constraint.
 func (noopCommentUpdater) DeleteConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
 	return nil
 }
