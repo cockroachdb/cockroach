@@ -27,9 +27,17 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
     current: 1,
   });
   const [sortSetting, setSortSetting] = useState({
-    ascending: true,
+    ascending: false,
     columnTitle: null,
   });
+  const formatTableName = (val: HotRange): string => {
+    if (!val.table_name) {
+      return "";
+    } else if (!val.schema_name) {
+      return val.table_name;
+    }
+    return val.schema_name + "." + val.table_name;
+  }
 
   if (hotRangesList.length === 0) {
     return <div>No hot ranges</div>;
@@ -65,10 +73,14 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
         </Tooltip>
       ),
       cell: (val: HotRange) => (
-        <Link to={`/node/${val.replica_node_ids[0]}`}>
-          {val.replica_node_ids.join(", ")}
-        </Link>
-      ),
+        val.replica_node_ids.map((replica, idx) => 
+          <>
+            <Link to={`/node/${replica}`}>
+              {replica}
+            </Link>
+            {idx !== val.replica_node_ids.length - 1 && ", "}
+          </>
+        )),
       sort: (val: HotRange) => val.replica_node_ids[0],
     },
     {
@@ -99,9 +111,9 @@ const HotRangesTable = ({ hotRangesList, lastUpdate }: HotRangesTableProps) => {
         </Text>
       ),
       cell: (val: HotRange) => (
-        <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
-          {val.table_name}
-        </Link>
+        val.database_name && val.table_name ? <Link to={`/database/${val.database_name}/table/${val.table_name}`}>
+          {formatTableName(val)}
+        </Link> : formatTableName(val)
       ),
       sort: (val: HotRange) => val.table_name,
     },
