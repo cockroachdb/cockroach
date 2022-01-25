@@ -337,11 +337,12 @@ const (
 	// this ID range.
 	MaxSystemConfigDescID = 10
 
-	// minUserDescID is the first descriptor ID available for user
-	// structured data. This is the ID following the maximum value of reserved
-	// descriptor IDs. Reserved IDs are used by namespaces and tables used
-	// internally by cockroach.
-	minUserDescID = 50
+	// MaxReservedDescID is the maximum descriptor ID in the reserved range.
+	// In practice, what this means is that this is the highest-possible value
+	// for a hard-coded descriptor ID.
+	// Note that this is NO LONGER a higher bound on ALL POSSIBLE system
+	// descriptor IDs.
+	MaxReservedDescID = 49
 
 	// RootNamespaceID is the ID of the root namespace.
 	RootNamespaceID = 0

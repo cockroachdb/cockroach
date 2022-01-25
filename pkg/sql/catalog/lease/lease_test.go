@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -1270,7 +1271,6 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
-	idChecker := atomic.Value{}
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -1285,12 +1285,10 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 					}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if idChecker.Load() == nil {
+					if uint32(id) < bootstrap.TestingMinUserDescID() {
 						return
 					}
-					if !catalog.IsSystemID(idChecker.Load().(keys.SystemIDChecker), id) {
-						atomic.AddInt32(&testAcquisitionBlockCount, 1)
-					}
+					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
 		},
@@ -1304,7 +1302,6 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 		lease.LeaseDuration.Get(&params.SV))
 
 	t := newLeaseTest(testingT, params)
-	idChecker.Store(t.server.SystemIDChecker())
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`
@@ -1729,7 +1726,6 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	var testAcquisitionBlockCount int32
 
 	params := createTestServerParams()
-	idChecker := atomic.Value{}
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
@@ -1741,10 +1737,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					}
 				},
 				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
-					if idChecker.Load() == nil {
-						return
-					}
-					if idChecker.Load().(keys.SystemIDChecker).IsSystemID(uint32(id)) {
+					if uint32(id) < bootstrap.TestingMinUserDescID() {
 						return
 					}
 					mu.Lock()
@@ -1752,12 +1745,10 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					releasedIDs[id] = struct{}{}
 				},
 				LeaseAcquireResultBlockEvent: func(_ lease.AcquireBlockType, id descpb.ID) {
-					if idChecker.Load() == nil {
+					if uint32(id) < bootstrap.TestingMinUserDescID() {
 						return
 					}
-					if !idChecker.Load().(keys.SystemIDChecker).IsSystemID(uint32(id)) {
-						atomic.AddInt32(&testAcquisitionBlockCount, 1)
-					}
+					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
 			TestingDescriptorUpdateEvent: func(_ *descpb.Descriptor) error {
@@ -1776,7 +1767,6 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	lease.LeaseRenewalDuration.Override(ctx, &params.SV, 0)
 
 	t := newLeaseTest(testingT, params)
-	idChecker.Store(t.server.SystemIDChecker())
 	defer t.cleanup()
 
 	if _, err := t.db.Exec(`

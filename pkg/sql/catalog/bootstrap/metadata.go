@@ -126,7 +126,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(int64(keys.MinUserDescriptorID(bootstrappedSystemIDChecker{ms})))
+		value.SetInt(int64(ms.MaxSystemDescriptorID() + 1))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
@@ -201,6 +201,18 @@ func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
 	}
 	sort.Sort(descriptorIDs)
 	return descriptorIDs
+}
+
+// MaxSystemDescriptorID returns the largest system descriptor ID in this
+// schema.
+func (ms MetadataSchema) MaxSystemDescriptorID() (maxID descpb.ID) {
+	maxID = keys.MaxReservedDescID
+	for _, d := range ms.descs {
+		if d.GetID() > maxID {
+			maxID = d.GetID()
+		}
+	}
+	return maxID
 }
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -377,36 +389,24 @@ func addSystemDatabaseToSchema(
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
 }
 
-type bootstrappedSystemIDChecker struct {
-	MetadataSchema
-}
-
-var _ keys.SystemIDChecker = bootstrappedSystemIDChecker{}
-
-// IsSystemID implements the keys.SystemIDChecker interface.
-func (b bootstrappedSystemIDChecker) IsSystemID(id uint32) bool {
-	if keys.DeprecatedSystemIDChecker().IsSystemID(id) {
-		return true
-	}
-	for _, desc := range b.descs {
-		if desc.GetID() == descpb.ID(id) {
-			return desc.GetParentID() == keys.SystemDatabaseID
-		}
-	}
-	return false
-}
-
-// BootstrappedSystemIDChecker constructs a keys.SystemIDChecker which is valid
-// for a bootstrapped cluster.
-func BootstrappedSystemIDChecker() keys.SystemIDChecker {
+// TestingMinUserDescID returns the smallest user-created descriptor ID in a
+// bootstrapped cluster.
+func TestingMinUserDescID() uint32 {
 	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	return bootstrappedSystemIDChecker{MetadataSchema: ms}
+	return uint32(ms.MaxSystemDescriptorID() + 1)
+}
+
+// TestingMinNonDefaultUserDescID returns the smallest user-creatable descriptor
+// ID in a bootstrapped cluster.
+func TestingMinNonDefaultUserDescID() uint32 {
+	// Each default DB comes with a public schema descriptor.
+	return TestingMinUserDescID() + uint32(len(catalogkeys.DefaultUserDBs))*2
 }
 
 // TestingUserDescID is a convenience function which returns a user ID offset
 // from the minimum value allowed in a simple unit test setting.
 func TestingUserDescID(offset uint32) uint32 {
-	return keys.MinUserDescriptorID(BootstrappedSystemIDChecker()) + offset
+	return TestingMinUserDescID() + offset
 }
 
 // TestingUserTableDataMin is a convenience function which returns the first
