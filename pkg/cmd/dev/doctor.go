@@ -16,10 +16,24 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
+
+func printStdoutAndErr(stdoutStr string, err error) {
+	if len(stdoutStr) > 0 {
+		log.Printf("stdout:   %s", stdoutStr)
+	}
+	var cmderr *exec.ExitError
+	if errors.As(err, &cmderr) {
+		stderrStr := strings.TrimSpace(string(cmderr.Stderr))
+		if len(stderrStr) > 0 {
+			log.Printf("stderr:   %s", stderrStr)
+		}
+	}
+}
 
 // makeDoctorCmd constructs the subcommand used to build the specified binaries.
 func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -45,22 +59,43 @@ func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 			success = false
 			log.Printf("Failed to run `/usr/bin/xcodebuild -version`.")
 			stdoutStr := strings.TrimSpace(string(stdout))
-			if len(stdoutStr) > 0 {
-				log.Printf("stdout:   %s", stdoutStr)
-			}
-			var cmderr *exec.ExitError
-			if errors.As(err, &cmderr) {
-				stderrStr := strings.TrimSpace(string(cmderr.Stderr))
-				if len(stderrStr) > 0 {
-					log.Printf("stderr:   %s", stderrStr)
-				}
-			}
+			printStdoutAndErr(stdoutStr, err)
 			log.Println(`You must have a full installation of XCode to build with Bazel.
 A command-line tools instance does not suffice.
 Please perform the following steps:
   1. Install XCode from the App Store.
   2. Launch Xcode.app at least once to perform one-time initialization of developer tools.
   3. Run ` + "`xcode-select -switch /Applications/Xcode.app/`.")
+		}
+	}
+
+	const cmakeRequiredMajor, cmakeRequiredMinor = 3, 20
+	d.log.Println("doctor: running cmake check")
+	{
+		stdout, err := d.exec.CommandContextSilent(ctx, "cmake", "--version")
+		stdoutStr := strings.TrimSpace(string(stdout))
+		if err != nil {
+			printStdoutAndErr(stdoutStr, err)
+			success = false
+		} else {
+			versionFields := strings.Split(strings.TrimPrefix(stdoutStr, "cmake version "), ".")
+			if len(versionFields) < 3 {
+				log.Printf("malformed cmake version:   %q\n", stdoutStr)
+				success = false
+			} else {
+				major, majorErr := strconv.Atoi(versionFields[0])
+				minor, minorErr := strconv.Atoi(versionFields[1])
+				if majorErr != nil || minorErr != nil {
+					log.Printf("malformed cmake version:   %q\n", stdoutStr)
+					success = false
+				} else if major < cmakeRequiredMajor || minor < cmakeRequiredMinor {
+					log.Printf("cmake is too old, upgrade to 3.20.x+\n")
+					if runtime.GOOS == "linux" {
+						log.Printf("\t If this is a gceworker you can use ./build/bootstrap/bootstrap-debian.sh to update all tools\n")
+					}
+					success = false
+				}
+			}
 		}
 	}
 
