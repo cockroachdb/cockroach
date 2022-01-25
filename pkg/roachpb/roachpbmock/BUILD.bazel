@@ -8,6 +8,7 @@ gomock(
     interfaces = [
         "InternalClient",
         "Internal_RangeFeedClient",
+        "Internal_MuxRangeFeedClient",
     ],
     library = "//pkg/roachpb",
     package = "roachpbmock",
