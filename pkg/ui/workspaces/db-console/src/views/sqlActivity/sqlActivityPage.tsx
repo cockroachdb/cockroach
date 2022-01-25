@@ -23,7 +23,7 @@ import { RouteComponentProps } from "react-router-dom";
 const { TabPane } = Tabs;
 
 const SQLActivityPage = (props: RouteComponentProps) => {
-  const defaultTab = util.queryByName(props.location, "tab") || "Sessions";
+  const defaultTab = util.queryByName(props.location, "tab") || "Statements";
   const [currentTab, setCurrentTab] = useState(defaultTab);
 
   const onTabChange = (tabId: string): void => {
@@ -33,7 +33,7 @@ const SQLActivityPage = (props: RouteComponentProps) => {
   };
 
   useEffect(() => {
-    const queryTab = util.queryByName(props.location, "tab") || "Sessions";
+    const queryTab = util.queryByName(props.location, "tab") || "Statements";
     if (queryTab !== currentTab) {
       setCurrentTab(queryTab);
     }
@@ -49,14 +49,14 @@ const SQLActivityPage = (props: RouteComponentProps) => {
         onChange={onTabChange}
         activeKey={currentTab}
       >
-        <TabPane tab="Sessions" key="Sessions">
-          <SessionsPageConnected />
+        <TabPane tab="Statements" key="Statements">
+          <StatementsPageConnected />
         </TabPane>
         <TabPane tab="Transactions" key="Transactions">
           <TransactionsPageConnected />
         </TabPane>
-        <TabPane tab="Statements" key="Statements">
-          <StatementsPageConnected />
+        <TabPane tab="Sessions" key="Sessions">
+          <SessionsPageConnected />
         </TabPane>
       </Tabs>
     </div>
