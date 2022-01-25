@@ -1212,7 +1212,7 @@ func addrWithDefaultHost(addr string) (string, error) {
 // until the connection (and its associated goroutines) have terminated.
 func getClientGRPCConn(
 	ctx context.Context, cfg server.Config,
-) (*grpc.ClientConn, *hlc.Clock, func(), error) {
+) (*grpc.ClientConn, *tracing.Tracer, func(), error) {
 	if ctx.Done() == nil {
 		return nil, nil, nil, errors.New("context must be cancellable")
 	}
@@ -1220,7 +1220,11 @@ func getClientGRPCConn(
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
-	stopper := stop.NewStopper()
+	tracer := cfg.Tracer
+	if tracer == nil {
+		tracer = tracing.NewTracer()
+	}
+	stopper := stop.NewStopper(stop.WithTracer(tracer))
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,
@@ -1254,7 +1258,7 @@ func getClientGRPCConn(
 	closer := func() {
 		stopper.Stop(ctx)
 	}
-	return conn, clock, closer, nil
+	return conn, tracer, closer, nil
 }
 
 // initGEOS sets up the Geospatial library.

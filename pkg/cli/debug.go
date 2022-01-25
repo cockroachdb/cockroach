@@ -1697,6 +1697,14 @@ func init() {
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+
+	f = debugSendKVBatchCmd.Flags()
+	f.StringVar(&debugSendKVBatchOpts.traceFormat, "trace", debugSendKVBatchOpts.traceFormat,
+		"which format to use for the trace output (off, text, jaeger)")
+	f.BoolVar(&debugSendKVBatchOpts.keepCollectedSpans, "keep-collected-spans", debugSendKVBatchOpts.keepCollectedSpans,
+		"whether to keep the CollectedSpans field on the response, to learn about how traces work")
+	f.StringVar(&debugSendKVBatchOpts.traceOutput, "trace-output", debugSendKVBatchOpts.traceOutput,
+		"the output file to use for the trace. If left empty, output to stderr.")
 }
 
 func initPebbleCmds(cmd *cobra.Command) {

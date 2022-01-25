@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -2707,12 +2708,16 @@ func (s *adminServer) SendKVBatch(
 	}
 	log.StructuredEvent(ctx, event)
 
-	// Send the batch to KV.
-	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
-	if pErr != nil {
-		return nil, pErr.GoError()
-	}
-	return br, nil
+	return executeBatchRPCInternalFn(ctx, roachpb.SystemTenantID, ba,
+		s.server.stopper,
+		s.server.stopper.Tracer(),
+		tracing.SendKVBatchMethodName,        /* spanMethodName */
+		"adminServer: send KV batch",         /* taskName */
+		"adminServer",                        /* processorName */
+		"db.NonTransactionalSender()",        /* senderName */
+		s.server.db.NonTransactionalSender(), /* sender */
+		nil,                                  /* finishCall */
+	)
 }
 
 // sqlQuery allows you to incrementally build a SQL query that uses
