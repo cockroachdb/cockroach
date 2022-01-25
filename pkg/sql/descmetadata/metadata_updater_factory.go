@@ -23,30 +23,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
-// MakeConstraintOidBuilderFn creates a ConstraintOidBuilder.
-type MakeConstraintOidBuilderFn func() ConstraintOidBuilder
-
 // MetadataUpdaterFactory used to construct a commenter.DescriptorMetadataUpdater, which
 // can be used to update comments on schema objects.
 type MetadataUpdaterFactory struct {
-	ieFactory                sqlutil.SessionBoundInternalExecutorFactory
-	makeConstraintOidBuilder MakeConstraintOidBuilderFn
-	collectionFactory        *descs.CollectionFactory
-	settings                 *settings.Values
+	ieFactory         sqlutil.SessionBoundInternalExecutorFactory
+	collectionFactory *descs.CollectionFactory
+	settings          *settings.Values
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
 func NewMetadataUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-	makeConstraintOidBuilder MakeConstraintOidBuilderFn,
 	collectionFactory *descs.CollectionFactory,
 	settings *settings.Values,
 ) scexec.DescriptorMetadataUpdaterFactory {
 	return MetadataUpdaterFactory{
-		ieFactory:                ieFactory,
-		makeConstraintOidBuilder: makeConstraintOidBuilder,
-		collectionFactory:        collectionFactory,
-		settings:                 settings,
+		ieFactory:         ieFactory,
+		collectionFactory: collectionFactory,
+		settings:          settings,
 	}
 }
 
@@ -65,7 +59,6 @@ func (mf MetadataUpdaterFactory) NewMetadataUpdater(
 	return metadataUpdater{
 		txn:               txn,
 		ie:                mf.ieFactory(ctx, modifiedSessionData),
-		oidBuilder:        mf.makeConstraintOidBuilder(),
 		collectionFactory: mf.collectionFactory,
 		cacheEnabled:      sessioninit.CacheEnabled.Get(mf.settings),
 	}
