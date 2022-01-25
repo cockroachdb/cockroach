@@ -558,6 +558,9 @@ func (f *txnKVFetcher) nextBatch(
 					"we're only scanning non-overlapping spans. New spans: %s",
 				catalogkeys.PrettySpans(nil, f.spans, 0 /* skip */))
 		}
+
+		// Any requests that were not fully completed will have the ResumeSpan set.
+		// Here we accumulate all of them.
 		if resumeSpan := header.ResumeSpan; resumeSpan != nil {
 			f.spansScratch[f.newFetchSpansIdx] = *resumeSpan
 			f.newFetchSpansIdx++
