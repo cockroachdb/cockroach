@@ -543,21 +543,14 @@ func (noopMetadataUpdater) DeleteDescriptorComment(
 
 //UpsertConstraintComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) UpsertConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
-	comment string,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
 ) error {
 	return nil
 }
 
 //DeleteConstraintComment implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
 	return nil
 }

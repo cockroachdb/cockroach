@@ -814,9 +814,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateInvertedIndexes,
 		sql.NewFakeSessionData,
 	)
+
 	execCfg.DescMetadaUpdaterFactory = descmetadata.NewMetadataUpdaterFactory(
 		ieFactory,
-		sql.MakeConstraintOidBuilder,
 		collectionFactory,
 		&execCfg.Settings.SV,
 	)

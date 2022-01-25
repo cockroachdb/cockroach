@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -4454,9 +4453,4 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
-}
-
-// MakeConstraintOidBuilder constructs an OID builder.
-func MakeConstraintOidBuilder() descmetadata.ConstraintOidBuilder {
-	return makeOidHasher()
 }
