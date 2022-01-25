@@ -117,7 +117,7 @@ type ReplicaResponseFilter func(context.Context, roachpb.BatchRequest, *roachpb.
 // ReplicaRangefeedFilter is used in unit tests to modify the request, inject
 // responses, or return errors from rangefeeds.
 type ReplicaRangefeedFilter func(
-	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
 ) *roachpb.Error
 
 // ContainsKey returns whether this range contains the specified key.
