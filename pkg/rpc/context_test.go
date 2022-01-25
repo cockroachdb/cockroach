@@ -240,6 +240,10 @@ func (*internalServer) RangeFeed(
 	panic("unimplemented")
 }
 
+func (*internalServer) RangeFeedStream(roachpb.Internal_RangeFeedStreamServer) error {
+	panic("unimplemented")
+}
+
 func (*internalServer) GossipSubscription(
 	*roachpb.GossipSubscriptionRequest, roachpb.Internal_GossipSubscriptionServer,
 ) error {

@@ -178,6 +178,12 @@ func (m *mockInternalClient) RangeFeed(
 	return nil, fmt.Errorf("unsupported RangeFeed call")
 }
 
+func (m *mockInternalClient) RangeFeedStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedStreamClient, error) {
+	return nil, fmt.Errorf("unsupported RangeFeedStream call")
+}
+
 // GossipSubscription is part of the roachpb.InternalClient interface.
 func (m *mockInternalClient) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
