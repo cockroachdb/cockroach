@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate stringer -type=Option
+//go:generate stringer -type=Option -linecomment
 
 // Option defines a role option. This is output by the parser
 type Option uint32
@@ -40,7 +40,7 @@ const (
 	PASSWORD
 	LOGIN
 	NOLOGIN
-	VALIDUNTIL
+	VALIDUNTIL // VALID UNTIL
 	CONTROLJOB
 	NOCONTROLJOB
 	CONTROLCHANGEFEED
@@ -119,7 +119,7 @@ var ByName = map[string]Option{
 	"NOMODIFYCLUSTERSETTING": NOMODIFYCLUSTERSETTING,
 	"DEFAULTSETTINGS":        DEFAULTSETTINGS,
 	"VIEWACTIVITYREDACTED":   VIEWACTIVITYREDACTED,
-	"NOVIEWACTIVITYREDACTED": VIEWACTIVITYREDACTED,
+	"NOVIEWACTIVITYREDACTED": NOVIEWACTIVITYREDACTED,
 	"SQLLOGIN":               SQLLOGIN,
 	"NOSQLLOGIN":             NOSQLLOGIN,
 }

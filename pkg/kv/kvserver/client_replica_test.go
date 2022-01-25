@@ -1189,7 +1189,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	// caught up to replica0 as draining code doesn't transfer leases to
 	// behind replicas.
 	l.ensureLeaderAndRaftState(t, l.replica0, l.replica1Desc)
-	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(true, nil /* reporter */)
+	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(true, nil /* reporter */, false /* verbose */)
 
 	// Check that replica0 doesn't serve reads any more.
 	pErr := l.sendRead(t, 0)
@@ -1205,7 +1205,7 @@ func TestLeaseExpirationBasedDrainTransfer(t *testing.T) {
 	// Check that replica1 now has the lease.
 	l.checkHasLease(t, 1)
 
-	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(false, nil /* reporter */)
+	l.tc.GetFirstStoreFromServer(t, 0).SetDraining(false, nil /* reporter */, false /* verbose */)
 }
 
 // TestLeaseExpirationBasedDrainTransferWithExtension verifies that
@@ -1242,7 +1242,7 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 
 	// Drain node 1 with an extension in progress.
 	go func() {
-		l.tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */)
+		l.tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	}()
 	// Now unblock the extension.
 	extensionSem <- struct{}{}
@@ -2011,7 +2011,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
 
 	drainingIdx := 1
-	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */)
+	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
 	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)

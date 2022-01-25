@@ -78,6 +78,12 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 type KeyRewriter struct {
 	codec keys.SQLCodec
 
+	// lastKeyTenant is the tenant ID and prefix for the most recent old key.
+	lastKeyTenant struct {
+		id     roachpb.TenantID
+		prefix []byte
+	}
+
 	prefixes prefixRewriter
 	descs    map[descpb.ID]catalog.TableDescriptor
 }
@@ -174,11 +180,14 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 		return nil, false, err
 	}
 
-	oldCodec := keys.MakeSQLCodec(oldTenantID)
-	oldTenantPrefix := oldCodec.TenantPrefix()
+	if kr.lastKeyTenant.id != oldTenantID {
+		kr.lastKeyTenant.id = oldTenantID
+		kr.lastKeyTenant.prefix = keys.MakeSQLCodec(oldTenantID).TenantPrefix()
+	}
+
 	newTenantPrefix := kr.codec.TenantPrefix()
-	if len(newTenantPrefix) == len(oldTenantPrefix) {
-		keyTenantPrefix := key[:len(oldTenantPrefix)]
+	if len(newTenantPrefix) == len(kr.lastKeyTenant.prefix) {
+		keyTenantPrefix := key[:len(kr.lastKeyTenant.prefix)]
 		copy(keyTenantPrefix, newTenantPrefix)
 		rekeyed = append(keyTenantPrefix, rekeyed...)
 	} else {
