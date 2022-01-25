@@ -149,6 +149,43 @@ func TestSendKVBatch(t *testing.T) {
 	})
 }
 
+func TestSendKVBatchTrace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	c := NewCLITest(TestCLIParams{T: t})
+	defer c.Cleanup()
+
+	reqJSON := `{"requests": [{"get": {"header": {"key": "Zm9v"}}}]}`
+	path := filepath.Join(t.TempDir(), "batch.json")
+	require.NoError(t, ioutil.WriteFile(path, []byte(reqJSON), 0644))
+
+	// text mode, output to stderr.
+	output, err := c.RunWithCapture("debug send-kv-batch --trace=text " + path)
+	require.NoError(t, err)
+	require.Contains(t, output, "=== operation:/cockroach.roachpb.Internal/Batch")
+
+	// jaeger mode, output to stderr.
+	output, err = c.RunWithCapture("debug send-kv-batch --trace=jaeger " + path)
+	require.NoError(t, err)
+	require.Contains(t, output, `"operationName": "/cockroach.roachpb.Internal/Batch",`)
+
+	traceOut := filepath.Join(t.TempDir(), "trace.out")
+	// text mode, output to file.
+	_, err = c.RunWithCapture("debug send-kv-batch --trace=text --trace-output=" + traceOut + " " + path)
+	require.NoError(t, err)
+	b, err := ioutil.ReadFile(traceOut)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "=== operation:/cockroach.roachpb.Internal/Batch")
+
+	// jaeger mode, output to file.
+	_, err = c.RunWithCapture("debug send-kv-batch --trace=jaeger --trace-output=" + traceOut + " " + path)
+	require.NoError(t, err)
+	b, err = ioutil.ReadFile(traceOut)
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"operationName": "/cockroach.roachpb.Internal/Batch",`)
+}
+
 func TestSendKVBatchErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -164,6 +201,16 @@ func TestSendKVBatchErrors(t *testing.T) {
 	output, err := c.RunWithCapture("debug send-kv-batch --insecure " + path)
 	require.NoError(t, err)
 	require.Contains(t, output, "ERROR: failed to connect")
+
+	// Invalid trace mode should error.
+	output, err = c.RunWithCapture("debug send-kv-batch --trace=unknown " + path)
+	require.NoError(t, err)
+	require.Contains(t, output, "ERROR: unknown --trace value")
+
+	// Invalid trace output file should error.
+	output, err = c.RunWithCapture("debug send-kv-batch --trace=on --trace-output=invalid/. " + path)
+	require.NoError(t, err)
+	require.Contains(t, output, "ERROR: open invalid/.: no such file or directory")
 
 	// Invalid JSON should error.
 	require.NoError(t, ioutil.WriteFile(path, []byte("{invalid"), 0644))
