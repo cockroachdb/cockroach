@@ -268,18 +268,22 @@ func TestPlainHTTPServer(t *testing.T) {
 	if resp, err := httputil.Get(context.Background(), url); err != nil {
 		t.Error(err)
 	} else {
-		if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
-			t.Error(err)
-		}
-		if err := resp.Body.Close(); err != nil {
-			t.Error(err)
-		}
+		func() {
+			defer resp.Body.Close()
+			if _, err := io.Copy(ioutil.Discard, resp.Body); err != nil {
+				t.Error(err)
+			}
+		}()
 	}
 
 	// Attempting to connect to the insecure server with HTTPS doesn't work.
 	secureURL := strings.Replace(url, "http://", "https://", 1)
-	if _, err := httputil.Get(context.Background(), secureURL); !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
+	resp, err := httputil.Get(context.Background(), secureURL)
+	if !testutils.IsError(err, "http: server gave HTTP response to HTTPS client") {
 		t.Error(err)
+	}
+	if err == nil {
+		resp.Body.Close()
 	}
 }
 
@@ -364,26 +368,28 @@ func TestAcceptEncoding(t *testing.T) {
 		},
 	}
 	for _, d := range testData {
-		req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
-		if err != nil {
-			t.Fatalf("could not create request: %s", err)
-		}
-		if d.acceptEncoding != "" {
-			req.Header.Set(httputil.AcceptEncodingHeader, d.acceptEncoding)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("could not make request to %s: %s", req.URL, err)
-		}
-		defer resp.Body.Close()
-		if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
-			t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
-		}
-		r := d.newReader(resp.Body)
-		var data serverpb.JSONResponse
-		if err := jsonpb.Unmarshal(r, &data); err != nil {
-			t.Error(err)
-		}
+		func() {
+			req, err := http.NewRequest("GET", s.AdminURL()+statusPrefix+"metrics/local", nil)
+			if err != nil {
+				t.Fatalf("could not create request: %s", err)
+			}
+			if d.acceptEncoding != "" {
+				req.Header.Set(httputil.AcceptEncodingHeader, d.acceptEncoding)
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("could not make request to %s: %s", req.URL, err)
+			}
+			defer resp.Body.Close()
+			if ce := resp.Header.Get(httputil.ContentEncodingHeader); ce != d.acceptEncoding {
+				t.Fatalf("unexpected content encoding: '%s' != '%s'", ce, d.acceptEncoding)
+			}
+			r := d.newReader(resp.Body)
+			var data serverpb.JSONResponse
+			if err := jsonpb.Unmarshal(r, &data); err != nil {
+				t.Error(err)
+			}
+		}()
 	}
 }
 
@@ -832,6 +838,7 @@ func TestServeIndexHTML(t *testing.T) {
 		t.Run("short build", func(t *testing.T) {
 			resp, err := client.Get(s.AdminURL())
 			require.NoError(t, err)
+			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
 
 			respBytes, err := ioutil.ReadAll(resp.Body)
@@ -852,6 +859,7 @@ Binary built without web UI.
 			defer unlinkFakeUI()
 			resp, err := client.Get(s.AdminURL())
 			require.NoError(t, err)
+			defer resp.Body.Close()
 			require.Equal(t, 200, resp.StatusCode)
 
 			respBytes, err := ioutil.ReadAll(resp.Body)
@@ -912,14 +920,9 @@ Binary built without web UI.
 				req, err := http.NewRequestWithContext(ctx, "GET", s.AdminURL(), nil)
 				require.NoError(t, err)
 
-				// Work around this go runtime bug: https://github.com/golang/go/issues/50652
-				cancelCh := make(chan struct{})
-				//lint:ignore SA1019 need this until go bug is resolved
-				req.Cancel = cancelCh
-				defer func() { close(cancelCh) }()
-
 				resp, err := testCase.client.Do(req)
 				require.NoError(t, err)
+				defer resp.Body.Close()
 				require.Equal(t, 200, resp.StatusCode)
 
 				respBytes, err := ioutil.ReadAll(resp.Body)

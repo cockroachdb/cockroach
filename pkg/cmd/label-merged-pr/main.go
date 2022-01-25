@@ -231,6 +231,7 @@ func apiCall(client *http.Client, url string, token string, payload interface{})
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	// Status code 422 is returned when a label already exist
 	if !(resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusUnprocessableEntity || resp.
 		StatusCode == http.StatusOK) {

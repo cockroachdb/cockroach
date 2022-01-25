@@ -158,6 +158,7 @@ func TestTenantGRPCServices(t *testing.T) {
 		resp, err := httpClient.Get("https://" + tenant.HTTPAddr() + "/_status/sessions")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
+		defer resp.Body.Close()
 		require.Equal(t, 200, resp.StatusCode)
 	})
 }

@@ -97,6 +97,7 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 		if err != nil {
 			return nil, err
 		}
+		defer resp.Body.Close()
 		edgeBinaryLocation = resp.Request.URL
 	}
 
