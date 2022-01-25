@@ -66,7 +66,7 @@ testdb sc user1 USAGE
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
 ----
-testdb sc othertable user1 SELECT
+testdb sc othertable user1 SELECT false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
@@ -90,12 +90,12 @@ SHOW GRANTS ON SCHEMA sc FOR testuser;
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
 ----
-testdb public testtable_greeting_usage testuser UPDATE
+testdb public testtable_greeting_usage testuser UPDATE false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR testuser;
 ----
-testdb public testtable_greeting_owner testuser ALL
+testdb public testtable_greeting_owner testuser ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR testuser;
@@ -108,25 +108,25 @@ SHOW GRANTS ON TABLE testdb.testtable_simple FOR testuser;
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
 ----
-testdb public testtable_simple admin ALL
+testdb public testtable_simple admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public testtable_greeting_owner admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
 ----
-testdb public testtable_greeting_usage admin ALL
+testdb public testtable_greeting_usage admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
 ----
-testdb sc othertable admin ALL
+testdb sc othertable admin ALL true
 
 
 exec-sql
@@ -180,16 +180,16 @@ testdb sc user1 USAGE
 query-sql
 SHOW GRANTS ON testuser_db.sc.othertable
 ----
-testuser_db sc othertable admin ALL
-testuser_db sc othertable root ALL
-testuser_db sc othertable testuser ALL
+testuser_db sc othertable admin ALL true
+testuser_db sc othertable root ALL true
+testuser_db sc othertable testuser ALL false
 
 query-sql
 SHOW GRANTS ON testuser_db.testtable_greeting_usage
 ----
-testuser_db public testtable_greeting_usage admin ALL
-testuser_db public testtable_greeting_usage root ALL
-testuser_db public testtable_greeting_usage testuser ALL
+testuser_db public testtable_greeting_usage admin ALL true
+testuser_db public testtable_greeting_usage root ALL true
+testuser_db public testtable_greeting_usage testuser ALL false
 
 # testuser should be owner, and therefore have SELECT privs too.
 exec-sql user=testuser
@@ -211,7 +211,7 @@ RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage, testdb.testtable_
 query-sql
 SHOW GRANTS ON restoredb.sc.othertable FOR user1;
 ----
-restoredb sc othertable user1 CREATE
+restoredb sc othertable user1 CREATE false
 
 query-sql
 SHOW GRANTS ON restoredb.sc.othertable FOR testuser;
@@ -220,12 +220,12 @@ SHOW GRANTS ON restoredb.sc.othertable FOR testuser;
 query-sql
 SHOW GRANTS ON restoredb.sc.othertable FOR admin;
 ----
-restoredb sc othertable admin ALL
+restoredb sc othertable admin ALL true
 
 query-sql
 SHOW GRANTS ON restoredb.testtable_greeting_usage FOR user1;
 ----
-restoredb public testtable_greeting_usage user1 CREATE
+restoredb public testtable_greeting_usage user1 CREATE false
 
 # testuser should not be the owner in this case, so won't have SELECT privs.
 query-sql user=testuser
@@ -241,7 +241,7 @@ SHOW GRANTS ON restoredb.testtable_greeting_usage FOR testuser;
 query-sql
 SHOW GRANTS ON restoredb.testtable_greeting_usage FOR admin;
 ----
-restoredb public testtable_greeting_usage admin ALL
+restoredb public testtable_greeting_usage admin ALL true
 
 # Testuser is no longer the owner of restoredb.greeting_owner.
 exec-sql user=testuser
@@ -311,25 +311,25 @@ testdb sc admin ALL
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
 ----
-testdb public testtable_simple admin ALL
+testdb public testtable_simple admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public testtable_greeting_owner admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
 ----
-testdb public testtable_greeting_usage admin ALL
+testdb public testtable_greeting_usage admin ALL true
 
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
 ----
-testdb sc othertable admin ALL
+testdb sc othertable admin ALL true
 
 
 # First drop the existing database as admin.
@@ -402,22 +402,22 @@ testdb sc admin ALL
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
 ----
-testdb public testtable_simple admin ALL
+testdb public testtable_simple admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
 ----
-testdb public testtable_greeting_usage admin ALL
+testdb public testtable_greeting_usage admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public testtable_greeting_owner admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
 ----
-testdb sc othertable admin ALL
+testdb sc othertable admin ALL true
 
 
 # Now let's try a cluster restore and expect all of the same privileges tha
@@ -448,7 +448,7 @@ testdb sc user1 USAGE
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
 ----
-testdb sc othertable user1 SELECT
+testdb sc othertable user1 SELECT false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
@@ -472,12 +472,12 @@ SHOW GRANTS ON SCHEMA testdb.sc FOR testuser;
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR testuser;
 ----
-testdb public testtable_greeting_usage testuser UPDATE
+testdb public testtable_greeting_usage testuser UPDATE false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR testuser;
 ----
-testdb public testtable_greeting_owner testuser ALL
+testdb public testtable_greeting_owner testuser ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR testuser;
@@ -511,19 +511,19 @@ testdb sc admin ALL
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
 ----
-testdb public testtable_simple admin ALL
+testdb public testtable_simple admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_owner FOR admin;
 ----
-testdb public testtable_greeting_owner admin ALL
+testdb public testtable_greeting_owner admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_greeting_usage FOR admin;
 ----
-testdb public testtable_greeting_usage admin ALL
+testdb public testtable_greeting_usage admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR admin;
 ----
-testdb sc othertable admin ALL
+testdb sc othertable admin ALL true

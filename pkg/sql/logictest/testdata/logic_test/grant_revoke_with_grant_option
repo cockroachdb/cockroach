@@ -397,7 +397,7 @@ REVOKE GRANT ON TABLE t FROM testuser
 query TTTTT colnames
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  relation_name  grantee    privilege_type
+database_name  schema_name  relation_name  grantee   privilege_type
 test           public       t              testuser  CREATE
 test           public       t              testuser  DELETE
 test           public       t              testuser  DROP
@@ -616,14 +616,14 @@ user testuser
 statement ok
 CREATE TABLE t1()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t1          admin     ALL
-test           public       t1          root      ALL
-test           public       t1          testuser  ALL
-test           public       t1          testuser2 CREATE
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser   ALL             false
+test           public       t1          testuser2  CREATE          false
 
 statement ok
 GRANT SELECT ON TABLE t1 TO testuser2
@@ -631,14 +631,14 @@ GRANT SELECT ON TABLE t1 TO testuser2
 statement ok
 REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t1          admin     ALL
-test           public       t1          root      ALL
-test           public       t1          testuser2 CREATE
-test           public       t1          testuser2 SELECT
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser2  CREATE          false
+test           public       t1          testuser2  SELECT          false
 
 # even though testuser doesn't have privileges on table t1, it can still grant
 # because it is the owner
@@ -648,31 +648,31 @@ GRANT INSERT ON TABLE t1 TO testuser2
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser2 WITH GRANT OPTION
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t1          admin     ALL
-test           public       t1          root      ALL
-test           public       t1          testuser2 ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser2  ALL             true
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t1          admin     ALL
-test           public       t1          root      ALL
-test           public       t1          testuser2 ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser2  ALL             true
 
 # owner can give privileges back to themself
 statement ok
 GRANT ALL PRIVILEGES ON TABLE t1 TO testuser
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t1          admin     ALL
-test           public       t1          root      ALL
-test           public       t1          testuser  ALL
-test           public       t1          testuser2 ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t1          admin      ALL             true
+test           public       t1          root       ALL             true
+test           public       t1          testuser   ALL             true
+test           public       t1          testuser2  ALL             true
