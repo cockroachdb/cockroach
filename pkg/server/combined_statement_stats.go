@@ -116,18 +116,12 @@ func collectCombinedStatements(
 				transaction_fingerprint_id,
 				app_name,
 				aggregated_ts,
-				jsonb_set(
-					metadata,
-					array['query'],
-					to_jsonb(
-						prettify_statement(metadata ->> 'query', %d, %d, %d)
-					)
-				),
+				metadata,
 				statistics,
 				sampled_plan,
 				aggregation_interval
 			FROM crdb_internal.statement_statistics
-			%s`, tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase, whereClause)
+			%s`, whereClause)
 
 	const expectedNumDatums = 8
 

@@ -111,8 +111,6 @@ type LineWidthMode int
 const (
 	// DefaultLineWidth is the line width used with the default pretty-printing configuration.
 	DefaultLineWidth LineWidthMode = 60
-	// ConsoleLineWidth is the line width used on the frontend console.
-	ConsoleLineWidth = 108
 )
 
 // keywordWithText returns a pretty.Keyword with left and/or right
