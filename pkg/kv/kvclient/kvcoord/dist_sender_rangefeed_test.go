@@ -8,147 +8,329 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvcoord
+package kvcoord_test
 
 import (
 	"context"
-	"io"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	gomock "github.com/golang/mock/gomock"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc"
 )
 
-// Tests that the range feed handles transport errors appropriately. In
-// particular, that when encountering other decommissioned nodes it will refresh
-// its range descriptor and retry, but if this node is decommissioned it will
-// bail out. Regression test for:
-// https://github.com/cockroachdb/cockroach/issues/66636
-func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
+type testRangefeedClient struct {
+	roachpb.InternalClient
+	muxRangeFeedEnabled bool
+	count               func()
+}
+
+func (c *testRangefeedClient) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, opts ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	defer c.count()
+
+	if c.muxRangeFeedEnabled {
+		panic(errors.AssertionFailedf("unexpected call to RangeFeed"))
+	}
+	return c.InternalClient.RangeFeed(ctx, args, opts...)
+}
+
+func (c *testRangefeedClient) RangeFeedStream(
+	ctx context.Context, opts ...grpc.CallOption,
+) (roachpb.Internal_MuxRangeFeedClient, error) {
+	defer c.count()
+
+	if !c.muxRangeFeedEnabled {
+		panic(errors.AssertionFailedf("unexpected call to RangeFeedStream"))
+	}
+	return c.InternalClient.MuxRangeFeed(ctx, opts...)
+}
+
+type internalClientCounts struct {
+	syncutil.Mutex
+	counts map[roachpb.InternalClient]int
+}
+
+func (c *internalClientCounts) Inc(ic roachpb.InternalClient) {
+	if c == nil {
+		return
+	}
+	c.Lock()
+	defer c.Unlock()
+	c.counts[ic]++
+}
+
+type countConnectionsTransport struct {
+	wrapped         kvcoord.Transport
+	counts          *internalClientCounts
+	rfStreamEnabled bool
+}
+
+func (c *countConnectionsTransport) IsExhausted() bool {
+	return c.wrapped.IsExhausted()
+}
+
+func (c *countConnectionsTransport) SendNext(
+	ctx context.Context, request roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	return c.wrapped.SendNext(ctx, request)
+}
+
+type testFeedCtxKey struct{}
+
+func (c *countConnectionsTransport) NextInternalClient(
+	ctx context.Context,
+) (context.Context, roachpb.InternalClient, error) {
+	ctx, client, err := c.wrapped.NextInternalClient(ctx)
+	if err != nil {
+		return ctx, client, err
+	}
+
+	// Count rangefeed calls but only for feeds started by this test.
+	countFn := func() {}
+	if ctx.Value(testFeedCtxKey{}) != nil {
+		countFn = func() {
+			c.counts.Inc(client)
+		}
+	}
+
+	tc := &testRangefeedClient{
+		InternalClient:      client,
+		muxRangeFeedEnabled: c.rfStreamEnabled,
+		count:               countFn,
+	}
+	return ctx, tc, nil
+}
+
+func (c *countConnectionsTransport) NextReplica() roachpb.ReplicaDescriptor {
+	return c.wrapped.NextReplica()
+}
+
+func (c *countConnectionsTransport) SkipReplica() {
+	c.wrapped.SkipReplica()
+}
+
+func (c *countConnectionsTransport) MoveToFront(descriptor roachpb.ReplicaDescriptor) {
+	c.wrapped.MoveToFront(descriptor)
+}
+
+func (c *countConnectionsTransport) Release() {
+	c.wrapped.Release()
+}
+
+var _ kvcoord.Transport = (*countConnectionsTransport)(nil)
+
+func makeTransportFactory(
+	rfStreamEnabled bool, counts *internalClientCounts,
+) kvcoord.TransportFactory {
+	return func(
+		options kvcoord.SendOptions,
+		dialer *nodedialer.Dialer,
+		slice kvcoord.ReplicaSlice,
+	) (kvcoord.Transport, error) {
+		transport, err := kvcoord.GRPCTransportFactory(options, dialer, slice)
+		if err != nil {
+			return nil, err
+		}
+		countingTransport := &countConnectionsTransport{
+			wrapped:         transport,
+			rfStreamEnabled: rfStreamEnabled,
+			counts:          counts,
+		}
+		return countingTransport, nil
+	}
+}
+
+// rangeFeed is a helper to execute rangefeed.  We are not using rangefeed library
+// here because of circular dependencies.
+func rangeFeed(
+	dsI interface{},
+	sp roachpb.Span,
+	startFrom hlc.Timestamp,
+	onValue func(event *roachpb.RangeFeedEvent),
+) func() {
+	ds := dsI.(*kvcoord.DistSender)
+	events := make(chan *roachpb.RangeFeedEvent)
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), testFeedCtxKey{}, struct{}{}))
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) (err error) {
+		return ds.RangeFeed(ctx, []roachpb.Span{sp}, startFrom, false, events)
+	})
+	g.GoCtx(func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ev := <-events:
+				onValue(ev)
+			}
+		}
+	})
+
+	return func() {
+		cancel()
+		_ = g.Wait()
+	}
+}
+
+// observeNValues returns on value handler which expects to see N rangefeed values,
+// along with the channel which gets closed when requisite count of events has been seen.
+func observeNValues(n int) (chan struct{}, func(ev *roachpb.RangeFeedEvent)) {
+	var count = struct {
+		syncutil.Mutex
+		c int
+	}{}
+	allSeen := make(chan struct{})
+	return allSeen, func(ev *roachpb.RangeFeedEvent) {
+		if ev.Val != nil {
+			count.Lock()
+			count.c++
+			if count.c == n {
+				close(allSeen)
+			}
+			count.Unlock()
+		}
+	}
+}
+
+func TestBiDirectionalRangefeedNotUsedUntilUpgradeFinalilzed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	for _, spec := range []struct {
-		errorCode   codes.Code
-		expectRetry bool
-	}{
-		{codes.FailedPrecondition, true}, // target node is decommissioned; retry
-		{codes.PermissionDenied, false},  // this node is decommissioned; abort
-		{codes.Unauthenticated, false},   // this node is not part of cluster; abort
-	} {
-		t.Run(spec.errorCode.String(), func(t *testing.T) {
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			stopper := stop.NewStopper()
-			defer stopper.Stop(ctx)
-			rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
-			g := makeGossip(t, stopper, rpcContext)
+	ctx := context.Background()
 
-			desc := roachpb.RangeDescriptor{
-				RangeID:    1,
-				Generation: 1,
-				StartKey:   roachpb.RKeyMin,
-				EndKey:     roachpb.RKeyMax,
-				InternalReplicas: []roachpb.ReplicaDescriptor{
-					{NodeID: 1, StoreID: 1, ReplicaID: 1},
-					{NodeID: 2, StoreID: 2, ReplicaID: 2},
-				},
-			}
-			for _, repl := range desc.InternalReplicas {
-				require.NoError(t, g.AddInfoProto(
-					gossip.MakeNodeIDKey(repl.NodeID),
-					newNodeDesc(repl.NodeID),
-					gossip.NodeDescriptorTTL,
-				))
-			}
+	startServerAtVer := func(ver roachpb.Version) (*testcluster.TestCluster, func()) {
+		st := cluster.MakeTestingClusterSettingsWithVersions(ver, ver, true)
+		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual, // Turn off replication queues.
 
-			ctrl := gomock.NewController(t)
-			transport := NewMockTransport(ctrl)
-			rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
+			ServerArgs: base.TestServerArgs{
+				Settings: st,
+				Knobs: base.TestingKnobs{
+					KVClient: &kvcoord.ClientTestingKnobs{
+						TransportFactory: makeTransportFactory(false, nil),
+					},
 
-			// We start off with a cached lease on r1.
-			cachedLease := roachpb.Lease{
-				Replica:  desc.InternalReplicas[0],
-				Sequence: 1,
-			}
-
-			// All nodes return the specified error code. We expect the range feed to
-			// keep trying all replicas in sequence regardless of error.
-			for _, repl := range desc.InternalReplicas {
-				transport.EXPECT().IsExhausted().Return(false)
-				transport.EXPECT().NextReplica().Return(repl)
-				transport.EXPECT().NextInternalClient(gomock.Any()).Return(
-					ctx, nil, grpcstatus.Error(spec.errorCode, ""))
-			}
-			transport.EXPECT().IsExhausted().Return(true)
-			transport.EXPECT().Release()
-
-			// Once all replicas have failed, it should try to refresh the lease using
-			// the range cache. We let this succeed once.
-			rangeDB.EXPECT().FirstRange().Return(&desc, nil)
-
-			// It then tries the replicas again. This time we just report the
-			// transport as exhausted immediately.
-			transport.EXPECT().IsExhausted().Return(true)
-			transport.EXPECT().Release()
-
-			// This invalidates the cache yet again. This time we error.
-			rangeDB.EXPECT().FirstRange().Return(nil, grpcstatus.Error(spec.errorCode, ""))
-
-			// If we expect a range lookup retry, allow the retry to succeed by
-			// returning a range descriptor and a client that immediately
-			// cancels the context and closes the range feed stream.
-			if spec.expectRetry {
-				rangeDB.EXPECT().FirstRange().Return(&desc, nil)
-				stream := roachpbmock.NewMockInternal_RangeFeedClient(ctrl)
-				stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
-				client := roachpbmock.NewMockInternalClient(ctrl)
-				client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
-				transport.EXPECT().IsExhausted().Return(false)
-				transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
-				transport.EXPECT().NextInternalClient(gomock.Any()).Return(ctx, client, nil)
-				transport.EXPECT().Release()
-			}
-
-			ds := NewDistSender(DistSenderConfig{
-				AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
-				Clock:           clock,
-				NodeDescs:       g,
-				RPCRetryOptions: &retry.Options{MaxRetries: 10},
-				RPCContext:      rpcContext,
-				TestingKnobs: ClientTestingKnobs{
-					TransportFactory: func(SendOptions, *nodedialer.Dialer, ReplicaSlice) (Transport, error) {
-						return transport, nil
+					Server: &server.TestingKnobs{
+						DisableAutomaticVersionUpgrade: 1,
+						BinaryVersionOverride:          ver,
 					},
 				},
-				RangeDescriptorDB: rangeDB,
-				NodeDialer:        nodedialer.New(rpcContext, gossip.AddressResolver(g)),
-				Settings:          cluster.MakeTestingClusterSettings(),
-			})
-			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
-				Desc:  desc,
-				Lease: cachedLease,
-			})
-
-			err := ds.RangeFeed(ctx, []roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}}, hlc.Timestamp{}, false, nil)
-			require.Error(t, err)
+			},
 		})
+		return tc, func() { tc.Stopper().Stop(ctx) }
+	}
+
+	// Create a small table; run rangefeed.  The transport factory we injected above verifies
+	// that we use the old rangefeed implementation.
+	runRangeFeed := func(tc *testcluster.TestCluster) {
+		ts := tc.Server(0)
+
+		sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+		startTime := ts.Clock().Now()
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
+
+		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+			ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+		allSeen, onValue := observeNValues(1000)
+		closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue)
+		<-allSeen
+		closeFeed()
+	}
+
+	t.Run("rangefeed-stream-disabled-prior-to-version-upgrade", func(t *testing.T) {
+		noRfStreamVer := clusterversion.ByKey(clusterversion.RangefeedUseOneStreamPerNode - 1)
+		tc, cleanup := startServerAtVer(noRfStreamVer)
+		defer cleanup()
+		runRangeFeed(tc)
+	})
+
+	t.Run("rangefeed-stream-disabled-via-environment", func(t *testing.T) {
+		defer kvcoord.TestinSetEnableMuxRangeFeed(false)()
+		// Even though we could use rangefeed stream, it's disable via kill switch.
+		rfStreamVer := clusterversion.ByKey(clusterversion.RangefeedUseOneStreamPerNode)
+		tc, cleanup := startServerAtVer(rfStreamVer)
+		defer cleanup()
+		runRangeFeed(tc)
+	})
+}
+
+func TestMuxRangeFeedConnectsToNodeOnce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	connCounts := &internalClientCounts{counts: make(map[roachpb.InternalClient]int)}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual, // Turn off replication queues.
+
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				KVClient: &kvcoord.ClientTestingKnobs{
+					TransportFactory: makeTransportFactory(true, connCounts),
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	ts := tc.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	startTime := ts.Clock().Now()
+
+	// Create a table, and split it so that we have multiple ranges, distributed across
+	// test cluster nodes.
+	sqlDB.Exec(t, `
+SET CLUSTER SETTING kv.rangefeed.enabled = true;
+ALTER DATABASE defaultdb  CONFIGURE ZONE USING num_replicas = 1;
+CREATE TABLE foo (key INT PRIMARY KEY);
+INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000);
+ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100));
+`)
+
+	for i := 100; i <= 900; i += 100 {
+		storeID := 1 + i%3
+		rowID := i
+		sqlDB.Exec(t, "ALTER TABLE foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[$1], $2)", storeID, rowID)
+	}
+
+	fooDesc := desctestutils.TestingGetPublicTableDescriptor(
+		ts.DB(), keys.SystemSQLCodec, "defaultdb", "foo")
+	fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+
+	allSeen, onValue := observeNValues(1000)
+	closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, onValue)
+	<-allSeen
+	closeFeed()
+
+	// Verify we connected to each node once.
+	connCounts.Lock()
+	defer connCounts.Unlock()
+	for _, c := range connCounts.counts {
+		require.Equal(t, 1, c)
 	}
 }

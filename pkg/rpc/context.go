@@ -607,36 +607,40 @@ func (a internalClientAdapter) UpdateSpanConfigs(
 	return a.server.UpdateSpanConfigs(ctx, req)
 }
 
-type respStreamClientAdapter struct {
-	ctx   context.Context
+type localStream struct {
+	ctx context.Context
+}
+
+// grpc.ClientStream methods.
+func (localStream) Header() (metadata.MD, error) { panic("unimplemented") }
+func (localStream) Trailer() metadata.MD         { panic("unimplemented") }
+func (localStream) CloseSend() error             { panic("unimplemented") }
+
+// grpc.ServerStream methods.
+func (localStream) SetHeader(metadata.MD) error  { panic("unimplemented") }
+func (localStream) SendHeader(metadata.MD) error { panic("unimplemented") }
+func (localStream) SetTrailer(metadata.MD)       { panic("unimplemented") }
+
+// grpc.Stream methods.
+func (a localStream) Context() context.Context  { return a.ctx }
+func (localStream) SendMsg(m interface{}) error { panic("unimplemented") }
+func (localStream) RecvMsg(m interface{}) error { panic("unimplemented") }
+
+type channelStream struct {
+	localStream
 	respC chan interface{}
 	errC  chan error
 }
 
-func makeRespStreamClientAdapter(ctx context.Context) respStreamClientAdapter {
-	return respStreamClientAdapter{
-		ctx:   ctx,
-		respC: make(chan interface{}, 128),
-		errC:  make(chan error, 1),
+func makeChannelStream(ctx context.Context) channelStream {
+	return channelStream{
+		localStream: localStream{ctx: ctx},
+		respC:       make(chan interface{}, 128),
+		errC:        make(chan error, 1),
 	}
 }
 
-// grpc.ClientStream methods.
-func (respStreamClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
-func (respStreamClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
-func (respStreamClientAdapter) CloseSend() error             { panic("unimplemented") }
-
-// grpc.ServerStream methods.
-func (respStreamClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
-func (respStreamClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
-func (respStreamClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
-
-// grpc.Stream methods.
-func (a respStreamClientAdapter) Context() context.Context  { return a.ctx }
-func (respStreamClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
-func (respStreamClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
-
-func (a respStreamClientAdapter) recvInternal() (interface{}, error) {
+func (a channelStream) recvInternal() (interface{}, error) {
 	// Prioritize respC. Both channels are buffered and the only guarantee we
 	// have is that once an error is sent on errC no other events will be sent
 	// on respC again.
@@ -651,10 +655,12 @@ func (a respStreamClientAdapter) recvInternal() (interface{}, error) {
 		default:
 			return nil, err
 		}
+	case <-a.ctx.Done():
+		return nil, a.ctx.Err()
 	}
 }
 
-func (a respStreamClientAdapter) sendInternal(e interface{}) error {
+func (a channelStream) sendInternal(e interface{}) error {
 	select {
 	case a.respC <- e:
 		return nil
@@ -664,7 +670,7 @@ func (a respStreamClientAdapter) sendInternal(e interface{}) error {
 }
 
 type rangeFeedClientAdapter struct {
-	respStreamClientAdapter
+	channelStream
 }
 
 // roachpb.Internal_RangeFeedServer methods.
@@ -691,7 +697,7 @@ func (a internalClientAdapter) RangeFeed(
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/RangeFeed")
 	rfAdapter := rangeFeedClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+		channelStream: makeChannelStream(ctx),
 	}
 
 	// Mark this as originating locally.
@@ -709,8 +715,78 @@ func (a internalClientAdapter) RangeFeed(
 	return rfAdapter, nil
 }
 
+type muxRangeFeedClientAdapter struct {
+	localStream
+	sendHandler func(interface{}) error
+	recvHandler func() (interface{}, error)
+}
+
+func (a muxRangeFeedClientAdapter) Send(r *roachpb.RangeFeedRequest) error {
+	return a.sendHandler(r)
+}
+
+func (a muxRangeFeedClientAdapter) Recv() (*roachpb.MuxRangeFeedEvent, error) {
+	e, err := a.recvHandler()
+	if err != nil {
+		return nil, err
+	}
+	return e.(*roachpb.MuxRangeFeedEvent), nil
+}
+
+var _ roachpb.Internal_MuxRangeFeedClient = muxRangeFeedClientAdapter{}
+
+type muxRangeFeedServerAdapter struct {
+	localStream
+	sendHandler func(interface{}) error
+	recvHandler func() (interface{}, error)
+}
+
+func (a muxRangeFeedServerAdapter) Send(event *roachpb.MuxRangeFeedEvent) error {
+	return a.sendHandler(event)
+}
+
+func (a muxRangeFeedServerAdapter) Recv() (*roachpb.RangeFeedRequest, error) {
+	e, err := a.recvHandler()
+	if err != nil {
+		return nil, err
+	}
+	return e.(*roachpb.RangeFeedRequest), nil
+}
+
+var _ roachpb.Internal_MuxRangeFeedServer = muxRangeFeedServerAdapter{}
+
+func (a internalClientAdapter) MuxRangeFeed(
+	ctx context.Context, opts ...grpc.CallOption,
+) (roachpb.Internal_MuxRangeFeedClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	serverStream := makeChannelStream(ctx)
+	clientStream := makeChannelStream(ctx)
+
+	go func() {
+		defer cancel()
+		adapter := muxRangeFeedServerAdapter{
+			localStream: localStream{ctx: ctx},
+			sendHandler: serverStream.sendInternal,
+			recvHandler: clientStream.recvInternal,
+		}
+		err := a.server.MuxRangeFeed(adapter)
+		if err == nil {
+			err = io.EOF
+		}
+		serverStream.errC <- err
+	}()
+
+	adapter := muxRangeFeedClientAdapter{
+		localStream: localStream{ctx: ctx},
+		sendHandler: clientStream.sendInternal,
+		recvHandler: serverStream.recvInternal,
+	}
+	return adapter, nil
+}
+
 type gossipSubscriptionClientAdapter struct {
-	respStreamClientAdapter
+	channelStream
 }
 
 // roachpb.Internal_GossipSubscriptionServer methods.
@@ -737,7 +813,7 @@ func (a internalClientAdapter) GossipSubscription(
 	ctx, cancel := context.WithCancel(ctx)
 	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/GossipSubscription")
 	gsAdapter := gossipSubscriptionClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+		channelStream: makeChannelStream(ctx),
 	}
 
 	go func() {
@@ -754,7 +830,7 @@ func (a internalClientAdapter) GossipSubscription(
 }
 
 type tenantSettingsClientAdapter struct {
-	respStreamClientAdapter
+	channelStream
 }
 
 // roachpb.Internal_TenantSettingsServer methods.
@@ -780,7 +856,7 @@ func (a internalClientAdapter) TenantSettings(
 ) (roachpb.Internal_TenantSettingsClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	gsAdapter := tenantSettingsClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
+		channelStream: makeChannelStream(ctx),
 	}
 
 	go func() {
