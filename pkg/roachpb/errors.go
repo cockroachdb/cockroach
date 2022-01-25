@@ -547,17 +547,14 @@ func IsRangeNotFoundError(err error) bool {
 	return errors.HasType(err, (*RangeNotFoundError)(nil))
 }
 
-// NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
-//
-// desc and lease represent info about the range that the request was
-// erroneously routed to. lease can be nil. If it's not nil but the leaseholder
-// is not part of desc, it is ignored. This allows callers to read the
-// descriptor and lease non-atomically without worrying about incoherence.
-//
-// Note that more range info is commonly added to the error after the error is
-// created.
-func NewRangeKeyMismatchError(
-	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+// NewRangeKeyMismatchErrorWithCTPolicy initializes a new RangeKeyMismatchError.
+// identical to NewRangeKeyMismatchError, with the given ClosedTimestampPolicy.
+func NewRangeKeyMismatchErrorWithCTPolicy(
+	ctx context.Context,
+	start, end Key,
+	desc *RangeDescriptor,
+	lease *Lease,
+	ctPolicy RangeClosedTimestampPolicy,
 ) *RangeKeyMismatchError {
 	if desc == nil {
 		panic("NewRangeKeyMismatchError with nil descriptor")
@@ -579,9 +576,35 @@ func NewRangeKeyMismatchError(
 		RequestStartKey: start,
 		RequestEndKey:   end,
 	}
+	ri := RangeInfo{
+		Desc:                  *desc,
+		Lease:                 l,
+		ClosedTimestampPolicy: ctPolicy,
+	}
 	// More ranges are sometimes added to rangesInternal later.
-	e.AppendRangeInfo(ctx, *desc, l)
+	e.AppendRangeInfo(ctx, ri)
 	return e
+}
+
+// NewRangeKeyMismatchError initializes a new RangeKeyMismatchError.
+//
+// desc and lease represent info about the range that the request was
+// erroneously routed to. lease can be nil. If it's not nil but the leaseholder
+// is not part of desc, it is ignored. This allows callers to read the
+// descriptor and lease non-atomically without worrying about incoherence.
+//
+// Note that more range info is commonly added to the error after the error is
+// created.
+func NewRangeKeyMismatchError(
+	ctx context.Context, start, end Key, desc *RangeDescriptor, lease *Lease,
+) *RangeKeyMismatchError {
+	return NewRangeKeyMismatchErrorWithCTPolicy(ctx,
+		start,
+		end,
+		desc,
+		lease,
+		LAG_BY_CLUSTER_SETTING, /* defaut closed timestsamp policy*/
+	)
 }
 
 func (e *RangeKeyMismatchError) Error() string {
@@ -613,23 +636,26 @@ func (e *RangeKeyMismatchError) MismatchedRange() (RangeInfo, error) {
 	return e.Ranges[0], nil
 }
 
-// AppendRangeInfo appends info about one range to the set returned to the
+// AppendRangeInfo appends info about a group of ranges to the set returned to the
 // kvclient.
 //
 // l can be empty. Otherwise, the leaseholder is asserted to be a replica in
 // desc.
-func (e *RangeKeyMismatchError) AppendRangeInfo(
-	ctx context.Context, desc RangeDescriptor, l Lease,
-) {
-	if !l.Empty() {
-		if _, ok := desc.GetReplicaDescriptorByID(l.Replica.ReplicaID); !ok {
-			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", l, desc)
+func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...RangeInfo) {
+	for _, ri := range ris {
+		ri.ValidateRangeInfoLease(ctx)
+		e.Ranges = append(e.Ranges, ri)
+	}
+}
+
+// ValidateRangeInfoLease checks the replica stored in this RangeInfo's lease is exists in
+// the range descriptor.
+func (ri RangeInfo) ValidateRangeInfoLease(ctx context.Context) {
+	if !ri.Lease.Empty() {
+		if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
+			log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
 		}
 	}
-	e.Ranges = append(e.Ranges, RangeInfo{
-		Desc:  desc,
-		Lease: l,
-	})
 }
 
 var _ ErrorDetailInterface = &RangeKeyMismatchError{}
