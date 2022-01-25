@@ -29,7 +29,7 @@ var (
 	_ tree.AggType
 )
 
-// checkCol determines if the current key column in the GroupID buckets matches
+// checkCol determines if the current key column in the ToCheckID buckets matches
 // the specified equality column key. If there is no match, then the key is
 // added to differs. If the bucket has reached the end, the key is rejected. If
 // the HashTable disallows null equality, then if any element in the key is
@@ -56,7 +56,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -68,7 +68,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -101,7 +101,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -110,7 +110,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -141,7 +141,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -174,7 +174,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -208,7 +208,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -220,7 +220,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -253,7 +253,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -262,7 +262,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -293,7 +293,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -326,7 +326,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -375,7 +375,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -387,7 +387,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -412,7 +412,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -421,7 +421,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -444,7 +444,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -469,7 +469,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -495,7 +495,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -507,7 +507,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -532,7 +532,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -541,7 +541,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -564,7 +564,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -589,7 +589,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -630,7 +630,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -642,7 +642,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -667,7 +667,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -676,7 +676,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -699,7 +699,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -724,7 +724,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -750,7 +750,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -762,7 +762,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -787,7 +787,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -796,7 +796,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -819,7 +819,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -844,7 +844,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -883,7 +883,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -895,7 +895,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -931,7 +931,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -940,7 +940,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -974,7 +974,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1010,7 +1010,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1047,7 +1047,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1059,7 +1059,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1095,7 +1095,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1104,7 +1104,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1138,7 +1138,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1174,7 +1174,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1215,7 +1215,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1227,7 +1227,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1263,7 +1263,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1272,7 +1272,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1306,7 +1306,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1342,7 +1342,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1379,7 +1379,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1391,7 +1391,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1427,7 +1427,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1436,7 +1436,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1470,7 +1470,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1506,7 +1506,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1548,7 +1548,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1560,7 +1560,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1596,7 +1596,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1605,7 +1605,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1639,7 +1639,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1675,7 +1675,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1712,7 +1712,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1724,7 +1724,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1760,7 +1760,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1769,7 +1769,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1803,7 +1803,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1839,7 +1839,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -1886,7 +1886,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1898,7 +1898,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1934,7 +1934,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -1943,7 +1943,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -1977,7 +1977,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2013,7 +2013,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2050,7 +2050,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2062,7 +2062,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2098,7 +2098,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2107,7 +2107,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2141,7 +2141,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2177,7 +2177,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2218,7 +2218,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2230,7 +2230,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2266,7 +2266,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2275,7 +2275,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2309,7 +2309,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2345,7 +2345,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2382,7 +2382,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2394,7 +2394,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2430,7 +2430,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2439,7 +2439,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2473,7 +2473,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2509,7 +2509,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2551,7 +2551,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2563,7 +2563,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2599,7 +2599,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2608,7 +2608,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2642,7 +2642,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2678,7 +2678,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2715,7 +2715,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2727,7 +2727,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2763,7 +2763,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2772,7 +2772,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2806,7 +2806,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2842,7 +2842,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -2890,7 +2890,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2902,7 +2902,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2938,7 +2938,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -2947,7 +2947,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -2981,7 +2981,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3017,7 +3017,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3054,7 +3054,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3066,7 +3066,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3102,7 +3102,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3111,7 +3111,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3145,7 +3145,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3181,7 +3181,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3222,7 +3222,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3234,7 +3234,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3270,7 +3270,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3279,7 +3279,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3313,7 +3313,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3349,7 +3349,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3386,7 +3386,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3398,7 +3398,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3434,7 +3434,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3443,7 +3443,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3477,7 +3477,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3513,7 +3513,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3555,7 +3555,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3567,7 +3567,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3603,7 +3603,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3612,7 +3612,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3646,7 +3646,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3682,7 +3682,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3719,7 +3719,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3731,7 +3731,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3767,7 +3767,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3776,7 +3776,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3810,7 +3810,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3846,7 +3846,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -3898,7 +3898,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3910,7 +3910,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -3954,7 +3954,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -3963,7 +3963,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4005,7 +4005,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4049,7 +4049,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4094,7 +4094,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4106,7 +4106,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4150,7 +4150,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4159,7 +4159,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4201,7 +4201,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4245,7 +4245,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4305,7 +4305,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4317,7 +4317,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4349,7 +4349,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4358,7 +4358,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4388,7 +4388,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4420,7 +4420,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4453,7 +4453,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4465,7 +4465,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4497,7 +4497,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4506,7 +4506,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4536,7 +4536,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4568,7 +4568,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4616,7 +4616,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4628,7 +4628,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4653,7 +4653,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4662,7 +4662,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4685,7 +4685,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4710,7 +4710,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4736,7 +4736,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4748,7 +4748,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4773,7 +4773,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4782,7 +4782,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4805,7 +4805,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4830,7 +4830,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -4871,7 +4871,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4883,7 +4883,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4914,7 +4914,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4923,7 +4923,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -4952,7 +4952,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -4983,7 +4983,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -5015,7 +5015,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5027,7 +5027,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5058,7 +5058,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5067,7 +5067,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5096,7 +5096,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5127,7 +5127,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5174,7 +5174,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -5186,7 +5186,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5213,7 +5213,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -5222,7 +5222,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5247,7 +5247,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -5274,7 +5274,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = probeSel[toCheck]
 										buildIdx = int(keyID - 1)
@@ -5302,7 +5302,7 @@ func (ht *HashTable) checkCol(
 								probeVecNulls := probeVec.Nulls()
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5314,7 +5314,7 @@ func (ht *HashTable) checkCol(
 													ht.ProbeScratch.differs[toCheck] = true
 												}
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5341,7 +5341,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								probeVecNulls := probeVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5350,7 +5350,7 @@ func (ht *HashTable) checkCol(
 											if ht.allowNullEquality {
 												ht.ProbeScratch.differs[toCheck] = true
 											} else {
-												ht.ProbeScratch.GroupID[toCheck] = 0
+												ht.ProbeScratch.ToCheckID[toCheck] = 0
 											}
 											continue
 										}
@@ -5375,7 +5375,7 @@ func (ht *HashTable) checkCol(
 								var probeIdx, buildIdx int
 								buildVecNulls := buildVec.Nulls()
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
@@ -5402,7 +5402,7 @@ func (ht *HashTable) checkCol(
 							} else {
 								var probeIdx, buildIdx int
 								for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-									keyID := ht.ProbeScratch.GroupID[toCheck]
+									keyID := ht.ProbeScratch.ToCheckID[toCheck]
 									if keyID != 0 {
 										probeIdx = int(toCheck)
 										buildIdx = int(keyID - 1)
