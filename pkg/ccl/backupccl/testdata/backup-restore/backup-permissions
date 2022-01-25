@@ -122,11 +122,8 @@ exec-sql
 CREATE DATABASE d;
 REVOKE CONNECT ON DATABASE d FROM public;
 CREATE USER testuser;
-GRANT SELECT ON DATABASE d TO testuser;
+GRANT CONNECT ON DATABASE d TO testuser;
 ----
-NOTICE: GRANT SELECT ON DATABASE is deprecated.
-This statement was automatically converted to USE d; ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO testuser;
-Please use ALTER DEFAULT PRIVILEGES going forward
 
 exec-sql server=s3 user=testuser
 SHOW BACKUP 'http://COCKROACH_TEST_HTTP_SERVER/'
@@ -136,7 +133,7 @@ pq: only users with the admin role are allowed to SHOW BACKUP from the specified
 exec-sql user=testuser
 BACKUP DATABASE d TO 'nodelocal://0/test3'
 ----
-pq: user testuser does not have CONNECT privilege on database d
+pq: only users with the admin role are allowed to BACKUP to the specified nodelocal URI
 
 # Test that http access is disallowed by disable http even if allow-non-admin is on.
 new-server name=s4 allow-implicit-access disable-http

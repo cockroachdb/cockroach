@@ -10,7 +10,7 @@ statement ok
 GRANT CREATE ON DATABASE test TO bar
 
 statement ok
-GRANT SELECT ON DATABASE test to testuser
+GRANT CONNECT ON DATABASE test to testuser
 
 statement ok
 GRANT CREATE ON SCHEMA test_schema TO bar

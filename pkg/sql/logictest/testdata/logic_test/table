@@ -565,6 +565,8 @@ cluster_inflight_traces                NULL
 cluster_queries                        NULL
 cluster_sessions                       NULL
 cluster_settings                       NULL
+cluster_statement_statistics           NULL
+cluster_transaction_statistics         NULL
 cluster_transactions                   NULL
 create_schema_statements               NULL
 create_statements                      NULL

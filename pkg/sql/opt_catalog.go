@@ -1548,6 +1548,11 @@ func (os *optTableStat) NullCount() uint64 {
 	return os.stat.NullCount
 }
 
+// AvgSize is part of the cat.TableStatistic interface.
+func (os *optTableStat) AvgSize() uint64 {
+	return os.stat.AvgSize
+}
+
 // Histogram is part of the cat.TableStatistic interface.
 func (os *optTableStat) Histogram() []cat.HistogramBucket {
 	return os.stat.Histogram

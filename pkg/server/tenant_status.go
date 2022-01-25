@@ -463,7 +463,7 @@ func (t *tenantStatusServer) CombinedStatementStats(
 	}
 
 	return getCombinedStatementStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetSQLStatsProvider(),
-		t.sqlServer.internalExecutor)
+		t.sqlServer.internalExecutor, t.st, t.sqlServer.execCfg.SQLStatsTestingKnobs)
 }
 
 // Statements implements the relevant endpoint on the StatusServer by
@@ -514,7 +514,11 @@ func (t *tenantStatusServer) Statements(
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
 		if local {
-			return statementsLocal(ctx, roachpb.NodeID(t.sqlServer.SQLInstanceID()), t.sqlServer)
+			return statementsLocal(
+				ctx,
+				roachpb.NodeID(t.sqlServer.SQLInstanceID()),
+				t.sqlServer,
+				req.FetchMode)
 		}
 		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
