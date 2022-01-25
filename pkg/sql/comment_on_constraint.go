@@ -12,8 +12,8 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"

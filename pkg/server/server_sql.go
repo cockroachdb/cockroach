@@ -812,8 +812,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.NewFakeSessionData,
 	)
 	execCfg.CommentUpdaterFactory = commenter.NewCommentUpdaterFactory(
-		ieFactory,
-		sql.MakeConstraintOidBuilder)
+		ieFactory)
 	execCfg.InternalExecutorFactory = ieFactory
 
 	distSQLServer.ServerConfig.ProtectedTimestampProvider = execCfg.ProtectedTimestampProvider

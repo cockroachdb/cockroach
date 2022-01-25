@@ -12,6 +12,7 @@ package migrations
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ensureTablesHasConstraintID(ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job) error {
+func ensureTablesHasConstraintID(
+	ctx context.Context, _ clusterversion.ClusterVersion, d migration.TenantDeps, _ *jobs.Job,
+) error {
 	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB,
 		func(ctx context.Context, txn *kv.Txn, collections *descs.Collection) error {
 			// Get all possible table descriptors and rewrite them out to
