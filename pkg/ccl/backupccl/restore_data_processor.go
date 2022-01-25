@@ -46,8 +46,6 @@ type restoreDataProcessor struct {
 	input   execinfra.RowSource
 	output  execinfra.RowReceiver
 
-	kr *KeyRewriter
-
 	// numWorkers is the number of workers this processor should use. Initialized
 	// at processor creation based on the cluster setting. If the cluster setting
 	// is updated, the job should be PAUSEd and RESUMEd for the new setting to
@@ -129,12 +127,6 @@ func newRestoreDataProcessor(
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
 		flushBytes: storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings),
-	}
-
-	var err error
-	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
-	if err != nil {
-		return nil, err
 	}
 
 	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -339,6 +331,11 @@ func (rd *restoreDataProcessor) openSSTs(
 
 func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
 	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
+		kr, err := makeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.Rekeys)
+		if err != nil {
+			return err
+		}
+
 		for {
 			done, err := func() (done bool, _ error) {
 				sstIter, ok := <-ssts
@@ -347,7 +344,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 					return done, nil
 				}
 
-				summary, err := rd.processRestoreSpanEntry(ctx, sstIter)
+				summary, err := rd.processRestoreSpanEntry(ctx, kr, sstIter)
 				if err != nil {
 					return done, err
 				}
@@ -373,7 +370,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 }
 
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
-	ctx context.Context, sst mergedSST,
+	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (roachpb.BulkOpSummary, error) {
 	db := rd.flowCtx.Cfg.DB
 	evalCtx := rd.EvalCtx
@@ -448,7 +445,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		value := roachpb.Value{RawBytes: valueScratch}
 		iter.NextKey()
 
-		key.Key, ok, err = rd.kr.RewriteKey(key.Key)
+		key.Key, ok, err = kr.RewriteKey(key.Key)
 		if err != nil {
 			return summary, err
 		}

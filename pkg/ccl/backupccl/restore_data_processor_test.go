@@ -392,7 +392,9 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts))
 			close(ssts)
 			sst := <-ssts
-			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(ctx, sst)
+			rewriter, err := makeKeyRewriterFromRekeys(flowCtx.Codec(), mockRestoreDataSpec.Rekeys)
+			require.NoError(t, err)
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(ctx, rewriter, sst)
 			require.NoError(t, err)
 
 			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
@@ -435,11 +437,5 @@ func newTestingRestoreDataProcessor(
 		flowCtx: flowCtx,
 		spec:    spec,
 	}
-	var err error
-	rd.kr, err = makeKeyRewriterFromRekeys(flowCtx.Codec(), rd.spec.Rekeys)
-	if err != nil {
-		return nil, err
-	}
-
 	return rd, nil
 }
