@@ -2429,7 +2429,7 @@ func (s *adminServer) DataDistribution(
 		defer acct.Close(txnCtx)
 
 		kvs, err := kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
-			Key:    keys.SystemSQLCodec.TablePrefix(keys.MinUserDescriptorID(s.server.sqlServer.execCfg.SystemIDChecker)),
+			Key:    keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1),
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {

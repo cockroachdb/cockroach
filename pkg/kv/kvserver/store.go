@@ -1133,15 +1133,13 @@ func NewStore(
 		log.Fatalf(ctx, "invalid store configuration: %+v", &cfg)
 	}
 	s := &Store{
-		cfg:      cfg,
-		db:       cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:   eng,
-		nodeDesc: nodeDesc,
-		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender: cfg.ClosedTimestampSender,
-		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(
-			keys.MinUserDescriptorID(keys.DeprecatedSystemIDChecker()),
-		),
+		cfg:                        cfg,
+		db:                         cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:                     eng,
+		nodeDesc:                   nodeDesc,
+		metrics:                    newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender:                   cfg.ClosedTimestampSender,
+		systemRangeStartUpperBound: keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1),
 	}
 	if cfg.RPCContext != nil {
 		s.allocator = MakeAllocator(

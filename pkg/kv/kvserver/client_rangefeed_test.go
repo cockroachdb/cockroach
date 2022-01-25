@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -70,7 +69,6 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 
 		// Note: 42 is a system descriptor.
 		const junkDescriptorID = 42
-		require.True(t, bootstrap.BootstrappedSystemIDChecker().IsSystemID(junkDescriptorID))
 		junkDescriptorKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, junkDescriptorID)
 		junkDescriptor := dbdesc.NewInitial(
 			junkDescriptorID, "junk", security.AdminRoleName())
