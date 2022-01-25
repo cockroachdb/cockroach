@@ -71,6 +71,10 @@ type Result struct {
 	// The responses are to be considered immutable; the Streamer might hold on
 	// to the respective memory. Calling Result.Release() tells the Streamer
 	// that the response is no longer needed.
+	//
+	// GetResp is only returned with non-nil Value field (i.e. the GetRequest
+	// was issued for a key that wasn't found, then the Result for such request
+	// is not created).
 	GetResp *roachpb.GetResponse
 	// ScanResp can contain a partial response to a ScanRequest (when Complete
 	// is false). In that case, there will be a further result with the
@@ -1044,7 +1048,9 @@ func (w *workerCoordinator) performRequestAsync(
 						numIncompleteGets++
 					} else {
 						// This Get was completed.
-						memoryFootprintBytes += getResponseSize(get)
+						if get.Value != nil {
+							memoryFootprintBytes += getResponseSize(get)
+						}
 					}
 				case *roachpb.ScanRequest:
 					scan := reply.(*roachpb.ScanResponse)
@@ -1175,6 +1181,11 @@ func (w *workerCoordinator) performRequestAsync(
 						resumeReqIdx++
 					} else {
 						// This Get was completed.
+						if get.Value == nil {
+							// Do not create the result for this Get because the
+							// key wasn't found.
+							continue
+						}
 						result := Result{
 							GetResp: get,
 							// This currently only works because all requests
@@ -1320,12 +1331,10 @@ func requestsMemUsage(reqs []roachpb.RequestUnion) int64 {
 }
 
 // getResponseSize calculates the size of the GetResponse similar to how it is
-// accounted for TargetBytes parameter by the KV layer.
+// accounted for TargetBytes parameter by the KV layer. It assumes that
+// get.Value is non-nil.
 // TODO(yuzefovich): check with Erik that this is, indeed, similar.
 func getResponseSize(get *roachpb.GetResponse) int64 {
-	if get.Value == nil {
-		return 0
-	}
 	return int64(len(get.Value.RawBytes))
 }
 
