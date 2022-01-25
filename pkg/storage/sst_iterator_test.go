@@ -126,34 +126,3 @@ func TestSSTIterator(t *testing.T) {
 		runTestSSTIterator(t, iter, allKVs)
 	})
 }
-
-func TestCockroachComparer(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	keyAMetadata := MVCCKey{
-		Key: []byte("a"),
-	}
-	keyA2 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-	keyA1 := MVCCKey{
-		Key:       []byte("a"),
-		Timestamp: hlc.Timestamp{WallTime: 1},
-	}
-	keyB2 := MVCCKey{
-		Key:       []byte("b"),
-		Timestamp: hlc.Timestamp{WallTime: 2},
-	}
-
-	if x := EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected key metadata to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)); x != -1 {
-		t.Errorf("expected higher timestamp to sort first got: %d", x)
-	}
-	if x := EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)); x != -1 {
-		t.Errorf("expected lower key to sort first got: %d", x)
-	}
-}

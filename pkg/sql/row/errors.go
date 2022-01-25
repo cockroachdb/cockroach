@@ -76,17 +76,9 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 	return origPErr.GoError()
 }
 
-// KeyToDescTranslator is capable of translating a key found in an error to a
-// table descriptor for error reporting.
-type KeyToDescTranslator interface {
-	// KeyToDesc attempts to translate the key found in an error to a table
-	// descriptor.
-	KeyToDesc(roachpb.Key) (catalog.TableDescriptor, bool)
-}
-
 // ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
-func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err error) error {
+func ConvertFetchError(ctx context.Context, desc catalog.TableDescriptor, err error) error {
 	var errs struct {
 		wi *roachpb.WriteIntentError
 		bs *roachpb.MinTimestampBoundUnsatisfiableError
@@ -94,7 +86,6 @@ func ConvertFetchError(ctx context.Context, descForKey KeyToDescTranslator, err 
 	switch {
 	case errors.As(err, &errs.wi):
 		key := errs.wi.Intents[0].Key
-		desc, _ := descForKey.KeyToDesc(key)
 		return NewLockNotAvailableError(ctx, desc, key, errs.wi.Reason)
 	case errors.As(err, &errs.bs):
 		return pgerror.WithCandidateCode(
