@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1154,6 +1155,12 @@ func (n *Node) RangeLookup(
 func (n *Node) RangeFeed(
 	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
+	return n.singleRangeFeed(args, stream)
+}
+
+func (n *Node) singleRangeFeed(
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+) error {
 	pErr := n.stores.RangeFeed(args, stream)
 	if pErr != nil {
 		var event roachpb.RangeFeedEvent
@@ -1163,6 +1170,55 @@ func (n *Node) RangeFeed(
 		return stream.Send(&event)
 	}
 	return nil
+}
+
+type setRangeIDEventSink struct {
+	ctx     context.Context
+	rangeID roachpb.RangeID
+	wrapped roachpb.Internal_MuxRangeFeedServer
+}
+
+func (s *setRangeIDEventSink) Context() context.Context {
+	return s.ctx
+}
+
+func (s *setRangeIDEventSink) Send(event *roachpb.RangeFeedEvent) error {
+	response := &roachpb.MuxRangeFeedResponse{
+		RangeFeedEvent: *event,
+		RangeID:        s.rangeID,
+	}
+	return s.wrapped.Send(response)
+}
+
+var _ roachpb.RangeFeedEventSink = (*setRangeIDEventSink)(nil)
+
+func (n *Node) asyncRangeFeed(
+	args roachpb.RangeFeedRequest, stream roachpb.Internal_MuxRangeFeedServer,
+) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		sink := setRangeIDEventSink{
+			ctx:     ctx,
+			rangeID: args.RangeID,
+			wrapped: stream,
+		}
+		return n.singleRangeFeed(&args, &sink)
+	}
+}
+
+// MuxRangeFeed implements the roachpb.InternalServer interface.
+func (n *Node) MuxRangeFeed(stream roachpb.Internal_MuxRangeFeedServer) error {
+	ctx, cancelFeeds := context.WithCancel(stream.Context())
+	defer cancelFeeds()
+	rfGrp := ctxgroup.WithContext(ctx)
+
+	for {
+		req, err := stream.Recv()
+		if err != nil {
+			cancelFeeds()
+			return errors.CombineErrors(err, rfGrp.Wait())
+		}
+		rfGrp.GoCtx(n.asyncRangeFeed(*req, stream))
+	}
 }
 
 // ResetQuorum implements the roachpb.InternalServer interface.
