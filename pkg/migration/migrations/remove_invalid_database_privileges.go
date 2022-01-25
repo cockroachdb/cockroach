@@ -32,7 +32,8 @@ type descIDAndVersion struct {
 }
 
 // runRemoveInvalidDatabasePrivileges calls RunPostDeserializationChanges on
-// every database descriptor.
+// every database descriptor. It also calls RunPostDeserializationChanges on
+// all table descriptors to add constraint IDs.
 // This migration is done to convert invalid privileges on the
 // database to default privileges.
 func runRemoveInvalidDatabasePrivileges(
@@ -143,9 +144,9 @@ func descriptorUpgradeMigration(
 		if err != nil {
 			return err
 		}
-		// If the descriptor is not a database descriptor, we can skip it.
-		_, databaseDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
-		if databaseDesc == nil {
+		// If the descriptor is not a database or table descriptor, we can skip it.
+		tableDesc, databaseDesc, _, _ := descpb.FromDescriptorWithMVCCTimestamp(&desc, ts)
+		if databaseDesc == nil && tableDesc == nil {
 			continue
 		}
 		ids = append(ids, id)
