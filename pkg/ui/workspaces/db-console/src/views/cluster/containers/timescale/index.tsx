@@ -44,15 +44,17 @@ const TimeScaleDropdownWithSearchParams = (
         currentWindow.start?.utc() ||
         moment(now).subtract(10, "minutes");
       const seconds = end.diff(start, "seconds");
-      const timeScale = findClosestTimeScale(defaultTimeScaleOptions, seconds);
+      const timeScale: TimeScale = {
+        ...findClosestTimeScale(defaultTimeScaleOptions, seconds),
+        windowSize: moment.duration(end.diff(start)),
+        windowEnd: null,
+      };
       if (
         moment.duration(now.diff(end)).asMinutes() >
         timeScale.sampleSize.asMinutes()
       ) {
         timeScale.key = "Custom";
       }
-      timeScale.windowEnd = null;
-      timeScale.windowSize = moment.duration(end.diff(start));
       props.setTimeScale(timeScale);
     };
 
