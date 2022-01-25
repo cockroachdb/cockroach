@@ -32,3 +32,15 @@ func GenerateUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (
 	}
 	return descpb.ID(newVal - 1), nil
 }
+
+// PeekNextUniqueDescID returns the next as-of-yet unassigned unique descriptor
+// ID in the sequence. Note that this value is _not_ guaranteed to be the same
+// as that returned by a subsequent call to GenerateUniqueDescID. It will,
+// however, be a lower bound on it.
+func PeekNextUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (descpb.ID, error) {
+	v, err := db.Get(ctx, codec.DescIDSequenceKey())
+	if err != nil {
+		return descpb.InvalidID, err
+	}
+	return descpb.ID(v.ValueInt()), nil
+}
