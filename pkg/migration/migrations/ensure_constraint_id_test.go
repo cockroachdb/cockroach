@@ -12,6 +12,8 @@ package migrations_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -25,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 // TestEnsureConstraintIDs tests that constraint IDs are added as expected.

@@ -19,24 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
-// MakeConstraintOidBuilderFn creates a ConstraintOidBuilder.
-type MakeConstraintOidBuilderFn func() ConstraintOidBuilder
-
 // CommentUpdaterFactory used to construct a commenter.CommentUpdater, which
 // can be used to update comments on schema objects.
 type CommentUpdaterFactory struct {
-	ieFactory                sqlutil.SessionBoundInternalExecutorFactory
-	makeConstraintOidBuilder MakeConstraintOidBuilderFn
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // NewCommentUpdaterFactory creates a new comment updater factory.
 func NewCommentUpdaterFactory(
 	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
-	makeConstraintOidBuilder MakeConstraintOidBuilderFn,
 ) scexec.CommentUpdaterFactory {
 	return CommentUpdaterFactory{
-		ieFactory:                ieFactory,
-		makeConstraintOidBuilder: makeConstraintOidBuilder,
+		ieFactory: ieFactory,
 	}
 }
 
@@ -46,8 +40,7 @@ func (cf CommentUpdaterFactory) NewCommentUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 ) scexec.CommentUpdater {
 	return commentUpdater{
-		txn:        txn,
-		ie:         cf.ieFactory(ctx, sessionData),
-		oidBuilder: cf.makeConstraintOidBuilder(),
+		txn: txn,
+		ie:  cf.ieFactory(ctx, sessionData),
 	}
 }
