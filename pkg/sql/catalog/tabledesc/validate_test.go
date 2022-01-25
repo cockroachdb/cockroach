@@ -129,6 +129,7 @@ var validationMap = []struct {
 			"LocalityConfig":                {status: iSolemnlySwearThisFieldIsValidated},
 			"PartitionAllBy":                {status: iSolemnlySwearThisFieldIsValidated},
 			"NewSchemaChangeJobID":          {status: iSolemnlySwearThisFieldIsValidated},
+			"RowLevelTTL":                   {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

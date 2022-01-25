@@ -1275,7 +1275,7 @@ func NewTableDesc(
 		semaCtx,
 		evalCtx,
 		n.StorageParams,
-		&paramparse.TableStorageParamObserver{},
+		paramparse.NewTableStorageParamObserver(&desc),
 	); err != nil {
 		return nil, err
 	}

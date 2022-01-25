@@ -11,11 +11,13 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
         "@com_github_cockroachdb_errors//:errors",
     ],
