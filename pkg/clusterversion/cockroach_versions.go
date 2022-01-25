@@ -327,6 +327,8 @@ const (
 	// AlterSystemStatementStatisticsAddIndexRecommendations adds an
 	// index_recommendations column to the system.statement_statistics table.
 	AlterSystemStatementStatisticsAddIndexRecommendations
+	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -563,6 +565,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
+	},
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
 	},
 
 	// *************************************************
