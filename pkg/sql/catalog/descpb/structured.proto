@@ -1168,6 +1168,29 @@ message TableDescriptor {
   // This means that all indexes implicitly inherit all partitioning
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
+
+  message RowLevelTTL {
+    option (gogoproto.equal) = true;
+
+    // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
+    optional string duration_expr = 1 [(gogoproto.nullable)=false];
+  }
+  // RowLevelTTL is set if there is a TTL set on the table.
+  optional RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
+
+  // ExcludeDataFromBackup specifies if the table's row data can be excluded
+  // from a backup targeting this table. This in turn means that the protected
+  // timestamp record written during the backup will exclude this table as a
+  // target, thereby not holding up GC on this table for the runtime of the
+  // backup. This is particularly useful for table's with high-churn that can
+  // then be configured with a low GC-TTL.
+  //
+  // It is important to note that we will still backup the table descriptor, and
+  // all other objects that reference this table egs: jobs, and so restoring
+  // such a table will result in an empty table on the restoring cluster.
+  optional bool exclude_data_from_backup = 47 [(gogoproto.nullable) = false];
+
+  // Next ID: 48
 }
 
 // SurvivalGoal is the survival goal for a database.
