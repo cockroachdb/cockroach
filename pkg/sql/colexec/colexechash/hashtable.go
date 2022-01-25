@@ -132,24 +132,24 @@ type hashTableProbeBuffer struct {
 	// to [1, 2].
 	ToCheck []uint64
 
-	// GroupID stores the keyIDs of the current "candidate" matches for the
-	// tuples from the probing batch. Concretely, GroupID[i] is the keyID of the
-	// tuple in the hash table which we are currently comparing with the ith
+	// ToCheckID stores the keyIDs of the current "candidate" matches for the
+	// tuples from the probing batch. Concretely, ToCheckID[i] is the keyID of
+	// the tuple in the hash table which we are currently comparing with the ith
 	// tuple of the probing batch. i is included in ToCheck. The result of the
 	// comparison is stored in 'differs' and/or 'distinct'.
 	//
 	// On the first iteration:
-	//   GroupID[i] = First[hash[i]]
+	//   ToCheckID[i] = First[hash[i]]
 	// (i.e. we're comparing the ith probing tuple against the head of the hash
-	// chain). For the next iteration of probing, new values of GroupID are
+	// chain). For the next iteration of probing, new values of ToCheckID are
 	// calculated as
-	//   GroupID[i] = Next[GroupID[i]].
-	// Whenever GroupID[i] becomes 0, there are no more matches for the ith
+	//   ToCheckID[i] = Next[ToCheckID[i]].
+	// Whenever ToCheckID[i] becomes 0, there are no more matches for the ith
 	// probing tuple.
-	GroupID []uint64
+	ToCheckID []uint64
 
 	// differs stores whether the probing tuple included in ToCheck differs
-	// from the corresponding "candidate" tuple specified in GroupID.
+	// from the corresponding "candidate" tuple specified in ToCheckID.
 	differs []bool
 
 	// distinct stores whether the probing tuple is distinct (i.e. it will
@@ -479,19 +479,19 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 //         a) all 4 tuples included to be checked against heads of their hash
 //            chains:
 //              ToCheck = [0, 1, 2, 3]
-//              GroupID = [1, 1, 3, 1]
+//              ToCheckID = [1, 1, 3, 1]
 //         b) after performing the equality check using CheckProbeForDistinct,
 //            tuples 0, 1, 2 are found to be equal to the heads of their hash
 //            chains while tuple 3 (-5) has a hash collision with tuple 0 (-6),
 //            so it is kept for another iteration:
 //              ToCheck = [3]
-//              GroupID = [x, x, x, 2]
+//              ToCheckID = [x, x, x, 2]
 //              HeadID  = [1, 1, 3, x]
 //      2) second iteration in FindBuckets finds that tuple 3 (-5) again has a
 //         hash collision with tuple 1 (-6), so it is kept for another
 //         iteration:
 //              ToCheck = [3]
-//              GroupID = [x, x, x, 4]
+//              ToCheckID = [x, x, x, 4]
 //              HeadID  = [1, 1, 3, x]
 //      3) third iteration finds a match for tuple (the tuple itself), no more
 //         tuples to check, so the iterations stop:
@@ -525,7 +525,7 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 //         a) all 4 tuples included to be checked against heads of their hash
 //            chains:
 //              ToCheck = [0, 1, 2, 3]
-//              GroupID = [1, 2, 2, 1]
+//              ToCheckID = [1, 2, 2, 1]
 //         b) after performing the equality check using CheckProbeForDistinct,
 //            all tuples are found to be equal to the heads of their hash
 //            chains, no more tuples to check, so the iterations stop:
@@ -541,17 +541,17 @@ func (ht *HashTable) FullBuild(input colexecop.Operator) {
 //      1) first iteration in FindBuckets:
 //         a) both tuples included to be checked against heads of their hash
 //            chains of the hash table (meaning BuildScratch.First and
-//            BuildScratch.Next are used to populate GroupID values):
+//            BuildScratch.Next are used to populate ToCheckID values):
 //              ToCheck = [0, 1]
-//              GroupID = [2, 1]
+//              ToCheckID = [2, 1]
 //         b) after performing the equality check using CheckBuildForDistinct,
 //            both tuples are found to have hash collisions (-8 with -7 and -5
 //            with -6), so both are kept for another iteration:
 //              ToCheck = [0, 1]
-//              GroupID = [0, 2]
+//              ToCheckID = [0, 2]
 //      2) second iteration in FindBuckets finds that tuple 1 (-5) has a match
-//         whereas tuple 0 (-8) is distinct (because its GroupID is 0), no more
-//         tuples to check:
+//         whereas tuple 0 (-8) is distinct (because its ToCheckID is 0), no
+//         more tuples to check:
 //              ToCheck = []
 //              HeadID  = [1, 0]
 //      3) duplicates are represented by having HeadID value of 0, so the batch
@@ -638,12 +638,12 @@ func (ht *HashTable) FindBuckets(
 
 	ht.ProbeScratch.SetupLimitedSlices(batchLength, ht.BuildMode)
 	// Early bounds checks.
-	groupIDs := ht.ProbeScratch.GroupID
-	_ = groupIDs[batchLength-1]
+	toCheckIDs := ht.ProbeScratch.ToCheckID
+	_ = toCheckIDs[batchLength-1]
 	for i, hash := range ht.ProbeScratch.HashBuffer[:batchLength] {
 		f := first[hash]
 		//gcassert:bce
-		groupIDs[i] = f
+		toCheckIDs[i] = f
 	}
 	copy(ht.ProbeScratch.ToCheck, HashTableInitialToCheck[:batchLength])
 
@@ -786,9 +786,9 @@ func (ht *HashTable) buildNextChains(first, next []uint64, offset, batchSize uin
 	ht.cancelChecker.CheckEveryCall()
 }
 
-// SetupLimitedSlices ensures that HeadID, differs, distinct, GroupID, and
+// SetupLimitedSlices ensures that HeadID, differs, distinct, ToCheckID, and
 // ToCheck are of the desired length and are setup for probing.
-// Note that if the old GroupID or ToCheck slices have enough capacity, they
+// Note that if the old ToCheckID or ToCheck slices have enough capacity, they
 // are *not* zeroed out.
 func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTableBuildMode) {
 	p.HeadID = colexecutils.MaybeAllocateLimitedUint64Array(p.HeadID, length)
@@ -796,12 +796,12 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTabl
 	if buildMode == HashTableDistinctBuildMode {
 		p.distinct = colexecutils.MaybeAllocateLimitedBoolArray(p.distinct, length)
 	}
-	// Note that we don't use maybeAllocate* methods below because GroupID and
+	// Note that we don't use maybeAllocate* methods below because ToCheckID and
 	// ToCheck don't need to be zeroed out when reused.
-	if cap(p.GroupID) < length {
-		p.GroupID = make([]uint64, length)
+	if cap(p.ToCheckID) < length {
+		p.ToCheckID = make([]uint64, length)
 	} else {
-		p.GroupID = p.GroupID[:length]
+		p.ToCheckID = p.ToCheckID[:length]
 	}
 	if cap(p.ToCheck) < length {
 		p.ToCheck = make([]uint64, length)
@@ -810,11 +810,11 @@ func (p *hashTableProbeBuffer) SetupLimitedSlices(length int, buildMode HashTabl
 	}
 }
 
-// FindNext determines the id of the next key inside the GroupID buckets for
+// FindNext determines the id of the next key inside the ToCheckID buckets for
 // each equality column key in ToCheck.
 func (ht *HashTable) FindNext(next []uint64, nToCheck uint64) {
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
-		ht.ProbeScratch.GroupID[toCheck] = next[ht.ProbeScratch.GroupID[toCheck]]
+		ht.ProbeScratch.ToCheckID[toCheck] = next[ht.ProbeScratch.ToCheckID[toCheck]]
 	}
 }
 
@@ -885,14 +885,14 @@ func (ht *HashTable) CheckBuildForAggregation(
 			} else {
 				// This tuple has a duplicate in the hash table, so we remember
 				// keyID of that duplicate.
-				ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.GroupID[toCheck]
+				ht.ProbeScratch.HeadID[toCheck] = ht.ProbeScratch.ToCheckID[toCheck]
 			}
 		}
 	}
 	return nDiffers
 }
 
-// DistinctCheck determines if the current key in the GroupID bucket matches the
+// DistinctCheck determines if the current key in the ToCheckID bucket matches the
 // equality column key. If there is a match, then the key is removed from
 // ToCheck. If the bucket has reached the end, the key is rejected. The ToCheck
 // list is reconstructed to only hold the indices of the keyCols keys that have
@@ -932,7 +932,7 @@ func (ht *HashTable) Reset(_ context.Context) {
 	// ht.ProbeScratch.HeadID, ht.ProbeScratch.differs, and
 	// ht.ProbeScratch.distinct are reset before they are used (these slices
 	// are limited in size and dynamically allocated).
-	// ht.ProbeScratch.GroupID and ht.ProbeScratch.ToCheck don't need to be
+	// ht.ProbeScratch.ToCheckID and ht.ProbeScratch.ToCheck don't need to be
 	// reset because they are populated manually every time before checking the
 	// columns.
 	if ht.BuildMode == HashTableDistinctBuildMode {
