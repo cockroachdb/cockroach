@@ -19,9 +19,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+// TODO(knz): this struct belongs elsewhere.
+// See: https://github.com/cockroachdb/cockroach/issues/49509
+var debugSendKVBatchOpts = struct {
+	// Whether to set the verbose flag in the trace span before the
+	// request.
+	verboseTracing bool
+	// Whether to print out the recording at the end.
+	printRecording bool
+	// Whether to preserve the collected spans in the batch response.
+	keepCollectedSpans bool
+}{
+	verboseTracing:     false,
+	printRecording:     false,
+	keepCollectedSpans: false,
+}
 
 var debugSendKVBatchCmd = &cobra.Command{
 	Use:   "send-kv-batch <jsonfile>",
@@ -82,6 +99,11 @@ func TestSendKVBatchExample(t *testing.T) {
 }
 
 func runSendKVBatch(cmd *cobra.Command, args []string) error {
+	if debugSendKVBatchOpts.printRecording {
+		// Not useful unless verbose is set.
+		debugSendKVBatchOpts.verboseTracing = true
+	}
+
 	jsonpb := protoutil.JSONPb{Indent: "  "}
 
 	// Parse and validate BatchRequest JSON.
@@ -108,14 +130,22 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	// Send BatchRequest.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	conn, _, finish, err := getClientGRPCConn(ctx, serverCfg)
+	conn, tracer, finish, err := getClientGRPCConn(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrap(err, "failed to connect to the node")
 	}
 	defer finish()
-	br, err := serverpb.NewAdminClient(conn).SendKVBatch(ctx, &ba)
+	admin := serverpb.NewAdminClient(conn)
+
+	br, rec, err := setupTraceThenSendKVBatchRequest(ctx, tracer, admin, jsonpb, &ba)
 	if err != nil {
-		return errors.Wrap(err, "request failed")
+		return err
+	}
+
+	if !debugSendKVBatchOpts.keepCollectedSpans {
+		// The most common use is with -print-recording, in which case the
+		// collected spans are redundant output.
+		br.CollectedSpans = nil
 	}
 
 	// Display BatchResponse.
@@ -123,7 +153,61 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to format BatchResponse as JSON")
 	}
-	fmt.Printf("%s\n", brJSON)
+	fmt.Println(string(brJSON))
+
+	if debugSendKVBatchOpts.printRecording {
+		// Print out the trace. We use stderr so that the
+		// user can redirect the response (on stdout)
+		// from the trace (on stderr) to different files.
+		fmt.Fprintln(stderr, rec)
+	}
 
 	return nil
+}
+
+func setupTraceThenSendKVBatchRequest(
+	ctx context.Context,
+	tracer *tracing.Tracer,
+	admin serverpb.AdminClient,
+	jsonpb protoutil.JSONPb,
+	ba *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, tracing.Recording, error) {
+	// Set up a tracing span and enable verbose tracing if requested by
+	// configuration.
+	ctx, rootSpan := tracing.EnsureChildSpan(ctx, tracer, "debug-send-kv-batch", tracing.WithForceRealSpan())
+	if debugSendKVBatchOpts.verboseTracing {
+		rootSpan.SetVerbose(true)
+	}
+	defer rootSpan.Finish()
+
+	// Run the request and collect the trace.
+	br, err := doSendKVBatchRequestInternal(ctx, admin, jsonpb, ba)
+
+	// Extract the recording.
+	rec := rootSpan.GetRecording(tracing.RecordingVerbose)
+	return br, rec, err
+}
+
+func doSendKVBatchRequestInternal(
+	ctx context.Context,
+	admin serverpb.AdminClient,
+	jsonpb protoutil.JSONPb,
+	ba *roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	// Attach the span metadata to the request.
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil && !sp.IsNoop() {
+		// Inject the span metadata into the KV request.
+		ba.TraceInfo = sp.Meta().ToProto()
+	}
+
+	// Do the request server-side.
+	br, err := admin.SendKVBatch(ctx, ba)
+
+	// Import the remotely collected spans, if any.
+	if sp != nil && len(br.CollectedSpans) != 0 {
+		sp.ImportRemoteSpans(br.CollectedSpans)
+	}
+
+	return br, errors.Wrap(err, "request failed")
 }

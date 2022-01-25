@@ -941,28 +941,57 @@ func (n *Node) batchInternal(
 		return &br, nil
 	}
 
+	return executeBatchRPCInternalFn(ctx, tenID, args,
+		n.stopper,
+		n.storeCfg.AmbientCtx.Tracer,
+		tracing.BatchMethodName, /* spanMethodName */
+		"node.Node: batch",      /* taskName */
+		"node",                  /* processorName */
+		"stores",                /* senderName */
+		n.stores,                /* sender */
+		n.metrics.callComplete,  /* finishCall */
+	)
+}
+
+func executeBatchRPCInternalFn(
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	args *roachpb.BatchRequest,
+	stopper *stop.Stopper,
+	tracer *tracing.Tracer,
+	spanMethodName string,
+	taskName string,
+	processorName redact.SafeString,
+	senderName redact.SafeString,
+	sender interface {
+		Send(ctx context.Context, req roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	},
+	finishCall func(dur time.Duration, perr *roachpb.Error),
+) (*roachpb.BatchResponse, error) {
 	var br *roachpb.BatchResponse
-	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
+	if err := stopper.RunTaskWithErr(ctx, taskName, func(ctx context.Context) error {
 		var finishSpan func(context.Context, *roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, tenID, args)
+		ctx, finishSpan = setupSpanForIncomingRPC(ctx, tenID, args, tracer, spanMethodName)
 		// NB: wrapped to delay br evaluation to its value when returning.
 		defer func() { finishSpan(ctx, br) }()
 		if log.HasSpanOrEvent(ctx) {
-			log.Eventf(ctx, "node received request: %s", args.Summary())
+			log.Eventf(ctx, "%s received request: %s", processorName, args.Summary())
 		}
 
 		tStart := timeutil.Now()
 		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
+		br, pErr = sender.Send(ctx, *args)
 		if pErr != nil {
 			br = &roachpb.BatchResponse{}
-			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
+			log.VErrEventf(ctx, 3, "error from %s.Send: %s", senderName, pErr)
 		}
 		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+			panic(roachpb.ErrorUnexpectedlySet(sender, br))
 		}
-		n.metrics.callComplete(timeutil.Since(tStart), pErr)
+		if finishCall != nil {
+			finishCall(timeutil.Since(tStart), pErr)
+		}
 		br.Error = pErr
 		return nil
 	}); err != nil {
@@ -1044,10 +1073,13 @@ func (n *Node) Batch(
 // the BatchResponse. The cleanup function takes the BatchResponse
 // in which the response is to serialized. The BatchResponse can
 // be nil in case no response is to be returned to the rpc caller.
-func (n *Node) setupSpanForIncomingRPC(
-	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
+func setupSpanForIncomingRPC(
+	ctx context.Context,
+	tenID roachpb.TenantID,
+	ba *roachpb.BatchRequest,
+	tr *tracing.Tracer,
+	spanMethodName string,
 ) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
-	tr := n.storeCfg.AmbientCtx.Tracer
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
 	localRequest := grpcutil.IsLocalRequestContext(ctx)
@@ -1057,7 +1089,7 @@ func (n *Node) setupSpanForIncomingRPC(
 	needRecordingCollection := !localRequest
 	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, tracing.BatchMethodName, tracing.WithServerSpanKind)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, spanMethodName, tracing.WithServerSpanKind)
 	} else if parentSpan == nil {
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
@@ -1072,13 +1104,13 @@ func (n *Node) setupSpanForIncomingRPC(
 			}
 		}
 
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+		ctx, newSpan = tr.StartSpanCtx(ctx, spanMethodName,
 			tracing.WithRemoteParent(remoteParent),
 			tracing.WithServerSpanKind)
 	} else {
 		// It's unexpected to find a span in the context for a non-local request.
 		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+		ctx, newSpan = tr.StartSpanCtx(ctx, spanMethodName,
 			tracing.WithParent(parentSpan),
 			tracing.WithServerSpanKind)
 	}
