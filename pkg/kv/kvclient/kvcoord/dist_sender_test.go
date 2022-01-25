@@ -1370,8 +1370,8 @@ func TestEvictCacheOnError(t *testing.T) {
 	}
 
 	rangeMismachErr := roachpb.NewRangeKeyMismatchError(
-		context.Background(), nil, nil, &lhs, nil /* lease */)
-	rangeMismachErr.AppendRangeInfo(context.Background(), rhs, roachpb.Lease{})
+		context.Background(), nil, nil, &lhs, nil /* lease */, roachpb.LAG_BY_CLUSTER_SETTING)
+	rangeMismachErr.AppendRangeInfo(context.Background(), roachpb.RangeInfo{Desc: rhs, Lease: roachpb.Lease{}})
 
 	testCases := []struct {
 		canceledCtx            bool
@@ -1684,8 +1684,8 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		// suggestion for future range descriptor lookups.
 		if ba.RangeID == staleDesc.RangeID {
 			var br roachpb.BatchResponse
-			err := roachpb.NewRangeKeyMismatchError(ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &rhsDesc, nil /* lease */)
-			err.AppendRangeInfo(ctx, lhsDesc, roachpb.Lease{})
+			err := roachpb.NewRangeKeyMismatchError(ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &rhsDesc, nil /* lease */, roachpb.LAG_BY_CLUSTER_SETTING)
+			err.AppendRangeInfo(ctx, roachpb.RangeInfo{Desc: lhsDesc, Lease: roachpb.Lease{}})
 			br.Error = roachpb.NewError(err)
 			return &br, nil
 		} else if ba.RangeID != lhsDesc.RangeID {
@@ -3890,9 +3890,13 @@ func TestEvictMetaRange(t *testing.T) {
 				reply := ba.CreateReply()
 				// Return a RangeKeyMismatchError to simulate the range being stale.
 				err := roachpb.NewRangeKeyMismatchError(
-					ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &testMeta2RangeDescriptor1, nil /* lease */)
+					ctx, rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), &testMeta2RangeDescriptor1, nil /* lease */, roachpb.LAG_BY_CLUSTER_SETTING)
 				if hasSuggestedRange {
-					err.AppendRangeInfo(ctx, testMeta2RangeDescriptor2, roachpb.Lease{})
+					ri := roachpb.RangeInfo{
+						Desc:  testMeta2RangeDescriptor2,
+						Lease: roachpb.Lease{},
+					}
+					err.AppendRangeInfo(ctx, ri)
 				}
 				reply.Error = roachpb.NewError(err)
 				return reply, nil
