@@ -9,13 +9,17 @@
 // licenses/APL.txt.
 
 import moment from "moment";
-import { TimeScale, TimeScaleCollection } from "./timeScaleTypes";
+import {
+  TimeScale,
+  DefaultTimeScaleOption,
+  DefaultTimesScaleOptions,
+} from "./timeScaleTypes";
 
 /**
  * defaultTimeScaleOptions is a preconfigured set of time scales that can be
  * selected by the user.
  */
-export const defaultTimeScaleOptions: TimeScaleCollection = {
+export const defaultTimeScaleOptions: DefaultTimesScaleOptions = {
   "Past 10 Minutes": {
     windowSize: moment.duration(10, "minutes"),
     windowValid: moment.duration(10, "seconds"),
@@ -76,6 +80,7 @@ export const defaultTimeScaleOptions: TimeScaleCollection = {
 export const defaultTimeScaleSelected: TimeScale = {
   ...defaultTimeScaleOptions["Past 1 Hour"],
   key: "Past 1 Hour",
+  windowEnd: null,
 };
 
 export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
@@ -85,12 +90,12 @@ export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
 };
 
 export const findClosestTimeScale = (
-  options: TimeScaleCollection,
+  options: DefaultTimesScaleOptions,
   seconds: number,
   startSeconds?: number,
-): TimeScale => {
+): DefaultTimeScaleOption => {
   const data = Object.keys(options).map(
-    (val): TimeScale => ({ ...options[val], key: val }),
+    (val): DefaultTimeScaleOption => ({ ...options[val], key: val }),
   );
 
   data.sort(
