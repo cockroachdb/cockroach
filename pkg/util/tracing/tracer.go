@@ -13,6 +13,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"os"
 	"runtime/debug"
 	"strconv"
@@ -23,7 +24,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -486,6 +486,10 @@ type TracerTestingKnobs struct {
 	// MaintainAllocationCounters, if set,  configures the Tracer to maintain
 	// counters about span creation. See Tracer.GetStatsAndReset().
 	MaintainAllocationCounters bool
+	// ReleaseSpanToPool, if set, if called just before a span is put in the
+	// sync.Pool for reuse. If the hook returns false, the span will not be put in
+	// the pool.
+	ReleaseSpanToPool func(*Span) bool
 }
 
 // Redactable returns true if the tracer is configured to emit
@@ -943,7 +947,13 @@ func (t *Tracer) releaseSpanToPool(sp *Span) {
 	h.childrenAlloc = [4]childRef{}
 	h.structuredEventsAlloc = [3]interface{}{}
 
-	t.spanPool.Put(h)
+	release := true
+	if fn := t.testing.ReleaseSpanToPool; fn != nil {
+		release = fn(sp)
+	}
+	if release {
+		t.spanPool.Put(h)
+	}
 }
 
 // StartSpanCtx starts a Span and returns it alongside a wrapping Context
@@ -959,6 +969,9 @@ func (t *Tracer) StartSpanCtx(
 	// `opts` on the heap here.
 	var opts spanOptions
 	for _, o := range os {
+		if o == nil {
+			continue
+		}
 		opts = o.apply(opts)
 	}
 
