@@ -11,12 +11,12 @@ package backupccl
 import (
 	"context"
 	"net/url"
-	"path"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -71,121 +71,116 @@ func resolveDest(
 	ctx context.Context,
 	user security.SQLUsername,
 	dest jobspb.BackupDetails_Destination,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	endTime hlc.Timestamp,
 	incrementalFrom []string,
+	execCfg *sql.ExecutorConfig,
 ) (
-	string, /* collectionURI */
-	string, /* defaultURI - the full path for the planned backup */
-	string, /* chosenSuffix - the resolved subdir for the planned backup */
-	map[string]string, /* urisByLocalityKV */
-	[]string, /* prevBackupURIs - list of full paths for previous backups in the chain */
-	error,
+	collectionURI string,
+	plannedBackupURI string, /* the full path for the planned backup */
+	/* chosenSuffix is the automatically chosen suffix within the collection path
+	   if we're backing up INTO a collection. */
+	chosenSuffix string,
+	urisByLocalityKV map[string]string,
+	prevBackupURIs []string, /* list of full paths for previous backups in the chain */
+	err error,
 ) {
-	// chosenSuffix is the automatically chosen suffix within the collection path
-	// if we're backing up INTO a collection.
-	var collectionURI string
-	var prevBackupURIs []string
-	var chosenSuffix string
-	var err error
+	makeCloudStorage := execCfg.DistSQLSrv.ExternalStorageFromURI
 
-	defaultURI, urisByLocalityKV, err := getURIsByLocalityKV(dest.To, "")
+	destinationURI, _, err := getURIsByLocalityKV(dest.To, "")
 	if err != nil {
 		return "", "", "", nil, nil, err
 	}
 
-	if dest.Subdir != "" {
-		collectionURI = defaultURI
-		chosenSuffix = dest.Subdir
+	chosenSuffix = dest.Subdir
+
+	if chosenSuffix != "" {
+		// The legacy backup syntax, BACKUP TO, leaves the dest.Subdir and collection parameters empty.
+		collectionURI = destinationURI
+
 		if chosenSuffix == latestFileName {
-			latest, err := readLatestFile(ctx, defaultURI, makeCloudStorage, user)
+			latest, err := readLatestFile(ctx, destinationURI, makeCloudStorage, user)
 			if err != nil {
 				return "", "", "", nil, nil, err
 			}
 			chosenSuffix = latest
 		}
-		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, chosenSuffix)
-		if err != nil {
-			return "", "", "", nil, nil, err
-		}
 	}
 
-	// At this point, the defaultURI is the full path for the backup. For BACKUP
-	// INTO, this path includes the chosenSuffix Once this function returns, the
-	// defaultURI will be the full path for this backup in planning.
+	plannedBackupURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, chosenSuffix)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+
+	// At this point, the plannedBackupURI is the full path for the backup. For BACKUP
+	// INTO, this path includes the chosenSuffix. Once this function returns, the
+	// plannedBackupURI will be the full path for this backup in planning.
 	if len(incrementalFrom) != 0 {
+		// Legacy backup with deprecated BACKUP TO-syntax.
 		prevBackupURIs = incrementalFrom
-	} else {
-		defaultStore, err := makeCloudStorage(ctx, defaultURI, user)
-		if err != nil {
-			return "", "", "", nil, nil, err
-		}
-		defer defaultStore.Close()
-		exists, err := containsManifest(ctx, defaultStore)
-		if err != nil {
-			return "", "", "", nil, nil, err
-		}
-		if exists {
-			// The defaultStore contains a full backup; consequently,
-			// we're conducting an incremental backup.
-			prevBackupURIs = append(prevBackupURIs, defaultURI)
-
-			var priors []string
-			var backupChainURI string
-			if len(dest.IncrementalStorage) > 0 {
-				// Implies the incremental backup chain lives in
-				// incrementalStorage/chosenSuffix, while the full backup lives in
-				// defaultStore/chosenSuffix. The incremental backup chain in
-				// incrementalStorage/chosenSuffix will not contain any incremental backups that live
-				// elsewhere.
-				backupChainURI, _, err = getURIsByLocalityKV(dest.IncrementalStorage,
-					chosenSuffix)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-				incrementalStore, err := makeCloudStorage(ctx, backupChainURI, user)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-				defer incrementalStore.Close()
-				priors, err = FindPriorBackups(ctx, incrementalStore, OmitManifest)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-			} else {
-				backupChainURI = defaultURI
-				priors, err = FindPriorBackups(ctx, defaultStore, OmitManifest)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-			}
-			for _, prior := range priors {
-				priorURI, err := url.Parse(backupChainURI)
-				if err != nil {
-					return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
-						backupChainURI)
-				}
-				priorURI.Path = path.Join(priorURI.Path, prior)
-				prevBackupURIs = append(prevBackupURIs, priorURI.String())
-			}
-			if err != nil {
-				return "", "", "", nil, nil, errors.Wrap(err, "finding previous backups")
-			}
-
-			// Within the chosenSuffix dir, differentiate files with partName.
-			partName := endTime.GoTime().Format(DateBasedIncFolderName)
-			partName = path.Join(chosenSuffix, partName)
-			if len(dest.IncrementalStorage) > 0 {
-				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.IncrementalStorage, partName)
-			} else {
-				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, partName)
-			}
-			if err != nil {
-				return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
-			}
-		}
+		return collectionURI, plannedBackupURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 	}
-	return collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+
+	defaultStore, err := makeCloudStorage(ctx, plannedBackupURI, user)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	defer defaultStore.Close()
+	exists, err := containsManifest(ctx, defaultStore)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	if !exists {
+		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
+		return collectionURI, plannedBackupURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+	}
+
+	// The defaultStore contains a full backup; consequently, we're conducting an incremental backup.
+
+	// Within the chosenSuffix dir, differentiate incremental backups with partName.
+	partName := endTime.GoTime().Format(DateBasedIncFolderName)
+
+	fullyResolvedIncrementalsLocation, err := resolveIncrementalsBackupLocation(
+		ctx,
+		user,
+		execCfg,
+		dest.IncrementalStorage,
+		dest.To,
+		chosenSuffix)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+
+	priorsURI, _, err := getURIsByLocalityKV(fullyResolvedIncrementalsLocation, "")
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	incrementalStore, err := makeCloudStorage(ctx, priorsURI, user)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	defer incrementalStore.Close()
+
+	priors, err := FindPriorBackups(ctx, incrementalStore, OmitManifest)
+	for _, prior := range priors {
+		priorURI, err := url.Parse(priorsURI)
+		if err != nil {
+			return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
+				priorsURI)
+		}
+		priorURI.Path = JoinURLPath(priorURI.Path, prior)
+		prevBackupURIs = append(prevBackupURIs, priorURI.String())
+	}
+	prevBackupURIs = append([]string{plannedBackupURI}, prevBackupURIs...)
+
+	if err != nil {
+		return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
+	}
+
+	incrementalsURI, urisByLocalityKV, err := getURIsByLocalityKV(fullyResolvedIncrementalsLocation, partName)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	return collectionURI, incrementalsURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 }
 
 // getBackupManifests fetches the backup manifest from a list of backup URIs.

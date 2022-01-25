@@ -11,8 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -1224,43 +1222,9 @@ func restorePlanHook(
 				return err
 			}
 		}
-		if subdir != "" {
-			if strings.EqualFold(subdir, "LATEST") {
-				// set subdir to content of latest file
-				latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
-				if err != nil {
-					return err
-				}
-				subdir = latest
-			}
-			if len(from) != 1 {
-				return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
-			}
-
-			appendPaths := func(uris []string, tailDir string) error {
-				for i, uri := range uris {
-					parsed, err := url.Parse(uri)
-					if err != nil {
-						return err
-					}
-					parsed.Path = path.Join(parsed.Path, tailDir)
-					uris[i] = parsed.String()
-				}
-				return nil
-			}
-
-			if err = appendPaths(from[0][:], subdir); err != nil {
-				return err
-			}
-			if len(incFrom) != 0 {
-				if err = appendPaths(incFrom[:], subdir); err != nil {
-					return err
-				}
-			}
-		}
 
 		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
-			newDBName, newTenantID, endTime, resultsCh)
+			newDBName, newTenantID, endTime, resultsCh, subdir)
 	}
 
 	if restoreStmt.Options.Detached {
@@ -1387,14 +1351,62 @@ func doRestorePlan(
 	newTenantID *roachpb.TenantID,
 	endTime hlc.Timestamp,
 	resultsCh chan<- tree.Datums,
+	subdir string,
 ) error {
-	if len(from) < 1 || len(from[0]) < 1 {
+	if len(from) == 0 || len(from[0]) == 0 {
 		return errors.New("invalid base backup specified")
 	}
 
-	baseStores := make([]cloud.ExternalStorage, len(from[0]))
-	for i := range from[0] {
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i], p.User())
+	if subdir != "" && len(from) != 1 {
+		return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
+	}
+
+	// var fullyResolvedBaseDirectory []string
+	//var fullyResolvedIncrementalsDirectory []string
+	var fullyResolvedSubdir string
+
+	if strings.EqualFold(subdir, latestFileName) {
+		// set subdir to content of latest file
+		latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		if err != nil {
+			return err
+		}
+		fullyResolvedSubdir = latest
+	} else {
+		fullyResolvedSubdir = subdir
+	}
+
+	fullyResolvedBaseDirectory, err := appendPaths(from[0][:], fullyResolvedSubdir)
+	if err != nil {
+		return err
+	}
+
+	fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+		ctx,
+		p.User(),
+		p.ExecCfg(),
+		incFrom,
+		from[0],
+		fullyResolvedSubdir,
+	)
+
+	if err != nil {
+		if errors.Is(err, cloud.ErrListingUnsupported) {
+			log.Warningf(ctx, "storage sink %v does not support listing, only resolving the base backup", incFrom)
+		} else {
+			return err
+		}
+	}
+
+	// fullyResolvedIncrementalsDirectory may in fact be nil, if incrementals
+	// aren't supported at this location. In that case, we logged a warning,
+	// further iterations over fullyResolvedIncrementalsDirectory will be
+	// vacuous, and we should proceed with restoring the base backup.
+	//
+	// Note that incremental _backup_ requests to this location will fail loudly instead.
+	baseStores := make([]cloud.ExternalStorage, len(fullyResolvedBaseDirectory))
+	for i := range fullyResolvedBaseDirectory {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, fullyResolvedBaseDirectory[i], p.User())
 		if err != nil {
 			return errors.Wrapf(err, "failed to open backup storage location")
 		}
@@ -1447,10 +1459,24 @@ func doRestorePlan(
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := resolveBackupManifests(
-		ctx, &mem, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
-		incFrom, endTime, encryption, p.User(),
-	)
+	// get base from here.
+	var defaultURIs []string
+	var mainBackupManifests []BackupManifest
+	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
+	var memReserved int64
+	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	if len(from) <= 1 {
+		// INTO-syntax.
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
+			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
+			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
+		)
+	} else {
+		// Old, deprecated TO-syntax.
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsDeprecatedSyntax(
+			ctx, &mem, baseStores, mkStore, from, endTime, encryption, p.User())
+	}
+
 	if err != nil {
 		return err
 	}
@@ -1692,9 +1718,21 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(p, restoreStmt, from, incFrom, restoreStmt.Options,
+	var fromDescription [][]string
+	if len(from) == 1 {
+		fromDescription = [][]string{fullyResolvedBaseDirectory}
+	} else {
+		fromDescription = from
+	}
+	description, err := restoreJobDescription(
+		p,
+		restoreStmt,
+		fromDescription,
+		fullyResolvedIncrementalsDirectory,
+		restoreStmt.Options,
 		intoDB,
-		newDBName, kms)
+		newDBName,
+		kms)
 	if err != nil {
 		return err
 	}
