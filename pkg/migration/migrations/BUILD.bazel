@@ -50,6 +50,7 @@ go_library(
 
 go_test(
     name = "migrations_test",
+    size = "large",
     srcs = [
         "alter_statement_diagnostics_requests_test.go",
         "alter_table_protected_timestamp_records_test.go",
