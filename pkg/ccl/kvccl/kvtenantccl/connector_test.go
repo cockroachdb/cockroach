@@ -90,6 +90,10 @@ func (*mockServer) RangeFeed(*roachpb.RangeFeedRequest, roachpb.Internal_RangeFe
 	panic("unimplemented")
 }
 
+func (m *mockServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+	panic("implement me")
+}
+
 func (*mockServer) Join(
 	context.Context, *roachpb.JoinNodeRequest,
 ) (*roachpb.JoinNodeResponse, error) {
