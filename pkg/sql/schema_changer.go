@@ -1091,15 +1091,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			}
 			isRollback = m.IsRollback()
 			if idx := m.AsIndex(); m.Dropped() && idx != nil {
-				// how we keep track of dropped index names (for, e.g., zone config
-				// lookups), even though in the absence of a GC job there's nothing to
-				// clean them up.
-				scTable.GCMutations = append(
-					scTable.GCMutations,
-					descpb.TableDescriptor_GCDescriptorMutation{
-						IndexID: idx.GetID(),
-					})
-
 				description := sc.job.Payload().Description
 				if isRollback {
 					description = "ROLLBACK of " + description
@@ -1108,7 +1099,6 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if err := sc.createIndexGCJob(ctx, idx.GetID(), txn, description); err != nil {
 					return err
 				}
-
 			}
 			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
 				if constraint.IsForeignKey() && constraint.ForeignKey().Validity == descpb.ConstraintValidity_Unvalidated {
