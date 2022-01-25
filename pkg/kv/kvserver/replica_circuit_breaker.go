@@ -12,6 +12,8 @@ package kvserver
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -55,6 +57,76 @@ var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurat
 // Telemetry counter to count number of trip events.
 var telemetryTripAsync = telemetry.GetCounterOnce("kv.replica_circuit_breaker.num_tripped_events")
 
+type cancelsStorage interface {
+	Reset()
+	Set(context.Context, func())
+	Del(context.Context)
+	Visit(func(context.Context, func()) (remove bool))
+}
+
+type mapCancelsStorage struct {
+	syncutil.Mutex
+	m map[context.Context]func()
+}
+
+func (m *mapCancelsStorage) Reset() {
+	m.Lock()
+	m.m = map[context.Context]func(){}
+	m.Unlock()
+}
+
+func (m *mapCancelsStorage) Set(ctx context.Context, cancel func()) {
+	m.Lock()
+	m.m[ctx] = cancel
+	m.Unlock()
+}
+
+func (m *mapCancelsStorage) Del(ctx context.Context) {
+	m.Lock()
+	delete(m.m, ctx)
+	m.Unlock()
+}
+
+func (m *mapCancelsStorage) Visit(fn func(context.Context, func()) (remove bool)) {
+	m.Lock()
+	for ctx, cancel := range m.m {
+		if fn(ctx, cancel) {
+			delete(m.m, ctx)
+		}
+	}
+	m.Unlock()
+}
+
+type syncMapCancelsStorage struct {
+	m *sync.Map
+}
+
+func (s *syncMapCancelsStorage) Reset() {
+	s.m = &sync.Map{}
+}
+
+func (s *syncMapCancelsStorage) Set(ctx context.Context, f func()) {
+	s.m.Store(ctx, f)
+}
+
+func (s *syncMapCancelsStorage) Del(ctx context.Context) {
+	s.m.Delete(ctx)
+}
+
+func (s *syncMapCancelsStorage) Visit(f func(context.Context, func()) (remove bool)) {
+	var rm []context.Context
+	s.m.Range(func(ctxi, cancel interface{}) bool {
+		ctx := ctxi.(context.Context)
+		if f(ctx, cancel.(func())) {
+			rm = append(rm, ctx)
+		}
+		return true // more
+	})
+	for _, ctx := range rm {
+		s.Del(ctx)
+	}
+}
+
 // replicaCircuitBreaker is a wrapper around *circuit.Breaker that makes it
 // convenient for use as a per-Replica circuit breaker.
 type replicaCircuitBreaker struct {
@@ -62,11 +134,10 @@ type replicaCircuitBreaker struct {
 	stopper *stop.Stopper
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
-	cancels struct {
-		syncutil.Mutex
-		m map[context.Context]func()
-	}
+	cancels cancelsStorage
 	wrapped *circuit.Breaker
+
+	versionIsActive int32 // atomic
 }
 
 // Register takes a cancelable context and its cancel function. The
@@ -79,21 +150,20 @@ type replicaCircuitBreaker struct {
 func (br *replicaCircuitBreaker) Register(
 	ctx context.Context, cancel func(),
 ) (_token interface{}, _ signaller, _ error) {
-	// We intentionally lock over the Signal() call and Err() check to prevent
-	// the situation in which the breaker trips and cancels everyone but the
-	// current cancel is added after the fact (and will linger). With the lock
-	// held before the Signal() call, we know that if the breaker is not tripped
-	// when we check, even if it does trip, our cancel will be seen by the probe
-	// when it cancels everything in the registry.
-	//
-	// Both calls are cheap and do not allocate.
-	br.cancels.Lock()
-	defer br.cancels.Unlock()
-
 	brSig := br.Signal()
 	if isCircuitBreakerProbe(ctx) {
 		brSig = neverTripSignaller{}
 	}
+
+	// Hmm is this really enough
+	//
+	// - Breaker trips
+	// - Probe runs
+	// - Probe has done all the work but not called done() yet
+	// - Insert
+	// - Check err (no new probe triggered b/c old one active)
+	// - Probe shuts down
+	br.cancels.Set(ctx, cancel)
 
 	if err := brSig.Err(); err != nil {
 		// TODO(tbg): we may want to exclude some requests from this check, or allow
@@ -101,7 +171,6 @@ func (br *replicaCircuitBreaker) Register(
 		cancel()
 		return nil, nil, err
 	}
-	br.cancels.m[ctx] = cancel
 
 	// The token is the context, saving allocations.
 	return ctx, brSig, nil
@@ -116,9 +185,7 @@ func (br *replicaCircuitBreaker) Unregister(
 		return pErr
 	}
 
-	br.cancels.Lock()
-	delete(br.cancels.m, tok.(context.Context))
-	br.cancels.Unlock()
+	br.cancels.Del(tok.(context.Context))
 
 	err := pErr.GoError()
 	if ae := (&roachpb.AmbiguousResultError{}); errors.As(err, &ae) {
@@ -145,25 +212,37 @@ func (br *replicaCircuitBreaker) Unregister(
 }
 
 func (br *replicaCircuitBreaker) visitCancels(f func(context.Context)) {
-	br.cancels.Lock()
-	for ctx := range br.cancels.m {
+	br.cancels.Visit(func(ctx context.Context, _ func()) (remove bool) {
 		f(ctx)
-	}
-	br.cancels.Unlock()
+		return false // keep
+	})
 }
 
-func (br *replicaCircuitBreaker) cancelAllTrackedProposals() {
-	br.cancels.Lock()
-	defer br.cancels.Unlock()
-	for _, cancel := range br.cancels.m {
+func (br *replicaCircuitBreaker) cancelAllTrackedProposals() int {
+	var n int
+	br.cancels.Visit(func(ctx context.Context, cancel func()) (remove bool) {
+		n++
 		cancel()
+		return true // remove
+	})
+	return n
+}
+
+func (br *replicaCircuitBreaker) canEnable() bool {
+	b := atomic.LoadInt32(&br.versionIsActive) == 1
+	if b {
+		return true // fast path
 	}
-	br.cancels.m = map[context.Context]func(){}
+	// IsActive is mildly expensive.
+	if br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest) {
+		atomic.StoreInt32(&br.versionIsActive, 1)
+		return true
+	}
+	return false // slow path
 }
 
 func (br *replicaCircuitBreaker) enabled() bool {
-	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 &&
-		br.st.Version.IsActive(context.Background(), clusterversion.ProbeRequest)
+	return replicaCircuitBreakerSlowReplicationThreshold.Get(&br.st.SV) > 0 && br.canEnable()
 }
 
 func (br *replicaCircuitBreaker) newError() error {
@@ -200,6 +279,9 @@ func (br *replicaCircuitBreaker) Signal() signaller { // TODO(tbg): unexport?
 	return br.wrapped.Signal()
 }
 
+// CancelsStorageStrategy ...
+var CancelsStorageStrategy = "mutexmap" // HACK
+
 func newReplicaCircuitBreaker(
 	cs *cluster.Settings,
 	stopper *stop.Stopper,
@@ -214,7 +296,15 @@ func newReplicaCircuitBreaker(
 		r:       r,
 		st:      cs,
 	}
-	br.cancels.m = map[context.Context]func(){}
+	switch CancelsStorageStrategy {
+	case "mutexmap":
+		br.cancels = &mapCancelsStorage{}
+	case "syncmap":
+		br.cancels = &syncMapCancelsStorage{}
+	default:
+		panic("unknown cancels storage strategy: " + CancelsStorageStrategy)
+	}
+	br.cancels.Reset()
 	br.wrapped = circuit.NewBreaker(circuit.Options{
 		Name:       "breaker", // log bridge has ctx tags
 		AsyncProbe: br.asyncProbe,
@@ -265,14 +355,34 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 	if err := br.stopper.RunAsyncTask(bgCtx, "replica-probe", func(ctx context.Context) {
 		defer done()
 
-		if !br.enabled() {
-			report(nil)
-			return
-		}
+		for {
+			if !br.enabled() {
+				report(nil)
+				return
+			}
 
-		br.cancelAllTrackedProposals()
-		err := sendProbe(ctx, br.r)
-		report(err)
+			br.cancelAllTrackedProposals()
+			err := sendProbe(ctx, br.r)
+			report(err)
+			if err != nil && br.cancelAllTrackedProposals() == 0 {
+				// If any cancels snuck in, loop around so that they ... oh hmm, this
+				// doesn't work. There could be a cancel sneaking in at any point in
+				// time (assuming infinite delay between receiving and checking the
+				// cancellation of the Signal():
+				//
+				// - client gets Signal()
+				// - client checks Err(): nil
+				// - breaker trips
+				// - probe launches
+				// - probe finishes
+				// - client inserts into map
+				// - stuck there forever
+				//
+				// Things should work out if we insert before checking the breaker.
+				continue
+			}
+			break
+		}
 	}); err != nil {
 		done()
 	}

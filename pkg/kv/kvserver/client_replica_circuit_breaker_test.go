@@ -640,7 +640,7 @@ func (tc *replicaCircuitBreakerBench) repl(b *testing.B) *kvserver.Replica {
 }
 
 func setupCircuitBreakerReplicaBench(
-	b *testing.B, breakerEnabled bool,
+	b *testing.B, breakerEnabled bool, cancelStorage string,
 ) (*replicaCircuitBreakerBench, *stop.Stopper) {
 	b.Helper()
 	var args base.TestClusterArgs
@@ -678,21 +678,36 @@ func BenchmarkReplicaCircuitBreakerSendOverhead(b *testing.B) {
 
 	for _, enabled := range []bool{false, true} {
 		b.Run("enabled="+strconv.FormatBool(enabled), func(b *testing.B) {
-			tc, stopper := setupCircuitBreakerReplicaBench(b, enabled)
-			defer stopper.Stop(ctx)
-
-			repl := tc.repl(b)
-
-			b.RunParallel(func(pb *testing.PB) {
-				for pb.Next() {
-					ba := tc.pool.Get().(*roachpb.BatchRequest)
-					_, err := repl.Send(ctx, *ba)
-					tc.pool.Put(ba)
-					if err != nil {
-						b.Fatal(err)
+			dss := []string{"mutexmap", "syncmap"}
+			if !enabled {
+				dss = dss[:1] // they're all unused anyway
+			}
+			for _, ds := range dss {
+				b.Run("datastructure="+ds, func(b *testing.B) {
+					{
+						prev := kvserver.CancelsStorageStrategy
+						kvserver.CancelsStorageStrategy = ds
+						defer func() {
+							kvserver.CancelsStorageStrategy = prev
+						}()
 					}
-				}
-			})
+					tc, stopper := setupCircuitBreakerReplicaBench(b, enabled, ds)
+					defer stopper.Stop(ctx)
+
+					repl := tc.repl(b)
+
+					b.RunParallel(func(pb *testing.PB) {
+						for pb.Next() {
+							ba := tc.pool.Get().(*roachpb.BatchRequest)
+							_, err := repl.Send(ctx, *ba)
+							tc.pool.Put(ba)
+							if err != nil {
+								b.Fatal(err)
+							}
+						}
+					})
+				})
+			}
 		})
 	}
 }
