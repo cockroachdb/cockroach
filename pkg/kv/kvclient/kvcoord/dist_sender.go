@@ -2293,6 +2293,11 @@ func newSendError(msg string) error {
 	return sendError{message: msg}
 }
 
+// TestNewSendError creates a new sendError for the purpose of unit tests
+func TestNewSendError(msg string) error {
+	return newSendError(msg)
+}
+
 func (s sendError) Error() string {
 	return "failed to send RPC: " + s.message
 }
