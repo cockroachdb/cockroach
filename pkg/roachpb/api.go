@@ -11,6 +11,7 @@
 package roachpb
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -23,7 +24,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-//go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient
+//go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient,Internal_MuxRangeFeedClient
 
 // UserPriority is a custom type for transaction's user priority.
 type UserPriority float64
@@ -1806,3 +1807,19 @@ const (
 	// with the SpecificTenantOverrides precedence..
 	AllTenantsOverrides
 )
+
+// RangeFeedEventSink is an interface for sending a single rangefeed event.
+// TODO: Remove once 22.2 is released.
+type RangeFeedEventSink interface {
+	Context() context.Context
+	Send(*RangeFeedEvent) error
+}
+
+// RangeFeedEventProducer is an adapter for receiving rangefeed events with either
+// the legacy RangeFeed RPC, or the MuxRangeFeed RPC.
+// TODO: Remove once 23.1 is released.
+type RangeFeedEventProducer interface {
+	// Recv receives the next rangefeed event. an io.EOF error indicates that the
+	// range needs to be restarted.
+	Recv() (*RangeFeedEvent, error)
+}

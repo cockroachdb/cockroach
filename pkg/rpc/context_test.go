@@ -324,6 +324,10 @@ type internalServer struct {
 	serverStream    roachpb.Internal_RangeFeedServer
 }
 
+func (s *internalServer) MuxRangeFeed(server roachpb.Internal_MuxRangeFeedServer) error {
+	panic("implement me")
+}
+
 func (*internalServer) Batch(
 	context.Context, *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
