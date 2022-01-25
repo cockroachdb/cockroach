@@ -248,7 +248,8 @@ const (
 	// that correspond to range descriptor changes resulting from recovery
 	// procedures.
 	UnsafeLossOfQuorumRecoveryRangeLog
-
+	// ConstraintIDsForTableDescs adds constraint IDs into table descriptors.
+	ConstraintIDsForTableDescs
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -379,6 +380,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     UnsafeLossOfQuorumRecoveryRangeLog,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 48},
+	},
+	{
+		Key:     ConstraintIDsForTableDescs,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
 	},
 
 	// *************************************************

@@ -91,6 +91,10 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.EnsureSpanConfigSubscription),
 		ensureSpanConfigSubscription,
 	),
+	migration.NewTenantMigration("add constraint IDs to tables",
+		toCV(clusterversion.ConstraintIDsForTableDescs),
+		NoPrecondition,
+		ensureTablesHasConstraintID),
 }
 
 func init() {
