@@ -115,131 +115,132 @@ func WriteDescriptors(
 	types []catalog.TypeDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	extra []roachpb.KeyValue,
-) error {
+) (err error) {
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
 	defer span.Finish()
-	err := func() error {
-		b := txn.NewBatch()
-		wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
-		for i := range databases {
-			desc := databases[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
-			if err != nil {
-				return err
-			}
-			if updatedPrivileges != nil {
-				if mut, ok := desc.(*dbdesc.Mutable); ok {
-					mut.Privileges = updatedPrivileges
-				} else {
-					log.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
-						desc.GetID(), desc)
-				}
-			}
-			privilegeDesc := desc.GetPrivileges()
-			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-			wroteDBs[desc.GetID()] = desc
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
-			); err != nil {
-				return err
-			}
-			b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+	defer func() {
+		err = errors.Wrapf(err, "restoring table desc and namespace entries")
+	}()
 
-			// We also have to put a system.namespace entry for the public schema
-			// if the database does not have a public schema backed by a descriptor.
-			if !desc.HasPublicSchemaWithDescriptor() {
-				b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
-			}
-		}
-
-		// Write namespace and descriptor entries for each schema.
-		for i := range schemas {
-			sc := schemas[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
-			if err != nil {
-				return err
-			}
-			if updatedPrivileges != nil {
-				if mut, ok := sc.(*schemadesc.Mutable); ok {
-					mut.Privileges = updatedPrivileges
-				} else {
-					log.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
-						sc.GetID(), sc)
-				}
-			}
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
-			); err != nil {
-				return err
-			}
-			b.CPut(catalogkeys.EncodeNameKey(codec, sc), sc.GetID(), nil)
-		}
-
-		for i := range tables {
-			table := tables[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
-			if err != nil {
-				return err
-			}
-			if updatedPrivileges != nil {
-				if mut, ok := table.(*tabledesc.Mutable); ok {
-					mut.Privileges = updatedPrivileges
-				} else {
-					log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
-						table.GetID(), table)
-				}
-			}
-			privilegeDesc := table.GetPrivileges()
-			catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-
-			if err := processTableForMultiRegion(ctx, txn, descsCol, table); err != nil {
-				return err
-			}
-
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, tables[i].(catalog.MutableDescriptor), b,
-			); err != nil {
-				return err
-			}
-			b.CPut(catalogkeys.EncodeNameKey(codec, table), table.GetID(), nil)
-		}
-
-		// Write all type descriptors -- create namespace entries and write to
-		// the system.descriptor table.
-		for i := range types {
-			typ := types[i]
-			updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
-			if err != nil {
-				return err
-			}
-			if updatedPrivileges != nil {
-				if mut, ok := typ.(*typedesc.Mutable); ok {
-					mut.Privileges = updatedPrivileges
-				} else {
-					log.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
-						typ.GetID(), typ)
-				}
-			}
-			if err := descsCol.WriteDescToBatch(
-				ctx, false /* kvTrace */, typ.(catalog.MutableDescriptor), b,
-			); err != nil {
-				return err
-			}
-			b.CPut(catalogkeys.EncodeNameKey(codec, typ), typ.GetID(), nil)
-		}
-
-		for _, kv := range extra {
-			b.InitPut(kv.Key, &kv.Value, false)
-		}
-		if err := txn.Run(ctx, b); err != nil {
-			if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
-				return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
-			}
+	b := txn.NewBatch()
+	wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
+	for i := range databases {
+		desc := databases[i]
+		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
+		if err != nil {
 			return err
 		}
-		return nil
-	}()
-	return errors.Wrapf(err, "restoring table desc and namespace entries")
+		if updatedPrivileges != nil {
+			if mut, ok := desc.(*dbdesc.Mutable); ok {
+				mut.Privileges = updatedPrivileges
+			} else {
+				log.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
+					desc.GetID(), desc)
+			}
+		}
+		privilegeDesc := desc.GetPrivileges()
+		catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
+		wroteDBs[desc.GetID()] = desc
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
+		); err != nil {
+			return err
+		}
+		b.CPut(catalogkeys.EncodeNameKey(codec, desc), desc.GetID(), nil)
+
+		// We also have to put a system.namespace entry for the public schema
+		// if the database does not have a public schema backed by a descriptor.
+		if !desc.HasPublicSchemaWithDescriptor() {
+			b.CPut(catalogkeys.MakeSchemaNameKey(codec, desc.GetID(), tree.PublicSchema), keys.PublicSchemaID, nil)
+		}
+	}
+
+	// Write namespace and descriptor entries for each schema.
+	for i := range schemas {
+		sc := schemas[i]
+		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
+		if err != nil {
+			return err
+		}
+		if updatedPrivileges != nil {
+			if mut, ok := sc.(*schemadesc.Mutable); ok {
+				mut.Privileges = updatedPrivileges
+			} else {
+				log.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
+					sc.GetID(), sc)
+			}
+		}
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, sc.(catalog.MutableDescriptor), b,
+		); err != nil {
+			return err
+		}
+		b.CPut(catalogkeys.EncodeNameKey(codec, sc), sc.GetID(), nil)
+	}
+
+	for i := range tables {
+		table := tables[i]
+		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
+		if err != nil {
+			return err
+		}
+		if updatedPrivileges != nil {
+			if mut, ok := table.(*tabledesc.Mutable); ok {
+				mut.Privileges = updatedPrivileges
+			} else {
+				log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
+					table.GetID(), table)
+			}
+		}
+		privilegeDesc := table.GetPrivileges()
+		catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
+
+		if err := processTableForMultiRegion(ctx, txn, descsCol, table); err != nil {
+			return err
+		}
+
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, tables[i].(catalog.MutableDescriptor), b,
+		); err != nil {
+			return err
+		}
+		b.CPut(catalogkeys.EncodeNameKey(codec, table), table.GetID(), nil)
+	}
+
+	// Write all type descriptors -- create namespace entries and write to
+	// the system.descriptor table.
+	for i := range types {
+		typ := types[i]
+		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
+		if err != nil {
+			return err
+		}
+		if updatedPrivileges != nil {
+			if mut, ok := typ.(*typedesc.Mutable); ok {
+				mut.Privileges = updatedPrivileges
+			} else {
+				log.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
+					typ.GetID(), typ)
+			}
+		}
+		if err := descsCol.WriteDescToBatch(
+			ctx, false /* kvTrace */, typ.(catalog.MutableDescriptor), b,
+		); err != nil {
+			return err
+		}
+		b.CPut(catalogkeys.EncodeNameKey(codec, typ), typ.GetID(), nil)
+	}
+
+	for _, kv := range extra {
+		b.InitPut(kv.Key, &kv.Value, false)
+	}
+	if err := txn.Run(ctx, b); err != nil {
+		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
+			return pgerror.Newf(pgcode.DuplicateObject, "table already exists")
+		}
+		return err
+	}
+	return nil
 }
 
 // rewriteBackupSpanKey rewrites a backup span start key for the purposes of
@@ -749,16 +750,6 @@ func isSchemaEmpty(
 	return true, nil
 }
 
-func getTempSystemDBID(details jobspb.RestoreDetails, idChecker keys.SystemIDChecker) descpb.ID {
-	tempSystemDBID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker))
-	for id := range details.DescriptorRewrites {
-		if id > tempSystemDBID {
-			tempSystemDBID = id
-		}
-	}
-	return tempSystemDBID
-}
-
 // spansForAllRestoreTableIndexes returns non-overlapping spans for every index
 // and table passed in. They would normally overlap if any of them are
 // interleaved.
@@ -885,9 +876,13 @@ func createImportingDescriptors(
 		}
 	}
 
-	tempSystemDBID := descpb.InvalidID
+	var tempSystemDBID descpb.ID
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		tempSystemDBID = getTempSystemDBID(details, p.ExecCfg().SystemIDChecker)
+		for id := range details.DescriptorRewrites {
+			if id > tempSystemDBID {
+				tempSystemDBID = id
+			}
+		}
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
 			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
@@ -1534,7 +1529,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		resTotal.add(res)
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
-			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, preData.systemTables); err != nil {
+			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, preData.systemTables); err != nil {
 				return err
 			}
 			// Reload the details as we may have updated the job.
@@ -1603,7 +1598,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// includes the jobs that are being restored. As soon as we restore these
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, mainData.systemTables); err != nil {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, mainData.systemTables); err != nil {
 			return err
 		}
 		// Reload the details as we may have updated the job.
@@ -2469,12 +2464,8 @@ type systemTableNameWithConfig struct {
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
 func (r *restoreResumer) restoreSystemTables(
-	ctx context.Context,
-	db *kv.DB,
-	restoreDetails jobspb.RestoreDetails,
-	tables []catalog.TableDescriptor,
+	ctx context.Context, db *kv.DB, tables []catalog.TableDescriptor,
 ) error {
-	tempSystemDBID := getTempSystemDBID(restoreDetails, r.execCfg.SystemIDChecker)
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
@@ -2485,9 +2476,6 @@ func (r *restoreResumer) restoreSystemTables(
 	// to the real system table.
 	systemTablesToRestore := make([]systemTableNameWithConfig, 0)
 	for _, table := range tables {
-		if table.GetParentID() != tempSystemDBID {
-			continue
-		}
 		systemTableName := table.GetName()
 		stagingTableName := restoreTempSystemDB + "." + systemTableName
 

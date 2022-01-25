@@ -4787,13 +4787,8 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 			descEnd = 0
 			return nil
 		}
-		idChecker := p.ExecCfg().SystemIDChecker
-		// Loop over every possible non-system descriptor ID
-		for id := uint32(keys.MaxSystemConfigDescID); id < uint32(maxDescID); id++ {
-			if idChecker.IsSystemID(id) {
-				continue
-			}
-
+		// Loop over every possible non-reserved descriptor ID.
+		for id := uint32(keys.MaxReservedDescID + 1); id < uint32(maxDescID); id++ {
 			// Skip over descriptors that are known
 			if c.LookupDescriptorEntry(descpb.ID(id)) != nil {
 				err := scanAndGenerateRows()

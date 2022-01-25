@@ -858,13 +858,19 @@ func parseAndCreateBundleTableDescs(
 	}}
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
-		id := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker))
+		id, err := descidgen.PeekNextUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		if err != nil {
+			return tableDescs, schemaDescs, err
+		}
 		fks.resolver.format.Format = roachpb.IOFileFormat_Mysqldump
 		evalCtx := &p.ExtendedEvalContext().EvalContext
 		tableDescs, err = readMysqlCreateTable(
 			ctx, reader, evalCtx, p, id, parentDB, tableName, fks,
 			seqVals, owner, walltime,
 		)
+		if err != nil {
+			return tableDescs, schemaDescs, err
+		}
 	case roachpb.IOFileFormat_PgDump:
 		fks.resolver.format.Format = roachpb.IOFileFormat_PgDump
 		evalCtx := &p.ExtendedEvalContext().EvalContext

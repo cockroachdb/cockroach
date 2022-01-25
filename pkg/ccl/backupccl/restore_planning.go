@@ -325,7 +325,7 @@ func allocateDescriptorRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
-	maxDescIDInBackup := int64(catalogkeys.MinNonDefaultUserDescriptorID(p.ExecCfg().SystemIDChecker))
+	var maxDescIDInBackup int64
 	for _, table := range tablesByID {
 		if int64(table.ID) > maxDescIDInBackup {
 			maxDescIDInBackup = int64(table.ID)
@@ -426,6 +426,15 @@ func allocateDescriptorRewrites(
 		var err error
 		// Restore the key which generates descriptor IDs.
 		if err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			v, err := txn.Get(ctx, p.ExecCfg().Codec.DescIDSequenceKey())
+			if err != nil {
+				return err
+			}
+			newValue := maxDescIDInBackup + 1
+			if newValue <= v.ValueInt() {
+				// This case may happen when restoring backups from older versions.
+				newValue = v.ValueInt() + 1
+			}
 			b := txn.NewBatch()
 			// N.B. This key is usually mutated using the Inc command. That
 			// command warns that if the key was every Put directly, Inc will
@@ -434,7 +443,7 @@ func allocateDescriptorRewrites(
 			// write int64 values.
 			// The generator's value should be set to the value of the next ID
 			// to generate.
-			b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), maxDescIDInBackup+1)
+			b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), newValue)
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return nil, err

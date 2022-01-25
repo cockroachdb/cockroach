@@ -123,7 +123,6 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		tc.Servers[0].DB(),
 		zonepb.DefaultZoneConfigRef(),
 		zonepb.DefaultSystemZoneConfigRef(),
-		tc.Servers[0].SystemIDChecker().(keys.SystemIDChecker),
 	)
 	if err != nil {
 		t.Fatal(err)

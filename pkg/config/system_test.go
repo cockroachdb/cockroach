@@ -147,16 +147,6 @@ func TestGet(t *testing.T) {
 	}
 }
 
-type testSystemIDChecker struct {
-	maxID config.SystemTenantObjectID
-}
-
-var _ keys.SystemIDChecker = testSystemIDChecker{}
-
-func (t testSystemIDChecker) IsSystemID(id uint32) bool {
-	return id <= uint32(t.maxID)
-}
-
 func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -270,11 +260,7 @@ func TestGetLargestID(t *testing.T) {
 	cfg := config.NewSystemConfig(zonepb.DefaultZoneConfigRef())
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
-		var idChecker keys.SystemIDChecker
-		if tc.maxID > 0 {
-			idChecker = testSystemIDChecker{tc.maxID}
-		}
-		ret, err := cfg.GetLargestObjectID(idChecker, tc.pseudoIDs)
+		ret, err := cfg.GetLargestObjectID(tc.maxID, tc.pseudoIDs)
 		if !testutils.IsError(err, tc.errStr) {
 			t.Errorf("#%d: expected err=%q, got %v", tcNum, tc.errStr, err)
 			continue

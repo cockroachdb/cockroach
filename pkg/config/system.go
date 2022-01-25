@@ -53,7 +53,7 @@ var (
 
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
-	testingLargestIDHook func(checker keys.SystemIDChecker) SystemTenantObjectID
+	testingLargestIDHook func(maxID SystemTenantObjectID) SystemTenantObjectID
 )
 
 type zoneEntry struct {
@@ -199,13 +199,13 @@ func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
 // IDs. If idChecker is nil, returns the largest ID in the config
 // (again, augmented by the pseudo IDs).
 func (s *SystemConfig) GetLargestObjectID(
-	idChecker keys.SystemIDChecker, pseudoIDs []uint32,
+	maxReservedDescID SystemTenantObjectID, pseudoIDs []uint32,
 ) (SystemTenantObjectID, error) {
 	testingLock.Lock()
 	hook := testingLargestIDHook
 	testingLock.Unlock()
 	if hook != nil {
-		return hook(idChecker), nil
+		return hook(maxReservedDescID), nil
 	}
 
 	// Search for the descriptor table entries within the SystemConfig. lowIndex
@@ -223,14 +223,14 @@ func (s *SystemConfig) GetLargestObjectID(
 	maxPseudoID := SystemTenantObjectID(0)
 	for _, id := range pseudoIDs {
 		objID := SystemTenantObjectID(id)
-		if objID > maxPseudoID && (idChecker == nil || idChecker.IsSystemID(uint32(objID))) {
+		if objID > maxPseudoID && (maxReservedDescID == 0 || objID <= maxReservedDescID) {
 			maxPseudoID = objID
 		}
 	}
 
 	// No maximum specified; maximum ID is the last entry in the descriptor
 	// table or the largest pseudo ID, whichever is larger.
-	if idChecker == nil {
+	if maxReservedDescID == 0 {
 		id, err := keys.SystemSQLCodec.DecodeDescMetadataID(s.Values[highIndex-1].Key)
 		if err != nil {
 			return 0, err
@@ -253,7 +253,7 @@ func (s *SystemConfig) GetLargestObjectID(
 		}
 		var id uint32
 		id, err = keys.SystemSQLCodec.DecodeDescMetadataID(searchSlice[i].Key)
-		return !idChecker.IsSystemID(id)
+		return uint32(maxReservedDescID) < id
 	})
 	if err != nil {
 		return 0, err
@@ -266,7 +266,7 @@ func (s *SystemConfig) GetLargestObjectID(
 		if err != nil {
 			return 0, err
 		}
-		if idChecker.IsSystemID(id) {
+		if id <= uint32(maxReservedDescID) {
 			return SystemTenantObjectID(id), nil
 		}
 	}
@@ -520,7 +520,6 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 		return nil
 	}
 
-	idChecker := keys.DeprecatedSystemIDChecker()
 	startID, _, ok := DecodeSystemTenantObjectID(startKey)
 	if !ok || startID <= keys.MaxSystemConfigDescID {
 		// The start key is either:
@@ -543,7 +542,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 		for id := startID; id <= endID; id++ {
 			tableKey := roachpb.RKey(keys.SystemSQLCodec.TablePrefix(uint32(id)))
 			// This logic is analogous to the well-commented static split logic above.
-			if startKey.Less(tableKey) && s.shouldSplitOnSystemTenantObject(id, idChecker) {
+			if startKey.Less(tableKey) && s.shouldSplitOnSystemTenantObject(id) {
 				if tableKey.Less(endKey) {
 					return tableKey
 				}
@@ -577,8 +576,8 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 
 	// If the startKey falls within the non-system reserved range, compute those
 	// keys first.
-	if idChecker.IsSystemID(uint32(startID)) {
-		endID, err := s.GetLargestObjectID(idChecker, keys.PseudoTableIDs)
+	if uint32(startID) <= keys.MaxReservedDescID {
+		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
 			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
@@ -586,11 +585,11 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
 			return splitKey
 		}
-		startID = SystemTenantObjectID(keys.MinUserDescriptorID(idChecker))
+		startID = SystemTenantObjectID(keys.MaxReservedDescID + 1)
 	}
 
 	// Find the split key in the system tenant's user space.
-	endID, err := s.GetLargestObjectID(nil /* systemIDChecker */, keys.PseudoTableIDs)
+	endID, err := s.GetLargestObjectID(0 /* maxReservedDescID */, keys.PseudoTableIDs)
 	if err != nil {
 		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
@@ -692,9 +691,7 @@ func (s *SystemConfig) NeedsSplit(ctx context.Context, startKey, endKey roachpb.
 // shouldSplitOnSystemTenantObject checks if the ID is eligible for a split at
 // all. It uses the internal cache to find a value, and tries to find it using
 // the hook if ID isn't found in the cache.
-func (s *SystemConfig) shouldSplitOnSystemTenantObject(
-	id SystemTenantObjectID, idChecker keys.SystemIDChecker,
-) bool {
+func (s *SystemConfig) shouldSplitOnSystemTenantObject(id SystemTenantObjectID) bool {
 	// Check the cache.
 	{
 		s.mu.RLock()
@@ -706,7 +703,7 @@ func (s *SystemConfig) shouldSplitOnSystemTenantObject(
 	}
 
 	var shouldSplit bool
-	if idChecker.IsSystemID(uint32(id)) {
+	if uint32(id) <= keys.MaxReservedDescID {
 		// The ID might be one of the reserved IDs that refer to ranges but not any
 		// actual descriptors.
 		shouldSplit = true

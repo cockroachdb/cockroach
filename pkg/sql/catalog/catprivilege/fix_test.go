@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -486,7 +485,7 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
-		testParentID := descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(bootstrap.BootstrappedSystemIDChecker()))
+		testParentID := descpb.ID(bootstrap.TestingMinNonDefaultUserDescID())
 		catprivilege.MaybeFixPrivileges(&desc,
 			testParentID,
 			descpb.InvalidID,

@@ -19,6 +19,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -276,9 +277,10 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 // with the possible exception of the version counter and the modification time
 // timestamp.
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
-	idChecker := bootstrap.BootstrappedSystemIDChecker()
-	minUserDescID := keys.MinUserDescriptorID(idChecker)
-	minUserCreatedDescID := catalogkeys.MinNonDefaultUserDescriptorID(idChecker)
+	// Assume the target is an empty cluster with the same binary version
+	ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	minUserDescID := ms.MaxSystemDescriptorID() + 1
+	minUserCreatedDescID := minUserDescID + descpb.ID(len(catalogkeys.DefaultUserDBs))*2
 	// Print first transaction, which removes all predefined user descriptors.
 	fmt.Fprintln(out, `BEGIN;`)
 	// Add a query which triggers a divide-by-zero error when the txn runs on a
@@ -303,14 +305,11 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 		reverseNamespace[row.ID] = append(reverseNamespace[row.ID], row)
 	}
 	for _, descRow := range descTable {
-		if idChecker.IsSystemID(uint32(descRow.ID)) {
-			// Skip system descriptors.
-			continue
-		}
 		// Update the descriptor representation to make it safe to insert:
 		// - set the version to 1,
 		// - unset the descriptor modification time,
 		// - unset the descriptor create-as-of time, for table descriptors.
+		// Also, skip system descriptors.
 		updatedDescBytes, err := descriptorModifiedForInsert(descRow)
 		if err != nil {
 			return err
@@ -329,7 +328,7 @@ func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceT
 	}
 	// Handle dangling namespace entries.
 	for _, namespaceRow := range namespaceTable {
-		if idChecker.IsSystemID(uint32(namespaceRow.ID)) {
+		if namespaceRow.ID == keys.SystemDatabaseID || namespaceRow.ParentID == keys.SystemDatabaseID {
 			// Skip system entries.
 			continue
 		}
@@ -355,6 +354,9 @@ func descriptorModifiedForInsert(r DescriptorTableRow) ([]byte, error) {
 		return nil, nil
 	}
 	mut := b.BuildCreatedMutable()
+	if catalog.IsSystemDescriptor(mut) {
+		return nil, nil
+	}
 	switch d := mut.(type) {
 	case catalog.DatabaseDescriptor:
 		d.DatabaseDesc().ModificationTime = hlc.Timestamp{}

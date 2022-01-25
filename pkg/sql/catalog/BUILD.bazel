@@ -6,7 +6,6 @@ go_library(
         "accessor.go",
         "catalog.go",
         "descriptor.go",
-        "descriptor_id.go",
         "descriptor_id_set.go",
         "errors.go",
         "schema.go",
