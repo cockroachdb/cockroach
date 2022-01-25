@@ -46,6 +46,7 @@ go_library(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvclient/kvcoord:with-mocks",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/protectedts",
