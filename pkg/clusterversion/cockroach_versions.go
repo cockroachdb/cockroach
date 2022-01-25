@@ -288,6 +288,8 @@ const (
 	// preserving temporary indexes, and a post-backfill merging
 	// processing.
 	MVCCIndexBackfiller
+	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	RangefeedUseOneStreamPerNode
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -459,6 +461,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
+	},
+	{
+		Key:     RangefeedUseOneStreamPerNode,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.

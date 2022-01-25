@@ -53,9 +53,8 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/RangeLookup":
 		return a.authRangeLookup(tenID, req.(*roachpb.RangeLookupRequest))
 
-	case "/cockroach.roachpb.Internal/RangeFeed":
+	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
 		return a.authRangeFeed(tenID, req.(*roachpb.RangeFeedRequest))
-
 	case "/cockroach.roachpb.Internal/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*roachpb.GossipSubscriptionRequest))
 
