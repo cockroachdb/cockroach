@@ -371,7 +371,21 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	basepath := uri.Path
+	incBasepath := uri.Path
+	if len(incPaths) == 0 {
+		incURI := *uri
+		incURI.Path = filepath.Join(incURI.Path, backupccl.DefaultIncrementalsSubdir)
+		incBasepath = incURI.Path
+		incStore, err := externalStorageFromURIFactory(ctx, incURI.String(), security.RootUserName())
+		if err != nil {
+			return errors.Wrapf(err, "connect to external storage")
+		}
+		incPaths, err = backupccl.FindPriorBackups(ctx, incStore, backupccl.OmitManifest)
+		if err != nil {
+			return err
+		}
+	}
+
 	manifestPaths := append([]string{""}, incPaths...)
 	stores := make([]cloud.ExternalStorage, len(manifestPaths))
 	stores[0] = store
@@ -380,14 +394,13 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	for i := range manifestPaths {
 
 		if i > 0 {
-			uri.Path = filepath.Join(basepath, manifestPaths[i])
+			uri.Path = filepath.Join(incBasepath, manifestPaths[i])
 			stores[i], err = externalStorageFromURIFactory(ctx, uri.String(), security.RootUserName())
 			if err != nil {
 				return errors.Wrapf(err, "connect to external storage")
 			}
 			defer stores[i].Close()
 		}
-
 		manifest, _, err := backupccl.ReadBackupManifestFromStore(ctx, nil /* mem */, stores[i], nil)
 		if err != nil {
 			return err
@@ -411,7 +424,6 @@ func runExportDataCmd(cmd *cobra.Command, args []string) error {
 	}
 	fullyQualifiedTableName := strings.ToLower(debugBackupArgs.exportTableName)
 	manifestPaths := args
-
 	ctx := context.Background()
 	manifests := make([]backupccl.BackupManifest, 0, len(manifestPaths))
 	for _, path := range manifestPaths {

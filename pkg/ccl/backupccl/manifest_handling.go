@@ -722,6 +722,7 @@ func resolveBackupManifests(
 	mkStore cloud.ExternalStorageFromURIFactory,
 	from [][]string,
 	incFrom []string,
+	defaultIncFrom []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	user security.SQLUsername,
@@ -784,9 +785,12 @@ func resolveBackupManifests(
 	} else {
 		// Since incremental layers were *not* explicitly specified, search for any
 		// automatically created incremental layers inside the base layer.
-
 		var incStores []cloud.ExternalStorage
+		var prev []string
+		var err error
 		if len(incFrom) != 0 {
+			// The user has supplied an explicit incrementals directory. Use it
+			// exclusively.
 			incStores = make([]cloud.ExternalStorage, len(incFrom))
 			for i := range incFrom {
 				store, err := mkStore(ctx, incFrom[i], user)
@@ -796,12 +800,39 @@ func resolveBackupManifests(
 				defer store.Close()
 				incStores[i] = store
 			}
+			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
 		} else {
-			incFrom = from[0]
-			incStores = baseStores
+			// The user has not supplied an explicit incrementals directory. Use a
+			// default.
+			// At most one default may be active:
+			// (1) The "old" style, i.e. the base collection directory itself.
+			// (2) The "new" style, i.e. the subdirectory `/incrementals` appended
+			// to the base collection.
+			// No more than one default may contain incremental backups. So correct
+			// behavior is to take the first default with any backups, or implicitly
+			// none if both defaults are empty.
+			incStores = make([]cloud.ExternalStorage, len(defaultIncFrom))
+			for i := range defaultIncFrom {
+				store, err := mkStore(ctx, defaultIncFrom[i], user)
+				if err != nil {
+					return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
+				}
+				defer store.Close()
+				incStores[i] = store
+			}
+			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+			if len(prev) > 0 {
+				// The new-style default has incremental backups. Use them.
+				incFrom = defaultIncFrom
+			} else {
+				// The new-style default has no incremental backups. Search the old-style
+				// default.
+				incFrom = from[0]
+				incStores = baseStores
+				prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+			}
 		}
 
-		prev, err := FindPriorBackups(ctx, incStores[0], IncludeManifest)
 		if err != nil {
 			if errors.Is(err, cloud.ErrListingUnsupported) {
 				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStores[0])

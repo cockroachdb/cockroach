@@ -74,6 +74,7 @@ func resolveDest(
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	endTime hlc.Timestamp,
 	incrementalFrom []string,
+	incrementalBackupSubdirEnabled bool,
 ) (
 	string, /* collectionURI */
 	string, /* defaultURI - the full path for the planned backup */
@@ -111,79 +112,130 @@ func resolveDest(
 	}
 
 	// At this point, the defaultURI is the full path for the backup. For BACKUP
-	// INTO, this path includes the chosenSuffix Once this function returns, the
+	// INTO, this path includes the chosenSuffix. Once this function returns, the
 	// defaultURI will be the full path for this backup in planning.
 	if len(incrementalFrom) != 0 {
+		// Legacy backup
 		prevBackupURIs = incrementalFrom
+		return collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+	}
+
+	defaultStore, err := makeCloudStorage(ctx, defaultURI, user)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	defer defaultStore.Close()
+	exists, err := containsManifest(ctx, defaultStore)
+	if err != nil {
+		return "", "", "", nil, nil, err
+	}
+	if !exists {
+		// There's no full backup in the resolved subdirectory; therefore, we're conducting a full backup.
+		return collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
+	}
+
+	// The defaultStore contains a full backup; consequently, we're conducting an incremental backup.
+	prevBackupURIs = append(prevBackupURIs, defaultURI)
+
+	var priors []string
+	var backupChainURI string
+	var incrementalBackupSource IncrementalsBackupSource
+	if len(dest.IncrementalStorage) > 0 {
+		// The caller has specified an explicit directory for incrementals storage.
+		// Use it exclusively.
+		//
+		// Specifically, this implies the incremental backup chain lives in
+		// incrementalStorage/chosenSuffix, while the full backup lives in
+		// defaultStore/chosenSuffix. The incremental backup chain in
+		// incrementalStorage/chosenSuffix will not contain any incremental backups
+		// that live elsewhere.
+		incrementalBackupSource = Custom
+		backupChainURI, _, err = getURIsByLocalityKV(dest.IncrementalStorage, chosenSuffix)
+		if err != nil {
+			return "", "", "", nil, nil, err
+		}
+		incrementalStore, err := makeCloudStorage(ctx, backupChainURI, user)
+		if err != nil {
+			return "", "", "", nil, nil, err
+		}
+		defer incrementalStore.Close()
+
+		priors, err = FindPriorBackups(ctx, incrementalStore, OmitManifest)
+		if err != nil {
+			return "", "", "", nil, nil, err
+		}
 	} else {
-		defaultStore, err := makeCloudStorage(ctx, defaultURI, user)
+		// The user has not supplied an explicit incrementals directory. Use a
+		// default.
+		//
+		// At most one default may be active:
+		// (1) The "old" style, i.e. the base collection directory itself.
+		// (2) The "new" style, i.e. the subdirectory `/incrementals` appended
+		// to the base collection.
+		// We prioritize consistency on disk at the cost of behavioral complexity
+		// here. Specifically, we maintain the invariant that at most one default
+		// directory may contain incremental backups. So we use the "old" default
+		// if we must, and the "new" default if we can.
+		backupChainURI = defaultURI
+		priors, err = FindPriorBackups(ctx, defaultStore, OmitManifest)
 		if err != nil {
 			return "", "", "", nil, nil, err
 		}
-		defer defaultStore.Close()
-		exists, err := containsManifest(ctx, defaultStore)
+
+		if !(incrementalBackupSubdirEnabled && len(priors) == 0) {
+			// If we're running a mixed-version cluster, we have to use the old
+			// default so all nodes in the cluster manage incremental backups in the
+			// same place.
+			//
+			// Likewise, if we actually have prior backups in the old default
+			// directory, we should continue to use that directory.
+			incrementalBackupSource = SameAsFull
+		} else {
+			// There are no backups in the old default directory, and the cluster is
+			// fully upgraded >=22.1. Use the new default directory.
+			incrementalBackupSource = Incrementals
+			backupChainURI, _, err = getURIsByLocalityKV(dest.To, path.Join(DefaultIncrementalsSubdir, chosenSuffix))
+			if err != nil {
+				return "", "", "", nil, nil, err
+			}
+			incrementalStore, err := makeCloudStorage(ctx, backupChainURI, user)
+			if err != nil {
+				return "", "", "", nil, nil, err
+			}
+			defer incrementalStore.Close()
+
+			priors, err = FindPriorBackups(ctx, incrementalStore, OmitManifest)
+			if err != nil {
+				return "", "", "", nil, nil, err
+			}
+		}
+	}
+	for _, prior := range priors {
+		priorURI, err := url.Parse(backupChainURI)
 		if err != nil {
-			return "", "", "", nil, nil, err
+			return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
+				backupChainURI)
 		}
-		if exists {
-			// The defaultStore contains a full backup; consequently,
-			// we're conducting an incremental backup.
-			prevBackupURIs = append(prevBackupURIs, defaultURI)
+		priorURI.Path = path.Join(priorURI.Path, prior)
+		prevBackupURIs = append(prevBackupURIs, priorURI.String())
+	}
+	if err != nil {
+		return "", "", "", nil, nil, errors.Wrap(err, "finding previous backups")
+	}
 
-			var priors []string
-			var backupChainURI string
-			if len(dest.IncrementalStorage) > 0 {
-				// Implies the incremental backup chain lives in
-				// incrementalStorage/chosenSuffix, while the full backup lives in
-				// defaultStore/chosenSuffix. The incremental backup chain in
-				// incrementalStorage/chosenSuffix will not contain any incremental backups that live
-				// elsewhere.
-				backupChainURI, _, err = getURIsByLocalityKV(dest.IncrementalStorage,
-					chosenSuffix)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-				incrementalStore, err := makeCloudStorage(ctx, backupChainURI, user)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-				defer incrementalStore.Close()
-				priors, err = FindPriorBackups(ctx, incrementalStore, OmitManifest)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-			} else {
-				backupChainURI = defaultURI
-				priors, err = FindPriorBackups(ctx, defaultStore, OmitManifest)
-				if err != nil {
-					return "", "", "", nil, nil, err
-				}
-			}
-			for _, prior := range priors {
-				priorURI, err := url.Parse(backupChainURI)
-				if err != nil {
-					return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
-						backupChainURI)
-				}
-				priorURI.Path = path.Join(priorURI.Path, prior)
-				prevBackupURIs = append(prevBackupURIs, priorURI.String())
-			}
-			if err != nil {
-				return "", "", "", nil, nil, errors.Wrap(err, "finding previous backups")
-			}
-
-			// Within the chosenSuffix dir, differentiate files with partName.
-			partName := endTime.GoTime().Format(DateBasedIncFolderName)
-			partName = path.Join(chosenSuffix, partName)
-			if len(dest.IncrementalStorage) > 0 {
-				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.IncrementalStorage, partName)
-			} else {
-				defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, partName)
-			}
-			if err != nil {
-				return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
-			}
-		}
+	// Within the chosenSuffix dir, differentiate files with partName.
+	partName := endTime.GoTime().Format(DateBasedIncFolderName)
+	partName = path.Join(chosenSuffix, partName)
+	switch incrementalBackupSource {
+	case Custom:
+		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.IncrementalStorage, partName)
+	case SameAsFull:
+		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, partName)
+	case Incrementals:
+		defaultURI, urisByLocalityKV, err = getURIsByLocalityKV(dest.To, path.Join(DefaultIncrementalsSubdir, partName))
+	}
+	if err != nil {
+		return "", "", "", nil, nil, errors.Wrap(err, "adjusting backup destination to append new layer to existing backup")
 	}
 	return collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, nil
 }
