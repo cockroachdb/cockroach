@@ -626,7 +626,7 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
-		return false, ConvertFetchError(ctx, rf, err)
+		return false, ConvertFetchError(ctx, rf.table.desc, err)
 	}
 	rf.setNextKV(kv, finalReferenceToBatch)
 
@@ -718,18 +718,6 @@ func (rf *Fetcher) DecodeIndexKey(key roachpb.Key) (remaining []byte, foundNull 
 		rf.table.indexColumnDirs,
 		key[rf.table.knownPrefixLength:],
 	)
-}
-
-// KeyToDesc implements the KeyToDescTranslator interface. The implementation is
-// used by ConvertFetchError.
-func (rf *Fetcher) KeyToDesc(key roachpb.Key) (catalog.TableDescriptor, bool) {
-	if len(key) < rf.table.knownPrefixLength {
-		return nil, false
-	}
-	if _, _, err := rf.DecodeIndexKey(key); err != nil {
-		return nil, false
-	}
-	return rf.table.desc, true
 }
 
 // processKV processes the given key/value, setting values in the row

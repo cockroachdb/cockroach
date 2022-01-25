@@ -93,9 +93,15 @@ func EngineKeyCompare(a, b []byte) int {
 		return bytes.Compare(a, b)
 	}
 
-	// Compute the index of the separator between the key and the version.
+	// Compute the index of the separator between the key and the version. If the
+	// separator is found to be at -1 for both keys, then we are comparing bare
+	// suffixes without a user key part. Pebble requires bare suffixes to be
+	// comparable with the same ordering as if they had a common user key.
 	aSep := aEnd - int(a[aEnd])
 	bSep := bEnd - int(b[bEnd])
+	if aSep == -1 && bSep == -1 {
+		aSep, bSep = 0, 0 // comparing bare suffixes
+	}
 	if aSep < 0 || bSep < 0 {
 		// This should never happen unless there is some sort of corruption of
 		// the keys.

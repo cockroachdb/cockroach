@@ -44,6 +44,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEngineComparer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyAMetadata := MVCCKey{
+		Key: []byte("a"),
+	}
+	keyA2 := MVCCKey{
+		Key:       []byte("a"),
+		Timestamp: hlc.Timestamp{WallTime: 2},
+	}
+	keyA1 := MVCCKey{
+		Key:       []byte("a"),
+		Timestamp: hlc.Timestamp{WallTime: 1},
+	}
+	keyB2 := MVCCKey{
+		Key:       []byte("b"),
+		Timestamp: hlc.Timestamp{WallTime: 2},
+	}
+
+	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)),
+		"expected key metadata to sort first")
+	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)),
+		"expected higher timestamp to sort first")
+	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)),
+		"expected lower key to sort first")
+
+	suffix := func(key []byte) []byte {
+		return key[EngineComparer.Split(key):]
+	}
+	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeKey(keyA2)), suffix(EncodeKey(keyA1))),
+		"expected bare suffix with higher timestamp to sort first")
+}
+
 func TestPebbleTimeBoundPropCollector(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

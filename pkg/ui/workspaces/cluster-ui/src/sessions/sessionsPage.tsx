@@ -26,7 +26,11 @@ import emptyTableResultsIcon from "../assets/emptyState/empty-table-results.svg"
 import SQLActivityError from "../sqlActivity/errorComponent";
 
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
-import { SortSetting, ISortedTablePagination } from "src/sortedtable";
+import {
+  SortSetting,
+  ISortedTablePagination,
+  updateSortSettingQueryParamsOnTab,
+} from "src/sortedtable";
 import { Loading } from "src/loading";
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
@@ -137,7 +141,18 @@ export class SessionsPage extends React.Component<
   }
 
   componentDidUpdate = (): void => {
+    const { history, sortSetting } = this.props;
+
     this.props.refreshSessions();
+    updateSortSettingQueryParamsOnTab(
+      "Sessions",
+      sortSetting,
+      {
+        ascending: false,
+        columnTitle: "statementAge",
+      },
+      history,
+    );
   };
 
   onChangePage = (current: number): void => {
