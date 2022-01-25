@@ -88,6 +88,11 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 			switch t := e.GetValue().(type) {
 			case *roachpb.RangeFeedValue:
 				kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
+				if p.cfg.Knobs.OnRangeFeedValue != nil {
+					if err := p.cfg.Knobs.OnRangeFeedValue(kv); err != nil {
+						return err
+					}
+				}
 				var prevVal roachpb.Value
 				if p.cfg.WithDiff {
 					prevVal = t.PrevValue
