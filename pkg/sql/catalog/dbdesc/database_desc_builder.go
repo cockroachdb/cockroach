@@ -11,8 +11,6 @@
 package dbdesc
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -57,9 +55,7 @@ func (ddb *databaseDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
-func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
-	_ context.Context, _ catalog.DescGetter,
-) error {
+func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 	ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 
 	privsChanged := catprivilege.MaybeFixPrivileges(
@@ -70,6 +66,12 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges(
 		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
 	ddb.changed = privsChanged || removedSelfEntryInSchemas
+}
+
+// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
+	_ func(id descpb.ID) catalog.Descriptor,
+) error {
 	return nil
 }
 

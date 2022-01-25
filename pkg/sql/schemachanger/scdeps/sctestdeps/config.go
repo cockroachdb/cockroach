@@ -11,7 +11,7 @@
 package sctestdeps
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -30,16 +30,22 @@ func (o optionFunc) apply(state *TestState) { o(state) }
 var _ Option = (optionFunc)(nil)
 
 // WithNamespace sets the TestState namespace to the provided value.
-func WithNamespace(ns map[descpb.NameInfo]descpb.ID) Option {
+func WithNamespace(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
-		state.namespace = ns
+		_ = c.ForEachNamespaceEntry(func(e catalog.NameEntry) error {
+			state.catalog.UpsertNamespaceEntry(e, e.GetID())
+			return nil
+		})
 	})
 }
 
 // WithDescriptors sets the TestState descriptors to the provided value.
-func WithDescriptors(descs nstree.Map) Option {
+func WithDescriptors(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
-		state.descriptors = descs
+		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			state.catalog.UpsertDescriptorEntry(desc)
+			return nil
+		})
 	})
 }
 
@@ -91,7 +97,6 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 
 var defaultOptions = []Option{
 	optionFunc(func(state *TestState) {
-		state.namespace = make(map[descpb.NameInfo]descpb.ID)
 		state.backfillTracker = &testBackfillTracker{deps: state}
 		state.backfiller = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}

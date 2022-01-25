@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -695,7 +696,7 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
-			if err := catalog.ValidateSelf(td); err != nil {
+			if err := descbuilder.ValidateSelf(td); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

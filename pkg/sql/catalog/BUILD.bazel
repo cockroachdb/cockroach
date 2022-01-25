@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "accessor.go",
         "catalog.go",
-        "desc_getter.go",
         "descriptor.go",
         "descriptor_id.go",
         "descriptor_id_set.go",

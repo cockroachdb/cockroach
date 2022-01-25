@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -227,7 +227,7 @@ INSERT INTO d.t2 VALUES (2);
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})
 
-	descr := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
 	t.Run("stream-tenant", func(t *testing.T) {
 		_, feed := startReplication(t, h, makeCoreChangefeedDecoder, streamTenantQuery)
@@ -366,7 +366,7 @@ USE d;
 	makePartitionSpec := func(startFrom hlc.Timestamp, tables ...string) *streampb.StreamPartitionSpec {
 		var spans []roachpb.Span
 		for _, table := range tables {
-			desc := catalogkv.TestingGetTableDescriptor(
+			desc := desctestutils.TestingGetPublicTableDescriptor(
 				h.SysServer.DB(), h.Tenant.Codec, "d", table)
 			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
 		}
@@ -391,7 +391,7 @@ USE d;
 	streamID := rows[0][0]
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
-	t1Descr := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,

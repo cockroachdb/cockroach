@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -104,7 +104,7 @@ CREATE TYPE d.t AS ENUM();
 	}
 
 	// Set up delTypeDesc to delete t.
-	desc := catalogkv.TestingGetTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
+	desc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, keys.SystemSQLCodec, "d", "t")
 	delTypeDesc = func() {
 		// Delete the descriptor.
 		if err := kvDB.Del(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID())); err != nil {

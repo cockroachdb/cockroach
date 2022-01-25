@@ -28,10 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -81,7 +81,7 @@ func writeMutation(
 ) {
 	tableDesc.Mutations = append(tableDesc.Mutations, m)
 	tableDesc.Version++
-	if err := catalog.ValidateSelf(tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(tableDesc); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(
@@ -131,7 +131,7 @@ func TestRegistryGC(t *testing.T) {
 	muchEarlier := ts.Add(-2 * time.Hour)
 
 	setDropJob := func(dbName, tableName string) {
-		desc := catalogkv.TestingGetMutableExistingTableDescriptor(
+		desc := desctestutils.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, dbName, tableName)
 		desc.DropJobID = 123
 		if err := kvDB.Put(
@@ -156,7 +156,7 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 `, tableName, tableName)); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := catalogkv.TestingGetMutableExistingTableDescriptor(
+		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
 			kvDB, keys.SystemSQLCodec, "t", tableName)
 		if mutOptions.hasDropJob {
 			setDropJob("t", tableName)

@@ -16,9 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -264,6 +264,10 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 
 	var seqNameToMetadata map[string]*SequenceMetadata
 	var seqIDToMetadata map[descpb.ID]*SequenceMetadata
+	// TODO(postamar): give the tree.EvalContext a useful interface
+	// instead of cobbling a descs.Collection in this way.
+	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
+	descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
 	err := evalCtx.DB.Txn(evalCtx.Context, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)
@@ -271,22 +275,16 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			return err
 		}
 		for seqID := range sequenceIDs {
-			seqDesc, err := catalogkv.MustGetTableDescByID(ctx, txn, evalCtx.Codec, seqID)
+			seqDesc, err := descsCol.MustGetTableDescByID(ctx, txn, seqID)
 			if err != nil {
 				return err
 			}
-
-			seqOpts := seqDesc.GetSequenceOpts()
-			if seqOpts == nil {
-				return errors.Newf("descriptor %s is not a sequence", seqDesc.GetName())
+			if seqDesc.GetSequenceOpts() == nil {
+				return errors.Errorf("relation %q (%d) is not a sequence", seqDesc.GetName(), seqDesc.GetID())
 			}
-
-			seqMetadata := &SequenceMetadata{
-				id:      seqID,
-				seqDesc: seqDesc,
-			}
+			seqMetadata := &SequenceMetadata{seqDesc: seqDesc}
 			seqNameToMetadata[seqDesc.GetName()] = seqMetadata
-			seqIDToMetadata[seqDesc.GetID()] = seqMetadata
+			seqIDToMetadata[seqID] = seqMetadata
 		}
 		return nil
 	})

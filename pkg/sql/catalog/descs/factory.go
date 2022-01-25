@@ -11,6 +11,7 @@
 package descs
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
@@ -20,6 +21,7 @@ import (
 // CollectionFactory is used to construct a new Collection.
 type CollectionFactory struct {
 	settings       *cluster.Settings
+	codec          keys.SQLCodec
 	leaseMgr       *lease.Manager
 	virtualSchemas catalog.VirtualSchemas
 	hydratedTables *hydratedtables.Cache
@@ -35,9 +37,21 @@ func NewCollectionFactory(
 ) *CollectionFactory {
 	return &CollectionFactory{
 		settings:       settings,
+		codec:          leaseMgr.Codec(),
 		leaseMgr:       leaseMgr,
 		virtualSchemas: virtualSchemas,
 		hydratedTables: hydratedTables,
+	}
+}
+
+// NewBareBonesCollectionFactory constructs a new CollectionFactory which holds
+// onto a minimum of dependencies needed to construct an operable Collection.
+func NewBareBonesCollectionFactory(
+	settings *cluster.Settings, codec keys.SQLCodec,
+) *CollectionFactory {
+	return &CollectionFactory{
+		settings: settings,
+		codec:    codec,
 	}
 }
 
@@ -46,7 +60,7 @@ func (cf *CollectionFactory) MakeCollection(
 	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
 	return makeCollection(
-		cf.leaseMgr, cf.settings, cf.hydratedTables, cf.virtualSchemas, temporarySchemaProvider,
+		cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.virtualSchemas, temporarySchemaProvider,
 	)
 }
 

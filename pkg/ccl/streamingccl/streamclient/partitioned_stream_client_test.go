@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -116,7 +116,7 @@ INSERT INTO d.t2 VALUES (2);
 	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {
 		var spans []roachpb.Span
 		for _, table := range tables {
-			desc := catalogkv.TestingGetTableDescriptor(
+			desc := desctestutils.TestingGetPublicTableDescriptor(
 				h.SysServer.DB(), h.Tenant.Codec, "d", table)
 			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
 		}
@@ -140,7 +140,7 @@ INSERT INTO d.t2 VALUES (2);
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
-	t1Descr := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
