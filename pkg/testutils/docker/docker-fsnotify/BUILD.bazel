@@ -5,12 +5,16 @@ go_library(
     srcs = ["ListenFileCreation.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/docker/docker-fsnotify",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_fsnotify_fsnotify//:fsnotify"],
+    deps = [
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_fsnotify_fsnotify//:fsnotify",
+    ],
 )
 
 go_binary(
     name = "docker-fsnotify",
+    out = "docker-fsnotify-bin",
     embed = [":docker-fsnotify_lib"],
     visibility = ["//visibility:public"],
-    out = "docker-fsnotify-bin",
 )

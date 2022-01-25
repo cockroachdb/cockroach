@@ -33,9 +33,13 @@ docker_image_tar_name="cockroach-docker-image.tar"
 
 docker_tag="cockroachdb/cockroach-ci"
 
+docker build --help
+
 docker build \
   --no-cache \
   --tag="$docker_tag" \
+  --memory 30g \
+  --memory-swap -1 \
   build/deploy
 
 docker save "$docker_tag" | gzip > "${artifacts}/${docker_image_tar_name}".gz

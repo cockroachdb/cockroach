@@ -8,6 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+//go:build docker
+// +build docker
+
 package docker
 
 import (
@@ -64,7 +67,42 @@ func TestSingleNodeDocker(t *testing.T) {
 
 	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
 
+	if err := os.Chmod(filepath.Join(fsnotifyPath, "docker-fsnotify-bin"), 0777); err != nil {
+		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot change docker-fsnotify-bin permission"))
+	}
+
 	var dockerTests = []singleNodeDockerTest{
+		{
+			testName:      "single-node-certs-mode",
+			containerName: "roach1",
+			runContainerArgs: runContainerArgs{
+				envSetting: []string{
+					"COCKROACH_DATABASE=mydb",
+					"COCKROACH_USER=myuser",
+					"COCKROACH_PASSWORD=23333",
+				},
+				volSetting: []string{
+					fmt.Sprintf("%s/cockroach-data/roach1:/cockroach/cockroach-data",
+						pwd),
+					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
+					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+				},
+				cmd: []string{"start-single-node", "--certs-dir=certs"},
+			},
+			sqlOpts: []string{
+				"--certs-dir=certs",
+				"--user=myuser",
+				"--url=postgresql://myuser:23333@127.0.0.1:26257/mydb?sslcert=certs%2Fclient.myuser.crt&sslkey=certs%2Fclient.myuser.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt",
+			},
+			sqlQueries: []sqlQuery{
+				{"SELECT current_user", "current_user\nmyuser"},
+				{"SELECT current_database()", "current_database\nmydb"},
+				{"CREATE TABLE hello (X INT)", "CREATE TABLE"},
+				{"INSERT INTO hello VALUES (1), (2), (3)", "INSERT 3"},
+				{"SELECT * FROM hello", "x\n1\n2\n3"},
+				{"SELECT * FROM bello", "id | name\n1 | a\n2 | b\n3 | c"},
+			},
+		},
 		{
 			testName:      "single-node-insecure-mode",
 			containerName: "roach2",
@@ -73,7 +111,9 @@ func TestSingleNodeDocker(t *testing.T) {
 					"COCKROACH_DATABASE=mydb",
 				},
 				volSetting: []string{
-					fmt.Sprintf("%s/cockroach-data/roach2:/cockroach/cockroach-data", pwd),
+					fmt.Sprintf("%s/cockroach-data/roach2:/cockroach/cockroach-data",
+						pwd),
+					fmt.Sprintf("%s/testdata/single-node-test/docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d", pwd),
 					fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
 				},
 				cmd: []string{"start-single-node", "--insecure"},
@@ -85,14 +125,43 @@ func TestSingleNodeDocker(t *testing.T) {
 			sqlQueries: []sqlQuery{
 				{"SELECT current_user", "current_user\nroot"},
 				{"SELECT current_database()", "current_database\nmydb"},
-				{"CREATE DATABASE mydb", "CREATE DATABASE"},
-				{"USE mydb", "SET"},
 				{"CREATE TABLE hello (X INT)", "CREATE TABLE"},
 				{"INSERT INTO hello VALUES (1), (2), (3)", "INSERT 3"},
 				{"SELECT * FROM hello", "x\n1\n2\n3"},
+				{"SELECT * FROM bello", "id | name\n1 | a\n2 | b\n3 | c"},
 			},
 		},
 	}
+
+	//var dockerTests = []singleNodeDockerTest{
+	//	{
+	//		testName:      "single-node-insecure-mode",
+	//		containerName: "roach2",
+	//		runContainerArgs: runContainerArgs{
+	//			envSetting: []string{
+	//				"COCKROACH_DATABASE=mydb",
+	//			},
+	//			volSetting: []string{
+	//				fmt.Sprintf("%s/cockroach-data/roach2:/cockroach/cockroach-data", pwd),
+	//				fmt.Sprintf("%s/docker-fsnotify-bin:/cockroach/docker-fsnotify", fsnotifyPath),
+	//			},
+	//			cmd: []string{"start-single-node", "--insecure"},
+	//		},
+	//		sqlOpts: []string{
+	//			"--insecure",
+	//			"--database=mydb",
+	//		},
+	//		sqlQueries: []sqlQuery{
+	//			{"SELECT current_user", "current_user\nroot"},
+	//			{"SELECT current_database()", "current_database\nmydb"},
+	//			{"CREATE DATABASE mydb", "CREATE DATABASE"},
+	//			{"USE mydb", "SET"},
+	//			{"CREATE TABLE hello (X INT)", "CREATE TABLE"},
+	//			{"INSERT INTO hello VALUES (1), (2), (3)", "INSERT 3"},
+	//			{"SELECT * FROM hello", "x\n1\n2\n3"},
+	//		},
+	//	},
+	//}
 
 	cl, err := client.NewClientWithOpts(client.FromEnv)
 	cl.NegotiateAPIVersion(ctx)
