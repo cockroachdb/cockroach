@@ -1112,7 +1112,7 @@ testoptlogic: bin/logictestopt
 
 logic-test-selector := $(if $(TESTCONFIG),^$(TESTCONFIG)$$)/$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testbaselogic: TESTS := TestLogic/$(logic-test-selector)
-testccllogic: TESTS := TestCCLLogic/$(logic-test-selector)
+testccllogic: TESTS := Test(CCL|Tenant)Logic/$(logic-test-selector)
 testoptlogic: TESTS := TestExecBuild/$(logic-test-selector)
 
 # Note: we specify -config here in addition to the filter on TESTS
