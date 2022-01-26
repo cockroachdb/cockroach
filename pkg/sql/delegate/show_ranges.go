@@ -16,11 +16,32 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
+
+func checkPrivilegesForShowRanges(d *delegator, table cat.Table) error {
+	// Basic requirement is SELECT privileges
+	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.SELECT); err != nil {
+		return err
+	}
+	hasAdmin, err := d.catalog.HasAdminRole(d.ctx)
+	if err != nil {
+		return err
+	}
+	// User needs to either have admin access or have the correct ZONECONFIG privilege
+	if hasAdmin {
+		return nil
+	}
+	if err := d.catalog.CheckPrivilege(d.ctx, table, privilege.ZONECONFIG); err != nil {
+		return pgerror.Wrapf(err, pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can use SHOW RANGES on %s", table.Name())
+	}
+	return nil
+}
 
 // delegateShowRanges implements the SHOW RANGES statement:
 //   SHOW RANGES FROM TABLE t
@@ -63,9 +84,11 @@ func (d *delegator) delegateShowRanges(n *tree.ShowRanges) (tree.Statement, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := d.catalog.CheckPrivilege(d.ctx, idx.Table(), privilege.SELECT); err != nil {
+
+	if err := checkPrivilegesForShowRanges(d, idx.Table()); err != nil {
 		return nil, err
 	}
+
 	if idx.Table().IsVirtualTable() {
 		return nil, errors.New("SHOW RANGES may not be called on a virtual table")
 	}
