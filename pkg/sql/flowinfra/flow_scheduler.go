@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"container/list"
 	"context"
+	"errors"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -177,6 +178,7 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 		fs.mu.Unlock()
 	}
 	if err := f.Start(ctx, func() { fs.flowDoneCh <- f }); err != nil {
+		f.Cleanup(ctx)
 		return err
 	}
 	// TODO(radu): we could replace the WaitGroup with a structure that keeps a
@@ -192,12 +194,13 @@ func (fs *FlowScheduler) runFlowNow(ctx context.Context, f Flow, locked bool) er
 }
 
 // ScheduleFlow is the main interface of the flow scheduler: it runs or enqueues
-// the given flow.
+// the given flow. If the flow is not enqueued, it is guaranteed to be cleaned
+// up when this function returns.
 //
 // If the flow can start immediately, errors encountered when starting the flow
 // are returned. If the flow is enqueued, these error will be later ignored.
 func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
-	return fs.stopper.RunTaskWithErr(
+	err := fs.stopper.RunTaskWithErr(
 		ctx, "flowinfra.FlowScheduler: scheduling flow", func(ctx context.Context) error {
 			fs.metrics.FlowsScheduled.Inc(1)
 			telemetry.Inc(sqltelemetry.DistSQLFlowsScheduled)
@@ -217,6 +220,11 @@ func (fs *FlowScheduler) ScheduleFlow(ctx context.Context, f Flow) error {
 			return nil
 
 		})
+	if err != nil && errors.Is(err, stop.ErrUnavailable) {
+		// If the server is quiescing, we have to explicitly clean up the flow.
+		f.Cleanup(ctx)
+	}
+	return err
 }
 
 // NumFlowsInQueue returns the number of flows currently in the queue to be
