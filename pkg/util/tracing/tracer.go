@@ -418,16 +418,26 @@ func (r *SpanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 // VisitSpans calls the visitor callback for every local root span in the
 // registry. Iterations stops when the visitor returns an error. If that error
 // is iterutils.StopIteration(), then VisitSpans() returns nil.
+//
+// The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan) error) error {
+	// Take a snapshot of the registry and release the lock.
 	r.mu.Lock()
-	sl := make([]*crdbSpan, 0, len(r.mu.m))
+	spans := make([]spanRef, 0, len(r.mu.m))
 	for _, sp := range r.mu.m {
-		sl = append(sl, sp)
+		// We'll keep the spans alive while we're visiting them below.
+		spans = append(spans, makeSpanRef(sp.sp))
 	}
 	r.mu.Unlock()
 
-	for _, sp := range sl {
-		if err := visitor(sp); err != nil {
+	defer func() {
+		for i := range spans {
+			spans[i].release()
+		}
+	}()
+
+	for _, sp := range spans {
+		if err := visitor(sp.Span.i.crdb); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}
@@ -543,6 +553,7 @@ func NewTracer() *Tracer {
 			c := &h.crdbSpan
 			*c = crdbSpan{
 				tracer: t,
+				sp:     sp,
 			}
 			sp.i.crdb = c
 			return h
@@ -1354,8 +1365,11 @@ func (t *Tracer) GetActiveSpanByID(spanID tracingpb.SpanID) RegistrySpan {
 	return t.activeSpansRegistry.getSpanByID(spanID)
 }
 
-// VisitSpans invokes the visitor with all active Spans. The function will
-// gracefully exit if the visitor returns iterutil.StopIteration().
+// VisitSpans calls the visitor callback for every local root span in the
+// registry. Iterations stops when the visitor returns an error. If that error
+// is iterutils.StopIteration(), then VisitSpans() returns nil.
+//
+// The callback should not hold on to the span after it returns.
 func (t *Tracer) VisitSpans(visitor func(span RegistrySpan) error) error {
 	return t.activeSpansRegistry.VisitSpans(visitor)
 }
