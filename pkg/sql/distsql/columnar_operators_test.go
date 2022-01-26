@@ -224,7 +224,8 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 									execinfrapb.StMakeline,
 									execinfrapb.StExtent,
 									execinfrapb.StUnion,
-									execinfrapb.StCollect:
+									execinfrapb.StCollect,
+									execinfrapb.ArrayAgg:
 									for _, typ := range aggFnInputTypes {
 										if typ.Family() == types.TupleFamily || (typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.TupleFamily) {
 											invalid = true
