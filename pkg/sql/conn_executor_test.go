@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1402,6 +1403,124 @@ func TestInjectRetryErrors(t *testing.T) {
 		}
 		require.Equal(t, 5, txRes)
 	})
+}
+
+func TestTrackOnlyExternalOpenTransactionsAndActiveStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	dbConn := serverutils.OpenDBConn(t, s.ServingSQLAddr(), "", false /* insecure */, s.Stopper())
+	defer s.Stopper().Stop(ctx)
+
+	applicationName := "TestApp"
+	selectQuery := "SELECT * FROM t.foo"
+	selectInternalQueryActive := `SELECT count(*) FROM crdb_internal.cluster_queries WHERE query = '` + selectQuery + `'`
+	selectExternalQueryActive := `SELECT count(*) FROM [SHOW STATEMENTS] WHERE query = '` + selectQuery + `'`
+	selectExternalTxnActive := `SELECT count(*) FROM [SHOW TRANSACTIONS] WHERE application_name = '` + applicationName + `'`
+
+	sqlServer := s.SQLServer().(*sql.Server)
+	testDB := sqlutils.MakeSQLRunner(sqlDB)
+	testDB.Exec(t, "SET application_name = "+applicationName)
+	testDB.Exec(t, "CREATE DATABASE t")
+	testDB.Exec(t, "CREATE TABLE t.foo (i INT PRIMARY KEY)")
+	testDB.Exec(t, "INSERT INTO t.foo VALUES (1)")
+
+	// Begin an external transaction.
+	testDB.Exec(t, "BEGIN")
+
+	// Check that the number of open transactions has incremented. (Might have to move this to later when a query has been executed)
+	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+
+	// Create a state of contention.
+	testDB.Exec(t, "SELECT * FROM t.foo WHERE i = 1 FOR UPDATE")
+
+	// Execute internal statement (this case is identical to opening an internal
+	// transaction).
+	go func() {
+		_, err := s.InternalExecutor().(*sql.InternalExecutor).ExecEx(ctx,
+			"test-internal-active-stmt-wait",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			selectQuery)
+		require.NoError(t, err, "expected internal SELECT query to be successful, but encountered an error")
+	}()
+
+	// Check that the internal statement is active.
+	testutils.SucceedsWithin(t, func() error {
+		row := testDB.QueryStr(t, selectInternalQueryActive)
+		if row[0][0] == "0" {
+			return errors.New("internal select query is not active yet")
+		}
+		return nil
+	}, 5*time.Second)
+
+	// Check that the number of open transactions has not incremented. We only
+	// want to track external open transactions. Open transaction count already
+	// at one from initial external transaction.
+	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+	// Check that the number of active statements has not incremented. We only
+	// want to track external active statements.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+	// Create active external statement.
+	go func() {
+		_, err := dbConn.Exec(selectQuery)
+		require.NoError(t, err, "expected external SELECT query to be successful, but encountered an error")
+	}()
+
+	// Check that the external statement is active.
+	testutils.SucceedsWithin(t, func() error {
+		row := testDB.QueryStr(t, selectExternalQueryActive)
+		if row[0][0] == "0" {
+			return errors.New("external select query is not active yet")
+		}
+		return nil
+	}, 5*time.Second)
+
+	// Check that the number of open transactions has incremented. Second db
+	// connection creates an implicit external transaction.
+	require.Equal(t, int64(2), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+	// Check that the number of active statements has incremented.
+	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+	// Commit the external transaction. The internal and external select queries
+	// are no longer in contention.
+	testDB.Exec(t, "COMMIT")
+
+	// Check that external transaction is no longer active.
+	testutils.SucceedsWithin(t, func() error {
+		externalTxn := testDB.QueryStr(t, selectExternalTxnActive)
+
+		if externalTxn[0][0] != "0" {
+			return errors.New("external transaction is still active")
+		}
+		return nil
+	}, 5*time.Second)
+
+	// Check that both the internal & external statements are no longer active.
+	testutils.SucceedsWithin(t, func() error {
+		externalRow := testDB.QueryStr(t, selectExternalQueryActive)
+		internalRow := testDB.QueryStr(t, selectInternalQueryActive)
+
+		if externalRow[0][0] != "0" {
+			return errors.New("external select query is still active")
+		}
+		if internalRow[0][0] != "0" {
+			return errors.New("internal select query is still active")
+		}
+		return nil
+	}, 5*time.Second)
+
+	// Check that the number of open transactions has decremented by 2 (should
+	// decrement for initial external transaction and external statement executed
+	// on second db connection).
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+	// Check that the number of active statements has decremented by 1 (should
+	// not decrement for the internal active statement).
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 }
 
 // dynamicRequestFilter exposes a filter method which is a

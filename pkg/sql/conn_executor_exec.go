@@ -316,6 +316,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	ex.addActiveQuery(ast, formatWithPlaceholders(ast, ex.planner.EvalContext()), queryID, ex.state.cancel)
+	if ex.executorType != executorTypeInternal {
+		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
+	}
 
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
@@ -329,6 +332,9 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 		ex.removeActiveQuery(queryID, ast)
+		if ex.executorType != executorTypeInternal {
+			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		}
 
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
@@ -1982,7 +1988,9 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 		ex.extraTxnState.shouldCollectTxnExecutionStats = txnExecStatsSampleRate > ex.rng.Float64()
 	}
 
-	ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
+	if ex.executorType != executorTypeInternal {
+		ex.metrics.EngineMetrics.SQLTxnsOpen.Inc(1)
+	}
 
 	ex.extraTxnState.shouldExecuteOnTxnFinish = true
 	ex.extraTxnState.txnFinishClosure.txnStartTime = txnStart
@@ -2019,7 +2027,9 @@ func (ex *connExecutor) recordTransactionFinish(
 
 	txnEnd := timeutil.Now()
 	txnTime := txnEnd.Sub(txnStart)
-	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
+	if ex.executorType != executorTypeInternal {
+		ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
+	}
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
 	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
