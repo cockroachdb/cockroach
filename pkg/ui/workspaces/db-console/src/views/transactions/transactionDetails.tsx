@@ -11,7 +11,7 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshStatements } from "src/redux/apiReducers";
+import { refreshStatements, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { aggregatedTsAttr, txnFingerprintIdAttr } from "src/util/constants";
 import { TimestampToString } from "src/util/convert";
@@ -76,6 +76,6 @@ export default withRouter(
         ),
       };
     },
-    { refreshData: refreshStatements },
+    { refreshData: refreshStatements, refreshUserSQLRoles },
   )(TransactionDetails),
 );

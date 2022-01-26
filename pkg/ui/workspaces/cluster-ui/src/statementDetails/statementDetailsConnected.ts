@@ -16,12 +16,15 @@ import {
   StatementDetailsDispatchProps,
   StatementDetailsProps,
 } from "./statementDetails";
-import { AppState } from "../store";
+import { AppState, uiConfigActions } from "../store";
 import {
   selectStatement,
   selectStatementDetailsUiConfig,
 } from "./statementDetails.selectors";
-import { selectIsTenant } from "../store/uiConfig";
+import {
+  selectIsTenant,
+  selectHasViewActivityRedactedRole,
+} from "../store/uiConfig";
 import {
   nodeDisplayNameByIDSelector,
   nodeRegionsByIDSelector,
@@ -48,14 +51,16 @@ const mapStateToProps = (state: AppState, props: StatementDetailsProps) => {
     dateRange: selectDateRange(state),
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
     nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
-    diagnosticsReports: selectIsTenant(state)
-      ? []
-      : selectDiagnosticsReportsByStatementFingerprint(
-          state,
-          statementFingerprint,
-        ),
+    diagnosticsReports:
+      selectIsTenant(state) || selectHasViewActivityRedactedRole(state)
+        ? []
+        : selectDiagnosticsReportsByStatementFingerprint(
+            state,
+            statementFingerprint,
+          ),
     uiConfig: selectStatementDetailsUiConfig(state),
     isTenant: selectIsTenant(state),
+    hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
   };
 };
 
@@ -67,6 +72,7 @@ const mapDispatchToProps = (
     dispatch(statementDiagnosticsActions.refresh()),
   refreshNodes: () => dispatch(nodesActions.refresh()),
   refreshNodesLiveness: () => dispatch(nodeLivenessActions.refresh()),
+  refreshUserSQLRoles: () => dispatch(uiConfigActions.refreshUserSQLRoles()),
   dismissStatementDiagnosticsAlertMessage: () =>
     dispatch(
       localStorageActions.update({

@@ -16,6 +16,7 @@ import * as protos from "src/js/protos";
 import {
   refreshStatementDiagnosticsRequests,
   refreshStatements,
+  refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
@@ -34,6 +35,7 @@ import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
 import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
 import { statementsDateRangeLocalSetting } from "src/redux/statementsDateRange";
+import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
 
 import {
@@ -273,11 +275,13 @@ export default withRouter(
       statements: selectStatements(state, props),
       statementsError: state.cachedData.statements.lastError,
       totalFingerprints: selectTotalFingerprints(state),
+      hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     }),
     {
       refreshStatements: refreshStatements,
       onDateRangeChange: setCombinedStatementsDateRangeAction,
       refreshStatementDiagnosticsRequests,
+      refreshUserSQLRoles,
       resetSQLStats: resetSQLStatsAction,
       dismissAlertMessage: () =>
         createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
