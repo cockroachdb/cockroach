@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 )
@@ -25,6 +26,7 @@ import (
 // This benchmark explicitly excludes construction of
 // the SpanOptions, which require allocations as well.
 func BenchmarkTracer_StartSpanCtx(b *testing.B) {
+	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	ctx := context.Background()
 
 	staticLogTags := logtags.Buffer{}
@@ -103,6 +105,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 }
 
 func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
+	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	tr := NewTracerWithOpt(context.Background(),
 		WithTracingMode(TracingModeActiveSpansRegistry),
 		WithSpanReusePercent(100))
@@ -121,6 +124,7 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 
 // BenchmarkSpanCreation creates traces with a couple of spans in them.
 func BenchmarkSpanCreation(b *testing.B) {
+	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	tr := NewTracerWithOpt(context.Background(),
 		WithTracingMode(TracingModeActiveSpansRegistry),
 		WithSpanReusePercent(100))
