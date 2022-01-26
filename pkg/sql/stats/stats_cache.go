@@ -67,7 +67,6 @@ type TableStatisticsCache struct {
 	}
 	ClientDB    *kv.DB
 	SQLExecutor sqlutil.InternalExecutor
-	Codec       keys.SQLCodec
 	Settings    *cluster.Settings
 
 	// Used to resolve descriptors.
@@ -112,19 +111,15 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
-	ctx context.Context,
 	cacheSize int,
 	db *kv.DB,
 	sqlExecutor sqlutil.InternalExecutor,
-	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	rangeFeedFactory *rangefeed.Factory,
 	cf *descs.CollectionFactory,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		ClientDB:          db,
 		SQLExecutor:       sqlExecutor,
-		Codec:             codec,
 		Settings:          settings,
 		collectionFactory: cf,
 	}
@@ -132,7 +127,13 @@ func NewTableStatisticsCache(
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
 	})
+	return tableStatsCache
+}
 
+// Start begins watching for updates in the stats table.
+func (sc *TableStatisticsCache) Start(
+	ctx context.Context, codec keys.SQLCodec, rangeFeedFactory *rangefeed.Factory,
+) error {
 	// Set up a range feed to watch for updates to system.table_statistics.
 
 	statsTablePrefix := codec.TablePrefix(keys.TableStatisticsTableID)
@@ -145,7 +146,7 @@ func NewTableStatisticsCache(
 	var lastTS hlc.Timestamp
 
 	handleEvent := func(ctx context.Context, kv *roachpb.RangeFeedValue) {
-		tableID, err := decodeTableStatisticsKV(codec, kv, &tableStatsCache.datumAlloc)
+		tableID, err := decodeTableStatisticsKV(codec, kv, &sc.datumAlloc)
 		if err != nil {
 			log.Warningf(ctx, "failed to decode table statistics row %v: %v", kv.Key, err)
 			return
@@ -159,7 +160,7 @@ func NewTableStatisticsCache(
 		}
 		lastTableID = tableID
 		lastTS = ts
-		tableStatsCache.refreshTableStats(ctx, tableID, ts)
+		sc.refreshTableStats(ctx, tableID, ts)
 	}
 
 	// Notes:
@@ -167,15 +168,14 @@ func NewTableStatisticsCache(
 	//    call Close() ourselves.
 	//  - an error here only happens if the server is already shutting down; we
 	//    can safely ignore it.
-	_, _ = rangeFeedFactory.RangeFeed(
+	_, err := rangeFeedFactory.RangeFeed(
 		ctx,
 		"table-stats-cache",
 		[]roachpb.Span{statsTableSpan},
-		db.Clock().Now(),
+		sc.ClientDB.Clock().Now(),
 		handleEvent,
 	)
-
-	return tableStatsCache
+	return err
 }
 
 // decodeTableStatisticsKV decodes the table ID from a range feed event on
