@@ -617,6 +617,23 @@ message JobResponse {
   google.protobuf.Timestamp last_run = 17 [(gogoproto.stdtime) = true];
   google.protobuf.Timestamp next_run = 18 [(gogoproto.stdtime) = true];
   int64 num_runs = 19;
+
+  // ExecutionFailure corresponds to a failure to execute the job with the
+  // attempt starting at start and ending at end.
+  message ExecutionFailure {
+    // Status is the status of the job during the execution.
+    string status = 1;
+    // Start is the time at which the execution started.
+    google.protobuf.Timestamp start = 2 [(gogoproto.stdtime) = true];
+    // End is the time at which the error occurred.
+    google.protobuf.Timestamp end = 3 [(gogoproto.stdtime) = true];
+    // Error is the error which occurred.
+    string error = 4;
+  }
+  // ExecutionFailures is a log of execution failures of the job. It is not
+  // guaranteed to contain all execution failures and some execution failures
+  // may not contain an error or end.
+  repeated ExecutionFailure execution_failures = 20;
 }
 
 // LocationsRequest requests system locality location information.
