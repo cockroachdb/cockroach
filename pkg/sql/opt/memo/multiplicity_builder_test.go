@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -300,6 +301,22 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols2[0])),
 			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
 		},
+		{ // 21
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0]))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0]))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 22
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0]))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstEquality(xyCols2[0]))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(exactly-one)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -308,7 +325,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			joinWithMult, _ := join.(joinWithMultiplicity)
 			multiplicity := joinWithMult.getMultiplicity()
 			if multiplicity.Format(tc.joinOp) != tc.expected {
-				t.Fatalf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
+				t.Errorf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
 			}
 		})
 	}
@@ -392,6 +409,10 @@ func (ob *testOpBuilder) oneNullMultiColFKScan() (scan RelExpr, vars []*Variable
 	return ob.makeScan("one_null_multi_col_fk_tab")
 }
 
+func (ob *testOpBuilder) makeSelect(input RelExpr, filters FiltersExpr) RelExpr {
+	return ob.mem.MemoizeSelect(input, filters)
+}
+
 func (ob *testOpBuilder) makeInnerJoin(left, right RelExpr, on FiltersExpr) RelExpr {
 	return ob.mem.MemoizeInnerJoin(left, right, on, EmptyJoinPrivate)
 }
@@ -431,6 +452,10 @@ func (ob *testOpBuilder) makeJoin(
 
 func (ob *testOpBuilder) makeEquality(left, right *VariableExpr) opt.ScalarExpr {
 	return ob.mem.MemoizeEq(left, right)
+}
+
+func (ob *testOpBuilder) makeConstEquality(v *VariableExpr) opt.ScalarExpr {
+	return ob.mem.MemoizeEq(v, ob.mem.MemoizeConst(tree.NewDInt(tree.DInt(5)), types.Int))
 }
 
 func (ob *testOpBuilder) makeFilters(conditions ...opt.ScalarExpr) (filters FiltersExpr) {
