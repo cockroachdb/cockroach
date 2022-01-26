@@ -70,7 +70,6 @@ describe("<TimeScaleDropdown>", function() {
   beforeEach(() => {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
     const timewindowState = new timewindow.TimeWindowState();
-    currentWindow = timewindowState.currentWindow;
     setCurrentWindowFromTimeScale(timewindowState.scale);
     state = {
       currentScale: timewindowState.scale,
