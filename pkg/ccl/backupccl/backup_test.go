@@ -9009,11 +9009,12 @@ func TestGCDropIndexSpanExpansion(t *testing.T) {
 	}})
 	defer tc.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlRunner.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`) // speeds up the test
 
 	sqlRunner.Exec(t, `
 CREATE DATABASE test; USE test;
 CREATE TABLE foo (id INT PRIMARY KEY, id2 INT, id3 INT, INDEX bar (id2), INDEX baz(id3));
-ALTER TABLE foo CONFIGURE ZONE USING gc.ttlseconds = '1';
+ALTER INDEX foo@bar CONFIGURE ZONE USING gc.ttlseconds = '1';
 INSERT INTO foo VALUES (1, 2, 3);
 DROP INDEX foo@bar;
 `)
@@ -9035,6 +9036,25 @@ DROP INDEX foo@bar;
 	// Wait for the GC to complete.
 	jobutils.WaitForJob(t, sqlRunner, gcJobID)
 
+	waitForTableSplit := func() {
+		testutils.SucceedsSoon(t, func() error {
+			count := 0
+			sqlRunner.QueryRow(t,
+				"SELECT count(*) "+
+					"FROM crdb_internal.ranges_no_leases "+
+					"WHERE table_name = $1 "+
+					"AND database_name = $2",
+				"foo", "test").Scan(&count)
+			if count == 0 {
+				return errors.New("waiting for table split")
+			}
+			return nil
+		})
+	}
+	waitForTableSplit()
+
+	// This backup should succeed since the spans being backed up have a default
+	// GC TTL of 25 hours.
 	sqlRunner.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://0/foo' WITH revision_history`)
 }
 
