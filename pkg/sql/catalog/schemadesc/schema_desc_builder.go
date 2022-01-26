@@ -52,16 +52,18 @@ func (sdb *schemaDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // interface.
 func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() {
 	sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
-	sdb.changed = catprivilege.MaybeFixPrivileges(
+	privsChanged := catprivilege.MaybeFixPrivileges(
 		&sdb.maybeModified.Privileges,
 		sdb.maybeModified.GetParentID(),
 		descpb.InvalidID,
 		privilege.Schema,
 		sdb.maybeModified.GetName(),
 	)
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(sdb.maybeModified.Privileges)
+	sdb.changed = privsChanged || addedGrantOptions
 }
 
-// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (sdb *schemaDescriptorBuilder) RunRestoreChanges(
 	_ func(id descpb.ID) catalog.Descriptor,
 ) error {

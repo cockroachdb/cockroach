@@ -155,7 +155,8 @@ func (p *planner) generateSerialInColumnDef(
 		// switch this behavior around.
 		upgradeType := types.Int
 		if defType.Width() < upgradeType.Width() {
-			p.noticeSender.BufferNotice(
+			p.BufferClientNotice(
+				ctx,
 				errors.WithHintf(
 					pgnotice.Newf(
 						"upgrading the column %s to %s to utilize the session serial_normalization setting",

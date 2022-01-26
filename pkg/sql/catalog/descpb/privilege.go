@@ -111,12 +111,14 @@ func NewCustomSuperuserPrivilegeDescriptor(
 		OwnerProto: owner.EncodeProto(),
 		Users: []UserPrivileges{
 			{
-				UserProto:  security.AdminRoleName().EncodeProto(),
-				Privileges: priv.ToBitField(),
+				UserProto:       security.AdminRoleName().EncodeProto(),
+				Privileges:      priv.ToBitField(),
+				WithGrantOption: priv.ToBitField(),
 			},
 			{
-				UserProto:  security.RootUserName().EncodeProto(),
-				Privileges: priv.ToBitField(),
+				UserProto:       security.RootUserName().EncodeProto(),
+				Privileges:      priv.ToBitField(),
+				WithGrantOption: priv.ToBitField(),
 			},
 		},
 		Version: Version21_2,

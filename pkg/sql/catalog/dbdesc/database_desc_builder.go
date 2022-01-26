@@ -65,10 +65,11 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 		privilege.Database,
 		ddb.maybeModified.GetName())
 	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas
+	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
+	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions
 }
 
-// RunPostRestoreChanges implements the catalog.DescriptorBuilder interface.
+// RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 	_ func(id descpb.ID) catalog.Descriptor,
 ) error {
