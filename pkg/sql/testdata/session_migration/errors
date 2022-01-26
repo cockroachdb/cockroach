@@ -67,3 +67,18 @@ SELECT crdb_internal.deserialize_session(
 )
 ----
 pq: crdb_internal.deserialize_session(): can only deserialize matching session users
+
+# We cannot deserialize into a current_user we do not match.
+user
+testuser
+----
+
+exec
+SELECT crdb_internal.deserialize_session(
+  decode(
+    '0a510a0964656661756c74646212102420636f636b726f6163682064656d6f1a04726f6f742204100222002802380842035554434a0524757365724a067075626c69635a0060808080207a0088010190018050124910904e3002380840026001680170017801880101d80101e00101f00101f80101900201b002808001c80201f202087465737475736572a00301a9030000000000408f40d00301e00301',
+    'hex'
+  )
+)
+----
+pq: crdb_internal.deserialize_session(): cannot SET ROLE to user: only root can become root
