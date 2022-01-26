@@ -392,7 +392,6 @@ filegroup(
         # "broken_in_bazel"
         exclude = [
             "*/test_multiline_statements.tcl",
-            "*/test_pretty.tcl",
             "*/test_server_sig.tcl",
         ],
     ),

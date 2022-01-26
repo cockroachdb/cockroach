@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -308,7 +309,6 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	log.Infof(ctx, "Initializing Cluster %s:\n%s", l.config.Name, configJSON)
 	l.panicOnStop()
 
-	pwd, err := os.Getwd()
 	maybePanic(err)
 
 	// Boot2docker's handling of binding local directories into the container is
@@ -317,9 +317,14 @@ func (l *DockerCluster) initCluster(ctx context.Context) {
 	// container. In particular, that means that binds of /tmp and /var will be
 	// problematic.
 	binds := []string{
-		filepath.Join(pwd, certsDir) + ":/certs",
-		filepath.Join(pwd, "..") + ":/go/src/github.com/cockroachdb/cockroach",
+		AbsCertsDir() + ":/certs",
 		filepath.Join(l.volumesDir, "logs") + ":/logs",
+	}
+
+	if !bazel.BuiltWithBazel() {
+		pwd, err := os.Getwd()
+		maybePanic(err)
+		binds = append(binds, filepath.Join(pwd, "..")+":/go/src/github.com/cockroachdb/cockroach")
 	}
 
 	if *cockroachImage == defaultImage {
@@ -449,8 +454,8 @@ func (l *DockerCluster) createNodeCerts() {
 		nodes = append(nodes, node.nodeStr)
 	}
 	maybePanic(security.CreateNodePair(
-		certsDir,
-		filepath.Join(certsDir, security.EmbeddedCAKey),
+		AbsCertsDir(),
+		filepath.Join(AbsCertsDir(), security.EmbeddedCAKey),
 		keyLen, 48*time.Hour, true /* overwrite */, nodes))
 }
 
@@ -505,7 +510,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 
   cli-env:   COCKROACH_INSECURE=false COCKROACH_CERTS_DIR=%[7]s COCKROACH_HOST=%s:%d`,
 		node.Name(), "https://"+httpAddr.String(), localLogDir, node.Container.id[:5],
-		base.DefaultHTTPPort, cmd, certsDir, httpAddr.IP, httpAddr.Port)
+		base.DefaultHTTPPort, cmd, AbsCertsDir(), httpAddr.IP, httpAddr.Port)
 }
 
 // RunInitCommand runs the `cockroach init` command. Normally called
@@ -633,7 +638,7 @@ func (l *DockerCluster) Start(ctx context.Context) {
 
 	l.createNetwork(ctx)
 	l.initCluster(ctx)
-	log.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, certsDir)
+	log.Infof(ctx, "creating node certs (%dbit) in: %s", keyLen, AbsCertsDir())
 	l.createNodeCerts()
 
 	log.Infof(ctx, "starting %d nodes", len(l.Nodes))
@@ -771,9 +776,9 @@ func (l *DockerCluster) PGUrl(ctx context.Context, i int) string {
 	certUser := security.RootUser
 	options := url.Values{}
 	options.Add("sslmode", "verify-full")
-	options.Add("sslcert", filepath.Join(certsDir, security.EmbeddedRootCert))
-	options.Add("sslkey", filepath.Join(certsDir, security.EmbeddedRootKey))
-	options.Add("sslrootcert", filepath.Join(certsDir, security.EmbeddedCACert))
+	options.Add("sslcert", filepath.Join(AbsCertsDir(), security.EmbeddedRootCert))
+	options.Add("sslkey", filepath.Join(AbsCertsDir(), security.EmbeddedRootKey))
+	options.Add("sslrootcert", filepath.Join(AbsCertsDir(), security.EmbeddedCACert))
 	pgURL := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(certUser),

@@ -13,15 +13,15 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/security"
 )
-
-const certsDir = ".localcluster.certs"
 
 var absCertsDir string
 
@@ -34,47 +34,57 @@ func AbsCertsDir() string {
 }
 
 // GenerateCerts generates CA and client certificates and private keys to be
-// used with a cluster. It returns a function that will clean up the generated
-// files.
+// used with a cluster. It returns the absolute path to the certs directory and
+// a function that will clean up the generated files.
 func GenerateCerts(ctx context.Context) func() {
-	var err error
+	const certsDir = ".localcluster.certs"
+
 	// docker-compose tests change their working directory,
 	// so they need to know the absolute path to the certificate directory.
-	absCertsDir, err = filepath.Abs(certsDir)
-	if err != nil {
-		panic(err)
+	if bazel.BuiltWithBazel() {
+		var err error
+		absCertsDir, err = ioutil.TempDir("", "certs")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		var err error
+		absCertsDir, err = filepath.Abs(certsDir)
+		if err != nil {
+			panic(err)
+		}
+		maybePanic(os.RemoveAll(absCertsDir))
 	}
-	maybePanic(os.RemoveAll(certsDir))
 
 	maybePanic(security.CreateCAPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		absCertsDir, filepath.Join(absCertsDir, security.EmbeddedCAKey),
 		keyLen, 96*time.Hour, false, false))
 
 	// Root user.
 	maybePanic(security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		absCertsDir, filepath.Join(absCertsDir, security.EmbeddedCAKey),
 		2048, 48*time.Hour, false, security.RootUserName(), true /* generate pk8 key */))
 
 	// Test user.
 	maybePanic(security.CreateClientPair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		absCertsDir, filepath.Join(absCertsDir, security.EmbeddedCAKey),
 		1024, 48*time.Hour, false, security.TestUserName(), true /* generate pk8 key */))
 
 	// Certs for starting a cockroach server. Key size is from cli/cert.go:defaultKeySize.
 	maybePanic(security.CreateNodePair(
-		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
+		absCertsDir, filepath.Join(absCertsDir, security.EmbeddedCAKey),
 		keyLen, 48*time.Hour, false, []string{"localhost", "cockroach"}))
 
 	// Store a copy of the client certificate and private key in a PKCS#12
 	// bundle, which is the only format understood by Npgsql (.NET).
 	{
 		execCmd("openssl", "pkcs12", "-export", "-password", "pass:",
-			"-in", filepath.Join(certsDir, "client.root.crt"),
-			"-inkey", filepath.Join(certsDir, "client.root.key"),
-			"-out", filepath.Join(certsDir, "client.root.pk12"))
+			"-in", filepath.Join(absCertsDir, "client.root.crt"),
+			"-inkey", filepath.Join(absCertsDir, "client.root.key"),
+			"-out", filepath.Join(absCertsDir, "client.root.pk12"))
 	}
 
-	return func() { _ = os.RemoveAll(certsDir) }
+	return func() { _ = os.RemoveAll(absCertsDir) }
 }
 
 // GenerateCerts is only called in a file protected by a build tag. Suppress the
