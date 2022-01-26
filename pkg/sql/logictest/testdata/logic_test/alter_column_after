@@ -1,0 +1,8 @@
+statement ok
+CREATE TABLE t (b INT PRIMARY KEY, c INT, a INT)
+
+statement count 2
+INSERT INTO t VALUES (2, 3, 1), (5, 6, 4)
+
+statement error pq: unimplemented: ALTER COLUMN AFTER is currently not supported
+ALTER TABLE t ALTER COLUMN a AFTER b
