@@ -33,8 +33,6 @@
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: geometry) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
-<tr><td><a name="array_agg"></a><code>array_agg(arg1: jsonb) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
-</span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>

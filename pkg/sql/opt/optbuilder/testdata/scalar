@@ -896,14 +896,12 @@ concat [type=int[]]
 build-scalar
 ARRAY['"foo"'::jsonb]
 ----
-array: [type=jsonb[]]
- └── const: '"foo"' [type=jsonb]
+error: unimplemented: arrays of jsonb not allowed
 
 build-scalar
 ARRAY['"foo"'::json]
 ----
-array: [type=jsonb[]]
- └── const: '"foo"' [type=jsonb]
+error: unimplemented: arrays of jsonb not allowed
 
 opt
 SELECT -((-9223372036854775808):::int)
@@ -1032,15 +1030,7 @@ project
 build
 SELECT ARRAY(VALUES ('{}'::JSONB))
 ----
-project
- ├── columns: array:2
- ├── values
- │    └── ()
- └── projections
-      └── array-flatten [as=array:2]
-           └── values
-                ├── columns: column1:1!null
-                └── ('{}',)
+error (0A000): unimplemented: arrays of jsonb not allowed
 
 build
 SELECT ARRAY(SELECT 1, 2)
