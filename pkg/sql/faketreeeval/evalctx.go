@@ -248,6 +248,11 @@ func (*DummyEvalPlanner) ValidateSessionRevivalToken(token *tree.DBytes) (*tree.
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// ValidateUniqueConstraints is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) ValidateUniqueConstraints(ctx context.Context) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // ExecutorConfig is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) ExecutorConfig() interface{} {
 	return nil

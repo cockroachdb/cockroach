@@ -3251,6 +3251,13 @@ type EvalPlanner interface {
 	// session revival token.
 	ValidateSessionRevivalToken(token *DBytes) (*DBool, error)
 
+	// ValidateUniqueConstraints verifies that all unique constraints defined on
+	// tables in the current database are valid. In other words, it verifies that
+	// for every table in the database with one or more unique constraints, all
+	// rows in the table have unique values for every unique constraint defined on
+	// the table.
+	ValidateUniqueConstraints(ctx context.Context) error
+
 	// QueryRowEx executes the supplied SQL statement and returns a single row, or
 	// nil if no row is found, or an error if more that one row is returned.
 	//

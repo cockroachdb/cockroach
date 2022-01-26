@@ -364,11 +364,105 @@ func duplicateRowQuery(
 	), colNames, nil
 }
 
+// ValidateUniqueConstraints verifies that all unique constraints defined on
+// tables in the current database are valid. In other words, it verifies that
+// for every table in the database with one or more unique constraints, all
+// rows in the table have unique values for every unique constraint defined on
+// the table.
+//
+// Note that we only need to validate UNIQUE constraints that are not already
+// enforced by an index. This includes implicitly partitioned UNIQUE indexes
+// and UNIQUE WITHOUT INDEX constraints.
+func (p *planner) ValidateUniqueConstraints(ctx context.Context) error {
+	dbName := p.CurrentDatabase()
+	log.Infof(ctx, "validating unique constraints in database %s", dbName)
+
+	// Get all the tables in the current database.
+	getAllTablesQuery := fmt.Sprintf(
+		`
+SELECT
+	tbl.table_id
+FROM
+	crdb_internal.tables AS tbl
+WHERE
+	tbl.database_name = '%s'
+	AND tbl.drop_time IS NULL;`, dbName,
+	)
+	it, err := p.ExecCfg().InternalExecutor.QueryIterator(
+		ctx,
+		"get-tables",
+		nil, /* txn */
+		getAllTablesQuery,
+	)
+	if err != nil {
+		return err
+	}
+	var ok bool
+	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
+		row := it.Cur()
+		tableID := descpb.ID(*row[0].(*tree.DInt))
+		// Don't bother checking virtual tables.
+		if descpb.IsVirtualTable(tableID) {
+			continue
+		}
+
+		tableDescIntf, err := p.GetImmutableTableInterfaceByID(ctx, int(tableID))
+		if err != nil {
+			return err
+		}
+		tableDesc := tableDescIntf.(catalog.TableDescriptor)
+
+		// Check implicitly partitioned UNIQUE indexes.
+		for _, index := range tableDesc.ActiveIndexes() {
+			if index.IsUnique() && index.GetPartitioning().NumImplicitColumns() > 0 {
+				if err := validateUniqueConstraint(
+					ctx,
+					tableDesc,
+					index.GetName(),
+					index.IndexDesc().KeyColumnIDs[index.GetPartitioning().NumImplicitColumns():],
+					index.GetPredicate(),
+					p.ExecCfg().InternalExecutor,
+					p.Txn(),
+					true, /* preExisting */
+				); err != nil {
+					log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+					return errors.Wrapf(err, "for table %s", tableDesc.GetName())
+				}
+			}
+		}
+
+		// Check UNIQUE WITHOUT INDEX constraints.
+		for _, uc := range tableDesc.GetUniqueWithoutIndexConstraints() {
+			if uc.Validity == descpb.ConstraintValidity_Validated {
+				if err := validateUniqueConstraint(
+					ctx,
+					tableDesc,
+					uc.Name,
+					uc.ColumnIDs,
+					uc.Predicate,
+					p.ExecCfg().InternalExecutor,
+					p.Txn(),
+					true, /* preExisting */
+				); err != nil {
+					log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+					return errors.Wrapf(err, "for table %s", tableDesc.GetName())
+				}
+			}
+		}
+
+		log.Infof(ctx, "validated all unique constraints in table %s", tableDesc.GetName())
+	}
+	return nil
+}
+
 // validateUniqueConstraint verifies that all the rows in the srcTable
 // have unique values for the given columns.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing kv.Txn safely.
+//
+// preExisting indicates whether this constraint already exists, and therefore
+// informs the error message that gets produced.
 func validateUniqueConstraint(
 	ctx context.Context,
 	srcTable catalog.TableDescriptor,
@@ -377,6 +471,7 @@ func validateUniqueConstraint(
 	pred string,
 	ie sqlutil.InternalExecutor,
 	txn *kv.Txn,
+	preExisting bool,
 ) error {
 	query, colNames, err := duplicateRowQuery(
 		srcTable, columnIDs, pred, true, /* limitResults */
@@ -404,10 +499,14 @@ func validateUniqueConstraint(
 		}
 		// Note: this error message mirrors the message produced by Postgres
 		// when it fails to add a unique index due to duplicated keys.
+		errMsg := "could not create unique constraint"
+		if preExisting {
+			errMsg = "failed to validate unique constraint"
+		}
 		return errors.WithDetail(
 			pgerror.WithConstraintName(
 				pgerror.Newf(
-					pgcode.UniqueViolation, "could not create unique constraint %q", constraintName,
+					pgcode.UniqueViolation, "%s %q", errMsg, constraintName,
 				),
 				constraintName,
 			),
