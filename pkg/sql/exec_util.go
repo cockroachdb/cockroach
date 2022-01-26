@@ -778,6 +778,12 @@ var (
 		Measurement: "Open SQL Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaSQLActiveQueries = metric.Metadata{
+		Name:        "sql.statements.active",
+		Help:        "Number of SQL statements currently active",
+		Measurement: "Active Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaFullTableOrIndexScan = metric.Metadata{
 		Name:        "sql.full.scan.count",
 		Help:        "Number of full table or index scans",

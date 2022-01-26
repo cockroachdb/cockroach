@@ -15,6 +15,8 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/jackc/pgx/v4"
 	"net/url"
 	"regexp"
 	"strings"
@@ -57,7 +59,6 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
@@ -1400,6 +1401,245 @@ func TestInjectRetryErrors(t *testing.T) {
 		}
 		require.Equal(t, 5, txRes)
 	})
+}
+
+func TestTrackOnlyExternalOpenTransactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlServer := s.SQLServer().(*sql.Server)
+	waitingQuery := `SELECT pg_sleep(60)`
+	selectQuery := `SELECT query_id FROM crdb_internal.cluster_queries WHERE query = '` + waitingQuery + `'`
+	cancelQuery := `CANCEL QUERY (` + selectQuery + `)`
+	cancelError := "query execution canceled"
+
+	// Open internal transaction.
+	go func() {
+		_, err := sqlServer.GetExecutorConfig().InternalExecutor.ExecEx(
+			ctx,
+			"test-open-internal-txn-wait",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			waitingQuery,
+		)
+		if err != nil {
+			require.Contains(t, err.Error(), cancelError)
+		}
+	}()
+
+	testutils.SucceedsWithin(t, func() error {
+		row, err := sqlServer.GetExecutorConfig().InternalExecutor.QueryRowEx(
+			ctx,
+			"test-open-internal-txn-select-active",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			selectQuery,
+		)
+		if err != nil {
+			require.NoError(t, err, "executing %s  ", selectQuery)
+			return err
+		}
+		if row == nil {
+			return errors.New("pg_sleep query is not active yet")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of open transactions has not incremented, we only
+	// want to increment external transactions.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+
+	_, err := sqlServer.GetExecutorConfig().InternalExecutor.ExecEx(
+		ctx,
+		"test-open-internal-txn-cancel",
+		nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		cancelQuery,
+	)
+	if err != nil {
+		require.NoError(t, err, "executing %s  ", cancelQuery)
+	}
+
+	testutils.SucceedsWithin(t, func() error {
+		row, err := sqlServer.GetExecutorConfig().InternalExecutor.QueryRowEx(
+			ctx,
+			"test-open-internal-txn-select-active",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			selectQuery,
+		)
+		if err != nil {
+			require.NoError(t, err, "executing %s  ", selectQuery)
+			return err
+		}
+		if row != nil {
+			return errors.New("pg_sleep query has not been cancelled yet, still active")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of open transactions has not decremented, we only
+	// want to decrement external transactions.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+
+	// Open an external transaction.
+	if _, err := sqlDB.Exec("BEGIN"); err != nil {
+		require.NoError(t, err, "executing %s  ", "BEGIN")
+	}
+	// Check that the number of open transactions has incremented.
+	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+
+	// Execute a statement so this transaction is recorded (empty transactions
+	// are not recorded).
+	if _, err := sqlDB.Exec(`SELECT 1`); err != nil {
+		require.NoError(t, err, "executing %s  ", `SELECT 1`)
+	}
+
+	// Close the transaction.
+	if _, err := sqlDB.Exec("COMMIT"); err != nil {
+		require.NoError(t, err, "executing %s  ", "COMMIT")
+	}
+	// Check that the number of open transactions has decremented.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLTxnsOpen.Value())
+}
+
+func TestTrackOnlyExternalActiveStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	sqlServer := s.SQLServer().(*sql.Server)
+	waitingQuery := `SELECT pg_sleep(60)`
+	selectQueryExternal := `SELECT query_id FROM [SHOW CLUSTER STATEMENTS] WHERE query = '` + waitingQuery + `'`
+	selectQueryInternal := `SELECT query_id FROM crdb_internal.cluster_queries WHERE query = '` + waitingQuery + `'`
+	cancelQueryExternal := `CANCEL QUERY (` + selectQueryExternal + `)`
+	cancelQueryInternal := `CANCEL QUERY (` + selectQueryInternal + `)`
+	cancelError := "query execution canceled"
+
+	// Create active external statement.
+	go func() {
+		if _, err := sqlDB.Exec(waitingQuery); err != nil {
+			require.Contains(t, err.Error(), cancelError)
+		}
+	}()
+
+	testutils.SucceedsWithin(t, func() error {
+		row := sqlDB.QueryRow(selectQueryExternal)
+		if row.Err() != nil {
+			require.NoError(t, row.Err(), "executing %s  ", selectQueryExternal)
+			return row.Err()
+		}
+		var dest interface{}
+		err := row.Scan(dest)
+		if err == gosql.ErrNoRows {
+			return errors.New("pg_sleep query is not active yet")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of active statements has incremented.
+	require.Equal(t, int64(1), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+	// Cancel the active query.
+	if _, err := sqlDB.Exec(cancelQueryExternal); err != nil {
+		require.NoError(t, err, "executing %s  ", cancelQueryExternal)
+	}
+
+	testutils.SucceedsWithin(t, func() error {
+		row := sqlDB.QueryRow(selectQueryExternal)
+		if row.Err() != nil {
+			require.NoError(t, row.Err(), "executing %s  ", selectQueryExternal)
+			return row.Err()
+		}
+		var dest interface{}
+		err := row.Scan(dest)
+		if err != gosql.ErrNoRows {
+			return errors.New("pg_sleep has not been cancelled yet, still active")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of open statements has not decremented, we only
+	// want to decrement external statements.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+	// Create active internal statement.
+	go func() {
+		_, err := sqlServer.GetExecutorConfig().InternalExecutor.ExecEx(
+			ctx,
+			"test-active-internal-statement-wait",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			waitingQuery,
+		)
+		if err != nil {
+			require.Contains(t, err.Error(), "query execution canceled")
+		}
+	}()
+
+	testutils.SucceedsWithin(t, func() error {
+		row, err := sqlServer.GetExecutorConfig().InternalExecutor.QueryRowEx(
+			ctx,
+			"test-active-internal-stmt-select",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			selectQueryInternal,
+		)
+		if err != nil {
+			require.NoError(t, err, "executing %s  ", selectQueryInternal)
+			return err
+		}
+		if row == nil {
+			return errors.New("pg_sleep query is not active yet")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of active statements has not incremented, we only
+	// want to increment external statements.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
+
+	_, err := sqlServer.GetExecutorConfig().InternalExecutor.ExecEx(
+		ctx,
+		"test-active-statement-cancel",
+		nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		cancelQueryInternal,
+	)
+	if err != nil {
+		require.NoError(t, err, "executing %s  ", cancelQueryInternal)
+	}
+
+	testutils.SucceedsWithin(t, func() error {
+		row, err := sqlServer.GetExecutorConfig().InternalExecutor.QueryRowEx(
+			ctx,
+			"test-active-internal-stmt-select",
+			nil,
+			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			selectQueryInternal,
+		)
+		if err != nil {
+			require.NoError(t, err, "executing %s  ", selectQueryInternal)
+			return err
+		}
+		if row != nil {
+			return errors.New("pg_sleep query has not been cancelled yet, still active")
+		}
+		return nil
+	}, 3*time.Second)
+
+	// Check that the number of open statements has not decremented, we only
+	// want to decrement external statements.
+	require.Equal(t, int64(0), sqlServer.Metrics.EngineMetrics.SQLActiveStatements.Value())
 }
 
 // dynamicRequestFilter exposes a filter method which is a
