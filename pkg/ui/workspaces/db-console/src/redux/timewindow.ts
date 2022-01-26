@@ -55,19 +55,29 @@ export interface TimeScale {
 export class TimeWindowState {
   // Currently selected scale.
   scale: TimeScale;
-  // Currently established time window.
-  currentWindow: TimeWindow;
-  // True if scale has changed since currentWindow was generated.
-  scaleChanged: boolean;
-  useTimeRange: boolean;
+  // Timekeeping for the DB Console metrics page.
+  metricsTime: {
+    // Currently established time window.
+    currentWindow: TimeWindow;
+    // True if scale has changed since currentWindow was generated.
+    scaleChanged: boolean;
+    useTimeRange: boolean;
+  };
+
   constructor() {
     this.scale = {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
       key: "Past 10 Minutes",
       windowEnd: null,
     };
-    this.useTimeRange = false;
-    this.scaleChanged = false;
+    this.metricsTime = {
+      // This is explicitly initialized as undefined to match the prior implementation while satisfying Typescript.
+      currentWindow: undefined,
+      useTimeRange: false,
+      // This is used to update the metrics time window after the scale is changed, and prevent cycles when directly
+      // updating the metrics time window.
+      scaleChanged: false,
+    };
   }
 }
 
@@ -78,29 +88,29 @@ export function timeWindowReducer(
   switch (action.type) {
     case SET_WINDOW: {
       const { payload: tw } = action as PayloadAction<TimeWindow>;
-      state = _.clone(state);
-      state.currentWindow = tw;
-      state.scaleChanged = false;
+      state = _.cloneDeep(state);
+      state.metricsTime.currentWindow = tw;
+      state.metricsTime.scaleChanged = false;
       return state;
     }
     case SET_RANGE: {
       const { payload: data } = action as PayloadAction<TimeWindow>;
-      state = _.clone(state);
-      state.currentWindow = data;
-      state.useTimeRange = true;
-      state.scaleChanged = false;
+      state = _.cloneDeep(state);
+      state.metricsTime.currentWindow = data;
+      state.metricsTime.useTimeRange = true;
+      state.metricsTime.scaleChanged = false;
       return state;
     }
     case SET_SCALE: {
       const { payload: scale } = action as PayloadAction<TimeScale>;
-      state = _.clone(state);
+      state = _.cloneDeep(state);
       if (scale.key === "Custom") {
-        state.useTimeRange = true;
+        state.metricsTime.useTimeRange = true;
       } else {
-        state.useTimeRange = false;
+        state.metricsTime.useTimeRange = false;
       }
       state.scale = scale;
-      state.scaleChanged = true;
+      state.metricsTime.scaleChanged = true;
       return state;
     }
     default:

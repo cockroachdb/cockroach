@@ -63,11 +63,11 @@ describe("time window reducer", function() {
       const end = start.add(10, "s");
       it("should correctly overwrite previous value", () => {
         const expected = new timewindow.TimeWindowState();
-        expected.currentWindow = {
+        expected.metricsTime.currentWindow = {
           start,
           end,
         };
-        expected.scaleChanged = false;
+        expected.metricsTime.scaleChanged = false;
         assert.deepEqual(
           timewindow.timeWindowReducer(
             undefined,
@@ -90,7 +90,7 @@ describe("time window reducer", function() {
           sampleSize: newSample,
           windowEnd: null,
         };
-        expected.scaleChanged = true;
+        expected.metricsTime.scaleChanged = true;
         assert.deepEqual(
           timewindow.timeWindowReducer(
             undefined,
