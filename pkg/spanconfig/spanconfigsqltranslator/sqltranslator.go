@@ -69,6 +69,21 @@ func (s *SQLTranslator) Translate(
 		// attempts.
 		entries = entries[:0]
 
+		// Construct an in-memory view of the system.protected_ts_records table to
+		// populate the protected timestamp field on the emitted span configs.
+		//
+		// TODO(adityamaru): This does a full table scan of the
+		// `system.protected_ts_records` table. While this is not assumed to be very
+		// expensive given the limited number of concurrent users of the protected
+		// timestamp subsystem, and the internal limits to limit the size of this
+		// table, there is scope for improvement in the future. One option could be
+		// a rangefeed-backed materialized view of the system table.
+		ptsState, err := s.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+		if err != nil {
+			return errors.Wrap(err, "failed to get protected timestamp state")
+		}
+		ptsStateReader := newProtectedTimestampStateReader(ctx, ptsState)
+
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also
 		// de-duplicate leaf IDs to not generate redundant entries.
@@ -103,7 +118,7 @@ func (s *SQLTranslator) Translate(
 
 		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
-			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol)
+			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol, ptsStateReader)
 			if err != nil {
 				return err
 			}
@@ -134,7 +149,11 @@ var descLookupFlags = tree.CommonLookupFlags{
 // ID. The ID must belong to an object that has a span configuration associated
 // with it, i.e, it should either belong to a table or a named zone.
 func (s *SQLTranslator) generateSpanConfigurations(
-	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context,
+	id descpb.ID,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	ptsStateReader *protectedTimestampStateReader,
 ) (entries []roachpb.SpanConfigEntry, err error) {
 	if zonepb.IsNamedZoneID(id) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
@@ -158,7 +177,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 		)
 	}
 
-	return s.generateSpanConfigurationsForTable(ctx, txn, desc)
+	return s.generateSpanConfigurationsForTable(ctx, txn, desc, ptsStateReader)
 }
 
 // generateSpanConfigurationsForNamedZone expects an ID corresponding to a named
@@ -226,7 +245,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 // corresponding to the given tableID. It uses a transactional view of
 // system.zones and system.descriptors to do so.
 func (s *SQLTranslator) generateSpanConfigurationsForTable(
-	ctx context.Context, txn *kv.Txn, desc catalog.Descriptor,
+	ctx context.Context,
+	txn *kv.Txn,
+	desc catalog.Descriptor,
+	ptsStateReader *protectedTimestampStateReader,
 ) ([]roachpb.SpanConfigEntry, error) {
 	if desc.DescriptorType() != catalog.Table {
 		return nil, errors.AssertionFailedf(
@@ -241,6 +263,12 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	tableStartKey := s.codec.TablePrefix(uint32(desc.GetID()))
 	tableEndKey := tableStartKey.PrefixEnd()
 	tableSpanConfig := zone.AsSpanConfig()
+
+	// Set the ProtectionPolicies on the table's SpanConfig to include protected
+	// timestamps that apply to the table, and its parent database.
+	tableSpanConfig.GCPolicy.ProtectionPolicies = append(
+		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetID()),
+		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetParentID())...)
 
 	entries := make([]roachpb.SpanConfigEntry, 0)
 	if desc.GetID() == keys.DescriptorTableID {
@@ -343,6 +371,9 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 
 		// Add an entry for the subzone.
 		subzoneSpanConfig := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.AsSpanConfig()
+		// Copy the ProtectionPolicies that apply to the table's SpanConfig onto its
+		// SubzoneSpanConfig.
+		subzoneSpanConfig.GCPolicy.ProtectionPolicies = tableSpanConfig.GCPolicy.ProtectionPolicies[:]
 		entries = append(entries,
 			roachpb.SpanConfigEntry{
 				Span:   roachpb.Span{Key: span.Key, EndKey: span.EndKey},

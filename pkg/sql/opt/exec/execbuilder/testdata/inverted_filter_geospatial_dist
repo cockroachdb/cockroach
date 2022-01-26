@@ -208,7 +208,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUlN9v2jAQx9_3V
 #
 # TODO(treilly): What the text above claims does not square with the figure
 # generated below.
-query T
+query T retry
 EXPLAIN (DISTSQL)
 SELECT k FROM geo_table WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.0 3.0))'::geometry, geom) ORDER BY k
 ----

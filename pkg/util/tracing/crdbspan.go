@@ -85,7 +85,12 @@ type crdbSpanMu struct {
 	// Finish()).
 	parent spanRef
 
+	// finished is set if finish() was called.
 	finished bool
+	// finishing is set while finish() is in the process of running. finish() has
+	// two separate critical sections, and this finishing field is used to detect
+	// when other calls have been interleaved between them.
+	finishing bool
 
 	// duration is initialized to -1 and set on Finish().
 	duration time.Duration
@@ -231,14 +236,18 @@ func (s *crdbSpan) finish() bool {
 		parent = s.mu.parent.move()
 		hasParent = !parent.empty()
 		if hasParent {
+			s.mu.finishing = true
 			s.mu.Unlock()
 		}
 	}
 
 	// Operate on the parent outside the child (our current receiver) lock.
-	// childFinished() might call back into the child and acquire the child's
-	// lock.
+	// childFinished() might call back into the child (`s`) and acquire the
+	// child's lock.
 	if hasParent {
+		// It's possible to race with parent.Finish(); if we lose the race, the
+		// parent will not have any record of this child. childFinished() deals with
+		// that possibility.
 		parent.Span.i.crdb.childFinished(s)
 		parent.release()
 	}
@@ -250,6 +259,7 @@ func (s *crdbSpan) finish() bool {
 		// Re-acquire the lock if we dropped it above.
 		if hasParent {
 			s.mu.Lock()
+			s.mu.finishing = false
 		}
 
 		// If the span is not part of the registry now, it never will be. So, we'll
@@ -264,12 +274,14 @@ func (s *crdbSpan) finish() bool {
 		//
 		// We also shallow-copy the children for operating on them outside the lock.
 		children = make([]spanRef, len(s.mu.openChildren))
-		for i, c := range s.mu.openChildren {
+		for i := range s.mu.openChildren {
+			c := &s.mu.openChildren[i]
 			c.parentFinished()
 			// Move ownership of the child reference, and also nil out the pointer to
 			// the child, making it available for GC.
 			children[i] = c.spanRef.move()
 		}
+		s.mu.openChildren = nil // The children were moved away.
 		s.mu.Unlock()
 	}
 
@@ -722,13 +734,15 @@ func (s *crdbSpan) addChildLocked(child *Span, collectChildRec bool) bool {
 // with its recording.
 //
 // child is the child span that just finished.
+//
+// This method can be called while the parent (s) is still alive, is in the
+// process of finishing (i.e. s.finish() is in the middle section where it has
+// dropped the lock), or has completed finishing. In the first two cases, it is
+// expected that child is part of s.mu.openChildren. In the last case, this will
+// be a no-op.
 func (s *crdbSpan) childFinished(child *crdbSpan) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if s.mu.finished {
-		return
-	}
 
 	var childIdx int
 	found := false
@@ -741,10 +755,35 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 		}
 	}
 	if !found {
-		// The child is expected to be found. In particular, this parent span is not
-		// supposed to be reused while children are holding a reference to it
-		// (courtesy of the parent's reference counter).
-		panic("child not present in parent")
+		// We haven't found the child, so the child must be calling into the parent
+		// (s) after s.finish() completed. This can happen if finishing the child
+		// races with finishing the parent (if s.finish() would have ran to
+		// completion before c.finish() was called, c wouldn't have called
+		// s.childFinished(c) because it would no longer have had a parent).
+		if !s.mu.finished {
+			panic("unexpectedly failed to find child of non-finished parent")
+		}
+		// Since s has been finished, there's nothing more to do.
+		return
+	}
+
+	// Sanity check the situations when this method is called after s.finish() was
+	// called. Running this after s.finish() was called indicates that s.finish()
+	// and child.finish() were called concurrently - if s.finish() would have
+	// finished before child.finish() was called, the child would not have had a
+	// parent to call childFinished() on. Here, we assert that we understand the
+	// races that can happen, as this concurrency is subtle.
+	// - s.childFinished(c) can be called after s.finish() completed, in which
+	//   case `found` will be false above, and we won't get here.
+	// - s.childFinished(c) can also be called after s.finish() started, but
+	//   before s.finish() completed. s.finish() has two critical sections, and
+	//   drops its lock in between them.
+	// This is the only case where the child is found, and we explicitly assert
+	// that here.
+	if s.mu.finished {
+		if !s.mu.finishing {
+			panic("child unexpectedly calling into finished parent")
+		}
 	}
 
 	collectChildRec := s.mu.openChildren[childIdx].collectRecording
