@@ -234,13 +234,18 @@ func filtersMatchLeftRowsAtMostOnce(left, right RelExpr, filters FiltersExpr) bo
 //      must come from the same foreign key.
 //
 // In both the self-join and the foreign key cases, the left columns must be
-// not-null, and the right columns must be unfiltered.
+// not-null, and the right columns must be either unfiltered, or the left and
+// right must be Select expressions where the left side filters imply the right
+// side filters and right columns are unfiltered in the right Select's input
+// (see condition #3b in the comment for verifyFiltersAreValidEqualities).
 //
-// Why do the left columns have to be not-null and the right columns
-// unfiltered? In both the self-join and the foreign-key cases, a non-null
-// value in the left column guarantees a corresponding value in the right
-// column. As long as no nulls have been added to the left column and no values
-// have been removed from the right, this property will be valid.
+// Why do the left columns have to be non-null, and the right columns unfiltered
+// or filtered identically as their corresponding left column? In both the
+// self-join and the foreign-key cases, a non-null value in the left column
+// guarantees a corresponding value in the right column. As long as no nulls
+// have been added to the left column and no values have been removed from the
+// right that have not also been removed from the left, this property will be
+// valid.
 //
 // Why do all foreign key columns in the foreign key case have to come from the
 // same foreign key? Equalities on different foreign keys may each be
@@ -285,12 +290,16 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 }
 
 // verifyFiltersAreValidEqualities returns the set of equality columns in the
-// right relation and true when all of the following conditions are satisfied:
+// right relation and true when all the following conditions are satisfied:
 //
 //   1. All filters are equalities.
 //   2. All equalities directly compare two columns.
-//   3. All equalities contain one column from the left not-null columns, and
-//      one column from the right unfiltered columns.
+//   3. All equalities x=y (or y=x) have x as a left non-null column and y as a
+//      right column, and either:
+//      a. y is an unfiltered column in the right expression, or
+//      b. both the left and right expressions are Selects; the left side
+//         filters imply the right side filters when replacing x with y; and y
+//         is an unfiltered column in the right Select's input.
 //   4. All equality columns come from a base table.
 //   5. All left columns come from a single table, and all right columns come
 //      from a single table.
@@ -304,10 +313,6 @@ func verifyFiltersAreValidEqualities(
 	var leftTab, rightTab opt.TableID
 	leftNotNullCols := left.Relational().NotNullCols
 	rightUnfilteredCols := deriveUnfilteredCols(right)
-	if rightUnfilteredCols.Empty() {
-		// There are no unfiltered columns from the right input.
-		return opt.ColSet{}, false
-	}
 
 	for i := range filters {
 		eq, _ := filters[i].Condition.(*EqExpr)
@@ -329,9 +334,21 @@ func verifyFiltersAreValidEqualities(
 		// Normalize leftColID to come from leftColIDs.
 		if !leftNotNullCols.Contains(leftColID) {
 			leftColID, rightColID = rightColID, leftColID
+			if !leftNotNullCols.Contains(leftColID) {
+				// Condition #3: Left column is not guaranteed to be non-null.
+				return opt.ColSet{}, false
+			}
 		}
-		if !leftNotNullCols.Contains(leftColID) || !rightUnfilteredCols.Contains(rightColID) {
-			// Condition #3: Columns don't come from both the left and right ColSets.
+
+		switch {
+		case rightUnfilteredCols.Contains(rightColID):
+		// Condition #3a: the right column is unfiltered.
+		case rightHasSingleFilterThatMatchesLeft(left, right, leftColID, rightColID):
+		// Condition #3b: The left and right are Selects where the left filters
+		// imply the right filters when replacing the left column with the right
+		// column, and the right column is unfiltered in the right Select's
+		// input.
+		default:
 			return opt.ColSet{}, false
 		}
 
@@ -354,6 +371,79 @@ func verifyFiltersAreValidEqualities(
 	}
 
 	return rightEqualityCols, true
+}
+
+// rightHasSingleFilterThatMatchesLeft returns true if:
+//
+//   1. Both left and right are Select expressions.
+//   2. rightCol is unfiltered in right's input.
+//   3. The left Select has a filter in the form leftCol=const.
+//   4. The right Select has a single filter in the form rightCol=const where
+//      the const value is the same as the const value in (2).
+//
+// This function is used by verifyFiltersAreValidEqualities to try to prove that
+// every row in the left input of a join will have a match in the right input
+// (see condition #3b in the comment of verifyFiltersAreValidEqualities).
+//
+// TODO(mgartner): Extend this to return true when the left filters imply the
+// right filters, after remapping leftCol to rightCol in the left filters. For
+// example, leftCol<10 implies rightCol<20 when leftCol and rightCol are held
+// equal by the join filters. This may be a good opportunity to reuse
+// partialidx.Implicator. Be aware that it might not be possible to simply
+// replace columns in a filter when one of the columns has a composite type.
+func rightHasSingleFilterThatMatchesLeft(left, right RelExpr, leftCol, rightCol opt.ColumnID) bool {
+	leftSelect, ok := left.(*SelectExpr)
+	if !ok {
+		return false
+	}
+	rightSelect, ok := right.(*SelectExpr)
+	if !ok {
+		return false
+	}
+
+	// Return false if the right column has been filtered in the input to
+	// rightSelect.
+	rightUnfilteredCols := deriveUnfilteredCols(rightSelect.Input)
+	if !rightUnfilteredCols.Contains(rightCol) {
+		return false
+	}
+
+	// Return false if rightSelect has more than one filter.
+	if len(rightSelect.Filters) > 1 {
+		return false
+	}
+
+	// constValueForCol searches for an expression in the form
+	// (Eq (Var col) Const) and returns the Const expression, if one is found.
+	constValueForCol := func(filters FiltersExpr, col opt.ColumnID) (_ *ConstExpr, ok bool) {
+		var constant *ConstExpr
+		for i := range filters {
+			if !filters[i].ScalarProps().OuterCols.Contains(col) {
+				continue
+			}
+			eq, _ := filters[i].Condition.(*EqExpr)
+			if eq == nil {
+				continue
+			}
+			v, _ := eq.Left.(*VariableExpr)
+			c, _ := eq.Right.(*ConstExpr)
+			if v == nil || v.Col != col || c == nil {
+				continue
+			}
+			constant = c
+		}
+		return constant, constant != nil
+	}
+
+	leftConst, ok := constValueForCol(leftSelect.Filters, leftCol)
+	if !ok {
+		return false
+	}
+	rightConst, ok := constValueForCol(rightSelect.Filters, rightCol)
+	if !ok {
+		return false
+	}
+	return leftConst == rightConst
 }
 
 // checkSelfJoinCase returns true if all equalities in the given FiltersExpr

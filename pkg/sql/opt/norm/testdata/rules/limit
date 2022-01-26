@@ -1088,6 +1088,49 @@ left-join (hash)
  └── filters
       └── a:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
+# Push the limit if both sides of an inner join have identical equality filters
+# on FK equality columns.
+norm expect=PushLimitIntoJoinLeft
+SELECT * FROM kvr_fk INNER JOIN uv ON r = u WHERE r = 5 LIMIT 10
+----
+inner-join (hash)
+ ├── columns: k:1!null v:2 r:3!null u:6!null v:7
+ ├── cardinality: [0 - 10]
+ ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── key: (1)
+ ├── fd: ()-->(3,6,7), (1)-->(2), (3)==(6), (6)==(3)
+ ├── limit
+ │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    ├── cardinality: [0 - 10]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2)
+ │    ├── select
+ │    │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    │    ├── key: (1)
+ │    │    ├── fd: ()-->(3), (1)-->(2)
+ │    │    ├── limit hint: 10.00
+ │    │    ├── scan kvr_fk
+ │    │    │    ├── columns: k:1!null kvr_fk.v:2 r:3!null
+ │    │    │    ├── key: (1)
+ │    │    │    ├── fd: (1)-->(2,3)
+ │    │    │    └── limit hint: 1000.00
+ │    │    └── filters
+ │    │         └── r:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+ │    └── 10
+ ├── select
+ │    ├── columns: u:6!null uv.v:7
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(6,7)
+ │    ├── scan uv
+ │    │    ├── columns: u:6!null uv.v:7
+ │    │    ├── key: (6)
+ │    │    └── fd: (6)-->(7)
+ │    └── filters
+ │         └── u:6 = 5 [outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
+ └── filters
+      └── r:3 = u:6 [outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+
 # Don't push negative limits (or we would enter an infinite loop).
 norm expect-not=PushLimitIntoJoinLeft
 SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT -1
