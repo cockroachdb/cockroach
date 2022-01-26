@@ -687,13 +687,10 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
-			ctx,
 			cfg.TableStatCacheSize,
 			cfg.db,
 			cfg.circularInternalExecutor,
-			codec,
 			cfg.Settings,
-			cfg.rangeFeedFactory,
 			collectionFactory,
 		),
 
@@ -1080,6 +1077,9 @@ func (s *SQLServer) preStart(
 		return err
 	}
 	s.stmtDiagnosticsRegistry.Start(ctx, stopper)
+	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+		return err
+	}
 
 	// Before serving SQL requests, we have to make sure the database is
 	// in an acceptable form for this version of the software.
