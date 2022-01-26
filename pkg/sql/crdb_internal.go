@@ -3028,7 +3028,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
+		isAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return nil, nil, err
 		}
 		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
@@ -3043,10 +3044,16 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		indexNames := make(map[uint32]map[uint32]string)
 		schemaParents := make(map[uint32]uint32)
 		parents := make(map[uint32]uint32)
+		var unauthorizedCt int
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
+				if p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) != nil && !isAdmin {
+					fmt.Printf("no permission on table: %s", desc.GetName())
+					unauthorizedCt++
+					continue
+				}
 				parents[id] = uint32(desc.GetParentID())
 				schemaParents[id] = uint32(desc.GetParentSchemaID())
 				tableNames[id] = desc.GetName()
@@ -3055,10 +3062,23 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 					indexNames[id][uint32(idx.GetID())] = idx.GetName()
 				}
 			case catalog.DatabaseDescriptor:
+				if p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) != nil && !isAdmin {
+					fmt.Printf("no permission on database: %s", desc.GetName())
+					unauthorizedCt++
+					continue
+				}
 				dbNames[id] = desc.GetName()
 			case catalog.SchemaDescriptor:
+				if p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) != nil && !isAdmin {
+					fmt.Printf("no permission on schema: %s", desc.GetName())
+					unauthorizedCt++
+					continue
+				}
 				schemaNames[id] = desc.GetName()
 			}
+		}
+		if unauthorizedCt == len(descs) {
+			return nil, nil, errors.New("user has neither access to the admin role or the ZONECONFIG privilege")
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
