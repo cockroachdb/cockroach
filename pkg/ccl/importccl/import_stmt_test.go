@@ -5016,6 +5016,7 @@ func TestImportControlJobRBAC(t *testing.T) {
 // worker node.
 func TestImportWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 73546, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	allowResponse := make(chan struct{})
