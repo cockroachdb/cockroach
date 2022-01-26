@@ -673,6 +673,19 @@ message DescriptorMutation {
     // (column default or index data) can only be backfilled once
     // all nodes have transitioned into the DELETE_AND_WRITE_ONLY state.
     DELETE_AND_WRITE_ONLY = 2;
+
+    // Operations other than non-transactional backfilling must not
+    // use this descriptor.
+    //
+    // Column: Columns do not use this state. A column descriptor in
+    // this state is a programming error.
+    //
+    // Index: A descriptor in this state is invisible to an INSERT,
+    // UPDATE, and DELETE.
+    //
+    // TODO(ssd): This is currently unused and is being added to
+    // facilitate the new temporary-index-based backfilling process.
+    BACKFILLING = 3;
   }
   optional State state = 3 [(gogoproto.nullable) = false];
 

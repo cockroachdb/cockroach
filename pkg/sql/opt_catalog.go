@@ -1067,7 +1067,7 @@ func (ot *optTable) WritableIndexCount() int {
 // DeletableIndexCount is part of the cat.Table interface.
 func (ot *optTable) DeletableIndexCount() int {
 	// Primary index is always present, so count is always >= 1.
-	return len(ot.desc.AllIndexes())
+	return len(ot.desc.DeletableNonPrimaryIndexes()) + 1
 }
 
 // Index is part of the cat.Table interface.

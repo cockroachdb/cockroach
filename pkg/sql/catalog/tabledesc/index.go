@@ -458,6 +458,7 @@ type indexCache struct {
 	all                  []catalog.Index
 	active               []catalog.Index
 	nonDrop              []catalog.Index
+	nonPrimary           []catalog.Index
 	publicNonPrimary     []catalog.Index
 	writableNonPrimary   []catalog.Index
 	deletableNonPrimary  []catalog.Index
@@ -490,7 +491,13 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 	c.primary = c.all[0]
 	c.active = c.all[:numPublic]
 	c.publicNonPrimary = c.active[1:]
-	c.deletableNonPrimary = c.all[1:]
+	for _, idx := range c.all[1:] {
+		if !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.deletableNonPrimary, idx, len(c.all[1:]))
+		}
+		lazyAllocAppendIndex(&c.nonPrimary, idx, len(c.all[1:]))
+	}
+
 	if numMutations == 0 {
 		c.writableNonPrimary = c.publicNonPrimary
 	} else {
@@ -506,7 +513,11 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
 			lazyAllocAppendIndex(&c.nonDrop, idx, len(c.all))
 		}
-		if idx.IsPartial() {
+		// TODO(ssd): We exclude backfilling indexes from
+		// IsPartial() for the unprincipled reason of not
+		// wanting to modify all of the code that assumes
+		// these are always at least delete-only.
+		if idx.IsPartial() && !idx.Backfilling() {
 			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
 		}
 	}
