@@ -231,6 +231,13 @@ func (ep *DummyEvalPlanner) UnsafeDeleteNamespaceEntry(
 	return errors.WithStack(errEvalPlanner)
 }
 
+// CheckCanBecomeUser is part of the EvalPlanner interface.
+func (ep *DummyEvalPlanner) CheckCanBecomeUser(
+	ctx context.Context, becomeUser security.SQLUsername,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 // MemberOfWithAdminOption is part of the EvalPlanner interface.
 func (ep *DummyEvalPlanner) MemberOfWithAdminOption(
 	ctx context.Context, member security.SQLUsername,
