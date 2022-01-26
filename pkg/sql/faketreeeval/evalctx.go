@@ -255,6 +255,25 @@ func (*DummyEvalPlanner) ExternalWriteFile(ctx context.Context, uri string, cont
 	return errors.WithStack(errEvalPlanner)
 }
 
+// RevalidateUniqueConstraintsInCurrentDB is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// RevalidateUniqueConstraintsInTable is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) RevalidateUniqueConstraintsInTable(
+	ctx context.Context, tableID int,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// RevalidateUniqueConstraint is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) RevalidateUniqueConstraint(
+	ctx context.Context, tableID int, constraintName string,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
 var _ tree.EvalPlanner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,

@@ -2881,6 +2881,15 @@ SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.reset_sql_stats"></a><code>crdb_internal.reset_sql_stats() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to clear the collected SQL statistics.</p>
 </span></td></tr>
+<tr><td><a name="crdb_internal.revalidate_unique_constraint"></a><code>crdb_internal.revalidate_unique_constraint(table_name: <a href="string.html">string</a>, constraint_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to revalidate the given unique constraint in the given
+table. Returns an error if validation fails.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_all_tables"></a><code>crdb_internal.revalidate_unique_constraints_in_all_tables() &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in tables
+in the current database. Returns an error if validation fails.</p>
+</span></td></tr>
+<tr><td><a name="crdb_internal.revalidate_unique_constraints_in_table"></a><code>crdb_internal.revalidate_unique_constraints_in_table(table_name: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>This function is used to revalidate all unique constraints in the given
+table. Returns an error if validation fails.</p>
+</span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>, scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>This function is used internally to round decimal values during mutations.</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.round_decimal_values"></a><code>crdb_internal.round_decimal_values(val: <a href="decimal.html">decimal</a>[], scale: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a>[]</code></td><td><span class="funcdesc"><p>This function is used internally to round decimal array values during mutations.</p>

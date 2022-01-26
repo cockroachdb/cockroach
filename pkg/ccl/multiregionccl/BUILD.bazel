@@ -29,8 +29,10 @@ go_test(
         "regional_by_row_test.go",
         "roundtrips_test.go",
         "show_test.go",
+        "unique_test.go",
     ],
     data = glob(["testdata/**"]),
+    embed = [":multiregionccl"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
