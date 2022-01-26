@@ -80,8 +80,14 @@ func ResetStorageParameters(
 
 // StorageParamObserver applies a storage parameter to an underlying item.
 type StorageParamObserver interface {
+	// onSet is called during CREATE [TABLE | INDEX] ... WITH (...) or
+	// ALTER [TABLE | INDEX] ... WITH (...).
 	onSet(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	// onReset is called during ALTER [TABLE | INDEX] ... RESET (...)
 	onReset(evalCtx *tree.EvalContext, key string) error
+	// runPostChecks is called after all storage parameters have been set.
+	// This allows checking whether multiple storage parameters together
+	// form a valid configuration.
 	runPostChecks() error
 }
 
