@@ -86,7 +86,7 @@ type ColIndexJoin struct {
 	}
 
 	flowCtx *execinfra.FlowCtx
-	rf      *cFetcher
+	cf      *cFetcher
 
 	// tracingSpan is created when the stats should be collected for the query
 	// execution, and it will be finished when closing the operator.
@@ -137,7 +137,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 			s.flowCtx.Stopper(),
 			s.flowCtx.Txn,
 			s.flowCtx.EvalCtx.Settings,
-			row.GetWaitPolicy(s.rf.lockWaitPolicy),
+			row.GetWaitPolicy(s.cf.lockWaitPolicy),
 			s.streamerInfo.budgetLimit,
 			s.streamerInfo.budgetAcc,
 		)
@@ -194,7 +194,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 
 			// Index joins will always return exactly one output row per input row.
-			s.rf.setEstimatedRowCount(uint64(rowCount))
+			s.cf.setEstimatedRowCount(uint64(rowCount))
 			// Note that the fetcher takes ownership of the spans slice - it
 			// will modify it and perform the memory accounting. We don't care
 			// about the modification here, but we want to be conscious about
@@ -203,14 +203,14 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			// memory from its account in GetSpans().
 			var err error
 			if s.usesStreamer {
-				err = s.rf.StartScanStreaming(
+				err = s.cf.StartScanStreaming(
 					s.Ctx,
 					s.streamerInfo.Streamer,
 					spans,
 					rowinfra.NoRowLimit,
 				)
 			} else {
-				err = s.rf.StartScan(
+				err = s.cf.StartScan(
 					s.Ctx,
 					s.flowCtx.Txn,
 					spans,
@@ -226,7 +226,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 			}
 			s.state = indexJoinScanning
 		case indexJoinScanning:
-			batch, err := s.rf.NextBatch(s.Ctx)
+			batch, err := s.cf.NextBatch(s.Ctx)
 			if err != nil {
 				colexecerror.InternalError(err)
 			}
@@ -398,7 +398,7 @@ func (s *ColIndexJoin) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColIndexJoin) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.rf.getBytesRead()
+	return s.cf.getBytesRead()
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.
@@ -500,7 +500,7 @@ func NewColIndexJoin(
 	op := &ColIndexJoin{
 		OneInputNode:     colexecop.NewOneInputNode(input),
 		flowCtx:          flowCtx,
-		rf:               fetcher,
+		cf:               fetcher,
 		spanAssembler:    spanAssembler,
 		ResultTypes:      tableArgs.typs,
 		maintainOrdering: spec.MaintainOrdering,
@@ -570,7 +570,7 @@ func (s *ColIndexJoin) GetScanStats() execinfra.ScanStats {
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColIndexJoin) Release() {
-	s.rf.Release()
+	s.cf.Release()
 	s.spanAssembler.Release()
 	*s = ColIndexJoin{}
 }
@@ -588,7 +588,7 @@ func (s *ColIndexJoin) Close() error {
 // closeInternal is a subset of Close() which doesn't finish the operator's
 // span.
 func (s *ColIndexJoin) closeInternal() {
-	s.rf.Close(s.EnsureCtx())
+	s.cf.Close(s.EnsureCtx())
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()

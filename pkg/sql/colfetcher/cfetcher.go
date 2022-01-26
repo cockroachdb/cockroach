@@ -219,13 +219,13 @@ const noOutputColumn = -1
 // cFetcher handles fetching kvs and forming table rows for an
 // arbitrary number of tables.
 // Usage:
-//   var rf cFetcher
-//   err := rf.Init(..)
+//   var cf cFetcher
+//   err := cf.Init(..)
 //   // Handle err
-//   err := rf.StartScan(..)
+//   err := cf.StartScan(..)
 //   // Handle err
 //   for {
-//      res, err := rf.NextBatch()
+//      res, err := cf.NextBatch()
 //      // Handle err
 //      if res.colBatch.Length() == 0 {
 //         // Done
@@ -233,7 +233,7 @@ const noOutputColumn = -1
 //      }
 //      // Process res.colBatch
 //   }
-//   rf.Close(ctx)
+//   cf.Close(ctx)
 type cFetcher struct {
 	cFetcherArgs
 
@@ -325,61 +325,61 @@ type cFetcher struct {
 	maxCapacity int
 }
 
-func (rf *cFetcher) resetBatch() {
+func (cf *cFetcher) resetBatch() {
 	var reallocated bool
 	var minDesiredCapacity int
-	if rf.maxCapacity > 0 {
+	if cf.maxCapacity > 0 {
 		// If we have already exceeded the memory limit for the output batch, we
 		// will only be using the same batch from now on.
-		minDesiredCapacity = rf.maxCapacity
-	} else if rf.machine.limitHint > 0 && (rf.estimatedRowCount == 0 || uint64(rf.machine.limitHint) < rf.estimatedRowCount) {
+		minDesiredCapacity = cf.maxCapacity
+	} else if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
 		// use the hint to size the batch. Note that if it exceeds
 		// coldata.BatchSize, ResetMaybeReallocate will chop it down.
-		minDesiredCapacity = rf.machine.limitHint
+		minDesiredCapacity = cf.machine.limitHint
 	} else {
 		// Otherwise, use the estimate. Note that if the estimate is not
 		// present, it'll be 0 and ResetMaybeReallocate will allocate the
 		// initial batch of capacity 1 which is the desired behavior.
 		//
-		// We need to transform our rf.estimatedRowCount, which is a uint64,
+		// We need to transform our cf.estimatedRowCount, which is a uint64,
 		// into an int. We have to be careful: if we just cast it directly, a
 		// giant estimate will wrap around and become negative.
-		if rf.estimatedRowCount > uint64(coldata.BatchSize()) {
+		if cf.estimatedRowCount > uint64(coldata.BatchSize()) {
 			minDesiredCapacity = coldata.BatchSize()
 		} else {
-			minDesiredCapacity = int(rf.estimatedRowCount)
+			minDesiredCapacity = int(cf.estimatedRowCount)
 		}
 	}
-	rf.machine.batch, reallocated = rf.accountingHelper.ResetMaybeReallocate(
-		rf.table.typs, rf.machine.batch, minDesiredCapacity, rf.memoryLimit,
+	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
+		cf.table.typs, cf.machine.batch, minDesiredCapacity, cf.memoryLimit,
 	)
 	if reallocated {
-		rf.machine.colvecs.SetBatch(rf.machine.batch)
+		cf.machine.colvecs.SetBatch(cf.machine.batch)
 		// Pull out any requested system column output vecs.
-		if rf.table.timestampOutputIdx != noOutputColumn {
-			rf.machine.timestampCol = rf.machine.colvecs.DecimalCols[rf.machine.colvecs.ColsMap[rf.table.timestampOutputIdx]]
+		if cf.table.timestampOutputIdx != noOutputColumn {
+			cf.machine.timestampCol = cf.machine.colvecs.DecimalCols[cf.machine.colvecs.ColsMap[cf.table.timestampOutputIdx]]
 		}
-		if rf.table.oidOutputIdx != noOutputColumn {
-			rf.machine.tableoidCol = rf.machine.colvecs.DatumCols[rf.machine.colvecs.ColsMap[rf.table.oidOutputIdx]]
+		if cf.table.oidOutputIdx != noOutputColumn {
+			cf.machine.tableoidCol = cf.machine.colvecs.DatumCols[cf.machine.colvecs.ColsMap[cf.table.oidOutputIdx]]
 		}
 		// Change the allocation size to be the same as the capacity of the
 		// batch we allocated above.
-		rf.table.da.AllocSize = rf.machine.batch.Capacity()
+		cf.table.da.AllocSize = cf.machine.batch.Capacity()
 	}
 }
 
 // Init sets up a Fetcher based on the table args. Only columns present in
 // tableArgs.cols will be fetched.
-func (rf *cFetcher) Init(
+func (cf *cFetcher) Init(
 	codec keys.SQLCodec,
 	allocator *colmem.Allocator,
 	kvFetcherMemAcc *mon.BoundAccount,
 	tableArgs *cFetcherTableArgs,
 ) error {
-	rf.kvFetcherMemAcc = kvFetcherMemAcc
+	cf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
 	if cap(table.orderedColIdxMap.vals) < nCols {
@@ -421,7 +421,7 @@ func (rf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(col.GetID()) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				rf.mvccDecodeStrategy = row.MVCCDecodingRequired
+				cf.mvccDecodeStrategy = row.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -456,7 +456,7 @@ func (rf *cFetcher) Init(
 		if ok {
 			//gcassert:bce
 			indexColOrdinals[i] = colIdx
-			rf.mustDecodeIndexKey = true
+			cf.mustDecodeIndexKey = true
 			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.typs[colIdx].Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
 			// decoded. Others can be removed from neededValueColsByIdx.
@@ -470,12 +470,12 @@ func (rf *cFetcher) Init(
 			indexColOrdinals[i] = -1
 		}
 	}
-	if needToDecodeDecimalKey && cap(rf.scratch) < 64 {
+	if needToDecodeDecimalKey && cap(cf.scratch) < 64 {
 		// If we need to decode the decimal key encoding, it might use a scratch
 		// byte slice internally, so we'll allocate such a space to be reused
 		// for every decimal.
 		// TODO(yuzefovich): 64 was chosen arbitrarily, tune it.
-		rf.scratch = make([]byte, 64)
+		cf.scratch = make([]byte, 64)
 	}
 	table.invertedColOrdinal = -1
 	if table.index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -548,7 +548,7 @@ func (rf *cFetcher) Init(
 	// Keep track of the maximum keys per row to accommodate a
 	// limitHint when StartScan is invoked.
 	var err error
-	rf.maxKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
+	cf.maxKeysPerRow, err = table.desc.KeysPerRow(table.index.GetID())
 	if err != nil {
 		return err
 	}
@@ -561,8 +561,8 @@ func (rf *cFetcher) Init(
 		return nil
 	})
 
-	rf.table = table
-	rf.accountingHelper.Init(allocator, rf.table.typs)
+	cf.table = table
+	cf.accountingHelper.Init(allocator, cf.table.typs)
 
 	return nil
 }
@@ -583,12 +583,12 @@ func getColumnTypesFromCols(cols []catalog.Column, outTypes []*types.T) []*types
 }
 
 //gcassert:inline
-func (rf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
-	rf.fetcher = f
-	rf.machine.lastRowPrefix = nil
-	rf.machine.limitHint = int(limitHint)
-	rf.machine.state[0] = stateResetBatch
-	rf.machine.state[1] = stateInitFetch
+func (cf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
+	cf.fetcher = f
+	cf.machine.lastRowPrefix = nil
+	cf.machine.limitHint = int(limitHint)
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 }
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
@@ -599,7 +599,7 @@ func (rf *cFetcher) setFetcher(f *row.KVFetcher, limitHint rowinfra.RowLimit) {
 // spans slice after the fetcher has been closed (which happens when the fetcher
 // emits the first zero batch), and if the caller does, it becomes responsible
 // for the memory accounting.
-func (rf *cFetcher) StartScan(
+func (cf *cFetcher) StartScan(
 	ctx context.Context,
 	txn *kv.Txn,
 	spans roachpb.Spans,
@@ -638,7 +638,7 @@ func (rf *cFetcher) StartScan(
 		//   - KVs for some column families are omitted for some rows - then we
 		//     will actually fetch more KVs than necessary, but we'll decode
 		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * rf.maxKeysPerRow)
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * cf.maxKeysPerRow)
 	}
 
 	f, err := row.NewKVFetcher(
@@ -646,19 +646,19 @@ func (rf *cFetcher) StartScan(
 		txn,
 		spans,
 		bsHeader,
-		rf.reverse,
+		cf.reverse,
 		batchBytesLimit,
 		firstBatchLimit,
-		rf.lockStrength,
-		rf.lockWaitPolicy,
-		rf.lockTimeout,
-		rf.kvFetcherMemAcc,
+		cf.lockStrength,
+		cf.lockWaitPolicy,
+		cf.lockTimeout,
+		cf.kvFetcherMemAcc,
 		forceProductionKVBatchSize,
 	)
 	if err != nil {
 		return err
 	}
-	rf.setFetcher(f, limitHint)
+	cf.setFetcher(f, limitHint)
 	return nil
 }
 
@@ -670,18 +670,18 @@ func (rf *cFetcher) StartScan(
 // spans slice after the fetcher has been closed (which happens when the fetcher
 // emits the first zero batch), and if the caller does, it becomes responsible
 // for the memory accounting.
-func (rf *cFetcher) StartScanStreaming(
+func (cf *cFetcher) StartScanStreaming(
 	ctx context.Context,
 	streamer *kvstreamer.Streamer,
 	spans roachpb.Spans,
 	limitHint rowinfra.RowLimit,
 ) error {
-	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, rf.lockStrength)
+	kvBatchFetcher, err := row.NewTxnKVStreamer(ctx, streamer, spans, cf.lockStrength)
 	if err != nil {
 		return err
 	}
 	f := row.NewKVStreamingFetcher(kvBatchFetcher)
-	rf.setFetcher(f, limitHint)
+	cf.setFetcher(f, limitHint)
 	return nil
 }
 
@@ -752,8 +752,8 @@ const (
 // Turn this on to enable super verbose logging of the fetcher state machine.
 const debugState = false
 
-func (rf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
-	rf.estimatedRowCount = estimatedRowCount
+func (cf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
+	cf.estimatedRowCount = estimatedRowCount
 }
 
 // setNextKV sets the next KV to process to the input KV. needsCopy, if true,
@@ -761,9 +761,9 @@ func (rf *cFetcher) setEstimatedRowCount(estimatedRowCount uint64) {
 // the input KV is pointing to the last KV of a batch, so that the batch can
 // be garbage collected before fetching the next one.
 // gcassert:inline
-func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
+func (cf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	if !needsCopy {
-		rf.machine.nextKV = kv
+		cf.machine.nextKV = kv
 		return
 	}
 
@@ -776,7 +776,7 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	kvCopy.Value.RawBytes = make([]byte, len(kv.Value.RawBytes))
 	copy(kvCopy.Value.RawBytes, kv.Value.RawBytes)
 	kvCopy.Value.Timestamp = kv.Value.Timestamp
-	rf.machine.nextKV = kvCopy
+	cf.machine.nextKV = kvCopy
 }
 
 // NextBatch processes keys until we complete one batch of rows (subject to the
@@ -786,21 +786,21 @@ func (rf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // are not needed (as per neededCols) are filled with nulls. The Batch should
 // not be modified and is only valid until the next call. When there are no more
 // rows, the Batch.Length is 0.
-func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
+func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
-			log.Infof(ctx, "State %s", rf.machine.state[0])
+			log.Infof(ctx, "State %s", cf.machine.state[0])
 		}
-		switch rf.machine.state[0] {
+		switch cf.machine.state[0] {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, rf.convertFetchError(ctx, err)
+				return nil, cf.convertFetchError(ctx, err)
 			}
 			if !moreKVs {
-				rf.machine.state[0] = stateEmitLastBatch
+				cf.machine.state[0] = stateEmitLastBatch
 				continue
 			}
 			// TODO(jordan): parse the logical longest common prefix of the span
@@ -811,11 +811,11 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// the next key, since that prefix isn't a complete key component.
 			/*
 				if newSpan {
-				lcs := rf.fetcher.span.LongestCommonPrefix()
+				lcs := cf.fetcher.span.LongestCommonPrefix()
 				// parse lcs into stuff
 				key, matches, err := rowenc.DecodeIndexKeyWithoutTableIDIndexIDPrefix(
-					rf.table.desc, rf.table.info.index, rf.table.info.keyValTypes,
-					rf.table.keyVals, rf.table.info.indexColumnDirs, kv.Key[rf.table.info.knownPrefixLength:],
+					cf.table.desc, cf.table.info.index, cf.table.info.keyValTypes,
+					cf.table.keyVals, cf.table.info.indexColumnDirs, kv.Key[cf.table.info.knownPrefixLength:],
 				)
 				if err != nil {
 					// This is expected - the longest common prefix of the keyspan might
@@ -825,23 +825,23 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				}
 			*/
 
-			rf.setNextKV(kv, finalReferenceToBatch)
-			rf.machine.state[0] = stateDecodeFirstKVOfRow
+			cf.setNextKV(kv, finalReferenceToBatch)
+			cf.machine.state[0] = stateDecodeFirstKVOfRow
 
 		case stateResetBatch:
-			rf.resetBatch()
-			rf.shiftState()
+			cf.resetBatch()
+			cf.shiftState()
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
-			rf.table.rowLastModified = hlc.Timestamp{}
+			cf.table.rowLastModified = hlc.Timestamp{}
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
 			// to tell whether they have extra columns appended to the key.
 			var foundNull bool
-			if rf.mustDecodeIndexKey {
+			if cf.mustDecodeIndexKey {
 				if debugState {
-					log.Infof(ctx, "decoding first key %s", rf.machine.nextKV.Key)
+					log.Infof(ctx, "decoding first key %s", cf.machine.nextKV.Key)
 				}
 				var (
 					key []byte
@@ -851,31 +851,31 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				// families, we must check all columns for NULL values in order
 				// to determine whether a KV belongs to the same row as the
 				// previous KV or a different row.
-				checkAllColsForNull := rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1
-				key, foundNull, rf.scratch, err = colencoding.DecodeKeyValsToCols(
-					&rf.table.da,
-					&rf.machine.colvecs,
-					rf.machine.rowIdx,
-					rf.table.indexColOrdinals,
+				checkAllColsForNull := cf.table.isSecondaryIndex && cf.table.index.IsUnique() && cf.table.desc.NumFamilies() != 1
+				key, foundNull, cf.scratch, err = colencoding.DecodeKeyValsToCols(
+					&cf.table.da,
+					&cf.machine.colvecs,
+					cf.machine.rowIdx,
+					cf.table.indexColOrdinals,
 					checkAllColsForNull,
-					rf.table.keyValTypes,
-					rf.table.indexColumnDirs,
+					cf.table.keyValTypes,
+					cf.table.indexColumnDirs,
 					nil, /* unseen */
-					rf.machine.nextKV.Key[rf.table.knownPrefixLength:],
-					rf.table.invertedColOrdinal,
-					rf.scratch,
+					cf.machine.nextKV.Key[cf.table.knownPrefixLength:],
+					cf.table.invertedColOrdinal,
+					cf.scratch,
 				)
 				if err != nil {
 					return nil, err
 				}
-				prefix := rf.machine.nextKV.Key[:len(rf.machine.nextKV.Key)-len(key)]
-				rf.machine.lastRowPrefix = prefix
+				prefix := cf.machine.nextKV.Key[:len(cf.machine.nextKV.Key)-len(key)]
+				cf.machine.lastRowPrefix = prefix
 			} else {
-				prefixLen, err := keys.GetRowPrefixLength(rf.machine.nextKV.Key)
+				prefixLen, err := keys.GetRowPrefixLength(cf.machine.nextKV.Key)
 				if err != nil {
 					return nil, err
 				}
-				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen]
+				cf.machine.lastRowPrefix = cf.machine.nextKV.Key[:prefixLen]
 			}
 
 			// For unique secondary indexes on tables with multiple column
@@ -903,15 +903,15 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// family because it is guaranteed that there is only one KV per
 			// row. We entirely skip the check that determines if the row is
 			// unfinished.
-			if foundNull && rf.table.isSecondaryIndex && rf.table.index.IsUnique() && rf.table.desc.NumFamilies() != 1 {
+			if foundNull && cf.table.isSecondaryIndex && cf.table.index.IsUnique() && cf.table.desc.NumFamilies() != 1 {
 				// We get the remaining bytes after the computed prefix, and then
 				// slice off the extra encoded columns from those bytes. We calculate
 				// how many bytes were sliced away, and then extend lastRowPrefix
 				// by that amount.
-				prefixLen := len(rf.machine.lastRowPrefix)
-				remainingBytes := rf.machine.nextKV.Key[prefixLen:]
+				prefixLen := len(cf.machine.lastRowPrefix)
+				remainingBytes := cf.machine.nextKV.Key[prefixLen:]
 				origRemainingBytesLen := len(remainingBytes)
-				for i := 0; i < rf.table.index.NumKeySuffixColumns(); i++ {
+				for i := 0; i < cf.table.index.NumKeySuffixColumns(); i++ {
 					var err error
 					// Slice off an extra encoded column from remainingBytes.
 					remainingBytes, err = keyside.Skip(remainingBytes)
@@ -919,114 +919,114 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 						return nil, err
 					}
 				}
-				rf.machine.lastRowPrefix = rf.machine.nextKV.Key[:prefixLen+(origRemainingBytesLen-len(remainingBytes))]
+				cf.machine.lastRowPrefix = cf.machine.nextKV.Key[:prefixLen+(origRemainingBytesLen-len(remainingBytes))]
 			}
 
-			familyID, err := rf.getCurrentColumnFamilyID()
+			familyID, err := cf.getCurrentColumnFamilyID()
 			if err != nil {
 				return nil, err
 			}
-			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
+			cf.machine.remainingValueColsByIdx.CopyFrom(cf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
-			if err := rf.processValue(ctx, familyID); err != nil {
+			if err := cf.processValue(ctx, familyID); err != nil {
 				return nil, err
 			}
 			// Update the MVCC values for this row.
-			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
-				rf.table.rowLastModified = rf.machine.nextKV.Value.Timestamp
+			if cf.table.rowLastModified.Less(cf.machine.nextKV.Value.Timestamp) {
+				cf.table.rowLastModified = cf.machine.nextKV.Value.Timestamp
 			}
 			// If the table has only one column family, then the next KV will
 			// always belong to a different row than the current KV.
-			if rf.table.desc.NumFamilies() == 1 {
-				rf.machine.state[0] = stateFinalizeRow
-				rf.machine.state[1] = stateInitFetch
+			if cf.table.desc.NumFamilies() == 1 {
+				cf.machine.state[0] = stateFinalizeRow
+				cf.machine.state[1] = stateInitFetch
 				continue
 			}
 			// If the table has more than one column family, then the next KV
 			// may belong to the same row as the current KV.
-			rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
+			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, finalReferenceToBatch, err := rf.fetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, rf.convertFetchError(ctx, err)
+				return nil, cf.convertFetchError(ctx, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
-				rf.machine.state[0] = stateFinalizeRow
-				rf.machine.state[1] = stateEmitLastBatch
+				cf.machine.state[0] = stateFinalizeRow
+				cf.machine.state[1] = stateEmitLastBatch
 				continue
 			}
 			// TODO(jordan): if nextKV returns newSpan = true, set the new span
 			// prefix and indicate that it needs decoding.
-			rf.setNextKV(kv, finalReferenceToBatch)
+			cf.setNextKV(kv, finalReferenceToBatch)
 			if debugState {
-				log.Infof(ctx, "decoding next key %s", rf.machine.nextKV.Key)
+				log.Infof(ctx, "decoding next key %s", cf.machine.nextKV.Key)
 			}
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
-			if !bytes.HasPrefix(kv.Key[rf.table.knownPrefixLength:], rf.machine.lastRowPrefix[rf.table.knownPrefixLength:]) {
+			if !bytes.HasPrefix(kv.Key[cf.table.knownPrefixLength:], cf.machine.lastRowPrefix[cf.table.knownPrefixLength:]) {
 				// The kv we just found is from a different row.
-				rf.machine.state[0] = stateFinalizeRow
-				rf.machine.state[1] = stateDecodeFirstKVOfRow
+				cf.machine.state[0] = stateFinalizeRow
+				cf.machine.state[1] = stateDecodeFirstKVOfRow
 				continue
 			}
 
-			familyID, err := rf.getCurrentColumnFamilyID()
+			familyID, err := cf.getCurrentColumnFamilyID()
 			if err != nil {
 				return nil, err
 			}
 
 			// Process the current KV's value component.
-			if err := rf.processValue(ctx, familyID); err != nil {
+			if err := cf.processValue(ctx, familyID); err != nil {
 				return nil, err
 			}
 
 			// Update the MVCC values for this row.
-			if rf.table.rowLastModified.Less(rf.machine.nextKV.Value.Timestamp) {
-				rf.table.rowLastModified = rf.machine.nextKV.Value.Timestamp
+			if cf.table.rowLastModified.Less(cf.machine.nextKV.Value.Timestamp) {
+				cf.table.rowLastModified = cf.machine.nextKV.Value.Timestamp
 			}
 
-			if familyID == rf.table.maxColumnFamilyID {
+			if familyID == cf.table.maxColumnFamilyID {
 				// We know the row can't have any more keys, so finalize the row.
-				rf.machine.state[0] = stateFinalizeRow
-				rf.machine.state[1] = stateInitFetch
+				cf.machine.state[0] = stateFinalizeRow
+				cf.machine.state[1] = stateInitFetch
 			} else {
 				// Continue with current state.
-				rf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
+				cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 			}
 
 		case stateFinalizeRow:
 			// Populate the timestamp system column if needed. We have to do it
 			// on a per row basis since each row can be modified at a different
 			// time.
-			if rf.table.timestampOutputIdx != noOutputColumn {
-				rf.machine.timestampCol[rf.machine.rowIdx] = tree.TimestampToDecimal(rf.table.rowLastModified)
+			if cf.table.timestampOutputIdx != noOutputColumn {
+				cf.machine.timestampCol[cf.machine.rowIdx] = tree.TimestampToDecimal(cf.table.rowLastModified)
 			}
 
 			// We're finished with a row. Fill the row in with nulls if
 			// necessary, perform the memory accounting for the row, bump the
 			// row index, emit the batch if necessary, and move to the next
 			// state.
-			if err := rf.fillNulls(); err != nil {
+			if err := cf.fillNulls(); err != nil {
 				return nil, err
 			}
 			// Note that we haven't set the tableoid value (if that system
 			// column is requested) yet, but it is ok for the purposes of the
 			// memory accounting - oids are fixed length values and, thus, have
 			// already been accounted for when the batch was allocated.
-			rf.accountingHelper.AccountForSet(rf.machine.rowIdx)
-			rf.machine.rowIdx++
-			rf.shiftState()
+			cf.accountingHelper.AccountForSet(cf.machine.rowIdx)
+			cf.machine.rowIdx++
+			cf.shiftState()
 
 			var emitBatch bool
-			if rf.maxCapacity == 0 && rf.accountingHelper.Allocator.Used() >= rf.memoryLimit {
-				rf.maxCapacity = rf.machine.rowIdx
+			if cf.maxCapacity == 0 && cf.accountingHelper.Allocator.Used() >= cf.memoryLimit {
+				cf.maxCapacity = cf.machine.rowIdx
 			}
-			if rf.machine.rowIdx >= rf.machine.batch.Capacity() ||
-				(rf.maxCapacity > 0 && rf.machine.rowIdx >= rf.maxCapacity) ||
-				(rf.machine.limitHint > 0 && rf.machine.rowIdx >= rf.machine.limitHint) {
+			if cf.machine.rowIdx >= cf.machine.batch.Capacity() ||
+				(cf.maxCapacity > 0 && cf.machine.rowIdx >= cf.maxCapacity) ||
+				(cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint) {
 				// We either
 				//   1. have no more room in our batch, so output it immediately
 				// or
@@ -1039,25 +1039,25 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				//
 				// Note that limitHint might become negative at which point we
 				// will start ignoring it.
-				rf.machine.limitHint -= rf.machine.rowIdx
+				cf.machine.limitHint -= cf.machine.rowIdx
 			}
 
 			if emitBatch {
-				rf.pushState(stateResetBatch)
-				rf.finalizeBatch()
-				return rf.machine.batch, nil
+				cf.pushState(stateResetBatch)
+				cf.finalizeBatch()
+				return cf.machine.batch, nil
 			}
 
 		case stateEmitLastBatch:
-			rf.machine.state[0] = stateFinished
-			rf.finalizeBatch()
+			cf.machine.state[0] = stateFinished
+			cf.finalizeBatch()
 			// Close the fetcher eagerly so that its memory could be GCed.
-			rf.Close(ctx)
-			return rf.machine.batch, nil
+			cf.Close(ctx)
+			return cf.machine.batch, nil
 
 		case stateFinished:
 			// Close the fetcher eagerly so that its memory could be GCed.
-			rf.Close(ctx)
+			cf.Close(ctx)
 			return coldata.ZeroBatch, nil
 		}
 	}
@@ -1065,21 +1065,21 @@ func (rf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 // shiftState shifts the state queue to the left, removing the first element and
 // clearing the last element.
-func (rf *cFetcher) shiftState() {
-	copy(rf.machine.state[:2], rf.machine.state[1:])
-	rf.machine.state[2] = stateInvalid
+func (cf *cFetcher) shiftState() {
+	copy(cf.machine.state[:2], cf.machine.state[1:])
+	cf.machine.state[2] = stateInvalid
 }
 
-func (rf *cFetcher) pushState(state fetcherState) {
-	copy(rf.machine.state[1:], rf.machine.state[:2])
-	rf.machine.state[0] = state
+func (cf *cFetcher) pushState(state fetcherState) {
+	copy(cf.machine.state[1:], cf.machine.state[:2])
+	cf.machine.state[0] = state
 }
 
 // getDatumAt returns the converted datum object at the given (colIdx, rowIdx).
 // This function is meant for tracing and should not be used in hot paths.
-func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
+func (cf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 	res := []tree.Datum{nil}
-	colconv.ColVecToDatumAndDeselect(res, rf.machine.colvecs.Vecs[colIdx], 1 /* length */, []int{rowIdx}, &rf.table.da)
+	colconv.ColVecToDatumAndDeselect(res, cf.machine.colvecs.Vecs[colIdx], 1 /* length */, []int{rowIdx}, &cf.table.da)
 	return res[0]
 }
 
@@ -1088,13 +1088,13 @@ func (rf *cFetcher) getDatumAt(colIdx int, rowIdx int) tree.Datum {
 // actually decoded (this is represented as "?" in the result). separator is
 // inserted between each two subsequent decoded column values (but not before
 // the first one).
-func (rf *cFetcher) writeDecodedCols(buf *strings.Builder, colOrdinals []int, separator byte) {
+func (cf *cFetcher) writeDecodedCols(buf *strings.Builder, colOrdinals []int, separator byte) {
 	for i, idx := range colOrdinals {
 		if i > 0 {
 			buf.WriteByte(separator)
 		}
 		if idx != -1 {
-			buf.WriteString(rf.getDatumAt(idx, rf.machine.rowIdx).String())
+			buf.WriteString(cf.getDatumAt(idx, cf.machine.rowIdx).String())
 		} else {
 			buf.WriteByte('?')
 		}
@@ -1104,11 +1104,11 @@ func (rf *cFetcher) writeDecodedCols(buf *strings.Builder, colOrdinals []int, se
 // processValue processes the state machine's current value component, setting
 // columns in the rowIdx'th tuple in the current batch depending on what data
 // is found in the current value component.
-func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) (err error) {
-	table := rf.table
+func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) (err error) {
+	table := cf.table
 
 	var prettyKey, prettyValue string
-	if rf.traceKV {
+	if cf.traceKV {
 		defer func() {
 			if err == nil {
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
@@ -1117,11 +1117,11 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 
 		var buf strings.Builder
 		buf.WriteByte('/')
-		buf.WriteString(rf.table.desc.GetName())
+		buf.WriteString(cf.table.desc.GetName())
 		buf.WriteByte('/')
-		buf.WriteString(rf.table.index.GetName())
+		buf.WriteString(cf.table.index.GetName())
 		buf.WriteByte('/')
-		rf.writeDecodedCols(&buf, rf.table.indexColOrdinals, '/')
+		cf.writeDecodedCols(&buf, cf.table.indexColOrdinals, '/')
 		prettyKey = buf.String()
 	}
 
@@ -1130,7 +1130,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		return nil
 	}
 
-	val := rf.machine.nextKV.Value
+	val := cf.machine.nextKV.Value
 	if !table.isSecondaryIndex || table.index.GetEncodingType() == descpb.PrimaryIndexEncoding {
 		// If familyID is 0, kv.Value contains values for composite key columns.
 		// These columns already have a table.row value assigned above, but that value
@@ -1152,14 +1152,14 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = rf.processValueBytes(ctx, table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
 		default:
 			var family *descpb.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
 				return scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
-			prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, family, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueSingle(ctx, table, family, prettyKey)
 		}
 		if err != nil {
 			return scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1180,26 +1180,26 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if table.isSecondaryIndex && table.index.IsUnique() {
 				// This is a unique secondary index; decode the extra
 				// column values from the value.
-				valueBytes, _, rf.scratch, err = colencoding.DecodeKeyValsToCols(
+				valueBytes, _, cf.scratch, err = colencoding.DecodeKeyValsToCols(
 					&table.da,
-					&rf.machine.colvecs,
-					rf.machine.rowIdx,
+					&cf.machine.colvecs,
+					cf.machine.rowIdx,
 					table.extraValColOrdinals,
 					false, /* checkAllColsForNull */
 					table.extraTypes,
 					table.extraValDirections,
-					&rf.machine.remainingValueColsByIdx,
+					&cf.machine.remainingValueColsByIdx,
 					valueBytes,
-					rf.table.invertedColOrdinal,
-					rf.scratch,
+					cf.table.invertedColOrdinal,
+					cf.scratch,
 				)
 				if err != nil {
 					return scrub.WrapError(scrub.SecondaryIndexKeyExtraValueDecodingError, err)
 				}
-				if rf.traceKV && len(table.extraValColOrdinals) > 0 {
+				if cf.traceKV && len(table.extraValColOrdinals) > 0 {
 					var buf strings.Builder
 					buf.WriteByte('/')
-					rf.writeDecodedCols(&buf, table.extraValColOrdinals, '/')
+					cf.writeDecodedCols(&buf, table.extraValColOrdinals, '/')
 					prettyValue = buf.String()
 				}
 			}
@@ -1211,7 +1211,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = rf.processValueBytes(
+			prettyKey, prettyValue, err = cf.processValueBytes(
 				ctx, table, valueBytes, prettyKey,
 			)
 			if err != nil {
@@ -1220,7 +1220,7 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		}
 	}
 
-	if rf.traceKV && prettyValue == "" {
+	if cf.traceKV && prettyValue == "" {
 		prettyValue = "<undecoded>"
 	}
 
@@ -1228,9 +1228,9 @@ func (rf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 }
 
 // processValueSingle processes the given value (of column
-// family.DefaultColumnID), setting values in rf.machine.colvecs accordingly.
+// family.DefaultColumnID), setting values in cf.machine.colvecs accordingly.
 // The key is only used for logging.
-func (rf *cFetcher) processValueSingle(
+func (cf *cFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
 	family *descpb.ColumnFamilyDescriptor,
@@ -1249,27 +1249,27 @@ func (rf *cFetcher) processValueSingle(
 	}
 
 	if idx, ok := table.ColIdxMap.Get(colID); ok {
-		if rf.traceKV {
+		if cf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[idx].GetName())
 		}
-		val := rf.machine.nextKV.Value
+		val := cf.machine.nextKV.Value
 		if len(val.RawBytes) == 0 {
 			return prettyKey, "", nil
 		}
-		typ := rf.table.typs[idx]
+		typ := cf.table.typs[idx]
 		err := colencoding.UnmarshalColumnValueToCol(
-			&table.da, &rf.machine.colvecs, idx, rf.machine.rowIdx, typ, val,
+			&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
 		)
 		if err != nil {
 			return "", "", err
 		}
-		rf.machine.remainingValueColsByIdx.Remove(idx)
+		cf.machine.remainingValueColsByIdx.Remove(idx)
 
-		if rf.traceKV {
-			prettyValue = rf.getDatumAt(idx, rf.machine.rowIdx).String()
+		if cf.traceKV {
+			prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
 		}
 		if row.DebugRowFetch {
-			log.Infof(ctx, "Scan %s -> %v", rf.machine.nextKV.Key, "?")
+			log.Infof(ctx, "Scan %s -> %v", cf.machine.nextKV.Key, "?")
 		}
 		return prettyKey, prettyValue, nil
 	}
@@ -1277,28 +1277,28 @@ func (rf *cFetcher) processValueSingle(
 	// No need to unmarshal the column value. Either the column was part of
 	// the index key or it isn't needed.
 	if row.DebugRowFetch {
-		log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
+		log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
 	}
 	return prettyKey, prettyValue, nil
 }
 
-func (rf *cFetcher) processValueBytes(
+func (cf *cFetcher) processValueBytes(
 	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
-	if rf.traceKV {
-		if rf.machine.prettyValueBuf == nil {
-			rf.machine.prettyValueBuf = &bytes.Buffer{}
+	if cf.traceKV {
+		if cf.machine.prettyValueBuf == nil {
+			cf.machine.prettyValueBuf = &bytes.Buffer{}
 		}
-		rf.machine.prettyValueBuf.Reset()
+		cf.machine.prettyValueBuf.Reset()
 	}
 
 	// Composite columns that are key encoded in the value (like the pk columns
 	// in a unique secondary index) have gotten removed from the set of
 	// remaining value columns. So, we need to add them back in here in case
 	// they have full value encoded composite values.
-	rf.table.compositeIndexColOrdinals.ForEach(func(i int) {
-		rf.machine.remainingValueColsByIdx.Add(i)
+	cf.table.compositeIndexColOrdinals.ForEach(func(i int) {
+		cf.machine.remainingValueColsByIdx.Add(i)
 	})
 
 	var (
@@ -1310,7 +1310,7 @@ func (rf *cFetcher) processValueBytes(
 	)
 	// Continue reading data until there's none left or we've finished
 	// populating the data for all of the requested columns.
-	for len(valueBytes) > 0 && rf.machine.remainingValueColsByIdx.Len() > 0 {
+	for len(valueBytes) > 0 && cf.machine.remainingValueColsByIdx.Len() > 0 {
 		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -1341,42 +1341,42 @@ func (rf *cFetcher) processValueBytes(
 			}
 			valueBytes = valueBytes[len:]
 			if row.DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> [%d] (skipped)", rf.machine.nextKV.Key, colID)
+				log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
 			}
 			continue
 		}
 
-		if rf.traceKV {
+		if cf.traceKV {
 			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.cols[vecIdx].GetName())
 		}
 
 		valueBytes, err = colencoding.DecodeTableValueToCol(
-			&table.da, &rf.machine.colvecs, vecIdx, rf.machine.rowIdx, typ,
-			dataOffset, rf.table.typs[vecIdx], valueBytes,
+			&table.da, &cf.machine.colvecs, vecIdx, cf.machine.rowIdx, typ,
+			dataOffset, cf.table.typs[vecIdx], valueBytes,
 		)
 		if err != nil {
 			return "", "", err
 		}
-		rf.machine.remainingValueColsByIdx.Remove(vecIdx)
-		if rf.traceKV {
-			dVal := rf.getDatumAt(vecIdx, rf.machine.rowIdx)
-			if _, err := fmt.Fprintf(rf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
+		cf.machine.remainingValueColsByIdx.Remove(vecIdx)
+		if cf.traceKV {
+			dVal := cf.getDatumAt(vecIdx, cf.machine.rowIdx)
+			if _, err := fmt.Fprintf(cf.machine.prettyValueBuf, "/%v", dVal.String()); err != nil {
 				return "", "", err
 			}
 		}
 	}
-	if rf.traceKV {
-		prettyValue = rf.machine.prettyValueBuf.String()
+	if cf.traceKV {
+		prettyValue = cf.machine.prettyValueBuf.String()
 	}
 	return prettyKey, prettyValue, nil
 }
 
-func (rf *cFetcher) fillNulls() error {
-	table := rf.table
-	if rf.machine.remainingValueColsByIdx.Empty() {
+func (cf *cFetcher) fillNulls() error {
+	table := cf.table
+	if cf.machine.remainingValueColsByIdx.Empty() {
 		return nil
 	}
-	for i, ok := rf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = rf.machine.remainingValueColsByIdx.Next(i + 1) {
+	for i, ok := cf.machine.remainingValueColsByIdx.Next(0); ok; i, ok = cf.machine.remainingValueColsByIdx.Next(i + 1) {
 		// Composite index columns may have a key but no value. Ignore them so we
 		// don't incorrectly mark them as null.
 		if table.compositeIndexColOrdinals.Contains(i) {
@@ -1384,38 +1384,38 @@ func (rf *cFetcher) fillNulls() error {
 		}
 		if !table.cols[i].IsNullable() && table.cols[i].Public() {
 			var indexColValues strings.Builder
-			rf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
+			cf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
 			return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
 				"non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 				table.desc.GetName(), table.cols[i].GetName(), table.index.GetName(),
 				strings.Join(table.index.IndexDesc().KeyColumnNames, ","), indexColValues.String()))
 		}
-		rf.machine.colvecs.Nulls[i].SetNull(rf.machine.rowIdx)
+		cf.machine.colvecs.Nulls[i].SetNull(cf.machine.rowIdx)
 	}
 	return nil
 }
 
-func (rf *cFetcher) finalizeBatch() {
+func (cf *cFetcher) finalizeBatch() {
 	// Populate the tableoid system column for the whole batch if necessary.
-	if rf.table.oidOutputIdx != noOutputColumn {
-		id := rf.table.desc.GetID()
-		for i := 0; i < rf.machine.rowIdx; i++ {
+	if cf.table.oidOutputIdx != noOutputColumn {
+		id := cf.table.desc.GetID()
+		for i := 0; i < cf.machine.rowIdx; i++ {
 			// Note that we don't need to update the memory accounting because
 			// oids are fixed length values and have already been accounted for
 			// when finalizing each row.
-			rf.machine.tableoidCol.Set(i, rf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id))))
+			cf.machine.tableoidCol.Set(i, cf.table.da.NewDOid(tree.MakeDOid(tree.DInt(id))))
 		}
 	}
-	rf.machine.batch.SetLength(rf.machine.rowIdx)
-	rf.machine.rowIdx = 0
+	cf.machine.batch.SetLength(cf.machine.rowIdx)
+	cf.machine.rowIdx = 0
 }
 
 // getCurrentColumnFamilyID returns the column family id of the key in
-// rf.machine.nextKV.Key.
-func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
+// cf.machine.nextKV.Key.
+func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 	// If the table only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
-	if rf.table.maxColumnFamilyID == 0 {
+	if cf.table.maxColumnFamilyID == 0 {
 		return 0, nil
 	}
 	// The column family is encoded in the final bytes of the key. The last
@@ -1423,7 +1423,7 @@ func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 	// itself. See encoding.md for more details, and see MakeFamilyKey for
 	// the routine that performs this encoding.
 	var id uint64
-	_, id, err := encoding.DecodeUvarintAscending(rf.machine.nextKV.Key[len(rf.machine.lastRowPrefix):])
+	_, id, err := encoding.DecodeUvarintAscending(cf.machine.nextKV.Key[len(cf.machine.lastRowPrefix):])
 	if err != nil {
 		return 0, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 	}
@@ -1434,8 +1434,8 @@ func (rf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(ctx, rf.table.desc, err)
+func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
+	err = row.ConvertFetchError(ctx, cf.table.desc, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }
@@ -1443,11 +1443,11 @@ func (rf *cFetcher) convertFetchError(ctx context.Context, err error) error {
 // getBytesRead returns the number of bytes read by the cFetcher throughout its
 // existence so far. This number accumulates the bytes read statistic across
 // StartScan* and Close methods.
-func (rf *cFetcher) getBytesRead() int64 {
-	if rf.fetcher != nil {
-		rf.bytesRead += rf.fetcher.ResetBytesRead()
+func (cf *cFetcher) getBytesRead() int64 {
+	if cf.fetcher != nil {
+		cf.bytesRead += cf.fetcher.ResetBytesRead()
 	}
-	return rf.bytesRead
+	return cf.bytesRead
 }
 
 var cFetcherPool = sync.Pool{
@@ -1456,24 +1456,24 @@ var cFetcherPool = sync.Pool{
 	},
 }
 
-func (rf *cFetcher) Release() {
-	rf.accountingHelper.Release()
-	if rf.table != nil {
-		rf.table.Release()
+func (cf *cFetcher) Release() {
+	cf.accountingHelper.Release()
+	if cf.table != nil {
+		cf.table.Release()
 	}
-	colvecs := rf.machine.colvecs
+	colvecs := cf.machine.colvecs
 	colvecs.Reset()
-	*rf = cFetcher{
-		scratch: rf.scratch[:0],
+	*cf = cFetcher{
+		scratch: cf.scratch[:0],
 	}
-	rf.machine.colvecs = colvecs
-	cFetcherPool.Put(rf)
+	cf.machine.colvecs = colvecs
+	cFetcherPool.Put(cf)
 }
 
-func (rf *cFetcher) Close(ctx context.Context) {
-	if rf != nil && rf.fetcher != nil {
-		rf.bytesRead += rf.fetcher.GetBytesRead()
-		rf.fetcher.Close(ctx)
-		rf.fetcher = nil
+func (cf *cFetcher) Close(ctx context.Context) {
+	if cf != nil && cf.fetcher != nil {
+		cf.bytesRead += cf.fetcher.GetBytesRead()
+		cf.fetcher.Close(ctx)
+		cf.fetcher = nil
 	}
 }
