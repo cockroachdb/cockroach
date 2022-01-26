@@ -323,7 +323,7 @@
 </span></td></tr>
 <tr><td><a name="cardinality"></a><code>cardinality(input: anyelement[]) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of elements contained in <code>input</code></p>
 </span></td></tr>
-<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: anyelement[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of roachpb.StatementStatistics into a single JSONB object</p>
+<tr><td><a name="crdb_internal.merge_statement_stats"></a><code>crdb_internal.merge_statement_stats(input: jsonb[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of roachpb.StatementStatistics into a single JSONB object</p>
 </span></td></tr>
 <tr><td><a name="crdb_internal.merge_transaction_stats"></a><code>crdb_internal.merge_transaction_stats(input: anyelement[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Merge an array of roachpb.TransactionStatistics into a single JSONB object</p>
 </span></td></tr>

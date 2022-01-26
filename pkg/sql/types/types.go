@@ -599,6 +599,10 @@ var (
 	AnyEnumArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 
+	// JSONArray is the type of an array value having JSON-typed elements.
+	JSONArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Jsonb, Oid: oid.T__jsonb, Locale: &emptyLocale}}
+
 	// Int2Vector is a type-alias for an array of Int2 values with a different
 	// OID (T_int2vector instead of T__int2). It is a special VECTOR type used
 	// by Postgres in system tables. Int2vectors are 0-indexed, unlike normal arrays.
