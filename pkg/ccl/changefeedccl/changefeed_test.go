@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -77,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -1695,6 +1697,62 @@ func TestChangefeedAvroNotice(t *testing.T) {
 
 	sql := fmt.Sprintf("CREATE CHANGEFEED FOR d.foo INTO 'null://' WITH format=experimental_avro, confluent_schema_registry='%s'", schemaReg.URL())
 	expectNotice(t, s, sql, `avro is no longer experimental, use format=avro`)
+}
+
+func TestChangefeedOutputTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		pgURL, cleanup := sqlutils.PGUrl(t, f.Server().ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+		pgBase, err := pq.NewConnector(pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual := "(no notice)"
+		connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+			actual = n.Message
+		})
+
+		dbWithHandler := gosql.OpenDB(connector)
+		defer dbWithHandler.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+		sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
+
+		tg := newTeeGroup()
+		feedCh := make(chan *sarama.ProducerMessage, 1024)
+		wrapSink := func(s Sink) Sink {
+			return &fakeKafkaSink{
+				Sink:   s,
+				tg:     tg,
+				feedCh: feedCh,
+			}
+		}
+		c := &kafkaFeed{
+			jobFeed:        newJobFeed(dbWithHandler, wrapSink),
+			seenTrackerMap: make(map[string]struct{}),
+			source:         feedCh,
+			tg:             tg,
+		}
+		defer func() {
+			err = c.Close()
+			require.NoError(t, err)
+		}()
+		kafkaFeed, ok := f.(*kafkaFeedFactory)
+		require.True(t, ok)
+		kafkaFeed.di.prepareJob(c.jobFeed)
+
+		sqlDB.Exec(t, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+
+		kafkaFeed.di.startJob(c.jobFeed)
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
 }
 
 func requireErrorSoon(
