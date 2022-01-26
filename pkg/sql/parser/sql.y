@@ -779,7 +779,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ESCAPE EXCEPT EXCLUDE EXCLUDING
-%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
+%token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL EXPRESSION
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTRACT EXTRACT_DURATION
@@ -1547,6 +1547,7 @@ alter_ddl_stmt:
 //   ALTER TABLE ... ALTER [COLUMN] <colname> {SET ON UPDATE <expr> | DROP ON UPDATE}
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP NOT NULL
 //   ALTER TABLE ... ALTER [COLUMN] <colname> DROP STORED
+//   ALTER TABLE ... ALTER [COLUMN] <colname> DROP EXPRESSION
 //   ALTER TABLE ... ALTER [COLUMN] <colname> [SET DATA] TYPE <type> [COLLATE <collation>]
 //   ALTER TABLE ... ALTER PRIMARY KEY USING INDEX <name>
 //   ALTER TABLE ... RENAME TO <newname>
@@ -2238,6 +2239,11 @@ alter_table_cmd:
 | ALTER opt_column column_name DROP STORED
   {
     $$.val = &tree.AlterTableDropStored{Column: tree.Name($3)}
+  }
+  // ALTER TABLE <name> ALTER [COLUMN] <colname> DROP EXPRESSION
+| ALTER opt_column column_name DROP EXPRESSION
+  {
+    $$.val = &tree.AlterTableDropExpression{Column: tree.Name($3)}
   }
   // ALTER TABLE <name> ALTER [COLUMN] <colname> SET NOT NULL
 | ALTER opt_column column_name SET NOT NULL
@@ -13389,6 +13395,7 @@ unreserved_keyword:
 | EXPIRATION
 | EXPLAIN
 | EXPORT
+| EXPRESSION
 | EXTENSION
 | FAILURE
 | FILES

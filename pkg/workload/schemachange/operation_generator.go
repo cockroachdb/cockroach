@@ -110,16 +110,17 @@ const (
 	createEnum     // CREATE TYPE <type> ENUM AS <def>
 	createSchema   // CREATE SCHEMA <schema>
 
-	dropColumn        // ALTER TABLE <table> DROP COLUMN <column>
-	dropColumnDefault // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
-	dropColumnNotNull // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
-	dropColumnStored  // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
-	dropConstraint    // ALTER TABLE <table> DROP CONSTRAINT <constraint>
-	dropIndex         // DROP INDEX <index>@<table>
-	dropSequence      // DROP SEQUENCE <sequence>
-	dropTable         // DROP TABLE <table>
-	dropView          // DROP VIEW <view>
-	dropSchema        // DROP SCHEMA <schema>
+	dropColumn           // ALTER TABLE <table> DROP COLUMN <column>
+	dropColumnDefault    // ALTER TABLE <table> ALTER [COLUMN] <column> DROP DEFAULT
+	dropColumnNotNull    // ALTER TABLE <table> ALTER [COLUMN] <column> DROP NOT NULL
+	dropColumnStored     // ALTER TABLE <table> ALTER [COLUMN] <column> DROP STORED
+	dropColumnExpression // ALTER TABLE <table> ALTER [COLUMN] <column> DROP EXPRESSION
+	dropConstraint       // ALTER TABLE <table> DROP CONSTRAINT <constraint>
+	dropIndex            // DROP INDEX <index>@<table>
+	dropSequence         // DROP SEQUENCE <sequence>
+	dropTable            // DROP TABLE <table>
+	dropView             // DROP VIEW <view>
+	dropSchema           // DROP SCHEMA <schema>
 
 	primaryRegion //  ALTER DATABASE <db> PRIMARY REGION <region>
 
@@ -160,6 +161,7 @@ var opFuncs = map[opType]func(*operationGenerator, context.Context, pgx.Tx) (str
 	dropColumnDefault:       (*operationGenerator).dropColumnDefault,
 	dropColumnNotNull:       (*operationGenerator).dropColumnNotNull,
 	dropColumnStored:        (*operationGenerator).dropColumnStored,
+	dropColumnExpression:    (*operationGenerator).dropColumnExpression,
 	dropConstraint:          (*operationGenerator).dropConstraint,
 	dropIndex:               (*operationGenerator).dropIndex,
 	dropSequence:            (*operationGenerator).dropSequence,
@@ -205,6 +207,7 @@ var opWeights = []int{
 	dropColumnDefault:       1,
 	dropColumnNotNull:       1,
 	dropColumnStored:        1,
+	dropColumnExpression:    1,
 	dropConstraint:          1,
 	dropIndex:               1,
 	dropSequence:            1,
@@ -1476,6 +1479,42 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 	}.add(og.expectedExecErrors)
 
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP STORED`, tableName, columnName), nil
+}
+
+func (og *operationGenerator) dropColumnExpression(ctx context.Context, tx pgx.Tx) (string, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return "", err
+	}
+	tableExists, err := tableExists(ctx, tx, tableName)
+	if err != nil {
+		return "", err
+	}
+	if !tableExists {
+		og.expectedExecErrors.add(pgcode.UndefinedTable)
+		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName DROP EXPRESSION`, tableName), nil
+	}
+
+	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
+	if err != nil {
+		return "", err
+	}
+	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	columnIsStored, err := columnIsStoredComputed(ctx, tx, tableName, columnName)
+	if err != nil {
+		return "", err
+	}
+
+	codesWithConditions{
+		{code: pgcode.InvalidColumnDefinition, condition: !columnIsStored},
+		{code: pgcode.UndefinedColumn, condition: !columnExists},
+	}.add(og.expectedExecErrors)
+
+	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" DROP EXPRESSION`, tableName, columnName), nil
 }
 
 func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (string, error) {
