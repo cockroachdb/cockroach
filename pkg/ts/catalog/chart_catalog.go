@@ -2107,6 +2107,14 @@ var charts = []sectionDescription{
 				AxisLabel: "Transactions",
 			},
 			{
+				Title: "Active Statements",
+				Metrics: []string{
+					"sql.statements.active",
+					"sql.statements.active.internal",
+				},
+				AxisLabel: "Transactions",
+			},
+			{
 				Title: "Full Table Index Scans",
 				Metrics: []string{
 					"sql.full.scan.count",
