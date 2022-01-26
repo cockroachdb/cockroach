@@ -683,7 +683,7 @@ func BenchmarkReplicaCircuitBreakerSendOverhead(b *testing.B) {
 				dss = dss[:1] // they're all unused anyway
 			}
 			for _, ds := range dss {
-				b.Run("datastructure="+ds, func(b *testing.B) {
+				b.Run(ds, func(b *testing.B) {
 					{
 						prev := kvserver.CancelsStorageStrategy
 						kvserver.CancelsStorageStrategy = ds

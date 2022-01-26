@@ -155,19 +155,28 @@ func (br *replicaCircuitBreaker) Register(
 		brSig = neverTripSignaller{}
 	}
 
-	// Hmm is this really enough
+	// NB: it might be tempting to check the breaker error first to avoid the call
+	// to Set below if the breaker is tripped at this point. However, the ordering
+	// here, subtly, is required to avoid situations in which the cancel is still
+	// in the map despite the probe having shut down (in which case cancel will
+	// not be invoked until the probe is next triggered, which maybe "never").
 	//
-	// - Breaker trips
-	// - Probe runs
-	// - Probe has done all the work but not called done() yet
-	// - Insert
-	// - Check err (no new probe triggered b/c old one active)
-	// - Probe shuts down
+	// To see this, consider the case in which the breaker is initially not
+	// tripped when we check, but then trips immediately and has the probe
+	// fail (and terminate). Since the probe is in charge of cancelling all
+	// tracked proposals, we must ensure that this probe sees our proposal.
+	// Adding the proposal prior to checking means that if we see an untripped
+	// breaker, no probe is running - consequently should the breaker then
+	// trip, it will observe our cancel, thus avoiding a leak. If we observe
+	// a tripped breaker, we also need to remove our own cancel, as the probe
+	// may already have passed the point at which it iterates through the
+	// cancels prior to us inserting it.
 	br.cancels.Set(ctx, cancel)
 
+	// TODO(tbg): we may want to exclude some requests from this check, or allow
+	// requests to exclude themselves from the check (via their header).
 	if err := brSig.Err(); err != nil {
-		// TODO(tbg): we may want to exclude some requests from this check, or allow
-		// requests to exclude themselves from the check (via their header).
+		br.cancels.Del(ctx)
 		cancel()
 		return nil, nil, err
 	}
