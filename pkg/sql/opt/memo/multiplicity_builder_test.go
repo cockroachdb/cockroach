@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -67,6 +68,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 
 	xyScan, xyCols := ob.xyScan()
 	xyScan2, xyCols2 := ob.xyScan()
+	xyScanFiltered, xyColsFiltered := ob.makeFilteredScan("xy")
 	uvScan, uvCols := ob.uvScan()
 	fkScan, fkCols := ob.fkScan()
 	abcScan, abcCols := ob.abcScan()
@@ -300,6 +302,108 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols2[0])),
 			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
 		},
+		{ // 21
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND x = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 22
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.x = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstEquality(xyCols2[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(exactly-one)",
+		},
+		{ // 23
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND x >= 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstInequality(xyCols[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 24
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.x >= 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstInequality(xyCols2[0], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
+		},
+		{ // 25
+			// SELECT * FROM fk_tab INNER JOIN xy ON r1 = x WHERE r1 = 5 AND y = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right:    ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[1], 5))),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 26
+			// SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.x = xy2.x WHERE xy.x = 5 AND xy2.y = 5;
+			joinOp:   opt.InnerJoinOp,
+			left:     ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right:    ob.makeSelect(xyScan2, ob.makeFilters(ob.makeConstEquality(xyCols2[1], 5))),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-one)",
+		},
+		{ // 27
+			// SELECT * FROM fk_tab INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 LIMIT 10
+			// ) AS xy2 ON r1 = x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right: ob.makeSelect(xyScanFiltered, ob.makeFilters(
+				ob.makeConstEquality(xyColsFiltered[0], 5),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyColsFiltered[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 28
+			// SELECT * FROM xy INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 LIMIT 10
+			// ) AS xy2 ON xy.x = xy2.x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right: ob.makeSelect(xyScanFiltered, ob.makeFilters(
+				ob.makeConstEquality(xyColsFiltered[0], 5),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyColsFiltered[0])),
+			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
+		},
+		{ // 29
+			// SELECT * FROM fk_tab INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 AND y = 2
+			// ) AS xy2 ON r1 = x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(fkScan, ob.makeFilters(ob.makeConstEquality(fkCols[0], 5))),
+			right: ob.makeSelect(xyScan, ob.makeFilters(
+				ob.makeConstEquality(xyCols[0], 5),
+				ob.makeConstEquality(xyCols[1], 2),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(zero-or-one), right-rows(zero-or-more)",
+		},
+		{ // 30
+			// SELECT * FROM xy INNER JOIN (
+			// 	 SELECT * FROM xy WHERE x = 5 AND y = 2
+			// ) AS xy2 ON xy.x = xy2.x
+			// WHERE xy.x = 5;
+			joinOp: opt.InnerJoinOp,
+			left:   ob.makeSelect(xyScan, ob.makeFilters(ob.makeConstEquality(xyCols[0], 5))),
+			right: ob.makeSelect(xyScan2, ob.makeFilters(
+				ob.makeConstEquality(xyCols2[0], 5),
+				ob.makeConstEquality(xyCols2[1], 2),
+			)),
+			on:       ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			expected: "left-rows(zero-or-one), right-rows(exactly-one)",
+		},
 	}
 
 	for i, tc := range testCases {
@@ -308,7 +412,7 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			joinWithMult, _ := join.(joinWithMultiplicity)
 			multiplicity := joinWithMult.getMultiplicity()
 			if multiplicity.Format(tc.joinOp) != tc.expected {
-				t.Fatalf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
+				t.Errorf("\nexpected: %s\nactual:   %s", tc.expected, multiplicity.Format(tc.joinOp))
 			}
 		})
 	}
@@ -355,6 +459,18 @@ func (ob *testOpBuilder) createTables(stmts string) {
 }
 
 func (ob *testOpBuilder) makeScan(tableName tree.Name) (scan RelExpr, vars []*VariableExpr) {
+	return ob.makeScanImpl(tableName, false /* filtered */)
+}
+
+func (ob *testOpBuilder) makeFilteredScan(
+	tableName tree.Name,
+) (scan RelExpr, vars []*VariableExpr) {
+	return ob.makeScanImpl(tableName, true /* filtered */)
+}
+
+func (ob *testOpBuilder) makeScanImpl(
+	tableName tree.Name, filtered bool,
+) (scan RelExpr, vars []*VariableExpr) {
 	tn := tree.NewUnqualifiedTableName(tableName)
 	tab := ob.cat.Table(tn)
 	tabID := ob.mem.Metadata().AddTable(tab, tn)
@@ -365,7 +481,11 @@ func (ob *testOpBuilder) makeScan(tableName tree.Name) (scan RelExpr, vars []*Va
 		newVar := ob.mem.MemoizeVariable(col)
 		vars = append(vars, newVar)
 	}
-	return ob.mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols}), vars
+	sp := &ScanPrivate{Table: tabID, Cols: cols}
+	if filtered {
+		sp.HardLimit = 10
+	}
+	return ob.mem.MemoizeScan(sp), vars
 }
 
 func (ob *testOpBuilder) xyScan() (scan RelExpr, vars []*VariableExpr) {
@@ -390,6 +510,10 @@ func (ob *testOpBuilder) notNullMultiColFKScan() (scan RelExpr, vars []*Variable
 
 func (ob *testOpBuilder) oneNullMultiColFKScan() (scan RelExpr, vars []*VariableExpr) {
 	return ob.makeScan("one_null_multi_col_fk_tab")
+}
+
+func (ob *testOpBuilder) makeSelect(input RelExpr, filters FiltersExpr) RelExpr {
+	return ob.mem.MemoizeSelect(input, filters)
 }
 
 func (ob *testOpBuilder) makeInnerJoin(left, right RelExpr, on FiltersExpr) RelExpr {
@@ -431,6 +555,14 @@ func (ob *testOpBuilder) makeJoin(
 
 func (ob *testOpBuilder) makeEquality(left, right *VariableExpr) opt.ScalarExpr {
 	return ob.mem.MemoizeEq(left, right)
+}
+
+func (ob *testOpBuilder) makeConstEquality(v *VariableExpr, c int) opt.ScalarExpr {
+	return ob.mem.MemoizeEq(v, ob.mem.MemoizeConst(tree.NewDInt(tree.DInt(c)), types.Int))
+}
+
+func (ob *testOpBuilder) makeConstInequality(v *VariableExpr, c int) opt.ScalarExpr {
+	return ob.mem.MemoizeGe(v, ob.mem.MemoizeConst(tree.NewDInt(tree.DInt(c)), types.Int))
 }
 
 func (ob *testOpBuilder) makeFilters(conditions ...opt.ScalarExpr) (filters FiltersExpr) {
