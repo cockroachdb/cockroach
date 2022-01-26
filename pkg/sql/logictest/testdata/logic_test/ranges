@@ -584,3 +584,31 @@ query TT
 SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE t63646 FOR ROW ('b')]
 ----
 /"\x80"  NULL
+
+# Test permissions for showing ranges with ZONECONFIG privilege
+
+user root
+
+statement ok
+GRANT SELECT ON TABLE t to testuser
+
+user testuser
+
+statement error only users with the ZONECONFIG privilege or the admin role can use SHOW RANGES on t
+SHOW RANGES FROM TABLE t
+
+statement error only users with the ZONECONFIG privilege or the admin role can use SHOW RANGES on t
+SHOW RANGES FROM INDEX t@idx
+
+user root
+
+statement ok
+GRANT ZONECONFIG ON TABLE t TO testuser
+
+user testuser
+
+statement ok
+SHOW RANGES FROM TABLE t
+
+statement ok
+SHOW RANGES FROM INDEX t@idx
