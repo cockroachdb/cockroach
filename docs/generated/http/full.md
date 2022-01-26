@@ -5234,6 +5234,24 @@ JobResponse contains the job record for a job.
 | last_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | num_runs | [int64](#cockroach.server.serverpb.JobsResponse-int64) |  |  | [reserved](#support-status) |
+| execution_failures | [JobResponse.ExecutionFailure](#cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure) | repeated | ExecutionFailures is a log of execution failures of the job. It is not guaranteed to contain all execution failures and some execution failures may not contain an error or end. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.JobsResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure"></a>
+#### JobResponse.ExecutionFailure
+
+ExecutionFailure corresponds to a failure to execute the job with the
+attempt starting at start and ending at end.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| status | [string](#cockroach.server.serverpb.JobsResponse-string) |  | Status is the status of the job during the execution. | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | Start is the time at which the execution started. | [reserved](#support-status) |
+| end | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobsResponse-google.protobuf.Timestamp) |  | End is the time at which the error occurred. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.JobsResponse-string) |  | Error is the error which occurred. | [reserved](#support-status) |
 
 
 
@@ -5295,7 +5313,25 @@ JobResponse contains the job record for a job.
 | last_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | next_run | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | num_runs | [int64](#cockroach.server.serverpb.JobResponse-int64) |  |  | [reserved](#support-status) |
+| execution_failures | [JobResponse.ExecutionFailure](#cockroach.server.serverpb.JobResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure) | repeated | ExecutionFailures is a log of execution failures of the job. It is not guaranteed to contain all execution failures and some execution failures may not contain an error or end. | [reserved](#support-status) |
 
+
+
+
+
+
+<a name="cockroach.server.serverpb.JobResponse-cockroach.server.serverpb.JobResponse.ExecutionFailure"></a>
+#### JobResponse.ExecutionFailure
+
+ExecutionFailure corresponds to a failure to execute the job with the
+attempt starting at start and ending at end.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| status | [string](#cockroach.server.serverpb.JobResponse-string) |  | Status is the status of the job during the execution. | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | Start is the time at which the execution started. | [reserved](#support-status) |
+| end | [google.protobuf.Timestamp](#cockroach.server.serverpb.JobResponse-google.protobuf.Timestamp) |  | End is the time at which the error occurred. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.JobResponse-string) |  | Error is the error which occurred. | [reserved](#support-status) |
 
 
 
