@@ -35,20 +35,23 @@ func ingest(
 	startTime hlc.Timestamp,
 	progress jobspb.Progress,
 	jobID jobspb.JobID,
-) error {
+) (err error) {
 	// Initialize a stream client and resolve topology.
 	client, err := streamclient.NewStreamClient(streamAddress)
 	if err != nil {
 		return err
 	}
+	defer func() {
+		err = errors.CombineErrors(err, client.Close())
+	}()
 
 	// TODO(dt): if there is an existing stream ID, reconnect to it.
-	id, err := client.Create(ctx, tenantID)
+	streamID, err := client.Create(ctx, tenantID)
 	if err != nil {
 		return err
 	}
 
-	topology, err := client.Plan(ctx, id)
+	topology, err := client.Plan(ctx, streamID)
 	if err != nil {
 		return err
 	}
@@ -73,7 +76,7 @@ func ingest(
 
 	// Construct stream ingestion processor specs.
 	streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
-		streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID)
+		streamAddress, topology, sqlInstanceIDs, initialHighWater, jobID, streamID)
 	if err != nil {
 		return err
 	}
@@ -99,6 +102,7 @@ func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx inter
 	// processors shut down gracefully, i.e stopped ingesting any additional
 	// events from the replication stream. At this point it is safe to revert to
 	// the cutoff time to leave the cluster in a consistent state.
+	// TODO: after this, we need to complete the producer job into "replication complete state" in the future.
 	return s.revertToCutoverTimestamp(resumeCtx, execCtx)
 }
 

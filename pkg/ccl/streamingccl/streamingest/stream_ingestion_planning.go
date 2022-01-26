@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -90,8 +91,17 @@ func ingestionPlanHook(
 			return err
 		}
 		q := url.Query()
-		q.Set("TENANT_ID", ingestionStmt.Targets.Tenant.String())
-		url.RawQuery = q.Encode()
+
+		// Operator should specify a postgres scheme address with cert authentication.
+		if hasPostgresAuthentication := (q.Get("sslmode") == "verify-full") &&
+			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert");
+			(url.Scheme == "postgres") && !hasPostgresAuthentication {
+			return errors.Errorf(
+				"stream replication address should have cert authentication if in postgres scheme: %s", streamAddress)
+		}
+
+		// Convert this URL into sslinline mode.
+		*url, err = sqlutils.AddInlineSecurityCredentials(*url)
 		streamAddress = streamingccl.StreamAddress(url.String())
 
 		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||
