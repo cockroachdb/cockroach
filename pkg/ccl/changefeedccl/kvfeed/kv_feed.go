@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
 )
@@ -356,30 +358,7 @@ func (f *kvFeed) runUntilTableEvent(
 		return hlc.Timestamp{}, err
 	}
 
-	memBuf := f.bufferFactory()
-	defer func() {
-		err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
-	}()
-
-	g := ctxgroup.WithContext(ctx)
-	physicalCfg := physicalConfig{
-		Spans:     f.spans,
-		Timestamp: startFrom,
-		WithDiff:  f.withDiff,
-		Knobs:     f.knobs,
-	}
-	g.GoCtx(func(ctx context.Context) error {
-		return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed)
-	})
-	g.GoCtx(func(ctx context.Context) error {
-		return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
-	})
-
-	// TODO(mrtracy): We are currently tearing down the entire rangefeed set in
-	// order to perform a scan; however, given that we have an intermediate
-	// buffer, its seems that we could do this without having to destroy and
-	// recreate the rangefeeds.
-	err = g.Wait()
+	err = f.runPhysicalFeed(ctx, startFrom)
 	if err == nil {
 		return hlc.Timestamp{},
 			errors.AssertionFailedf("feed exited with no error and no scan boundary")
@@ -391,6 +370,56 @@ func (f *kvFeed) runUntilTableEvent(
 	} else {
 		return hlc.Timestamp{}, err
 	}
+}
+
+func (f *kvFeed) runPhysicalFeed(ctx context.Context, startFrom hlc.Timestamp) error {
+	frontier, err := span.MakeFrontier(f.spans...)
+	if err != nil {
+		return err
+	}
+	for _, span := range f.spans {
+		if _, err := frontier.Forward(span, startFrom); err != nil {
+			return err
+		}
+	}
+
+	retryOpts := base.DefaultRetryOptions()
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		memBuf := f.bufferFactory()
+		defer func() {
+			err = errors.CombineErrors(err, memBuf.CloseWithReason(ctx, err))
+		}()
+
+		physicalCfg := physicalConfig{
+			Spans:     f.spans,
+			Timestamp: frontier.Frontier(),
+			WithDiff:  f.withDiff,
+			Knobs:     f.knobs,
+		}
+
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			return copyFromSourceToDestUntilTableEvent(ctx, f.writer, memBuf, physicalCfg, f.tableFeed, frontier)
+		})
+		g.GoCtx(func(ctx context.Context) error {
+			return f.physicalFeed.Run(ctx, memBuf, physicalCfg)
+		})
+
+		// TODO(mrtracy): We are currently tearing down the entire rangefeed set in
+		// order to perform a scan; however, given that we have an intermediate
+		// buffer, its seems that we could do this without having to destroy and
+		// recreate the rangefeeds.
+		err = g.Wait()
+
+		// Send errors can occur naturally during cluster upgrades
+		isRetryable := kvcoord.IsSendError(err)
+
+		if !isRetryable {
+			return err
+		}
+	}
+
+	return err
 }
 
 type errBoundaryReached struct {
@@ -410,28 +439,19 @@ func (e *errUnknownEvent) Error() string {
 }
 
 // copyFromSourceToDestUntilTableEvents will pull read entries from source and
-// publish them to the destination if there is no table event from the SchemaFeed. If a
-// tableEvent occurs then the function will return once all of the spans have
-// been resolved up to the event. The first such event will be returned as
-// *errBoundaryReached. A nil error will never be returned.
+// publish them to the destination if there is no table event from the
+// SchemaFeed, advancing the frontier upon receiving resolved events. If a
+// tableEvent occurs then the function will return once the frontier has reached
+// it. The first such event will be returned as *errBoundaryReached. A nil error
+// will never be returned.
 func copyFromSourceToDestUntilTableEvent(
 	ctx context.Context,
 	dest kvevent.Writer,
 	source kvevent.Reader,
 	cfg physicalConfig,
 	tables schemafeed.SchemaFeed,
+	frontier *span.Frontier,
 ) error {
-	// Maintain a local spanfrontier to tell when all the component rangefeeds
-	// being watched have reached the Scan boundary.
-	frontier, err := span.MakeFrontier(cfg.Spans...)
-	if err != nil {
-		return err
-	}
-	for _, span := range cfg.Spans {
-		if _, err := frontier.Forward(span, cfg.Timestamp); err != nil {
-			return err
-		}
-	}
 	var (
 		scanBoundary         *errBoundaryReached
 		checkForScanBoundary = func(ts hlc.Timestamp) error {

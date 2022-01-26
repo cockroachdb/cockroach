@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/schemafeed",
@@ -29,6 +30,7 @@ go_library(
         "//pkg/util/limit",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/retry",
         "//pkg/util/span",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
