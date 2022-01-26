@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMaybeRefreshStats(t *testing.T) {
@@ -68,15 +69,13 @@ func TestMaybeRefreshStats(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// There should not be any stats yet.
@@ -197,15 +196,13 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	if err := checkAllTablesCount(ctx, 2, r); err != nil {
@@ -298,15 +295,13 @@ func TestAverageRefreshTime(t *testing.T) {
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// curTime is used as the current time throughout the test to ensure that the
@@ -548,15 +543,13 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	refresher := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
@@ -596,15 +589,13 @@ func TestNoRetryOnFailure(t *testing.T) {
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	r := MakeRefresher(s.AmbientCtx(), st, executor, cache, time.Microsecond /* asOfTime */)
 
 	// Try to refresh stats on a table that doesn't exist.
@@ -715,16 +706,13 @@ func TestAnalyzeSystemTables(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		kvDB,
 		executor,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	var tableNames []string
 	tableNames = make([]string, 0, 40)
 
