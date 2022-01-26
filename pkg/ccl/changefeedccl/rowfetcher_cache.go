@@ -43,6 +43,11 @@ type rowFetcherCache struct {
 	a tree.DatumAlloc
 }
 
+type cachedFetcher struct {
+	tableDesc catalog.TableDescriptor
+	fetcher   row.Fetcher
+}
+
 var rfCacheConfig = cache.Config{
 	Policy: cache.CacheFIFO,
 	// TODO: If we find ourselves thrashing here in changefeeds on many tables,
@@ -147,11 +152,16 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	// guaranteed that the tables have the same version. Additionally, these
 	// fetchers are always initialized with a single tabledesc.Immutable.
 	if v, ok := c.fetchers.Get(idVer); ok {
-		rf := v.(*row.Fetcher)
-		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, rf.GetTable().(catalog.TableDescriptor)) {
-			return rf, nil
+		f := v.(*cachedFetcher)
+		if catalog.UserDefinedTypeColsHaveSameVersion(tableDesc, f.tableDesc) {
+			return &f.fetcher, nil
 		}
 	}
+
+	f := &cachedFetcher{
+		tableDesc: tableDesc,
+	}
+	rf := &f.fetcher
 
 	// TODO(dan): Allow for decoding a subset of the columns.
 	rfArgs := row.FetcherTableArgs{
@@ -160,7 +170,6 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		IsSecondaryIndex: false,
 		Columns:          tableDesc.PublicColumns(),
 	}
-	var rf row.Fetcher
 	if err := rf.Init(
 		context.TODO(),
 		c.codec,
@@ -176,8 +185,9 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	}
 
 	// Necessary because virtual columns are not populated.
+	// TODO(radu): should we stop requesting those columns from the fetcher?
 	rf.IgnoreUnexpectedNulls = true
 
-	c.fetchers.Add(idVer, &rf)
-	return &rf, nil
+	c.fetchers.Add(idVer, f)
+	return rf, nil
 }
