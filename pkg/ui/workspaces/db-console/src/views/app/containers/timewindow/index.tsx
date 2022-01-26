@@ -60,7 +60,10 @@ class TimeWindowManager extends React.Component<
 
     // If there is no current window, or if scale have changed since this
     // window was generated, set one immediately.
-    if (!props.timeWindow.currentWindow || props.timeWindow.scaleChanged) {
+    if (
+      !props.timeWindow.metricsTime.currentWindow ||
+      props.timeWindow.metricsTime.scaleChanged
+    ) {
       this.setWindow(props);
       return;
     }
@@ -72,7 +75,7 @@ class TimeWindowManager extends React.Component<
     }
 
     const now = props.now ? props.now() : moment();
-    const currentEnd = props.timeWindow.currentWindow.end;
+    const currentEnd = props.timeWindow.metricsTime.currentWindow.end;
     const expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
     if (now.isAfter(expires)) {
       // Current time window is expired, reset it.
@@ -95,7 +98,7 @@ class TimeWindowManager extends React.Component<
    */
   setWindow(props: TimeWindowManagerProps) {
     if (!props.timeWindow.scale.windowEnd) {
-      if (!props.timeWindow.useTimeRange) {
+      if (!props.timeWindow.metricsTime.useTimeRange) {
         const now = props.now ? props.now() : moment();
         props.setTimeWindow({
           start: now.clone().subtract(props.timeWindow.scale.windowSize),
