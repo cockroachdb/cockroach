@@ -178,7 +178,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 		}
 	}
 
-	// Attempt to start an automatic stats run. It should fail.
+	// Attempt to Start an automatic stats run. It should fail.
 	autoStatsRunShouldFail()
 
 	// PAUSE JOB does not bloack until the job is paused but only requests it.
@@ -208,7 +208,7 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	// Starting another automatic stats run should still fail.
 	autoStatsRunShouldFail()
 
-	// Attempt to start a regular stats run. It should succeed.
+	// Attempt to Start a regular stats run. It should succeed.
 	errCh2 := make(chan error)
 	go func() {
 		_, err := conn.Exec(`CREATE STATISTICS s2 FROM d.t`)
