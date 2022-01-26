@@ -39,6 +39,7 @@ type EngineMetrics struct {
 	SQLServiceLatency     *metric.Histogram
 	SQLTxnLatency         *metric.Histogram
 	SQLTxnsOpen           *metric.Gauge
+	SQLActiveStatements   *metric.Gauge
 
 	// TxnAbortCount counts transactions that were aborted, either due
 	// to non-retriable errors, or retriable errors when the client-side
