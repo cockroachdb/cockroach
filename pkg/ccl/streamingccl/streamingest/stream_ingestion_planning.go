@@ -10,6 +10,8 @@ package streamingest
 
 import (
 	"context"
+	"net/url"
+	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -34,6 +36,45 @@ func streamIngestionJobDescription(
 ) (string, error) {
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(streamIngestion, ann), nil
+}
+
+// maybeAddInlineSecurityCredentials converts a PG URL into sslinline mode by adding ssl key and
+// certificates inline as ssl parameters. sslinline is postgres driver specific feature
+// (https://github.com/lib/pq/blob/8446d16b8935fdf2b5c0fe333538ac395e3e1e4b/ssl.go#L85).
+func maybeAddInlineSecurityCredentials(pgURL url.URL) (url.URL, error) {
+	options := pgURL.Query()
+	if options.Get("sslinline") == "true" {
+		return pgURL, nil
+	}
+
+	loadPathContentAsOption := func(optionKey string) error {
+		if !options.Has(optionKey) {
+			return nil
+		}
+		content, err := os.ReadFile(options.Get(optionKey))
+		if err != nil {
+			return err
+		}
+		options.Set(optionKey, string(content))
+		return nil
+	}
+
+	if err := loadPathContentAsOption("sslrootcert"); err != nil {
+		return url.URL{}, err
+	}
+	// Convert client certs inline.
+	if options.Get("sslmode") == "verify-full" {
+		if err := loadPathContentAsOption("sslcert"); err != nil {
+			return url.URL{}, err
+		}
+		if err := loadPathContentAsOption("sslkey"); err != nil {
+			return url.URL{}, err
+		}
+	}
+	options.Set("sslinline", "true")
+	res := pgURL
+	res.RawQuery = options.Encode()
+	return res, nil
 }
 
 func ingestionPlanHook(
@@ -90,8 +131,19 @@ func ingestionPlanHook(
 			return err
 		}
 		q := url.Query()
-		q.Set("TENANT_ID", ingestionStmt.Targets.Tenant.String())
-		url.RawQuery = q.Encode()
+
+		// Operator should specify a postgres scheme address with cert authentication.
+		if hasPostgresAuthentication := (q.Get("sslmode") == "verify-full") &&
+			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); (url.Scheme == "postgres") && !hasPostgresAuthentication {
+			return errors.Errorf(
+				"stream replication address should have cert authentication if in postgres scheme: %s", streamAddress)
+		}
+
+		// Convert this URL into sslinline mode.
+		*url, err = maybeAddInlineSecurityCredentials(*url)
+		if err != nil {
+			return err
+		}
 		streamAddress = streamingccl.StreamAddress(url.String())
 
 		if ingestionStmt.Targets.Types != nil || ingestionStmt.Targets.Databases != nil ||

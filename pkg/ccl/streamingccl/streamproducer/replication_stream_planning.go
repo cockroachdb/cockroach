@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeeddist"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -254,7 +255,9 @@ func getReplicationStreamSpec(
 			Locality:   nodeInfo.Locality,
 			PartitionSpec: &streampb.StreamPartitionSpec{
 				Spans: sp.Spans,
-				// Use default ExecutionConfig for now
+				Config: streampb.StreamPartitionSpec_ExecutionConfig{
+					MinCheckpointFrequency: streamingccl.StreamReplicationMinCheckpointFrequency.Get(&evalCtx.Settings.SV),
+				},
 			},
 		})
 	}
