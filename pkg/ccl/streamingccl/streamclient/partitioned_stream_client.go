@@ -12,11 +12,15 @@ import (
 	"context"
 	gosql "database/sql"
 	"net/url"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -24,6 +28,11 @@ import (
 
 type partitionedStreamClient struct {
 	db *gosql.DB // DB handle to the source cluster
+	mu sync.Mutex
+
+	closed bool
+	pgURLCertCleanup []func()
+	activeSubscriptions map[*partitionedStreamSubscription]bool
 }
 
 func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, error) {
@@ -31,7 +40,11 @@ func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, erro
 	if err != nil {
 		return nil, err
 	}
-	return &partitionedStreamClient{db: db}, nil
+	return &partitionedStreamClient{
+		db: db,
+		pgURLCertCleanup: make([]func(), 0),
+		activeSubscriptions: make(map[*partitionedStreamSubscription]bool),
+	}, nil
 }
 
 var _ Client = &partitionedStreamClient{}
@@ -110,7 +123,7 @@ func (p *partitionedStreamClient) Plan(
 	}
 
 	var rawSpec []byte
-	if err = row.Scan(&rawSpec); err != nil {
+	if err := row.Scan(&rawSpec); err != nil {
 		return nil, err
 	}
 	var spec streampb.ReplicationStreamSpec
@@ -119,17 +132,25 @@ func (p *partitionedStreamClient) Plan(
 	}
 
 	topology := Topology{}
-	for _, p := range spec.Partitions {
-		rawSpec, err := protoutil.Marshal(p.PartitionSpec)
+	for _, sp := range spec.Partitions {
+		pgUrl, cleanupCertDir, err := sqlutils.PGUrlE(sp.SQLAddress.String(),
+			"PartitionedReplicationStream" /* prefix */, url.User(security.RootUser))
+		if err != nil {
+			return nil, err
+		}
+		p.mu.Lock()
+		p.pgURLCertCleanup = append(p.pgURLCertCleanup, cleanupCertDir)
+		p.mu.Unlock()
+		rawSpec, err := protoutil.Marshal(sp.PartitionSpec)
 		if err != nil {
 			return nil, err
 		}
 		topology = append(topology, PartitionInfo{
-			ID:                p.NodeID.String(), // how do determine partition ID?
+			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
-			SrcInstanceID:     int(p.NodeID),
-			SrcAddr:           streamingccl.PartitionAddress(p.SQLAddress.String()),
-			SrcLocality:       p.Locality,
+			SrcInstanceID:     int(sp.NodeID),
+			SrcAddr:           streamingccl.PartitionAddress(pgUrl.String()),
+			SrcLocality:       sp.Locality,
 		})
 	}
 	return topology, nil
@@ -137,6 +158,14 @@ func (p *partitionedStreamClient) Plan(
 
 // Close implements Client interface.
 func (p *partitionedStreamClient) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	// Close all the active subscriptions and disallow more usage.
+	p.closed = true
+	for sub := range p.activeSubscriptions {
+		sub.Close()
+		delete(p.activeSubscriptions, sub)
+	}
 	return p.db.Close()
 }
 
@@ -144,29 +173,39 @@ func (p *partitionedStreamClient) Close() error {
 func (p *partitionedStreamClient) Subscribe(
 	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
+
 	sps := streampb.StreamPartitionSpec{}
 	if err := protoutil.Unmarshal(spec, &sps); err != nil {
 		return nil, err
 	}
 	sps.StartFrom = checkpoint
+	sps.Config = streampb.StreamPartitionSpec_ExecutionConfig{MinCheckpointFrequency: 2 * time.Second}
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
 		return nil, err
 	}
 
-	return &partitionedStreamSubscription{
+	res := &partitionedStreamSubscription{
 		eventsChan: make(chan streamingccl.Event),
 		db:         p.db,
 		specBytes:  specBytes,
 		streamID:   stream,
-	}, nil
+		client: p,
+		closeChan: make(chan struct{}),
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.activeSubscriptions[res] = true
+	return res, nil
 }
 
 type partitionedStreamSubscription struct {
 	eventsChan chan streamingccl.Event
 	err        error
-	db         *gosql.DB
+	db        *gosql.DB
+	client    *partitionedStreamClient
+	closeChan chan struct{}
 
 	streamEvent *streampb.StreamEvent
 	specBytes   []byte
@@ -249,8 +288,13 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 			p.err = err
 			return err
 		}
+		if event == nil {
+			return nil
+		}
 		select {
 		case p.eventsChan <- event:
+		case <-p.closeChan:
+			return nil
 		case <-ctx.Done():
 			p.err = err
 			return ctx.Err()
@@ -266,4 +310,9 @@ func (p *partitionedStreamSubscription) Events() <-chan streamingccl.Event {
 // Err implements the Subscription interface.
 func (p *partitionedStreamSubscription) Err() error {
 	return p.err
+}
+
+// Close implements the Subscription interface.
+func (p *partitionedStreamSubscription) Close() {
+	p.closeChan <- struct{}{}
 }

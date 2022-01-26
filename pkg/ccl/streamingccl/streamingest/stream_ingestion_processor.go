@@ -88,6 +88,9 @@ type streamIngestionProcessor struct {
 	// client is a streaming client which provides a stream of events from a given
 	// address.
 	forceClientForTests streamclient.Client
+	// clients are a collection of streamclient.Client created for consuming multiple
+	// partitions from a stream.
+	clients             []streamclient.Client
 
 	// Checkpoint events may need to be buffered if they arrive within the same
 	// minimumFlushInterval.
@@ -220,6 +223,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
+	sip.clients = make([]streamclient.Client, 0)
 	for i := range sip.spec.PartitionIds {
 		id := sip.spec.PartitionIds[i]
 		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
@@ -229,11 +233,17 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for parition spec %q from %q", spec, addr))
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
 				return
 			}
+			partitionedStream := streamingccl.UsePartitionedStreamClient.Get(&evalCtx.Settings.SV)
+			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr), partitionedStream)
+			if err != nil {
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
+				return
+			}
+			sip.clients = append(sip.clients, streamClient)
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
@@ -301,6 +311,9 @@ func (sip *streamIngestionProcessor) close() {
 		return
 	}
 
+	for _, client := range sip.clients {
+		_ = client.Close()
+	}
 	if sip.batcher != nil {
 		sip.batcher.Close()
 	}

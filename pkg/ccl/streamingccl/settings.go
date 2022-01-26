@@ -31,3 +31,12 @@ var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
 	"controls how long we wait for to kill an inactive producer job",
 	time.Minute,
 )
+
+// UsePartitionedStreamClient controls whether to use partitioned stream client to
+// consume a replication stream.
+var UsePartitionedStreamClient = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"stream_replication.use_partitioned_stream_client",
+	"controls whether to use partitioned stream client to consume a replication stream",
+	true,
+)

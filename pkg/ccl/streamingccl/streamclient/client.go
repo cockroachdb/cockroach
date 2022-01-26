@@ -10,7 +10,7 @@ package streamclient
 
 import (
 	"context"
-
+	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -114,8 +114,13 @@ type Subscription interface {
 }
 
 // NewStreamClient creates a new stream client based on the stream
-// address.
-func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
+// address. If `partitioned` is true, returns a partitioned stream client.
+func NewStreamClient(streamAddress streamingccl.StreamAddress, partitioned bool) (Client, error) {
+	if partitioned {
+		fmt.Println("creating a partitioned stream client")
+	} else {
+		fmt.Println("creating a sinkless stream client")
+	}
 	var streamClient Client
 	streamURL, err := streamAddress.URL()
 	if err != nil {
@@ -126,6 +131,9 @@ func NewStreamClient(streamAddress streamingccl.StreamAddress) (Client, error) {
 	case "postgres", "postgresql":
 		// The canonical PostgreSQL URL scheme is "postgresql", however our
 		// own client commands also accept "postgres".
+		if partitioned {
+			return newPartitionedStreamClient(streamURL)
+		}
 		return newPGWireReplicationClient(streamURL)
 	case RandomGenScheme:
 		streamClient, err = newRandomStreamClient(streamURL)
