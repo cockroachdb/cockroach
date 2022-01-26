@@ -192,6 +192,11 @@ message StreamIngestionFrontierSpec {
   repeated roachpb.Span tracked_spans = 2 [(gogoproto.nullable) = false];
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
+
+  // StreamID is the ID of the stream.
+  optional uint64 stream_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
+  // StreamAddress locate the stream so that a stream client can be initialized.
+  optional string stream_address = 5 [(gogoproto.nullable) = false];
 }
 
 message BackupDataSpec {
