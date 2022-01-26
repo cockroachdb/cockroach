@@ -622,7 +622,7 @@ ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y), DROP CONSTRAINT "t_pkey"
 statement error pq: multiple primary keys for table "t" are not allowed
 ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
-statement error pgcode 42710 constraint with name \"t_pkey\" already exists
+statement ok
 ALTER TABLE t DROP CONSTRAINT "t_pkey", ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 statement ok
@@ -654,7 +654,7 @@ BEGIN
 statement ok
 ALTER TABLE t DROP CONSTRAINT "t_pkey"
 
-statement error pgcode 42710 constraint with name \"t_pkey\" already exists
+statement ok
 ALTER TABLE t ADD CONSTRAINT "t_pkey" PRIMARY KEY (y)
 
 statement ok

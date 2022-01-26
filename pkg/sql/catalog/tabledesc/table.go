@@ -312,10 +312,18 @@ func (desc *wrapper) collectConstraintInfo(
 			if hidden {
 				continue
 			}
+			indexName := index.Name
+			// If a primary key swap is occurring, then the primary index name can
+			// be seen as being under the new name.
+			for _, mutation := range desc.GetMutations() {
+				if mutation.GetPrimaryKeySwap() != nil {
+					indexName = mutation.GetPrimaryKeySwap().NewPrimaryIndexName
+				}
+			}
 			detail := descpb.ConstraintDetail{Kind: descpb.ConstraintTypePK}
 			detail.Columns = index.KeyColumnNames
 			detail.Index = index
-			info[index.Name] = detail
+			info[indexName] = detail
 		} else if index.Unique {
 			if _, ok := info[index.Name]; ok {
 				return nil, pgerror.Newf(pgcode.DuplicateObject,

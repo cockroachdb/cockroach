@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -96,9 +97,9 @@ type Result struct {
 	// requests.
 	EnqueueKeysSatisfied []int
 	// memoryTok describes the memory reservation of this Result that needs to
-	// be released back to the budget when the Result is Release()'d.
+	// be released back to the Streamer's budget when the Result is Release()'d.
 	memoryTok struct {
-		budget    *budget
+		streamer  *Streamer
 		toRelease int64
 	}
 	// position tracks the ordinal among all originally enqueued requests that
@@ -130,8 +131,14 @@ type Hints struct {
 // Streamer internally does buffering and caching of Results - which also
 // contributes to the refcounts.
 func (r Result) Release(ctx context.Context) {
-	if r.memoryTok.budget != nil {
-		r.memoryTok.budget.release(ctx, r.memoryTok.toRelease)
+	if s := r.memoryTok.streamer; s != nil {
+		s.budget.mu.Lock()
+		defer s.budget.mu.Unlock()
+		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.mu.numUnreleasedResults--
+		s.signalBudgetIfNoRequestsInProgressLocked()
 	}
 }
 
@@ -228,6 +235,10 @@ type Streamer struct {
 		// TODO(yuzefovich): consider using ring.Buffer instead of a slice.
 		requestsToServe []singleRangeBatch
 
+		// hasWork is used by the worker coordinator to block until some
+		// requests are added to requestsToServe.
+		hasWork *sync.Cond
+
 		// numRangesLeftPerScanRequest tracks how many ranges a particular
 		// originally enqueued ScanRequest touches, but scanning of those ranges
 		// isn't complete. It is allocated lazily when the first ScanRequest is
@@ -246,14 +257,25 @@ type Streamer struct {
 		// are currently being served asynchronously (i.e. those that have
 		// already left requestsToServe queue, but for which we haven't received
 		// the results yet).
-		// TODO(yuzefovich): check whether the contention on mu when accessing
-		// this field is sufficient to justify pulling it out into an atomic.
 		numRequestsInFlight int
+
+		// numUnreleasedResults tracks the number of Results that have already
+		// been created but haven't been Release()'d yet. This number includes
+		// those that are currently in 'results' in addition to those returned
+		// by GetResults() to the caller which the caller hasn't processed yet.
+		numUnreleasedResults int
 
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
 		results []Result
-		err     error
+
+		// err is set once the Streamer cannot make progress any more and will
+		// be returned by GetResults().
+		err error
+
+		// done is set to true once the Streamer is closed meaning the worker
+		// coordinator must exit.
+		done bool
 	}
 }
 
@@ -302,6 +324,7 @@ func NewStreamer(
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
+	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -315,7 +338,6 @@ func NewStreamer(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
 	)
-	s.coordinator.mu.hasWork = sync.NewCond(&s.coordinator.mu)
 	streamerConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
 		s.coordinator.asyncSem.UpdateCapacity(uint64(streamerConcurrencyLimit.Get(&st.SV)))
 	})
@@ -390,22 +412,21 @@ func (s *Streamer) Enqueue(
 	// TODO(yuzefovich): we might want to have more fine-grained lock
 	// acquisitions once pipelining is implemented.
 	s.mu.Lock()
-	locked := true
 	defer func() {
-		if retErr != nil {
-			if !locked {
-				s.mu.Lock()
-				locked = true
-			}
-			if s.mu.err == nil {
-				// Set the error so that mainLoop of the worker coordinator
-				// exits as soon as possible, without issuing any more requests.
-				s.mu.err = retErr
+		// We assume that the Streamer's mutex is held when Enqueue returns.
+		s.mu.AssertHeld()
+		defer s.mu.Unlock()
+		if buildutil.CrdbTestBuild {
+			if s.mu.err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(s.mu.err, "s.mu.err is non-nil"))
 			}
 		}
-		if locked {
-			s.mu.Unlock()
-		}
+		// Set the error (if present) so that mainLoop of the worker coordinator
+		// exits as soon as possible, without issuing any requests. Note that
+		// s.mu.err couldn't have already been set by the worker coordinator or
+		// the asynchronous requests because the worker coordinator starts
+		// issuing the requests only after Enqueue() returns.
+		s.mu.err = retErr
 	}()
 
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
@@ -434,6 +455,10 @@ func (s *Streamer) Enqueue(
 	// requestsToServe, and the worker coordinator will then pick those batches
 	// up to execute asynchronously.
 	var totalReqsMemUsage int64
+	// Use a local variable for requestsToServe rather than
+	// s.mu.requestsToServe. This is needed in order for the worker coordinator
+	// to not pick up any work until we account for totalReqsMemUsage.
+	var requestsToServe []singleRangeBatch
 	// TODO(yuzefovich): in InOrder mode we need to treat the head-of-the-line
 	// request differently.
 	seekKey := rs.Key
@@ -492,7 +517,7 @@ func (s *Streamer) Enqueue(
 			sort.Sort(&r)
 		}
 
-		s.mu.requestsToServe = append(s.mu.requestsToServe, r)
+		requestsToServe = append(requestsToServe, r)
 
 		// Determine next seek key, taking potentially sparse requests into
 		// consideration.
@@ -511,25 +536,37 @@ func (s *Streamer) Enqueue(
 		}
 	}
 
-	// Release the Streamer's mutex so that there is no overlap with the
-	// budget's mutex - the budget's mutex needs to be acquired first in order
-	// to eliminate a potential deadlock.
-	s.mu.Unlock()
-	locked = false
-
-	// Account for the memory used by all the requests. We allow the budget to
-	// go into debt iff a single request was enqueued. This is needed to support
-	// the case of arbitrarily large keys - the caller is expected to produce
-	// requests with such cases one at a time.
-	allowDebt := len(reqs) == 1
-	if err = s.budget.consume(ctx, totalReqsMemUsage, allowDebt); err != nil {
+	err = s.enqueueMemoryAccountingLocked(ctx, totalReqsMemUsage, len(reqs))
+	if err != nil {
 		return err
 	}
 
-	// TODO(yuzefovich): it might be better to notify the coordinator once
-	// one singleRangeBatch object has been appended to s.mu.requestsToServe.
-	s.coordinator.mu.hasWork.Signal()
+	// Memory reservation was approved, so the requests are good to go.
+	s.mu.requestsToServe = requestsToServe
+	s.mu.hasWork.Signal()
 	return nil
+}
+
+// enqueueMemoryAccountingLocked accounts for the memory used by all the
+// requests that are added in Enqueue.
+//
+// It assumes that the mutex of s is being held and guarantees that it will be
+// held when the function returns too.
+func (s *Streamer) enqueueMemoryAccountingLocked(
+	ctx context.Context, totalReqsMemUsage int64, numReqs int,
+) error {
+	s.mu.AssertHeld()
+	// Per the contract of the budget's mutex (which must be acquired first,
+	// before the Streamer's mutex), we cannot hold the mutex of s, so we have
+	// to release it first and acquire right before returning from this
+	// function.
+	s.mu.Unlock()
+	defer s.mu.Lock()
+	// We allow the budget to go into debt iff a single request was enqueued.
+	// This is needed to support the case of arbitrarily large keys - the caller
+	// is expected to produce requests with such cases one at a time.
+	allowDebt := numReqs == 1
+	return s.budget.consume(ctx, totalReqsMemUsage, allowDebt)
 }
 
 // GetResults blocks until at least one result is available. If the operation
@@ -588,6 +625,13 @@ func (s *Streamer) notifyGetResultsLocked() {
 func (s *Streamer) setError(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.setErrorLocked(err)
+}
+
+// setErrorLocked is the same as setError but assumes that the mutex of s is
+// already being held.
+func (s *Streamer) setErrorLocked(err error) {
+	s.mu.AssertHeld()
 	if s.mu.err == nil {
 		s.mu.err = err
 	}
@@ -600,22 +644,41 @@ func (s *Streamer) setError(err error) {
 func (s *Streamer) Close() {
 	if s.coordinatorStarted {
 		s.coordinatorCtxCancel()
-		s.coordinator.mu.Lock()
-		s.coordinator.mu.done = true
+		s.mu.Lock()
+		s.mu.done = true
 		// Unblock the coordinator in case it is waiting for more work.
-		s.coordinator.mu.hasWork.Signal()
-		s.coordinator.mu.Unlock()
+		s.mu.hasWork.Signal()
+		s.mu.Unlock()
+		// Unblock the coordinator in case it is waiting for the budget.
+		s.budget.mu.waitForBudget.Signal()
 	}
 	s.waitGroup.Wait()
 	*s = Streamer{}
 }
 
-// getNumRequestsInFlight returns the number of requests that are currently in
-// flight. This method should be called without holding the lock of s.
-func (s *Streamer) getNumRequestsInFlight() int {
+// getNumRequestsInProgress returns the number of requests that are currently
+// "in progress" - already issued requests that are in flight combined with the
+// number of unreleased results. This method should be called without holding
+// the lock of s.
+func (s *Streamer) getNumRequestsInProgress() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.numRequestsInFlight
+	return s.mu.numRequestsInFlight + s.mu.numUnreleasedResults
+}
+
+// signalBudgetIfNoRequestsInProgressLocked checks whether there are no requests
+// in progress and signals the budget's condition variable if so.
+//
+// We have to explicitly signal the condition variable to make sure that if the
+// budget doesn't get out of debt, the worker coordinator doesn't wait for any
+// other request to be completed / other result be released.
+//
+// The mutex of s must be held.
+func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
+	s.mu.AssertHeld()
+	if s.mu.numRequestsInFlight == 0 && s.mu.numUnreleasedResults == 0 {
+		s.budget.mu.waitForBudget.Signal()
+	}
 }
 
 // adjustNumRequestsInFlight updates the number of requests that are currently
@@ -624,6 +687,7 @@ func (s *Streamer) adjustNumRequestsInFlight(delta int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.numRequestsInFlight += delta
+	s.signalBudgetIfNoRequestsInProgressLocked()
 }
 
 // singleRangeBatch contains parts of the originally enqueued requests that have
@@ -671,18 +735,10 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader roachpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
-
-	mu struct {
-		syncutil.Mutex
-		hasWork *sync.Cond
-		// done is set to true once the Streamer is closed meaning the worker
-		// coordinator must exit.
-		done bool
-	}
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
-// call until Cancel) and routes the single-range batches for asynchronous
+// call until Close) and routes the single-range batches for asynchronous
 // execution. This function is dividing up the Streamer's budget for each of
 // those batches and won't start executing the batches if the available budget
 // is insufficient. The function exits when an error is encountered by one of
@@ -691,37 +747,22 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer w.s.waitGroup.Done()
 	for {
 		// Get next requests to serve.
-		requestsToServe, avgResponseSize, shouldExit := w.getRequests()
+		requestsToServe, avgResponseSize, shouldExit := w.getRequests(ctx)
 		if shouldExit {
 			return
 		}
-		if len(requestsToServe) == 0 {
-			// If the Streamer isn't closed yet, block until there are enqueued
-			// requests.
-			w.mu.Lock()
-			if !w.mu.done {
-				w.mu.hasWork.Wait()
+		if buildutil.CrdbTestBuild {
+			if len(requestsToServe) == 0 {
+				panic(errors.AssertionFailedf(
+					"unexpectedly zero requests to serve returned by " +
+						"getRequests when shouldExit is false",
+				))
 			}
-			w.mu.Unlock()
-			if ctx.Err() != nil {
-				w.s.setError(ctx.Err())
-				return
-			}
-			continue
 		}
 
-		// Now wait until there is enough budget to at least receive one full
-		// response (but only if there are requests in flight - if there are
-		// none, then we might have a degenerate case when a single row is
-		// expected to exceed the budget).
-		// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
-		for w.s.getNumRequestsInFlight() > 0 && w.s.budget.available() < avgResponseSize {
-			select {
-			case <-w.s.budget.waitCh:
-			case <-ctx.Done():
-				w.s.setError(ctx.Err())
-				return
-			}
+		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
+		if shouldExit {
+			return
 		}
 
 		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, avgResponseSize)
@@ -732,27 +773,91 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	}
 }
 
-// getRequests returns all currently enqueued requests to be served.
+// getRequests returns all currently enqueued requests to be served, and if
+// there are none, it waits until some requests are added. It assumes that the
+// Streamer's mutex is not held.
 //
 // A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequests() (
+func (w *workerCoordinator) getRequests(
+	ctx context.Context,
+) (requestsToServe []singleRangeBatch, avgResponseSize int64, shouldExit bool) {
+	w.s.mu.Lock()
+	defer w.s.mu.Unlock()
+	requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
+	if shouldExit {
+		return requestsToServe, avgResponseSize, shouldExit
+	}
+	if len(requestsToServe) == 0 {
+		w.s.mu.hasWork.Wait()
+		// Check whether the Streamer has been canceled or closed while we
+		// were waiting for work.
+		if ctx.Err() != nil {
+			// Note that if it was a graceful closure, we still will see a
+			// context cancellation error; however, it won't be propagated
+			// to the client because no more calls after Close() are
+			// allowed.
+			w.s.setErrorLocked(ctx.Err())
+			shouldExit = true
+			return
+		}
+		requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
+	}
+	return requestsToServe, avgResponseSize, shouldExit
+}
+
+// getRequestsLocked returns all currently enqueued requests to be served.
+// Unlike getRequests, it doesn't block if there are no requests at the moment.
+// It assumes that the Streamer's mutex is being held.
+//
+// A boolean that indicates whether the coordinator should exit is returned.
+func (w *workerCoordinator) getRequestsLocked() (
 	requestsToServe []singleRangeBatch,
 	avgResponseSize int64,
 	shouldExit bool,
 ) {
-	w.s.mu.Lock()
-	defer w.s.mu.Unlock()
+	w.s.mu.AssertHeld()
 	requestsToServe = w.s.mu.requestsToServe
 	avgResponseSize = w.s.mu.avgResponseEstimator.getAvgResponseSize()
-	shouldExit = w.s.mu.err != nil
+	shouldExit = w.s.mu.err != nil || w.s.mu.done
 	return requestsToServe, avgResponseSize, shouldExit
+}
+
+// waitUntilEnoughBudget waits until there is enough budget to at least receive
+// one full response.
+//
+// A boolean that indicates whether the coordinator should exit is returned.
+func (w *workerCoordinator) waitUntilEnoughBudget(
+	ctx context.Context, avgResponseSize int64,
+) (shouldExit bool) {
+	w.s.budget.mu.Lock()
+	defer w.s.budget.mu.Unlock()
+	// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
+	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < avgResponseSize {
+		// There isn't enough budget at the moment. Check whether there are any
+		// requests in progress.
+		if w.s.getNumRequestsInProgress() == 0 {
+			// We have a degenerate case when a single row is expected to exceed
+			// the budget.
+			return false
+		}
+		// We have to wait for some budget.release() calls.
+		w.s.budget.mu.waitForBudget.Wait()
+		// Check if the Streamer has been canceled or closed while we were
+		// waiting.
+		if ctx.Err() != nil {
+			w.s.setError(ctx.Err())
+			return true
+		}
+	}
+	return false
 }
 
 // issueRequestsForAsyncProcessing iterates over the given requests and issues
 // them to be served asynchronously while there is enough budget available to
 // receive the responses. Once the budget is exhausted, no new requests are
-// issued, the only exception is made for the case when there are no other
-// requests in flight, and in that scenario, a single request will be issued.
+// issued, the only exception is made for the case when there are no requests in
+// progress (both requests in flight as well as unreleased results), and in that
+// scenario, a single request will be issued.
 //
 // It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
 // (i.e. it is possible that some other requests have been appended to
@@ -772,16 +877,16 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 
-	headOfLine := w.s.getNumRequestsInFlight() == 0
+	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
 	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		if availableBudget < avgResponseSize {
 			if !headOfLine {
 				// We don't have enough budget available to serve this request,
-				// and there are other requests in flight, so we'll wait for
+				// and there are other requests in progress, so we'll wait for
 				// some of them to finish.
-				break
+				return nil
 			}
 			budgetIsExhausted = true
 			if availableBudget < 1 {
@@ -818,7 +923,8 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// we're holding the budget's mutex. Thus, the error indicates that
 			// the root memory pool has been exhausted.
 			if !headOfLine {
-				// There are some requests in flight, so we'll let them finish.
+				// There are some requests in progress, so we'll let them
+				// finish / be released.
 				//
 				// This is opportunistic behavior where we're hoping that once
 				// other requests are fully processed (i.e. the corresponding
@@ -831,9 +937,9 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				// available RAM). Furthermore, if other queries are consuming
 				// all of the root memory pool limit, then the head-of-the-line
 				// request will notice it and will exit accordingly.
-				break
+				return nil
 			}
-			// We don't have any requests in flight, so we'll exit to be safe
+			// We don't have any requests in progress, so we'll exit to be safe
 			// (in order not to OOM the node). Most likely this occurs when
 			// there are concurrent memory-intensive queries which this Streamer
 			// has no control over.
@@ -857,7 +963,7 @@ func (w *workerCoordinator) addRequest(req singleRangeBatch) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
 	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
-	w.mu.hasWork.Signal()
+	w.s.mu.hasWork.Signal()
 }
 
 func (w *workerCoordinator) asyncRequestCleanup() {
@@ -879,11 +985,11 @@ func (w *workerCoordinator) asyncRequestCleanup() {
 // the memory reservation (according to the Result's footprint) that will be
 // returned back to the budget once Result.Release() is called.
 //
-// headOfLine indicates whether this request is the current head of the line.
-// Head-of-the-line requests are treated specially in a sense that they are
-// allowed to put the budget into debt. The caller is responsible for ensuring
-// that there is at most one asynchronous request with headOfLine=true at all
-// times.
+// headOfLine indicates whether this request is the current head of the line and
+// there are no unreleased Results. Head-of-the-line requests are treated
+// specially in a sense that they are allowed to put the budget into debt. The
+// caller is responsible for ensuring that there is at most one asynchronous
+// request with headOfLine=true at all times.
 func (w *workerCoordinator) performRequestAsync(
 	ctx context.Context, req singleRangeBatch, targetBytes int64, headOfLine bool,
 ) {
@@ -934,92 +1040,18 @@ func (w *workerCoordinator) performRequestAsync(
 				return
 			}
 
-			var resumeReq singleRangeBatch
-			// We will reuse the slices for the resume spans, if any.
-			resumeReq.reqs = req.reqs[:0]
-			resumeReq.positions = req.positions[:0]
-			var results []Result
-			var numCompleteGetResponses int
-			// memoryFootprintBytes tracks the total memory footprint of
-			// non-empty responses. This will be equal to the sum of memory
-			// tokens created for all Results.
-			var memoryFootprintBytes int64
-			var hasNonEmptyScanResponse bool
-			for i, resp := range br.Responses {
-				enqueueKey := req.positions[i]
-				if w.s.enqueueKeys != nil {
-					enqueueKey = w.s.enqueueKeys[req.positions[i]]
-				}
-				reply := resp.GetInner()
-				origReq := req.reqs[i]
-				// Unset the original request so that we lose the reference to
-				// the span.
-				req.reqs[i] = roachpb.RequestUnion{}
-				switch origRequest := origReq.GetInner().(type) {
-				case *roachpb.GetRequest:
-					get := reply.(*roachpb.GetResponse)
-					if get.ResumeSpan != nil {
-						// This Get wasn't completed - update the original
-						// request according to the ResumeSpan and include it
-						// into the batch again.
-						origRequest.SetSpan(*get.ResumeSpan)
-						resumeReq.reqs = append(resumeReq.reqs, origReq)
-						resumeReq.positions = append(resumeReq.positions, req.positions[i])
-					} else {
-						// This Get was completed.
-						toRelease := int64(get.Size())
-						result := Result{
-							GetResp: get,
-							// This currently only works because all requests
-							// are unique.
-							EnqueueKeysSatisfied: []int{enqueueKey},
-							position:             req.positions[i],
-						}
-						result.memoryTok.budget = w.s.budget
-						result.memoryTok.toRelease = toRelease
-						memoryFootprintBytes += toRelease
-						results = append(results, result)
-						numCompleteGetResponses++
-					}
-
-				case *roachpb.ScanRequest:
-					scan := reply.(*roachpb.ScanResponse)
-					resumeSpan := scan.ResumeSpan
-					if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
-						toRelease := int64(scan.Size())
-						result := Result{
-							// This currently only works because all requests
-							// are unique.
-							EnqueueKeysSatisfied: []int{enqueueKey},
-							position:             req.positions[i],
-						}
-						result.memoryTok.budget = w.s.budget
-						result.memoryTok.toRelease = toRelease
-						result.ScanResp.ScanResponse = scan
-						// Complete field will be set below.
-						memoryFootprintBytes += toRelease
-						results = append(results, result)
-						hasNonEmptyScanResponse = true
-					}
-					if resumeSpan != nil {
-						// This Scan wasn't completed - update the original
-						// request according to the resumeSpan and include it
-						// into the batch again.
-						origRequest.SetSpan(*resumeSpan)
-						resumeReq.reqs = append(resumeReq.reqs, origReq)
-						resumeReq.positions = append(resumeReq.positions, req.positions[i])
-					}
-				}
-			}
+			// First, we have to reconcile the memory budget. We do it
+			// separately from processing the results because we want to know
+			// how many Gets and Scans need to be allocated for the ResumeSpans,
+			// if any are present. At the moment, due to limitations of the KV
+			// layer (#75452) we cannot reuse original requests because the KV
+			// doesn't allow mutability.
+			memoryFootprintBytes, resumeReqsMemUsage, numIncompleteGets, numIncompleteScans := calculateFootprint(req, br)
 
 			// Now adjust the budget based on the actual memory footprint of
 			// non-empty responses as well as resume spans, if any.
 			respOverestimate := targetBytes - memoryFootprintBytes
-			var reqsMemUsage int64
-			if len(resumeReq.reqs) > 0 {
-				reqsMemUsage = requestsMemUsage(resumeReq.reqs)
-			}
-			reqOveraccounted := req.reqsReservedBytes - reqsMemUsage
+			reqOveraccounted := req.reqsReservedBytes - resumeReqsMemUsage
 			overaccountedTotal := respOverestimate + reqOveraccounted
 			if overaccountedTotal >= 0 {
 				w.s.budget.release(ctx, overaccountedTotal)
@@ -1063,8 +1095,6 @@ func (w *workerCoordinator) performRequestAsync(
 					return
 				}
 			}
-			// Update the resume request accordingly.
-			resumeReq.reqsReservedBytes = reqsMemUsage
 
 			// Do admission control after we've finalized the memory accounting.
 			if br != nil && w.responseAdmissionQ != nil {
@@ -1079,24 +1109,209 @@ func (w *workerCoordinator) performRequestAsync(
 				}
 			}
 
-			// If we have any results, finalize them.
-			if len(results) > 0 {
-				w.finalizeSingleRangeResults(
-					results, memoryFootprintBytes, hasNonEmptyScanResponse,
-					numCompleteGetResponses,
-				)
-			}
-
-			// If we have any incomplete requests, add them back into the work
-			// pool.
-			if len(resumeReq.reqs) > 0 {
-				w.addRequest(resumeReq)
-			}
+			// Finally, process the results and add the ResumeSpans to be
+			// processed as well.
+			w.processSingleRangeResults(
+				req, br, memoryFootprintBytes, resumeReqsMemUsage,
+				numIncompleteGets, numIncompleteScans,
+			)
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
 		w.asyncRequestCleanup()
 		w.s.setError(err)
+	}
+}
+
+// calculateFootprint calculates the memory footprint of the batch response as
+// well as of the requests that will have to be created for the ResumeSpans.
+// - memoryFootprintBytes tracks the total memory footprint of non-empty
+// responses. This will be equal to the sum of memory tokens created for all
+// Results.
+// - resumeReqsMemUsage tracks the memory usage of the requests for the
+// ResumeSpans.
+func calculateFootprint(
+	req singleRangeBatch, br *roachpb.BatchResponse,
+) (
+	memoryFootprintBytes int64,
+	resumeReqsMemUsage int64,
+	numIncompleteGets, numIncompleteScans int,
+) {
+	// Note that we cannot use Size() methods that are automatically generated
+	// by the protobuf library because they account for things differently from
+	// how the memory usage is accounted for by the KV layer for the purposes of
+	// tracking TargetBytes limit.
+
+	// getRequestScratch and scanRequestScratch are used to calculate
+	// the size of requests when we set the ResumeSpans on them.
+	var getRequestScratch roachpb.GetRequest
+	var scanRequestScratch roachpb.ScanRequest
+	for i, resp := range br.Responses {
+		reply := resp.GetInner()
+		switch req.reqs[i].GetInner().(type) {
+		case *roachpb.GetRequest:
+			get := reply.(*roachpb.GetResponse)
+			if get.ResumeSpan != nil {
+				// This Get wasn't completed.
+				getRequestScratch.SetSpan(*get.ResumeSpan)
+				resumeReqsMemUsage += int64(getRequestScratch.Size())
+				numIncompleteGets++
+			} else {
+				// This Get was completed.
+				memoryFootprintBytes += getResponseSize(get)
+			}
+		case *roachpb.ScanRequest:
+			scan := reply.(*roachpb.ScanResponse)
+			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+				memoryFootprintBytes += scanResponseSize(scan)
+			}
+			if scan.ResumeSpan != nil {
+				// This Scan wasn't completed.
+				scanRequestScratch.SetSpan(*scan.ResumeSpan)
+				resumeReqsMemUsage += int64(scanRequestScratch.Size())
+				numIncompleteScans++
+			}
+		}
+	}
+	// This addendum is the first step of requestsMemUsage() and we've already
+	// added the size of each resume request above.
+	resumeReqsMemUsage += requestUnionOverhead * int64(numIncompleteGets+numIncompleteScans)
+	return memoryFootprintBytes, resumeReqsMemUsage, numIncompleteGets, numIncompleteScans
+}
+
+// processSingleRangeResults creates a Result for each non-empty response found
+// in the BatchResponse. The ResumeSpans, if found, are added into a new
+// singleRangeBatch request that is added to be picked up by the mainLoop of the
+// worker coordinator. This method assumes that req is no longer needed by the
+// caller, so req.positions is reused for the ResumeSpans.
+//
+// It also assumes that the budget has already been reconciled with the
+// reservations for Results that will be created.
+func (w *workerCoordinator) processSingleRangeResults(
+	req singleRangeBatch,
+	br *roachpb.BatchResponse,
+	memoryFootprintBytes int64,
+	resumeReqsMemUsage int64,
+	numIncompleteGets, numIncompleteScans int,
+) {
+	numIncompleteRequests := numIncompleteGets + numIncompleteScans
+	var resumeReq singleRangeBatch
+	// We have to allocate the new slice for requests, but we can reuse the
+	// positions slice.
+	resumeReq.reqs = make([]roachpb.RequestUnion, numIncompleteRequests)
+	// numIncompleteRequests will never exceed the number of requests in req.
+	resumeReq.positions = req.positions[:numIncompleteRequests]
+	// We've already reconciled the budget with the actual reservation for the
+	// requests with the ResumeSpans.
+	resumeReq.reqsReservedBytes = resumeReqsMemUsage
+	gets := make([]struct {
+		req   roachpb.GetRequest
+		union roachpb.RequestUnion_Get
+	}, numIncompleteGets)
+	scans := make([]struct {
+		req   roachpb.ScanRequest
+		union roachpb.RequestUnion_Scan
+	}, numIncompleteScans)
+	var results []Result
+	var numCompleteGetResponses int
+	var hasNonEmptyScanResponse bool
+	var resumeReqIdx int
+	// memoryTokensBytes accumulates all reservations that are made for all
+	// Results created below. The accounting for these reservations has already
+	// been performed, and memoryTokensBytes should be exactly equal to
+	// memoryFootprintBytes, so we use it only as an additional check.
+	var memoryTokensBytes int64
+	for i, resp := range br.Responses {
+		enqueueKey := req.positions[i]
+		if w.s.enqueueKeys != nil {
+			enqueueKey = w.s.enqueueKeys[req.positions[i]]
+		}
+		reply := resp.GetInner()
+		switch origRequest := req.reqs[i].GetInner().(type) {
+		case *roachpb.GetRequest:
+			get := reply.(*roachpb.GetResponse)
+			if get.ResumeSpan != nil {
+				// This Get wasn't completed - update the original
+				// request according to the ResumeSpan and include it
+				// into the batch again.
+				newGet := gets[0]
+				gets = gets[1:]
+				newGet.req.SetSpan(*get.ResumeSpan)
+				newGet.req.KeyLocking = origRequest.KeyLocking
+				newGet.union.Get = &newGet.req
+				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
+				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReqIdx++
+			} else {
+				// This Get was completed.
+				result := Result{
+					GetResp: get,
+					// This currently only works because all requests
+					// are unique.
+					EnqueueKeysSatisfied: []int{enqueueKey},
+					position:             req.positions[i],
+				}
+				result.memoryTok.streamer = w.s
+				result.memoryTok.toRelease = getResponseSize(get)
+				memoryTokensBytes += result.memoryTok.toRelease
+				results = append(results, result)
+				numCompleteGetResponses++
+			}
+
+		case *roachpb.ScanRequest:
+			scan := reply.(*roachpb.ScanResponse)
+			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+				result := Result{
+					// This currently only works because all requests
+					// are unique.
+					EnqueueKeysSatisfied: []int{enqueueKey},
+					position:             req.positions[i],
+				}
+				result.memoryTok.streamer = w.s
+				result.memoryTok.toRelease = scanResponseSize(scan)
+				memoryTokensBytes += result.memoryTok.toRelease
+				result.ScanResp.ScanResponse = scan
+				// Complete field will be set below.
+				results = append(results, result)
+				hasNonEmptyScanResponse = true
+			}
+			if scan.ResumeSpan != nil {
+				// This Scan wasn't completed - update the original
+				// request according to the ResumeSpan and include it
+				// into the batch again.
+				newScan := scans[0]
+				scans = scans[1:]
+				newScan.req.SetSpan(*scan.ResumeSpan)
+				newScan.req.KeyLocking = origRequest.KeyLocking
+				newScan.union.Scan = &newScan.req
+				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReqIdx++
+			}
+		}
+	}
+
+	if buildutil.CrdbTestBuild {
+		if memoryFootprintBytes != memoryTokensBytes {
+			panic(errors.AssertionFailedf(
+				"different calculation of memory footprint\ncalculateFootprint: %d bytes\n"+
+					"processSingleRangeResults: %d bytes", memoryFootprintBytes, memoryTokensBytes,
+			))
+		}
+	}
+
+	// If we have any results, finalize them.
+	if len(results) > 0 {
+		w.finalizeSingleRangeResults(
+			results, memoryFootprintBytes, hasNonEmptyScanResponse,
+			numCompleteGetResponses,
+		)
+	}
+
+	// If we have any incomplete requests, add them back into the work
+	// pool.
+	if len(resumeReq.reqs) > 0 {
+		w.addRequest(resumeReq)
 	}
 }
 
@@ -1152,6 +1367,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
+	w.s.mu.numUnreleasedResults += len(results)
 	// Store the results and non-blockingly notify the Streamer about them.
 	w.s.mu.results = append(w.s.mu.results, results...)
 	w.s.notifyGetResultsLocked()
@@ -1163,13 +1379,31 @@ func init() {
 	zeroIntSlice = make([]int, 1<<10)
 }
 
-const requestUnionSliceOverhead = int64(unsafe.Sizeof([]roachpb.RequestUnion{}))
+const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 
 func requestsMemUsage(reqs []roachpb.RequestUnion) int64 {
-	memUsage := requestUnionSliceOverhead
-	// Slice up to the capacity to account for everything.
-	for _, r := range reqs[:cap(reqs)] {
+	// RequestUnion.Size() ignores the overhead of RequestUnion object, so we'll
+	// account for it separately first.
+	memUsage := requestUnionOverhead * int64(cap(reqs))
+	// No need to account for elements past len(reqs) because those must be
+	// unset and we have already accounted for RequestUnion object above.
+	for _, r := range reqs {
 		memUsage += int64(r.Size())
 	}
 	return memUsage
+}
+
+// getResponseSize calculates the size of the GetResponse similar to how it is
+// accounted for TargetBytes parameter by the KV layer.
+func getResponseSize(get *roachpb.GetResponse) int64 {
+	if get.Value == nil {
+		return 0
+	}
+	return int64(len(get.Value.RawBytes))
+}
+
+// scanResponseSize calculates the size of the ScanResponse similar to how it is
+// accounted for TargetBytes parameter by the KV layer.
+func scanResponseSize(scan *roachpb.ScanResponse) int64 {
+	return scan.NumBytes
 }
