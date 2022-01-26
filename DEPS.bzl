@@ -1216,8 +1216,13 @@ def go_deps():
     )
     go_repository(
         name = "com_github_cockroachdb_pebble",
+        build_directives = ["gazelle:build_tags invariants"],
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_cockroachdb_pebble.patch",
+        ],
         sha256 = "031a81b46b545212a1fb43587670ce99edff8f1e202d4ae1f0825b8263b2432f",
         strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20220127212634-b958d9a7760b",
         urls = [
