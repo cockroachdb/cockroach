@@ -708,7 +708,7 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 	}
 
 	// Assign names to unnamed indexes.
-	err := catalog.ForEachDeletableNonPrimaryIndex(desc, func(idx catalog.Index) error {
+	err := catalog.ForEachNonPrimaryIndex(desc, func(idx catalog.Index) error {
 		if len(idx.GetName()) == 0 {
 			name, err := BuildIndexName(desc, idx.IndexDesc())
 			if err != nil {

@@ -195,6 +195,13 @@ func TestIndexInterface(t *testing.T) {
 			catalog.FindDeletableNonPrimaryIndex,
 		},
 		{
+			"NonPrimaryIndex",
+			indexNames[1:],
+			catalog.TableDescriptor.NonPrimaryIndexes,
+			catalog.ForEachNonPrimaryIndex,
+			catalog.FindNonPrimaryIndex,
+		},
+		{
 			"DeleteOnlyNonPrimaryIndex",
 			[]string{},
 			catalog.TableDescriptor.DeleteOnlyNonPrimaryIndexes,
