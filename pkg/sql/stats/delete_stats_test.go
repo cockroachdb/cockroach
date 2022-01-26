@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDeleteOldStatsForColumns(t *testing.T) {
@@ -41,15 +42,13 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
@@ -340,15 +339,13 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
 	cache := NewTableStatisticsCache(
-		ctx,
 		10, /* cacheSize */
 		db,
 		ex,
-		keys.SystemSQLCodec,
 		s.ClusterSettings(),
-		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
+	require.NoError(t, cache.Start(ctx, keys.SystemSQLCodec, s.RangeFeedFactory().(*rangefeed.Factory)))
 	testData := []TableStatisticProto{
 		{
 			TableID:       descpb.ID(100),
