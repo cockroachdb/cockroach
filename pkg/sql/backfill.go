@@ -1717,6 +1717,7 @@ func ValidateForwardIndexes(
 							idx.GetPredicate(),
 							ie,
 							txn,
+							false, /* preExisting */
 						); err != nil {
 							return err
 						}
@@ -2262,7 +2263,9 @@ func validateUniqueWithoutIndexConstraintInTxn(
 	}
 
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
-		return validateUniqueConstraint(ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn)
+		return validateUniqueConstraint(
+			ctx, tableDesc, uc.Name, uc.ColumnIDs, uc.Predicate, ie, txn, false, /* preExisting */
+		)
 	})
 }
 

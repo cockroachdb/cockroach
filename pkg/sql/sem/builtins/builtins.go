@@ -6404,6 +6404,70 @@ table's zone configuration this will return NULL.`,
 			Volatility: tree.VolatilityVolatile,
 		},
 	),
+
+	"crdb_internal.revalidate_unique_constraints": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if err := evalCtx.Planner.RevalidateUniqueConstraintsInCurrentDB(evalCtx.Ctx()); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `This function is used to revalidate all unique constraints in tables
+in the current database. Returns an error if validation fails.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				name := tree.MustBeDString(args[0])
+				dOid, err := tree.ParseDOid(evalCtx, string(name), types.RegClass)
+				if err != nil {
+					return nil, err
+				}
+				if err := evalCtx.Planner.RevalidateUniqueConstraintsInTable(evalCtx.Ctx(), int(dOid.DInt)); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `This function is used to revalidate all unique constraints in the given
+table. Returns an error if validation fails.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
+	"crdb_internal.revalidate_unique_constraint": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"table_name", types.String}, {"constraint_name", types.String}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				tableName := tree.MustBeDString(args[0])
+				constraintName := tree.MustBeDString(args[1])
+				dOid, err := tree.ParseDOid(evalCtx, string(tableName), types.RegClass)
+				if err != nil {
+					return nil, err
+				}
+				if err = evalCtx.Planner.RevalidateUniqueConstraint(
+					evalCtx.Ctx(), int(dOid.DInt), string(constraintName),
+				); err != nil {
+					return nil, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info: `This function is used to revalidate the given unique constraint in the given
+table. Returns an error if validation fails.`,
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {
