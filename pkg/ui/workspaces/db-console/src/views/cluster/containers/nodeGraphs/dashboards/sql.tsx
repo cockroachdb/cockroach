@@ -63,7 +63,7 @@ export default function(props: GraphDashboardProps) {
     >
       <Axis label="queries">
         <Metric
-          name="cr.node.sql.distsql.queries.active"
+          name="cr.node.sql.statements.active"
           title="Active Statements"
         />
       </Axis>
