@@ -11,6 +11,7 @@ package streamclient
 import (
 	"context"
 	gosql "database/sql"
+	"net"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -19,11 +20,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
 type partitionedStreamClient struct {
-	db *gosql.DB // DB handle to the source cluster
+	srcDB          *gosql.DB // DB handle to the source cluster
+	urlPlaceholder url.URL
+
+	mu struct {
+		syncutil.Mutex
+
+		closed              bool
+		activeSubscriptions map[*partitionedStreamSubscription]struct{}
+	}
 }
 
 func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, error) {
@@ -31,7 +41,13 @@ func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, erro
 	if err != nil {
 		return nil, err
 	}
-	return &partitionedStreamClient{db: db}, nil
+
+	client := &partitionedStreamClient{
+		srcDB:          db,
+		urlPlaceholder: *remote,
+	}
+	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
+	return client, nil
 }
 
 var _ Client = &partitionedStreamClient{}
@@ -42,13 +58,10 @@ func (p *partitionedStreamClient) Create(
 ) (streaming.StreamID, error) {
 	streamID := streaming.InvalidStreamID
 
-	conn, err := p.db.Conn(ctx)
+	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return streamID, err
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
 
 	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantID.ToUint64())
 	if row.Err() != nil {
@@ -63,13 +76,10 @@ func (p *partitionedStreamClient) Create(
 func (p *partitionedStreamClient) Heartbeat(
 	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,
 ) error {
-	conn, err := p.db.Conn(ctx)
+	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
 
 	row := conn.QueryRowContext(ctx,
 		`SELECT crdb_internal.replication_stream_progress($1, $2)`, streamID, consumed.String())
@@ -87,22 +97,30 @@ func (p *partitionedStreamClient) Heartbeat(
 	}
 	// TODO(casper): add observability for stream protected timestamp
 	if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE {
-		return errors.Errorf("Replication stream %d is not running, status is %s", streamID, status.StreamStatus.String())
+		return streamingccl.NewStreamStatusErr(streamID, status.StreamStatus)
 	}
 	return nil
+}
+
+// postgresURL converts an SQL serving address into a postgres URL.
+func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, error) {
+	host, port, err := net.SplitHostPort(servingAddr)
+	if err != nil {
+		return url.URL{}, err
+	}
+	res := p.urlPlaceholder
+	res.Host = net.JoinHostPort(host, port)
+	return res, nil
 }
 
 // Plan implements Client interface.
 func (p *partitionedStreamClient) Plan(
 	ctx context.Context, streamID streaming.StreamID,
 ) (Topology, error) {
-	conn, err := p.db.Conn(ctx)
+	conn, err := p.srcDB.Conn(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
 
 	row := conn.QueryRowContext(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
 	if row.Err() != nil {
@@ -110,7 +128,7 @@ func (p *partitionedStreamClient) Plan(
 	}
 
 	var rawSpec []byte
-	if err = row.Scan(&rawSpec); err != nil {
+	if err := row.Scan(&rawSpec); err != nil {
 		return nil, err
 	}
 	var spec streampb.ReplicationStreamSpec
@@ -119,17 +137,21 @@ func (p *partitionedStreamClient) Plan(
 	}
 
 	topology := Topology{}
-	for _, p := range spec.Partitions {
-		rawSpec, err := protoutil.Marshal(p.PartitionSpec)
+	for _, sp := range spec.Partitions {
+		pgURL, err := p.postgresURL(sp.SQLAddress.String())
+		if err != nil {
+			return nil, err
+		}
+		rawSpec, err := protoutil.Marshal(sp.PartitionSpec)
 		if err != nil {
 			return nil, err
 		}
 		topology = append(topology, PartitionInfo{
-			ID:                p.NodeID.String(), // how do determine partition ID?
+			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
-			SrcInstanceID:     int(p.NodeID),
-			SrcAddr:           streamingccl.PartitionAddress(p.SQLAddress.String()),
-			SrcLocality:       p.Locality,
+			SrcInstanceID:     int(sp.NodeID),
+			SrcAddr:           streamingccl.PartitionAddress(pgURL.String()),
+			SrcLocality:       sp.Locality,
 		})
 	}
 	return topology, nil
@@ -137,7 +159,19 @@ func (p *partitionedStreamClient) Plan(
 
 // Close implements Client interface.
 func (p *partitionedStreamClient) Close() error {
-	return p.db.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.mu.closed {
+		return nil
+	}
+	// Close all the active subscriptions and disallow more usage.
+	p.mu.closed = true
+	for sub := range p.mu.activeSubscriptions {
+		close(sub.closeChan)
+		delete(p.mu.activeSubscriptions, sub)
+	}
+	return p.srcDB.Close()
 }
 
 // Subscribe implements Client interface.
@@ -155,18 +189,25 @@ func (p *partitionedStreamClient) Subscribe(
 		return nil, err
 	}
 
-	return &partitionedStreamSubscription{
+	res := &partitionedStreamSubscription{
 		eventsChan: make(chan streamingccl.Event),
-		db:         p.db,
+		db:         p.srcDB,
 		specBytes:  specBytes,
 		streamID:   stream,
-	}, nil
+		closeChan:  make(chan struct{}),
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.activeSubscriptions[res] = struct{}{}
+	return res, nil
 }
 
 type partitionedStreamSubscription struct {
-	eventsChan chan streamingccl.Event
 	err        error
 	db         *gosql.DB
+	eventsChan chan streamingccl.Event
+	// Channel to send signal to close the subscription.
+	closeChan chan struct{}
 
 	streamEvent *streampb.StreamEvent
 	specBytes   []byte
@@ -204,9 +245,6 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
 
 	_, err = conn.ExecContext(ctx, `SET avoid_buffering = true`)
 	if err != nil {
@@ -251,9 +289,13 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 		}
 		select {
 		case p.eventsChan <- event:
+		case <-p.closeChan:
+			// Exit quietly to not cause other subscriptions in the same
+			// ctxgroup.Group to exit.
+			return nil
 		case <-ctx.Done():
-			p.err = err
-			return ctx.Err()
+			p.err = ctx.Err()
+			return p.err
 		}
 	}
 }
