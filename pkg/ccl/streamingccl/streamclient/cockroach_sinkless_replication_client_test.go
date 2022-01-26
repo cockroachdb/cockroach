@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,8 +54,9 @@ func (f *channelFeedSource) Close(ctx context.Context) {
 
 func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "sinkless client is deprecated")
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
 	defer cleanup()
 
@@ -70,7 +72,8 @@ INSERT INTO d.t2 VALUES (2);
 
 	t1 := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
-	client := &sinklessReplicationClient{remote: &h.PGUrl}
+	client, err := newPGWireReplicationClient(&h.PGUrl)
+	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, client.Close())
 	}()
