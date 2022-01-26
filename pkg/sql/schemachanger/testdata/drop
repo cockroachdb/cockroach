@@ -29,7 +29,7 @@ upsert descriptor #54
   +  version: "3"
 upsert descriptor #56
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -138,21 +138,21 @@ upsert descriptor #54
   +  version: "5"
 upsert descriptor #57
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #59
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #60
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -187,7 +187,7 @@ create job #1: "schema change job"
   descriptor IDs: [54 55]
 upsert descriptor #54
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  schemas:
   -    public:
@@ -198,7 +198,7 @@ upsert descriptor #54
   +  version: "6"
 upsert descriptor #55
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -301,7 +301,7 @@ delete object namespace entry {61 63 _typ} -> 73
 delete object namespace entry {61 63 v5} -> 74
 upsert descriptor #61
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  schemas:
   -    public:
@@ -314,14 +314,14 @@ upsert descriptor #61
   +  version: "3"
 upsert descriptor #62
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #63
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
@@ -550,7 +550,7 @@ upsert descriptor #71
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
 upsert descriptor #72
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
   -  - 74
@@ -560,7 +560,7 @@ upsert descriptor #72
   +  version: "3"
 upsert descriptor #73
   ...
-         userProto: root
+         withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
   -  - 74

@@ -92,13 +92,13 @@ test           public       t              testuser2  SELECT
 
 user testuser2
 
-# in version 22.1, granting GRANT to a user means they now have grant options on all their privileges.
-# This is to promote backwards compatibility as we deprecate GRANT
+# In version 22.1, granting GRANT to a user means they now have grant options on
+# all their privileges. This is to promote backwards compatibility as we deprecate GRANT.
 statement ok
 GRANT INSERT, SELECT ON TABLE t TO target
 
-# however, future privileges do not automatically get grant options just because the user currently
-# holds GRANT - you would need to either specify grant options or grant GRANT again
+# Also, privileges will automatically get grant options if the user currently
+# holds GRANT.
 user root
 
 statement ok
@@ -106,8 +106,11 @@ GRANT DELETE ON TABLE t TO testuser2
 
 user testuser2
 
-statement error user testuser2 missing WITH GRANT OPTION privilege on DELETE
+query T noticetrace
 GRANT DELETE ON TABLE t TO target
+----
+NOTICE: grant options were automatically applied but this behavior is deprecated
+HINT: please use WITH GRANT OPTION
 
 user testuser
 
