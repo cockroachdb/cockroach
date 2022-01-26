@@ -11,7 +11,7 @@ CREATE TABLE geo_table(
 statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE INDEX bad_idx ON geo_table(id) WITH (s2_max_cells=15)
 
-statement error "s2_max_cells" value must be between 1 and 32 inclusive
+statement error "s2_max_cells" value must be between 0 and 30 inclusive
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (s2_max_cells=42)
 
 statement error s2_max_level \(29\) must be divisible by s2_level_mod \(2\)
