@@ -127,9 +127,11 @@ type Flow interface {
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
 
-	// Cleanup should be called when the flow completes (after all processors
-	// and mailboxes exited). The implementations must be safe to execute in
-	// case the Flow is never Run() or Start()ed.
+	// Cleanup must be called whenever the flow is done (meaning it either
+	// completes gracefully after all processors and mailboxes exited or an
+	// error is encountered that stops the flow from making progress). The
+	// implementations must be safe to execute in case the Flow is never Run()
+	// or Start()ed.
 	Cleanup(context.Context)
 
 	// ConcurrentTxnUse returns true if multiple processors/operators in the flow
@@ -423,10 +425,7 @@ func (f *FlowBase) IsVectorized() bool {
 
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context, doneFn func()) error {
-	if err := f.StartInternal(ctx, f.processors, doneFn); err != nil {
-		return err
-	}
-	return nil
+	return f.StartInternal(ctx, f.processors, doneFn)
 }
 
 // Run is part of the Flow interface.
