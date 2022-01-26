@@ -316,8 +316,12 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if nodeCtx.nodeDecommissionSelf {
+		fmt.Fprintf(stderr, "warning: --%s is deprecated.\n", cliflags.NodeDecommissionSelf.Name)
+	}
+
 	if !nodeCtx.nodeDecommissionSelf && len(args) == 0 {
-		return errors.New("no node ID specified; use --self to target the node specified with --host")
+		return errors.New("no node ID specified")
 	}
 
 	nodeIDs, err := parseNodeIDs(args)
