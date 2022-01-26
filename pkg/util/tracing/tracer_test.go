@@ -12,6 +12,8 @@ package tracing
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"sort"
 	"sync"
 	"testing"
@@ -756,4 +758,58 @@ func TestSpanReuse(t *testing.T) {
 		}
 	}
 	t.Fatal("spans do not seem to be reused reliably")
+}
+
+// Test that parents and children can finish in any order (even concurrently)
+// and that the recording is always sane in such cases.
+func TestSpanFinishRaces(t *testing.T) {
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx,
+		WithSpanReusePercent(100),
+		WithTracingMode(TracingModeActiveSpansRegistry),
+		WithTestingKnobs(TracerTestingKnobs{
+			ReleaseSpanToPool: func(sp *Span) bool {
+				// Asynchronously overwrite sp, to catch races.
+				go func() {
+					*sp = Span{}
+				}()
+				// Tell the tracer to not pool this span. We've hijacked it above.
+				return false
+			}}),
+	)
+
+	const numSpans = 4
+
+	for ti := 0; ti < 1000; ti++ {
+		sps := make([]*Span, numSpans)
+		for i := 0; i < numSpans; i++ {
+			var opt SpanOption
+			if i > 0 {
+				opt = WithParent(sps[i-1])
+			}
+			sps[i] = tr.StartSpan(fmt.Sprint(i), WithRecording(RecordingVerbose), opt)
+			sps[i].Recordf("msg %d", i)
+		}
+
+		finishOrder := rand.Perm(numSpans)
+		var rec Recording
+		g := sync.WaitGroup{}
+		g.Add(len(finishOrder))
+		for _, idx := range finishOrder {
+			go func(idx int) {
+				if idx != 0 {
+					sps[idx].Finish()
+				} else {
+					rec = sps[0].FinishAndGetRecording(RecordingVerbose)
+				}
+				g.Done()
+			}(idx)
+		}
+		g.Wait()
+		require.Len(t, rec, numSpans)
+		for i, s := range rec {
+			require.Len(t, s.Logs, 1)
+			require.Equal(t, fmt.Sprintf("msg %d", i), s.Logs[0].Message.StripMarkers())
+		}
+	}
 }

@@ -102,7 +102,7 @@ func TestDataDriven(t *testing.T) {
 			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
 		}
 
-		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs)
+		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, nil /* ptsKnobs */)
 		defer spanConfigTestCluster.Cleanup()
 
 		systemTenant := spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)

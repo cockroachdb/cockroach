@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -32,21 +33,26 @@ import (
 // cluster while providing convenient, scoped access to each tenant's specific
 // span config primitives. It's not safe for concurrent use.
 type Handle struct {
-	t       *testing.T
-	tc      *testcluster.TestCluster
-	ts      map[roachpb.TenantID]*Tenant
-	scKnobs *spanconfig.TestingKnobs
+	t        *testing.T
+	tc       *testcluster.TestCluster
+	ts       map[roachpb.TenantID]*Tenant
+	scKnobs  *spanconfig.TestingKnobs
+	ptsKnobs *protectedts.TestingKnobs
 }
 
 // NewHandle returns a new Handle.
 func NewHandle(
-	t *testing.T, tc *testcluster.TestCluster, scKnobs *spanconfig.TestingKnobs,
+	t *testing.T,
+	tc *testcluster.TestCluster,
+	scKnobs *spanconfig.TestingKnobs,
+	ptsKnobs *protectedts.TestingKnobs,
 ) *Handle {
 	return &Handle{
-		t:       t,
-		tc:      tc,
-		ts:      make(map[roachpb.TenantID]*Tenant),
-		scKnobs: scKnobs,
+		t:        t,
+		tc:       tc,
+		ts:       make(map[roachpb.TenantID]*Tenant),
+		scKnobs:  scKnobs,
+		ptsKnobs: ptsKnobs,
 	}
 }
 
@@ -63,7 +69,8 @@ func (h *Handle) InitializeTenant(ctx context.Context, tenID roachpb.TenantID) *
 		tenantArgs := base.TestTenantArgs{
 			TenantID: tenID,
 			TestingKnobs: base.TestingKnobs{
-				SpanConfig: h.scKnobs,
+				SpanConfig:  h.scKnobs,
+				ProtectedTS: h.ptsKnobs,
 			},
 		}
 		var err error

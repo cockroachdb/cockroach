@@ -10,8 +10,10 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb:with-mocks",
         "//pkg/spanconfig",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
