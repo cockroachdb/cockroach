@@ -90,6 +90,14 @@ func ingestionPlanHook(
 			return err
 		}
 		q := url.Query()
+
+		// Operator should specify inline certificates to authenticate across cluster to cluster communication.
+		if hasInlineCertificates := (q.Get("sslinline") == "true") && (q.Get("sslmode") == "verify-full") &&
+			q.Has("sslrootcert") && q.Has("sslkey") && q.Has("sslcert"); url.Scheme == "postgres" && !hasInlineCertificates {
+			return errors.Errorf(
+				"Postgres stream address should contain an inline full authentication with client certs: %s", streamAddress)
+		}
+
 		q.Set("TENANT_ID", ingestionStmt.Targets.Tenant.String())
 		url.RawQuery = q.Encode()
 		streamAddress = streamingccl.StreamAddress(url.String())

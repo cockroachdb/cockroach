@@ -31,3 +31,13 @@ var StreamReplicationJobLivenessTimeout = settings.RegisterDurationSetting(
 	"controls how long we wait for to kill an inactive producer job",
 	time.Minute,
 )
+
+// StreamReplicationConsumerHeartbeatFrequency controls frequency the stream replication
+// destination cluster sends heartbeat to the source cluster to keep the stream alive.
+var StreamReplicationConsumerHeartbeatFrequency = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"stream_replication.consumer_heartbeat_frequency",
+	"controls frequency the stream replication destination cluster sends heartbeat "+
+		"to the source cluster to keep the stream alive",
+	30*time.Second,
+)

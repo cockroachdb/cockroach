@@ -45,6 +45,43 @@ func PGUrlE(servingAddr, prefix string, user *url.Userinfo) (url.URL, func(), er
 	return PGUrlWithOptionalClientCertsE(servingAddr, prefix, user, true /* withCerts */)
 }
 
+// ConvertPGUrlSSLInline converts a PG URL into sslinline mode, i.e., the ssl key and certificates
+// parameters represent file content instead of file paths.
+func ConvertPGUrlSSLInline(pgURL *url.URL) error {
+	options := pgURL.Query()
+	if options.Get("sslinline") == "true" {
+		return nil
+	}
+
+	loadPathContentAsOption := func(optionKey string) error {
+		if !options.Has(optionKey) {
+			return nil
+		}
+		content, err := os.ReadFile(options.Get(optionKey))
+		if err != nil {
+			return err
+		}
+		options.Set(optionKey, string(content))
+		return nil
+	}
+
+	if err := loadPathContentAsOption("sslrootcert"); err != nil {
+		return err
+	}
+	// Convert client certs inline.
+	if options.Get("sslmode") == "verify-full" {
+		if err := loadPathContentAsOption("sslcert"); err != nil {
+			return err
+		}
+		if err := loadPathContentAsOption("sslkey"); err != nil {
+			return err
+		}
+	}
+	options.Set("sslinline", "true")
+	pgURL.RawQuery = options.Encode()
+	return nil
+}
+
 // PGUrlWithOptionalClientCerts is like PGUrlWithOptionalClientCertsE, but uses t.Fatal to handle
 // errors.
 func PGUrlWithOptionalClientCerts(

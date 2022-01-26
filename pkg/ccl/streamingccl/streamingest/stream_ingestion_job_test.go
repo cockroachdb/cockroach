@@ -81,6 +81,7 @@ SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms'
 	// job.
 	destSQL := hDest.SysDB
 	destSQL.Exec(t, `
+SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '2s';
 SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '5us';
 SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
 SET enable_experimental_stream_replication = true;
@@ -88,6 +89,7 @@ SET enable_experimental_stream_replication = true;
 
 	// Sink to read data from.
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
+	require.NoError(t, sqlutils.ConvertPGUrlSSLInline(&pgURL))
 	defer cleanupSink()
 
 	var ingestionJobID int
