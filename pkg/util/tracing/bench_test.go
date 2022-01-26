@@ -113,12 +113,12 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 	ev := &types.Int32Value{Value: 5}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		root := tr.StartSpan("foo")
+		root := tr.StartSpan("foo", WithRecording(RecordingStructured))
 		root.RecordStructured(ev)
 		child := tr.StartSpan("bar", WithParent(root))
 		child.RecordStructured(ev)
 		child.Finish()
-		_ = root.GetRecording(RecordingStructured)
+		_ = root.FinishAndGetRecording(RecordingStructured)
 	}
 }
 
