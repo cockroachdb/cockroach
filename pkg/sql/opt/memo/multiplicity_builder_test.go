@@ -270,6 +270,36 @@ func TestGetJoinMultiplicity(t *testing.T) {
 			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
 			expected: "left-rows(exactly-one)",
 		},
+		{ // 19
+			// SELECT *
+			// FROM fk_tab
+			// INNER JOIN (SELECT * FROM xy AS xy1 INNER JOIN xy xy2 ON xy1.x = xy2.x)
+			// ON r1 = xy1.x;
+			joinOp: opt.InnerJoinOp,
+			left:   fkScan,
+			right: ob.makeInnerJoin(
+				xyScan,
+				xyScan2,
+				ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
+		{ // 20
+			// SELECT *
+			// FROM fk_tab
+			// INNER JOIN (SELECT * FROM xy AS xy1 INNER JOIN xy xy2 ON xy1.x = xy2.x)
+			// ON r1 = xy2.x;
+			joinOp: opt.InnerJoinOp,
+			left:   fkScan,
+			right: ob.makeInnerJoin(
+				xyScan,
+				xyScan2,
+				ob.makeFilters(ob.makeEquality(xyCols[0], xyCols2[0])),
+			),
+			on:       ob.makeFilters(ob.makeEquality(fkCols[0], xyCols2[0])),
+			expected: "left-rows(exactly-one), right-rows(zero-or-more)",
+		},
 	}
 
 	for i, tc := range testCases {

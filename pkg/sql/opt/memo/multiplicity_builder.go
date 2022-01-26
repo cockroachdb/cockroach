@@ -122,8 +122,8 @@ func deriveUnfilteredCols(in RelExpr) opt.ColSet {
 		right := t.Child(1).(RelExpr)
 		multiplicity := GetJoinMultiplicity(t)
 
-		// Use the UnfilteredCols to determine whether unfiltered columns can be
-		// passed through.
+		// Use the join's multiplicity to determine whether unfiltered columns
+		// can be passed through.
 		if multiplicity.JoinPreservesLeftRows(t.Op()) {
 			unfilteredCols.UnionWith(deriveUnfilteredCols(left))
 		}
@@ -267,7 +267,8 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 			filters,
 		)
 	}
-	if !verifyFiltersAreValidEqualities(left, right, filters) {
+	rightEqualityCols, ok := verifyFiltersAreValidEqualities(left, right, filters)
+	if !ok {
 		return false
 	}
 	if checkSelfJoinCase(left.Memo().Metadata(), filters) {
@@ -276,19 +277,28 @@ func filtersMatchAllLeftRows(left, right RelExpr, filters FiltersExpr) bool {
 	}
 	// Case 2b.
 	return checkForeignKeyCase(
-		left.Memo().Metadata(), left.Relational().NotNullCols, deriveUnfilteredCols(right), filters)
+		left.Memo().Metadata(),
+		left.Relational().NotNullCols,
+		rightEqualityCols,
+		filters,
+	)
 }
 
-// verifyFiltersAreValidEqualities returns true when all of the following
-// conditions are satisfied:
-// 1. All filters are equalities.
-// 2. All equalities directly compare two columns.
-// 3. All equalities contain one column from the left not-null columns, and one
-//    column from the right unfiltered columns.
-// 4. All equality columns come from a base table.
-// 5. All left columns come from a single table, and all right columns come from
-//    a single table.
-func verifyFiltersAreValidEqualities(left, right RelExpr, filters FiltersExpr) bool {
+// verifyFiltersAreValidEqualities returns the set of equality columns in the
+// right relation and true when all of the following conditions are satisfied:
+//
+//   1. All filters are equalities.
+//   2. All equalities directly compare two columns.
+//   3. All equalities contain one column from the left not-null columns, and
+//      one column from the right unfiltered columns.
+//   4. All equality columns come from a base table.
+//   5. All left columns come from a single table, and all right columns come
+//      from a single table.
+//
+// Returns ok=false if any of these conditions are unsatisfied.
+func verifyFiltersAreValidEqualities(
+	left, right RelExpr, filters FiltersExpr,
+) (rightEqualityCols opt.ColSet, ok bool) {
 	md := left.Memo().Metadata()
 
 	var leftTab, rightTab opt.TableID
@@ -296,21 +306,21 @@ func verifyFiltersAreValidEqualities(left, right RelExpr, filters FiltersExpr) b
 	rightUnfilteredCols := deriveUnfilteredCols(right)
 	if rightUnfilteredCols.Empty() {
 		// There are no unfiltered columns from the right input.
-		return false
+		return opt.ColSet{}, false
 	}
 
 	for i := range filters {
 		eq, _ := filters[i].Condition.(*EqExpr)
 		if eq == nil {
 			// Condition #1: Conjunct is not an equality comparison.
-			return false
+			return opt.ColSet{}, false
 		}
 
 		leftVar, _ := eq.Left.(*VariableExpr)
 		rightVar, _ := eq.Right.(*VariableExpr)
 		if leftVar == nil || rightVar == nil {
 			// Condition #2: Conjunct does not directly compare two columns.
-			return false
+			return opt.ColSet{}, false
 		}
 
 		leftColID := leftVar.Col
@@ -322,7 +332,7 @@ func verifyFiltersAreValidEqualities(left, right RelExpr, filters FiltersExpr) b
 		}
 		if !leftNotNullCols.Contains(leftColID) || !rightUnfilteredCols.Contains(rightColID) {
 			// Condition #3: Columns don't come from both the left and right ColSets.
-			return false
+			return opt.ColSet{}, false
 		}
 
 		if leftTab == 0 || rightTab == 0 {
@@ -331,16 +341,19 @@ func verifyFiltersAreValidEqualities(left, right RelExpr, filters FiltersExpr) b
 			rightTab = md.ColumnMeta(rightColID).Table
 			if leftTab == 0 || rightTab == 0 {
 				// Condition #4: Columns don't come from base tables.
-				return false
+				return opt.ColSet{}, false
 			}
 		}
 		if leftTab != md.ColumnMeta(leftColID).Table || rightTab != md.ColumnMeta(rightColID).Table {
 			// Condition #5: The filter conditions reference more than one table from
 			// each side.
-			return false
+			return opt.ColSet{}, false
 		}
+
+		rightEqualityCols.Add(rightColID)
 	}
-	return true
+
+	return rightEqualityCols, true
 }
 
 // checkSelfJoinCase returns true if all equalities in the given FiltersExpr
@@ -374,7 +387,9 @@ func checkForeignKeyCase(
 ) bool {
 	if rightUnfilteredCols.Empty() {
 		// There are no unfiltered columns from the right; a valid foreign key
-		// relation is not possible.
+		// relation is not possible. This check, which is a duplicate of a check
+		// in verifyFiltersAreValidEqualities, is necessary in the case of a
+		// cross-join because verifyFiltersAreValidEqualities is not called.
 		return false
 	}
 
@@ -419,7 +434,7 @@ func checkForeignKeyCase(
 				rightColID := rightTableID.ColumnID(rightColOrd)
 				if !leftNotNullCols.Contains(leftColID) {
 					// The left column isn't a left not-null output column. It can't be
-					// used in a filter (since it isn't an output column) but the foreign key may still be valid.but it may still
+					// used in a filter (since it isn't an output column) but it may still
 					// be provably not null.
 					//
 					// A column that isn't in leftNotNullCols is guaranteed not-null if it
@@ -444,8 +459,11 @@ func checkForeignKeyCase(
 					continue
 				}
 				if !rightUnfilteredCols.Contains(rightColID) {
-					// The right column isn't guaranteed to be unfiltered. It can't be
-					// used in a filter.
+					// The right column isn't guaranteed to be unfiltered. It
+					// can't be used in a filter. This check, which is a
+					// duplicate of a check in verifyFiltersAreValidEqualities,
+					// is necessary in the case of a cross-join because
+					// verifyFiltersAreValidEqualities is not called.
 					continue
 				}
 				if filtersHaveEquality(filters, leftColID, rightColID) {
