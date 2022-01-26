@@ -2224,7 +2224,7 @@ INNER JOIN (SELECT xysd.x, a.x AS t FROM xysd INNER JOIN xysd AS a ON xysd.x = a
 ----
 inner-join (hash)
  ├── columns: k:1(int!null) v:2(int) r1:3(int!null) r2:4(int) x:7(int!null) t:13(int!null)
- ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  ├── key: (1)
  ├── fd: (1)-->(2-4), (7)==(3,13), (13)==(3,7), (3)==(7,13)
  ├── prune: (1,2,4)
