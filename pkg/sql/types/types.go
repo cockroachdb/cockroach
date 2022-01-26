@@ -2457,8 +2457,6 @@ func IsStringType(t *T) bool {
 // the issue number should be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	switch t.Family() {
-	case JsonFamily:
-		return false, 23468
 	default:
 		return true, 0
 	}
