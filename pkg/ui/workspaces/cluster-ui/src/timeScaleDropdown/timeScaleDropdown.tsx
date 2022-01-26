@@ -124,8 +124,8 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
   setTimeScale,
   adjustTimeScaleOnChange,
 }): React.ReactElement => {
-  const end = currentScale.windowEnd
-    ? moment.utc(currentScale.windowEnd)
+  const end = currentScale.fixedWindowEnd
+    ? moment.utc(currentScale.fixedWindowEnd)
     : moment().utc();
   const currentWindow: TimeWindow = {
     start: moment.utc(end).subtract(currentScale.windowSize),
@@ -136,7 +136,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     let timeScale: TimeScale = {
       ...options[rangeOption.label],
       key: rangeOption.label,
-      windowEnd: null,
+      fixedWindowEnd: false,
     };
     if (adjustTimeScaleOnChange) {
       const timeWindow: TimeWindow = {
@@ -156,37 +156,58 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     const seconds = windowSize.asSeconds();
     let selected = {};
     let key = currentScale.key;
-    let windowEnd = moment.utc(currentWindow.end);
+    let fixedWindowEnd = moment.utc(currentWindow.end);
 
     switch (direction) {
       case ArrowDirection.RIGHT:
-        if (windowEnd) {
-          windowEnd = windowEnd.add(seconds, "seconds");
+        if (fixedWindowEnd) {
+          fixedWindowEnd = fixedWindowEnd.add(seconds, "seconds");
         }
         break;
       case ArrowDirection.LEFT:
-        windowEnd = windowEnd.subtract(seconds, "seconds");
+        fixedWindowEnd = fixedWindowEnd.subtract(seconds, "seconds");
         break;
       case ArrowDirection.CENTER:
         // CENTER is used to set the time window to the current time.
-        windowEnd = moment.utc();
+        fixedWindowEnd = moment.utc();
         break;
       default:
         console.error("Unknown direction: ", direction);
     }
+    /**
+     * todo(josephine) I'm very confused about the `fixedWindowEnd > moment.utc().subtract(currentScale.windowValid)` clause
+     *  What is this testing?
+     *  How is windowValid used here?
+     *    The only other usage is in the db console metrics page, where it is used to do continuous polling
+     *  The existing comment below confuses me in that:
+     *    "If the timescale extends into the future..."
+     *      -> I almost wonder if the clause means to subtract windowSize (could be custom) instead of windowValid
+     *    "...Otherwise set the key to "Custom" so it appears correctly"
+     *      -> This seems to suggest that we allow end times in the future if the windowSize is not one of the defaults.
+     *        However, I cannot hit this code.
+     */
     // If the timescale extends into the future then fallback to a default
     // timescale. Otherwise set the key to "Custom" so it appears correctly.
+    // if fixedWindowEnd is null, or fixedWindowEnd + windowValid > now
     if (
-      !windowEnd ||
-      windowEnd > moment.utc().subtract(currentScale.windowValid)
+      !fixedWindowEnd ||
+      fixedWindowEnd > moment.utc().subtract(currentScale.windowValid)
     ) {
       const foundTimeScale = Object.entries(options).find(
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         ([_, value]) => value.windowSize.asSeconds() === windowSize.asSeconds(),
       );
       if (foundTimeScale) {
+        /**
+         * This code can be hit by:
+         *  - select a default option, then click the left arrow, then click the right arrow
+         * This (or the parent if block) is *not* hit by:
+         *  - select a default time, click left, select a custom time of the same range, then click right. The arrow is
+         *    not disabled, but the clause doesn't seem to be true
+         */
         selected = { key: foundTimeScale[0], ...foundTimeScale[1] };
       } else {
+        // I can't figure out how to hit this code; when I try the right arrow is always disabled
         key = "Custom";
       }
     } else {
@@ -195,7 +216,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
 
     let timeScale: TimeScale = {
       ...currentScale,
-      windowEnd,
+      fixedWindowEnd: fixedWindowEnd,
       windowSize,
       key,
       ...selected,
@@ -225,7 +246,7 @@ export const TimeScaleDropdown: React.FC<TimeScaleDropdownProps> = ({
     let timeScale: TimeScale = {
       ...findClosestTimeScale(options, seconds),
       windowSize: moment.duration(end.diff(start)),
-      windowEnd: end,
+      fixedWindowEnd: end,
       key: "Custom",
     };
     if (adjustTimeScaleOnChange) {

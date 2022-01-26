@@ -21,38 +21,43 @@ export interface TimeWindow {
 }
 
 /**
- * TimeScale describes the requested dimensions of TimeWindows; it
- * prescribes a length for the window, along with a period of time that a
- * newly created TimeWindow will remain valid.
+ * TimeScale describes the requested dimensions, from which one can derive concrete TimeWindows using toDateRange
  */
 export interface TimeScale {
   // The key used to index in to the availableTimeScales collection.
   key?: string;
   // The size of a global time window. Default is ten minutes.
   windowSize: moment.Duration;
+  /**
+   * fixme(josephine) I don't understand what windowValid is, or how to modify the original comment below
+   *  - It is used for db console polling, which after my changes is not involved in this cluster-ui copy of TimeScale
+   *    This usage tests for `now > (currentWindow.end + windowValid)`, as the original comment below describes
+   *  - It is also used in the `arrowClick` function in timeScaleDropdown.tsx
+   *    See my comment there for confusion about this usage
+   */
   // The length of time the global time window is valid. The current time window
   // is invalid if now > (currentWindow.end + windowValid). Default is ten
-  // seconds. If windowEnd is set this is ignored.
+  // seconds. If fixedWindowEnd is set this is ignored.
   windowValid?: moment.Duration;
   // The expected duration of individual samples for queries at this time scale.
   sampleSize: moment.Duration;
-  // The end time of the window, or null if it should be a dynamically moving "now"
-  windowEnd: moment.Moment | null;
+  // The fixed end time of the window, or null if it should be a dynamically moving "now"
+  fixedWindowEnd: moment.Moment | false;
 }
 
-export class TimeWindowState {
+export class TimeScaleState {
   // Currently selected scale.
   scale: TimeScale;
   constructor() {
     this.scale = {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
-      windowEnd: null,
+      fixedWindowEnd: false,
       key: "Past 10 Minutes",
     };
   }
 }
 
-export type DefaultTimeScaleOption = Omit<TimeScale, "windowEnd">;
+export type DefaultTimeScaleOption = Omit<TimeScale, "fixedWindowEnd">;
 
 export interface DefaultTimesScaleOptions {
   [key: string]: DefaultTimeScaleOption;
