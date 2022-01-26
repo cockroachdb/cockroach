@@ -402,6 +402,7 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *extendedEvalContext,
 	finishedSetupFn func(),
 ) (cleanup func()) {
+	cleanup = func() {}
 	ctx := planCtx.ctx
 
 	flows := plan.GenerateFlowSpecs()
@@ -412,7 +413,7 @@ func (dsp *DistSQLPlanner) Run(
 	}()
 	if _, ok := flows[dsp.gatewayNodeID]; !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
-		return func() {}
+		return cleanup
 	}
 
 	var (
@@ -464,7 +465,7 @@ func (dsp *DistSQLPlanner) Run(
 		if err != nil {
 			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 			recv.SetError(err)
-			return func() {}
+			return cleanup
 		}
 		leafInputState = tis
 	}
@@ -527,9 +528,15 @@ func (dsp *DistSQLPlanner) Run(
 	ctx, flow, opChains, err := dsp.setupFlows(
 		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats, statementSQL,
 	)
+	// Make sure that the local flow is always cleaned up if it was created.
+	if flow != nil {
+		cleanup = func() {
+			flow.Cleanup(ctx)
+		}
+	}
 	if err != nil {
 		recv.SetError(err)
-		return func() {}
+		return cleanup
 	}
 
 	if finishedSetupFn != nil {
@@ -543,7 +550,7 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.saveFlows != nil {
 		if err := planCtx.saveFlows(flows, opChains); err != nil {
 			recv.SetError(err)
-			return func() {}
+			return cleanup
 		}
 	}
 
@@ -556,7 +563,7 @@ func (dsp *DistSQLPlanner) Run(
 	if txn != nil && !localState.MustUseLeafTxn() && flow.ConcurrentTxnUse() {
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
-		return func() {}
+		return cleanup
 	}
 
 	// TODO(radu): this should go through the flow scheduler.
@@ -579,9 +586,7 @@ func (dsp *DistSQLPlanner) Run(
 
 	// ignoreClose is set to true meaning that someone else will handle the
 	// closing of the current plan, so we simply clean up the flow.
-	return func() {
-		flow.Cleanup(ctx)
-	}
+	return cleanup
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that

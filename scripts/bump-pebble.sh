@@ -22,9 +22,6 @@
 
 set -euo pipefail
 
-_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-_root_dir="$_dir"/..
-
 echoerr() { printf "%s\n" "$*" >&2; }
 pushd() { builtin pushd "$@" > /dev/null; }
 popd() { builtin popd "$@" > /dev/null; }
@@ -113,12 +110,9 @@ $COMMITS"
 git push -u --force origin "$VENDORED_BRANCH"
 popd
 
-# Mirror the dependency changes to cloud storage.
-"$_root_dir/dev" generate bazel --mirror
-
 # Create the branch and commit on the CockroachDB repository.
 pushd "$COCKROACH_DIR"
-make bazel-generate
+./dev generate bazel --mirror
 git add go.mod go.sum DEPS.bzl
 git add vendor
 git branch -D "$COCKROACH_BRANCH" || true
