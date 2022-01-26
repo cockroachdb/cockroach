@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"golang.org/x/text/language"
@@ -92,11 +91,6 @@ func ValidateColumnDefType(t *types.T) error {
 		if t.ArrayContents().Family() == types.ArrayFamily {
 			// Nested arrays are not supported as a column type.
 			return errors.Errorf("nested array unsupported as column type: %s", t.String())
-		}
-		if t.ArrayContents().Family() == types.JsonFamily {
-			// JSON arrays are not supported as a column type.
-			return unimplemented.NewWithIssueDetailf(23468, t.String(),
-				"arrays of JSON unsupported as column type")
 		}
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
