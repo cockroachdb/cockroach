@@ -406,7 +406,7 @@ func convertPGIncompatibleDatabasePrivilegesToDefaultPrivileges(
 			if err != nil {
 				return nil, err
 			}
-			translatedStatement = fmt.Sprintf("USE %s; %s;", database.Normalize(),
+			translatedStatement = fmt.Sprintf("USE %s; %s;", database,
 				alterDefaultPrivilegesASTNode.String())
 			if err := alterDefaultPrivilegesNode.startExec(params); err != nil {
 				return nil, err
