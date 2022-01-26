@@ -67,6 +67,7 @@ func (*AlterTableDropColumn) alterTableCmd()         {}
 func (*AlterTableDropConstraint) alterTableCmd()     {}
 func (*AlterTableDropNotNull) alterTableCmd()        {}
 func (*AlterTableDropStored) alterTableCmd()         {}
+func (*AlterTableDropExpression) alterTableCmd()     {}
 func (*AlterTableSetNotNull) alterTableCmd()         {}
 func (*AlterTableRenameColumn) alterTableCmd()       {}
 func (*AlterTableRenameConstraint) alterTableCmd()   {}
@@ -84,6 +85,7 @@ var _ AlterTableCmd = &AlterTableAlterColumnType{}
 var _ AlterTableCmd = &AlterTableDropColumn{}
 var _ AlterTableCmd = &AlterTableDropConstraint{}
 var _ AlterTableCmd = &AlterTableDropNotNull{}
+var _ AlterTableCmd = &AlterTableDropExpression{}
 var _ AlterTableCmd = &AlterTableDropStored{}
 var _ AlterTableCmd = &AlterTableSetNotNull{}
 var _ AlterTableCmd = &AlterTableRenameColumn{}
@@ -529,6 +531,29 @@ func (node *AlterTableDropStored) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" DROP STORED")
+}
+
+// AlterTableDropExpression represents an ALTER COLUMN DROP EXPRESSION command
+// to remove the computed-ness from a column.
+type AlterTableDropExpression struct {
+	Column Name
+}
+
+// GetColumn implemnets the ColumnMutationCmd interface.
+func (node *AlterTableDropExpression) GetColumn() Name {
+	return node.Column
+}
+
+// TelemetryCounter implements the AlterTableCmd interface.
+func (node *AlterTableDropExpression) TelemetryCounter() telemetry.Counter {
+	return sqltelemetry.SchemaChangeAlterCounterWithExtra("table", "drop_expression")
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableDropExpression) Format(ctx *FmtCtx) {
+	ctx.WriteString(" ALTER COLUMN ")
+	ctx.FormatNode(&node.Column)
+	ctx.WriteString(" DROP EXPRESSION")
 }
 
 // AlterTablePartitionByTable represents an ALTER TABLE PARTITION [ALL]

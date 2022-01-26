@@ -1228,7 +1228,7 @@ func applyColumnMutation(
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
 
-	case *tree.AlterTableDropStored:
+	case *tree.AlterTableDropStored, *tree.AlterTableDropExpression:
 		if !col.IsComputed() {
 			return pgerror.Newf(pgcode.InvalidColumnDefinition,
 				"column %q is not a computed column", col.GetName())

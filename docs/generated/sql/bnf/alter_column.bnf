@@ -11,6 +11,8 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'STORED'
+	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'EXPRESSION'
+	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'DROP' 'EXPRESSION'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'SET' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' table_name 'ALTER'  column_name 'SET' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' table_name 'ALTER' 'COLUMN' column_name 'SET' 'DATA' 'TYPE' typename 'COLLATE' collation_name 'USING' a_expr
@@ -41,6 +43,8 @@ alter_onetable_stmt ::=
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'STORED'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'STORED'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'DROP' 'EXPRESSION'
+	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'DROP' 'EXPRESSION'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER'  column_name 'SET' 'NOT' 'NULL'
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' table_name 'ALTER' 'COLUMN' column_name 'SET' 'DATA' 'TYPE' typename 'COLLATE' collation_name 'USING' a_expr

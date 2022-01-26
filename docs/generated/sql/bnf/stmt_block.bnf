@@ -933,6 +933,7 @@ unreserved_keyword ::=
 	| 'EXPIRATION'
 	| 'EXPLAIN'
 	| 'EXPORT'
+	| 'EXPRESSION'
 	| 'EXTENSION'
 	| 'FAILURE'
 	| 'FILES'
@@ -2676,6 +2677,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name alter_column_visible
 	| 'ALTER' opt_column column_name 'DROP' 'NOT' 'NULL'
 	| 'ALTER' opt_column column_name 'DROP' 'STORED'
+	| 'ALTER' opt_column column_name 'DROP' 'EXPRESSION'
 	| 'ALTER' opt_column column_name 'SET' 'NOT' 'NULL'
 	| 'DROP' opt_column 'IF' 'EXISTS' column_name opt_drop_behavior
 	| 'DROP' opt_column column_name opt_drop_behavior
