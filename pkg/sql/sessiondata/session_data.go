@@ -148,7 +148,7 @@ func (s *SessionData) GetDateStyle() pgdate.DateStyle {
 // SessionUser retrieves the session_user.
 // The SessionUser is the username that originally logged into the session.
 // If a user applies SET ROLE, the SessionUser remains the same whilst the
-// CurrentUser() changes.
+// User() changes.
 func (s *SessionData) SessionUser() security.SQLUsername {
 	if s.SessionUserProto == "" {
 		return s.User()
