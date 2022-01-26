@@ -43,19 +43,12 @@ export interface TimeScale {
 export class TimeWindowState {
   // Currently selected scale.
   scale: TimeScale;
-  // Currently established time window.
-  currentWindow: TimeWindow;
-  // True if scale has changed since currentWindow was generated.
-  scaleChanged: boolean;
-  useTimeRange: boolean;
   constructor() {
     this.scale = {
       ...defaultTimeScaleOptions["Past 10 Minutes"],
       windowEnd: null,
       key: "Past 10 Minutes",
     };
-    this.useTimeRange = false;
-    this.scaleChanged = false;
   }
 }
 
