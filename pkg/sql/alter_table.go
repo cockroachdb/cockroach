@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -963,6 +964,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return errors.New("cannot inject statistics in an explicit transaction")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
+				return err
+			}
+
+		case *tree.AlterTableSetStorageParams:
+			if err := paramparse.ApplyStorageParameters(
+				params.ctx,
+				params.p.SemaCtx(),
+				params.EvalContext(),
+				t.StorageParams,
+				&paramparse.TableStorageParamObserver{},
+			); err != nil {
 				return err
 			}
 
