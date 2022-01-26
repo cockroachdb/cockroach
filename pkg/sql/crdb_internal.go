@@ -3043,7 +3043,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		if err := p.RequireAdminRole(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
+		hasAdmin, err := p.HasAdminRole(ctx)
+		if err != nil {
 			return nil, nil, err
 		}
 		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
@@ -3058,8 +3059,14 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		indexNames := make(map[uint32]map[uint32]string)
 		schemaParents := make(map[uint32]uint32)
 		parents := make(map[uint32]uint32)
+		hasPermission := false
 		for _, desc := range descs {
 			id := uint32(desc.GetID())
+			if p.CheckPrivilege(ctx, desc, privilege.ZONECONFIG) != nil && !hasAdmin {
+				log.Warningf(ctx, "user has no ZONECONFIG privilege or admin role for %s", desc.GetName())
+				continue
+			}
+			hasPermission = true
 			switch desc := desc.(type) {
 			case catalog.TableDescriptor:
 				parents[id] = uint32(desc.GetParentID())
@@ -3074,6 +3081,10 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			case catalog.SchemaDescriptor:
 				schemaNames[id] = desc.GetName()
 			}
+		}
+		// if the user has no ZONECONFIG privilege on any table/schema/database
+		if !hasPermission {
+			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or have the admin role can read crdb_internal.ranges")
 		}
 		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
 			Key:    keys.MinKey,
