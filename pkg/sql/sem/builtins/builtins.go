@@ -4079,7 +4079,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_statement_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			Types:      tree.ArgTypes{{"input", types.JSONArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
@@ -4107,7 +4107,7 @@ value if you rely on the HLC for accuracy.`,
 	),
 	"crdb_internal.merge_transaction_stats": makeBuiltin(arrayProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"input", types.AnyArray}},
+			Types:      tree.ArgTypes{{"input", types.JSONArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				arr := tree.MustBeDArray(args[0])
