@@ -1056,6 +1056,13 @@ func (s *fakeKafkaSink) Dial() error {
 	return nil
 }
 
+func (s *fakeKafkaSink) Topics() []string {
+	if sink, ok := s.Sink.(*kafkaSink); ok {
+		return sink.Topics()
+	}
+	return nil
+}
+
 type kafkaFeedFactory struct {
 	enterpriseFeedFactory
 }

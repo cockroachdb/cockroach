@@ -376,6 +376,14 @@ func (s *kafkaSink) workerLoop() {
 	}
 }
 
+func (s *kafkaSink) Topics() []string {
+	var topics []string
+	for _, topic := range s.topics {
+		topics = append(topics, topic)
+	}
+	return topics
+}
+
 type changefeedPartitioner struct {
 	hash sarama.Partitioner
 }
