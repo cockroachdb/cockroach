@@ -63,13 +63,6 @@ func TestStreamerLimitations(t *testing.T) {
 		return getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
 	}
 
-	t.Run("InOrder mode unsupported", func(t *testing.T) {
-		require.Panics(t, func() {
-			streamer := getStreamer()
-			streamer.Init(InOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
-		})
-	})
-
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()

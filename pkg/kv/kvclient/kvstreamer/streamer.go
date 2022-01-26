@@ -56,10 +56,6 @@ const (
 	OutOfOrder
 )
 
-// Remove an unused warning for now.
-// TODO(yuzefovich): remove this when supported.
-var _ = InOrder
-
 // Result describes the result of performing a single KV request.
 //
 // The recipient of the Result is required to call Release() when the Result is
@@ -353,9 +349,6 @@ func NewStreamer(
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
 func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
-	if mode != OutOfOrder {
-		panic(errors.AssertionFailedf("only OutOfOrder mode is supported"))
-	}
 	s.mode = mode
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))

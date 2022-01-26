@@ -141,8 +141,12 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 			s.streamerInfo.budgetLimit,
 			s.streamerInfo.budgetAcc,
 		)
+		mode := kvstreamer.OutOfOrder
+		if s.maintainOrdering {
+			mode = kvstreamer.InOrder
+		}
 		s.streamerInfo.Streamer.Init(
-			kvstreamer.OutOfOrder,
+			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			s.rf.maxKeysPerRow,
 		)
@@ -454,7 +458,7 @@ func NewColIndexJoin(
 
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 
-	useStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) && !spec.MaintainOrdering
+	useStreamer := row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
