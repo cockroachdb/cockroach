@@ -2838,8 +2838,8 @@ message ContentionEvent {
 
   // Key is the key that this and the other transaction conflicted on.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
-  // TxnMeta is the transaction conflicted
-  // with, i.e. the transaction holding a lock.
+  // TxnMeta is the transaction conflicted with, i.e. the transaction holding a
+  // lock or lock reservation.
   cockroach.storage.enginepb.TxnMeta txn_meta = 2 [(gogoproto.nullable) = false];
   // Duration spent contending against the other transaction.
   google.protobuf.Duration duration = 3 [(gogoproto.nullable) = false,
