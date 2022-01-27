@@ -95,10 +95,7 @@ export function* sqlStatsSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       sqlStatsActions.refresh,
-      [
-        sqlStatsActions.invalidated,
-        rootActions.resetState,
-      ],
+      [sqlStatsActions.invalidated, rootActions.resetState],
       refreshSQLStatsSaga,
     ),
     takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
