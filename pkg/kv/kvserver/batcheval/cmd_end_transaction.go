@@ -279,6 +279,12 @@ func EndTxn(
 				return result.Result{}, errors.AssertionFailedf(
 					"programming error: epoch regression: %d", h.Txn.Epoch)
 			}
+			if h.Txn.Epoch > reply.Txn.Epoch {
+				// If the EndTxn carries a newer epoch than a STAGING txn record, we do
+				// not consider the record to be performing a parallel commit because we
+				// know that the transaction restarted since entering the STAGING state.
+				reply.Txn.Status = roachpb.PENDING
+			}
 
 		default:
 			return result.Result{}, errors.AssertionFailedf("bad txn status: %s", reply.Txn)
@@ -318,6 +324,29 @@ func EndTxn(
 		// Else, the transaction can be explicitly committed.
 		reply.Txn.Status = roachpb.COMMITTED
 	} else {
+		// If the transaction is STAGING, we can only move it to ABORTED if it is
+		// *not* already implicitly committed. On the commit path, the transaction
+		// coordinator is deliberate to only ever issue an EndTxn(commit) once the
+		// transaction has reached an implicit commit state. However, on the
+		// rollback path, the transaction coordinator does not make the opposite
+		// guarantee that it will never issue an EndTxn(abort) once the transaction
+		// has reached (or if it still could reach) an implicit commit state.
+		//
+		// As a result, on the rollback path, we don't trust the transaction's
+		// coordinator to be an authoritative source of truth about whether the
+		// transaction is implicitly committed. In other words, we don't consider
+		// this EndTxn(abort) to be a claim that the transaction is not implicitly
+		// committed. The transaction's coordinator may have just given up on the
+		// transaction before it heard the outcome of a commit attempt. So in this
+		// case, we return an IndeterminateCommitError to trigger the transaction
+		// recovery protocol and transition the transaction record to a finalized
+		// state (COMMITTED or ABORTED).
+		if reply.Txn.Status == roachpb.STAGING {
+			err := roachpb.NewIndeterminateCommitError(*reply.Txn)
+			log.VEventf(ctx, 1, "%v", err)
+			return result.Result{}, err
+		}
+
 		reply.Txn.Status = roachpb.ABORTED
 	}
 

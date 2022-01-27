@@ -611,15 +611,16 @@ func TestEndTxnUpdatesTransactionRecord(t *testing.T) {
 		},
 		{
 			// Standard case where a transaction is rolled back. The record
-			// already exists because of a failed parallel commit attempt.
-			name: "record staging, try rollback",
+			// already exists because of a failed parallel commit attempt in
+			// the same epoch.
+			name: "record staging, try rollback at same epoch",
 			// Replica state.
 			existingTxn: stagingRecord,
 			// Request state.
 			headerTxn: headerTxn,
 			commit:    false,
 			// Expected result.
-			expTxn: abortedRecord,
+			expError: "found txn in indeterminate STAGING state",
 		},
 		{
 			// Standard case where a transaction record is created during a
