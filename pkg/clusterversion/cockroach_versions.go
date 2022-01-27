@@ -251,6 +251,12 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
+	// AddRaftAppliedIndexTermMigration is a migration that causes each range
+	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
+	AddRaftAppliedIndexTermMigration
+	// PostAddRaftAppliedIndexTermMigration is used for asserting that
+	// RaftAppliedIndexTerm is populated.
+	PostAddRaftAppliedIndexTermMigration
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -386,6 +392,14 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     AddRaftAppliedIndexTermMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
+	},
+	{
+		Key:     PostAddRaftAppliedIndexTermMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
 
 	// *************************************************
