@@ -2133,7 +2133,7 @@ func (r *restoreResumer) dropDescriptors(
 		// and so we don't need to preserve MVCC semantics.
 		tableToDrop.DropTime = dropTime
 		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
-		descsCol.AddDeletedDescriptor(tableToDrop)
+		descsCol.AddDeletedDescriptor(tableToDrop.GetID())
 		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, tableToDrop, b); err != nil {
 			return errors.Wrap(err, "writing dropping table to batch")
 		}
@@ -2161,7 +2161,7 @@ func (r *restoreResumer) dropDescriptors(
 		}
 		// Remove the system.descriptor entry.
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, typDesc.ID))
-		descsCol.AddDeletedDescriptor(mutType)
+		descsCol.AddDeletedDescriptor(mutType.GetID())
 	}
 
 	// Queue a GC job.
@@ -2233,7 +2233,7 @@ func (r *restoreResumer) dropDescriptors(
 
 		b.Del(catalogkeys.EncodeNameKey(codec, mutSchema))
 		b.Del(catalogkeys.MakeDescMetadataKey(codec, mutSchema.GetID()))
-		descsCol.AddDeletedDescriptor(mutSchema)
+		descsCol.AddDeletedDescriptor(mutSchema.GetID())
 		dbsWithDeletedSchemas[mutSchema.GetParentID()] = append(dbsWithDeletedSchemas[mutSchema.GetParentID()], mutSchema)
 	}
 
@@ -2312,7 +2312,7 @@ func (r *restoreResumer) dropDescriptors(
 
 		nameKey := catalogkeys.MakeDatabaseNameKey(codec, db.GetName())
 		b.Del(nameKey)
-		descsCol.AddDeletedDescriptor(db)
+		descsCol.AddDeletedDescriptor(db.GetID())
 		deletedDBs[db.GetID()] = struct{}{}
 	}
 
