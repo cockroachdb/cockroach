@@ -13,45 +13,45 @@ import { connect } from "react-redux";
 import moment from "moment";
 
 import { AdminUIState } from "src/redux/state";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "src/redux/timeScale";
 import _ from "lodash";
 
-interface TimeWindowManagerProps {
-  // The current timewindow redux state.
-  timeWindow: timewindow.TimeWindowState;
+interface MetricsTimeManagerProps {
+  // The current timescale redux state.
+  timeScale: timewindow.TimeScaleState;
   // Callback function used to set a new time window.
-  setTimeWindow: typeof timewindow.setTimeWindow;
+  setMetricsMovingWindow: typeof timewindow.setMetricsMovingWindow;
   // Optional override method to obtain the current time. Used for tests.
   now?: () => moment.Moment;
 }
 
-interface TimeWindowManagerState {
+interface MetricsTimeManagerState {
   // Identifier from an outstanding call to setTimeout.
   timeout: number;
 }
 
 /**
- * TimeWindowManager takes responsibility for advancing the current global
+ * MetricsTimeManager takes responsibility for advancing the current global
  * time window used by metric graphs. It renders nothing, but will dispatch an
  * updated time window into the redux store whenever the previous time window is
  * expired.
  */
-class TimeWindowManager extends React.Component<
-  TimeWindowManagerProps,
-  TimeWindowManagerState
+class MetricsTimeManager extends React.Component<
+  MetricsTimeManagerProps,
+  MetricsTimeManagerState
 > {
-  constructor(props?: TimeWindowManagerProps, context?: any) {
+  constructor(props?: MetricsTimeManagerProps, context?: any) {
     super(props, context);
     this.state = { timeout: null };
   }
 
   /**
-   * checkWindow determines when the current time window will expire. If it is
+   * checkWindow determines when the metrics current time window will expire. If it is
    * already expired, a new time window is dispatched immediately. Otherwise,
    * setTimeout is used to asynchronously set a new time window when the current
    * one expires.
    */
-  checkWindow(props: TimeWindowManagerProps) {
+  checkWindow(props: MetricsTimeManagerProps) {
     // Clear any existing timeout.
     if (this.state.timeout) {
       clearTimeout(this.state.timeout);
@@ -61,22 +61,22 @@ class TimeWindowManager extends React.Component<
     // If there is no current window, or if scale have changed since this
     // window was generated, set one immediately.
     if (
-      !props.timeWindow.metricsTime.currentWindow ||
-      props.timeWindow.metricsTime.scaleChanged
+      !props.timeScale.metricsTime.currentWindow ||
+      props.timeScale.metricsTime.shouldUpdateMetricsWindowFromScale
     ) {
       this.setWindow(props);
       return;
     }
 
-    // Exact time ranges can't expire.
-    if (props.timeWindow.scale.windowEnd) {
+    // Fixed time ranges can't expire.
+    if (props.timeScale.scale.fixedWindowEnd) {
       // this.setWindow(props);
       return;
     }
 
     const now = props.now ? props.now() : moment();
-    const currentEnd = props.timeWindow.metricsTime.currentWindow.end;
-    const expires = currentEnd.clone().add(props.timeWindow.scale.windowValid);
+    const currentEnd = props.timeScale.metricsTime.currentWindow.end;
+    const expires = currentEnd.clone().add(props.timeScale.scale.windowValid);
     if (now.isAfter(expires)) {
       // Current time window is expired, reset it.
       this.setWindow(props);
@@ -94,22 +94,28 @@ class TimeWindowManager extends React.Component<
 
   /**
    * setWindow dispatches a new time window, extending backwards from the
-   * current time.
+   * current time, by deriving the time from timeScale.
    */
-  setWindow(props: TimeWindowManagerProps) {
-    if (!props.timeWindow.scale.windowEnd) {
-      if (!props.timeWindow.metricsTime.useTimeRange) {
+  setWindow(props: MetricsTimeManagerProps) {
+    // The following two `if` blocks check two things that in theory should always be in sync.
+    // They check if the time selection is a dynamic, moving, now.
+    if (!props.timeScale.scale.fixedWindowEnd) {
+      if (!props.timeScale.metricsTime.isFixedWindow) {
         const now = props.now ? props.now() : moment();
-        props.setTimeWindow({
-          start: now.clone().subtract(props.timeWindow.scale.windowSize),
+        // Update the metrics page window with the new "now" time for polling.
+        props.setMetricsMovingWindow({
+          start: now.clone().subtract(props.timeScale.scale.windowSize),
           end: now,
         });
       }
     } else {
-      const windowEnd = props.timeWindow.scale.windowEnd;
-      props.setTimeWindow({
-        start: windowEnd.clone().subtract(props.timeWindow.scale.windowSize),
-        end: windowEnd,
+      const fixedWindowEnd = props.timeScale.scale.fixedWindowEnd;
+      // Update the metrics page window with the fixed, custom end time.
+      props.setMetricsMovingWindow({
+        start: fixedWindowEnd
+          .clone()
+          .subtract(props.timeScale.scale.windowSize),
+        end: fixedWindowEnd,
       });
     }
   }
@@ -118,8 +124,8 @@ class TimeWindowManager extends React.Component<
     this.checkWindow(this.props);
   }
 
-  componentDidUpdate(prevProps: TimeWindowManagerProps) {
-    if (!_.isEqual(prevProps.timeWindow, this.props.timeWindow)) {
+  componentDidUpdate(prevProps: MetricsTimeManagerProps) {
+    if (!_.isEqual(prevProps.timeScale, this.props.timeScale)) {
       this.checkWindow(this.props);
     }
   }
@@ -130,16 +136,16 @@ class TimeWindowManager extends React.Component<
   }
 }
 
-const timeWindowManagerConnected = connect(
+const metricsTimeManagerConnected = connect(
   (state: AdminUIState) => {
     return {
-      timeWindow: state.timewindow,
+      timeScale: state.timeScale,
     };
   },
   {
-    setTimeWindow: timewindow.setTimeWindow,
+    setMetricsMovingWindow: timewindow.setMetricsMovingWindow,
   },
-)(TimeWindowManager);
+)(MetricsTimeManager);
 
-export default timeWindowManagerConnected;
-export { TimeWindowManager as TimeWindowManagerUnconnected };
+export default metricsTimeManagerConnected;
+export { MetricsTimeManager as MetricsTimeManagerUnconnected };

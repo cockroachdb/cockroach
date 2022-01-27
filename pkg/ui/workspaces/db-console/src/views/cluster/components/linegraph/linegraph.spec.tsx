@@ -17,7 +17,7 @@ import uPlot from "uplot";
 import _ from "lodash";
 
 import { fillGaps, LineGraph, LineGraphProps } from "./index";
-import * as timewindow from "src/redux/timewindow";
+import * as timewindow from "src/redux/timeScale";
 import * as protos from "src/js/protos";
 import { Axis } from "src/views/shared/components/metricQuery";
 import {
@@ -49,7 +49,7 @@ describe("<LineGraph>", function() {
         end: new Long(2346),
         sampleDuration: new Long(1),
       },
-      setTimeRange: timewindow.setTimeRange,
+      setMetricsFixedWindow: timewindow.setMetricsFixedWindow,
       setTimeScale: timewindow.setTimeScale,
       history: {
         length: 0,

@@ -16,24 +16,24 @@ import moment from "moment";
 import _ from "lodash";
 
 import "src/enzymeInit";
-import { TimeWindowManagerUnconnected as TimeWindowManager } from "./";
-import * as timewindow from "src/redux/timewindow";
+import { MetricsTimeManagerUnconnected as MetricsTimeManager } from "./";
+import * as timewindow from "src/redux/timeScale";
 
-describe("<TimeWindowManager>", function() {
+describe("<MetricsTimeManager>", function() {
   let spy: sinon.SinonSpy;
-  let state: timewindow.TimeWindowState;
+  let state: timewindow.TimeScaleState;
   const now = () => moment("11-12-1955 10:04PM -0800", "MM-DD-YYYY hh:mma Z");
 
   beforeEach(function() {
     spy = sinon.spy();
-    state = new timewindow.TimeWindowState();
+    state = new timewindow.TimeScaleState();
   });
 
   const getManager = () =>
     shallow(
-      <TimeWindowManager
-        timeWindow={_.clone(state)}
-        setTimeWindow={spy}
+      <MetricsTimeManager
+        timeScale={_.clone(state)}
+        setMetricsMovingWindow={spy}
         now={now}
       />,
     );
@@ -69,7 +69,7 @@ describe("<TimeWindowManager>", function() {
       start: now().subtract(state.scale.windowSize),
       end: now(),
     };
-    state.metricsTime.scaleChanged = true;
+    state.metricsTime.shouldUpdateMetricsWindowFromScale = true;
 
     getManager();
     assert.isTrue(spy.calledOnce);

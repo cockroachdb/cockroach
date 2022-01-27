@@ -628,6 +628,6 @@ export const transactionDetails = {
 export const timeScale: TimeScale = {
   windowSize: moment.duration(1, "year"),
   sampleSize: moment.duration(1, "day"),
-  windowEnd: moment.utc("2021.12.31"),
+  fixedWindowEnd: moment.utc("2021.12.31"),
   key: "Custom",
 };

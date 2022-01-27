@@ -22,7 +22,7 @@ import {
   PageConfig,
   PageConfigItem,
 } from "src/views/shared/components/pageconfig";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import ClusterSummaryBar from "./summaryBar";
 
 import { AdminUIState } from "src/redux/state";
@@ -64,12 +64,12 @@ import overloadDashboard from "./dashboards/overload";
 import { getMatchParamByName } from "src/util/query";
 import { PayloadAction } from "src/interfaces/action";
 import {
-  setTimeRange,
+  setMetricsFixedWindow,
   setTimeScale,
   TimeWindow,
   TimeScale,
   adjustTimeScale,
-} from "src/redux/timewindow";
+} from "src/redux/timeScale";
 import { InlineAlert } from "src/components";
 import { Anchor } from "@cockroachlabs/cluster-ui";
 import { reduceStorageOfTimeSeriesDataOperationalFlags } from "src/util/docs";
@@ -119,7 +119,7 @@ type MapDispatchToProps = {
   refreshNodeSettings: typeof refreshSettings;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
-  setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 };
 
@@ -305,7 +305,7 @@ export class NodeGraphs extends React.Component<
         <MetricsDataProvider
           id={key}
           key={key}
-          setTimeRange={this.props.setTimeRange}
+          setMetricsFixedWindow={this.props.setMetricsFixedWindow}
           setTimeScale={this.props.setTimeScale}
           history={this.props.history}
           adjustTimeScaleOnChange={this.adjustTimeScaleOnChange}
@@ -426,7 +426,7 @@ const mapDispatchToProps: MapDispatchToProps = {
   refreshNodeSettings: refreshSettings,
   hoverOn,
   hoverOff,
-  setTimeRange: setTimeRange,
+  setMetricsFixedWindow: setMetricsFixedWindow,
   setTimeScale: setTimeScale,
 };
 

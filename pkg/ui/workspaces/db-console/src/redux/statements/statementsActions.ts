@@ -12,7 +12,7 @@ import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
 import { google } from "@cockroachlabs/crdb-protobuf-client";
 import IDuration = google.protobuf.IDuration;
-import { TimeScale } from "src/redux/timewindow";
+import { TimeScale } from "src/redux/timeScale";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";

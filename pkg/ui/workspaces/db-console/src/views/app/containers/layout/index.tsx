@@ -15,7 +15,7 @@ import { connect } from "react-redux";
 
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
-import TimeWindowManager from "src/views/app/containers/timewindow";
+import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import AlertBanner from "src/views/app/containers/alertBanner";
 import RequireLogin from "src/views/login/requireLogin";
 import {
