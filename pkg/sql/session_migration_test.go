@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
@@ -57,6 +59,29 @@ func TestSessionMigration(t *testing.T) {
 		defer func() {
 			_ = dbConn.Close()
 		}()
+		_, err := dbConn.Exec("CREATE USER testuser")
+		require.NoError(t, err)
+
+		openUserConnFunc := func(user string) *gosql.DB {
+
+			pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+				tc.Server(0).ServingSQLAddr(),
+				"StartServer", /* prefix */
+				url.User(user),
+			)
+			require.NoError(t, err)
+			pgURL.Path = "defaultdb"
+
+			goDB, err := gosql.Open("postgres", pgURL.String())
+			require.NoError(t, err)
+
+			tc.Server(0).Stopper().AddCloser(
+				stop.CloserFn(func() {
+					cleanupGoDB()
+				}))
+
+			return goDB
+		}
 
 		vars := make(map[string]string)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -71,6 +96,10 @@ func TestSessionMigration(t *testing.T) {
 			case "reset":
 				require.NoError(t, dbConn.Close())
 				dbConn = openConnFunc()
+				return ""
+			case "user":
+				require.NoError(t, dbConn.Close())
+				dbConn = openUserConnFunc(d.Input)
 				return ""
 			case "exec":
 				_, err := dbConn.Exec(getQuery())
