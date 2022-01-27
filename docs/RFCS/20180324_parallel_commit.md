@@ -251,7 +251,7 @@ If the writes come back, it is checked whether they require a transaction restar
 If the transaction *can* commit, the `txnCommitter` returns the final transaction to the client and asynchronously sends an `EndTransactionRequest` that finalizes the transaction record (and as a side effect, eagerly resolves the intents). Expected responses to the `EndTransactionRequest` are RPC errors (timeouts, etc) and success. In particular, we can assert that the commit is not rejected.
 
 When adding in this new interceptor, we will also move `txnIntentCollector` below the `txnPipeliner`,
-so that the new order between them becomes: `txnPipeliner` -> `txnIntentCollector` -> `txnIntentCollector`.
+so that the new order between them becomes: `txnPipeliner` -> `txnIntentCollector` -> `txnCommitter`.
 Getting the refresh behavior correct may also require us to move `txnSpanRefresher` above all three
 of these interceptors. There are no known issues with making those rearrangements.
 
