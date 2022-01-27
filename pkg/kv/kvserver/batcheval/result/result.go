@@ -193,10 +193,13 @@ func coalesceBool(lhs *bool, rhs *bool) {
 func (p *Result) MergeAndDestroy(q Result) error {
 	if q.Replicated.State != nil {
 		if q.Replicated.State.RaftAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify RaftAppliedIndex")
+		}
+		if q.Replicated.State.RaftAppliedIndexTerm != 0 {
+			return errors.AssertionFailedf("must not specify RaftAppliedIndexTerm")
 		}
 		if q.Replicated.State.LeaseAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify LeaseAppliedIndex")
 		}
 		if p.Replicated.State == nil {
 			p.Replicated.State = &kvserverpb.ReplicaState{}

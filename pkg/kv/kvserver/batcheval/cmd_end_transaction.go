@@ -1011,9 +1011,19 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
+		// The RHS should populate RaftAppliedIndexTerm if the LHS is doing so.
+		rangeAppliedState, err := sl.LoadRangeAppliedState(ctx, batch)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{},
+				errors.Wrap(err, "unable to load range applied state")
+		}
+		writeRaftAppliedIndexTerm := false
+		if rangeAppliedState.RaftAppliedIndexTerm > 0 {
+			writeRaftAppliedIndexTerm = true
+		}
 		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
-			*gcThreshold, replicaVersion,
+			*gcThreshold, replicaVersion, writeRaftAppliedIndexTerm,
 		)
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")

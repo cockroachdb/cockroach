@@ -15,6 +15,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -903,6 +904,11 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	// TODO: is SendEmptySnapshot only used for a new cluster, so
+	// we can assume that we should set writeAppliedIndexTerm to true?
+	// It doesn't seem right to use a cluster version check since if this
+	// node's view of the version is stale it can use false.
+	writeAppliedIndexTerm := st.Version.IsActive(ctx, clusterversion.AddRaftAppliedIndexTermMigration)
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -911,6 +917,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
+		writeAppliedIndexTerm,
 	)
 	if err != nil {
 		return err
