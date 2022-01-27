@@ -72,6 +72,12 @@ func TestUnionType(t *testing.T) {
 			right:    types.String,
 			expected: nil,
 		},
+		{
+			// Error.
+			left:     types.MakeArray(types.MakeTuple([]*types.T{types.Bool})),
+			right:    types.MakeArray(types.MakeTuple([]*types.T{types.Bool, types.Int})),
+			expected: nil,
+		},
 	}
 
 	for _, tc := range testCases {
