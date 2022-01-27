@@ -17,8 +17,9 @@ SHOW CREATE TABLE tbl
 tbl                                                CREATE TABLE public.tbl (
                                                    id INT8 NOT NULL,
                                                    text STRING NULL,
+                                                   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                    CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                   FAMILY fam_0_id_text (id, text)
+                                                   FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '00:10:00':::INTERVAL)
 
 query T
@@ -27,7 +28,17 @@ SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 {ttl_expire_after='00:10:00':::INTERVAL}
 
 statement ok
-DROP TABLE tbl;
+DROP TABLE tbl
+
+statement error table crdb_internal_expiration has TTL defined, but column crdb_internal_expiration is not a TIMESTAMPTZ
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  crdb_internal_expiration INTERVAL,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes'::interval)
+
+statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
@@ -40,6 +51,7 @@ SHOW CREATE TABLE tbl
 tbl                                                CREATE TABLE public.tbl (
                                                    id INT8 NOT NULL,
                                                    text STRING NULL,
+                                                   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
                                                    CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                   FAMILY fam_0_id_text (id, text)
+                                                   FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '00:10:00':::INTERVAL)

@@ -160,6 +160,18 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (a, b, rowid)
 )`,
 		},
+
+		{
+			CreateStatement: `CREATE TABLE %s (
+	pk int8 PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes')`,
+			Expect: `CREATE TABLE public.%[1]s (
+	pk INT8 NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (pk ASC),
+	FAMILY "primary" (pk, crdb_internal_expiration)
+) WITH (ttl_expire_after = '00:10:00':::INTERVAL)`,
+		},
 		// Check that FK dependencies inside the current database
 		// have their db name omitted.
 		{
@@ -269,7 +281,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	INDEX t12_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 8,
+	INDEX %[1]s_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 8,
 	FAMILY "primary" (a, rowid)
 )`,
 		},
