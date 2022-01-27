@@ -269,7 +269,14 @@ func TestBackpressureNotAppliedWhenReducingRangeSize(t *testing.T) {
 		moveTableToNewStore(t, tc, args, tablePrefix)
 
 		// Ensure that the new replica has applied the same config.
-		waitForSpanConfig(t, tc, tablePrefix, newMax)
+		testutils.SucceedsSoon(t, func() error {
+			_, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
+			conf := repl.SpanConfig()
+			if conf.RangeMaxBytes != newMax {
+				return fmt.Errorf("expected %d, got %d", newMax, conf.RangeMaxBytes)
+			}
+			return nil
+		})
 
 		s, repl := getFirstStoreReplica(t, tc.Server(1), tablePrefix)
 		s.SetReplicateQueueActive(false)
