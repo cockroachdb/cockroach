@@ -88,7 +88,7 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
+	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self} and waitElsewhere
 	key           roachpb.Key       // the key of the conflict
 	held          bool              // is the conflict a held lock?
 	queuedWriters int               // how many writers are waiting?
@@ -265,21 +265,25 @@ var _ lockTable = &lockTableImpl{}
 func newLockTable(
 	maxLocks int64, rangeID roachpb.RangeID, timeProvider timeutil.TimeSource,
 ) *lockTableImpl {
+	lt := &lockTableImpl{
+		rID:          rangeID,
+		timeProvider: timeProvider,
+	}
+	lt.setMaxLocks(maxLocks)
+	return lt
+}
+
+func (t *lockTableImpl) setMaxLocks(maxLocks int64) {
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
-	lt := &lockTableImpl{
-		rID:          rangeID,
-		maxLocks:     maxLocks,
-		minLocks:     maxLocks / 2,
-		timeProvider: timeProvider,
-	}
+	t.maxLocks = maxLocks
+	t.minLocks = maxLocks / 2
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
-		lt.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+		t.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
 	}
-	return lt
 }
 
 // lockTableGuardImpl is an implementation of lockTableGuard.

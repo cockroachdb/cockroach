@@ -603,6 +603,11 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 
+// TestingSetMaxLocks implements the TestingAccessor interface.
+func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
+	m.lt.(*lockTableImpl).setMaxLocks(maxLocks)
+}
+
 func (r *Request) txnMeta() *enginepb.TxnMeta {
 	if r.Txn == nil {
 		return nil
