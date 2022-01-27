@@ -6253,6 +6253,9 @@ table's zone configuration this will return NULL.`,
 						"can only deserialize matching session users",
 					)
 				}
+				if err := evalCtx.Planner.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+					return nil, err
+				}
 				*evalCtx.SessionData() = *sd
 				return tree.MakeDBool(true), nil
 			},

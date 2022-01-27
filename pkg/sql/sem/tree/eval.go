@@ -3200,6 +3200,10 @@ type EvalPlanner interface {
 		force bool,
 	) error
 
+	// CheckCanBecomeUser returns an error if the SessionUser cannot become the
+	// becomeUser.
+	CheckCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error
+
 	// MemberOfWithAdminOption is used to collect a list of roles (direct and
 	// indirect) that the member is part of. See the comment on the planner
 	// implementation in authorization.go
