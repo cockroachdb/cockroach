@@ -476,7 +476,7 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 			//     probing tuple is distinct (i.e. it is unique in the batch),
 			//     so we want to mark it as equal to itself only.
 			// */}}
-			ht.ProbeScratch.HeadID[toCheck] = toCheck + 1
+			ht.ProbeScratch.HeadID[toCheck] = keyID(toCheck + 1)
 			continue
 		}
 		// {{end}}
