@@ -319,13 +319,15 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 
 	// Compare statistics with those passed by client.
 	if stats != nil {
+		given := *stats
+		given.LastUpdateNanos = 0
 		actual, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
 		if err != nil {
 			return errors.Wrap(err, "failed to compare stats: %w")
 		}
-		if !stats.Equal(actual) {
+		if !given.Equal(actual) {
 			return errors.AssertionFailedf("SST stats are incorrect: diff(given, actual) = %s",
-				pretty.Diff(*stats, actual))
+				pretty.Diff(given, actual))
 		}
 	}
 
