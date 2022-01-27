@@ -25,10 +25,10 @@ import (
 )
 
 type commentOnConstraintNode struct {
-	n         *tree.CommentOnConstraint
-	tableDesc catalog.TableDescriptor
-	oid       *tree.DOid
-	commenter scexec.CommentUpdater
+	n               *tree.CommentOnConstraint
+	tableDesc       catalog.TableDescriptor
+	oid             *tree.DOid
+	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
 //CommentOnConstraint add comment on a constraint
@@ -55,7 +55,7 @@ func (p *planner) CommentOnConstraint(
 	return &commentOnConstraintNode{
 		n:         n,
 		tableDesc: tableDesc,
-		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+		metadataUpdater: p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 			ctx,
 			p.txn,
 			p.SessionData(),
@@ -102,7 +102,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	// Setting the comment to NULL is the
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		err := n.commenter.UpsertDescriptorComment(
+		err := n.metadataUpdater.UpsertDescriptorComment(
 			int64(n.oid.DInt),
 			0,
 			keys.ConstraintCommentType,
@@ -112,7 +112,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 			return err
 		}
 	} else {
-		err := n.commenter.DeleteDescriptorComment(
+		err := n.metadataUpdater.DeleteDescriptorComment(
 			int64(n.oid.DInt),
 			0,
 			keys.ConstraintCommentType,

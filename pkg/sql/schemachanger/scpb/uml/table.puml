@@ -262,6 +262,11 @@ ConstraintComment :  ConstraintName
 ConstraintComment :  ConstraintType
 ConstraintComment :  Comment
 
+object DatabaseRoleSetting
+
+DatabaseRoleSetting :  DatabaseID
+DatabaseRoleSetting :  RoleName
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -327,4 +332,5 @@ SecondaryIndex <|-- ConstraintComment
 ForeignKey <|-- ConstraintComment
 UniqueConstraint <|-- ConstraintComment
 CheckConstraint <|-- ConstraintComment
+Database <|-- DatabaseRoleSetting
 @enduml

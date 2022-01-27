@@ -173,18 +173,18 @@ func (mr *MockDependenciesMockRecorder) Catalog() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Catalog", reflect.TypeOf((*MockDependencies)(nil).Catalog))
 }
 
-// CommentUpdater mocks base method.
-func (m *MockDependencies) CommentUpdater(arg0 context.Context) scexec.CommentUpdater {
+// DescriptorMetadataUpdater mocks base method.
+func (m *MockDependencies) DescriptorMetadataUpdater(arg0 context.Context) scexec.DescriptorMetadataUpdater {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommentUpdater", arg0)
-	ret0, _ := ret[0].(scexec.CommentUpdater)
+	ret := m.ctrl.Call(m, "DescriptorMetadataUpdater", arg0)
+	ret0, _ := ret[0].(scexec.DescriptorMetadataUpdater)
 	return ret0
 }
 
-// CommentUpdater indicates an expected call of CommentUpdater.
-func (mr *MockDependenciesMockRecorder) CommentUpdater(arg0 interface{}) *gomock.Call {
+// DescriptorMetadataUpdater indicates an expected call of DescriptorMetadataUpdater.
+func (mr *MockDependenciesMockRecorder) DescriptorMetadataUpdater(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommentUpdater", reflect.TypeOf((*MockDependencies)(nil).CommentUpdater), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescriptorMetadataUpdater", reflect.TypeOf((*MockDependencies)(nil).DescriptorMetadataUpdater), arg0)
 }
 
 // EventLogger mocks base method.

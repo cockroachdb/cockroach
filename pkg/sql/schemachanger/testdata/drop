@@ -177,9 +177,10 @@ DROP DATABASE db CASCADE;
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 5 MutationType ops
 delete comment for descriptor #55 of type SchemaCommentType
 delete comment for descriptor #54 of type DatabaseCommentType
+delete role settings for database on #54
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
@@ -260,7 +261,7 @@ DROP DATABASE db1 CASCADE
 ----
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 36 MutationType ops
+## StatementPhase stage 1 of 1 with 37 MutationType ops
 delete comment for descriptor #64 of type TableCommentType
 delete comment for descriptor #67 of type TableCommentType
 delete comment for descriptor #67 of type ColumnCommentType
@@ -283,6 +284,7 @@ delete comment for descriptor #63 of type SchemaCommentType
 delete comment for descriptor #61 of type DatabaseCommentType
 delete comment for constraint on #67, name: t1_pkey, type: PrimaryKey
 delete comment for constraint on #66, name: t1_pkey, type: PrimaryKey
+delete role settings for database on #61
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 56 MutationType ops
