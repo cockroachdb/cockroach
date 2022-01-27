@@ -2002,3 +2002,12 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
+
+// LockRaftMuForTesting is for use only by tests that are trying to avoid a
+// race with concurrent raft application.
+func (r *Replica) LockRaftMuForTesting() (unlockFunc func()) {
+	r.raftMu.Lock()
+	return func() {
+		r.raftMu.Unlock()
+	}
+}
