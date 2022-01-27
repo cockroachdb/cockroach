@@ -12,13 +12,26 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// AllowSessionRevival is true if the cluster is allowed to create session
+// revival tokens and use them to authenticate a session. It is a non-public
+// setting since this is only intended to be used by CockroachDB-serverless
+// at the time of this writing.
+var AllowSessionRevival = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"server.user_login.session_revival_token.enabled",
+	"if set, the cluster is able to create session revival tokens and use them "+
+		"to authenticate a new session",
+	false,
+)
+
 func (p *planner) CreateSessionRevivalToken() (*tree.DBytes, error) {
-	if !p.ExecCfg().AllowSessionRevival {
+	if !AllowSessionRevival.Get(&p.ExecCfg().Settings.SV) || p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, pgerror.New(pgcode.FeatureNotSupported, "session revival tokens are not supported on this cluster")
 	}
 	// Note that we use SessionUser here and not CurrentUser, since when the
@@ -41,7 +54,7 @@ func (p *planner) CreateSessionRevivalToken() (*tree.DBytes, error) {
 }
 
 func (p *planner) ValidateSessionRevivalToken(token *tree.DBytes) (*tree.DBool, error) {
-	if !p.ExecCfg().AllowSessionRevival {
+	if !AllowSessionRevival.Get(&p.ExecCfg().Settings.SV) || p.ExecCfg().Codec.ForSystemTenant() {
 		return nil, pgerror.New(pgcode.FeatureNotSupported, "session revival tokens are not supported on this cluster")
 	}
 	cm, err := p.ExecCfg().RPCContext.SecurityContext.GetCertificateManager()

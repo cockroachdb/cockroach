@@ -609,7 +609,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 		b.SetRoleMapper(UseProvidedIdentity)
 		b.SetAuthenticator(func(ctx context.Context, user security.SQLUsername, _ bool, _ PasswordRetrievalFn) error {
 			c.LogAuthInfof(ctx, "session revival token detected; attempting to use it")
-			if !execCfg.AllowSessionRevival {
+			if !sql.AllowSessionRevival.Get(&execCfg.Settings.SV) || execCfg.Codec.ForSystemTenant() {
 				return errors.New("session revival tokens are not supported on this cluster")
 			}
 			cm, err := execCfg.RPCContext.SecurityContext.GetCertificateManager()
