@@ -317,20 +317,31 @@ func (p *planner) HasPrivilege(
 	// hasPrivilegeFunc checks whether any role has the given privilege.
 	hasPrivilegeFunc := func(priv privilege.Privilege) (bool, error) {
 		err := p.CheckPrivilegeForUser(ctx, desc, priv.Kind, user)
-		if err == nil {
-			if priv.GrantOption {
-				if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
-					err = p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, user)
-				} else {
-					err = p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, true /* isGrant */)
-				}
-			}
-		}
 		if err != nil {
 			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 				return false, nil
 			}
 			return false, err
+		}
+
+		if priv.GrantOption {
+			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption) {
+				err := p.CheckPrivilegeForUser(ctx, desc, privilege.GRANT, user)
+				if err != nil {
+					if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
+						return false, nil
+					}
+					return false, err
+				}
+			} else {
+				err := p.CheckGrantOptionsForUser(ctx, desc, []privilege.Kind{priv.Kind}, user, true /* isGrant */)
+				if err != nil {
+					if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
+						return false, nil
+					}
+					return false, err
+				}
+			}
 		}
 
 		return true, nil
