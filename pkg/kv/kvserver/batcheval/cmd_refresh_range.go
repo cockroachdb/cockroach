@@ -120,12 +120,19 @@ func refreshRange(
 			}
 			if meta.Txn.ID == txnID {
 				// Ignore the transaction's own intent and skip past the corresponding
-				// provisional key-value. To do this, scan to the timestamp immediately
-				// before (i.e. the key immediately after) the provisional key.
-				iter.SeekGE(storage.MVCCKey{
-					Key:       key.Key,
-					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
-				})
+				// provisional key-value. To do this, iterate to the provisional
+				// key-value, validate its timestamp, then iterate again.
+				iter.Next()
+				if ok, err := iter.Valid(); err != nil {
+					return errors.Wrap(err, "iterating to provisional value for intent")
+				} else if !ok {
+					return errors.Errorf("expected provisional value for intent")
+				}
+				if !meta.Timestamp.ToTimestamp().EqOrdering(iter.UnsafeKey().Timestamp) {
+					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
+						meta.Timestamp, iter.UnsafeKey().Timestamp)
+				}
+				iter.Next()
 				continue
 			}
 			return roachpb.NewRefreshFailedError(roachpb.RefreshFailedError_REASON_INTENT,
