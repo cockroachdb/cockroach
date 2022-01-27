@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"text/template"
@@ -515,7 +516,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	listenHost := ""
-	if c.IsLocal() {
+	if c.IsLocal() && runtime.GOOS == "darwin " {
 		// This avoids annoying firewall prompts on Mac OS X.
 		listenHost = "127.0.0.1"
 	}
