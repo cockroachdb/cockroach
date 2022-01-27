@@ -4,13 +4,13 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
 statement ok
 CREATE TABLE t()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t           admin     ALL
-test           public       t           root      ALL
-test           public       t           testuser  SELECT
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t           admin     ALL             true
+test           public       t           root      ALL             true
+test           public       t           testuser  SELECT          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT CREATE ON TABLES TO testuser
@@ -20,14 +20,14 @@ CREATE TABLE t2()
 
 # Taking the union of default privileges defined on ALL ROLES and testuser
 # testuser should have CREATE and SELECT on the table.
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t2
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t2          admin     ALL
-test           public       t2          root      ALL
-test           public       t2          testuser  CREATE
-test           public       t2          testuser  SELECT
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t2          admin     ALL             true
+test           public       t2          root      ALL             true
+test           public       t2          testuser  CREATE          false
+test           public       t2          testuser  SELECT          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE SELECT ON TABLES FROM testuser
@@ -35,13 +35,13 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES REVOKE SELECT ON TABLES FROM testuser
 statement ok
 CREATE TABLE t3()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t3
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t3          admin     ALL
-test           public       t3          root      ALL
-test           public       t3          testuser  CREATE
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t3          admin     ALL             true
+test           public       t3          root      ALL             true
+test           public       t3          testuser  CREATE          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT CREATE ON TABLES TO testuser
@@ -51,13 +51,13 @@ CREATE TABLE t4()
 
 # CREATE is defined as a default privilege when the table is created by
 # ALL ROLES and root.
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t4
 ----
-database_name  schema_name  table_name  grantee   privilege_type
-test           public       t4          admin     ALL
-test           public       t4          root      ALL
-test           public       t4          testuser  CREATE
+database_name  schema_name  table_name  grantee   privilege_type  is_grantable
+test           public       t4          admin     ALL             true
+test           public       t4          root      ALL             true
+test           public       t4          testuser  CREATE          false
 
 statement ok
 CREATE USER testuser2
@@ -68,14 +68,14 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT CREATE ON TABLES TO testuser, testu
 statement ok
 CREATE TABLE t5()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t5
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t5          admin      ALL
-test           public       t5          root       ALL
-test           public       t5          testuser   CREATE
-test           public       t5          testuser2  CREATE
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t5          admin      ALL             true
+test           public       t5          root       ALL             true
+test           public       t5          testuser   CREATE          false
+test           public       t5          testuser2  CREATE          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TABLES TO testuser, testuser2
@@ -83,14 +83,14 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TABLES TO testuser, testuser
 statement ok
 CREATE TABLE t6()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t6
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t6          admin      ALL
-test           public       t6          root       ALL
-test           public       t6          testuser   ALL
-test           public       t6          testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t6          admin      ALL             true
+test           public       t6          root       ALL             true
+test           public       t6          testuser   ALL             true
+test           public       t6          testuser2  ALL             true
 
 # Revoking from the target role should not affect the default privileges
 # defined on ALL ROLES.
@@ -100,14 +100,14 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON TABLES FROM testuser, testuser2
 statement ok
 CREATE TABLE t7()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON t7
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       t7          admin      ALL
-test           public       t7          root       ALL
-test           public       t7          testuser   ALL
-test           public       t7          testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       t7          admin      ALL             true
+test           public       t7          root       ALL             true
+test           public       t7          testuser   ALL             true
+test           public       t7          testuser2  ALL             true
 
 user testuser
 
@@ -139,14 +139,14 @@ test           s            testuser2  ALL
 statement ok
 CREATE SEQUENCE seq
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON seq
 ----
-database_name  schema_name  table_name  grantee    privilege_type
-test           public       seq         admin      ALL
-test           public       seq         root       ALL
-test           public       seq         testuser   ALL
-test           public       seq         testuser2  ALL
+database_name  schema_name  table_name  grantee    privilege_type  is_grantable
+test           public       seq         admin      ALL             true
+test           public       seq         root       ALL             true
+test           public       seq         testuser   ALL             true
+test           public       seq         testuser2  ALL             true
 
 statement ok
 CREATE TYPE typ AS ENUM()

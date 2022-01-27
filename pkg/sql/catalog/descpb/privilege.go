@@ -134,6 +134,15 @@ func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
 	)
 }
 
+// NewPublicUsagePrivilegeDescriptor is used to construct a privilege descriptor
+// owned by the node user which has USAGE privilege for the public role. It is
+// used for virtual schemas.
+func NewPublicUsagePrivilegeDescriptor() *PrivilegeDescriptor {
+	return NewPrivilegeDescriptor(
+		security.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, security.NodeUserName(),
+	)
+}
+
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
 // user with the specified list of privileges.
 func NewPrivilegeDescriptor(
@@ -436,26 +445,24 @@ func (p PrivilegeDescriptor) IsValidPrivilegesForObjectType(
 	return true, UserPrivileges{}, 0
 }
 
-// UserPrivilegeString is a pair of strings describing the
-// privileges for a given user.
-type UserPrivilegeString struct {
+// UserPrivilege represents a User and its Privileges
+type UserPrivilege struct {
 	User       security.SQLUsername
-	Privileges []string
-}
-
-// PrivilegeString returns a string of comma-separted privilege names.
-func (u UserPrivilegeString) PrivilegeString() string {
-	return strings.Join(u.Privileges, ",")
+	Privileges []privilege.Privilege
 }
 
 // Show returns the list of {username, privileges} sorted by username.
 // 'privileges' is a string of comma-separated sorted privilege names.
-func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilegeString {
-	ret := make([]UserPrivilegeString, 0, len(p.Users))
+func (p PrivilegeDescriptor) Show(objectType privilege.ObjectType) []UserPrivilege {
+	ret := make([]UserPrivilege, 0, len(p.Users))
 	for _, userPriv := range p.Users {
-		ret = append(ret, UserPrivilegeString{
+		privileges := privilege.PrivilegesFromBitFields(userPriv.Privileges, userPriv.WithGrantOption, objectType)
+		sort.Slice(privileges, func(i, j int) bool {
+			return strings.Compare(privileges[i].Kind.String(), privileges[j].Kind.String()) < 0
+		})
+		ret = append(ret, UserPrivilege{
 			User:       userPriv.User(),
-			Privileges: privilege.ListFromBitField(userPriv.Privileges, objectType).SortedNames(),
+			Privileges: privileges,
 		})
 	}
 	return ret

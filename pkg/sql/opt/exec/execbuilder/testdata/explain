@@ -611,11 +611,13 @@ vectorized: true
 • sort
 │ order: +grantee,+privilege_type
 │
-└── • filter
-    │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+└── • render
     │
-    └── • virtual table
-          table: table_privileges@primary
+    └── • filter
+        │ filter: ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+        │
+        └── • virtual table
+              table: table_privileges@primary
 
 query T
 EXPLAIN SHOW INDEX FROM foo
