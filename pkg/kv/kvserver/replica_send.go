@@ -554,7 +554,9 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			latchSpans, lockSpans = g.TakeSpanSets()
 			r.concMgr.FinishReq(g)
 			g = nil
-			// Then launch a task to handle the indeterminate commit error.
+			// Then launch a task to handle the indeterminate commit error. No error
+			// is returned if the transaction is recovered successfully to either a
+			// COMMITTED or ABORTED state.
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
@@ -758,7 +760,7 @@ func (r *Replica) handleIndeterminateCommitError(
 		newPErr.Index = pErr.Index
 		return newPErr
 	}
-	// We've recovered the transaction that blocked the push; retry command.
+	// We've recovered the transaction that blocked the request; retry.
 	return nil
 }
 
