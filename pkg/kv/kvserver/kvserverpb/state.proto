@@ -134,6 +134,10 @@ message ReplicaState {
   // "follower reads" at or below this timestamp.
   util.hlc.Timestamp raft_closed_timestamp = 13 [(gogoproto.nullable) = false];
 
+  // The term corresponding to RaftAppliedIndex. This is derived from
+  // RangeAppliedState.RaftAppliedIndexTerm.
+  uint64 raft_applied_index_term = 14;
+
   reserved 8, 9, 10;
 }
 
