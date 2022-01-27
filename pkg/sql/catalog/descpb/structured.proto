@@ -1042,8 +1042,10 @@ message TableDescriptor {
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
     // This is not a jobspb.JobID to avoid a dependency cycle.
-    optional int64 job_id = 2 [(gogoproto.nullable) = false,
-             (gogoproto.customname) = "JobID"];
+    optional int64 job_id = 2 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "JobID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
   }
 
   // Mutation jobs queued for execution in a FIFO order. Remains synchronized
@@ -1053,8 +1055,10 @@ message TableDescriptor {
   // The job associated with a schema change job run in the new schema changer
   // (in sql/schemachanger), if one exists. Only one such job can exist at a
   // time.
-  optional int64 new_schema_change_job_id = 46 [(gogoproto.nullable) = false,
-                                               (gogoproto.customname) = "NewSchemaChangeJobID"];
+  optional int64 new_schema_change_job_id = 46 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "NewSchemaChangeJobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   message SequenceOpts {
     option (gogoproto.equal) = true;
@@ -1130,7 +1134,10 @@ message TableDescriptor {
 
   // The job id for a drop job is the id in the system.jobs table of the
   // dropping of this table.
-  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
+  optional int64 drop_job_id = 32 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "DropJobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 
   message GCDescriptorMutation {
     option (gogoproto.equal) = true;
@@ -1141,8 +1148,10 @@ message TableDescriptor {
 
     // The job id for a mutation job is the id in the system.jobs table of the
     // schema change job executing the mutation referenced by mutation_id.
-    optional int64 job_id = 3 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "JobID", deprecated = true];
+    optional int64 job_id = 3 [
+      (gogoproto.nullable) = false,
+      (gogoproto.customname) = "JobID", deprecated = true,
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
   }
 
   // Before 22.1:

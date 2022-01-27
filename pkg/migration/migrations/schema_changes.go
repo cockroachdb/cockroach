@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -95,7 +94,7 @@ func migrateTable(
 				// TODO(cameron): Remove this knob conditional once the related migration code has been removed.
 				// See pkg/migration/testing_knobs.go for more details.
 				if d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration != nil {
-					d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration(jobspb.JobID(mutation.JobID))
+					d.TestingKnobs.BeforeWaitInRetryJobsWithExponentialBackoffMigration(mutation.JobID)
 				}
 				if _, err := d.InternalExecutor.Exec(ctx, "migration-mutations-wait",
 					nil, "SHOW JOB WHEN COMPLETE $1", mutation.JobID); err != nil {

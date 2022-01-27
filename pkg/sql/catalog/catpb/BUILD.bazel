@@ -29,6 +29,7 @@ go_library(
         "constraint.go",
         "default_privilege.go",
         "doc.go",
+        "job_id.go",
         "multiregion.go",
         "privilege.go",
         ":gen-privilegedescversion-stringer",  # keep

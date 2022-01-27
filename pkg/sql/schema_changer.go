@@ -2403,7 +2403,7 @@ func (sc *SchemaChanger) queueCleanupJob(
 		log.Infof(ctx, "created job %d to drop previous columns and indexes", jobID)
 		scDesc.MutationJobs = append(scDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
 			MutationID: mutationID,
-			JobID:      int64(jobID),
+			JobID:      jobID,
 		})
 	}
 	return jobID, nil
