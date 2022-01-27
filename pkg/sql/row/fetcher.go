@@ -412,11 +412,6 @@ func getColumnTypes(columns []catalog.Column, outTypes []*types.T) ([]*types.T, 
 	return outTypes, nil
 }
 
-// GetTable returns the table that this Fetcher was initialized with.
-func (rf *Fetcher) GetTable() catalog.Descriptor {
-	return rf.table.desc
-}
-
 // StartScan initializes and starts the key-value scan. Can be used multiple
 // times.
 //

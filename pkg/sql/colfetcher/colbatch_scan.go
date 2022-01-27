@@ -50,7 +50,7 @@ type ColBatchScan struct {
 
 	flowCtx         *execinfra.FlowCtx
 	bsHeader        *roachpb.BoundedStalenessHeader
-	rf              *cFetcher
+	cf              *cFetcher
 	limitHint       rowinfra.RowLimit
 	batchBytesLimit rowinfra.BytesLimit
 	parallelize     bool
@@ -90,7 +90,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	// tracing is enabled.
 	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchscan")
 	limitBatches := !s.parallelize
-	if err := s.rf.StartScan(
+	if err := s.cf.StartScan(
 		s.Ctx,
 		s.flowCtx.Txn,
 		s.Spans,
@@ -106,7 +106,7 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 
 // Next is part of the Operator interface.
 func (s *ColBatchScan) Next() coldata.Batch {
-	bat, err := s.rf.NextBatch(s.Ctx)
+	bat, err := s.cf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
 	}
@@ -149,7 +149,7 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 func (s *ColBatchScan) GetBytesRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.rf.getBytesRead()
+	return s.cf.getBytesRead()
 }
 
 // GetRowsRead is part of the colexecop.KVReader interface.
@@ -260,7 +260,7 @@ func NewColBatchScan(
 		SpansWithCopy:   s.SpansWithCopy,
 		flowCtx:         flowCtx,
 		bsHeader:        bsHeader,
-		rf:              fetcher,
+		cf:              fetcher,
 		limitHint:       limitHint,
 		batchBytesLimit: batchBytesLimit,
 		parallelize:     spec.Parallelize,
@@ -271,7 +271,7 @@ func NewColBatchScan(
 
 // Release implements the execinfra.Releasable interface.
 func (s *ColBatchScan) Release() {
-	s.rf.Release()
+	s.cf.Release()
 	// Deeply reset the spans so that we don't hold onto the keys of the spans.
 	s.SpansWithCopy.Reset()
 	*s = ColBatchScan{
@@ -282,7 +282,7 @@ func (s *ColBatchScan) Release() {
 
 // Close implements the colexecop.Closer interface.
 func (s *ColBatchScan) Close() error {
-	s.rf.Close(s.EnsureCtx())
+	s.cf.Close(s.EnsureCtx())
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil

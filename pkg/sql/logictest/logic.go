@@ -2452,6 +2452,11 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 					}
 				}
 			} else {
+				if *rewriteResultsInTestfiles {
+					for _, l := range query.expectedResultsRaw {
+						t.emit(l)
+					}
+				}
 				s.LogAndResetSkip(t)
 			}
 			repeat = 1

@@ -219,26 +219,38 @@ func CachedClusters(l *logger.Logger, fn func(clusterName string, numVMs int)) {
 	}
 }
 
+// acquireFilesystemLock acquires a filesystem lock so that two concurrent
+// synchronizations of roachprod state don't clobber each other.
+func acquireFilesystemLock() (unlockFn func(), _ error) {
+	lockFile := os.ExpandEnv("$HOME/.roachprod/LOCK")
+	f, err := os.Create(lockFile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "creating lock file %q", lockFile)
+	}
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
+		f.Close()
+		return nil, errors.Wrap(err, "acquiring lock on %q")
+	}
+	return func() {
+		f.Close()
+	}, nil
+}
+
 // Sync grabs an exclusive lock on the roachprod state and then proceeds to
 // read the current state from the cloud and write it out to disk. The locking
 // protects both the reading and the writing in order to prevent the hazard
 // caused by concurrent goroutines reading cloud state in a different order
 // than writing it to disk.
 func Sync(l *logger.Logger) (*cloud.Cloud, error) {
-	lockFile := os.ExpandEnv("$HOME/.roachprod/LOCK")
 	if !config.Quiet {
 		l.Printf("Syncing...")
 	}
-	// Acquire a filesystem lock so that two concurrent synchronizations of
-	// roachprod state don't clobber each other.
-	f, err := os.Create(lockFile)
+	unlock, err := acquireFilesystemLock()
 	if err != nil {
-		return nil, errors.Wrapf(err, "creating lock file %q", lockFile)
+		return nil, err
 	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
-		return nil, errors.Wrap(err, "acquiring lock on %q")
-	}
-	defer f.Close()
+	defer unlock()
+
 	cld, err := cloud.ListCloud(l)
 	if err != nil {
 		return nil, err
@@ -1159,9 +1171,6 @@ func Create(
 	createVMOpts vm.CreateOpts,
 	providerOptsContainer vm.ProviderOptionsContainer,
 ) (retErr error) {
-	if err := LoadClusters(); err != nil {
-		return errors.Wrap(err, "problem loading clusters")
-	}
 	if numNodes <= 0 || numNodes >= 1000 {
 		// Upper limit is just for safety.
 		return fmt.Errorf("number of nodes must be in [1..999]")
@@ -1171,22 +1180,22 @@ func Create(
 		return err
 	}
 
-	defer func() {
-		if retErr == nil || config.IsLocalClusterName(clusterName) {
-			return
+	isLocal := config.IsLocalClusterName(clusterName)
+	if isLocal {
+		// To ensure that multiple processes don't create local clusters at
+		// the same time (causing port collisions), acquire the lock file.
+		unlockFn, err := acquireFilesystemLock()
+		if err != nil {
+			return err
 		}
-		if errors.HasType(retErr, (*ClusterAlreadyExistsError)(nil)) {
-			return
-		}
-		fmt.Fprintf(l.Stderr, "Cleaning up partially-created cluster (prev err: %s)\n", retErr)
-		if err := cleanupFailedCreate(l, clusterName); err != nil {
-			fmt.Fprintf(l.Stderr, "Error while cleaning up partially-created cluster: %s\n", err)
-		} else {
-			fmt.Fprintf(l.Stderr, "Cleaning up OK\n")
-		}
-	}()
+		defer unlockFn()
+	}
 
-	if !config.IsLocalClusterName(clusterName) {
+	if err := LoadClusters(); err != nil {
+		return errors.Wrap(err, "problem loading clusters")
+	}
+
+	if !isLocal {
 		cld, err := cloud.ListCloud(l)
 		if err != nil {
 			return err
@@ -1194,6 +1203,18 @@ func Create(
 		if _, ok := cld.Clusters[clusterName]; ok {
 			return &ClusterAlreadyExistsError{name: clusterName}
 		}
+
+		defer func() {
+			if retErr == nil {
+				return
+			}
+			fmt.Fprintf(l.Stderr, "Cleaning up partially-created cluster (prev err: %s)\n", retErr)
+			if err := cleanupFailedCreate(l, clusterName); err != nil {
+				fmt.Fprintf(l.Stderr, "Error while cleaning up partially-created cluster: %s\n", err)
+			} else {
+				fmt.Fprintf(l.Stderr, "Cleaning up OK\n")
+			}
+		}()
 	} else {
 		if _, ok := readSyncedClusters(clusterName); ok {
 			return &ClusterAlreadyExistsError{name: clusterName}
