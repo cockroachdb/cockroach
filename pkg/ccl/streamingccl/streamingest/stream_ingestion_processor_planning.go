@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -46,7 +47,7 @@ func distStreamIngestionPlanSpecs(
 		// the partition addresses.
 		if i < len(nodes) {
 			spec := &execinfrapb.StreamIngestionDataSpec{
-				StreamID: 					uint64(streamID),
+				StreamID:           uint64(streamID),
 				JobID:              int64(jobID),
 				StartTime:          initialHighWater,
 				StreamAddress:      string(streamAddress),
@@ -185,10 +186,10 @@ func (s *streamIngestionResultWriter) AddRow(ctx context.Context, row tree.Datum
 		&ingestedHighWatermark); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, `unmarshalling resolved timestamp`)
 	}
-	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false /* useReadLock */,
+	return s.registry.UpdateJobWithTxn(ctx, s.jobID, nil /* txn */, false, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			return jobs.UpdateHighwaterProgressed(ingestedHighWatermark, md, ju)
-	})
+		})
 }
 
 // IncrementRowsAffected implements the sql.rowResultWriter interface.

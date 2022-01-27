@@ -88,9 +88,9 @@ type streamIngestionProcessor struct {
 	// client is a streaming client which provides a stream of events from a given
 	// address.
 	forceClientForTests streamclient.Client
-	// clients are a collection of streamclient.Client created for consuming multiple
-	// partitions from a stream.
-	clients             []streamclient.Client
+	// streamPartitionClients are a collection of streamclient.Client created for
+	// consuming multiple partitions from a stream.
+	streamPartitionClients []streamclient.Client
 
 	// Checkpoint events may need to be buffered if they arrive within the same
 	// minimumFlushInterval.
@@ -223,7 +223,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
-	sip.clients = make([]streamclient.Client, 0)
+	sip.streamPartitionClients = make([]streamclient.Client, 0)
 	for i := range sip.spec.PartitionIds {
 		id := sip.spec.PartitionIds[i]
 		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
@@ -243,7 +243,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
 				return
 			}
-			sip.clients = append(sip.clients, streamClient)
+			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
@@ -311,7 +311,7 @@ func (sip *streamIngestionProcessor) close() {
 		return
 	}
 
-	for _, client := range sip.clients {
+	for _, client := range sip.streamPartitionClients {
 		_ = client.Close()
 	}
 	if sip.batcher != nil {

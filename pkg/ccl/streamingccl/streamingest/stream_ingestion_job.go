@@ -10,6 +10,7 @@ package streamingest
 
 import (
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -34,7 +35,7 @@ func ingest(
 	startTime hlc.Timestamp,
 	progress jobspb.Progress,
 	jobID jobspb.JobID,
-) error {
+) (err error) {
 	// Initialize a stream client and resolve topology.
 	partitionedStream := streamingccl.UsePartitionedStreamClient.Get(&execCtx.ExtendedEvalContext().Settings.SV)
 	client, err := streamclient.NewStreamClient(streamAddress, partitionedStream)
@@ -42,7 +43,7 @@ func ingest(
 		return err
 	}
 	defer func() {
-		_ = client.Close()
+		err = errors.CombineErrors(err, client.Close())
 	}()
 
 	// TODO(dt): if there is an existing stream ID, reconnect to it.

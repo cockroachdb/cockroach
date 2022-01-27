@@ -137,7 +137,8 @@ INSERT INTO d.t2 VALUES (2);
 
 	// Ignore table t2 and only subscribe to the changes to table t1.
 	require.Equal(t, len(top), 1)
-	url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
+	//url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
+	url, err := streamingccl.StreamAddress(h.PGUrl.String()).URL()
 	require.NoError(t, err)
 	// Creating a new stream client with the given partition address.
 	subClient, err := newPartitionedStreamClient(url)
@@ -149,12 +150,14 @@ INSERT INTO d.t2 VALUES (2);
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
 	t1Descr := catalogkv.TestingGetTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
 
+	fmt.Println(h.PGUrl.String())
+	fmt.Println(top[0].SrcAddr)
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)
 	cg.GoCtx(sub.Subscribe)
 	// Observe the existing single row in t1.
 	expected := streamingtest.EncodeKV(t, h.Tenant.Codec, t1Descr, 42)
-	firstObserved := rf.ObserveKey(ctx, expected.Key)
+	firstObserved := rf.ObserveKey(ctx, expected.Key) // block here
 	require.Equal(t, expected.Value.RawBytes, firstObserved.Value.RawBytes)
 	rf.ObserveResolved(ctx, firstObserved.Value.Timestamp)
 

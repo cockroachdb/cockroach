@@ -10,9 +10,7 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
@@ -129,86 +127,96 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 }
 
 type heartbeatSender struct {
-	lastSent        time.Time
-	frequency       time.Duration
+	lastSent  time.Time
+	frequency time.Duration
 
 	cg              ctxgroup.Group
 	client          streamclient.Client
 	streamID        streaming.StreamID
 	frontierUpdates chan hlc.Timestamp
+	frontier        hlc.Timestamp
 	stopChan        chan struct{}
-	stopped 				atomic.Value
+	stopped         bool
 }
 
-func newHeartbeatSender(flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec) (*heartbeatSender, error) {
+func newHeartbeatSender(
+	flowCtx *execinfra.FlowCtx, spec execinfrapb.StreamIngestionFrontierSpec,
+) (*heartbeatSender, error) {
 	partitionedStream := streamingccl.UsePartitionedStreamClient.Get(&flowCtx.EvalCtx.Settings.SV)
-	streamClient, err := streamclient.NewStreamClient(streamingccl.StreamAddress(spec.StreamAddress), partitionedStream)
+	streamClient, err := streamclient.NewStreamClient(
+		streamingccl.StreamAddress(spec.StreamAddress), partitionedStream)
 	if err != nil {
 		return nil, err
 	}
-	stopped := atomic.Value{}
-	stopped.Store(false)
+	const defaultHeartbeatFrequency = 2 * time.Second
 	return &heartbeatSender{
-		frequency:       2 * time.Second,
+		frequency:       defaultHeartbeatFrequency,
 		client:          streamClient,
 		streamID:        streaming.StreamID(spec.StreamID),
 		frontierUpdates: make(chan hlc.Timestamp),
-		stopChan:        make(chan struct{}, 1),
-		stopped: 				 stopped,
+		// Buffered channel allows caller to stop an already stopped heartbeatSender
+		// without causing deadlock.
+		stopChan: make(chan struct{}, 10),
 	}, nil
 }
 
 func (h *heartbeatSender) maybeHeartbeat(ctx context.Context, frontier hlc.Timestamp) error {
-	if h.lastSent.Add(h.frequency).After(time.Now()) {
+	if h.lastSent.Add(h.frequency).After(timeutil.Now()) {
 		return nil
 	}
-	err := h.client.Heartbeat(ctx, h.streamID, frontier)
-	h.lastSent = time.Now()
-	return err
+	h.lastSent = timeutil.Now()
+	return h.client.Heartbeat(ctx, h.streamID, frontier)
 }
 
 func (h *heartbeatSender) startHeartbeatLoop(ctx context.Context) {
 	h.cg = ctxgroup.WithContext(ctx)
 
-	h.cg.GoCtx(func(ctx context.Context) error {
+	h.cg.GoCtx(func(ctx context.Context) (err error) {
 		defer func() {
-			h.stopped.Store(true)
-			_ = h.client.Close()
+			h.stopped = true
+			err = errors.CombineErrors(err, h.client.Close())
 		}()
 
+		// The heartbeat thread send heartbeats when there is a frontier update,
+		// and it has been a while since last time we sent it, or when we need
+		// to heartbeat to keep the stream alive even if the frontier has no update.
+		timer := time.NewTimer(h.frequency)
 		for {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-h.stopChan:
 				return nil
+			case <-timer.C:
+				timer.Reset(h.frequency)
 			case frontier := <-h.frontierUpdates:
-				err := h.maybeHeartbeat(ctx, frontier)
-				if err == nil || strings.Contains(err.Error(), "UNKNOWN_STREAM_STATUS_RETRY") {
-					continue
-				}
-				// The replication stream is either paused or inactive.
-				return err
+				h.frontier = frontier
 			}
+
+			err := h.maybeHeartbeat(ctx, h.frontier)
+			if err == nil || strings.Contains(err.Error(), "UNKNOWN_STREAM_STATUS_RETRY") {
+				continue
+			}
+			// The replication stream is either paused or inactive.
+			return err
 		}
 	})
 }
 
 func (h *heartbeatSender) isStopped() (bool, error) {
-	stoppedVal := h.stopped.Load()
-	if stopped := stoppedVal.(bool); stopped {
+	if h.stopped {
 		return true, h.cg.Wait()
 	}
 	return false, nil
 }
 
-// No-op if already stopped.
+// Stop the heartbeat loop and should only be called at most once. Will be
+// a No-op if the sender is already stopped.
 func (h *heartbeatSender) stop() error {
 	if stopped, err := h.isStopped(); stopped {
 		return err
 	}
 	h.stopChan <- struct{}{}
-	fmt.Println("stopped heartbeater")
 	return h.cg.Wait()
 }
 
@@ -217,32 +225,33 @@ func (sf *streamIngestionFrontier) Start(ctx context.Context) {
 	ctx = sf.StartInternal(ctx, streamIngestionFrontierProcName)
 	sf.input.Start(ctx)
 	sf.heartbeatSender.startHeartbeatLoop(ctx)
-	fmt.Println("started heartbeat loop")
 }
 
 // Next is part of the RowSource interface.
-func (sf *streamIngestionFrontier) Next() (row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata) {
-
+func (sf *streamIngestionFrontier) Next() (
+	row rowenc.EncDatumRow,
+	meta *execinfrapb.ProducerMetadata,
+) {
 	// If the returned row is nil, we should close the heartbeatSender
 	defer func() {
 		if row == nil {
-			_ = sf.heartbeatSender.stop() // should log
+			if err := sf.heartbeatSender.stop(); err != nil {
+				log.Errorf(sf.Ctx, "error when stopping the heartbeatSender: %s", err.Error())
+			}
 		}
 	}()
 
 	for sf.State == execinfra.StateRunning {
-		// If heartsender has error, it means remote has error, we want to stop
+		// If heartbeatSender has error, it means remote has error, we want to
+		// stop the processor.
 		if stopped, err := sf.heartbeatSender.isStopped(); stopped {
 			sf.MoveToDraining(nil /* err */)
-			fmt.Println("heartbeater stopped", err)
 			return nil, &execinfrapb.ProducerMetadata{Err: err}
 		}
 
-		// when receive cutover signal, how does this react?
 		row, meta := sf.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
-				// why?
 				sf.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
@@ -268,7 +277,6 @@ func (sf *streamIngestionFrontier) Next() (row rowenc.EncDatumRow, meta *execinf
 			newResolvedTS := sf.frontier.Frontier()
 			// Send the frontier update in the heartbeat to the source cluster.
 			sf.heartbeatSender.frontierUpdates <- newResolvedTS
-			fmt.Println("send new resolved to channel")
 			progressBytes, err := protoutil.Marshal(&newResolvedTS)
 			if err != nil {
 				sf.MoveToDraining(err)

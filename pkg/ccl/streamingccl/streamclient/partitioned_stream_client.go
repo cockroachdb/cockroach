@@ -11,28 +11,36 @@ package streamclient
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
+	"io/ioutil"
+	"net"
 	"net/url"
-	"sync"
-	"time"
+	"os"
+	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
 type partitionedStreamClient struct {
 	db *gosql.DB // DB handle to the source cluster
-	mu sync.Mutex
 
-	closed bool
-	pgURLCertCleanup []func()
-	activeSubscriptions map[*partitionedStreamSubscription]bool
+	mu struct {
+		syncutil.Mutex
+
+		closed              bool
+		pgURLCertCleanup    []func()
+		activeSubscriptions map[*partitionedStreamSubscription]struct{}
+	}
 }
 
 func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, error) {
@@ -40,11 +48,9 @@ func newPartitionedStreamClient(remote *url.URL) (*partitionedStreamClient, erro
 	if err != nil {
 		return nil, err
 	}
-	return &partitionedStreamClient{
-		db: db,
-		pgURLCertCleanup: make([]func(), 0),
-		activeSubscriptions: make(map[*partitionedStreamSubscription]bool),
-	}, nil
+	client := &partitionedStreamClient{db: db}
+	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
+	return client, nil
 }
 
 var _ Client = &partitionedStreamClient{}
@@ -105,6 +111,61 @@ func (p *partitionedStreamClient) Heartbeat(
 	return nil
 }
 
+// postgresURL converts an SQL serving address into a postgres URL. In order to connect securely
+// using postgres, this method will create temporary on-disk copies of
+// certain embedded security certificates. The certificates will be created in a new temporary
+// directory. The returned cleanup function will delete this temporary directory.
+func postgresURL(servingAddr string, user *url.Userinfo) (url.URL, func(), error) {
+	host, port, err := net.SplitHostPort(servingAddr)
+	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+
+	tempDir, err := ioutil.TempDir("", fileutil.EscapeFilename("StreamClientPGConnection"))
+	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+
+	// This CA is the one used by the SQL client driver to authenticate KV nodes on the host cluster.
+	caPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert)
+	tempCAPath, err := securitytest.RestrictedCopy(caPath, tempDir, "ca")
+
+	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+	// This CA is the one used by the SQL client driver to authenticate SQL tenant servers.
+	tenantCAPath := filepath.Join(security.EmbeddedCertsDir, security.EmbeddedTenantCACert)
+	if err := securitytest.AppendFile(tenantCAPath, tempCAPath); err != nil {
+		return url.URL{}, func() {}, err
+	}
+	options := url.Values{}
+	options.Add("sslrootcert", tempCAPath)
+
+	certPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.crt", user.Username()))
+	keyPath := filepath.Join(security.EmbeddedCertsDir, fmt.Sprintf("client.%s.key", user.Username()))
+
+	// Copy these assets to disk from embedded strings, so this test can
+	// run from a standalone binary.
+	tempCertPath, err := securitytest.RestrictedCopy(certPath, tempDir, "cert")
+	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+	tempKeyPath, err := securitytest.RestrictedCopy(keyPath, tempDir, "key")
+	if err != nil {
+		return url.URL{}, func() {}, err
+	}
+	options.Add("sslcert", tempCertPath)
+	options.Add("sslkey", tempKeyPath)
+	options.Add("sslmode", "verify-full")
+
+	return url.URL{
+		Scheme:   "postgres",
+		User:     user,
+		Host:     net.JoinHostPort(host, port),
+		RawQuery: options.Encode(),
+	}, func() { _ = os.RemoveAll(tempDir) }, nil
+}
+
 // Plan implements Client interface.
 func (p *partitionedStreamClient) Plan(
 	ctx context.Context, streamID streaming.StreamID,
@@ -133,13 +194,12 @@ func (p *partitionedStreamClient) Plan(
 
 	topology := Topology{}
 	for _, sp := range spec.Partitions {
-		pgUrl, cleanupCertDir, err := sqlutils.PGUrlE(sp.SQLAddress.String(),
-			"PartitionedReplicationStream" /* prefix */, url.User(security.RootUser))
+		pgURL, cleanupCertDir, err := postgresURL(sp.SQLAddress.String(), url.User(security.RootUser))
 		if err != nil {
 			return nil, err
 		}
 		p.mu.Lock()
-		p.pgURLCertCleanup = append(p.pgURLCertCleanup, cleanupCertDir)
+		p.mu.pgURLCertCleanup = append(p.mu.pgURLCertCleanup, cleanupCertDir)
 		p.mu.Unlock()
 		rawSpec, err := protoutil.Marshal(sp.PartitionSpec)
 		if err != nil {
@@ -149,7 +209,7 @@ func (p *partitionedStreamClient) Plan(
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),
-			SrcAddr:           streamingccl.PartitionAddress(pgUrl.String()),
+			SrcAddr:           streamingccl.PartitionAddress(pgURL.String()),
 			SrcLocality:       sp.Locality,
 		})
 	}
@@ -160,11 +220,18 @@ func (p *partitionedStreamClient) Plan(
 func (p *partitionedStreamClient) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if p.mu.closed {
+		return nil
+	}
 	// Close all the active subscriptions and disallow more usage.
-	p.closed = true
-	for sub := range p.activeSubscriptions {
+	p.mu.closed = true
+	for sub := range p.mu.activeSubscriptions {
 		sub.Close()
-		delete(p.activeSubscriptions, sub)
+		delete(p.mu.activeSubscriptions, sub)
+	}
+	for _, cleanup := range p.mu.pgURLCertCleanup {
+		cleanup()
 	}
 	return p.db.Close()
 }
@@ -179,7 +246,6 @@ func (p *partitionedStreamClient) Subscribe(
 		return nil, err
 	}
 	sps.StartFrom = checkpoint
-	sps.Config = streampb.StreamPartitionSpec_ExecutionConfig{MinCheckpointFrequency: 2 * time.Second}
 
 	specBytes, err := protoutil.Marshal(&sps)
 	if err != nil {
@@ -191,21 +257,22 @@ func (p *partitionedStreamClient) Subscribe(
 		db:         p.db,
 		specBytes:  specBytes,
 		streamID:   stream,
-		client: p,
-		closeChan: make(chan struct{}),
+		// Buffered channel allows caller to close an already closed subscription
+		// without causing deadlock.
+		closeChan: make(chan struct{}, 10),
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.activeSubscriptions[res] = true
+	p.mu.activeSubscriptions[res] = struct{}{}
 	return res, nil
 }
 
 type partitionedStreamSubscription struct {
-	eventsChan chan streamingccl.Event
 	err        error
-	db        *gosql.DB
-	client    *partitionedStreamClient
-	closeChan chan struct{}
+	db         *gosql.DB
+	eventsChan chan streamingccl.Event
+	closeChan  chan struct{}
+	closed     bool
 
 	streamEvent *streampb.StreamEvent
 	specBytes   []byte
@@ -237,14 +304,15 @@ func parseEvent(streamEvent *streampb.StreamEvent) streamingccl.Event {
 }
 
 // Subscribe implements the Subscription interface.
-func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
+func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) (err error) {
 	defer close(p.eventsChan)
 	conn, err := p.db.Conn(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_ = conn.Close()
+		p.closed = true
+		err = errors.CombineErrors(err, conn.Close())
 	}()
 
 	_, err = conn.ExecContext(ctx, `SET avoid_buffering = true`)
@@ -288,12 +356,11 @@ func (p *partitionedStreamSubscription) Subscribe(ctx context.Context) error {
 			p.err = err
 			return err
 		}
-		if event == nil {
-			return nil
-		}
 		select {
 		case p.eventsChan <- event:
 		case <-p.closeChan:
+			// Exit quietly to not cause other subscriptions in the same
+			// ctxgroup.Group to exit.
 			return nil
 		case <-ctx.Done():
 			p.err = err
@@ -312,7 +379,9 @@ func (p *partitionedStreamSubscription) Err() error {
 	return p.err
 }
 
-// Close implements the Subscription interface.
+// Close closes the Subscription.
 func (p *partitionedStreamSubscription) Close() {
-	p.closeChan <- struct{}{}
+	if !p.closed {
+		p.closeChan <- struct{}{}
+	}
 }

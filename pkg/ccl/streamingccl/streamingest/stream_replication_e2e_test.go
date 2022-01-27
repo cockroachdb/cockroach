@@ -11,6 +11,10 @@ package streamingest
 import (
 	"context"
 	gosql "database/sql"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -27,14 +31,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
-	"net/url"
-	"testing"
-	"time"
 )
 
-
-func startTestClusterWithTenant(t *testing.T, ctx context.Context,
-	serverArgs base.TestServerArgs, tenantID roachpb.TenantID, numNodes int) (serverutils.TestClusterInterface, *gosql.DB, *gosql.DB, func()) {
+func startTestClusterWithTenant(
+	ctx context.Context,
+	t *testing.T,
+	serverArgs base.TestServerArgs,
+	tenantID roachpb.TenantID,
+	numNodes int,
+) (serverutils.TestClusterInterface, *gosql.DB, *gosql.DB, func()) {
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	c := testcluster.StartTestCluster(t, numNodes, params)
 	// TODO(casper): support adding splits when we have multiple nodes.
@@ -63,7 +68,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 
 	// Start the source cluster.
 	tenantID := serverutils.TestTenantID()
-	sc, sourceSysDB, sourceTenantDB, srcCleanup := startTestClusterWithTenant(t, ctx, args, tenantID, 3)
+	sc, sourceSysDB, sourceTenantDB, srcCleanup := startTestClusterWithTenant(ctx, t, args, tenantID, 3)
 	defer srcCleanup()
 	sourceSysSQL, sourceTenantSQL := sqlutils.MakeSQLRunner(sourceSysDB), sqlutils.MakeSQLRunner(sourceTenantDB)
 
@@ -74,7 +79,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
   `)
 
 	// Start the destination cluster.
-	_, destSysDB, destTenantDB, destCleanup := startTestClusterWithTenant(t, ctx, args, tenantID, 2)
+	_, destSysDB, destTenantDB, destCleanup := startTestClusterWithTenant(ctx, t, args, tenantID, 2)
 	defer destCleanup()
 	destSysSQL, destTenantSQL := sqlutils.MakeSQLRunner(destSysDB), sqlutils.MakeSQLRunner(destTenantDB)
 
@@ -93,7 +98,7 @@ func TestPartitionedTenantStreamingEndToEnd(t *testing.T) {
 	sourceSysSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 	var ingestionJobID int
 	destSysSQL.QueryRow(t,
-		`RESTORE TENANT ` + tenantID.String() +` FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME ` + startTime,
+		`RESTORE TENANT `+tenantID.String()+` FROM REPLICATION STREAM FROM $1 AS OF SYSTEM TIME `+startTime,
 		pgURL.String(),
 	).Scan(&ingestionJobID)
 
