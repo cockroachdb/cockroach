@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -427,7 +428,7 @@ func mysqlTableToCockroach(
 			seqVals[id] = startingValue
 		}
 		var err error
-		privilegeDesc := descpb.NewBasePrivilegeDescriptor(owner)
+		privilegeDesc := catpb.NewBasePrivilegeDescriptor(owner)
 		seqDesc, err = sql.NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */

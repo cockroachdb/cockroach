@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -105,7 +106,7 @@ func (p *planner) UnsafeUpsertDescriptor(
 	var existingVersion descpb.DescriptorVersion
 	var existingModTime hlc.Timestamp
 	var previousOwner string
-	var previousUserPrivileges []descpb.UserPrivileges
+	var previousUserPrivileges []catpb.UserPrivileges
 	if mut != nil {
 		if mut.IsUncommittedVersion() {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
@@ -283,10 +284,10 @@ func comparePrivileges(
 	ctx context.Context,
 	p *planner,
 	existing catalog.MutableDescriptor,
-	prevUserPrivileges []descpb.UserPrivileges,
+	prevUserPrivileges []catpb.UserPrivileges,
 	objectType privilege.ObjectType,
 ) error {
-	computePrivilegeChanges := func(prev, cur *descpb.UserPrivileges) (granted, revoked []string) {
+	computePrivilegeChanges := func(prev, cur *catpb.UserPrivileges) (granted, revoked []string) {
 		// User has no privileges anymore after upsert, all privileges revoked.
 		if cur == nil {
 			revoked = privilege.ListFromBitField(prev.Privileges, objectType).SortedNames()
@@ -326,7 +327,7 @@ func comparePrivileges(
 	}
 
 	curUserPrivileges := existing.GetPrivileges().Users
-	curUserMap := make(map[string]*descpb.UserPrivileges)
+	curUserMap := make(map[string]*catpb.UserPrivileges)
 	for i := range curUserPrivileges {
 		curUser := &curUserPrivileges[i]
 		curUserMap[curUser.User().Normalized()] = curUser

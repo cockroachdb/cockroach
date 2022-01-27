@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -57,7 +58,7 @@ func descForTable(
 		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
-		priv := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		priv := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
