@@ -884,7 +884,7 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 	// If true, we want to emit the current event and possibly start a new one.
 	// Otherwise,
 	switch s.kind {
-	case waitFor, waitForDistinguished, waitSelf:
+	case waitFor, waitForDistinguished, waitSelf, waitElsewhere:
 		// If we're tracking an event and see a different txn/key, the event is
 		// done and we initialize the new event tracking the new txn/key.
 		//
@@ -901,12 +901,9 @@ func (h *contentionEventHelper) emitAndInit(s waitingState) {
 			}
 			h.tBegin = timeutil.Now()
 		}
-	case waitElsewhere, waitQueueMaxLengthExceeded, doneWaiting:
-		// If we have an event, emit it now and that's it - the case we're in
-		// does not give us a new transaction/key.
-		if h.ev != nil {
-			h.emit()
-		}
+	case waitQueueMaxLengthExceeded, doneWaiting:
+		// There will be no more state updates; we're done waiting.
+		h.emit()
 	default:
 		panic("unhandled waitingState.kind")
 	}
