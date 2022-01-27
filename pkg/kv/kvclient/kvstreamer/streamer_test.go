@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
@@ -64,21 +66,21 @@ func TestStreamerLimitations(t *testing.T) {
 	t.Run("InOrder mode unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
-			streamer.Init(InOrder, Hints{UniqueRequests: true})
+			streamer.Init(InOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		})
 	})
 
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
-			streamer.Init(OutOfOrder, Hints{UniqueRequests: false})
+			streamer.Init(OutOfOrder, Hints{UniqueRequests: false}, 1 /* maxKeysPerRow */)
 		})
 	})
 
 	t.Run("invalid enqueueKeys", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close()
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true})
+		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		// Use a single request but two keys which is invalid.
 		reqs := []roachpb.RequestUnion{{Value: &roachpb.RequestUnion_Get{}}}
 		enqueueKeys := []int{0, 1}
@@ -88,7 +90,7 @@ func TestStreamerLimitations(t *testing.T) {
 	t.Run("pipelining unsupported", func(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close()
-		streamer.Init(OutOfOrder, Hints{UniqueRequests: true})
+		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		get := roachpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
 		reqs := []roachpb.RequestUnion{{
 			Value: &roachpb.RequestUnion_Get{
@@ -232,7 +234,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	getStreamer := func(limitBytes int64) *Streamer {
 		acc.Clear(ctx)
 		s := getStreamer(ctx, s, limitBytes, &acc)
-		s.Init(OutOfOrder, Hints{UniqueRequests: true})
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
 		return s
 	}
 
@@ -333,6 +335,90 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 			var sum int
 			require.NoError(t, row.Scan(&sum))
 			require.Equal(t, numRows*blobSize, sum)
+		})
+	}
+}
+
+// TestStreamerColumnFamilies verifies that the Streamer works correctly with
+// large rows and multiple column families. The goal is to make sure that KVs
+// from different rows are not intertwined.
+func TestStreamerWideRows(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1GiB */
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	const blobSize = 10 * initialAvgResponseSize
+	const numRows = 2
+
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")
+	require.NoError(t, err)
+	for i := 0; i < numRows; i++ {
+		if i > 0 {
+			// Split each row into a separate range.
+			_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", i))
+			require.NoError(t, err)
+		}
+		_, err = db.Exec(fmt.Sprintf("INSERT INTO t SELECT %d, 1, repeat('a', %d), repeat('b', %d)", i, blobSize, blobSize))
+		require.NoError(t, err)
+	}
+
+	// Populate the range cache.
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	// Perform an index join to read large blobs.
+	query := "SELECT count(*), sum(length(blob1)), sum(length(blob2)) FROM t@t_k_idx WHERE k = 1"
+	const concurrency = 3
+	// Different values for the distsql_workmem setting allow us to exercise the
+	// behavior in some degenerate cases (e.g. a small value results in a single
+	// KV exceeding the limit).
+	for _, workmem := range []int{
+		3 * blobSize / 2,
+		3 * blobSize,
+		4 * blobSize,
+	} {
+		t.Run(fmt.Sprintf("workmem=%s", humanize.Bytes(uint64(workmem))), func(t *testing.T) {
+			_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
+			require.NoError(t, err)
+			var wg sync.WaitGroup
+			wg.Add(concurrency)
+			errCh := make(chan error, concurrency)
+			for i := 0; i < concurrency; i++ {
+				go func() {
+					defer wg.Done()
+					row := db.QueryRow(query)
+					var count, sum1, sum2 int
+					if err := row.Scan(&count, &sum1, &sum2); err != nil {
+						errCh <- err
+						return
+					}
+					if count != numRows {
+						errCh <- errors.Newf("expected %d rows, read %d", numRows, count)
+						return
+					}
+					if sum1 != numRows*blobSize {
+						errCh <- errors.Newf("expected total length %d of blob1, read %d", numRows*blobSize, sum1)
+						return
+					}
+					if sum2 != numRows*blobSize {
+						errCh <- errors.Newf("expected total length %d of blob2, read %d", numRows*blobSize, sum2)
+						return
+					}
+				}()
+			}
+			wg.Wait()
+			close(errCh)
+			err, ok := <-errCh
+			if ok {
+				t.Fatal(err)
+			}
 		})
 	}
 }
