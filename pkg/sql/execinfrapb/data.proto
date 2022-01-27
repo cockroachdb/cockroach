@@ -38,7 +38,7 @@ import "google/protobuf/timestamp.proto";
 message Error {
   option (gogoproto.goproto_stringer) = false;
 
-  reserved 1,2;
+  reserved 1, 2;
 
   // full_error contains a structured errors with possibly multiple
   // wrapping layers implementing the errors.Cause() interface.
@@ -103,16 +103,16 @@ message StreamEndpointSpec {
   //
   // For SYNC_RESPONSE streams, the ID is unused.
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
-                                (gogoproto.customname) = "StreamID",
-                                (gogoproto.casttype) = "StreamID"];
-  // Node ID of the target host, only used for outgoing REMOTE streams.
+    (gogoproto.customname) = "StreamID",
+    (gogoproto.casttype) = "StreamID"];
+  // SQLInstanceID of the target host, only used for outgoing REMOTE streams.
   optional int32 target_node_id = 4 [(gogoproto.nullable) = false,
-                                     (gogoproto.customname) = "TargetNodeID",
-                                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  // Node ID of the origin node, only used for REMOTE streams.
+    (gogoproto.customname) = "TargetNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
+  // SQLInstanceID of the origin node, only used for REMOTE streams.
   optional int32 origin_node_id = 5 [(gogoproto.nullable) = false,
-                                    (gogoproto.customname) = "OriginNodeID",
-                                    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    (gogoproto.customname) = "OriginNodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"];
   reserved 3;
 }
 
@@ -209,12 +209,12 @@ message DatumInfo {
 // ProducerHeader is a message that is sent once at the beginning of a stream.
 message ProducerHeader {
   optional bytes flow_id = 1 [(gogoproto.nullable) = false,
-                              (gogoproto.customname) = "FlowID",
-                              (gogoproto.customtype) = "FlowID"];
+    (gogoproto.customname) = "FlowID",
+    (gogoproto.customtype) = "FlowID"];
 
   optional int32 stream_id = 2 [(gogoproto.nullable) = false,
-                                (gogoproto.customname) = "StreamID",
-                                (gogoproto.casttype) = "StreamID"];
+    (gogoproto.customname) = "StreamID",
+    (gogoproto.casttype) = "StreamID"];
 }
 
 // ProducerData is a message that can be sent multiple times as part of a stream
@@ -264,7 +264,7 @@ message RemoteProducerMetadata {
   message RowNum {
     // The ID of the processor that is producing rows.
     optional string sender_id = 1 [(gogoproto.nullable) = false,
-                                   (gogoproto.customname) = "SenderID"];
+      (gogoproto.customname) = "SenderID"];
     // A running count of the number of rows emitted from the sender so far.
     optional int32 row_num = 2 [(gogoproto.nullable) = false];
     // When set, indicates that the row count contains the expected number of
@@ -317,10 +317,10 @@ message RemoteProducerMetadata {
 // distsqlrun/server.go.
 message DistSQLVersionGossipInfo {
   optional uint32 version = 1 [(gogoproto.nullable) = false,
-                               (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "DistSQLVersion"];
 
   optional uint32 min_accepted_version = 2 [(gogoproto.nullable) = false,
-                                            (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "DistSQLVersion"];
 }
 
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped

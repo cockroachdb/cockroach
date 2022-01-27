@@ -292,7 +292,7 @@ func startConnExecutor(
 		},
 		Codec: keys.SystemSQLCodec,
 		DistSQLPlanner: NewDistSQLPlanner(
-			ctx, execinfra.Version, st, roachpb.NodeID(1),
+			ctx, execinfra.Version, st, 1, /* sqlInstanceID */
 			nil, /* rpcCtx */
 			distsql.NewServer(
 				ctx,
@@ -311,7 +311,7 @@ func startConnExecutor(
 			nil, /* nodeDescs */
 			gw,
 			stopper,
-			func(roachpb.NodeID) bool { return true }, // everybody is available
+			func(base.SQLInstanceID) bool { return true }, // everybody is available
 			nil, /* nodeDialer */
 		),
 		QueryCache:              querycache.New(0),

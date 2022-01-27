@@ -14,7 +14,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
-// StaticNodeID is the default Node ID to be used in tests.
-const StaticNodeID = roachpb.NodeID(3)
+// StaticSQLInstanceID is the default Node ID to be used in tests.
+const StaticSQLInstanceID = base.SQLInstanceID(3)
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
 // reinitialize a new RowSource every time during multiple passes of the input.

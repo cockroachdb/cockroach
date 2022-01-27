@@ -66,6 +66,13 @@ type Sink interface {
 	Close() error
 }
 
+// SinkWithTopics extends the Sink interface to include a method that returns
+// the topics that a changefeed will emit to
+type SinkWithTopics interface {
+	Sink
+	Topics() []string
+}
+
 func getSink(
 	ctx context.Context,
 	serverCfg *execinfra.ServerConfig,

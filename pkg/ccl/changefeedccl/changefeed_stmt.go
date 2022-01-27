@@ -397,6 +397,13 @@ func changefeedPlanHook(
 			if err := canarySink.Close(); err != nil {
 				return err
 			}
+			if sink, ok := canarySink.(SinkWithTopics); ok {
+				topics := sink.Topics()
+				for _, topic := range topics {
+					p.BufferClientNotice(ctx, pgnotice.Newf(`changefeed will emit to topic %s`, topic))
+				}
+				details.Opts[changefeedbase.Topics] = strings.Join(topics, ",")
+			}
 		}
 
 		// The below block creates the job and if there's an initial scan, protects

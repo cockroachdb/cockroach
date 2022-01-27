@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -22,17 +21,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type processorStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	nodeID roachpb.NodeID
-	stats  *execinfrapb.ComponentStats
-}
-
 type streamStats struct {
-	// TODO(radu): this field redundant with stats.Component.SQLInstanceID.
-	originNodeID      roachpb.NodeID
-	destinationNodeID roachpb.NodeID
-	stats             *execinfrapb.ComponentStats
+	originSQLInstanceID      base.SQLInstanceID
+	destinationSQLInstanceID base.SQLInstanceID
+	stats                    *execinfrapb.ComponentStats
 }
 
 type flowStats struct {
@@ -46,11 +38,11 @@ type FlowsMetadata struct {
 	// flowID is the FlowID of the flows belonging to the physical plan. Note that
 	// the same FlowID is used across multiple flows in the same query.
 	flowID execinfrapb.FlowID
-	// processorStats maps a processor ID to stats associated with this
-	// processor extracted from a trace as well as some metadata. Note that it
-	// is possible for the processorStats to have nil stats, which indicates
-	// that no stats were found for the given processor in the trace.
-	processorStats map[execinfrapb.ProcessorID]*processorStats
+	// processorStats maps a processor ID to stats associated with this component
+	// extracted from a trace as well as some metadata. Note that it is possible
+	// for the processorStats to have nil stats, which indicates that no stats
+	// were found for the given processor in the trace.
+	processorStats map[execinfrapb.ProcessorID]*execinfrapb.ComponentStats
 	// streamStats maps a stream ID to stats associated with this stream
 	// extracted from a trace as well as some metadata. Note that it is possible
 	// for the streamStats to have nil stats, which indicates that no stats were
@@ -64,32 +56,35 @@ type FlowsMetadata struct {
 
 // NewFlowsMetadata creates a FlowsMetadata for the given physical plan
 // information.
-func NewFlowsMetadata(flows map[roachpb.NodeID]*execinfrapb.FlowSpec) *FlowsMetadata {
+func NewFlowsMetadata(flows map[base.SQLInstanceID]*execinfrapb.FlowSpec) *FlowsMetadata {
 	a := &FlowsMetadata{
-		processorStats: make(map[execinfrapb.ProcessorID]*processorStats),
+		processorStats: make(map[execinfrapb.ProcessorID]*execinfrapb.ComponentStats),
 		streamStats:    make(map[execinfrapb.StreamID]*streamStats),
 		flowStats:      make(map[base.SQLInstanceID]*flowStats),
 	}
 
 	// Annotate the maps with physical plan information.
-	for nodeID, flow := range flows {
+	for sqlInstanceID, flow := range flows {
 		if a.flowID.IsUnset() {
 			a.flowID = flow.FlowID
 		} else if buildutil.CrdbTestBuild && !a.flowID.Equal(flow.FlowID) {
 			panic(
 				errors.AssertionFailedf(
 					"expected the same FlowID to be used for all flows. UUID of first flow: %v, UUID of flow on node %s: %v",
-					a.flowID, nodeID, flow.FlowID),
+					a.flowID, sqlInstanceID, flow.FlowID),
 			)
 		}
-		a.flowStats[base.SQLInstanceID(nodeID)] = &flowStats{}
+		a.flowStats[sqlInstanceID] = &flowStats{}
 		for _, proc := range flow.Processors {
-			a.processorStats[execinfrapb.ProcessorID(proc.ProcessorID)] = &processorStats{nodeID: nodeID}
+			procID := execinfrapb.ProcessorID(proc.ProcessorID)
+			a.processorStats[procID] = &execinfrapb.ComponentStats{}
+			a.processorStats[procID].Component.SQLInstanceID = sqlInstanceID
+
 			for _, output := range proc.Output {
 				for _, stream := range output.Streams {
 					a.streamStats[stream.StreamID] = &streamStats{
-						originNodeID:      nodeID,
-						destinationNodeID: stream.TargetNodeID,
+						originSQLInstanceID:      sqlInstanceID,
+						destinationSQLInstanceID: stream.TargetNodeID,
 					}
 				}
 			}
@@ -177,11 +172,7 @@ func (a *TraceAnalyzer) AddTrace(trace []tracingpb.RecordedSpan, makeDeterminist
 		switch component.Type {
 		case execinfrapb.ComponentID_PROCESSOR:
 			id := component.ID
-			processorStats := a.processorStats[execinfrapb.ProcessorID(id)]
-			if processorStats == nil {
-				return errors.Errorf("trace has span for processor %d but the processor does not exist in the physical plan", id)
-			}
-			processorStats.stats = componentStats
+			a.processorStats[execinfrapb.ProcessorID(id)] = componentStats
 
 		case execinfrapb.ComponentID_STREAM:
 			id := component.ID
@@ -227,14 +218,14 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	// Process processorStats.
 	for _, stats := range a.processorStats {
-		if stats.stats == nil {
+		if stats == nil {
 			continue
 		}
-		instanceID := base.SQLInstanceID(stats.nodeID)
-		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.stats.KV.BytesRead.Value())
-		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.stats.KV.TuplesRead.Value())
-		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.stats.KV.KVTime.Value()
-		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.stats.KV.ContentionTime.Value()
+		instanceID := stats.Component.SQLInstanceID
+		a.nodeLevelStats.KVBytesReadGroupedByNode[instanceID] += int64(stats.KV.BytesRead.Value())
+		a.nodeLevelStats.KVRowsReadGroupedByNode[instanceID] += int64(stats.KV.TuplesRead.Value())
+		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
+		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
 	}
 
 	// Process streamStats.
@@ -242,7 +233,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		if stats.stats == nil {
 			continue
 		}
-		originInstanceID := base.SQLInstanceID(stats.originNodeID)
+		originInstanceID := stats.originSQLInstanceID
 
 		// Set networkBytesSentGroupedByNode.
 		bytes, err := getNetworkBytesFromComponentStats(stats.stats)

@@ -77,7 +77,7 @@ func _ASSIGN_NE(_, _, _, _, _, _ interface{}) int {
 // _SELECT_DISTINCT - a boolean as .SelectDistinct that determines whether a
 // probe tuple should be marked as "distinct" if there is no tuple in the hash
 // table that might be a duplicate of the probe tuple (either because the
-// GroupID of the probe tuple is 0 - meaning no hash matches - or because the
+// ToCheckID of the probe tuple is 0 - meaning no hash matches - or because the
 // probe tuple has a NULL value when NULLs are treated as not equal).
 // _USE_PROBE_SEL - a boolean as .UseProbeSel that determines whether there is
 // a selection vector on the probe vector.
@@ -109,13 +109,13 @@ func _CHECK_COL_BODY(
 	// {{end}}
 	for _, toCheck := range ht.ProbeScratch.ToCheck[:nToCheck] {
 		// {{/*
-		//     The build table tuple (identified by GroupID value) is being
+		//     The build table tuple (identified by ToCheckID value) is being
 		//     compared to the corresponding probing tuple (with the ordinal
 		//     'toCheck') to determine if it is an equality match. keyID of 0
 		//     indicates that for the probing tuple there are no more build
 		//     tuples to try.
 		// */}}
-		keyID := ht.ProbeScratch.GroupID[toCheck]
+		keyID := ht.ProbeScratch.ToCheckID[toCheck]
 		// {{if or (not .SelectDistinct) (not .ProbingAgainstItself)}}
 		// {{/*
 		//      When we're selecting distinct tuples and probing against itself,
@@ -211,7 +211,7 @@ func _CHECK_COL_BODY(
 					// */}}
 					ht.ProbeScratch.distinct[toCheck] = true
 					// {{else}}
-					ht.ProbeScratch.GroupID[toCheck] = 0
+					ht.ProbeScratch.ToCheckID[toCheck] = 0
 					// {{end}}
 				}
 				continue
@@ -344,7 +344,7 @@ func _CHECK_COL_FUNCTION_TEMPLATE(
 
 // {{if and (not .HashTableMode.IsDistinctBuild) (not .HashTableMode.IsDeletingProbe)}}
 
-// checkCol determines if the current key column in the GroupID buckets matches
+// checkCol determines if the current key column in the ToCheckID buckets matches
 // the specified equality column key. If there is no match, then the key is
 // added to differs. If the bucket has reached the end, the key is rejected. If
 // the HashTable disallows null equality, then if any element in the key is
@@ -379,11 +379,11 @@ func (ht *HashTable) checkColAgainstItselfForDistinct(vec coldata.Vec, nToCheck 
 
 // {{if .HashTableMode.IsDeletingProbe}}
 
-// checkColDeleting determines if the current key column in the GroupID buckets
-// matches the specified equality column key. If there is no match *or* the key
-// has been already used, then the key is added to differs. If the bucket has
-// reached the end, the key is rejected. If the HashTable disallows null
-// equality, then if any element in the key is null, there is no match.
+// checkColDeleting determines if the current key column in the ToCheckID
+// buckets matches the specified equality column key. If there is no match *or*
+// the key has been already used, then the key is added to differs. If the
+// bucket has reached the end, the key is rejected. If the HashTable disallows
+// null equality, then if any element in the key is null, there is no match.
 func (ht *HashTable) checkColDeleting(
 	probeVec, buildVec coldata.Vec, keyColIdx int, nToCheck uint64, probeSel []int,
 ) {
@@ -481,7 +481,7 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 		}
 		// {{end}}
 		if !ht.ProbeScratch.differs[toCheck] {
-			keyID := ht.ProbeScratch.GroupID[toCheck]
+			keyID := ht.ProbeScratch.ToCheckID[toCheck]
 			// {{if .DeletingProbeMode}}
 			// {{/*
 			//     We need to check whether this matching tuple hasn't been
@@ -576,9 +576,9 @@ func _CHECK_BODY(_SELECT_SAME_TUPLES bool, _DELETING_PROBE_MODE bool, _SELECT_DI
 // */}}
 // {{if .HashTableMode.IsDeletingProbe}}
 
-// Check performs an equality check between the current key in the GroupID bucket
-// and the probe key at that index. If there is a match, the HashTable's same
-// array is updated to lazily populate the linked list of identical build
+// Check performs an equality check between the current key in the ToCheckID
+// bucket and the probe key at that index. If there is a match, the HashTable's
+// same array is updated to lazily populate the linked list of identical build
 // table keys. The visited flag for corresponding build table key is also set. A
 // key is removed from ToCheck if it has already been visited in a previous
 // probe, or the bucket has reached the end (key not found in build table). The
