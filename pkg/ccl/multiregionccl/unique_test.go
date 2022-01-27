@@ -33,6 +33,7 @@ func TestValidateUniqueConstraints(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
 	// Create two tables and a view.
@@ -58,7 +59,7 @@ CREATE TABLE u (
 	insertValuesT := func(values []tree.Datum) {
 		// Get the table descriptor and primary index of t.
 		tableDesc := desctestutils.TestingGetTableDescriptor(
-			kvDB, keys.SystemSQLCodec, "test", "public", "t",
+			kvDB, keys.SystemSQLCodec, version, "test", "public", "t",
 		)
 		primaryIndex := tableDesc.GetPrimaryIndex()
 
@@ -83,7 +84,7 @@ CREATE TABLE u (
 	insertValuesU := func(values []tree.Datum) {
 		// Get the table descriptor and indexes of u.
 		tableDesc := desctestutils.TestingGetTableDescriptor(
-			kvDB, keys.SystemSQLCodec, "test", "public", "u",
+			kvDB, keys.SystemSQLCodec, version, "test", "public", "u",
 		)
 		primaryIndex := tableDesc.GetPrimaryIndex()
 		secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]

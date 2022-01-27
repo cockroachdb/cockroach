@@ -13,6 +13,7 @@ package catalog
 import (
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
@@ -62,6 +63,11 @@ type ValidationErrorAccumulator interface {
 	// Report is called by the validation methods to report a possible error.
 	// No-ops when err is nil.
 	Report(err error)
+
+	// IsActive is used to confirm if a certain version of validation should
+	// be enabled, by comparing against the active version. If the active version
+	// is unknown the validation in question will always be enabled.
+	IsActive(version clusterversion.Key) bool
 }
 
 // ValidationErrors is the error container returned by Validate which contains

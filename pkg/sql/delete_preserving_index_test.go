@@ -97,7 +97,13 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 		<-atBackfillStage
 		// Find the descriptors for the indices.
 		codec := keys.SystemSQLCodec
-		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		version := server.ClusterSettings().Version.ActiveVersion(context.Background())
+		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
+			kvDB,
+			codec,
+			version,
+			"d",
+			"t")
 		var index *descpb.IndexDescriptor
 		var ord int
 		for idx, i := range tableDesc.Mutations {
@@ -264,7 +270,13 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 	_, err := sqlDB.Exec(setupSQL)
 	require.NoError(t, err)
 	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
-	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
+	version := server.ClusterSettings().Version.ActiveVersionOrEmpty(context.Background())
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
+		kvDB,
+		codec,
+		version,
+		"t",
+		"test")
 
 	// Move index to DELETE_ONLY. The following delete should not
 	// be preserved even though the index sees the delete.
@@ -330,7 +342,13 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
 	_, err := sqlDB.Exec(setupSQL)
 	require.NoError(t, err)
 	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
-	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
+	version := server.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
+		kvDB,
+		codec,
+		version,
+		"t",
+		"test")
 	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", func(idx *descpb.IndexDescriptor) error {
 		// Here, we make this index look like the temporary
 		// index for a new primary index during the
@@ -606,7 +624,13 @@ func TestMergeProcess(t *testing.T) {
 		}
 
 		codec := keys.SystemSQLCodec
-		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		version := server.ClusterSettings().Version.ActiveVersion(context.Background())
+		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
+			kvDB,
+			codec,
+			version,
+			"d",
+			"t")
 		lm := server.LeaseManager().(*lease.Manager)
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
@@ -618,7 +642,12 @@ func TestMergeProcess(t *testing.T) {
 		// Here want to have different entries for the two indices, so we manipulate
 		// the index to DELETE_ONLY when we don't want to write to it, and
 		// DELETE_AND_WRITE_ONLY when we write to it.
-		mTest := makeMutationTest(t, kvDB, tdb, tableDesc)
+		mTest := makeMutationTest(t,
+			kvDB,
+			tdb,
+			tableDesc,
+			version,
+		)
 
 		mTest.writeIndexMutation(ctx, test.dstIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
 		mTest.updateIndexMutation(ctx, test.srcIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_ONLY}, true)
@@ -644,7 +673,12 @@ func TestMergeProcess(t *testing.T) {
 		}
 
 		mTest.makeMutationsActive(ctx)
-		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
+		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
+			kvDB,
+			codec,
+			version,
+			"d",
+			"t")
 
 		dstIndex, err := tableDesc.FindIndexWithName(test.dstIndex)
 		if err != nil {

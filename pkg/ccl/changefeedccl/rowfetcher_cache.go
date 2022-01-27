@@ -71,7 +71,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:      codec,
 		leaseMgr:   leaseMgr,
-		collection: cf.NewCollection(nil /* TemporarySchemaProvider */),
+		collection: cf.NewCollection(ctx, nil),
 		db:         db,
 		fetchers:   cache.NewUnorderedCache(rfCacheConfig),
 	}

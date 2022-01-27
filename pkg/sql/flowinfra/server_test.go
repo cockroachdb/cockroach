@@ -44,6 +44,7 @@ func TestServer(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 	conn, err := s.RPCContext().GRPCDialNode(s.ServingRPCAddr(), s.NodeID(),
 		rpc.DefaultClass).Connect(ctx)
@@ -57,7 +58,12 @@ func TestServer(t *testing.T) {
 	r.Exec(t, `CREATE TABLE test.t (a INT PRIMARY KEY, b INT)`)
 	r.Exec(t, `INSERT INTO test.t VALUES (1, 10), (2, 20), (3, 30)`)
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	ts := execinfrapb.TableReaderSpec{
 		Table:     *td.TableDesc(),

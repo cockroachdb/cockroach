@@ -50,7 +50,13 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor.
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"foo")
 	if tableDesc.GetName() != oldName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", oldName, tableDesc)
 	}
@@ -64,7 +70,12 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor again.
-	renamedDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "bar")
+	renamedDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"bar")
 	if renamedDesc.GetName() != newName {
 		t.Fatalf("Wrong table name, expected %s, got: %+v", newName, tableDesc)
 	}
@@ -136,7 +147,13 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 	mu.Lock()
 	waitTableID = tableDesc.GetID()
 	mu.Unlock()

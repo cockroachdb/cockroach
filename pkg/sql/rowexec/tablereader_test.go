@@ -70,7 +70,13 @@ func TestTableReader(t *testing.T) {
 		19,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 	cols := td.PublicColumns()
 
 	makeIndexSpan := func(start, end int) roachpb.Span {
@@ -214,7 +220,13 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 	}
 
 	kvDB := tc.Server(0).DB()
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	st := tc.Server(0).ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -317,7 +329,13 @@ func TestTableReaderDrain(t *testing.T) {
 		3, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	// Run the flow in a verbose trace so that we can test for tracing info.
 	tracer := s.TracerI().(*tracing.Tracer)
@@ -373,7 +391,13 @@ func TestLimitScans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -491,7 +515,13 @@ func BenchmarkTableReader(b *testing.B) {
 			numRows,
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 		)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		version := s.ClusterSettings().Version.ActiveVersion(ctx)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"test",
+			tableName)
 		flowCtx := execinfra.FlowCtx{
 			EvalCtx: &evalCtx,
 			Cfg: &execinfra.ServerConfig{

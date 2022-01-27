@@ -139,7 +139,8 @@ func (tc *Collection) getDescriptorsByID(
 		return descs, nil
 	}
 	kvDescs, err := tc.withReadFromStore(flags.RequireMutable, func() ([]catalog.MutableDescriptor, error) {
-		return tc.kv.getByIDs(ctx, txn, kvIDs)
+		version := tc.settings.Version.ActiveVersion(ctx)
+		return tc.kv.getByIDs(ctx, txn, version, kvIDs)
 	})
 	if err != nil {
 		return nil, err
@@ -293,7 +294,15 @@ func (tc *Collection) getByName(
 	var descs []catalog.Descriptor
 	descs, err = tc.withReadFromStore(mutable, func() ([]catalog.MutableDescriptor, error) {
 		uncommittedDB, _ := tc.uncommitted.getByID(parentID).(catalog.DatabaseDescriptor)
-		desc, err := tc.kv.getByName(ctx, txn, uncommittedDB, parentID, parentSchemaID, name)
+		version := tc.settings.Version.ActiveVersion(ctx)
+		desc, err := tc.kv.getByName(
+			ctx,
+			txn,
+			version,
+			uncommittedDB,
+			parentID,
+			parentSchemaID,
+			name)
 		if err != nil {
 			return nil, err
 		}

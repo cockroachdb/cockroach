@@ -116,6 +116,7 @@ func TestScatterResponse(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	sqlutils.CreateTable(
@@ -124,7 +125,12 @@ func TestScatterResponse(t *testing.T) {
 		1000,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(10)),
 	)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
 

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -42,16 +43,22 @@ type mutationTest struct {
 	*sqlutils.SQLRunner
 	kvDB      *kv.DB
 	tableDesc *tabledesc.Mutable
+	version   clusterversion.ClusterVersion
 }
 
 func makeMutationTest(
-	t *testing.T, kvDB *kv.DB, db *gosql.DB, tableDesc *tabledesc.Mutable,
+	t *testing.T,
+	kvDB *kv.DB,
+	db *gosql.DB,
+	tableDesc *tabledesc.Mutable,
+	version clusterversion.ClusterVersion,
 ) mutationTest {
 	return mutationTest{
 		TB:        t,
 		SQLRunner: sqlutils.MakeSQLRunner(db),
 		kvDB:      kvDB,
 		tableDesc: tableDesc,
+		version:   version,
 	}
 }
 
@@ -86,7 +93,7 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	}
 	mt.tableDesc.Mutations = nil
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc, desctestutils.LatestClusterVersionForValidationForTest); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -146,7 +153,7 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc, mt.version); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -189,10 +196,21 @@ ALTER TABLE t.test ADD COLUMN i VARCHAR NOT NULL DEFAULT 'i';
 	}
 
 	// read table descriptor
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(
+		t,
+		kvDB,
+		sqlDB,
+		tableDesc,
+		version,
+	)
 	// Add column "i" as a mutation in delete/write.
 	mTest.writeColumnMutation(ctx, "i", descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
 
@@ -251,10 +269,21 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(
+		t,
+		kvDB,
+		sqlDB,
+		tableDesc,
+		version,
+	)
 
 	starQuery := `SELECT * FROM t.test`
 	for _, useUpsert := range []bool{true, false} {
@@ -275,7 +304,11 @@ CREATE INDEX allidx ON t.test (k, v);
 
 					// read table descriptor
 					mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-						kvDB, keys.SystemSQLCodec, "t", "test")
+						kvDB,
+						keys.SystemSQLCodec,
+						version,
+						"t",
+						"test")
 
 					initRows := [][]string{{"a", "z", "q"}}
 					for _, row := range initRows {
@@ -456,21 +489,21 @@ CREATE INDEX allidx ON t.test (k, v);
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{}}
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := descbuilder.ValidateSelf(tableDesc, mTest.version); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, mTest.version); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_DELETE_ONLY
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, mTest.version); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = descpb.DescriptorMutation_DROP
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, mTest.version); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
@@ -520,10 +553,21 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	}
 
 	// read table descriptor
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(
+		t,
+		kvDB,
+		sqlDB,
+		tableDesc,
+		version,
+	)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT v FROM t.test@foo`
@@ -546,7 +590,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			}
 			// read table descriptor
 			mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-				kvDB, keys.SystemSQLCodec, "t", "test")
+				kvDB,
+				keys.SystemSQLCodec,
+				version,
+				"t",
+				"test")
 
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
 			for _, row := range initRows {
@@ -663,7 +711,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	index := tableDesc.PublicNonPrimaryIndexes()[len(tableDesc.PublicNonPrimaryIndexes())-1]
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: index.IndexDesc()}}}
 	tableDesc.RemovePublicNonPrimaryIndex(index.Ordinal())
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := descbuilder.ValidateSelf(tableDesc, mTest.version); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }
@@ -699,10 +747,21 @@ CREATE INDEX allidx ON t.test (k, v);
 	}
 
 	// read table descriptor
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
-	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mTest := makeMutationTest(
+		t,
+		kvDB,
+		sqlDB,
+		tableDesc,
+		version,
+	)
 
 	starQuery := `SELECT * FROM t.test`
 	indexQuery := `SELECT i FROM t.test@foo`
@@ -737,7 +796,11 @@ CREATE INDEX allidx ON t.test (k, v);
 
 				// read table descriptor
 				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-					kvDB, keys.SystemSQLCodec, "t", "test")
+					kvDB,
+					keys.SystemSQLCodec,
+					version,
+					"t",
+					"test")
 
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
 				for _, row := range initRows {
@@ -924,10 +987,21 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	}
 
 	// Read table descriptor
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
-	mt := makeMutationTest(t, kvDB, sqlDB, tableDesc)
+	mt := makeMutationTest(
+		t,
+		kvDB,
+		sqlDB,
+		tableDesc,
+		version,
+	)
 
 	// Test CREATE INDEX in the presence of mutations.
 
@@ -1056,7 +1130,12 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
-	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
 	// Make "ufo" live.
 	mt.makeMutationsActive(ctx)
@@ -1083,7 +1162,11 @@ CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
 	mt.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
 	// Make column "e" live.
 	mt.makeMutationsActive(ctx)
@@ -1165,7 +1248,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 	}
 
 	// read table descriptor
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	version := server.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
 	expected := []struct {
 		name  string
@@ -1243,8 +1332,13 @@ func TestAddingFKs(t *testing.T) {
 	}
 
 	// Step the referencing table back to the ADD state.
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	ordersDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "orders")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"orders")
 	ordersDesc.State = descpb.DescriptorState_ADD
 	ordersDesc.Version++
 	if err := kvDB.Put(

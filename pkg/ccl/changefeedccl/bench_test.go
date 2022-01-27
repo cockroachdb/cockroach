@@ -193,7 +193,13 @@ func createBenchmarkChangefeed(
 	feedClock *hlc.Clock,
 	database, table string,
 ) (*benchSink, func() error, error) {
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, database, table)
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(),
+		keys.SystemSQLCodec,
+		version,
+		database,
+		table)
 	spans := []roachpb.Span{tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)}
 	details := jobspb.ChangefeedDetails{
 		Targets: jobspb.ChangefeedTargets{tableDesc.GetID(): jobspb.ChangefeedTarget{

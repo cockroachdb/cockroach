@@ -236,6 +236,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 ) (descpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
+
 	if err != nil {
 		return descpb.TableDescriptor{}, err
 	}
@@ -248,21 +249,19 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	}
 	mutDesc, err := makeViewTableDesc(
 		ctx,
-		st,
 		create.Name.Table(),
 		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
-		0, /* parentID */
+		0,
 		sc.GetID(),
 		id,
 		columns,
-		startTime, /* creationTime */
+		startTime,
 		descpb.NewVirtualTablePrivilegeDescriptor(),
-		nil, /* semaCtx */
-		nil, /* evalCtx */
+		nil,
+		nil, st,
 		tree.PersistencePermanent,
-		false, /* isMultiRegion */
-		nil,   /* sc */
-	)
+		false,
+		nil)
 	return mutDesc.TableDescriptor, err
 }
 
@@ -696,7 +695,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
-			if err := descbuilder.ValidateSelf(td); err != nil {
+			version := st.Version.ActiveVersionOrEmpty(ctx)
+			if err := descbuilder.ValidateSelf(td, version); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

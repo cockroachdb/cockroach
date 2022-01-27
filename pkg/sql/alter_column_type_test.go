@@ -276,8 +276,14 @@ ALTER TABLE t.test ALTER COLUMN x TYPE INT;
 `)
 
 	// Ensure that the add column and column swap mutations are cleaned up.
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	testutils.SucceedsSoon(t, func() error {
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"t",
+			"test")
 		if len(desc.AllMutations()) != 0 {
 			return errors.New("expected no mutations on TableDescriptor")
 		}

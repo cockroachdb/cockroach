@@ -55,6 +55,7 @@ func TestClusterFlow(t *testing.T) {
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual}
 	tci := serverutils.StartNewTestCluster(t, 3, args)
 	tc := tci.(*testcluster.TestCluster)
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
 	defer tc.Stopper().Stop(context.Background())
 
 	sumDigitsFn := func(row int) tree.Datum {
@@ -72,7 +73,12 @@ func TestClusterFlow(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sumDigitsFn, sqlutils.RowEnglishFn))
 
 	kvDB := tc.Server(0).DB()
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
 		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc.GetID(), desc.PublicNonPrimaryIndexes()[0].GetID()))

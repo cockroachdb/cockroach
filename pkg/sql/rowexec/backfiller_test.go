@@ -105,8 +105,13 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	registry := server.JobRegistry().(*jobs.Registry)
+	version := server.ClusterSettings().Version.ActiveVersion(ctx)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
 	if err := kvDB.Put(
 		ctx,

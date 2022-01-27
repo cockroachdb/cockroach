@@ -61,7 +61,8 @@ func TestMergingIndexKVOps(t *testing.T) {
 				state := descpb.DescriptorMutation_State(descpb.DescriptorMutation_State_value[stateStr])
 
 				codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
-				tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", tableName)
+				version := s.ClusterSettings().Version.ActiveVersion(ctx)
+				tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, version, "t", tableName)
 				err = mutateIndexByName(kvDB, codec, tableDesc, name, nil, state)
 				require.NoError(t, err)
 			case "statement":

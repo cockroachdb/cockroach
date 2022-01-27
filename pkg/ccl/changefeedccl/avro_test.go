@@ -76,7 +76,11 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc, descbuilder.ValidateSelf(mutDesc)
+	version := st.Version.ActiveVersion(ctx)
+	return mutDesc, descbuilder.ValidateSelf(
+		mutDesc,
+		version,
+	)
 }
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {

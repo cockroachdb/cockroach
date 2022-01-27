@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -55,6 +56,7 @@ import (
 func writeColumnMutation(
 	t *testing.T,
 	kvDB *kv.DB,
+	version clusterversion.ClusterVersion,
 	tableDesc *tabledesc.Mutable,
 	column string,
 	m descpb.DescriptorMutation,
@@ -72,16 +74,20 @@ func writeColumnMutation(
 		}
 	}
 	m.Descriptor_ = &descpb.DescriptorMutation_Column{Column: col.ColumnDesc()}
-	writeMutation(t, kvDB, tableDesc, m)
+	writeMutation(t, kvDB, version, tableDesc, m)
 }
 
 // writeMutation writes the mutation to the table descriptor.
 func writeMutation(
-	t *testing.T, kvDB *kv.DB, tableDesc *tabledesc.Mutable, m descpb.DescriptorMutation,
+	t *testing.T,
+	kvDB *kv.DB,
+	version clusterversion.ClusterVersion,
+	tableDesc *tabledesc.Mutable,
+	m descpb.DescriptorMutation,
 ) {
 	tableDesc.Mutations = append(tableDesc.Mutations, m)
 	tableDesc.Version++
-	if err := descbuilder.ValidateSelf(tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(tableDesc, version); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(
@@ -130,9 +136,14 @@ func TestRegistryGC(t *testing.T) {
 	earlier := ts.Add(-1 * time.Hour)
 	muchEarlier := ts.Add(-2 * time.Hour)
 
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	setDropJob := func(dbName, tableName string) {
 		desc := desctestutils.TestingGetMutableExistingTableDescriptor(
-			kvDB, keys.SystemSQLCodec, dbName, tableName)
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			dbName,
+			tableName)
 		desc.DropJobID = 123
 		if err := kvDB.Put(
 			context.Background(),
@@ -148,6 +159,7 @@ func TestRegistryGC(t *testing.T) {
 	}
 
 	writeJob := func(name string, created, finished time.Time, status Status, mutOptions mutationOptions) string {
+		version := s.ClusterSettings().Version.ActiveVersion(ctx)
 		tableName := constructTableName(name, mutOptions)
 		if _, err := sqlDB.Exec(fmt.Sprintf(`
 CREATE DATABASE IF NOT EXISTS t;
@@ -157,12 +169,12 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			t.Fatal(err)
 		}
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-			kvDB, keys.SystemSQLCodec, "t", tableName)
+			kvDB, keys.SystemSQLCodec, version, "t", tableName)
 		if mutOptions.hasDropJob {
 			setDropJob("t", tableName)
 		}
 		if mutOptions.hasMutation {
-			writeColumnMutation(t, kvDB, tableDesc, "i", descpb.DescriptorMutation{State: descpb.
+			writeColumnMutation(t, kvDB, version, tableDesc, "i", descpb.DescriptorMutation{State: descpb.
 				DescriptorMutation_DELETE_AND_WRITE_ONLY, Direction: descpb.DescriptorMutation_DROP})
 		}
 		payload, err := protoutil.Marshal(&jobspb.Payload{
