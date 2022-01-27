@@ -306,10 +306,6 @@ type sqlServerArgs struct {
 	// monitorAndMetrics contains the return value of newRootSQLMemoryMonitor.
 	monitorAndMetrics monitorAndMetrics
 
-	// allowSessionRevival is true if the cluster is allowed to create session
-	// revival tokens and use them to authenticate a session.
-	allowSessionRevival bool
-
 	// settingsStorage is an optional interface to drive storing of settings
 	// data on disk to provide a fresh source of settings upon next startup.
 	settingsStorage settingswatcher.Storage
@@ -695,7 +691,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
 		TraceCollector:          traceCollector,
 		TenantUsageServer:       cfg.tenantUsageServer,
-		AllowSessionRevival:     cfg.allowSessionRevival,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,
