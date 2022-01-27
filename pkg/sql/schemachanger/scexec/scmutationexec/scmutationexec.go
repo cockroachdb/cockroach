@@ -184,13 +184,13 @@ func (m *visitor) swapSchemaChangeJobID(
 	if !ok {
 		return nil
 	}
-	if jobspb.JobID(mut.NewSchemaChangeJobID) != exp {
+	if mut.NewSchemaChangeJobID != exp {
 		return errors.AssertionFailedf(
 			"unexpected schema change job ID %d on table %d, expected %d",
 			mut.NewSchemaChangeJobID, descID, exp,
 		)
 	}
-	mut.NewSchemaChangeJobID = int64(to)
+	mut.NewSchemaChangeJobID = to
 	return nil
 }
 

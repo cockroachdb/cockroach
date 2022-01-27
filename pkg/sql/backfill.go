@@ -789,7 +789,7 @@ func getJobIDForMutationWithDescriptor(
 ) (jobspb.JobID, error) {
 	for _, job := range tableDesc.GetMutationJobs() {
 		if job.MutationID == mutationID {
-			return jobspb.JobID(job.JobID), nil
+			return job.JobID, nil
 		}
 	}
 

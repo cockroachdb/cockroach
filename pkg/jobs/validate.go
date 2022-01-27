@@ -36,7 +36,7 @@ func ValidateJobReferencesInDescriptor(
 	}
 
 	for _, m := range tbl.GetMutationJobs() {
-		j, err := jmg.GetJobMetadata(jobspb.JobID(m.JobID))
+		j, err := jmg.GetJobMetadata(m.JobID)
 		if err != nil {
 			errorAccFn(errors.WithAssertionFailure(errors.Wrapf(err, "mutation job %d", m.JobID)))
 			continue
