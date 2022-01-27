@@ -626,7 +626,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		var relOptions tree.Datum = tree.DNull
 		if ttl := table.GetRowLevelTTL(); ttl != nil {
 			relOptionsArr := tree.NewDArray(types.String)
-			if err := relOptionsArr.Append(tree.NewDString(fmt.Sprintf("expire_after=%s", ttl.DurationExpr))); err != nil {
+			if err := relOptionsArr.Append(tree.NewDString(fmt.Sprintf("ttl_expire_after=%s", ttl.DurationExpr))); err != nil {
 				return err
 			}
 			relOptions = relOptionsArr

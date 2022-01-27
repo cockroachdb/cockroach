@@ -176,7 +176,7 @@ func ShowCreateTable(
 	}
 
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
-		f.Buffer.WriteString(` WITH (expire_after = `)
+		f.Buffer.WriteString(` WITH (ttl_expire_after = `)
 		f.Buffer.WriteString(ttl.DurationExpr)
 		f.Buffer.WriteString(`)`)
 	}

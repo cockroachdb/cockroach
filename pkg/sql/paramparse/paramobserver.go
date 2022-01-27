@@ -156,7 +156,7 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
-	`expire_after`: {
+	`ttl_expire_after`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			var d *tree.DInterval
 			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
@@ -164,7 +164,7 @@ var tableParams = map[string]tableParam{
 				if err != nil || d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "expire_after" must be an interval`,
+						`value of "ttl_expire_after" must be an interval`,
 					)
 				}
 			} else {
@@ -173,7 +173,7 @@ var tableParams = map[string]tableParam{
 				if !ok || d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "expire_after" must be an interval`,
+						`value of "ttl_expire_after" must be an interval`,
 					)
 				}
 			}
@@ -181,7 +181,7 @@ var tableParams = map[string]tableParam{
 			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
 				return pgerror.Newf(
 					pgcode.InvalidParameterValue,
-					`value of "expire_after" must be at least zero`,
+					`value of "ttl_expire_after" must be at least zero`,
 				)
 			}
 			if po.tableDesc.RowLevelTTL == nil {
