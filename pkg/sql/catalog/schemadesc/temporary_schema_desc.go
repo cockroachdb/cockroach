@@ -12,6 +12,7 @@ package schemadesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
@@ -45,8 +46,8 @@ var _ catalog.SchemaDescriptor = temporary{}
 func (p temporary) GetID() descpb.ID       { return p.id }
 func (p temporary) GetName() string        { return p.name }
 func (p temporary) GetParentID() descpb.ID { return p.parentID }
-func (p temporary) GetPrivileges() *descpb.PrivilegeDescriptor {
-	return descpb.NewTemporarySchemaPrivilegeDescriptor()
+func (p temporary) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewTemporarySchemaPrivilegeDescriptor()
 }
 
 type temporaryBase struct{}

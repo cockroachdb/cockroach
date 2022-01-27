@@ -15,9 +15,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -175,20 +175,20 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 	var events []eventLogEntry
 	for _, schemaDesc := range n.schemaDescs {
 		if schemaDesc.GetDefaultPrivileges() == nil {
-			schemaDesc.SetDefaultPrivilegeDescriptor(catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_SCHEMA))
+			schemaDesc.SetDefaultPrivilegeDescriptor(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
 		}
 
 		defaultPrivs := schemaDesc.GetMutableDefaultPrivilegeDescriptor()
 
-		var roles []descpb.DefaultPrivilegesRole
+		var roles []catpb.DefaultPrivilegesRole
 		if n.n.ForAllRoles {
-			roles = append(roles, descpb.DefaultPrivilegesRole{
+			roles = append(roles, catpb.DefaultPrivilegesRole{
 				ForAllRoles: true,
 			})
 		} else {
-			roles = make([]descpb.DefaultPrivilegesRole, len(targetRoles))
+			roles = make([]catpb.DefaultPrivilegesRole, len(targetRoles))
 			for i, role := range targetRoles {
-				roles[i] = descpb.DefaultPrivilegesRole{
+				roles[i] = catpb.DefaultPrivilegesRole{
 					Role: role,
 				}
 			}
@@ -276,20 +276,20 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	grantOption bool,
 ) error {
 	if n.dbDesc.GetDefaultPrivileges() == nil {
-		n.dbDesc.SetDefaultPrivilegeDescriptor(catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE))
+		n.dbDesc.SetDefaultPrivilegeDescriptor(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE))
 	}
 
 	defaultPrivs := n.dbDesc.GetMutableDefaultPrivilegeDescriptor()
 
-	var roles []descpb.DefaultPrivilegesRole
+	var roles []catpb.DefaultPrivilegesRole
 	if n.n.ForAllRoles {
-		roles = append(roles, descpb.DefaultPrivilegesRole{
+		roles = append(roles, catpb.DefaultPrivilegesRole{
 			ForAllRoles: true,
 		})
 	} else {
-		roles = make([]descpb.DefaultPrivilegesRole, len(targetRoles))
+		roles = make([]catpb.DefaultPrivilegesRole, len(targetRoles))
 		for i, role := range targetRoles {
-			roles[i] = descpb.DefaultPrivilegesRole{
+			roles[i] = catpb.DefaultPrivilegesRole{
 				Role: role,
 			}
 		}

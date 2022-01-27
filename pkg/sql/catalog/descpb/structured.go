@@ -41,7 +41,7 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 type ID = catid.DescID
 
 // InvalidID is the uninitialised descriptor id.
-const InvalidID ID = 0
+const InvalidID = catid.InvalidDescID
 
 // IDs is a sortable list of IDs.
 type IDs []ID
