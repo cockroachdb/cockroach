@@ -109,6 +109,12 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/UpdateSystemSpanConfigs":
+		return a.authUpdateSystemSpanConfigs(tenID, req.(*roachpb.UpdateSystemSpanConfigsRequest))
+
+	case "/cockroach.roachpb.Internal/GetSystemSpanConfigs":
+		return a.authTenant(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -293,6 +299,33 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		}
 	}
 
+	return nil
+}
+
+func (a tenantAuthorizer) authUpdateSystemSpanConfigs(
+	tenID roachpb.TenantID, args *roachpb.UpdateSystemSpanConfigsRequest,
+) error {
+	if err := a.authTenant(tenID); err != nil {
+		return err
+	}
+
+	validate := func(target roachpb.SystemSpanConfigTarget) error {
+		if target.TenantID != nil {
+			return authError("secondary tenants cannot target tenants for system span configurations")
+		}
+		return nil
+	}
+
+	for _, target := range args.ToDelete {
+		if err := validate(target); err != nil {
+			return err
+		}
+	}
+	for _, entry := range args.ToUpsert {
+		if err := validate(entry.SystemSpanConfigTarget); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -44,6 +44,20 @@ type KVAccessor interface {
 		toUpsert []roachpb.SpanConfigEntry,
 	) error
 
+	// GetSystemSpanConfigEntries returns the system span config entries that
+	// have been installed by the tenant.
+	GetSystemSpanConfigEntries(ctx context.Context) ([]roachpb.SystemSpanConfigEntry, error)
+
+	// UpdateSystemSpanConfigEntries updates system span configurations for the
+	// given targets. Targets for span config entries being deleted are expected
+	// to have been present; targets must be distinct within and across the two
+	// lists.
+	UpdateSystemSpanConfigEntries(
+		ctx context.Context,
+		toDelete []roachpb.SystemSpanConfigTarget,
+		toUpsert []roachpb.SystemSpanConfigEntry,
+	) error
+
 	// WithTxn returns a KVAccessor that runs using the given transaction (with
 	// its operations discarded if aborted, valid only if committed). If nil, a
 	// transaction is created internally for every operation.
