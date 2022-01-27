@@ -16,8 +16,8 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -95,8 +95,8 @@ func (f fakeBatchReceiver) PushBatch(
 }
 
 type flowWithNode struct {
-	nodeID roachpb.NodeID
-	flow   *execinfrapb.FlowSpec
+	sqlInstanceID base.SQLInstanceID
+	flow          *execinfrapb.FlowSpec
 }
 
 // ExplainVec converts the flows (that are assumed to be vectorizable) into the
@@ -113,10 +113,10 @@ type flowWithNode struct {
 func ExplainVec(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
-	flows map[roachpb.NodeID]*execinfrapb.FlowSpec,
+	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	localProcessors []execinfra.LocalProcessor,
 	opChains execinfra.OpChains,
-	gatewayNodeID roachpb.NodeID,
+	gatewaySQLInstanceID base.SQLInstanceID,
 	verbose bool,
 	distributed bool,
 ) (_ []string, cleanup func(), _ error) {
@@ -139,15 +139,15 @@ func ExplainVec(
 	// catching such errors.
 	if err = colexecerror.CatchVectorizedRuntimeError(func() {
 		if opChains != nil {
-			formatChains(root, gatewayNodeID, opChains, verbose)
+			formatChains(root, gatewaySQLInstanceID, opChains, verbose)
 		} else {
 			sortedFlows := make([]flowWithNode, 0, len(flows))
 			for nodeID, flow := range flows {
-				sortedFlows = append(sortedFlows, flowWithNode{nodeID: nodeID, flow: flow})
+				sortedFlows = append(sortedFlows, flowWithNode{sqlInstanceID: nodeID, flow: flow})
 			}
 			// Sort backward, since the first thing you add to a treeprinter will come
 			// last.
-			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].nodeID < sortedFlows[j].nodeID })
+			sort.Slice(sortedFlows, func(i, j int) bool { return sortedFlows[i].sqlInstanceID < sortedFlows[j].sqlInstanceID })
 			for _, flow := range sortedFlows {
 				opChains, cleanup, err = convertToVecTree(ctx, flowCtx, flow.flow, localProcessors, !distributed)
 				cleanups = append(cleanups, cleanup)
@@ -155,7 +155,7 @@ func ExplainVec(
 					conversionErr = err
 					return
 				}
-				formatChains(root, flow.nodeID, opChains, verbose)
+				formatChains(root, flow.sqlInstanceID, opChains, verbose)
 			}
 		}
 	}); err != nil {
@@ -168,9 +168,12 @@ func ExplainVec(
 }
 
 func formatChains(
-	root treeprinter.Node, nodeID roachpb.NodeID, opChains execinfra.OpChains, verbose bool,
+	root treeprinter.Node,
+	sqlInstanceID base.SQLInstanceID,
+	opChains execinfra.OpChains,
+	verbose bool,
 ) {
-	node := root.Childf("Node %d", nodeID)
+	node := root.Childf("Node %d", sqlInstanceID)
 	for _, op := range opChains {
 		formatOpChain(op, node, verbose)
 	}

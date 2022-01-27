@@ -466,7 +466,7 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 
 	globalRng, _ := randutil.NewTestRand()
 	numNodes := globalRng.Intn(16) + 2
-	gatewayNodeID := roachpb.NodeID(1)
+	gatewaySQLInstanceID := base.SQLInstanceID(1)
 
 	assertInvariants := func() {
 		c.mu.Lock()
@@ -474,29 +474,29 @@ func TestCancelFlowsCoordinator(t *testing.T) {
 		// Check that the coordinator hasn't created duplicate entries for some
 		// nodes.
 		require.GreaterOrEqual(t, numNodes-1, c.mu.deadFlowsByNode.Len())
-		seen := make(map[roachpb.NodeID]struct{})
+		seen := make(map[base.SQLInstanceID]struct{})
 		for i := 0; i < c.mu.deadFlowsByNode.Len(); i++ {
 			deadFlows := c.mu.deadFlowsByNode.Get(i).(*deadFlowsOnNode)
-			require.NotEqual(t, gatewayNodeID, deadFlows.nodeID)
-			_, ok := seen[deadFlows.nodeID]
+			require.NotEqual(t, gatewaySQLInstanceID, deadFlows.sqlInstanceID)
+			_, ok := seen[deadFlows.sqlInstanceID]
 			require.False(t, ok)
-			seen[deadFlows.nodeID] = struct{}{}
+			seen[deadFlows.sqlInstanceID] = struct{}{}
 		}
 	}
 
 	// makeFlowsToCancel returns a fake flows map where each node in the cluster
 	// has 67% probability of participating in the plan.
-	makeFlowsToCancel := func(rng *rand.Rand) map[roachpb.NodeID]*execinfrapb.FlowSpec {
-		res := make(map[roachpb.NodeID]*execinfrapb.FlowSpec)
+	makeFlowsToCancel := func(rng *rand.Rand) map[base.SQLInstanceID]*execinfrapb.FlowSpec {
+		res := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
 		flowID := execinfrapb.FlowID{UUID: uuid.FastMakeV4()}
 		for id := 1; id <= numNodes; id++ {
 			if rng.Float64() < 0.33 {
 				// This node wasn't a part of the current plan.
 				continue
 			}
-			res[roachpb.NodeID(id)] = &execinfrapb.FlowSpec{
+			res[base.SQLInstanceID(id)] = &execinfrapb.FlowSpec{
 				FlowID:  flowID,
-				Gateway: gatewayNodeID,
+				Gateway: gatewaySQLInstanceID,
 			}
 		}
 		return res

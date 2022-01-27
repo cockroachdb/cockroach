@@ -113,7 +113,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -1679,7 +1679,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		s.cfg.LocalityAddresses,
-		s.sqlServer.execCfg.DistSQLPlanner.SetNodeInfo,
+		s.sqlServer.execCfg.DistSQLPlanner.SetSQLInstanceInfo,
 	); err != nil {
 		return err
 	}

@@ -194,11 +194,11 @@ func collectRightSemiAnti(hj *hashJoiner, batchSize int) {
 func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel bool) {
 	// Early bounds checks.
 	// Capture the slices in order for BCE to occur.
-	groupIDs := hj.ht.ProbeScratch.GroupID
+	toCheckIDs := hj.ht.ProbeScratch.ToCheckID
 	probeRowUnmatched := hj.probeState.probeRowUnmatched
 	buildIdx := hj.probeState.buildIdx
 	probeIdx := hj.probeState.probeIdx
-	_ = groupIDs[batchSize-1]
+	_ = toCheckIDs[batchSize-1]
 	_ = probeRowUnmatched[batchSize-1]
 	_ = buildIdx[batchSize-1]
 	_ = probeIdx[batchSize-1]
@@ -208,7 +208,7 @@ func distinctCollectProbeOuter(hj *hashJoiner, batchSize int, sel []int, useSel 
 	for i := 0; i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
 		//gcassert:bce
-		id := groupIDs[i]
+		id := toCheckIDs[i]
 		rowUnmatched := id == 0
 		//gcassert:bce
 		probeRowUnmatched[i] = rowUnmatched
@@ -235,14 +235,14 @@ func distinctCollectProbeNoOuter(
 ) int {
 	// Early bounds checks.
 	// Capture the slice in order for BCE to occur.
-	groupIDs := hj.ht.ProbeScratch.GroupID
-	_ = groupIDs[batchSize-1]
+	toCheckIDs := hj.ht.ProbeScratch.ToCheckID
+	_ = toCheckIDs[batchSize-1]
 	if useSel {
 		_ = sel[batchSize-1]
 	}
 	for i := 0; i < batchSize; i++ {
 		//gcassert:bce
-		id := groupIDs[i]
+		id := toCheckIDs[i]
 		if id != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
 			hj.probeState.buildIdx[nResults] = int(id - 1)
@@ -290,7 +290,7 @@ func (hj *hashJoiner) collect(batch coldata.Batch, batchSize int, sel []int) int
 }
 
 // distinctCollect prepares the batch with the joined output columns where the build
-// row index for each probe row is given in the GroupID slice. This function
+// row index for each probe row is given in the ToCheckID slice. This function
 // requires assumes a N-1 hash join.
 func (hj *hashJoiner) distinctCollect(batch coldata.Batch, batchSize int, sel []int) int {
 	nResults := 0
