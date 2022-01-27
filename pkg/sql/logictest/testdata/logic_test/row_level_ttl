@@ -21,6 +21,11 @@ tbl                                            CREATE TABLE public.tbl (
                                                FAMILY fam_0_id_text (id, text)
 ) WITH (expire_after = '00:10:00':::INTERVAL)
 
+query T
+SELECT reloptions FROM pg_class WHERE relname = 'tbl'
+----
+{expire_after='00:10:00':::INTERVAL}
+
 statement ok
 DROP TABLE tbl;
 CREATE TABLE tbl (
