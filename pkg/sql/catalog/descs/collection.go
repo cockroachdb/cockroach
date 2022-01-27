@@ -115,7 +115,7 @@ type Collection struct {
 
 	// droppedDescriptors that will not need to wait for new
 	// lease versions.
-	deletedDescs []catalog.Descriptor
+	deletedDescs catalog.DescriptorIDSet
 
 	// maxTimestampBoundDeadlineHolder contains the maximum timestamp to read
 	// schemas at. This is only set during the retries of bounded_staleness when
@@ -178,7 +178,7 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.uncommitted.reset()
 	tc.kv.reset()
 	tc.synthetic.reset()
-	tc.deletedDescs = nil
+	tc.deletedDescs = catalog.DescriptorIDSet{}
 	tc.skipValidationOnWrite = false
 }
 
@@ -423,8 +423,8 @@ func (tc *Collection) codec() keys.SQLCodec {
 // be inside storage.
 // Note: that this happens, at time of writing, only when reverting an
 // IMPORT or RESTORE.
-func (tc *Collection) AddDeletedDescriptor(desc catalog.Descriptor) {
-	tc.deletedDescs = append(tc.deletedDescs, desc)
+func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
+	tc.deletedDescs.Add(id)
 }
 
 // SetSession sets the sqlliveness.Session for the transaction. This

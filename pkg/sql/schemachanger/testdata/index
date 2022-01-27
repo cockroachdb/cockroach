@@ -17,6 +17,14 @@ create job #1: "schema change job"
   descriptor IDs: [104]
 upsert descriptor #104
   ...
+     createAsOfTime:
+       wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    jobId: "1"
+     families:
+     - columnIds:
+  ...
      id: 104
      modificationTime: {}
   +  mutations:
@@ -44,7 +52,6 @@ upsert descriptor #104
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
-  +  newSchemaChangeJobId: "1"
      nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
@@ -69,7 +76,7 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
      name: t
-     newSchemaChangeJobId: "1"
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 101
@@ -88,6 +95,14 @@ begin transaction #5
 ## PostCommitPhase stage 4 of 4 with 4 MutationType ops
 update progress of schema change job #1
 upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    jobId: "1"
+     families:
+     - columnIds:
   ...
      formatVersion: 3
      id: 104
@@ -137,9 +152,7 @@ upsert descriptor #104
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
      name: t
-  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextFamilyId: 1
   ...
        time: {}
      unexposedParentSchemaId: 101
