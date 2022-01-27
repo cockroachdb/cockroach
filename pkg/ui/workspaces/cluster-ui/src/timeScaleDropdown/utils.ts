@@ -80,11 +80,13 @@ export const defaultTimeScaleOptions: DefaultTimesScaleOptions = {
 export const defaultTimeScaleSelected: TimeScale = {
   ...defaultTimeScaleOptions["Past 1 Hour"],
   key: "Past 1 Hour",
-  windowEnd: null,
+  fixedWindowEnd: false,
 };
 
 export const toDateRange = (ts: TimeScale): [moment.Moment, moment.Moment] => {
-  const end = ts.windowEnd ? moment.utc(ts.windowEnd) : moment().utc();
+  const end = ts.fixedWindowEnd
+    ? moment.utc(ts.fixedWindowEnd)
+    : moment().utc();
   const start = moment.utc(end).subtract(ts.windowSize);
   return [start, end];
 };
@@ -110,7 +112,9 @@ export const findClosestTimeScale = (
   // that exactly matches one of the standard available time scales e.g. selecting June 1 at
   // 0:00 to June 2 at 0:00 when the date is July 1 at 0:00 should return a custom timescale
   // instead of past day.
+  // If the start is specified, and the window size matches.
   if (startSeconds && firstTimeScaleOptionSeconds === seconds) {
+    // Find what the start would have been, if the end was now.
     const startWindow = moment()
       .subtract(firstTimeScaleOptionSeconds, "seconds")
       .unix();

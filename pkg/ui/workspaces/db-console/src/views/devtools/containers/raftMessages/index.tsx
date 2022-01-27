@@ -28,7 +28,7 @@ import {
   GraphDashboardProps,
   storeIDsForNode,
 } from "src/views/cluster/containers/nodeGraphs/dashboards/dashboardUtils";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import {
   PageConfig,
