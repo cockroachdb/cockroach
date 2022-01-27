@@ -122,7 +122,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	if len(tableDesc.MutationJobs) > 0 {
 		for _, job := range tableDesc.MutationJobs {
 			if job.MutationID == mutationID {
-				jobID = jobspb.JobID(job.JobID)
+				jobID = job.JobID
 				break
 			}
 		}
