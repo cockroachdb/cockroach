@@ -19,7 +19,7 @@ import {
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
-import * as timewindow from "./timeScaleTypes";
+import * as timescale from "./timeScaleTypes";
 import moment from "moment";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "./timeFrameControls";
@@ -51,7 +51,7 @@ describe("<TimeScaleDropdown>", function() {
   let currentWindow: TimeWindow;
 
   const setCurrentWindowFromTimeScale = (timeScale: TimeScale): void => {
-    const end = timeScale.windowEnd || moment.utc();
+    const end = timeScale.fixedWindowEnd || moment.utc();
     currentWindow = {
       start: moment(end).subtract(timeScale.windowSize),
       end,
@@ -69,10 +69,10 @@ describe("<TimeScaleDropdown>", function() {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
-    const timewindowState = new timewindow.TimeWindowState();
-    setCurrentWindowFromTimeScale(timewindowState.scale);
+    const timeScaleState = new timescale.TimeScaleState();
+    setCurrentWindowFromTimeScale(timeScaleState.scale);
     state = {
-      currentScale: timewindowState.scale,
+      currentScale: timeScaleState.scale,
       setTimeScale: () => {},
     };
   });
@@ -93,7 +93,7 @@ describe("<TimeScaleDropdown>", function() {
     const expected: TimeScale = {
       key: "Past 10 Minutes",
       ...defaultTimeScaleOptions["Past 10 Minutes"],
-      windowEnd: null,
+      fixedWindowEnd: false,
     };
     assert.deepEqual(wrapper.props().currentScale, expected);
   });
@@ -143,7 +143,7 @@ describe("<TimeScaleDropdown>", function() {
       };
       const currentScale = {
         ...state.currentScale,
-        windowEnd: window.end,
+        fixedWindowEnd: window.end,
         windowSize: moment.duration(
           window.end.diff(window.start, "seconds"),
           "seconds",
@@ -191,7 +191,7 @@ describe("<TimeScaleDropdown>", function() {
     };
     const currentTimeScale = {
       ...state.currentScale,
-      windowEnd: window.end,
+      fixedWindowEnd: window.end,
     };
     const arrows = generateDisabledArrows(window);
     const wrapper = makeTimeScaleDropdown({
