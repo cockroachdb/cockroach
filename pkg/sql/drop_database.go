@@ -12,10 +12,8 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -27,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -184,10 +180,20 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := p.removeDbComment(ctx, n.dbDesc.GetID()); err != nil {
+	metadataUpdater := p.ExecCfg().DescMetadaUpdaterFactory.NewMetadataUpdater(
+		ctx,
+		p.txn,
+		p.SessionData())
+	err := metadataUpdater.DeleteDescriptorComment(
+		int64(n.dbDesc.GetID()),
+		0,
+		keys.DatabaseCommentType)
+	if err != nil {
 		return err
 	}
-	if err := p.removeDbRoleSettings(ctx, n.dbDesc.GetID()); err != nil {
+
+	err = metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc)
+	if err != nil {
 		return err
 	}
 
@@ -302,41 +308,4 @@ func (p *planner) accumulateCascadingViews(
 		}
 	}
 	return nil
-}
-
-func (p *planner) removeDbComment(ctx context.Context, dbID descpb.ID) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-db-comment",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=0",
-		keys.DatabaseCommentType,
-		dbID)
-
-	return err
-}
-
-func (p *planner) removeDbRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	rowsDeleted, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-db-role-settings",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-		fmt.Sprintf(
-			`DELETE FROM %s WHERE database_id = $1`,
-			sessioninit.DatabaseRoleSettingsTableName,
-		),
-		dbID,
-	)
-	if err != nil {
-		return err
-	}
-	if rowsDeleted > 0 && sessioninit.CacheEnabled.Get(&p.ExecCfg().Settings.SV) {
-		if err := p.bumpDatabaseRoleSettingsTableVersion(ctx); err != nil {
-			return err
-		}
-	}
-
-	return err
 }

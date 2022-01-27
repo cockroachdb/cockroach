@@ -612,7 +612,17 @@ DROP DATABASE db1 CASCADE
 subtest drop_database
 
 statement ok
+CREATE ROLE test_set_role;
+
+statement ok
 CREATE DATABASE db1;
+
+statement ok
+ALTER ROLE test_set_role SET application_name = 'a';
+ALTER ROLE test_set_role IN DATABASE db1 SET application_name = 'b';
+ALTER ROLE ALL IN DATABASE db1 SET application_name = 'c';
+ALTER ROLE ALL SET application_name = 'd';
+ALTER ROLE test_set_role SET custom_option.setting = 'e'
 
 statement ok
 CREATE SCHEMA db1.sc1
@@ -669,6 +679,16 @@ BLAH3
 BLAH4
 BLAH5
 
+# Verify that the current set of role settings
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            ·              {application_name=d}
+0            test_set_role  {application_name=a,custom_option.setting=e}
+133          ·              {application_name=c}
+133          test_set_role  {application_name=b}
+
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
 
@@ -718,6 +738,14 @@ DROP DATABASE db1 CASCADE
 query T
 SELECT comment FROM system.comments ORDER BY comment ASC
 ----
+
+# Verify that the remaining set of role settings
+query OTT colnames
+SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+----
+database_id  role_name      settings
+0            ·              {application_name=d}
+0            test_set_role  {application_name=a,custom_option.setting=e}
 
 let $desc_count_post_drop
 select count(*) from system.descriptor

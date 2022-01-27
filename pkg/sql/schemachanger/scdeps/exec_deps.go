@@ -56,7 +56,7 @@ func NewExecutorDependencies(
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
-	commentUpdaterFactory scexec.CommentUpdaterFactory,
+	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
 	schemaChangerJobID jobspb.JobID,
 	statements []string,
@@ -314,7 +314,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	partitioner             scmutationexec.Partitioner
-	commentUpdaterFactory   scexec.CommentUpdaterFactory
+	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
 	backfillTracker         scexec.BackfillTracker
 	periodicProgressFlusher scexec.PeriodicProgressFlusher
@@ -375,8 +375,8 @@ func (d *execDeps) User() security.SQLUsername {
 }
 
 // CommentUpdater implements the scexec.Dependencies interface.
-func (d *execDeps) CommentUpdater(ctx context.Context) scexec.CommentUpdater {
-	return d.commentUpdaterFactory.NewCommentUpdater(ctx, d.txn, d.sessionData)
+func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.DescriptorMetadataUpdater {
+	return d.commentUpdaterFactory.NewMetadataUpdater(ctx, d.txn, d.sessionData)
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.

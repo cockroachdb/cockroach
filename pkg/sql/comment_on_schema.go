@@ -23,9 +23,9 @@ import (
 )
 
 type commentOnSchemaNode struct {
-	n          *tree.CommentOnSchema
-	schemaDesc catalog.SchemaDescriptor
-	commenter  scexec.CommentUpdater
+	n               *tree.CommentOnSchema
+	schemaDesc      catalog.SchemaDescriptor
+	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
 // CommentOnSchema add comment on a schema.
@@ -66,7 +66,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	return &commentOnSchemaNode{
 		n:          n,
 		schemaDesc: schemaDesc,
-		commenter: p.execCfg.CommentUpdaterFactory.NewCommentUpdater(
+		metadataUpdater: p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 			ctx,
 			p.txn,
 			p.SessionData(),
@@ -76,13 +76,13 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
-		err := n.commenter.UpsertDescriptorComment(
+		err := n.metadataUpdater.UpsertDescriptorComment(
 			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := n.commenter.DeleteDescriptorComment(
+		err := n.metadataUpdater.DeleteDescriptorComment(
 			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType)
 		if err != nil {
 			return err
