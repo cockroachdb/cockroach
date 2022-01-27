@@ -84,4 +84,4 @@ var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
 		"this value must be greater than or equal to sql.stats.flush.interval",
 	time.Hour,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-).WithPublic()
+)
