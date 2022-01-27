@@ -322,6 +322,7 @@ func createPostgresSequences(
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
+			execCfg.Settings,
 			schemaAndTableName.table,
 			seq.Options,
 			parentID,

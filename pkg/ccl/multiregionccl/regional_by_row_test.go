@@ -423,9 +423,14 @@ USE t;
 
 							// Ensure that the mutations corresponding to the primary key change are cleaned up and
 							// that the job did not succeed even though it was canceled.
+							version := s.ClusterSettings().Version.ActiveVersion(ctx)
 							testutils.SucceedsSoon(t, func() error {
 								tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-									kvDB, keys.SystemSQLCodec, "t", "test",
+									kvDB,
+									keys.SystemSQLCodec,
+									version,
+									"t",
+									"test",
 								)
 								if len(tableDesc.AllMutations()) != 0 {
 									return errors.Errorf(
@@ -481,7 +486,12 @@ USE t;
 								return nil
 							})
 
-							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+							tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+								kvDB,
+								keys.SystemSQLCodec,
+								version,
+								"t",
+								"test")
 							if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID()); err != nil {
 								t.Fatal(err)
 							}
@@ -912,7 +922,12 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	fetchIndexes := func(tableName string) []catalog.Index {
 		kvDB := c.Servers[0].DB()
-		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		version := c.Servers[0].ClusterSettings().Version.ActiveVersion(context.Background())
+		desc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"test", tableName)
 		return desc.NonDropIndexes()
 	}
 

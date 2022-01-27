@@ -154,7 +154,9 @@ func (pt *partitioningTest) parse() error {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := descbuilder.ValidateSelf(pt.parsed.tableDesc); err != nil {
+		if err := descbuilder.ValidateSelf(
+			pt.parsed.tableDesc,
+			st.Version.ActiveVersion(ctx)); err != nil {
 			return err
 		}
 	}
@@ -1449,7 +1451,13 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y)
 	}
 
 	// Get the zone config corresponding to the table.
-	table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	table := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"t")
 	kv, err := kvDB.Get(ctx, config.MakeZoneKey(keys.SystemSQLCodec, table.GetID()))
 	if err != nil {
 		t.Fatal(err)

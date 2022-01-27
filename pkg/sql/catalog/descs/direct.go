@@ -142,7 +142,7 @@ func (d *direct) GetCatalogUnvalidated(ctx context.Context, txn *kv.Txn) (nstree
 func (d *direct) MustGetDatabaseDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, id, catalog.Database)
+	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.settings.Version.ActiveVersion(ctx), id, catalog.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (d *direct) MustGetDatabaseDescByID(
 func (d *direct) MustGetSchemaDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.SchemaDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, id, catalog.Schema)
+	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.settings.Version.ActiveVersion(ctx), id, catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (d *direct) MustGetSchemaDescByID(
 func (d *direct) MustGetTableDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, id, catalog.Table)
+	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.settings.Version.ActiveVersion(ctx), id, catalog.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (d *direct) MustGetTableDescByID(
 func (d *direct) MustGetTypeDescByID(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.TypeDescriptor, error) {
-	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, id, catalog.Type)
+	desc, err := catkv.MustGetDescriptorByID(ctx, txn, d.codec, d.settings.Version.ActiveVersion(ctx), id, catalog.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,13 @@ func (d *direct) MustGetTypeDescByID(
 func (d *direct) GetSchemaDescriptorsFromIDs(
 	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
 ) ([]catalog.SchemaDescriptor, error) {
-	descs, err := catkv.MustGetDescriptorsByID(ctx, txn, d.codec, ids, catalog.Schema)
+	descs, err := catkv.MustGetDescriptorsByID(
+		ctx,
+		txn,
+		d.codec,
+		d.settings.Version.ActiveVersion(ctx),
+		ids,
+		catalog.Schema)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +214,13 @@ func (d *direct) GetDescriptorCollidingWithObject(
 		return nil, err
 	}
 	// ID is already in use by another object.
-	desc, err := catkv.MaybeGetDescriptorByID(ctx, txn, d.codec, id, catalog.Any)
+	desc, err := catkv.MaybeGetDescriptorByID(
+		ctx,
+		txn,
+		d.codec,
+		id,
+		catalog.Any,
+		d.settings.Version.ActiveVersion(ctx))
 	if desc == nil && err == nil {
 		return nil, errors.NewAssertionErrorWithWrappedErrf(
 			catalog.ErrDescriptorNotFound,

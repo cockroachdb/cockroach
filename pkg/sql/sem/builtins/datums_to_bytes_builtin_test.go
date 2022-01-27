@@ -81,7 +81,13 @@ func TestCrdbInternalDatumsToBytes(t *testing.T) {
 		if util.RaceEnabled {
 			numRows = 2
 		}
-		tab := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "defaultdb", t.Name())
+		version := s.ClusterSettings().Version.ActiveVersion(ctx)
+		tab := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"defaultdb",
+			t.Name())
 		for i := 0; i < numRows; i++ {
 			var row []string
 			for _, col := range tab.WritableColumns() {

@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -206,23 +205,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
 		// currently relied on in import and restore code and tests.
 		var creationTime hlc.Timestamp
-		desc, err := makeViewTableDesc(
-			params.ctx,
-			params.p.ExecCfg().Settings,
-			viewName,
-			n.viewQuery,
-			n.dbDesc.GetID(),
-			schema.GetID(),
-			id,
-			n.columns,
-			creationTime,
-			privs,
-			&params.p.semaCtx,
-			params.p.EvalContext(),
-			n.persistence,
-			n.dbDesc.IsMultiRegion(),
-			params.p,
-		)
+		desc, err := makeViewTableDesc(params.ctx, viewName, n.viewQuery, n.dbDesc.GetID(), schema.GetID(), id, n.columns, creationTime, privs, &params.p.semaCtx, params.p.EvalContext(), n.persistence, n.dbDesc.IsMultiRegion(), params.p)
 		if err != nil {
 			return err
 		}
@@ -237,7 +220,10 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(params.ctx); err != nil {
+			if err := desc.AllocateIDs(
+				params.ctx,
+				params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+			); err != nil {
 				return err
 			}
 			// For multi-region databases, we want this descriptor to be GLOBAL instead.
@@ -361,7 +347,6 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // include the back-references.
 func makeViewTableDesc(
 	ctx context.Context,
-	st *cluster.Settings,
 	viewName string,
 	viewQuery string,
 	parentID descpb.ID,
@@ -612,7 +597,9 @@ func addResultColumns(
 		}
 		desc.AddColumn(cdd.ColumnDescriptor)
 	}
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(
+		ctx,
+		evalCtx.Settings.Version.ActiveVersionOrEmpty(ctx)); err != nil {
 		return err
 	}
 	return nil

@@ -62,8 +62,12 @@ func TestEnsureConstraintIDs(t *testing.T) {
 		"pq: cannot comment on constraint",
 		"COMMENT ON CONSTRAINT \"t_pkey\" ON t IS 'primary_comment'")
 	// Validate that we have a constraint ID due to post deserialization logic
-
-	desc := desctestutils.TestingGetMutableExistingTableDescriptor(s.DB(), c, "defaultdb", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	desc := desctestutils.TestingGetMutableExistingTableDescriptor(s.DB(),
+		c,
+		version,
+		"defaultdb",
+		"t")
 	desc.PrimaryIndex.ConstraintID = 0
 	require.NoError(t, s.DB().Put(
 		context.Background(),
@@ -72,7 +76,12 @@ func TestEnsureConstraintIDs(t *testing.T) {
 	))
 	// Validate that the post serialization will recompute the constraint IDs
 	// if they are missing.
-	desc = desctestutils.TestingGetMutableExistingTableDescriptor(s.DB(), c, "defaultdb", "t")
+	desc = desctestutils.TestingGetMutableExistingTableDescriptor(
+		s.DB(),
+		c,
+		version,
+		"defaultdb",
+		"t")
 	require.Equal(t, desc.PrimaryIndex.ConstraintID, descpb.ConstraintID(2))
 	// If we set both the constraint ID / next value to 0, then we will have
 	// it assigned form scratch.

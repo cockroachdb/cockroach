@@ -13,6 +13,7 @@ package nstree
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
@@ -107,7 +108,7 @@ var _ validate.ValidationDereferencer = MutableCatalog{}
 // DereferenceDescriptors implements the validate.ValidationDereferencer
 // interface.
 func (c Catalog) DereferenceDescriptors(
-	_ context.Context, reqs []descpb.ID,
+	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	ret := make([]catalog.Descriptor, len(reqs))
 	for i, id := range reqs {
@@ -131,18 +132,19 @@ func (c Catalog) DereferenceDescriptorIDs(
 // Validate delegates to validate.Validate.
 func (c Catalog) Validate(
 	ctx context.Context,
+	version clusterversion.ClusterVersion,
 	telemetry catalog.ValidationTelemetry,
 	targetLevel catalog.ValidationLevel,
 	descriptors ...catalog.Descriptor,
 ) (ve catalog.ValidationErrors) {
-	return validate.Validate(ctx, c, telemetry, targetLevel, descriptors...)
+	return validate.Validate(ctx, version, c, telemetry, targetLevel, descriptors...)
 }
 
 // ValidateWithRecover is like Validate but which recovers from panics.
 // This is useful when we're validating many descriptors separately and we don't
 // want a corrupt descriptor to prevent validating the others.
 func (c Catalog) ValidateWithRecover(
-	ctx context.Context, desc catalog.Descriptor,
+	ctx context.Context, version clusterversion.ClusterVersion, desc catalog.Descriptor,
 ) (ve catalog.ValidationErrors) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -154,7 +156,7 @@ func (c Catalog) ValidateWithRecover(
 			ve = append(ve, err)
 		}
 	}()
-	return c.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
+	return c.Validate(ctx, version, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, desc)
 }
 
 // MutableCatalog is like Catalog but mutable.

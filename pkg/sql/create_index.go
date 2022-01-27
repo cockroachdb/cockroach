@@ -97,7 +97,10 @@ func (p *planner) maybeSetupConstraintForShard(
 ) error {
 	// Assign an ID to the newly-added shard column, which is needed for the creation
 	// of a valid check constraint.
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	if err := tableDesc.AllocateIDs(
+		ctx,
+		p.ExecCfg().Settings.Version.ActiveVersion(ctx),
+	); err != nil {
 		return err
 	}
 
@@ -640,7 +643,10 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err := n.tableDesc.AddIndexMutation(indexDesc, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	if err := n.tableDesc.AllocateIDs(
+		params.ctx,
+		params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+	); err != nil {
 		return err
 	}
 	if err := params.p.configureZoneConfigForNewIndexPartitioning(

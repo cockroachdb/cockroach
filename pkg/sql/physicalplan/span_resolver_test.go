@@ -337,7 +337,13 @@ func setupRanges(
 		}
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(cdb, keys.SystemSQLCodec, "t", "test")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		cdb,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 	// Split every SQL row to its own range.
 	rowRanges := make([]roachpb.RangeDescriptor, len(values))
 	for i, val := range values {

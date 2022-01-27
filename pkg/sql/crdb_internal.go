@@ -4535,7 +4535,10 @@ CREATE TABLE crdb_internal.invalid_objects (
 					)
 				}
 			}
-			ve := c.ValidateWithRecover(ctx, descriptor)
+			ve := c.ValidateWithRecover(
+				ctx,
+				p.ExecCfg().Settings.Version.ActiveVersion(ctx),
+				descriptor)
 			for _, validationError := range ve {
 				addValidationErrorRow(validationError)
 			}

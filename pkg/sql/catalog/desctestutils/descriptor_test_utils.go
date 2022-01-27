@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -23,10 +24,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// LatestClusterVersionForValidationForTest used as the latest descriptor validation
+// version for tests.
+var LatestClusterVersionForValidationForTest = clusterversion.ClusterVersion{
+	Version: clusterversion.ByKey(clusterversion.ConstraintIDsForTableDescs),
+}
+
 // TestingGetDatabaseDescriptor retrieves a database descriptor directly from
 // the kv layer.
 func TestingGetDatabaseDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string,
+	kvDB *kv.DB, codec keys.SQLCodec, version clusterversion.ClusterVersion, database string,
 ) catalog.DatabaseDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
@@ -37,7 +44,14 @@ func TestingGetDatabaseDescriptor(
 		} else if id == descpb.InvalidID {
 			panic(fmt.Sprintf("database %s not found", database))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, id, catalog.Database)
+		desc, err = catkv.MustGetDescriptorByID(
+			ctx,
+			txn,
+			codec,
+			version,
+			id,
+			catalog.Database,
+		)
 		if err != nil {
 			panic(err)
 		}
@@ -51,7 +65,11 @@ func TestingGetDatabaseDescriptor(
 // TestingGetSchemaDescriptor retrieves a schema descriptor directly from the kv
 // layer.
 func TestingGetSchemaDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, dbID descpb.ID, schemaName string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	dbID descpb.ID,
+	schemaName string,
 ) catalog.SchemaDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
@@ -62,7 +80,7 @@ func TestingGetSchemaDescriptor(
 		} else if schemaID == descpb.InvalidID {
 			panic(fmt.Sprintf("schema %s not found", schemaName))
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, schemaID, catalog.Schema)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, version, schemaID, catalog.Schema)
 		if err != nil {
 			panic(err)
 		}
@@ -76,46 +94,73 @@ func TestingGetSchemaDescriptor(
 // TestingGetTableDescriptor retrieves a table descriptor directly
 // from the KV layer.
 func TestingGetTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, table string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	schema string,
+	table string,
 ) catalog.TableDescriptor {
-	return testingGetObjectDescriptor(kvDB, codec, database, schema, table).(catalog.TableDescriptor)
+	return testingGetObjectDescriptor(kvDB, codec, version, database, schema, table).(catalog.TableDescriptor)
 }
 
 // TestingGetPublicTableDescriptor retrieves a table descriptor directly from
 // the KV layer.
 func TestingGetPublicTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	table string,
 ) catalog.TableDescriptor {
-	return testingGetObjectDescriptor(kvDB, codec, database, "public", table).(catalog.TableDescriptor)
+	return testingGetObjectDescriptor(kvDB, codec, version, database, "public", table).(catalog.TableDescriptor)
 }
 
 // TestingGetMutableExistingTableDescriptor retrieves a mutable table descriptor
 // directly from the KV layer.
 func TestingGetMutableExistingTableDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, table string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	table string,
 ) *tabledesc.Mutable {
-	imm := TestingGetPublicTableDescriptor(kvDB, codec, database, table)
+	imm := TestingGetPublicTableDescriptor(kvDB, codec, version, database, table)
 	return tabledesc.NewBuilder(imm.TableDesc()).BuildExistingMutableTable()
 }
 
 // TestingGetTypeDescriptor retrieves a type descriptor directly from
 // the KV layer.
 func TestingGetTypeDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, object string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	schema string,
+	object string,
 ) catalog.TypeDescriptor {
-	return testingGetObjectDescriptor(kvDB, codec, database, schema, object).(catalog.TypeDescriptor)
+	return testingGetObjectDescriptor(kvDB, codec, version, database, schema, object).(catalog.TypeDescriptor)
 }
 
 // TestingGetPublicTypeDescriptor retrieves a type descriptor directly from the
 // KV layer.
 func TestingGetPublicTypeDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, object string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	object string,
 ) catalog.TypeDescriptor {
-	return TestingGetTypeDescriptor(kvDB, codec, database, "public", object)
+	return TestingGetTypeDescriptor(kvDB, codec, version, database, "public", object)
 }
 
 func testingGetObjectDescriptor(
-	kvDB *kv.DB, codec keys.SQLCodec, database string, schema string, object string,
+	kvDB *kv.DB,
+	codec keys.SQLCodec,
+	version clusterversion.ClusterVersion,
+	database string,
+	schema string,
+	object string,
 ) (desc catalog.Descriptor) {
 	ctx := context.Background()
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -140,7 +185,7 @@ func testingGetObjectDescriptor(
 		if objectID == descpb.InvalidID {
 			return errors.Errorf("object %s not found", object)
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, objectID, catalog.Any)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, codec, version, objectID, catalog.Any)
 		return err
 	}); err != nil {
 		panic(err)

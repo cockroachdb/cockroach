@@ -11,6 +11,7 @@
 package descbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -53,6 +54,6 @@ func NewBuilder(desc *descpb.Descriptor) catalog.DescriptorBuilder {
 }
 
 // ValidateSelf validates that the descriptor is internally consistent.
-func ValidateSelf(desc catalog.Descriptor) error {
-	return validate.Self(desc)
+func ValidateSelf(desc catalog.Descriptor, version clusterversion.ClusterVersion) error {
+	return validate.Self(version, desc)
 }

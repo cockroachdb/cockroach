@@ -120,7 +120,12 @@ USE data2;
 CREATE SCHEMA empty_schema;
 CREATE TABLE data2.foo (a int);
 `)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(backupKVDB, keys.SystemSQLCodec, "data2", "foo")
+	version := tcBackup.Server(0).ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		backupKVDB,
+		keys.SystemSQLCodec,
+		version,
+		"data2", "foo")
 	// Store the highest user-table ID for later assertions.
 	maxBackupTableID := tableDesc.GetID()
 

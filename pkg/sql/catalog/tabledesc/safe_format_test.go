@@ -282,7 +282,7 @@ func TestSafeMessage(t *testing.T) {
 				td = desc
 			}
 			redacted := string(redact.Sprint(td).Redact())
-			require.NoError(t, validate.Self(desc))
+			require.NoError(t, validate.Self(latestClusterVersionForValidationForTest, desc))
 			require.Equal(t, tc.exp, redacted)
 			var m map[string]interface{}
 			require.NoError(t, yaml.UnmarshalStrict([]byte(redacted), &m), redacted)

@@ -415,7 +415,9 @@ func alterColumnTypeGeneral(
 		tableDesc.SetPrimaryIndex(primaryIndex)
 	}
 
-	if err := tableDesc.AllocateIDs(ctx); err != nil {
+	if err := tableDesc.AllocateIDs(
+		ctx,
+		params.ExecCfg().Settings.Version.ActiveVersion(ctx)); err != nil {
 		return err
 	}
 
