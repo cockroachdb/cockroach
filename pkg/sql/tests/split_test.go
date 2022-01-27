@@ -81,7 +81,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 		kvDB,
 		&s.(*server.TestServer).Cfg.DefaultZoneConfig,
 		&s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
-		s.(*server.TestServer).SystemIDChecker().(keys.SystemIDChecker))
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

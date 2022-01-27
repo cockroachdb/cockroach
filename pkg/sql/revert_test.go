@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -99,7 +100,7 @@ func TestRevertGCThreshold(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	req := &roachpb.RevertRangeRequest{
-		RequestHeader:                       roachpb.RequestHeader{Key: keys.TestingUserTableDataMin(), EndKey: keys.MaxKey},
+		RequestHeader:                       roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 		TargetTime:                          hlc.Timestamp{WallTime: -1},
 		EnableTimeBoundIteratorOptimization: true,
 	}

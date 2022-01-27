@@ -67,10 +67,6 @@ type TestTenantInterface interface {
 	// The real return type is sql.ExecutorConfig.
 	ExecutorConfig() interface{}
 
-	// ExecutorConfig returns a copy of the tenant's SystemIDChecker.
-	// The real return type is keys.SystemIDChecker.
-	SystemIDChecker() interface{}
-
 	// RangeFeedFactory returns the range feed factory used by the tenant.
 	// The real return type is *rangefeed.Factory.
 	RangeFeedFactory() interface{}

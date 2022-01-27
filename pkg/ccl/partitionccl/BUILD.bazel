@@ -57,6 +57,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",

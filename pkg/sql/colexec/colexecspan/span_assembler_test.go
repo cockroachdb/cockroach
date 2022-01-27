@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -181,7 +182,7 @@ func spanGeneratorOracle(
 }
 
 func makeTable(useColFamilies bool) catalog.TableDescriptor {
-	tableID := keys.TestingUserDescID(0)
+	tableID := bootstrap.TestingUserDescID(0)
 	if !useColFamilies {
 		// We can prevent the span builder from splitting spans into separate column
 		// families by using a system table ID, since system tables do not have

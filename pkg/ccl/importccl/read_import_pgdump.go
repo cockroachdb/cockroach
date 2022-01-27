@@ -18,14 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -264,7 +263,10 @@ func createPostgresSchemas(
 
 		// We didn't allocate an ID above, so we must assign it a mock ID until it
 		// is assigned an actual ID later in the import.
-		desc.ID = getNextPlaceholderDescID(execCfg.SystemIDChecker)
+		desc.ID, err = getNextPlaceholderDescID(ctx, execCfg)
+		if err != nil {
+			return nil, err
+		}
 		desc.SetOffline("importing")
 		return desc, nil
 	}
@@ -313,13 +315,17 @@ func createPostgresSequences(
 		if err != nil {
 			return nil, err
 		}
+		id, err := getNextPlaceholderDescID(ctx, execCfg)
+		if err != nil {
+			return nil, err
+		}
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
 			schemaAndTableName.table,
 			seq.Options,
 			parentID,
 			schema.GetID(),
-			getNextPlaceholderDescID(execCfg.SystemIDChecker),
+			id,
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
@@ -379,8 +385,12 @@ func createPostgresTables(
 		// Bundle imports do not support user defined types, and so we nil out the
 		// type resolver to protect against unexpected behavior on UDT resolution.
 		semaCtxPtr := makeSemaCtxWithoutTypeResolver(p.SemaCtx())
+		id, err := getNextPlaceholderDescID(evalCtx.Ctx(), p.ExecCfg())
+		if err != nil {
+			return nil, err
+		}
 		desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), semaCtxPtr, p.ExecCfg().Settings,
-			create, parentDB, schema, getNextPlaceholderDescID(p.ExecCfg().SystemIDChecker), fks, walltime)
+			create, parentDB, schema, id, fks, walltime)
 		if err != nil {
 			return nil, err
 		}
@@ -446,13 +456,18 @@ func resolvePostgresFKs(
 // data. Thus, we pessimistically wait till all the verification steps in the
 // IMPORT have been completed after which we rewrite the descriptor IDs with
 // "real" unique IDs.
-func getNextPlaceholderDescID(idChecker keys.SystemIDChecker) descpb.ID {
+func getNextPlaceholderDescID(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) (_ descpb.ID, err error) {
 	if placeholderID == 0 {
-		placeholderID = descpb.ID(catalogkeys.MinNonDefaultUserDescriptorID(idChecker) + 2)
+		placeholderID, err = descidgen.PeekNextUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+		if err != nil {
+			return descpb.InvalidID, err
+		}
 	}
 	ret := placeholderID
 	placeholderID++
-	return ret
+	return ret, nil
 }
 
 var placeholderID descpb.ID

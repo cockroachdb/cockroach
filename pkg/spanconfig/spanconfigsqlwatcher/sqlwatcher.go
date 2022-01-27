@@ -261,7 +261,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.descriptors table starting at time %s", startTS)
+	log.Infof(ctx, "established range feed over system.descriptors starting at time %s", startTS)
 	return rf, nil
 }
 
@@ -317,6 +317,6 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		return nil, err
 	}
 
-	log.Infof(ctx, "established range feed over system.zones table starting at time %s", startTS)
+	log.Infof(ctx, "established range feed over system.zones starting at time %s", startTS)
 	return rf, nil
 }

@@ -296,8 +296,8 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 				switch lower {
 				case "pg_sleep":
 					continue
-				case "st_frechetdistance":
-					// Calculating the Frechet distance is slow and testing it here
+				case "st_frechetdistance", "st_buffer":
+					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
 				case "crdb_internal.reset_sql_stats", "crdb_internal.check_consistency":

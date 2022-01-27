@@ -968,11 +968,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
-			if err := paramparse.ApplyStorageParameters(
+			if err := paramparse.SetStorageParameters(
 				params.ctx,
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
+				&paramparse.TableStorageParamObserver{},
+			); err != nil {
+				return err
+			}
+
+		case *tree.AlterTableResetStorageParams:
+			if err := paramparse.ResetStorageParameters(
+				params.ctx,
+				params.EvalContext(),
+				t.Params,
 				&paramparse.TableStorageParamObserver{},
 			); err != nil {
 				return err
