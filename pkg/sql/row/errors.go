@@ -55,6 +55,7 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 			origPErr.GoError(),
 			pgcode.UnsatisfiableBoundedStaleness,
 		)
+
 	case *roachpb.ConditionFailedError:
 		if origPErr.Index == nil {
 			break
@@ -69,16 +70,30 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		}
 		key := result.Rows[0].Key
 		return NewUniquenessConstraintViolationError(ctx, tableDesc, key, v.ActualValue)
+
 	case *roachpb.WriteIntentError:
 		key := v.Intents[0].Key
-		return NewLockNotAvailableError(ctx, tableDesc, key, v.Reason)
+		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
+			codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
+			if err != nil {
+				return "", "", nil, nil, err
+			}
+			var spec descpb.IndexFetchSpec
+			if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, nil /* fetchColumnIDs */); err != nil {
+				return "", "", nil, nil, err
+			}
+
+			colNames, values, err = decodeKeyValsUsingSpec(&spec, key)
+			return spec.TableName, spec.IndexName, colNames, values, err
+		}
+		return newLockNotAvailableError(v.Reason, decodeKeyFn)
 	}
 	return origPErr.GoError()
 }
 
 // ConvertFetchError attempts to map a key-value error generated during a
 // key-value fetch to a user friendly SQL error.
-func ConvertFetchError(ctx context.Context, desc catalog.TableDescriptor, err error) error {
+func ConvertFetchError(spec *descpb.IndexFetchSpec, err error) error {
 	var errs struct {
 		wi *roachpb.WriteIntentError
 		bs *roachpb.MinTimestampBoundUnsatisfiableError
@@ -86,7 +101,12 @@ func ConvertFetchError(ctx context.Context, desc catalog.TableDescriptor, err er
 	switch {
 	case errors.As(err, &errs.wi):
 		key := errs.wi.Intents[0].Key
-		return NewLockNotAvailableError(ctx, desc, key, errs.wi.Reason)
+		decodeKeyFn := func() (tableName string, indexName string, colNames []string, values []string, err error) {
+			colNames, values, err = decodeKeyValsUsingSpec(spec, key)
+			return spec.TableName, spec.IndexName, colNames, values, err
+		}
+		return newLockNotAvailableError(errs.wi.Reason, decodeKeyFn)
+
 	case errors.As(err, &errs.bs):
 		return pgerror.WithCandidateCode(
 			err,
@@ -122,32 +142,74 @@ func NewUniquenessConstraintViolationError(
 	)
 }
 
-// NewLockNotAvailableError creates an error that represents an inability to
-// acquire a lock.
-func NewLockNotAvailableError(
-	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
-	key roachpb.Key,
+// decodeKeyValsUsingSpec decodes an index key and returns the key column names
+// and values.
+func decodeKeyValsUsingSpec(
+	spec *descpb.IndexFetchSpec, key roachpb.Key,
+) (colNames []string, values []string, err error) {
+	// We want the key columns without the suffix columns.
+	keyCols := spec.KeyColumns()
+	keyVals := make([]rowenc.EncDatum, len(keyCols))
+	if len(key) < int(spec.KeyPrefixLength) {
+		return nil, nil, errors.AssertionFailedf("invalid table key")
+	}
+	if _, _, err := rowenc.DecodeKeyValsUsingSpec(keyCols, key[spec.KeyPrefixLength:], keyVals); err != nil {
+		return nil, nil, err
+	}
+	colNames = make([]string, len(keyCols))
+	values = make([]string, len(keyCols))
+	for i := range keyCols {
+		colNames[i] = keyCols[i].Name
+		values[i] = keyVals[i].String(keyCols[i].Type)
+	}
+	return colNames, values, nil
+}
+
+// newLockNotAvailableError creates an error that represents an inability to
+// acquire a lock. It uses an IndexFetchSpec for the corresponding index (the
+// fetch columns in the spec are not used).
+func newLockNotAvailableError(
 	reason roachpb.WriteIntentError_Reason,
+	decodeKeyFn func() (tableName string, indexName string, colNames []string, values []string, err error),
 ) error {
 	baseMsg := "could not obtain lock on row"
 	if reason == roachpb.WriteIntentError_REASON_LOCK_TIMEOUT {
 		baseMsg = "canceling statement due to lock timeout on row"
 	}
-
-	index, colNames, values, err := DecodeRowInfo(ctx, tableDesc, key, nil, false)
+	tableName, indexName, colNames, values, err := decodeKeyFn()
 	if err != nil {
-		return pgerror.Wrapf(err, pgcode.LockNotAvailable,
-			"%s: got decoding error", baseMsg)
+		return pgerror.Wrapf(err, pgcode.LockNotAvailable, "%s: got decoding error", baseMsg)
 	}
-
 	return pgerror.Newf(pgcode.LockNotAvailable,
 		"%s (%s)=(%s) in %s@%s",
 		baseMsg,
 		strings.Join(colNames, ","),
 		strings.Join(values, ","),
-		tableDesc.GetName(),
-		index.GetName())
+		tableName,
+		indexName,
+	)
+}
+
+// decodeKeyCodecAndIndex extracts the codec and index from a key (for a
+// particular table).
+func decodeKeyCodecAndIndex(
+	tableDesc catalog.TableDescriptor, key roachpb.Key,
+) (keys.SQLCodec, catalog.Index, error) {
+	_, tenantID, err := keys.DecodeTenantPrefix(key)
+	if err != nil {
+		return keys.SQLCodec{}, nil, err
+	}
+	codec := keys.MakeSQLCodec(tenantID)
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc.GetID(), key)
+	if err != nil {
+		return keys.SQLCodec{}, nil, err
+	}
+	index, err := tableDesc.FindIndexWithID(indexID)
+	if err != nil {
+		return keys.SQLCodec{}, nil, err
+	}
+
+	return keys.MakeSQLCodec(tenantID), index, nil
 }
 
 // DecodeRowInfo takes a table descriptor, a key, and an optional value and
@@ -163,16 +225,7 @@ func DecodeRowInfo(
 	// Strip the tenant prefix and pretend to use the system tenant's SQL codec
 	// for the rest of this function. This is safe because the key is just used
 	// to decode the corresponding datums and never escapes this function.
-	codec := keys.SystemSQLCodec
-	key, _, err := keys.DecodeTenantPrefix(key)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	indexID, _, err := rowenc.DecodeIndexKeyPrefix(codec, tableDesc.GetID(), key)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	index, err := tableDesc.FindIndexWithID(indexID)
+	codec, index, err := decodeKeyCodecAndIndex(tableDesc, key)
 	if err != nil {
 		return nil, nil, nil, err
 	}
