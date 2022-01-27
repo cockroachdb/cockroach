@@ -68,7 +68,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, txn)
 }
 
-// GetSpanConfigEntriesFor is part of the KVAccessor interface.
+// GetSpanConfigEntriesFor is part of the spanconfig.KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
 	ctx context.Context, spans []roachpb.Span,
 ) (resp []roachpb.SpanConfigEntry, retErr error) {
@@ -116,7 +116,7 @@ func (k *KVAccessor) GetSpanConfigEntriesFor(
 	return resp, nil
 }
 
-// UpdateSpanConfigEntries is part of the KVAccessor interface.
+// UpdateSpanConfigEntries is part of the spanconfig.KVAccessor interface.
 func (k *KVAccessor) UpdateSpanConfigEntries(
 	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
 ) error {
@@ -127,6 +127,20 @@ func (k *KVAccessor) UpdateSpanConfigEntries(
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, toUpsert, txn)
 	})
+}
+
+// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
+func (k *KVAccessor) GetSystemSpanConfigEntries(
+	context.Context,
+) ([]roachpb.SystemSpanConfigEntry, error) {
+	return nil, errors.New("unimplemented")
+}
+
+// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
+func (k *KVAccessor) UpdateSystemSpanConfigEntries(
+	context.Context, []roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry,
+) error {
+	return errors.New("unimplemented")
 }
 
 func newKVAccessor(

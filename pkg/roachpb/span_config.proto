@@ -182,9 +182,6 @@ message SystemSpanConfigTarget {
    // TenantID indicates the tenant ID of the logical cluster being targeted.
    // For secondary tenants this field is left unset. For the host we can use
    // this field to protect a specific secondary tenant.
-   //
-   // TODO(arul): Ensure that secondary tenants don't populate this field when
-   // we make use of these in the RPC.
    roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = true];
 }
 
@@ -219,6 +216,18 @@ message GetSpanConfigsResponse {
   repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
 };
 
+// GetSystemSpanConfigsRequest is used to fetch all system span configurations
+// installed by the requesting tenant.
+message GetSystemSpanConfigsRequest {};
+
+// GetSystemSpanConfigsResponse lists out all system span configurations that
+// are installed by the requesting tenant.
+message GetSystemSpanConfigsResponse {
+  // SystemSpanConfigEntries captures the system span configurations that have
+  // been set by the tenant.
+  repeated SystemSpanConfigEntry system_span_config_entries = 1 [(gogoproto.nullable) = false];
+};
+
 // UpdateSpanConfigsRequest is used to update the span configurations over the
 // given spans.
 //
@@ -245,3 +254,20 @@ message UpdateSpanConfigsRequest {
 
 message UpdateSpanConfigsResponse { };
 
+// UpdateSystemSpanConfigsRequest is used to update system span configurations.
+
+// System span config targets being deleted are expected to have been present.
+// Targets are not allowed to be duplicated in the same list or across lists;
+// existing span configs should be updated by including in the upsert list
+// without deleting their targets first.
+message UpdateSystemSpanConfigsRequest {
+  // SystemSpanConfigsToDelete captures the targets of the system span
+  // configurations to delete.
+  repeated SystemSpanConfigTarget to_delete = 1 [(gogoproto.nullable) = false];
+
+  // SystemSpanConfigsToUpsert captures the system span configurations we want
+  // to upsert with.
+  repeated SystemSpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
+};
+
+message UpdateSystemSpanConfigsResponse {};
