@@ -1600,15 +1600,17 @@ func (dsp *DistSQLPlanner) addAggregators(
 			col := uint32(p.PlanToStreamColMap[fholder.filterRenderIdx])
 			aggregations[i].FilterColIdx = &col
 		}
-		aggregations[i].Arguments = make([]execinfrapb.Expression, len(fholder.arguments))
-		argumentsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
-		for j, argument := range fholder.arguments {
-			var err error
-			aggregations[i].Arguments[j], err = physicalplan.MakeExpression(argument, planCtx, nil)
-			if err != nil {
-				return err
+		if len(fholder.arguments) > 0 {
+			aggregations[i].Arguments = make([]execinfrapb.Expression, len(fholder.arguments))
+			argumentsColumnTypes[i] = make([]*types.T, len(fholder.arguments))
+			for j, argument := range fholder.arguments {
+				var err error
+				aggregations[i].Arguments[j], err = physicalplan.MakeExpression(argument, planCtx, nil)
+				if err != nil {
+					return err
+				}
+				argumentsColumnTypes[i][j] = argument.ResolvedType()
 			}
-			argumentsColumnTypes[i][j] = argument.ResolvedType()
 		}
 	}
 

@@ -460,9 +460,11 @@ func populateAggFuncSpec(
 	}
 	spec.Func = execinfrapb.AggregatorSpec_Func(funcIdx)
 	spec.Distinct = distinct
-	spec.ColIdx = make([]uint32, len(argCols))
-	for i, col := range argCols {
-		spec.ColIdx[i] = uint32(col)
+	if len(argCols) > 0 {
+		spec.ColIdx = make([]uint32, len(argCols))
+		for i, col := range argCols {
+			spec.ColIdx[i] = uint32(col)
+		}
 	}
 	if filter != tree.NoColumnIdx {
 		filterColIdx := uint32(physPlan.PlanToStreamColMap[filter])
@@ -1038,6 +1040,14 @@ func (e *distSQLSpecExecFactory) ConstructOpaque(metadata opt.OpaqueMetadata) (e
 	plan, err := constructOpaque(metadata)
 	if err != nil {
 		return nil, err
+	}
+	switch plan.(type) {
+	case *zeroNode:
+		physPlan, err := e.dsp.createPhysPlanForPlanNode(e.getPlanCtx(cannotDistribute), plan)
+		if err != nil {
+			return nil, err
+		}
+		return makePlanMaybePhysical(physPlan, []planNode{plan}), nil
 	}
 	physPlan, err := e.dsp.wrapPlan(e.getPlanCtx(cannotDistribute), plan, e.planningMode != distSQLLocalOnlyPlanning)
 	if err != nil {
