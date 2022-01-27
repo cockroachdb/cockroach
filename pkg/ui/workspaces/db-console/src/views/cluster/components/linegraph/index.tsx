@@ -446,7 +446,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   // setNewTimeRange uses code from the TimeScaleDropdown component
   // to set new start/end ranges in the query params and force a
   // reload of the rest of the dashboard at new ranges via the props
-  // `setTimeRange` and `setTimeScale`.
+  // `setMetricsFixedWindow` and `setTimeScale`.
   // TODO(davidh): centralize management of query params for time range
   // TODO(davidh): figure out why the timescale doesn't get more granular
   // automatically when a narrower time frame is selected.
@@ -461,7 +461,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     let newTimeScale: TimeScale = {
       ...findClosestTimeScale(defaultTimeScaleOptions, end - start, start),
       key: "Custom",
-      windowEnd: moment.unix(end),
+      fixedWindowEnd: moment.unix(end),
     };
     if (this.props.adjustTimeScaleOnChange) {
       newTimeScale = this.props.adjustTimeScaleOnChange(
@@ -469,7 +469,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         newTimeWindow,
       );
     }
-    this.props.setTimeRange(newTimeWindow);
+    this.props.setMetricsFixedWindow(newTimeWindow);
     this.props.setTimeScale(newTimeScale);
     const { pathname, search } = this.props.history.location;
     const urlParams = new URLSearchParams(search);

@@ -19,7 +19,7 @@ import { refreshMetricMetadata, refreshNodes } from "src/redux/apiReducers";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LineGraph } from "src/views/cluster/components/linegraph";
-import TimeScaleDropdown from "src/views/cluster/containers/timescale";
+import TimeScaleDropdown from "src/views/cluster/containers/timeScaleDropdownWithSearchParams";
 import { DropdownOption } from "src/views/shared/components/dropdown";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import {
@@ -44,9 +44,9 @@ import { PayloadAction } from "src/interfaces/action";
 import {
   TimeWindow,
   TimeScale,
-  setTimeRange,
+  setMetricsFixedWindow,
   setTimeScale,
-} from "src/redux/timewindow";
+} from "src/redux/timeScale";
 
 export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
@@ -54,7 +54,7 @@ export interface CustomChartProps {
   nodesSummary: NodesSummary;
   refreshMetricMetadata: typeof refreshMetricMetadata;
   metricsMetadata: MetricsMetadata;
-  setTimeRange: (tw: TimeWindow) => PayloadAction<TimeWindow>;
+  setMetricsFixedWindow: (tw: TimeWindow) => PayloadAction<TimeWindow>;
   setTimeScale: (ts: TimeScale) => PayloadAction<TimeScale>;
 }
 
@@ -205,7 +205,7 @@ export class CustomChart extends React.Component<
       <MetricsDataProvider
         id={`debug-custom-chart.${index}`}
         key={index}
-        setTimeRange={this.props.setTimeRange}
+        setMetricsFixedWindow={this.props.setMetricsFixedWindow}
         setTimeScale={this.props.setTimeScale}
         history={this.props.history}
       >
@@ -328,7 +328,7 @@ const mapStateToProps = (state: AdminUIState) => ({
 const mapDispatchToProps = {
   refreshNodes,
   refreshMetricMetadata,
-  setTimeRange,
+  setMetricsFixedWindow: setMetricsFixedWindow,
   setTimeScale,
 };
 
