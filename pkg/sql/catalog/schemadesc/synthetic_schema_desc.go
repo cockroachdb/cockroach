@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -107,6 +108,9 @@ func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
 	log.Fatalf(context.TODO(),
 		"synthetic %s cannot be encoded", p.kindName())
 	return nil // unreachable
+}
+func (p synthetic) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
+	return nil
 }
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
