@@ -12,6 +12,7 @@ go_library(
         "migrate_span_configs.go",
         "migrations.go",
         "public_schema_migration.go",
+        "raft_applied_index_term.go",
         "schema_changes.go",
         "seed_tenant_span_configs.go",
     ],

@@ -78,6 +78,7 @@ func (rsl StateLoader) Load(
 		return kvserverpb.ReplicaState{}, err
 	}
 	s.RaftAppliedIndex = as.RaftAppliedIndex
+	s.RaftAppliedIndexTerm = as.RaftAppliedIndexTerm
 	s.LeaseAppliedIndex = as.LeaseAppliedIndex
 	ms := as.RangeStats.ToStats()
 	s.Stats = &ms
@@ -133,8 +134,9 @@ func (rsl StateLoader) Save(
 			return enginepb.MVCCStats{}, err
 		}
 	}
-	rai, lai, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, &state.RaftClosedTimestamp
-	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, ms, ct); err != nil {
+	rai, lai, rait, ct := state.RaftAppliedIndex, state.LeaseAppliedIndex, state.RaftAppliedIndexTerm,
+		&state.RaftClosedTimestamp
+	if err := rsl.SetRangeAppliedState(ctx, readWriter, rai, lai, rait, ms, ct); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
 	return *ms, nil
@@ -194,14 +196,15 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetRangeAppliedState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
-	appliedIndex, leaseAppliedIndex uint64,
+	appliedIndex, leaseAppliedIndex, appliedIndexTerm uint64,
 	newMS *enginepb.MVCCStats,
 	raftClosedTimestamp *hlc.Timestamp,
 ) error {
 	as := enginepb.RangeAppliedState{
-		RaftAppliedIndex:  appliedIndex,
-		LeaseAppliedIndex: leaseAppliedIndex,
-		RangeStats:        newMS.ToPersistentStats(),
+		RaftAppliedIndex:     appliedIndex,
+		LeaseAppliedIndex:    leaseAppliedIndex,
+		RangeStats:           newMS.ToPersistentStats(),
+		RaftAppliedIndexTerm: appliedIndexTerm,
 	}
 	if raftClosedTimestamp != nil && !raftClosedTimestamp.IsEmpty() {
 		as.RaftClosedTimestamp = raftClosedTimestamp
@@ -223,7 +226,8 @@ func (rsl StateLoader) SetMVCCStats(
 		return err
 	}
 	return rsl.SetRangeAppliedState(
-		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, newMS, as.RaftClosedTimestamp)
+		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm, newMS,
+		as.RaftClosedTimestamp)
 }
 
 // SetClosedTimestamp overwrites the closed timestamp.
@@ -235,7 +239,7 @@ func (rsl StateLoader) SetClosedTimestamp(
 		return err
 	}
 	return rsl.SetRangeAppliedState(
-		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex,
+		ctx, readWriter, as.RaftAppliedIndex, as.LeaseAppliedIndex, as.RaftAppliedIndexTerm,
 		as.RangeStats.ToStatsPtr(), closedTS)
 }
 

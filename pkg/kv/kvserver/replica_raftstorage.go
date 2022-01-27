@@ -386,6 +386,7 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
 // (and sent) by the Raft snapshot queue.
+// TODO(sumeer): is this method really used?
 func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	appliedIndex := r.mu.state.RaftAppliedIndex
@@ -419,6 +420,15 @@ func (r *Replica) GetSnapshot(
 	r.raftMu.Lock()
 	snap := r.store.engine.NewSnapshot()
 	r.mu.Lock()
+	// We will fetch the appliedIndex again from snap. We require that the
+	// appliedIndex cached in Replica is consistent with that in the engine.
+	//
+	// TODO(sumeer): what ensures the in-memory state is not lagging the engine
+	// given that replicaAppBatch.ApplyToStateMachine commits the engine batch
+	// and then acquires Replica.mu to update Replica.mu.state.RaftAppliedIndex?
+	// Or do we not care whether these two values are consistent given that
+	// appliedIndex is just serving as an upper bound on what can be truncated
+	// in the log, so it's completely best-effort?
 	appliedIndex := r.mu.state.RaftAppliedIndex
 	// Cleared when OutgoingSnapshot closes.
 	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex, recipientStore)
@@ -568,6 +578,12 @@ func snapshot(
 	}
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, state.RaftAppliedIndex)
+	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
+	// from the two sources are equal.
+	if state.RaftAppliedIndexTerm != 0 && term != state.RaftAppliedIndexTerm {
+		return OutgoingSnapshot{},
+			errors.Errorf("unequal terms %d != %d", term, state.RaftAppliedIndexTerm)
+	}
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
 	}
@@ -920,6 +936,12 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
+	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
+	// from the two sources are equal.
+	if state.RaftAppliedIndexTerm != 0 && state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
+		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
+			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
+	}
 
 	// The on-disk state is now committed, but the corresponding in-memory state
 	// has not yet been updated. Any errors past this point must therefore be
@@ -975,6 +997,7 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = state.RaftAppliedIndex
+	// TODO(sumeer): why can't this be set to nonemptySnap.Metadata.Term?
 	r.mu.lastTerm = invalidLastTerm
 	r.mu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
