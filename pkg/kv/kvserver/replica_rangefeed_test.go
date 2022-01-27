@@ -1269,7 +1269,7 @@ func TestRangefeedCheckpointsRecoverFromLeaseExpiration(t *testing.T) {
 	require.Equal(t, int64(1), nudged)
 
 	// Check that n2 renewed its lease, like the test intended.
-	li, _, err := tc.FindRangeLeaseEx(ctx, desc, &n2Target)
+	li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
 	require.NoError(t, err)
 	require.True(t, li.Current().OwnedBy(n2.GetFirstStoreID()))
 	require.Equal(t, int64(2), li.Current().Epoch)
