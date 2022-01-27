@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -52,7 +53,7 @@ func CreateUserDefinedSchemaDescriptor(
 	execCfg *ExecutorConfig,
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
-) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
+) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
 	authRole, err := n.AuthRole.ToSQLUsername(sessionData, security.UsernameValidation)
 	if err != nil {
 		return nil, nil, err
@@ -133,7 +134,7 @@ func CreateSchemaDescriptorWithPrivileges(
 	schemaName string,
 	user, owner security.SQLUsername,
 	allocateID bool,
-) (*schemadesc.Mutable, *descpb.PrivilegeDescriptor, error) {
+) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
 	// Create the ID.
 	var id descpb.ID
 	var err error

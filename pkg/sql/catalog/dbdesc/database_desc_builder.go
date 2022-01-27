@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -65,7 +66,8 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 	// want any default privileges on the system database.
 	if ddb.original.GetID() != keys.SystemDatabaseID {
 		if ddb.maybeModified.DefaultPrivileges == nil {
-			ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+			ddb.maybeModified.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+				catpb.DefaultPrivilegeDescriptor_DATABASE)
 			createdDefaultPrivileges = true
 		}
 
@@ -94,7 +96,7 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 }
 
 func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
-	privileges *descpb.PrivilegeDescriptor, defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor, defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
 ) (hasChanged bool) {
 	// If privileges are nil, there is nothing to convert.
 	// This case can happen during restore where privileges are not yet created.
@@ -121,7 +123,7 @@ func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
 		privileges.Users[i] = user
 
 		// Convert the incompatible privileges to default privileges.
-		role := defaultPrivileges.FindOrCreateUser(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+		role := defaultPrivileges.FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
 		tableDefaultPrivilegesForAllRoles := role.DefaultPrivilegesPerObject[tree.Tables]
 
 		defaultPrivilegesForUser := tableDefaultPrivilegesForAllRoles.FindOrCreateUser(user.User())
@@ -229,8 +231,8 @@ func NewInitial(
 	return newInitialWithPrivileges(
 		id,
 		name,
-		descpb.NewBaseDatabasePrivilegeDescriptor(owner),
-		catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE),
+		catpb.NewBaseDatabasePrivilegeDescriptor(owner),
+		catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
 		options...,
 	)
 }
@@ -240,8 +242,8 @@ func NewInitial(
 func newInitialWithPrivileges(
 	id descpb.ID,
 	name string,
-	privileges *descpb.PrivilegeDescriptor,
-	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
+	defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
 	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{

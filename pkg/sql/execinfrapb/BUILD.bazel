@@ -76,6 +76,7 @@ go_test(
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
