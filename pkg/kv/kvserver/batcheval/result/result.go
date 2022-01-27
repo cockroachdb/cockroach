@@ -290,6 +290,14 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Replicated.AddSSTable = nil
 
+	if p.Replicated.MVCCHistoryMutation == nil {
+		p.Replicated.MVCCHistoryMutation = q.Replicated.MVCCHistoryMutation
+	} else if q.Replicated.MVCCHistoryMutation != nil {
+		p.Replicated.MVCCHistoryMutation.Spans = append(p.Replicated.MVCCHistoryMutation.Spans,
+			q.Replicated.MVCCHistoryMutation.Spans...)
+	}
+	q.Replicated.MVCCHistoryMutation = nil
+
 	if p.Replicated.PrevLeaseProposal == nil {
 		p.Replicated.PrevLeaseProposal = q.Replicated.PrevLeaseProposal
 	} else if q.Replicated.PrevLeaseProposal != nil {

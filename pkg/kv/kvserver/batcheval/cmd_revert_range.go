@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -75,7 +76,13 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	reply := resp.(*roachpb.RevertRangeResponse)
-	var pd result.Result
+	pd := result.Result{
+		Replicated: kvserverpb.ReplicatedEvalResult{
+			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+				Spans: []roachpb.Span{{Key: args.Key, EndKey: args.EndKey}},
+			},
+		},
+	}
 
 	if empty, err := isEmptyKeyTimeRange(
 		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
