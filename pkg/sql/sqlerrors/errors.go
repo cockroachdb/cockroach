@@ -279,6 +279,11 @@ func IsUndefinedDatabaseError(err error) bool {
 	return errHasCode(err, pgcode.UndefinedDatabase)
 }
 
+// IsUndefinedSchemaError checks whether this is an undefined schema error.
+func IsUndefinedSchemaError(err error) bool {
+	return errHasCode(err, pgcode.UndefinedSchema)
+}
+
 func errHasCode(err error, code ...pgcode.Code) bool {
 	pgCode := pgerror.GetPGCode(err)
 	for _, c := range code {

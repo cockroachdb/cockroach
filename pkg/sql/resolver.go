@@ -367,6 +367,16 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			ctx, p.txn, descpb.ID(*specifier.DatabaseOID), tree.DatabaseLookupFlags{Required: true},
 		)
 		return database, err
+	} else if specifier.SchemaName != nil {
+		database, err := p.Descriptors().GetImmutableDatabaseByName(
+			ctx, p.txn, *specifier.SchemaDatabaseName, tree.DatabaseLookupFlags{Required: true},
+		)
+		if err != nil {
+			return nil, err
+		}
+		return p.Descriptors().GetImmutableSchemaByName(
+			ctx, p.txn, database, *specifier.SchemaName, tree.SchemaLookupFlags{Required: true},
+		)
 	} else if specifier.TableName != nil || specifier.TableOID != nil {
 		var table catalog.TableDescriptor
 		var err error
