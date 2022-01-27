@@ -153,7 +153,7 @@ type Manager interface {
 	TransactionManager
 	RangeStateListener
 	MetricExporter
-	TestStateExporter
+	TestingAccessor
 }
 
 // RequestSequencer is concerned with the sequencing of concurrent requests. It
@@ -321,16 +321,20 @@ type MetricExporter interface {
 	// TxnWaitQueueMetrics()
 }
 
-// TestStateExporter is concerned with providing testing hooks that expose the
+// TestingAccessor is concerned with providing testing hooks that expose the
 // state of the concurrency manager, to be used by unit tests outside of the
 // concurrency package. It is one of the roles of Manager.
-type TestStateExporter interface {
+type TestingAccessor interface {
 	// TestingLockTableString returns a debug string representing the state of the
 	// lockTable.
 	TestingLockTableString() string
 
 	// TestingTxnWaitQueue returns the concurrency manager's txnWaitQueue.
 	TestingTxnWaitQueue() *txnwait.Queue
+
+	// TestingSetMaxLocks updates the locktable's lock limit. This can be used to
+	// force the locktable to exceed its limit and clear locks.
+	TestingSetMaxLocks(n int64)
 }
 
 ///////////////////////////////////
