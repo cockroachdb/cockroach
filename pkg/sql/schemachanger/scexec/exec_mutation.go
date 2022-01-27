@@ -41,6 +41,9 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		}
 	}
 	b := deps.Catalog().NewCatalogChangeBatcher()
+	mvs.descriptorsToDelete.ForEach(func(id descpb.ID) {
+		mvs.checkedOutDescriptors.Remove(id)
+	})
 	err := mvs.checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})

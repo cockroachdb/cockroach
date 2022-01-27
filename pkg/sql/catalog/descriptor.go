@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -203,6 +204,13 @@ type Descriptor interface {
 
 	// ValidateTxnCommit performs pre-commit checks.
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
+
+	// GetDeclarativeSchemaChangerState returns the state of the declarative
+	// schema change currently operating on this descriptor. It will be nil if
+	// there is no declarative schema change job. Note that it is a clone of
+	// the value on the descriptor. Changes will need to be written back to
+	// the descriptor using SetDeclarativeSchemaChangeState.
+	GetDeclarativeSchemaChangerState() *scpb.DescriptorState
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.

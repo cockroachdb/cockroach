@@ -1462,7 +1462,7 @@ func (r *importResumer) dropTables(
 			newTableDesc.DropTime = dropTime
 			b.Del(catalogkeys.EncodeNameKey(execCfg.Codec, newTableDesc))
 			tablesToGC = append(tablesToGC, newTableDesc.ID)
-			descsCol.AddDeletedDescriptor(newTableDesc)
+			descsCol.AddDeletedDescriptor(newTableDesc.GetID())
 		} else {
 			// IMPORT did not create this table, so we should not drop it.
 			newTableDesc.SetPublic()

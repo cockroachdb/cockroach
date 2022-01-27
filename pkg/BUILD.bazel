@@ -210,6 +210,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/descpb:descpb_test",
     "//pkg/sql/catalog/descs:descs_test",
     "//pkg/sql/catalog/hydratedtables:hydratedtables_test",
+    "//pkg/sql/catalog/internal/validate:validate_test",
     "//pkg/sql/catalog/lease:lease_test",
     "//pkg/sql/catalog/multiregion:multiregion_test",
     "//pkg/sql/catalog/nstree:nstree_test",

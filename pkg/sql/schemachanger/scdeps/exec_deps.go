@@ -240,6 +240,7 @@ func (b *catalogChangeBatcher) DeleteName(
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	b.batch.Del(catalogkeys.MakeDescMetadataKey(b.codec, id))
 	b.deletedDescriptors.Add(id)
+	b.descsCollection.AddDeletedDescriptor(id)
 	return nil
 }
 

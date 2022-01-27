@@ -15,8 +15,9 @@ option go_package = "scpb";
 import "sql/schemachanger/scpb/elements.proto";
 import "gogoproto/gogo.proto";
 
+option (gogoproto.equal_all) = true;
+
 message Target {
-  option (gogoproto.equal) = true;
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
   TargetMetadata metadata = 2 [(gogoproto.nullable) = false];
   Status target_status = 3;
@@ -52,6 +53,10 @@ message TargetMetadata {
   uint32 source_element_id = 2 [(gogoproto.customname) = "SourceElementID", (gogoproto.casttype) = "SourceElementID"];
   // StatementID refers to the statement that produced this element, where
   // the ID indexes into the State structure.
+  //
+  // TODO(ajwerner): Potentially multiple statements in a transaction affect
+  // the same target. We'll need to retain a set of ids to deal with that case.
+  // Fortunately making a field repeated is backwards compatible.
   uint32 statement_id = 3 [(gogoproto.customname) = "StatementID"];
 }
 
@@ -70,4 +75,49 @@ message Statement {
 message Authorization {
   string user_name = 1;
   string app_name = 2;
+}
+
+// DescriptorState contains the portion of a schema change state
+// corresponding to an individual descriptor. The combination of
+// these messages for all descriptors involved in a schema change produces the
+// current state of the entire schema change.
+message DescriptorState {
+
+  // JobID is the ID of the job responsible for this DescriptorState.
+  int64 job_id = 5 [
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Targets is the set of targets in the schema change belonging to this
+  // descriptor.
+  repeated Target targets = 1 [(gogoproto.nullable) = false];
+
+  // CurrentStatuses is parallel to Targets and stores the current status for
+  // those targets.
+  repeated Status current_statuses = 4;
+
+  // TargetRanks is parallel to Targets and stores the rank of the target in
+  // the complete schema change. These ranks are used to deterministically
+  // reconstruct the complete TargetState from a collection of DescriptorState
+  // messages.
+  repeated uint32 target_ranks = 6;
+
+  // Statement is a statement which is associated with one or more targets
+  // in the current DescriptorState.
+  message Statement {
+
+    // Statement is a statement that is relevant to one or more targets
+    // in this descriptor.
+    scpb.Statement statement = 1 [(gogoproto.nullable) = false];
+
+    // StatementRank is the rank of the statement in the transaction.
+    uint32 statement_rank = 2;
+  }
+
+  // RelevantStatements is the set of statements which are relevant to any of
+  // the targets. It is sorted internally by StatementRank.
+  repeated Statement relevant_statements = 2  [(gogoproto.nullable) = false];
+
+  // Authorization is information about the creator of the schema change.
+  Authorization authorization = 3 [(gogoproto.nullable) = false];
 }

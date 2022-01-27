@@ -14,6 +14,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -56,6 +57,10 @@ type MutableDescriptor interface {
 	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 	// RunPostDeserializationChanges.
 	HasPostDeserializationChanges() bool
+
+	// SetDeclarativeSchemaChangerState sets the state of the declarative
+	// schema change currently operating on this descriptor.
+	SetDeclarativeSchemaChangerState(*scpb.DescriptorState)
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.
