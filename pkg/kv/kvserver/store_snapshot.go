@@ -903,6 +903,12 @@ func SendEmptySnapshot(
 		return err
 	}
 
+	// Since SendEmptySnapshot is only used by the new cockroach debug
+	// reset-quorum tool, it will be used only in new clusters, so we set
+	// writeAppliedIndexTerm to true. We could have also compared against the
+	// cluster version, but there is a concern that the cluster version
+	// information could be stale.
+	writeAppliedIndexTerm := true
 	ms, err = stateloader.WriteInitialReplicaState(
 		ctx,
 		eng,
@@ -911,6 +917,7 @@ func SendEmptySnapshot(
 		roachpb.Lease{},
 		hlc.Timestamp{}, // gcThreshold
 		st.Version.ActiveVersionOrEmpty(ctx).Version,
+		writeAppliedIndexTerm,
 	)
 	if err != nil {
 		return err
