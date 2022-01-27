@@ -21,6 +21,12 @@ create job #1: "schema change job"
 write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
 upsert descriptor #106
   ...
+     createAsOfTime:
+       wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    jobId: "1"
+     families:
      - columnIds:
        - 1
   +    - 2
@@ -71,7 +77,6 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: tbl
   -  nextColumnId: 2
-  +  newSchemaChangeJobId: "1"
   +  nextColumnId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
@@ -103,7 +108,7 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
      name: tbl
-     newSchemaChangeJobId: "1"
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -218,7 +223,7 @@ upsert descriptor #106
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
      name: tbl
-     newSchemaChangeJobId: "1"
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
@@ -231,6 +236,14 @@ create job #2: "GC for dropping table 106 index 1"
   descriptor IDs: [106]
 update progress of schema change job #1
 upsert descriptor #106
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    jobId: "1"
+     families:
+     - columnIds:
   ...
      id: 106
      modificationTime: {}
@@ -257,9 +270,7 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   +  mutations: []
      name: tbl
-  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextFamilyId: 1
   ...
        time: {}
      unexposedParentSchemaId: 105

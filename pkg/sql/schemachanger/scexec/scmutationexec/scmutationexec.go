@@ -142,44 +142,49 @@ func (m *visitor) AddJobReference(ctx context.Context, reference scop.AddJobRefe
 func (m *visitor) swapSchemaChangeJobID(
 	ctx context.Context, descID descpb.ID, exp, to jobspb.JobID,
 ) error {
-	// TODO(ajwerner): Support all of the descriptor types. We need to write this
-	// to avoid concurrency.
-	d, err := m.cr.MustReadImmutableDescriptor(ctx, descID)
+	{
+		_, err := m.cr.MustReadImmutableDescriptor(ctx, descID)
 
-	// If we're clearing the status, we might have already deleted the
-	// descriptor. Permit that by detecting the prior deletion and
-	// short-circuiting.
-	//
-	// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
-	// an operation which has to happen before deleting the descriptor. If that
-	// were the case, this error would become unexpected.
-	if errors.Is(err, catalog.ErrDescriptorNotFound) && to == 0 {
-		return nil
+		// If we're clearing the status, we might have already deleted the
+		// descriptor. Permit that by detecting the prior deletion and
+		// short-circuiting.
+		//
+		// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
+		// an operation which has to happen before deleting the descriptor. If that
+		// were the case, this error would become unexpected.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) && to == 0 {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 	}
+
+	mut, err := m.s.CheckOutDescriptor(ctx, descID)
 	if err != nil {
 		return err
 	}
-	// Short-circuit writing an update if this isn't a table because we'd have
-	// no field to touch.
-	if _, isTable := d.(catalog.TableDescriptor); !isTable {
-		return nil
-	}
-
-	tbl, err := m.s.CheckOutDescriptor(ctx, descID)
-	if err != nil {
-		return err
-	}
-	mut, ok := tbl.(*tabledesc.Mutable)
-	if !ok {
-		return nil
-	}
-	if mut.NewSchemaChangeJobID != exp {
+	// TODO(ajwerner): We could leverage this spot to determine whether
+	// there's an outstanding concurrent schema change and bubble up the
+	// relevant error. It's probably better to detect the conflict at
+	// build time when we resolve the descriptor or perhaps immediately
+	// after building by taking a peek at the implied descriptor set so
+	// that this can remain an assertion.
+	scs := mut.GetDeclarativeSchemaChangerState()
+	if scs != nil && scs.JobID != exp || scs == nil && exp != 0 {
 		return errors.AssertionFailedf(
 			"unexpected schema change job ID %d on table %d, expected %d",
-			mut.NewSchemaChangeJobID, descID, exp,
+			scs.JobID, descID, exp,
 		)
 	}
-	mut.NewSchemaChangeJobID = to
+	if to == 0 {
+		scs = nil
+	} else if scs == nil {
+		scs = &scpb.DescriptorState{JobID: to}
+	} else {
+		scs.JobID = to
+	}
+	mut.SetDeclarativeSchemaChangerState(scs)
 	return nil
 }
 

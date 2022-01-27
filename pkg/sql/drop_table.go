@@ -383,7 +383,7 @@ func (p *planner) initiateDropTable(
 	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.NewSchemaChangeJobID != 0 {
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			tableDesc.GetName(),

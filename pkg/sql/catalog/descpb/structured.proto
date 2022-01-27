@@ -16,6 +16,7 @@ option go_package = "descpb";
 import "util/hlc/timestamp.proto";
 import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/privilege.proto";
+import "sql/schemachanger/scpb/scpb.proto";
 import "sql/types/types.proto";
 import "geo/geoindex/config.proto";
 import "gogoproto/gogo.proto";
@@ -1052,13 +1053,11 @@ message TableDescriptor {
   // with the mutations list.
   repeated MutationJob mutationJobs = 27 [(gogoproto.nullable) = false];
 
-  // The job associated with a schema change job run in the new schema changer
-  // (in sql/schemachanger), if one exists. Only one such job can exist at a
-  // time.
-  optional int64 new_schema_change_job_id = 46 [
-    (gogoproto.nullable) = false,
-    (gogoproto.customname) = "NewSchemaChangeJobID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+  reserved 46;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 49;
 
   message SequenceOpts {
     option (gogoproto.equal) = true;
@@ -1223,7 +1222,7 @@ message TableDescriptor {
   // such a table will result in an empty table on the restoring cluster.
   optional bool exclude_data_from_backup = 48 [(gogoproto.nullable) = false];
 
-  // Next ID: 48
+  // Next ID: 49
 }
 
 // SurvivalGoal is the survival goal for a database.
@@ -1307,6 +1306,12 @@ message DatabaseDescriptor {
 
   // DefaultPrivileges contains the default privileges for the database.
   optional DefaultPrivilegeDescriptor default_privileges = 11;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
+
+  // Next field is 13.
 }
 
 // TypeDescriptor represents a user defined type and is stored in a structured
@@ -1428,6 +1433,12 @@ message TypeDescriptor {
   }
 
   optional RegionConfig region_config = 16;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 17;
+
+  // Next field is 18.
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
@@ -1465,6 +1476,12 @@ message SchemaDescriptor {
 
   // DefaultPrivileges contains the default privileges for the database.
   optional DefaultPrivilegeDescriptor default_privileges = 10;
+
+  // DeclarativeSchemaChangerState contains the state corresponding to the
+  // descriptor being changed as part of a declarative schema change.
+  optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 11;
+
+  // Next field is 12.
 }
 
 // Descriptor is a union type for descriptors for tables, schemas, databases,
