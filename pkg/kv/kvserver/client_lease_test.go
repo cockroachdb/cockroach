@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -529,7 +530,7 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	key := keys.TestingUserTableDataMin()
+	key := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 	require.NoError(t, tc.WaitForVoters(key, tc.Targets(1, 2)...))
@@ -635,7 +636,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	key := keys.TestingUserTableDataMin()
+	key := bootstrap.TestingUserTableDataMin()
 	tc.SplitRangeOrFatal(t, key)
 	tc.AddVotersOrFatal(t, key, tc.Targets(2, 4)...)
 	repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(key))
@@ -813,7 +814,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 	_, err := tc.ServerConn(0).Exec(`SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = 'false'`)
 	require.NoError(t, err)
 
-	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.TestingUserTableDataMin())
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
 	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
 
@@ -967,7 +968,7 @@ func TestAlterRangeRelocate(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	_, rhsDesc := tc.SplitRangeOrFatal(t, keys.TestingUserTableDataMin())
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
 
 	// We start with having the range under test on (1,2,3).

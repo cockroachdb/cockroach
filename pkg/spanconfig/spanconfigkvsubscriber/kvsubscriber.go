@@ -320,7 +320,7 @@ func (s *KVSubscriber) run(ctx context.Context) error {
 		fn()
 	}
 
-	log.Info(ctx, "established range feed over span configurations table")
+	log.Infof(ctx, "established range feed over system.span_configurations starting at time %s", initialScanTS)
 
 	injectedErrCh := s.knobs.KVSubscriberErrorInjectionCh
 

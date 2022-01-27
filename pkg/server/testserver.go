@@ -47,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -575,11 +574,6 @@ func (t *TestTenant) ExecutorConfig() interface{} {
 	return *t.SQLServer.execCfg
 }
 
-// SystemIDChecker is part of TestTenantInterface.
-func (t *TestTenant) SystemIDChecker() interface{} {
-	return *t.SQLServer.execCfg.SystemIDChecker
-}
-
 // RangeFeedFactory is part of TestTenantInterface.
 func (t *TestTenant) RangeFeedFactory() interface{} {
 	return t.SQLServer.execCfg.RangeFeedFactory
@@ -741,17 +735,13 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 		ts.DB(),
 		&ts.cfg.DefaultZoneConfig,
 		&ts.cfg.DefaultSystemZoneConfig,
-		ts.sqlServer.execCfg.SystemIDChecker,
 	)
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after bootstrap.
 func ExpectedInitialRangeCount(
-	db *kv.DB,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-	idChecker keys.SystemIDChecker,
+	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
 	descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
 		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
@@ -766,7 +756,7 @@ func ExpectedInitialRangeCount(
 	// the span does not have an associated descriptor.
 	maxSystemDescriptorID := descriptorIDs[0]
 	for _, descID := range descriptorIDs {
-		if descID > maxSystemDescriptorID && catalog.IsSystemID(idChecker, descID) {
+		if descID > maxSystemDescriptorID && uint32(descID) <= keys.MaxReservedDescID {
 			maxSystemDescriptorID = descID
 		}
 	}
@@ -1337,11 +1327,6 @@ func (ts *TestServer) GetRangeLease(
 // ExecutorConfig is part of the TestServerInterface.
 func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.sqlServer.execCfg
-}
-
-// SystemIDChecker is part of the TestServerInterface.
-func (ts *TestServer) SystemIDChecker() interface{} {
-	return *ts.sqlServer.execCfg.SystemIDChecker
 }
 
 // TracerI is part of the TestServerInterface.

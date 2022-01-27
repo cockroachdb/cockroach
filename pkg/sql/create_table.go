@@ -1270,7 +1270,7 @@ func NewTableDesc(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 
-	if err := paramparse.ApplyStorageParameters(
+	if err := paramparse.SetStorageParameters(
 		ctx,
 		semaCtx,
 		evalCtx,
@@ -1775,7 +1775,7 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := paramparse.ApplyStorageParameters(
+			if err := paramparse.SetStorageParameters(
 				ctx,
 				semaCtx,
 				evalCtx,
