@@ -52,6 +52,11 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 		// If txnStatus == COMMITTED, setting txnRecordCleanedUp will make us
 		// cleanup the transaction. The txn record will be deleted.
 		txnRecordCleanedUp bool
+		// If txnStatus == STAGING, setting txnImplicitlyCommitted will make
+		// the transaction qualify for the implicit commit condition. Otherwise,
+		// the transaction will not qualify because the test will attach a fake
+		// in-flight write to the transaction's STAGING record.
+		txnImplictlyCommitted bool
 		// The error that we expect from txn.Rollback().
 		expRollbackErr string
 		// Is the transaction expected to be committed or not after the
@@ -76,42 +81,109 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			expRollbackErr:     "already committed",
 		},
 		{
-			name:      "STAGING",
-			txnStatus: roachpb.STAGING,
-			// The rollback succeeds. This behavior is undersired. See #48301.
+			name:                  "STAGING, implicitly committed",
+			txnStatus:             roachpb.STAGING,
+			txnImplictlyCommitted: true,
+			// The rollback fails after performing txn recovery and moving the
+			// transaction to committed.
+			expCommitted:   true,
+			expRollbackErr: "already committed",
+		},
+		{
+			name:                  "STAGING, not implicitly committed",
+			txnStatus:             roachpb.STAGING,
+			txnImplictlyCommitted: false,
+			// The rollback succeeds after performing txn recovery and moving the
+			// transaction to aborted.
+			expCommitted:   false,
+			expRollbackErr: "",
+		},
+		{
+			name:      "PENDING",
+			txnStatus: roachpb.PENDING,
+			// The rollback succeeds.
 			expCommitted:   false,
 			expRollbackErr: "",
 		},
 	}
 	for _, testCase := range testCases {
+		// Sanity-check test cases.
 		if testCase.txnRecordCleanedUp {
 			require.Equal(t, roachpb.COMMITTED, testCase.txnStatus)
 		}
+		if testCase.txnImplictlyCommitted {
+			require.Equal(t, roachpb.STAGING, testCase.txnStatus)
+		}
+
 		t.Run(testCase.name, func(t *testing.T) {
 			var filterSet int64
 			var key roachpb.Key
 			commitBlocked := make(chan struct{})
+			onCommitReqFilter := func(
+				ba roachpb.BatchRequest, fn func(et *roachpb.EndTxnRequest) *roachpb.Error,
+			) *roachpb.Error {
+				if atomic.LoadInt64(&filterSet) == 0 {
+					return nil
+				}
+				req, ok := ba.GetArg(roachpb.EndTxn)
+				if !ok {
+					return nil
+				}
+				et := req.(*roachpb.EndTxnRequest)
+				if et.Key.Equal(key) && et.Commit {
+					return fn(et)
+				}
+				return nil
+			}
+			blockCommitReqFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
+					// Inform the test that the commit is blocked.
+					commitBlocked <- struct{}{}
+					// Block until the client interrupts the commit. The client will
+					// cancel its context, at which point gRPC will return an error
+					// to the client and marshall the cancelation to the server.
+					<-ctx.Done()
+					return roachpb.NewError(ctx.Err())
+				})
+			}
+			addInFlightWriteToCommitReqFilter := func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				return onCommitReqFilter(ba, func(et *roachpb.EndTxnRequest) *roachpb.Error {
+					// Add a fake in-flight write.
+					et.InFlightWrites = append(et.InFlightWrites, roachpb.SequencedWrite{
+						Key: key.Next(), Sequence: et.Sequence,
+					})
+					// Be sure to update the EndTxn and Txn's sequence accordingly.
+					et.Sequence++
+					ba.Txn.Sequence++
+					return nil
+				})
+			}
 			args := base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
 						// We're going to block the commit of the test's txn, letting the
-						// test cancel the request's ctx while the request is blocked.
+						// test cancel the request's ctx while the request is blocked. We
+						// do this either before or after the request completes, depending
+						// on the status that the test wants the txn record to be in when
+						// the rollback is performed.
+						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+							if testCase.txnStatus == roachpb.PENDING {
+								// Block and reject before the request writes the txn record.
+								return blockCommitReqFilter(ctx, ba)
+							}
+							if testCase.txnStatus == roachpb.STAGING && !testCase.txnImplictlyCommitted {
+								// If the test wants the upcoming rollback to find a STAGING
+								// record for a transaction that is not implicitly committed,
+								// add an in-flight write for a (key, sequence) that does not
+								// exist to the EndTxn request.
+								_ = addInFlightWriteToCommitReqFilter(ctx, ba)
+							}
+							return nil
+						},
 						TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
-							if atomic.LoadInt64(&filterSet) == 0 {
-								return nil
-							}
-							req, ok := ba.GetArg(roachpb.EndTxn)
-							if !ok {
-								return nil
-							}
-							commit := req.(*roachpb.EndTxnRequest)
-							if commit.Key.Equal(key) && commit.Commit {
-								// Inform the test that the commit is blocked.
-								commitBlocked <- struct{}{}
-								// Block until the client interrupts the commit. The client will
-								// cancel its context, at which point gRPC will return an error
-								// to the client and marshall the cancelation to the server.
-								<-ctx.Done()
+							if testCase.txnStatus != roachpb.PENDING {
+								// Block and reject after the request writes the txn record.
+								return blockCommitReqFilter(ctx, ba)
 							}
 							return nil
 						},
@@ -186,7 +258,7 @@ func TestRollbackAfterAmbiguousCommit(t *testing.T) {
 			// If the test wants the upcoming rollback to find a COMMITTED record,
 			// we'll perform transaction recovery. This will leave the transaction in
 			// the COMMITTED state, without cleaning it up.
-			if !testCase.txnRecordCleanedUp && testCase.txnStatus == roachpb.COMMITTED {
+			if testCase.txnStatus == roachpb.COMMITTED && !testCase.txnRecordCleanedUp {
 				// Sanity check - verify that the txn is STAGING.
 				txnProto := txn.TestingCloneTxn()
 				queryTxn := roachpb.QueryTxnRequest{
