@@ -13,6 +13,7 @@ package tabledesc
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -376,7 +377,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			desc.validateUniqueWithoutIndexConstraints(columnIDs),
 			desc.validateTableIndexes(columnNames),
 			desc.validatePartitioning(),
-			desc.validateConstraints(),
+			desc.validateConstraints(vea),
 		}
 		hasErrs := false
 		for _, err := range newErrs {
@@ -500,7 +501,12 @@ func ValidateOnUpdate(desc catalog.TableDescriptor, errReportFn func(err error))
 	})
 }
 
-func (desc *wrapper) validateConstraints() error {
+func (desc *wrapper) validateConstraints(vea catalog.ValidationErrorAccumulator) error {
+	// Constraint IDs can only be validated if they were introduced
+	// within this release.
+	if !vea.IsActive(clusterversion.ConstraintIDsForTableDescs) {
+		return nil
+	}
 	if !desc.IsTable() {
 		return nil
 	}

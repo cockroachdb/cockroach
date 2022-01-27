@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -628,7 +629,7 @@ func (desc *Mutable) MaybeFillColumnID(
 // AllocateIDs allocates column, family, and index ids for any column, family,
 // or index which has an ID of 0. It's the same as AllocateIDsWithoutValidation,
 // but does validation on the table elements.
-func (desc *Mutable) AllocateIDs(ctx context.Context) error {
+func (desc *Mutable) AllocateIDs(ctx context.Context, version clusterversion.ClusterVersion) error {
 	if err := desc.AllocateIDsWithoutValidation(ctx); err != nil {
 		return err
 	}
@@ -640,7 +641,7 @@ func (desc *Mutable) AllocateIDs(ctx context.Context) error {
 	if desc.ID == 0 {
 		desc.ID = keys.SystemDatabaseID
 	}
-	err := validate.Self(desc)
+	err := validate.Self(version, desc)
 	desc.ID = savedID
 
 	return err

@@ -80,7 +80,13 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		a STRING PRIMARY KEY, b STRING, c STRING, d STRING,
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		`d`,
+		`parent`)
 	table := row.FetcherTableArgs{
 		Desc:    desc,
 		Index:   desc.GetPrimaryIndex(),

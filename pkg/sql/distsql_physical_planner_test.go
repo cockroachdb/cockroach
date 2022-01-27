@@ -160,6 +160,8 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 	_ = tc.Stopper().RunAsyncTask(ctx, "splitter", func(ctx context.Context) {
 		rng, _ := randutil.NewTestRand()
 		cdb := tc.Server(0).DB()
+		version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
+
 		for {
 			select {
 			case <-tc.Stopper().ShouldQuiesce():
@@ -167,7 +169,12 @@ func TestPlanningDuringSplitsAndMerges(t *testing.T) {
 			default:
 				// Split the table at a random row.
 				tableDesc := desctestutils.TestingGetTableDescriptor(
-					cdb, keys.SystemSQLCodec, "test", "public", "t",
+					cdb,
+					keys.SystemSQLCodec,
+					version,
+					"test",
+					"public",
+					"t",
 				)
 
 				val := rng.Intn(n)

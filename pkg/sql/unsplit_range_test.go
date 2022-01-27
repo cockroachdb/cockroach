@@ -326,6 +326,7 @@ func TestUnsplitRanges(t *testing.T) {
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
+		version := s.ClusterSettings().Version.ActiveVersion(ctx)
 		defer s.Stopper().Stop(context.Background())
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -334,7 +335,7 @@ func TestUnsplitRanges(t *testing.T) {
 
 		require.NoError(t, tests.CreateKVTable(sqlDB, tableName, numRows))
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", tableName)
 		tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
 

@@ -363,7 +363,12 @@ func getSpansFromManifest(ctx context.Context, t *testing.T, backupPath string) 
 }
 
 func getKVCount(ctx context.Context, kvDB *kv.DB, dbName, tableName string) (int, error) {
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		desctestutils.LatestClusterVersionForValidationForTest,
+		dbName,
+		tableName)
 	tablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
 	tableEnd := tablePrefix.PrefixEnd()
 	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)

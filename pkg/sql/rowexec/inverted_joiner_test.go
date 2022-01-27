@@ -240,7 +240,13 @@ func TestInvertedJoiner(t *testing.T) {
 	const dciIndex = 4
 	const daciIndex = 5
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	type testCase struct {
 		description           string
@@ -736,7 +742,13 @@ func TestInvertedJoinerDrain(t *testing.T) {
 		invertedJoinerNumRows,
 		sqlutils.ToRowFn(aFn, bFn))
 	const biIndex = 1
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	tracer := s.TracerI().(*tracing.Tracer)
 	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracing.RecordingVerbose))

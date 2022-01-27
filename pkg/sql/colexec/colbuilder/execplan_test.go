@@ -83,7 +83,13 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	streamingMemAcc := evalCtx.Mon.MakeBoundAccount()
 	defer streamingMemAcc.Close(ctx)
 
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 	tr := execinfrapb.TableReaderSpec{
 		Table:     *desc.TableDesc(),
 		Spans:     make([]roachpb.Span, 1),

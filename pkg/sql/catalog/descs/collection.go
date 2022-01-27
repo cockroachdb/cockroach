@@ -219,7 +219,7 @@ func (tc *Collection) WriteDescToBatch(
 ) error {
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		if err := validate.Self(desc); err != nil {
+		if err := validate.Self(tc.settings.Version.ActiveVersion(ctx), desc); err != nil {
 			return err
 		}
 	}
@@ -272,7 +272,7 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return tc.kv.getAllDescriptors(ctx, txn)
+	return tc.kv.getAllDescriptors(ctx, txn, tc.settings.Version.ActiveVersion(ctx))
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
@@ -284,7 +284,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
+	return tc.kv.getAllDatabaseDescriptors(ctx, txn, tc.settings.Version.ActiveVersion(ctx))
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to

@@ -621,7 +621,7 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
 		b.s.catalog.DeleteDescriptorEntry(deletedID)
 	}
-	ve := b.s.catalog.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
+	ve := b.s.catalog.Validate(ctx, b.s.ClusterSettings().Version.ActiveVersion(ctx), catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
 	return ve.CombinedError()
 }
 

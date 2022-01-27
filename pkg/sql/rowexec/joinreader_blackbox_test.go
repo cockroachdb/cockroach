@@ -93,7 +93,13 @@ func TestJoinReaderUsesBatchLimit(t *testing.T) {
 	// were on the lookup side. We expect more than one of them (it would be only
 	// one if there was no limit on the size of results).
 	rec := <-recCh
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "a")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"a")
 	tableID := desc.TableDesc().ID
 	sp, ok := rec.FindSpan("join reader")
 	require.True(t, ok)

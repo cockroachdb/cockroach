@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -73,16 +74,18 @@ type leaseTest struct {
 	kvDB                     *kv.DB
 	nodes                    map[uint32]*lease.Manager
 	leaseManagerTestingKnobs lease.ManagerTestingKnobs
+	version                  clusterversion.ClusterVersion
 }
 
 func newLeaseTest(tb testing.TB, params base.TestServerArgs) *leaseTest {
 	s, db, kvDB := serverutils.StartServer(tb, params)
 	leaseTest := &leaseTest{
-		TB:     tb,
-		server: s,
-		db:     db,
-		kvDB:   kvDB,
-		nodes:  map[uint32]*lease.Manager{},
+		TB:      tb,
+		server:  s,
+		db:      db,
+		kvDB:    kvDB,
+		nodes:   map[uint32]*lease.Manager{},
+		version: s.ClusterSettings().Version.ActiveVersion(context.Background()),
 	}
 	if params.Knobs.SQLLeaseManager != nil {
 		leaseTest.leaseManagerTestingKnobs =
@@ -568,7 +571,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "test", "t")
 
 	// Block schema changers so that the table we're about to DROP is not actually
 	// dropped; it will be left in a "deleted" state.
@@ -635,6 +638,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
 	}
 	s, db, kvDB := serverutils.StartServer(t, params)
+	verson := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	stmt := `
@@ -646,7 +650,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, verson, "test", "t")
 	ctx := context.Background()
 
 	lease1, err := acquire(ctx, s.(*server.TestServer), tableDesc.GetID())
@@ -727,6 +731,7 @@ func TestSubqueryLeases(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -740,7 +745,7 @@ CREATE TABLE t.foo (v INT);
 		t.Fatalf("CREATE TABLE has acquired a lease: got %d, expected 0", atomic.LoadInt32(&fooAcquiredCount))
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
 
 	if _, err := sqlDB.Exec(`
@@ -857,6 +862,7 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -870,7 +876,7 @@ CREATE TABLE t.foo (v INT);
 		t.Fatalf("CREATE TABLE has acquired a descriptor")
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "foo")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "foo")
 	atomic.StoreInt64(&tableID, int64(tableDesc.GetID()))
 
 	tx, err := sqlDB.Begin()
@@ -922,6 +928,7 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params := createTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -948,7 +955,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv")
 
 	// A read-write transaction that uses the old version of the descriptor.
 	txReadWrite, err := sqlDB.Begin()
@@ -1149,6 +1156,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -1162,7 +1170,7 @@ COMMIT;
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv")
 	var updated bool
 	if err := crdb.ExecuteTx(context.Background(), sqlDB, nil, func(tx *gosql.Tx) error {
 		// Insert an entry so that the transaction is guaranteed to be
@@ -1223,7 +1231,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "test")
 	dbID := tableDesc.GetParentID()
 	tableName := tableDesc.GetName()
 	leaseManager := t.node(1)
@@ -1312,8 +1320,8 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
-	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test1")
-	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "test1")
+	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "test2")
 	dbID := test2Desc.GetParentID()
 
 	// Acquire a lease on test1 by name.
@@ -1441,6 +1449,7 @@ func TestIncrementTableVersion(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -1450,7 +1459,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv")
 	if tableDesc.GetVersion() != 1 {
 		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
@@ -1471,7 +1480,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// The first schema change will succeed and increment the version.
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv1")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv1")
 	if tableDesc.GetVersion() != 2 {
 		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
@@ -1501,7 +1510,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// the table descriptor. If the schema change transaction
 	// doesn't rollback the transaction this descriptor read will
 	// hang.
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv1")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv1")
 	if tableDesc.GetVersion() != 2 {
 		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
@@ -1512,7 +1521,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	wg.Wait()
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv2")
 	if tableDesc.GetVersion() != 3 {
 		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
@@ -1543,6 +1552,7 @@ func TestTwoVersionInvariantRetryError(t *testing.T) {
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -1553,7 +1563,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv")
 	if tableDesc.GetVersion() != 1 {
 		t.Fatalf("invalid version %d", tableDesc.GetVersion())
 	}
@@ -1777,8 +1787,8 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
-	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
-	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "test2")
+	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "test2")
 	dbID := test2Desc.GetParentID()
 
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
@@ -1972,8 +1982,8 @@ CREATE TABLE t.after (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	beforeDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "before")
-	afterDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "after")
+	beforeDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "before")
+	afterDesc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, t.version, "t", "after")
 	dbID := beforeDesc.GetParentID()
 
 	// Acquire a lease on "before" by name.
@@ -2333,6 +2343,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs.SQLLeaseManager = &lmKnobs
 	s, db, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(ctx)
 	runner := sqlutils.MakeSQLRunner(db)
 
@@ -2348,7 +2359,7 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	`)
 	require.NoError(t, err)
 
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "test")
 	atomic.StoreUint32(&descID, uint32(desc.GetID()))
 
 	// Sets table descriptor state and waits for that change to propagate to the

@@ -62,7 +62,13 @@ func TestManualReplication(t *testing.T) {
 
 	// Split the table to a new range.
 	kvDB := tc.Servers[0].DB()
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"test")
 
 	tableStartKey := keys.SystemSQLCodec.TablePrefix(uint32(tableDesc.GetID()))
 	leftRangeDesc, tableRangeDesc, err := tc.SplitRange(tableStartKey)

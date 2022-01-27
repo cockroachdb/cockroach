@@ -68,7 +68,13 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Verify that there are no leases held.
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	lm := s.LeaseManager().(*lease.Manager)
 

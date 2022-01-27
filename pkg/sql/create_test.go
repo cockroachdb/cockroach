@@ -236,7 +236,13 @@ func verifyTables(
 		count++
 		tableName := fmt.Sprintf("table_%d", id)
 		kvDB := tc.Servers[count%tc.NumServers()].DB()
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		version := tc.Server(count % tc.NumServers()).ClusterSettings().Version.ActiveVersion(context.Background())
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"test",
+			tableName)
 		if tableDesc.GetID() < descIDStart {
 			t.Fatalf(
 				"table %s's ID %d is too small. Expected >= %d",

@@ -45,6 +45,7 @@ func TestColBatchScanMeta(t *testing.T) {
 
 	ctx := context.Background()
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(t, sqlDB, "t",
@@ -52,7 +53,12 @@ func TestColBatchScanMeta(t *testing.T) {
 		3, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
-	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	td := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	st := s.ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
@@ -116,6 +122,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 
 	const numCols = 2
@@ -127,7 +134,12 @@ func BenchmarkColBatchScan(b *testing.B) {
 			numRows,
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 		)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			"test",
+			tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 			spec := execinfrapb.ProcessorSpec{
