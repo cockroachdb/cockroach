@@ -28,8 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -74,6 +76,7 @@ tables are queried either from a live cluster or from an unzipped debug.zip.
 }
 
 type doctorFn = func(
+	version *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -82,19 +85,27 @@ type doctorFn = func(
 
 func makeZipDirCommand(fn doctorFn) *cobra.Command {
 	return &cobra.Command{
-		Use:   "zipdir <debug_zip_dir>",
+		Use:   "zipdir <debug_zip_dir> [version]",
 		Short: "run doctor tool on data from an unzipped debug.zip",
 		Long: `
 Run the doctor tool on system data from an unzipped debug.zip. This command
-requires the path of the unzipped 'debug' directory as its argument.
+requires the path of the unzipped 'debug' directory as its argument. A version
+can be optionally specified, which will be used enable / disable validation
+that may not exist on downlevel versions.
 `,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			descs, ns, jobs, err := fromZipDir(args[0])
+			var version *clusterversion.ClusterVersion
+			if len(args) == 2 {
+				version = &clusterversion.ClusterVersion{
+					Version: roachpb.MustParseVersion(args[1]),
+				}
+			}
 			if err != nil {
 				return err
 			}
-			return fn(descs, ns, jobs, os.Stdout)
+			return fn(version, descs, ns, jobs, os.Stdout)
 		},
 	}
 }
@@ -118,7 +129,7 @@ Run the doctor tool system data from a live cluster specified by --url.
 				if err != nil {
 					return err
 				}
-				return fn(descs, ns, jobs, os.Stdout)
+				return fn(nil, descs, ns, jobs, os.Stdout)
 			}),
 	}
 }
@@ -137,6 +148,7 @@ var doctorRecreateClusterCmd = makeClusterCommand(runDoctorRecreate)
 var doctorRecreateZipDirCmd = makeZipDirCommand(runDoctorRecreate)
 
 func runDoctorRecreate(
+	_ *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
@@ -146,14 +158,26 @@ func runDoctorRecreate(
 }
 
 func runDoctorExamine(
+	version *clusterversion.ClusterVersion,
 	descTable doctor.DescriptorTable,
 	namespaceTable doctor.NamespaceTable,
 	jobsTable doctor.JobsTable,
 	out io.Writer,
 ) (err error) {
+	if version == nil {
+		version = &clusterversion.ClusterVersion{
+			Version: clusterversion.ByKey(clusterversion.ConstraintIDsForTableDescs),
+		}
+	}
 	var valid bool
 	valid, err = doctor.Examine(
-		context.Background(), descTable, namespaceTable, jobsTable, debugCtx.verbose, out)
+		context.Background(),
+		*version,
+		descTable,
+		namespaceTable,
+		jobsTable,
+		debugCtx.verbose,
+		out)
 	if err != nil {
 		return err
 	}

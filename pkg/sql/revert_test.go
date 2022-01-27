@@ -41,6 +41,7 @@ func TestRevertTable(t *testing.T) {
 
 	s, sqlDB, kv := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
@@ -80,7 +81,7 @@ func TestRevertTable(t *testing.T) {
 		require.Equal(t, before, aost)
 
 		// Revert the table to ts.
-		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, "test", "test")
+		desc := desctestutils.TestingGetPublicTableDescriptor(kv, keys.SystemSQLCodec, version, "test", "test")
 		desc.TableDesc().State = descpb.DescriptorState_OFFLINE // bypass the offline check.
 		require.NoError(t, sql.RevertTables(context.Background(), kv, &execCfg, []catalog.TableDescriptor{desc}, targetTime, ignoreGC, 10))
 

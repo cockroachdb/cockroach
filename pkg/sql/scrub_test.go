@@ -43,6 +43,7 @@ func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
@@ -59,7 +60,7 @@ INSERT INTO t."tEst" VALUES (10, 20);
 
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tEst")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "tEst")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 
 	var colIDtoRowIndex catalog.TableColMap
@@ -117,6 +118,7 @@ func TestScrubIndexDanglingIndexReference(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
@@ -128,7 +130,7 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 
 	var colIDtoRowIndex catalog.TableColMap
@@ -210,6 +212,7 @@ func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
@@ -222,7 +225,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "test")
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 
 	var colIDtoRowIndex catalog.TableColMap
@@ -331,6 +334,7 @@ func TestScrubCheckConstraint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and the row entry.
@@ -342,7 +346,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "test")
 
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
@@ -422,6 +426,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 	r := sqlutils.MakeSQLRunner(db)
 
@@ -441,7 +446,7 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 		INSERT INTO t.child VALUES (10, 314);
 	`)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "child")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "child")
 
 	// Construct datums for the child row values (child_id, parent_id).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}

@@ -72,7 +72,13 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		PARTITION p1 VALUES IN (1),
 		PARTITION p2 VALUES IN (2)
 	)`)
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"kv")
 	index, err := tableDesc.FindIndexWithName("i")
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +125,12 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 			t.Fatalf(`zone config for %s still exists`, target)
 		}
 	}
-	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc = desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"kv")
 	if _, err := tableDesc.FindIndexWithName("i"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}

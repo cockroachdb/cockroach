@@ -132,8 +132,13 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT VALUES (250), (500), (750)")
 
+		version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			db, keys.SystemSQLCodec, "defaultdb", "foo")
+			db,
+			keys.SystemSQLCodec,
+			version,
+			"defaultdb",
+			"foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 		// We expect 4 splits -- we'll start the scan with parallelism set to 3.
@@ -177,8 +182,13 @@ func TestDBClientScan(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo (key) SELECT * FROM generate_series(1, 1000)`)
 		sqlDB.Exec(t, "ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(100, 900, 100))")
 
+		version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			db, keys.SystemSQLCodec, "defaultdb", "foo")
+			db,
+			keys.SystemSQLCodec,
+			version,
+			"defaultdb",
+			"foo")
 		fooSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 		scanData := struct {

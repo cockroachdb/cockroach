@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -37,7 +38,13 @@ func (tc *Collection) Validate(
 		tc:  tc,
 		txn: txn,
 	}
-	return validate.Validate(ctx, cbd, telemetry, targetLevel, descriptors...).CombinedError()
+	return validate.Validate(
+		ctx,
+		tc.settings.Version.ActiveVersion(ctx),
+		cbd,
+		telemetry,
+		targetLevel,
+		descriptors...).CombinedError()
 }
 
 // ValidateUncommittedDescriptors validates all uncommitted descriptors.
@@ -69,7 +76,7 @@ var _ validate.ValidationDereferencer = &collectionBackedDereferencer{}
 // DereferenceDescriptors implements the validate.ValidationDereferencer
 // interface by leveraging the collection's uncommitted descriptors.
 func (c collectionBackedDereferencer) DereferenceDescriptors(
-	ctx context.Context, reqs []descpb.ID,
+	ctx context.Context, version clusterversion.ClusterVersion, reqs []descpb.ID,
 ) (ret []catalog.Descriptor, _ error) {
 	ret = make([]catalog.Descriptor, len(reqs))
 	fallbackReqs := make([]descpb.ID, 0, len(reqs))
@@ -90,7 +97,12 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 		// TODO(postamar): actually use the Collection here instead,
 		// either by calling the Collection's methods or by caching the results
 		// of this call in the Collection.
-		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(ctx, c.txn, c.tc.codec(), fallbackReqs)
+		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
+			ctx,
+			c.txn,
+			c.tc.codec(),
+			version,
+			fallbackReqs)
 		if err != nil {
 			return nil, err
 		}

@@ -136,9 +136,15 @@ func TestNextRowSingle(t *testing.T) {
 	alloc := &tree.DatumAlloc{}
 
 	// We try to read rows from each table.
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				version,
+				sqlutils.TestDB,
+				tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -241,11 +247,16 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	}
 
 	alloc := &tree.DatumAlloc{}
-
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				version,
+				sqlutils.TestDB,
+				tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -331,7 +342,13 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 			}
 		})
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		sqlutils.TestDB,
+		tableName)
 
 	args := initFetcherArgs{
 		tableDesc: tableDesc,
@@ -404,7 +421,13 @@ INDEX(c)
 
 	alloc := &tree.DatumAlloc{}
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		sqlutils.TestDB,
+		tableName)
 
 	args := initFetcherArgs{
 		tableDesc: tableDesc,
@@ -575,10 +598,16 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 	}
 
 	alloc := &tree.DatumAlloc{}
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, tableName)
+			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				version,
+				sqlutils.TestDB,
+				tableName)
 
 			args := initFetcherArgs{
 				tableDesc: tableDesc,
@@ -699,7 +728,13 @@ func TestRowFetcherReset(t *testing.T) {
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
 	)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, sqlutils.TestDB, "foo")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		sqlutils.TestDB,
+		"foo")
 
 	args := initFetcherArgs{
 		tableDesc: tableDesc,

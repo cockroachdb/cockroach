@@ -118,7 +118,13 @@ func TestSpanBuilderCanSplitSpan(t *testing.T) {
 			if _, err := sqlDB.Exec(sql); err != nil {
 				t.Fatal(err)
 			}
-			desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "t")
+			version := s.ClusterSettings().Version.ActiveVersion(ctx)
+			desc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				version,
+				"t",
+				"t")
 			idx, err := desc.FindIndexWithName(tc.index)
 			if err != nil {
 				t.Fatal(err)

@@ -306,7 +306,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 				// We need to allocate IDs upfront in the event we need to update the zone config
 				// in the same transaction.
-				if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+				if err := n.tableDesc.AllocateIDs(
+					params.ctx,
+					params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+				); err != nil {
 					return err
 				}
 				if err := params.p.configureZoneConfigForNewIndexPartitioning(
@@ -1054,7 +1057,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		if err := n.tableDesc.AllocateIDs(
+			params.ctx,
+			params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+		); err != nil {
 			return err
 		}
 	}

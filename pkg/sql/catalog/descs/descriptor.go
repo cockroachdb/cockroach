@@ -125,7 +125,11 @@ func (tc *Collection) getDescriptorByIDMaybeSetTxnDeadline(
 		}
 
 		return tc.withReadFromStore(flags.RequireMutable, func() (catalog.MutableDescriptor, error) {
-			return tc.kv.getByID(ctx, txn, id)
+			return tc.kv.getByID(
+				ctx,
+				txn,
+				tc.settings.Version.ActiveVersion(ctx),
+				id)
 		})
 	}
 
@@ -208,7 +212,14 @@ func (tc *Collection) getByName(
 
 	desc, err = tc.withReadFromStore(mutable, func() (desc catalog.MutableDescriptor, err error) {
 		uncommittedDB, _ := tc.uncommitted.getByID(parentID).(catalog.DatabaseDescriptor)
-		return tc.kv.getByName(ctx, txn, uncommittedDB, parentID, parentSchemaID, name)
+		return tc.kv.getByName(
+			ctx,
+			txn,
+			tc.settings.Version.ActiveVersion(ctx),
+			uncommittedDB,
+			parentID,
+			parentSchemaID,
+			name)
 	})
 	return desc != nil, desc, err
 }

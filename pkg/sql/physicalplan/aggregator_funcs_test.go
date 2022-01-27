@@ -483,7 +483,13 @@ func TestSingleArgumentDistAggregateFunctions(t *testing.T) {
 	)
 
 	kvDB := tc.Server(0).DB()
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(context.Background())
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	for fn, info := range physicalplan.DistAggregationTable {
 		if fn == execinfrapb.AnyNotNull {
@@ -573,7 +579,14 @@ func TestTwoArgumentRegressionAggregateFunctions(t *testing.T) {
 	)
 
 	kvDB := tc.Server(0).DB()
-	desc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "public", "t")
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(context.Background())
+
+	desc := desctestutils.TestingGetTableDescriptor(kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"public",
+		"t")
 
 	for fn, info := range physicalplan.DistAggregationTable {
 		if !isTwoArgumentFunction(fn) {

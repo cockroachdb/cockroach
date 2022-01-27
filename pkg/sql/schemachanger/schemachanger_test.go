@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -66,6 +67,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 
 		var s serverutils.TestServerInterface
 		var kvDB *kv.DB
+		var version clusterversion.ClusterVersion
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -96,7 +98,12 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 						return nil
 					}
 					table := desctestutils.TestingGetTableDescriptor(
-						kvDB, keys.SystemSQLCodec, "db", "public", "t")
+						kvDB,
+						keys.SystemSQLCodec,
+						version,
+						"db",
+						"public",
+						"t")
 					// There are 2 schema changes that should precede job 3.
 					// The declarative schema changer uses the same mutation ID for all
 					// its mutations.
@@ -115,6 +122,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		}
 		var sqlDB *gosql.DB
 		s, sqlDB, kvDB = serverutils.StartServer(t, params)
+		version = s.ClusterSettings().Version.ActiveVersion(ctx)
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -196,6 +204,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		stmt2 := `ALTER TABLE db.t ADD COLUMN c INT8 DEFAULT 2`
 
 		var kvDB *kv.DB
+		var version clusterversion.ClusterVersion
 		params, _ := tests.CreateTestServerParams()
 		params.Knobs = base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: &scrun.TestingKnobs{
@@ -206,7 +215,12 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 						return nil
 					}
 					table := desctestutils.TestingGetTableDescriptor(
-						kvDB, keys.SystemSQLCodec, "db", "public", "t")
+						kvDB,
+						keys.SystemSQLCodec,
+						version,
+						"db",
+						"public",
+						"t")
 					mutations := table.AllMutations()
 					if len(mutations) == 0 {
 						t.Errorf("unexpected empty mutations")
@@ -251,6 +265,7 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		var s serverutils.TestServerInterface
 		var sqlDB *gosql.DB
 		s, sqlDB, kvDB = serverutils.StartServer(t, params)
+		version = s.ClusterSettings().Version.ActiveVersion(ctx)
 		defer s.Stopper().Stop(ctx)
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -311,6 +326,7 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 	beforeBackfillNotification := make(chan struct{})
 	// Closed when we're ready to continue with the schema change.
 	continueNotification := make(chan struct{})
+	var version clusterversion.ClusterVersion
 
 	var kvDB *kv.DB
 	params, _ := tests.CreateTestServerParams()
@@ -330,7 +346,12 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 					return nil
 				}
 				table := desctestutils.TestingGetTableDescriptor(
-					kvDB, keys.SystemSQLCodec, "db", "public", "t")
+					kvDB,
+					keys.SystemSQLCodec,
+					version,
+					"db",
+					"public",
+					"t")
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
@@ -351,10 +372,10 @@ func TestConcurrentOldSchemaChangesCannotStart(t *testing.T) {
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
-
 	var s serverutils.TestServerInterface
 	var sqlDB *gosql.DB
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	version = s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -419,6 +440,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	continueNotification := make(chan struct{})
 
 	var kvDB *kv.DB
+	var version clusterversion.ClusterVersion
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -436,7 +458,12 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 					return nil
 				}
 				table := desctestutils.TestingGetTableDescriptor(
-					kvDB, keys.SystemSQLCodec, "db", "public", "t")
+					kvDB,
+					keys.SystemSQLCodec,
+					version,
+					"db",
+					"public",
+					"t")
 				for _, m := range table.AllMutations() {
 					assert.LessOrEqual(t, int(m.MutationID()), 2)
 				}
@@ -460,12 +487,18 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	var s serverutils.TestServerInterface
 	var sqlDB *gosql.DB
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
+	version = s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"db",
+		"t")
 
 	g := ctxgroup.WithContext(ctx)
 

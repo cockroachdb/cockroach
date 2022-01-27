@@ -61,8 +61,13 @@ func TestEmitsResolvedDuringScan(t *testing.T) {
 CREATE TABLE t (a INT PRIMARY KEY);
 INSERT INTO t VALUES (1), (2), (3);
 `)
-
-	descr := desctestutils.TestingGetPublicTableDescriptor(kvdb, keys.SystemSQLCodec, "defaultdb", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	descr := desctestutils.TestingGetPublicTableDescriptor(
+		kvdb,
+		keys.SystemSQLCodec,
+		version,
+		"defaultdb",
+		"t")
 	span := tableSpan(uint32(descr.GetID()))
 
 	exportTime := kvdb.Clock().Now()

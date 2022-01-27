@@ -51,6 +51,7 @@ func TestEnsureIndexesExistForComments(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := tc.ServerConn(0)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 
 	// Create a table, index and insert a valid comment and an artificial comment,
 	// that belongs to an invalid index ID.
@@ -63,7 +64,7 @@ func TestEnsureIndexesExistForComments(t *testing.T) {
 	tdb.Exec(t,
 		"COMMENT ON INDEX blah IS 'Valid comment';",
 	)
-	desc := desctestutils.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, "defaultdb", "public", "t1")
+	desc := desctestutils.TestingGetTableDescriptor(s.DB(), keys.SystemSQLCodec, version, "defaultdb", "public", "t1")
 	tdb.Exec(t,
 		"INSERT INTO system.comments VALUES($1, $2, 999, 'Invalid comment')",
 		keys.IndexCommentType,

@@ -138,6 +138,12 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 	ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 ) (descpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
+	// When constructing views the eval context might be empty, so we will construct
+	// a skeleton one for constraint ID information.
+	evalCtx := &tree.EvalContext{
+		Context:  ctx,
+		Settings: st,
+	}
 	if err != nil {
 		return descpb.TableDescriptor{}, err
 	}
@@ -181,7 +187,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		descpb.NewVirtualTablePrivilegeDescriptor(),
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
-		nil,                        /* evalCtx */
+		evalCtx,                    /* evalCtx */
 		&sessiondata.SessionData{}, /* sessionData */
 		tree.PersistencePermanent,
 	)
@@ -236,6 +242,13 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	ctx context.Context, st *cluster.Settings, sc catalog.SchemaDescriptor, id descpb.ID,
 ) (descpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
+	// When constructing views the eval context might be empty, so we will construct
+	// a skeleton one for constraint ID information.
+	evalCtx := &tree.EvalContext{
+		Context:  ctx,
+		Settings: st,
+	}
+
 	if err != nil {
 		return descpb.TableDescriptor{}, err
 	}
@@ -246,23 +259,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 	if len(create.ColumnNames) != 0 {
 		columns = overrideColumnNames(columns, create.ColumnNames)
 	}
-	mutDesc, err := makeViewTableDesc(
-		ctx,
-		st,
-		create.Name.Table(),
-		tree.AsStringWithFlags(create.AsSource, tree.FmtParsable),
-		0, /* parentID */
-		sc.GetID(),
-		id,
-		columns,
-		startTime, /* creationTime */
-		descpb.NewVirtualTablePrivilegeDescriptor(),
-		nil, /* semaCtx */
-		nil, /* evalCtx */
-		tree.PersistencePermanent,
-		false, /* isMultiRegion */
-		nil,   /* sc */
-	)
+	mutDesc, err := makeViewTableDesc(ctx, create.Name.Table(), tree.AsStringWithFlags(create.AsSource, tree.FmtParsable), 0, sc.GetID(), id, columns, startTime, descpb.NewVirtualTablePrivilegeDescriptor(), nil, evalCtx, tree.PersistencePermanent, false, nil)
 	return mutDesc.TableDescriptor, err
 }
 
@@ -696,7 +693,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
-			if err := descbuilder.ValidateSelf(td); err != nil {
+			if err := descbuilder.ValidateSelf(td,
+				st.Version.ActiveVersionOrEmpty(ctx)); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

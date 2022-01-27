@@ -1057,8 +1057,13 @@ func TestChangefeedSchemaChangeBackfillCheckpoint(t *testing.T) {
 			context.Background(), &f.Server().ClusterSettings().SV, maxCheckpointSize)
 
 		// Note the tableSpan to avoid resolved events that leave no gaps
+		version := f.Server().ClusterSettings().Version.ActiveVersion(context.Background())
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+			f.Server().DB(),
+			keys.SystemSQLCodec,
+			version,
+			"d",
+			"foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 		// ShouldSkipResolved should ensure that once the backfill begins, the following resolved events
@@ -4664,8 +4669,12 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo(key INT PRIMARY KEY DEFAULT unique_rowid(), val INT)`)
 		sqlDB.Exec(t, `INSERT INTO foo (val) SELECT * FROM generate_series(1, 1000)`)
 
+		version := f.Server().ClusterSettings().Version.ActiveVersion(context.Background())
 		fooDesc := desctestutils.TestingGetPublicTableDescriptor(
-			f.Server().DB(), keys.SystemSQLCodec, "d", "foo")
+			f.Server().DB(),
+			keys.SystemSQLCodec,
+			version,
+			"d", "foo")
 		tableSpan := fooDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
 
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.

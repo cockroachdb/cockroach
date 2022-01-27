@@ -123,7 +123,7 @@ func (m *Manager) WaitForOneVersion(
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			desc, err = catkv.MustGetDescriptorByID(ctx, txn, m.Codec(), id, catalog.Any)
+			desc, err = catkv.MustGetDescriptorByID(ctx, txn, m.Codec(), m.storage.settings.Version.ActiveVersion(ctx), id, catalog.Any)
 			return err
 		}); err != nil {
 			return nil, err

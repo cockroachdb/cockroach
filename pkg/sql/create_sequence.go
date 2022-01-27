@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -130,6 +131,7 @@ func doCreateSequence(
 	desc, err := NewSequenceTableDesc(
 		ctx,
 		p,
+		p.EvalContext().Settings,
 		name.Object(),
 		opts,
 		dbDesc.GetID(),
@@ -239,6 +241,7 @@ func (*createSequenceNode) Close(context.Context)        {}
 func NewSequenceTableDesc(
 	ctx context.Context,
 	p *planner,
+	settings *clustersettings.Settings,
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
 	parentID descpb.ID,
@@ -312,7 +315,8 @@ func NewSequenceTableDesc(
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
 
-	if err := descbuilder.ValidateSelf(&desc); err != nil {
+	if err := descbuilder.ValidateSelf(&desc,
+		settings.Version.ActiveVersion(ctx)); err != nil {
 		return nil, err
 	}
 	return &desc, nil

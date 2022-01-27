@@ -136,7 +136,10 @@ func (n *alterIndexNode) startExec(params runParams) error {
 
 	}
 
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	if err := n.tableDesc.AllocateIDs(
+		params.ctx,
+		params.ExecCfg().Settings.Version.ActiveVersion(params.ctx),
+	); err != nil {
 		return err
 	}
 

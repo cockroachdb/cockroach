@@ -161,7 +161,11 @@ func expectedSCJobCount(scName string, isClusterRestore, after bool) int {
 func validateTable(
 	t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner, dbName string, tableName string,
 ) {
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tableName)
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		desctestutils.LatestClusterVersionForValidationForTest,
+		dbName, tableName)
 	// There should be no mutations on these table descriptors at this point.
 	require.Equal(t, 0, len(desc.TableDesc().Mutations))
 
