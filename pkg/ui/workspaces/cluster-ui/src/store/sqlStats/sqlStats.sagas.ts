@@ -97,7 +97,6 @@ export function* sqlStatsSaga(
       sqlStatsActions.refresh,
       [
         sqlStatsActions.invalidated,
-        sqlStatsActions.failed,
         rootActions.resetState,
       ],
       refreshSQLStatsSaga,
