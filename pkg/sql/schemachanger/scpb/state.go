@@ -70,3 +70,11 @@ func MakeTarget(status Status, elem Element, metadata *TargetMetadata) Target {
 // This ID is dynamically allocated when any parent element is
 // created and has no relation to the descriptor ID.
 type SourceElementID uint32
+
+// Clone will make a deep copy of the DescriptorState.
+func (m *DescriptorState) Clone() *DescriptorState {
+	if m == nil {
+		return nil
+	}
+	return protoutil.Clone(m).(*DescriptorState)
+}
