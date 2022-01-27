@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -329,4 +330,16 @@ func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { r
 
 func (v TableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
+}
+
+// GetDeclarativeSchemaChangeJobID implements the Descriptor interface.
+func (v TableImplicitRecordType) GetDeclarativeSchemaChangeJobID() catpb.JobID {
+	v.panicNotSupported("GetDeclarativeSchemaChangeJobID")
+	return 0
+}
+
+// GetDeclarativeSchemaChangeState implements the Descriptor interface.
+func (v TableImplicitRecordType) GetDeclarativeSchemaChangeState() *scpb.DescriptorState {
+	v.panicNotSupported("GetDeclarativeSchemaChangeState")
+	return nil
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -496,6 +497,24 @@ func (desc *Mutable) AddSchemaToDatabase(
 		desc.Schemas = make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 	}
 	desc.Schemas[schemaName] = schemaInfo
+}
+
+// GetDeclarativeSchemaChangeState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *immutable) GetDeclarativeSchemaChangeState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
+// SetDeclarativeSchemaChangeState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *Mutable) SetDeclarativeSchemaChangeState(state *scpb.DescriptorState) {
+	desc.DeclarativeSchemaChangerState = state
+}
+
+// SetDeclarativeSchemaChangeJobID is part of the catalog.MutableDescriptor
+// interface.
+func (desc *Mutable) SetDeclarativeSchemaChangeJobID(id catpb.JobID) {
+	desc.DeclarativeSchemaChangeJobID = id
 }
 
 // maybeRemoveDroppedSelfEntryFromSchemas removes an entry in the Schemas map corresponding to the

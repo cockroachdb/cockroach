@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -2480,6 +2481,24 @@ func LocalityConfigRegionalByRow(regionColName tree.Name) catpb.LocalityConfig {
 func (desc *Mutable) SetTableLocalityGlobal() {
 	lc := LocalityConfigGlobal()
 	desc.LocalityConfig = &lc
+}
+
+// GetDeclarativeSchemaChangeState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *wrapper) GetDeclarativeSchemaChangeState() *scpb.DescriptorState {
+	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
+// SetDeclarativeSchemaChangeState is part of the catalog.MutableDescriptor
+// interface.
+func (desc *Mutable) SetDeclarativeSchemaChangeState(state *scpb.DescriptorState) {
+	desc.DeclarativeSchemaChangerState = state
+}
+
+// SetDeclarativeSchemaChangeJobID is part of the catalog.MutableDescriptor
+// interface.
+func (desc *Mutable) SetDeclarativeSchemaChangeJobID(id catpb.JobID) {
+	desc.DeclarativeSchemaChangeJobID = id
 }
 
 // LocalityConfigGlobal returns a config for a GLOBAL table.

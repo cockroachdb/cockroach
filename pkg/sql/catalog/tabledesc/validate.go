@@ -45,7 +45,7 @@ func (desc *wrapper) ValidateTxnCommit(
 	}
 	// Check that the mutation ID values are appropriately set when a declarative
 	// schema change is underway.
-	if n := len(desc.Mutations); n > 0 && desc.NewSchemaChangeJobID != 0 {
+	if n := len(desc.Mutations); n > 0 && desc.DeclarativeSchemaChangeJobID != 0 {
 		lastMutationID := desc.Mutations[n-1].MutationID
 		if lastMutationID != desc.NextMutationID {
 			vea.Report(errors.AssertionFailedf(
@@ -440,14 +440,14 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Validate that the presence of MutationJobs (from the old schema changer)
-	// and the presence of a NewSchemaChangeJobID are mutually exclusive. (Note
+	// and the presence of a DeclarativeSchemaChangeJobID are mutually exclusive. (Note
 	// the jobs themselves can be running simultaneously, since a resumer can
 	// still be running after the schema change is complete from the point of view
 	// of the descriptor, in both the new and old schema change jobs.)
-	if len(desc.MutationJobs) > 0 && desc.NewSchemaChangeJobID != 0 {
+	if len(desc.MutationJobs) > 0 && desc.DeclarativeSchemaChangeJobID != 0 {
 		vea.Report(errors.AssertionFailedf(
 			"invalid concurrent declarative schema change job %d and legacy schema change jobs %v",
-			desc.NewSchemaChangeJobID, desc.MutationJobs))
+			desc.DeclarativeSchemaChangeJobID, desc.MutationJobs))
 	}
 
 	// Check that all expression strings can be parsed.

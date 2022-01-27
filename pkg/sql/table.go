@@ -106,7 +106,7 @@ func (p *planner) createNonDropDatabaseChangeJob(
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *tabledesc.Mutable, jobDesc string, mutationID descpb.MutationID,
 ) error {
-	if tableDesc.NewSchemaChangeJobID != 0 {
+	if tableDesc.DeclarativeSchemaChangeJobID != 0 {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			// We use the cluster version because the table may have been renamed.

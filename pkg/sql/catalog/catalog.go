@@ -13,7 +13,9 @@ package catalog
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -56,6 +58,13 @@ type MutableDescriptor interface {
 	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 	// RunPostDeserializationChanges.
 	HasPostDeserializationChanges() bool
+
+	// SetDeclarativeSchemaChangeState sets the state of the declarative
+	// schema change currently operating on this descriptor.
+	SetDeclarativeSchemaChangeState(*scpb.DescriptorState)
+	// SetDeclarativeSchemaChangeJobID sets the ID of the declarative schema
+	// change job.
+	SetDeclarativeSchemaChangeJobID(i catpb.JobID)
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.
