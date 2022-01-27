@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -51,7 +52,7 @@ func (p synthetic) GetModificationTime() hlc.Timestamp {
 func (p synthetic) GetDrainingNames() []descpb.NameInfo {
 	return nil
 }
-func (p synthetic) GetPrivileges() *descpb.PrivilegeDescriptor {
+func (p synthetic) GetPrivileges() *catpb.PrivilegeDescriptor {
 	log.Fatalf(context.TODO(), "cannot access privileges on a %s descriptor", p.kindName())
 	return nil
 }
@@ -110,5 +111,5 @@ func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {
-	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_SCHEMA))
+	return catprivilege.MakeDefaultPrivileges(catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA))
 }

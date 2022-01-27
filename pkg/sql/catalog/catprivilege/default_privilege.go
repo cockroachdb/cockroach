@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,7 +28,7 @@ var _ catalog.DefaultPrivilegeDescriptor = &Mutable{}
 // immutable is a wrapper for a DefaultPrivilegeDescriptor
 // that only exposes getters.
 type immutable struct {
-	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor
+	defaultPrivilegeDescriptor *catpb.DefaultPrivilegeDescriptor
 }
 
 // Mutable is a wrapper for a DefaultPrivilegeDescriptor
@@ -39,10 +40,10 @@ type Mutable struct {
 // MakeDefaultPrivilegeDescriptor returns a new DefaultPrivilegeDescriptor for
 // the specified DefaultPrivilegeDescriptorType.
 func MakeDefaultPrivilegeDescriptor(
-	typ descpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType,
-) *descpb.DefaultPrivilegeDescriptor {
-	var defaultPrivilegesForRole []descpb.DefaultPrivilegesForRole
-	return &descpb.DefaultPrivilegeDescriptor{
+	typ catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType,
+) *catpb.DefaultPrivilegeDescriptor {
+	var defaultPrivilegesForRole []catpb.DefaultPrivilegesForRole
+	return &catpb.DefaultPrivilegeDescriptor{
 		DefaultPrivilegesPerRole: defaultPrivilegesForRole,
 		Type:                     typ,
 	}
@@ -51,7 +52,7 @@ func MakeDefaultPrivilegeDescriptor(
 // MakeDefaultPrivileges returns an immutable
 // given a defaultPrivilegeDescriptor.
 func MakeDefaultPrivileges(
-	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
+	defaultPrivilegeDescriptor *catpb.DefaultPrivilegeDescriptor,
 ) catalog.DefaultPrivilegeDescriptor {
 	return &immutable{
 		defaultPrivilegeDescriptor: defaultPrivilegeDescriptor,
@@ -61,7 +62,7 @@ func MakeDefaultPrivileges(
 // NewMutableDefaultPrivileges returns a Mutable
 // given a defaultPrivilegeDescriptor.
 func NewMutableDefaultPrivileges(
-	defaultPrivilegeDescriptor *descpb.DefaultPrivilegeDescriptor,
+	defaultPrivilegeDescriptor *catpb.DefaultPrivilegeDescriptor,
 ) *Mutable {
 	return &Mutable{
 		immutable{
@@ -75,8 +76,8 @@ func NewMutableDefaultPrivileges(
 // If the DefaultPrivilegeDescriptor is for a schema we simply
 // call grant/revoke.
 func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
-	role descpb.DefaultPrivilegesRole,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
+	role catpb.DefaultPrivilegesRole,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 	grantee security.SQLUsername,
 	privList privilege.List,
@@ -111,7 +112,7 @@ func (d *immutable) grantOrRevokeDefaultPrivilegesHelper(
 
 // GrantDefaultPrivileges grants privileges for the specified users.
 func (d *Mutable) GrantDefaultPrivileges(
-	role descpb.DefaultPrivilegesRole,
+	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
@@ -126,7 +127,7 @@ func (d *Mutable) GrantDefaultPrivileges(
 
 // RevokeDefaultPrivileges revokes privileges for the specified users.
 func (d *Mutable) RevokeDefaultPrivileges(
-	role descpb.DefaultPrivilegesRole,
+	role catpb.DefaultPrivilegesRole,
 	privileges privilege.List,
 	grantees []security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
@@ -174,12 +175,12 @@ func CreatePrivilegesFromDefaultPrivileges(
 	dbID descpb.ID,
 	user security.SQLUsername,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
-	databasePrivileges *descpb.PrivilegeDescriptor,
-) *descpb.PrivilegeDescriptor {
+	databasePrivileges *catpb.PrivilegeDescriptor,
+) *catpb.PrivilegeDescriptor {
 	// If a new system table is being created (which should only be doable by
 	// an internal user account), make sure it gets the correct privileges.
 	if dbID == keys.SystemDatabaseID {
-		return descpb.NewBasePrivilegeDescriptor(security.NodeUserName())
+		return catpb.NewBasePrivilegeDescriptor(security.NodeUserName())
 	}
 
 	defaultPrivilegeDescriptors := []catalog.DefaultPrivilegeDescriptor{
@@ -190,13 +191,13 @@ func CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivilegeDescriptors = append(defaultPrivilegeDescriptors, schemaDefaultPrivilegeDescriptor)
 	}
 
-	newPrivs := descpb.NewBasePrivilegeDescriptor(user)
-	role := descpb.DefaultPrivilegesRole{Role: user}
+	newPrivs := catpb.NewBasePrivilegeDescriptor(user)
+	role := catpb.DefaultPrivilegesRole{Role: user}
 	for _, d := range defaultPrivilegeDescriptors {
 		if defaultPrivilegesForRole, found := d.GetDefaultPrivilegesForRole(role); !found {
 			// If default privileges are not defined for the creator role, we handle
 			// it as the case where the user has all privileges.
-			defaultPrivilegesForCreatorRole := descpb.InitDefaultPrivilegesForRole(role, d.GetDefaultPrivilegeDescriptorType())
+			defaultPrivilegesForCreatorRole := catpb.InitDefaultPrivilegesForRole(role, d.GetDefaultPrivilegeDescriptorType())
 			for _, user := range GetUserPrivilegesForObject(defaultPrivilegesForCreatorRole, targetObject) {
 				applyDefaultPrivileges(
 					newPrivs,
@@ -221,7 +222,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 		// The privileges for the object are the union of the default privileges
 		// defined for the object for the object creator and the default privileges
 		// defined for all roles.
-		defaultPrivilegesForAllRoles, found := d.GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+		defaultPrivilegesForAllRoles, found := d.GetDefaultPrivilegesForRole(catpb.DefaultPrivilegesRole{ForAllRoles: true})
 		if found {
 			for _, user := range GetUserPrivilegesForObject(*defaultPrivilegesForAllRoles, targetObject) {
 				applyDefaultPrivileges(
@@ -234,7 +235,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 		}
 	}
 
-	newPrivs.Version = descpb.Version21_2
+	newPrivs.Version = catpb.Version21_2
 
 	// TODO(richardjcai): Remove this depending on how we handle the migration.
 	//   For backwards compatibility, also "inherit" privileges from the dbDesc.
@@ -266,7 +267,7 @@ func CreatePrivilegesFromDefaultPrivileges(
 // ForEachDefaultPrivilegeForRole loops through the DefaultPrivilegeDescriptior's
 // DefaultPrivilegePerRole entry and calls f on it.
 func (d *immutable) ForEachDefaultPrivilegeForRole(
-	f func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error,
+	f func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error,
 ) error {
 	if d.defaultPrivilegeDescriptor == nil {
 		return nil
@@ -284,8 +285,8 @@ func (d *immutable) ForEachDefaultPrivilegeForRole(
 // GetDefaultPrivilegesForRole looks for a specific user in the list.
 // Returns (nil, false) if not found, or (ptr, true) if found.
 func (d *immutable) GetDefaultPrivilegesForRole(
-	role descpb.DefaultPrivilegesRole,
-) (*descpb.DefaultPrivilegesForRole, bool) {
+	role catpb.DefaultPrivilegesRole,
+) (*catpb.DefaultPrivilegesForRole, bool) {
 	idx := d.defaultPrivilegeDescriptor.FindUserIndex(role)
 	if idx == -1 {
 		return nil, false
@@ -294,14 +295,14 @@ func (d *immutable) GetDefaultPrivilegesForRole(
 }
 
 // GetDefaultPrivilegeDescriptorType the Type of the default privilege descriptor.
-func (d *immutable) GetDefaultPrivilegeDescriptorType() descpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType {
+func (d *immutable) GetDefaultPrivilegeDescriptorType() catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType {
 	return d.defaultPrivilegeDescriptor.Type
 }
 
 // IsDatabaseDefaultPrivilege returns whether the Type of the default privilege
 // descriptor is for databases.
 func (d *immutable) IsDatabaseDefaultPrivilege() bool {
-	return d.defaultPrivilegeDescriptor.Type == descpb.DefaultPrivilegeDescriptor_DATABASE
+	return d.defaultPrivilegeDescriptor.Type == catpb.DefaultPrivilegeDescriptor_DATABASE
 }
 
 // foldPrivileges folds ALL privileges for role and USAGE on public into
@@ -312,9 +313,9 @@ func (d *immutable) IsDatabaseDefaultPrivilege() bool {
 // This is necessary as role having ALL privileges on tables is the default state
 // and should not prevent the role from being dropped if it has ALL privileges.
 func foldPrivileges(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
-	role descpb.DefaultPrivilegesRole,
-	privileges *descpb.PrivilegeDescriptor,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
+	role catpb.DefaultPrivilegesRole,
+	privileges *catpb.PrivilegeDescriptor,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types &&
@@ -351,9 +352,9 @@ func foldPrivileges(
 // For example - if RoleHasAllPrivilegesOnTables is true, ALL privilege is added
 // into the UserPrivileges array for the Role.
 func expandPrivileges(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
-	role descpb.DefaultPrivilegesRole,
-	privileges *descpb.PrivilegeDescriptor,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
+	role catpb.DefaultPrivilegesRole,
+	privileges *catpb.PrivilegeDescriptor,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {
 	if targetObject == tree.Types && GetPublicHasUsageOnTypes(defaultPrivilegesForRole) {
@@ -373,14 +374,14 @@ func expandPrivileges(
 // GetUserPrivilegesForObject returns the set of []UserPrivileges constructed
 // from the DefaultPrivilegesForRole.
 func GetUserPrivilegesForObject(
-	p descpb.DefaultPrivilegesForRole, targetObject tree.AlterDefaultPrivilegesTargetObject,
-) []descpb.UserPrivileges {
-	var userPrivileges []descpb.UserPrivileges
+	p catpb.DefaultPrivilegesForRole, targetObject tree.AlterDefaultPrivilegesTargetObject,
+) []catpb.UserPrivileges {
+	var userPrivileges []catpb.UserPrivileges
 	if privileges, ok := p.DefaultPrivilegesPerObject[targetObject]; ok {
 		userPrivileges = privileges.Users
 	}
 	if GetPublicHasUsageOnTypes(&p) && targetObject == tree.Types {
-		userPrivileges = append(userPrivileges, descpb.UserPrivileges{
+		userPrivileges = append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  security.PublicRoleName().EncodeProto(),
 			Privileges: privilege.USAGE.Mask(),
 		})
@@ -393,7 +394,7 @@ func GetUserPrivilegesForObject(
 	}
 	userProto := p.GetExplicitRole().UserProto
 	if GetRoleHasAllPrivilegesOnTargetObject(&p, targetObject) {
-		return append(userPrivileges, descpb.UserPrivileges{
+		return append(userPrivileges, catpb.UserPrivileges{
 			UserProto:  userProto,
 			Privileges: privilege.ALL.Mask(),
 		})
@@ -402,7 +403,7 @@ func GetUserPrivilegesForObject(
 }
 
 // GetPublicHasUsageOnTypes returns whether Public has Usage privilege on types.
-func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole) bool {
+func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole) bool {
 	if defaultPrivilegesForRole.IsExplicitRole() {
 		return defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes
 	}
@@ -412,7 +413,7 @@ func GetPublicHasUsageOnTypes(defaultPrivilegesForRole *descpb.DefaultPrivileges
 // GetRoleHasAllPrivilegesOnTargetObject returns whether the creator role
 // has all privileges on the default privileges target object.
 func GetRoleHasAllPrivilegesOnTargetObject(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) bool {
 	if !defaultPrivilegesForRole.IsExplicitRole() {
@@ -435,7 +436,7 @@ func GetRoleHasAllPrivilegesOnTargetObject(
 
 // setPublicHasUsageOnTypes sets PublicHasUsageOnTypes to publicHasUsageOnTypes.
 func setPublicHasUsageOnTypes(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole, publicHasUsageOnTypes bool,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole, publicHasUsageOnTypes bool,
 ) {
 	if defaultPrivilegesForRole.IsExplicitRole() {
 		defaultPrivilegesForRole.GetExplicitRole().PublicHasUsageOnTypes = publicHasUsageOnTypes
@@ -448,7 +449,7 @@ func setPublicHasUsageOnTypes(
 // could be different from the privileges. Unlike the normal grant, the privileges
 // and the grant options being granted could be different
 func applyDefaultPrivileges(
-	p *descpb.PrivilegeDescriptor,
+	p *catpb.PrivilegeDescriptor,
 	user security.SQLUsername,
 	privList privilege.List,
 	grantOptionList privilege.List,
@@ -491,7 +492,7 @@ func applyDefaultPrivileges(
 }
 
 func setRoleHasAllOnTargetObject(
-	defaultPrivilegesForRole *descpb.DefaultPrivilegesForRole,
+	defaultPrivilegesForRole *catpb.DefaultPrivilegesForRole,
 	roleHasAll bool,
 	targetObject tree.AlterDefaultPrivilegesTargetObject,
 ) {

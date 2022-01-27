@@ -39,7 +39,7 @@ type TableImplicitRecordType struct {
 	// by examining the privileges for the table that the record type corresponds
 	// to, and providing the USAGE privilege if the table had the SELECT
 	// privilege.
-	privs *descpb.PrivilegeDescriptor
+	privs *catpb.PrivilegeDescriptor
 }
 
 var _ catalog.TypeDescriptor = (*TableImplicitRecordType)(nil)
@@ -82,7 +82,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}
 
 	tablePrivs := descriptor.GetPrivileges()
-	newPrivs := make([]descpb.UserPrivileges, len(tablePrivs.Users))
+	newPrivs := make([]catpb.UserPrivileges, len(tablePrivs.Users))
 	for i := range tablePrivs.Users {
 		newPrivs[i].UserProto = tablePrivs.Users[i].UserProto
 		// A table's record type has USAGE privs if a user has SELECT on the table.
@@ -94,7 +94,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	return &TableImplicitRecordType{
 		desc: descriptor,
 		typ:  typ,
-		privs: &descpb.PrivilegeDescriptor{
+		privs: &catpb.PrivilegeDescriptor{
 			Users:      newPrivs,
 			OwnerProto: tablePrivs.OwnerProto,
 			Version:    tablePrivs.Version,
@@ -132,7 +132,7 @@ func (v TableImplicitRecordType) GetDrainingNames() []descpb.NameInfo {
 }
 
 // GetPrivileges implements the Descriptor interface.
-func (v TableImplicitRecordType) GetPrivileges() *descpb.PrivilegeDescriptor {
+func (v TableImplicitRecordType) GetPrivileges() *catpb.PrivilegeDescriptor {
 	return v.privs
 }
 

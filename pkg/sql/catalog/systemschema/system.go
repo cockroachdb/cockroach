@@ -721,7 +721,7 @@ func MakeSystemDatabaseDesc() catalog.DatabaseDescriptor {
 		ID:      keys.SystemDatabaseID,
 		Version: 1,
 		// Assign max privileges to root user.
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			priv, security.NodeUserName()),
 	}).BuildImmutableDatabase()
 }
@@ -789,7 +789,7 @@ func registerSystemTable(
 		if privs == nil {
 			log.Fatalf(ctx, "No superuser privileges found when building descriptor of system table %q", tbl.Name)
 		}
-		tbl.Privileges = descpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
+		tbl.Privileges = catpb.NewCustomSuperuserPrivilegeDescriptor(privs, security.NodeUserName())
 	}
 	for _, fn := range fns {
 		fn(&tbl)
@@ -1452,8 +1452,8 @@ var (
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
-			tbl.Privileges.Version = descpb.Version21_2
-			tbl.Privileges.Users = append(tbl.Privileges.Users, descpb.UserPrivileges{
+			tbl.Privileges.Version = catpb.Version21_2
+			tbl.Privileges.Users = append(tbl.Privileges.Users, catpb.UserPrivileges{
 				UserProto:  security.PublicRoleName().EncodeProto(),
 				Privileges: privilege.List{privilege.SELECT}.ToBitField(),
 			})

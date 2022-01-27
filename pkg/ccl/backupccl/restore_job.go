@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1323,7 +1324,7 @@ func remapPublicSchemas(
 		db.AddSchemaToDatabase(tree.PublicSchema, descpb.DatabaseDescriptor_SchemaInfo{ID: id})
 		// Every database must be initialized with the public schema.
 		// Create the SchemaDescriptor.
-		publicSchemaPrivileges := descpb.NewPublicSchemaPrivilegeDescriptor()
+		publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
 		publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 			ParentID:   db.GetID(),
 			Name:       tree.PublicSchema,
@@ -2409,7 +2410,7 @@ func getRestoringPrivileges(
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
-) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
+) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor:
 		return getRestorePrivilegesForTableOrSchema(
@@ -2438,14 +2439,14 @@ func getRestoringPrivileges(
 		// the restoring cluster match the ones that were on the cluster that was
 		// backed up. So we wipe the privileges on the type.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = descpb.NewBasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 		}
 	case catalog.DatabaseDescriptor:
 		// If the restore is not a cluster restore we cannot know that the users on
 		// the restoring cluster match the ones that were on the cluster that was
 		// backed up. So we wipe the privileges on the database.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = descpb.NewBaseDatabasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
 	}
 	return updatedPrivileges, nil
@@ -2460,7 +2461,7 @@ func getRestorePrivilegesForTableOrSchema(
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
-) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
+) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
 		// If we're creating a new database in this restore, the privileges of the
 		// table and schema should be that of the parent DB.

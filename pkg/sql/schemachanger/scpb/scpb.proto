@@ -16,6 +16,7 @@ import "sql/schemachanger/scpb/elements.proto";
 import "gogoproto/gogo.proto";
 
 message Target {
+  option (gogoproto.equal) = true;
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
   TargetMetadata metadata = 2 [(gogoproto.nullable) = false];
   Status target_status = 3;
@@ -37,6 +38,7 @@ enum Status {
 // some fields like statement_id are indexes into the the full declarative
 // schema changer State.
 message TargetMetadata {
+  option (gogoproto.equal) = true;
   // SubWorkID identifies the individual portions of a statement that this
   // target belongs too. For example, if multiple objects such as tables or
   // schemas are dropped in a single statement (i.e. such as DROP TABLE A, B)

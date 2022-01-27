@@ -1,28 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//build:STRINGER.bzl", "stringer")
-
-go_library(
-    name = "catalogkv",
-    srcs = ["catalogkv.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkv",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/clusterversion",
-        "//pkg/keys",
-        "//pkg/kv",
-        "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catalogkeys",
-        "//pkg/sql/catalog/descpb",
-        "//pkg/sql/sem/tree",
-        "//pkg/util/log",
-    ],
-)
-
-stringer(
-    name = "gen-descriptorkind-stringer",
-    src = "catalogkv.go",
-    typ = "DescriptorKind",
-)
 
 go_library(
     name = "descidgen",

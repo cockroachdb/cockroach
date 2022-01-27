@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -100,7 +101,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 			descpb.DatabaseDescriptor{
 				Name:       "db",
 				ID:         0,
-				Privileges: descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges: catpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 		{
@@ -109,7 +110,7 @@ func TestValidateDatabaseDesc(t *testing.T) {
 				Name:         "multi-region-db",
 				ID:           200,
 				RegionConfig: &descpb.DatabaseDescriptor_RegionConfig{},
-				Privileges:   descpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
+				Privileges:   catpb.NewBaseDatabasePrivilegeDescriptor(security.RootUserName()),
 			},
 		},
 	}
@@ -272,7 +273,7 @@ func TestValidateCrossDatabaseReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		privilege := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := NewBuilder(&test.desc).BuildImmutable()
@@ -316,7 +317,7 @@ func TestFixDroppedSchemaName(t *testing.T) {
 		Schemas: map[string]descpb.DatabaseDescriptor_SchemaInfo{
 			dbName: {ID: dbID, Dropped: true},
 		},
-		Privileges: descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+		Privileges: catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 	}
 	b := NewBuilder(&dbDesc)
 	b.RunPostDeserializationChanges()
@@ -328,16 +329,16 @@ func TestFixDroppedSchemaName(t *testing.T) {
 
 func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 	tests := []struct {
-		privilegeDesc          descpb.PrivilegeDescriptor
-		defaultPrivilegeDesc   descpb.DefaultPrivilegeDescriptor
+		privilegeDesc          catpb.PrivilegeDescriptor
+		defaultPrivilegeDesc   catpb.DefaultPrivilegeDescriptor
 		privileges             privilege.List
 		incompatiblePrivileges privilege.List
 		shouldChange           bool
 		users                  []security.SQLUsername
 	}{
 		{ // 0
-			privilegeDesc:          descpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   descpb.DefaultPrivilegeDescriptor{},
+			privilegeDesc:          catpb.PrivilegeDescriptor{},
+			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
 			privileges:             privilege.List{privilege.SELECT},
 			incompatiblePrivileges: privilege.List{privilege.SELECT},
 			shouldChange:           true,
@@ -346,8 +347,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 		},
 		{ // 1
-			privilegeDesc:        descpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc: descpb.DefaultPrivilegeDescriptor{},
+			privilegeDesc:        catpb.PrivilegeDescriptor{},
+			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
 				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
 			},
@@ -358,8 +359,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 		},
 		{ // 2
-			privilegeDesc:          descpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   descpb.DefaultPrivilegeDescriptor{},
+			privilegeDesc:          catpb.PrivilegeDescriptor{},
+			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
 			privileges:             privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
 			incompatiblePrivileges: privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE},
 			shouldChange:           true,
@@ -368,8 +369,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 		},
 		{ // 3
-			privilegeDesc:          descpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc:   descpb.DefaultPrivilegeDescriptor{},
+			privilegeDesc:          catpb.PrivilegeDescriptor{},
+			defaultPrivilegeDesc:   catpb.DefaultPrivilegeDescriptor{},
 			privileges:             privilege.List{privilege.SELECT},
 			incompatiblePrivileges: privilege.List{privilege.SELECT},
 			shouldChange:           true,
@@ -379,8 +380,8 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 			},
 		},
 		{ // 4
-			privilegeDesc:        descpb.PrivilegeDescriptor{},
-			defaultPrivilegeDesc: descpb.DefaultPrivilegeDescriptor{},
+			privilegeDesc:        catpb.PrivilegeDescriptor{},
+			defaultPrivilegeDesc: catpb.DefaultPrivilegeDescriptor{},
 			privileges: privilege.List{
 				privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.ZONECONFIG,
 			},
@@ -409,11 +410,15 @@ func TestMaybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(t *testing.T) {
 					t.Errorf("found incompatible privilege %s", privilege.String())
 				}
 
-				forAllRoles := test.defaultPrivilegeDesc.FindOrCreateUser(descpb.DefaultPrivilegesRole{ForAllRoles: true})
+				forAllRoles := test.defaultPrivilegeDesc.
+					FindOrCreateUser(catpb.DefaultPrivilegesRole{ForAllRoles: true})
 				// Check that the incompatible privileges have been converted to the
 				// equivalent default privileges.
 				if !forAllRoles.DefaultPrivilegesPerObject[tree.Tables].CheckPrivilege(testUser, privilege) {
-					t.Errorf("expected incompatible privilege %s to be converted to a default privilege", privilege.String())
+					t.Errorf(
+						"expected incompatible privilege %s to be converted to a default privilege",
+						privilege.String(),
+					)
 				}
 			}
 		}

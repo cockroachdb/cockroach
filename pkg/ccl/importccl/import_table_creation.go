@@ -75,7 +75,7 @@ func MakeTestingSimpleTableDescriptor(
 			ID:       parentSchemaID,
 			Version:  1,
 			ParentID: parentID,
-			Privileges: descpb.NewPrivilegeDescriptor(
+			Privileges: catpb.NewPrivilegeDescriptor(
 				security.PublicRoleName(),
 				privilege.SchemaPrivileges,
 				privilege.List{},
@@ -185,7 +185,7 @@ func MakeSimpleTableDescriptor(
 		tableID,
 		nil, /* regionConfig */
 		hlc.Timestamp{WallTime: walltime},
-		descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		affected,
 		semaCtx,
 		&evalCtx,
