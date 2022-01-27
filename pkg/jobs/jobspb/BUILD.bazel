@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/protoreflect",
         "@com_github_cockroachdb_errors//:errors",

@@ -171,7 +171,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		// TODO (lucy): get rid of this when we get rid of MutationJobs.
 		if mutationID != descpb.InvalidMutationID {
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
-				MutationID: mutationID, JobID: int64(newRecord.JobID)})
+				MutationID: mutationID, JobID: newRecord.JobID})
 		}
 		log.Infof(ctx, "queued new schema-change job %d for table %d, mutation %d",
 			newRecord.JobID, tableDesc.ID, mutationID)
@@ -204,7 +204,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 			// Also add a MutationJob on the table descriptor.
 			// TODO (lucy): get rid of this when we get rid of MutationJobs.
 			tableDesc.MutationJobs = append(tableDesc.MutationJobs, descpb.TableDescriptor_MutationJob{
-				MutationID: mutationID, JobID: int64(record.JobID)})
+				MutationID: mutationID, JobID: record.JobID})
 			// For existing records, if a mutation ID ever gets assigned
 			// at a later point then mark it as cancellable again.
 			record.NonCancelable = false
