@@ -113,3 +113,33 @@ SHOW DEFAULT PRIVILEGES FOR ALL ROLES
 ----
 NULL  true  tables  test-user  SELECT
 NULL  true  types   public     USAGE
+
+statement ok
+CREATE DATABASE "tEsT"
+
+statement ok
+USE "tEsT"
+
+statement ok
+GRANT SELECT ON DATABASE "tEsT" to "test-user"
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  test-user  SELECT
+NULL  true  types   public     USAGE
+
+statement ok
+CREATE DATABASE "😀"
+
+statement ok
+USE "😀"
+
+statement ok
+GRANT SELECT ON DATABASE "😀" to "test-user"
+
+query TBTTT
+SHOW DEFAULT PRIVILEGES FOR ALL ROLES
+----
+NULL  true  tables  test-user  SELECT
+NULL  true  types   public     USAGE

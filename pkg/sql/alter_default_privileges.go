@@ -56,7 +56,7 @@ func (p *planner) alterDefaultPrivileges(
 	// for the current database.
 	database := p.CurrentDatabase()
 	if n.Database != nil {
-		database = n.Database.Normalize()
+		database = string(*n.Database)
 	}
 	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, database,
 		tree.DatabaseLookupFlags{Required: true})
