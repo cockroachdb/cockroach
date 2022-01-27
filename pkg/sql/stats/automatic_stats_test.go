@@ -62,7 +62,13 @@ func TestMaybeRefreshStats(t *testing.T) {
 		CREATE VIEW t.vw AS SELECT k, k+1 FROM t.a;`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	descA := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	descA := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(),
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"a")
 	cache := NewTableStatisticsCache(
 		ctx,
 		10, /* cacheSize */
@@ -110,7 +116,12 @@ func TestMaybeRefreshStats(t *testing.T) {
 	// Ensure that attempt to refresh stats on view does not result in re-
 	// enqueuing the attempt.
 	// TODO(rytaft): Should not enqueue views to begin with.
-	descVW := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "vw")
+	descVW := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(),
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"vw")
 	refresher.maybeRefreshStats(
 		ctx, s.Stopper(), descVW.GetID(), 0 /* rowsAffected */, time.Microsecond, /* asOf */
 	)
@@ -142,7 +153,13 @@ func TestAverageRefreshTime(t *testing.T) {
 		INSERT INTO t.a VALUES (1);`)
 
 	executor := s.InternalExecutor().(sqlutil.InternalExecutor)
-	table := desctestutils.TestingGetPublicTableDescriptor(s.DB(), keys.SystemSQLCodec, "t", "a")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	table := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(),
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"a")
 	cache := NewTableStatisticsCache(
 		ctx,
 		10, /* cacheSize */

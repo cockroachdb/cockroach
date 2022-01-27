@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -39,6 +40,7 @@ import (
 
 // makeCollection constructs a Collection.
 func makeCollection(
+	ctx context.Context,
 	leaseMgr *lease.Manager,
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
@@ -48,12 +50,13 @@ func makeCollection(
 ) Collection {
 	return Collection{
 		settings:       settings,
+		version:        settings.Version.ActiveVersion(ctx),
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
-		direct:         makeDirect(codec, settings),
+		direct:         makeDirect(ctx, codec, settings),
 	}
 }
 
@@ -66,6 +69,9 @@ type Collection struct {
 
 	// settings dictate whether we validate descriptors on write.
 	settings *cluster.Settings
+
+	// version used for validation
+	version clusterversion.ClusterVersion
 
 	// virtualSchemas optionally holds the virtual schemas.
 	virtual virtualDescriptors
@@ -219,7 +225,7 @@ func (tc *Collection) WriteDescToBatch(
 ) error {
 	desc.MaybeIncrementVersion()
 	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
-		if err := validate.Self(desc); err != nil {
+		if err := validate.Self(tc.version, desc); err != nil {
 			return err
 		}
 	}
@@ -272,7 +278,7 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 // first checking the Collection's cached descriptors for validity if validate
 // is set to true before defaulting to a key-value scan, if necessary.
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
-	return tc.kv.getAllDescriptors(ctx, txn)
+	return tc.kv.getAllDescriptors(ctx, txn, tc.version)
 }
 
 // GetAllDatabaseDescriptors returns all database descriptors visible by the
@@ -284,7 +290,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 func (tc *Collection) GetAllDatabaseDescriptors(
 	ctx context.Context, txn *kv.Txn,
 ) ([]catalog.DatabaseDescriptor, error) {
-	return tc.kv.getAllDatabaseDescriptors(ctx, txn)
+	return tc.kv.getAllDatabaseDescriptors(ctx, txn, tc.version)
 }
 
 // GetAllTableDescriptorsInDatabase returns all the table descriptors visible to

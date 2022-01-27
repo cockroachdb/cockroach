@@ -704,6 +704,7 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 
 	ctx := context.Background()
 	tc := serverutils.StartNewTestCluster(t, numNodes, testClusterArgs)
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
 	defer tc.Stopper().Stop(ctx)
 
 	// Create a 30-row table, split and scatter evenly across the numNodes nodes.
@@ -817,7 +818,12 @@ func TestUncertaintyErrorIsReturned(t *testing.T) {
 						for _, tableName := range errorOriginSpec.tableNames {
 							filters[nodeIdx].tableIDsToFilter = append(
 								filters[nodeIdx].tableIDsToFilter,
-								int(desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", tableName).GetID()),
+								int(desctestutils.TestingGetPublicTableDescriptor(
+									tc.Server(0).DB(),
+									keys.SystemSQLCodec,
+									version,
+									"test",
+									tableName).GetID()),
 							)
 						}
 						filters[nodeIdx].Unlock()

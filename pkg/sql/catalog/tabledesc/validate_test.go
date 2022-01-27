@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -31,6 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"google.golang.org/protobuf/proto"
 )
+
+// latestClusterVersionForValidationForTest only used for database descriptor
+// related tests to avoid a circular dependency.
+var latestClusterVersionForValidationForTest = clusterversion.ClusterVersion{
+	Version: clusterversion.ByKey(clusterversion.RemoveIncompatibleDatabasePrivileges),
+}
 
 type validateStatus int
 
@@ -1753,7 +1760,7 @@ func TestValidateTableDesc(t *testing.T) {
 		t.Run(d.err, func(t *testing.T) {
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := validate.Self(desc)
+			err := validate.Self(latestClusterVersionForValidationForTest, desc)
 			if d.err == "" && err != nil {
 				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
 			} else if d.err != "" && err == nil {
@@ -2004,7 +2011,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		desc := NewBuilder(&test.desc).BuildImmutable()
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 		const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-		results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+		results := cb.Validate(ctx, latestClusterVersionForValidationForTest, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 		if err := results.CombinedError(); err == nil {
 			if test.err != "" {
 				t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

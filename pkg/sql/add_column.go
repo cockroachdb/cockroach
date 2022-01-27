@@ -161,7 +161,8 @@ func (p *planner) addColumnImpl(
 
 	// We need to allocate new ID for the created column in order to correctly
 	// assign sequence ownership.
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
 

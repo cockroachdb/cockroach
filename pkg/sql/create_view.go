@@ -206,23 +206,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
 		// currently relied on in import and restore code and tests.
 		var creationTime hlc.Timestamp
-		desc, err := makeViewTableDesc(
-			params.ctx,
-			params.p.ExecCfg().Settings,
-			viewName,
-			n.viewQuery,
-			n.dbDesc.GetID(),
-			schema.GetID(),
-			id,
-			n.columns,
-			creationTime,
-			privs,
-			&params.p.semaCtx,
-			params.p.EvalContext(),
-			n.persistence,
-			n.dbDesc.IsMultiRegion(),
-			params.p,
-		)
+		desc, err := makeViewTableDesc(params.ctx, viewName, n.viewQuery, n.dbDesc.GetID(), schema.GetID(), id, n.columns, creationTime, privs, &params.p.semaCtx, params.p.EvalContext(), params.p.EvalContext().Settings, n.persistence, n.dbDesc.IsMultiRegion(), params.p)
 		if err != nil {
 			return err
 		}
@@ -237,7 +221,8 @@ func (n *createViewNode) startExec(params runParams) error {
 			desc.IsMaterializedView = true
 			desc.State = descpb.DescriptorState_ADD
 			desc.CreateAsOfTime = params.p.Txn().ReadTimestamp()
-			if err := desc.AllocateIDs(params.ctx); err != nil {
+			version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+			if err := desc.AllocateIDs(params.ctx, version); err != nil {
 				return err
 			}
 			// For multi-region databases, we want this descriptor to be GLOBAL instead.
@@ -361,7 +346,6 @@ func (n *createViewNode) Close(ctx context.Context)  {}
 // include the back-references.
 func makeViewTableDesc(
 	ctx context.Context,
-	st *cluster.Settings,
 	viewName string,
 	viewQuery string,
 	parentID descpb.ID,
@@ -372,6 +356,7 @@ func makeViewTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	st *cluster.Settings,
 	persistence tree.Persistence,
 	isMultiRegion bool,
 	sc resolver.SchemaResolver,
@@ -404,7 +389,7 @@ func makeViewTableDesc(
 	}
 	desc.ViewQuery = typeReplacedQuery
 
-	if err := addResultColumns(ctx, semaCtx, evalCtx, &desc, resultColumns); err != nil {
+	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
 	}
 
@@ -514,7 +499,7 @@ func (p *planner) replaceViewDesc(
 	// Reset the columns to add the new result columns onto.
 	toReplace.Columns = make([]descpb.ColumnDescriptor, 0, len(n.columns))
 	toReplace.NextColumnID = 0
-	if err := addResultColumns(ctx, &p.semaCtx, p.EvalContext(), toReplace, n.columns); err != nil {
+	if err := addResultColumns(ctx, &p.semaCtx, p.EvalContext(), p.EvalContext().Settings, toReplace, n.columns); err != nil {
 		return nil, err
 	}
 
@@ -596,6 +581,7 @@ func addResultColumns(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	st *cluster.Settings,
 	desc *tabledesc.Mutable,
 	resultColumns colinfo.ResultColumns,
 ) error {
@@ -612,7 +598,8 @@ func addResultColumns(
 		}
 		desc.AddColumn(cdd.ColumnDescriptor)
 	}
-	if err := desc.AllocateIDs(ctx); err != nil {
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return err
 	}
 	return nil

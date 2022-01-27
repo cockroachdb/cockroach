@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -34,6 +35,12 @@ import (
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
+
+// latestClusterVersionForValidationForTest only used for database descriptor
+// related tests to avoid a circular dependency.
+var latestClusterVersionForValidationForTest = clusterversion.ClusterVersion{
+	Version: clusterversion.TestingBinaryVersion,
+}
 
 // Makes an descpb.IndexDescriptor with all columns being ascending.
 func makeIndexDescriptor(name string, columnNames []string) descpb.IndexDescriptor {
@@ -83,7 +90,7 @@ func TestAllocateIDs(t *testing.T) {
 		Privileges:    descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		FormatVersion: descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, latestClusterVersionForValidationForTest); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +148,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, latestClusterVersionForValidationForTest); err != nil {
 		t.Fatal(err)
 	}
 
@@ -560,7 +567,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			desc := b.BuildImmutableTable()
 			changes, err := GetPostDeserializationChanges(desc)
 			require.NoError(t, err)
-			err = validate.Self(desc)
+			err = validate.Self(latestClusterVersionForValidationForTest, desc)
 			if test.expValidErr != "" {
 				require.EqualError(t, err, test.expValidErr)
 				return
@@ -611,7 +618,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			},
 		},
 	}).BuildCreatedMutableTable()
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, latestClusterVersionForValidationForTest); err != nil {
 		t.Fatal(err)
 	}
 	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
@@ -643,6 +650,7 @@ func TestKeysPerRow(t *testing.T) {
 	// a descpb.TableDescriptor. It should be possible to move MakeTableDesc into
 	// sqlbase. If/when that happens, use it here instead of this server.
 	s, conn, db := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(context.Background())
 	if _, err := conn.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatalf("%+v", err)
@@ -704,7 +712,12 @@ func TestKeysPerRow(t *testing.T) {
 			tableName := fmt.Sprintf("t%d", i)
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE d.%s %s`, tableName, test.createTable))
 
-			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
+			desc := desctestutils.TestingGetPublicTableDescriptor(
+				db,
+				keys.SystemSQLCodec,
+				version,
+				"d",
+				tableName)
 			require.NotNil(t, desc)
 			keys, err := desc.KeysPerRow(test.indexID)
 			if err != nil {
@@ -834,7 +847,12 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
 
 	// Get the descriptor for the table.
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tbl")
+	tbl := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		latestClusterVersionForValidationForTest,
+		"t",
+		"tbl")
 
 	// Setting a default value on the computed column should fail.
 	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
@@ -851,7 +869,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	// This modified table descriptor should fail validation.
 	{
 		broken := NewBuilder(desc).BuildImmutableTable()
-		require.Error(t, validate.Self(broken))
+		require.Error(t, validate.Self(latestClusterVersionForValidationForTest, broken))
 	}
 
 	// This modified table descriptor should be fixed by removing the default
@@ -860,7 +878,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 		b := NewBuilder(desc)
 		b.RunPostDeserializationChanges()
 		fixed := b.BuildImmutableTable()
-		require.NoError(t, validate.Self(fixed))
+		require.NoError(t, validate.Self(latestClusterVersionForValidationForTest, fixed))
 		changes, err := GetPostDeserializationChanges(fixed)
 		require.NoError(t, err)
 		require.True(t, changes.RemovedDefaultExprFromComputedColumn)

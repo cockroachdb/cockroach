@@ -83,6 +83,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
 	defer s.Stopper().Stop(ctx)
 	if _, err := db.Exec(`CREATE DATABASE d`); err != nil {
 		t.Fatal(err)
@@ -107,7 +108,12 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX foo ON kv_primary (v)`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_primary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			`d`,
+			`kv_primary`)
 		verifyTableDescriptorState(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 		shardColID := getShardColumnID(t, tableDesc, "kv_primary_pkey" /* shardedIndexName */)
 
@@ -141,7 +147,11 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			`d`, `kv_secondary`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary" /* shardedIndexName */)
 	})
 
@@ -158,7 +168,12 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH BUCKET_COUNT = 12`); err != nil {
 			t.Fatal(err)
 		}
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)
+		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+			kvDB,
+			keys.SystemSQLCodec,
+			version,
+			`d`,
+			`kv_secondary2`)
 		verifyTableDescriptorState(t, tableDesc, "sharded_secondary2" /* shardedIndexName */)
 	})
 }

@@ -49,6 +49,7 @@ go_test(
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",
         "//pkg/sql/catalog/schemadesc",

@@ -113,11 +113,16 @@ INSERT INTO d.t2 VALUES (2);
 		"Replication stream %d is not running, status is STREAM_INACTIVE", 999)
 
 	// Testing client.Subscribe()
+	version := h.SysServer.ClusterSettings().Version.ActiveVersion(ctx)
 	makePartitionSpec := func(tables ...string) *streampb.StreamPartitionSpec {
 		var spans []roachpb.Span
 		for _, table := range tables {
 			desc := desctestutils.TestingGetPublicTableDescriptor(
-				h.SysServer.DB(), h.Tenant.Codec, "d", table)
+				h.SysServer.DB(),
+				h.Tenant.Codec,
+				version,
+				"d",
+				table)
 			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
 		}
 
@@ -140,7 +145,12 @@ INSERT INTO d.t2 VALUES (2);
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})
-	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	t1Descr := desctestutils.TestingGetPublicTableDescriptor(
+		h.SysServer.DB(),
+		h.Tenant.Codec,
+		version,
+		"d",
+		"t1")
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cg := ctxgroup.WithContext(ctxWithCancel)

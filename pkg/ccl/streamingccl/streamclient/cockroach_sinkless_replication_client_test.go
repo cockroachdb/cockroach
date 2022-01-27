@@ -68,7 +68,13 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	t1 := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	version := h.SysServer.ClusterSettings().Version.ActiveVersion(ctx)
+	t1 := desctestutils.TestingGetPublicTableDescriptor(
+		h.SysServer.DB(),
+		h.Tenant.Codec,
+		version,
+		"d",
+		"t1")
 
 	client := &sinklessReplicationClient{remote: &h.PGUrl}
 	defer func() {

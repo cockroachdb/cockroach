@@ -359,7 +359,13 @@ CREATE STATISTICS s FROM tt;
 		s.RangeFeedFactory().(*rangefeed.Factory),
 		s.CollectionFactory().(*descs.CollectionFactory),
 	)
-	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "tt")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tbl := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"tt")
 	// Get stats for our table. We are ensuring here that the access to the stats
 	// for tt properly hydrates the user defined type t before access.
 	stats, err := sc.GetTableStats(ctx, tbl)
@@ -484,7 +490,13 @@ func TestCacheAutoRefresh(t *testing.T) {
 	sr0.Exec(t, "CREATE TABLE test.t (k INT PRIMARY KEY, v INT)")
 	sr0.Exec(t, "INSERT INTO test.t VALUES (1, 1), (2, 2), (3, 3)")
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "test", "t")
+	version := s.ClusterSettings().Version.ActiveVersion(ctx)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		tc.Server(0).DB(),
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 
 	expectNStats := func(n int) error {
 		stats, err := sc.GetTableStats(ctx, tableDesc)

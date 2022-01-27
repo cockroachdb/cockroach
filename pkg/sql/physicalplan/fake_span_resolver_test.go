@@ -55,8 +55,14 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	txn := kv.NewTxn(ctx, db, tc.Server(0).NodeID())
 	it := resolver.NewSpanResolverIterator(txn)
+	version := tc.Server(0).ClusterSettings().Version.ActiveVersion(ctx)
 
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "test", "t")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+		db,
+		keys.SystemSQLCodec,
+		version,
+		"test",
+		"t")
 	primIdxValDirs := catalogkeys.IndexKeyValDirs(tableDesc.GetPrimaryIndex())
 
 	span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)

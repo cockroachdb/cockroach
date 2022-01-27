@@ -38,6 +38,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	defer s.Stopper().Stop(ctx)
 
@@ -45,7 +46,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	if err := tests.CreateKVTable(sqlDBRaw, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
-	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, version, "t", "kv")
 	tableKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.

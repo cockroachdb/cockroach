@@ -227,7 +227,13 @@ INSERT INTO d.t2 VALUES (2);
 		require.True(t, testutils.IsError(err, "only the system tenant can backup other tenants"), err)
 	})
 
-	descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	version := h.SysServer.ClusterSettings().Version.ActiveVersion(ctx)
+	descr := desctestutils.TestingGetPublicTableDescriptor(
+		h.SysServer.DB(),
+		h.Tenant.Codec,
+		version,
+		"d",
+		"t1")
 
 	t.Run("stream-tenant", func(t *testing.T) {
 		_, feed := startReplication(t, h, makeCoreChangefeedDecoder, streamTenantQuery)
@@ -363,11 +369,16 @@ INSERT INTO d.t1 (i) VALUES (42);
 USE d;
 `)
 
+	version := h.SysServer.ClusterSettings().Version.ActiveVersion(context.Background())
 	makePartitionSpec := func(startFrom hlc.Timestamp, tables ...string) *streampb.StreamPartitionSpec {
 		var spans []roachpb.Span
 		for _, table := range tables {
 			desc := desctestutils.TestingGetPublicTableDescriptor(
-				h.SysServer.DB(), h.Tenant.Codec, "d", table)
+				h.SysServer.DB(),
+				h.Tenant.Codec,
+				version,
+				"d",
+				table)
 			spans = append(spans, desc.PrimaryIndexSpan(h.Tenant.Codec))
 		}
 
@@ -391,7 +402,12 @@ USE d;
 	streamID := rows[0][0]
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
-	t1Descr := desctestutils.TestingGetPublicTableDescriptor(h.SysServer.DB(), h.Tenant.Codec, "d", "t1")
+	t1Descr := desctestutils.TestingGetPublicTableDescriptor(
+		h.SysServer.DB(),
+		h.Tenant.Codec,
+		version,
+		"d",
+		"t1")
 
 	t.Run("stream-table", func(t *testing.T) {
 		_, feed := startReplication(t, h, makePartitionStreamDecoder,

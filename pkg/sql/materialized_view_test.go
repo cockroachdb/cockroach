@@ -40,6 +40,7 @@ func TestMaterializedViewClearedAfterRefresh(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -55,7 +56,12 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"v")
 
 	// Update the view and refresh it.
 	if _, err := sqlDB.Exec(`
@@ -164,6 +170,7 @@ func TestMaterializedViewCleansUpOnRefreshFailure(t *testing.T) {
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -179,7 +186,12 @@ CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 		t.Fatal(err)
 	}
 
-	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	descBeforeRefresh := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"v")
 
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlDB, descBeforeRefresh.GetID())
@@ -211,6 +223,7 @@ func TestDropMaterializedView(t *testing.T) {
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
 	s, sqlRaw, kvDB := serverutils.StartServer(t, params)
+	version := s.ClusterSettings().Version.ActiveVersion(context.Background())
 	defer s.Stopper().Stop(ctx)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -226,7 +239,12 @@ CREATE TABLE t.t (x INT);
 INSERT INTO t.t VALUES (1), (2);
 CREATE MATERIALIZED VIEW t.v AS SELECT x FROM t.t;
 `)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "v")
+	desc := desctestutils.TestingGetPublicTableDescriptor(
+		kvDB,
+		keys.SystemSQLCodec,
+		version,
+		"t",
+		"v")
 	// Add a zone config to delete all table data.
 	_, err := sqltestutils.AddImmediateGCZoneConfig(sqlRaw, desc.GetID())
 	require.NoError(t, err)

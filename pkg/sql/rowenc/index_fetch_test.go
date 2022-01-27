@@ -57,7 +57,13 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				if err := yaml.UnmarshalStrict([]byte(d.Input), &params); err != nil {
 					d.Fatalf(t, "failed to parse index-fetch params: %v", err)
 				}
-				table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "testdb", params.Table)
+				version := srv.ClusterSettings().Version.ActiveVersionOrEmpty(context.Background())
+				table := desctestutils.TestingGetPublicTableDescriptor(
+					kvDB,
+					keys.SystemSQLCodec,
+					version,
+					"testdb",
+					params.Table)
 				index, err := table.FindIndexWithName(params.Index)
 				if err != nil {
 					d.Fatalf(t, "%+v", err)
