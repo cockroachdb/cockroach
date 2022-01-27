@@ -35,6 +35,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/security",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/internal/validate",
         "//pkg/sql/catalog/nstree",

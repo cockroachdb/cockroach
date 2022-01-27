@@ -14,6 +14,9 @@ package catid
 // DescID is a custom type for {Database,Table}Descriptor IDs.
 type DescID uint32
 
+// InvalidDescID is the uninitialised descriptor id.
+const InvalidDescID DescID = 0
+
 // SafeValue implements the redact.SafeValue interface.
 func (DescID) SafeValue() {}
 

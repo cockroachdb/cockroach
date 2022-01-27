@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -329,7 +330,7 @@ func createPostgresSequences(
 			schema.GetID(),
 			id,
 			hlc.Timestamp{WallTime: walltime},
-			descpb.NewBasePrivilegeDescriptor(owner),
+			catpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
 			// If this is multi-region, this will get added by WriteDescriptors.
 			false, /* isMultiRegion */

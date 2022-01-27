@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -67,7 +68,7 @@ func TestCreateSystemTable(t *testing.T) {
 			KeyColumnIDs: []descpb.ColumnID{1},
 		},
 		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			privilege.ReadData,
 			security.NodeUserName(),
 		),
