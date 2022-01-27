@@ -15,6 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// TTLDefaultExpirationColumnName is the column name representing the expiration
+// column for TTL.
+const TTLDefaultExpirationColumnName = "crdb_internal_expiration"
+
 // ValidateRowLevelTTL validates that the TTL options are valid.
 func ValidateRowLevelTTL(ttl *descpb.TableDescriptor_RowLevelTTL) error {
 	if ttl == nil {
