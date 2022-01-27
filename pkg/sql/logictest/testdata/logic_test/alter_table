@@ -2023,3 +2023,45 @@ ALTER TABLE colsource ADD COLUMN customer_id UUID  REFERENCES colref(id), ADD CO
 
 statement ok
 COMMIT
+
+# Issue #75074 occurred when we added multiple columns inside a single transaction,
+# where the backfill logic was completely skipped because the last added column
+# did not require one. This test will add multiple columns and confirm that a
+# backfill has occurred.
+subtest add_multiple_in_txn
+
+statement ok
+CREATE SEQUENCE IF NOT EXISTS multipleinstmt_seq MAXVALUE 9007199254740991;
+
+statement ok
+CREATE TABLE IF NOT EXISTS multipleinstmt (
+	id INT8 DEFAULT nextval('multipleinstmt_seq') PRIMARY KEY, key STRING, value STRING
+);
+INSERT INTO multipleinstmt (key, value) VALUES ('a', 'a');
+INSERT INTO multipleinstmt (key, value) VALUES ('b', 'b');
+INSERT INTO multipleinstmt (key, value) VALUES ('c', 'c');
+
+
+statement ok
+BEGIN;
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS a BOOL DEFAULT false;
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS b STRING;
+COMMIT;
+
+query ITTBT
+SELECT * FROM multipleinstmt ORDER BY id ASC;
+----
+1  a  a  false  NULL
+2  b  b  false  NULL
+3  c  c  false  NULL
+
+statement ok
+ALTER TABLE multipleinstmt ADD COLUMN IF NOT EXISTS c BOOL DEFAULT true,
+                           ADD COLUMN IF NOT EXISTS d STRING;
+
+query ITTBTBT
+SELECT * FROM multipleinstmt ORDER BY id ASC;
+----
+1  a  a  false  NULL  true  NULL
+2  b  b  false  NULL  true  NULL
+3  c  c  false  NULL  true  NULL
