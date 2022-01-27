@@ -2002,3 +2002,14 @@ func (r *Replica) GetResponseMemoryAccount() *mon.BoundAccount {
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
+
+// LockRaftMuForTesting is for use only by tests in other packages that are
+// trying to avoid a race with concurrent raft application. For tests in the
+// kvserver package, use Replica.{RaftLock,RaftUnlock} that are defined in
+// helpers_test.go.
+func (r *Replica) LockRaftMuForTesting() (unlockFunc func()) {
+	r.raftMu.Lock()
+	return func() {
+		r.raftMu.Unlock()
+	}
+}

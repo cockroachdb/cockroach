@@ -386,6 +386,15 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 // r.mu is held. Note that the returned snapshot is a placeholder and
 // does not contain any of the replica data. The snapshot is actually generated
 // (and sent) by the Raft snapshot queue.
+//
+// More specifically, this method is called by etcd/raft in
+// (*raftLog).snapshot. Raft expects that it generates the snapshot (by
+// calling Snapshot) and that "sending" the result actually sends the
+// snapshot. In CockroachDB, that message is intercepted (at the sender) and
+// instead we add the replica (the raft leader) to the raft snapshot queue,
+// and when its turn comes we look at the raft state for followers that want a
+// snapshot, and then send one. That actual sending path does not call this
+// Snapshot method.
 func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	appliedIndex := r.mu.state.RaftAppliedIndex
@@ -418,11 +427,27 @@ func (r *Replica) GetSnapshot(
 	// the corresponding Raft command not applied yet).
 	r.raftMu.Lock()
 	snap := r.store.engine.NewSnapshot()
-	r.mu.Lock()
-	appliedIndex := r.mu.state.RaftAppliedIndex
-	// Cleared when OutgoingSnapshot closes.
-	r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex, recipientStore)
-	r.mu.Unlock()
+	{
+		r.mu.Lock()
+		// We will fetch the applied index later again, from snap. The
+		// appliedIndex fetched here is narrowly used for adding a log truncation
+		// constraint to prevent log entries > appliedIndex from being removed.
+		// Note that the appliedIndex maintained in Replica actually lags the one
+		// in the engine, since replicaAppBatch.ApplyToStateMachine commits the
+		// engine batch and then acquires Replica.mu to update
+		// Replica.mu.state.RaftAppliedIndex. The use of a possibly stale value
+		// here is harmless since using a lower index in this constraint, than the
+		// actual snapshot index, preserves more from a log truncation
+		// perspective.
+		//
+		// TODO(sumeer): despite the above justification, this is unnecessarily
+		// complicated. Consider loading the RaftAppliedIndex from the snap for
+		// this use case.
+		appliedIndex := r.mu.state.RaftAppliedIndex
+		// Cleared when OutgoingSnapshot closes.
+		r.addSnapshotLogTruncationConstraintLocked(ctx, snapUUID, appliedIndex, recipientStore)
+		r.mu.Unlock()
+	}
 	r.raftMu.Unlock()
 
 	release := func() {
@@ -568,6 +593,12 @@ func snapshot(
 	}
 
 	term, err := term(ctx, rsl, snap, rangeID, eCache, state.RaftAppliedIndex)
+	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
+	// from the two sources are equal.
+	if state.RaftAppliedIndexTerm != 0 && term != state.RaftAppliedIndexTerm {
+		return OutgoingSnapshot{},
+			errors.AssertionFailedf("unequal terms %d != %d", term, state.RaftAppliedIndexTerm)
+	}
 	if err != nil {
 		return OutgoingSnapshot{}, errors.Wrapf(err, "failed to fetch term of %d", state.RaftAppliedIndex)
 	}
@@ -920,6 +951,12 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "snapshot RaftAppliedIndex %d doesn't match its metadata index %d",
 			state.RaftAppliedIndex, nonemptySnap.Metadata.Index)
 	}
+	// If we've migrated to populating RaftAppliedIndexTerm, check that the term
+	// from the two sources are equal.
+	if state.RaftAppliedIndexTerm != 0 && state.RaftAppliedIndexTerm != nonemptySnap.Metadata.Term {
+		log.Fatalf(ctx, "snapshot RaftAppliedIndexTerm %d doesn't match its metadata term %d",
+			state.RaftAppliedIndexTerm, nonemptySnap.Metadata.Term)
+	}
 
 	// The on-disk state is now committed, but the corresponding in-memory state
 	// has not yet been updated. Any errors past this point must therefore be
@@ -975,6 +1012,11 @@ func (r *Replica) applySnapshot(
 	// feelings about this ever change, we can add a LastIndex field to
 	// raftpb.SnapshotMetadata.
 	r.mu.lastIndex = state.RaftAppliedIndex
+
+	// TODO(sumeer): We should be able to set this to
+	// nonemptySnap.Metadata.Term. See
+	// https://github.com/cockroachdb/cockroach/pull/75675#pullrequestreview-867926687
+	// for a discussion regarding this.
 	r.mu.lastTerm = invalidLastTerm
 	r.mu.raftLogSize = 0
 	// Update the store stats for the data in the snapshot.
