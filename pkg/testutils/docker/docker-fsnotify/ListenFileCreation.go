@@ -13,15 +13,14 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/errors"
 	"github.com/fsnotify/fsnotify"
 )
 
@@ -33,9 +32,11 @@ type result struct {
 const defaultTimeout = 30
 
 func main() {
-
 	if len(os.Args) < 2 {
-		panic(fmt.Errorf("must provide the folder to watch and the file to listen to"))
+		panic(errors.Wrap(
+			fmt.Errorf("must provide the folder to watch and the file to listen to"),
+			"fail to run fsnotify to listen to file creation"),
+		)
 	}
 
 	var err error
@@ -49,15 +50,19 @@ func main() {
 		timeoutArg := os.Args[3]
 		timeout, err = strconv.Atoi(timeoutArg)
 		if err != nil {
-			panic(fmt.Errorf("timeout argument must be an integer: %v", err))
+			panic(errors.Wrap(err, "timeout argument must be an integer"))
 		}
 	}
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Fatal(err)
+		panic(errors.Wrap(err, "cannot create new fsnotify file watcher"))
 	}
-	defer watcher.Close()
+	defer func() {
+		if err := watcher.Close(); err != nil {
+			panic(errors.Wrap(err, "error closing the file watcher in docker-fsnotify"))
+		}
+	}()
 
 	done := make(chan result)
 
@@ -102,12 +107,10 @@ func main() {
 		if res.finished && res.err == nil {
 			fmt.Println("finished")
 		} else {
-			fmt.Printf("error: %v", res.err)
+			fmt.Printf("error in docker-fsnotify: %v", res.err)
 		}
 
 	case <-time.After(time.Duration(timeout) * time.Second):
 		fmt.Printf("timeout for %d second", timeout)
 	}
-
-	return
 }
