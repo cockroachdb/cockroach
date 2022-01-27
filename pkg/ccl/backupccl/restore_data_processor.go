@@ -331,7 +331,7 @@ func (rd *restoreDataProcessor) openSSTs(
 
 func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan mergedSST) error {
 	return ctxgroup.GroupWorkers(ctx, rd.numWorkers, func(ctx context.Context, _ int) error {
-		kr, err := makeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.Rekeys)
+		kr, err := makeKeyRewriterFromRekeys(rd.FlowCtx.Codec(), rd.spec.TableRekeys, rd.spec.TenantRekeys)
 		if err != nil {
 			return err
 		}

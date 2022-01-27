@@ -44,7 +44,8 @@ func distRestore(
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
-	rekeys []execinfrapb.TableRekey,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
 	restoreTime hlc.Timestamp,
 	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
@@ -82,16 +83,17 @@ func distRestore(
 		return err
 	}
 
-	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, rekeys)
+	splitAndScatterSpecs, err := makeSplitAndScatterSpecs(sqlInstanceIDs, chunks, tableRekeys, tenantRekeys)
 	if err != nil {
 		return err
 	}
 
 	restoreDataSpec := execinfrapb.RestoreDataSpec{
-		RestoreTime: restoreTime,
-		Encryption:  fileEncryption,
-		Rekeys:      rekeys,
-		PKIDs:       pkIDs,
+		RestoreTime:  restoreTime,
+		Encryption:   fileEncryption,
+		TableRekeys:  tableRekeys,
+		TenantRekeys: tenantRekeys,
+		PKIDs:        pkIDs,
 	}
 
 	if len(splitAndScatterSpecs) == 0 {
@@ -239,7 +241,8 @@ func distRestore(
 func makeSplitAndScatterSpecs(
 	sqlInstanceIDs []base.SQLInstanceID,
 	chunks [][]execinfrapb.RestoreSpanEntry,
-	rekeys []execinfrapb.TableRekey,
+	tableRekeys []execinfrapb.TableRekey,
+	tenantRekeys []execinfrapb.TenantRekey,
 ) (map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec, error) {
 	specsBySQLInstanceID := make(map[base.SQLInstanceID]*execinfrapb.SplitAndScatterSpec)
 	for i, chunk := range chunks {
@@ -253,7 +256,8 @@ func makeSplitAndScatterSpecs(
 				Chunks: []execinfrapb.SplitAndScatterSpec_RestoreEntryChunk{{
 					Entries: chunk,
 				}},
-				Rekeys: rekeys,
+				TableRekeys:  tableRekeys,
+				TenantRekeys: tenantRekeys,
 			}
 		}
 	}
