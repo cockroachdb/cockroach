@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -96,7 +97,10 @@ type TestingIntervalOverrides struct {
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with
 // overrides for short adopt and cancel intervals.
 func NewTestingKnobsWithShortIntervals() *TestingKnobs {
-	const defaultShortInterval = 10 * time.Millisecond
+	defaultShortInterval := 10 * time.Millisecond
+	if util.RaceEnabled {
+		defaultShortInterval *= 5
+	}
 	return NewTestingKnobsWithIntervals(
 		defaultShortInterval, defaultShortInterval, defaultShortInterval, defaultShortInterval,
 	)
