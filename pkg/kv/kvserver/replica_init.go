@@ -125,6 +125,7 @@ func newUnloadedReplica(
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTag("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 	r.raftMu.stateLoader = stateloader.Make(desc.RangeID)
+
 	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
 	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
 
@@ -136,8 +137,14 @@ func newUnloadedReplica(
 	onReset := func() {
 		store.Metrics().ReplicaCircuitBreakerCurTripped.Dec(1)
 	}
+	var cancelStorage CancelStorage
+	if f := r.store.cfg.TestingKnobs.CancelStorageFactory; f != nil {
+		cancelStorage = f()
+	} else {
+		cancelStorage = &MapCancelStorage{}
+	}
 	r.breaker = newReplicaCircuitBreaker(
-		store.cfg.Settings, store.stopper, r.AmbientContext, r, onTrip, onReset,
+		store.cfg.Settings, store.stopper, r.AmbientContext, r, cancelStorage, onTrip, onReset,
 	)
 	return r
 }

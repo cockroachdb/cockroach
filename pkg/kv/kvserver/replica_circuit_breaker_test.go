@@ -56,8 +56,7 @@ func (c *circuitBreakerReplicaMock) Clock() *hlc.Clock {
 }
 
 func (c *circuitBreakerReplicaMock) Desc() *roachpb.RangeDescriptor {
-	//TODO implement me
-	panic("implement me")
+	return &roachpb.RangeDescriptor{}
 }
 
 func (c *circuitBreakerReplicaMock) Send(
@@ -76,7 +75,7 @@ func (c *circuitBreakerReplicaMock) replicaUnavailableError() error {
 	return errors.New("unavailable")
 }
 
-func setupCircuitBreakerBench(b *testing.B) (*replicaCircuitBreaker, *stop.Stopper) {
+func setupCircuitBreakerBench(b *testing.B, cs string) (*replicaCircuitBreaker, *stop.Stopper) {
 	st := cluster.MakeTestingClusterSettings()
 	// Enable circuit breakers.
 	replicaCircuitBreakerSlowReplicationThreshold.Override(context.Background(), &st.SV, time.Hour)
@@ -84,7 +83,16 @@ func setupCircuitBreakerBench(b *testing.B) (*replicaCircuitBreaker, *stop.Stopp
 	r := &circuitBreakerReplicaMock{clock: hlc.NewClock(hlc.UnixNano, 500*time.Millisecond)}
 	onTrip := func() {}
 	onReset := func() {}
-	br := newReplicaCircuitBreaker(st, stopper, log.AmbientContext{}, r, onTrip, onReset)
+	var s CancelStorage
+	switch cs {
+	case "mutexmap":
+		s = &MapCancelStorage{}
+	case "syncmap":
+		s = &SyncMapCancelStorage{}
+	default:
+		b.Fatalf("unknown cancel storage: %s", cs)
+	}
+	br := newReplicaCircuitBreaker(st, stopper, log.AmbientContext{}, r, s, onTrip, onReset)
 	return br, stopper
 }
 
@@ -104,25 +112,30 @@ func BenchmarkReplicaCircuitBreaker_Register(b *testing.B) {
 	})
 
 	b.Run("enabled", func(b *testing.B) {
-		br, stopper := setupCircuitBreakerBench(b)
-		defer stopper.Stop(ctx)
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				ctx, cancel := context.WithCancel(ctx)
-				tok, sig, err := br.Register(ctx, cancel)
-				if err != nil {
-					b.Error(err)
-				}
-				if pErr := br.Unregister(tok, sig, nil); pErr != nil {
-					b.Error(pErr)
-				}
-				cancel()
-			}
-		})
+		for _, ds := range []string{"mutexmax", "syncmap"} {
+			b.Run(ds, func(b *testing.B) {
+				br, stopper := setupCircuitBreakerBench(b, ds)
+				defer stopper.Stop(ctx)
+
+				b.RunParallel(func(pb *testing.PB) {
+					for pb.Next() {
+						ctx, cancel := context.WithCancel(ctx)
+						tok, sig, err := br.Register(ctx, cancel)
+						if err != nil {
+							b.Error(err)
+						}
+						if pErr := br.Unregister(tok, sig, nil); pErr != nil {
+							b.Error(pErr)
+						}
+						cancel()
+					}
+				})
+			})
+		}
 	})
 
 	b.Run("disabled", func(b *testing.B) {
-		br, stopper := setupCircuitBreakerBench(b)
+		br, stopper := setupCircuitBreakerBench(b, "mutexmap" /* irrelevant */)
 		defer stopper.Stop(ctx)
 		b.RunParallel(func(pb *testing.PB) {
 			replicaCircuitBreakerSlowReplicationThreshold.Override(ctx, &br.st.SV, 0) // disable

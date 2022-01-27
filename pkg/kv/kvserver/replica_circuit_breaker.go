@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.etcd.io/etcd/raft/v3"
@@ -57,74 +55,13 @@ var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurat
 // Telemetry counter to count number of trip events.
 var telemetryTripAsync = telemetry.GetCounterOnce("kv.replica_circuit_breaker.num_tripped_events")
 
-type cancelsStorage interface {
+// CancelStorage implements tracking of context cancellation functions
+// for use by Replica circuit breakers.
+type CancelStorage interface {
 	Reset()
 	Set(context.Context, func())
 	Del(context.Context)
 	Visit(func(context.Context, func()) (remove bool))
-}
-
-type mapCancelsStorage struct {
-	syncutil.Mutex
-	m map[context.Context]func()
-}
-
-func (m *mapCancelsStorage) Reset() {
-	m.Lock()
-	m.m = map[context.Context]func(){}
-	m.Unlock()
-}
-
-func (m *mapCancelsStorage) Set(ctx context.Context, cancel func()) {
-	m.Lock()
-	m.m[ctx] = cancel
-	m.Unlock()
-}
-
-func (m *mapCancelsStorage) Del(ctx context.Context) {
-	m.Lock()
-	delete(m.m, ctx)
-	m.Unlock()
-}
-
-func (m *mapCancelsStorage) Visit(fn func(context.Context, func()) (remove bool)) {
-	m.Lock()
-	for ctx, cancel := range m.m {
-		if fn(ctx, cancel) {
-			delete(m.m, ctx)
-		}
-	}
-	m.Unlock()
-}
-
-type syncMapCancelsStorage struct {
-	m *sync.Map
-}
-
-func (s *syncMapCancelsStorage) Reset() {
-	s.m = &sync.Map{}
-}
-
-func (s *syncMapCancelsStorage) Set(ctx context.Context, f func()) {
-	s.m.Store(ctx, f)
-}
-
-func (s *syncMapCancelsStorage) Del(ctx context.Context) {
-	s.m.Delete(ctx)
-}
-
-func (s *syncMapCancelsStorage) Visit(f func(context.Context, func()) (remove bool)) {
-	var rm []context.Context
-	s.m.Range(func(ctxi, cancel interface{}) bool {
-		ctx := ctxi.(context.Context)
-		if f(ctx, cancel.(func())) {
-			rm = append(rm, ctx)
-		}
-		return true // more
-	})
-	for _, ctx := range rm {
-		s.Del(ctx)
-	}
 }
 
 // replicaCircuitBreaker is a wrapper around *circuit.Breaker that makes it
@@ -134,7 +71,7 @@ type replicaCircuitBreaker struct {
 	stopper *stop.Stopper
 	r       replicaInCircuitBreaker
 	st      *cluster.Settings
-	cancels cancelsStorage
+	cancels CancelStorage
 	wrapped *circuit.Breaker
 
 	versionIsActive int32 // atomic
@@ -151,6 +88,10 @@ func (br *replicaCircuitBreaker) Register(
 	ctx context.Context, cancel func(),
 ) (_token interface{}, _ signaller, _ error) {
 	brSig := br.Signal()
+
+	// TODO(tbg): we may want to exclude more requests from this check, or allow
+	// requests to exclude themselves from the check (via their header). This
+	// latter mechanism could also replace isCircuitBreakerProbe.
 	if isCircuitBreakerProbe(ctx) {
 		brSig = neverTripSignaller{}
 	}
@@ -170,11 +111,9 @@ func (br *replicaCircuitBreaker) Register(
 	// trip, it will observe our cancel, thus avoiding a leak. If we observe
 	// a tripped breaker, we also need to remove our own cancel, as the probe
 	// may already have passed the point at which it iterates through the
-	// cancels prior to us inserting it.
+	// cancels prior to us inserting it. The cancel may be invoked twice,
+	// but that's ok.
 	br.cancels.Set(ctx, cancel)
-
-	// TODO(tbg): we may want to exclude some requests from this check, or allow
-	// requests to exclude themselves from the check (via their header).
 	if err := brSig.Err(); err != nil {
 		br.cancels.Del(ctx)
 		cancel()
@@ -227,14 +166,11 @@ func (br *replicaCircuitBreaker) visitCancels(f func(context.Context)) {
 	})
 }
 
-func (br *replicaCircuitBreaker) cancelAllTrackedProposals() int {
-	var n int
+func (br *replicaCircuitBreaker) cancelAllTrackedContexts() {
 	br.cancels.Visit(func(ctx context.Context, cancel func()) (remove bool) {
-		n++
 		cancel()
 		return true // remove
 	})
-	return n
 }
 
 func (br *replicaCircuitBreaker) canEnable() bool {
@@ -288,14 +224,12 @@ func (br *replicaCircuitBreaker) Signal() signaller { // TODO(tbg): unexport?
 	return br.wrapped.Signal()
 }
 
-// CancelsStorageStrategy ...
-var CancelsStorageStrategy = "mutexmap" // HACK
-
 func newReplicaCircuitBreaker(
 	cs *cluster.Settings,
 	stopper *stop.Stopper,
 	ambientCtx log.AmbientContext,
 	r replicaInCircuitBreaker,
+	s CancelStorage,
 	onTrip func(),
 	onReset func(),
 ) *replicaCircuitBreaker {
@@ -305,14 +239,7 @@ func newReplicaCircuitBreaker(
 		r:       r,
 		st:      cs,
 	}
-	switch CancelsStorageStrategy {
-	case "mutexmap":
-		br.cancels = &mapCancelsStorage{}
-	case "syncmap":
-		br.cancels = &syncMapCancelsStorage{}
-	default:
-		panic("unknown cancels storage strategy: " + CancelsStorageStrategy)
-	}
+	br.cancels = s
 	br.cancels.Reset()
 	br.wrapped = circuit.NewBreaker(circuit.Options{
 		Name:       "breaker", // log bridge has ctx tags
@@ -364,34 +291,20 @@ func (br *replicaCircuitBreaker) asyncProbe(report func(error), done func()) {
 	if err := br.stopper.RunAsyncTask(bgCtx, "replica-probe", func(ctx context.Context) {
 		defer done()
 
-		for {
-			if !br.enabled() {
-				report(nil)
-				return
-			}
-
-			br.cancelAllTrackedProposals()
-			err := sendProbe(ctx, br.r)
-			report(err)
-			if err != nil && br.cancelAllTrackedProposals() == 0 {
-				// If any cancels snuck in, loop around so that they ... oh hmm, this
-				// doesn't work. There could be a cancel sneaking in at any point in
-				// time (assuming infinite delay between receiving and checking the
-				// cancellation of the Signal():
-				//
-				// - client gets Signal()
-				// - client checks Err(): nil
-				// - breaker trips
-				// - probe launches
-				// - probe finishes
-				// - client inserts into map
-				// - stuck there forever
-				//
-				// Things should work out if we insert before checking the breaker.
-				continue
-			}
-			break
+		if !br.enabled() {
+			report(nil)
+			return
 		}
+
+		// First, tell all current requests to fail fast. Note that clients insert
+		// first, then check the breaker (and remove themselves if breaker already
+		// tripped then). This prevents any cancels from sneaking in after the probe
+		// gets past this point, which could otherwise leave cancels hanging until
+		// "something" triggers the next probe (which may be never if no more traffic
+		// arrives at the Replica). See Register.
+		br.cancelAllTrackedContexts()
+		err := sendProbe(ctx, br.r)
+		report(err)
 	}); err != nil {
 		done()
 	}
