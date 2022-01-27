@@ -108,6 +108,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	defer cluster.close()
 
 	sql := sqlutils.MakeSQLRunner(cluster.conn())
+
 	expData := readExpectationsFile(b)
 
 	exp, haveExp := expData.find(strings.TrimPrefix(b.Name(), "Benchmark"))
@@ -116,7 +117,10 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 	b.ResetTimer()
 	b.StopTimer()
 	var r tracing.Recording
-	for i := 0; i < b.N(); i++ {
+
+	// Do an extra iteration and don't record it in order to deal with effects of
+	// running it the first time.
+	for i := 0; i < b.N()+1; i++ {
 		sql.Exec(b, "CREATE DATABASE bench;")
 		sql.Exec(b, tc.Setup)
 		cluster.clearStatementTrace(tc.Stmt)
@@ -138,7 +142,7 @@ func executeRoundTripTest(b testingB, tc RoundTripBenchTestCase, cc ClusterConst
 		rt, hasRetry := countKvBatchRequestsInRecording(r)
 		if hasRetry {
 			i--
-		} else {
+		} else if i > 0 { // skip the initial iteration
 			roundTrips += rt
 		}
 

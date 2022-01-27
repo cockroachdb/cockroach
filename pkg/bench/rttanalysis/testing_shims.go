@@ -66,7 +66,7 @@ func (ts tShim) logScope() (getDirectory func() string, close func()) {
 func (ts tShim) GetDirectory() string {
 	return ts.scope.GetDirectory()
 }
-func (ts tShim) N() int      { return 1 }
+func (ts tShim) N() int      { return 2 }
 func (ts tShim) ResetTimer() {}
 func (ts tShim) StopTimer()  {}
 func (ts tShim) StartTimer() {}
