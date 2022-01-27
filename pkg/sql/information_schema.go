@@ -1046,7 +1046,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, func(sc catalog.SchemaDescriptor) error {
-					var privs []descpb.UserPrivilege
+					var privs []catpb.UserPrivilege
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						// User defined schemas have their own privileges.
 						privs = sc.GetPrivileges().Show(privilege.Schema)

@@ -1188,7 +1188,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 	schema: vtable.PGCatalogDefaultACL,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		f := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+		f := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
 			objectTypes := tree.GetAlterDefaultPrivilegesTargetObjects()
 			for _, objectType := range objectTypes {
 				privs, ok := defaultPrivilegesForRole.DefaultPrivilegesPerObject[objectType]

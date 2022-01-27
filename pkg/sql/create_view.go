@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -369,7 +370,7 @@ func makeViewTableDesc(
 	id descpb.ID,
 	resultColumns []colinfo.ResultColumn,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 	persistence tree.Persistence,

@@ -180,7 +180,7 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 	// In postgres, the user "postgres" is the owner of the public schema in a
 	// newly created db. Postgres and Public have USAGE and CREATE privileges.
 	// In CockroachDB, root is our substitute for the postgres user.
-	publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+	publicSchemaPrivileges := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 	// By default, everyone has USAGE and CREATE on the public schema.
 	// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
 	// the public role will no longer have CREATE privileges.

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descpb
+package catpb
 
 import (
 	"fmt"
@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -338,7 +339,7 @@ func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
 // It requires the objectType to determine the superset of privileges allowed
 // for regular users.
 func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
-	parentID ID,
+	parentID catid.DescID,
 	objectType privilege.ObjectType,
 	objectName string,
 	allowedSuperuserPrivileges privilege.List,
@@ -373,7 +374,7 @@ func (p PrivilegeDescriptor) ValidateSuperuserPrivileges(
 
 // Validate returns an assertion error if the privilege descriptor is invalid.
 func (p PrivilegeDescriptor) Validate(
-	parentID ID,
+	parentID catid.DescID,
 	objectType privilege.ObjectType,
 	objectName string,
 	allowedSuperuserPrivileges privilege.List,
@@ -527,9 +528,11 @@ func (p *PrivilegeDescriptor) SetVersion(version PrivilegeDescVersion) {
 }
 
 // privilegeObject is a helper function for privilege errors.
-func privilegeObject(parentID ID, objectType privilege.ObjectType, objectName string) string {
+func privilegeObject(
+	parentID catid.DescID, objectType privilege.ObjectType, objectName string,
+) string {
 	if parentID == keys.SystemDatabaseID ||
-		(parentID == InvalidID && objectName == catconstants.SystemDatabaseName) {
+		(parentID == catid.InvalidDescID && objectName == catconstants.SystemDatabaseName) {
 		return fmt.Sprintf("system %s %q", objectType, objectName)
 	}
 	return fmt.Sprintf("%s %q", objectType, objectName)

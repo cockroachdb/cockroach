@@ -168,6 +168,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catformat",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

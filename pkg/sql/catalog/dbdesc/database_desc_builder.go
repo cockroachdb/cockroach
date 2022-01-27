@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -172,8 +173,8 @@ func NewInitial(
 	return newInitialWithPrivileges(
 		id,
 		name,
-		descpb.NewBaseDatabasePrivilegeDescriptor(owner),
-		catprivilege.MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE),
+		catpb.NewBaseDatabasePrivilegeDescriptor(owner),
+		catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
 		options...,
 	)
 }
@@ -183,8 +184,8 @@ func NewInitial(
 func newInitialWithPrivileges(
 	id descpb.ID,
 	name string,
-	privileges *descpb.PrivilegeDescriptor,
-	defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
+	defaultPrivileges *catpb.DefaultPrivilegeDescriptor,
 	options ...NewInitialOption,
 ) *Mutable {
 	ret := descpb.DatabaseDescriptor{

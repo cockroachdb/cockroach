@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -142,7 +143,7 @@ func TestFixPrivileges(t *testing.T) {
 	}
 
 	for num, testCase := range testCases {
-		desc := &descpb.PrivilegeDescriptor{}
+		desc := &catpb.PrivilegeDescriptor{}
 		for u, p := range testCase.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
@@ -189,7 +190,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 		modified        bool
 		output          userPrivileges
 		objectType      privilege.ObjectType
-		privDescVersion descpb.PrivilegeDescVersion
+		privDescVersion catpb.PrivilegeDescVersion
 		description     string
 		isValid         bool
 	}{
@@ -203,7 +204,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -217,7 +218,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a database created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -231,7 +232,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ALL},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"ALL should stay as ALL",
 			true,
 		},
@@ -244,7 +245,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.USAGE},
 			},
 			privilege.Table,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a table created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			false,
@@ -258,7 +259,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.USAGE},
 			},
 			privilege.Database,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a Database created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			false,
@@ -272,7 +273,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a table created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			true,
@@ -286,7 +287,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Database,
-			descpb.OwnerVersion,
+			catpb.OwnerVersion,
 			"A privilege descriptor from a Database created in v20.2 onwards " +
 				"(OwnerVersion) should not be modified.",
 			true,
@@ -303,7 +304,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.SELECT},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -319,7 +320,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -335,7 +336,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				barUser: privilege.List{privilege.ZONECONFIG, privilege.CREATE, privilege.GRANT},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a database created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -353,7 +354,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				bazUser: privilege.List{privilege.ALL},
 			},
 			privilege.Database,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"A privilege descriptor from a table created in v20.1 or prior " +
 				"(InitialVersion) with USAGE should have the privilege converted to ZONECONFIG.",
 			true,
@@ -368,7 +369,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 				fooUser: privilege.List{privilege.ZONECONFIG},
 			},
 			privilege.Table,
-			descpb.InitialVersion,
+			catpb.InitialVersion,
 			"If the descriptor has USAGE and ZONECONFIG, it should become just " +
 				"ZONECONFIG",
 			true,
@@ -376,7 +377,7 @@ func TestMaybeFixUsageAndZoneConfigPrivilege(t *testing.T) {
 	}
 
 	for num, tc := range testCases {
-		desc := &descpb.PrivilegeDescriptor{Version: tc.privDescVersion}
+		desc := &catpb.PrivilegeDescriptor{Version: tc.privDescVersion}
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}
@@ -483,7 +484,7 @@ func TestMaybeFixSchemaPrivileges(t *testing.T) {
 	}
 
 	for num, tc := range testCases {
-		desc := &descpb.PrivilegeDescriptor{}
+		desc := &catpb.PrivilegeDescriptor{}
 		for u, p := range tc.input {
 			desc.Grant(u, p, false /* withGrantOption */)
 		}

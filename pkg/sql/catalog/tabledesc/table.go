@@ -468,7 +468,7 @@ func InitTableDescriptor(
 	id, parentID, parentSchemaID descpb.ID,
 	name string,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	persistence tree.Persistence,
 ) Mutable {
 	return Mutable{

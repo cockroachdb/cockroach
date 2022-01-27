@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -193,7 +194,7 @@ func makeTable(useColFamilies bool) catalog.TableDescriptor {
 	var testTableDesc = descpb.TableDescriptor{
 		Name:       "abcd",
 		ID:         descpb.ID(tableID),
-		Privileges: descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+		Privileges: catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		Version:    1,
 		Columns: []descpb.ColumnDescriptor{
 			{Name: "a", ID: 1, Type: types.Int},

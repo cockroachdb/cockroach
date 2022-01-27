@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1140,7 +1141,7 @@ func newTableDescIfAs(
 	id descpb.ID,
 	creationTime hlc.Timestamp,
 	resultColumns []colinfo.ResultColumn,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
 ) (desc *tabledesc.Mutable, err error) {
 	colResIndex := 0
@@ -1245,7 +1246,7 @@ func NewTableDesc(
 	id descpb.ID,
 	regionConfig *multiregion.RegionConfig,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
@@ -2182,7 +2183,7 @@ func newTableDesc(
 	sc catalog.SchemaDescriptor,
 	id descpb.ID,
 	creationTime hlc.Timestamp,
-	privileges *descpb.PrivilegeDescriptor,
+	privileges *catpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 ) (ret *tabledesc.Mutable, err error) {
 	newDefs, err := replaceLikeTableOpts(n, params)

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -64,7 +65,7 @@ func TestInitialKeys(t *testing.T) {
 			keys.SystemDatabaseID,
 			descpb.ID(1000 /* suitably large descriptor ID */),
 			"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-			descpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
+			catpb.NewBasePrivilegeDescriptor(security.NodeUserName()),
 		)
 		if err != nil {
 			t.Fatal(err)

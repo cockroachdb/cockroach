@@ -265,7 +265,7 @@ func TestSafeMessage(t *testing.T) {
 				tc.parentID,
 				tc.id,
 				tc.schema,
-				descpb.NewBasePrivilegeDescriptor(security.RootUserName()),
+				catpb.NewBasePrivilegeDescriptor(security.RootUserName()),
 			)
 			require.NoError(t, err)
 			var td catalog.TableDescriptor

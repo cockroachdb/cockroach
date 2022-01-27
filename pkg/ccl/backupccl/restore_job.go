@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1326,7 +1327,7 @@ func remapPublicSchemas(
 		// In postgres, the user "postgres" is the owner of the public schema in a
 		// newly created db. Postgres and Public have USAGE and CREATE privileges.
 		// In CockroachDB, root is our substitute for the postgres user.
-		publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		publicSchemaPrivileges := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		// By default, everyone has USAGE and CREATE on the public schema.
 		// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
 		// the public role will no longer have CREATE privilege.
@@ -2415,7 +2416,7 @@ func getRestoringPrivileges(
 	user security.SQLUsername,
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
-) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
+) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	switch desc := desc.(type) {
 	case catalog.TableDescriptor:
 		return getRestorePrivilegesForTableOrSchema(
@@ -2444,14 +2445,14 @@ func getRestoringPrivileges(
 		// the restoring cluster match the ones that were on the cluster that was
 		// backed up. So we wipe the privileges on the type.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = descpb.NewBasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
 		}
 	case catalog.DatabaseDescriptor:
 		// If the restore is not a cluster restore we cannot know that the users on
 		// the restoring cluster match the ones that were on the cluster that was
 		// backed up. So we wipe the privileges on the database.
 		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = descpb.NewBaseDatabasePrivilegeDescriptor(user)
+			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
 		}
 	}
 	return updatedPrivileges, nil
@@ -2466,7 +2467,7 @@ func getRestorePrivilegesForTableOrSchema(
 	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
 	descCoverage tree.DescriptorCoverage,
 	privilegeType privilege.ObjectType,
-) (updatedPrivileges *descpb.PrivilegeDescriptor, err error) {
+) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
 	if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
 		// If we're creating a new database in this restore, the privileges of the
 		// table and schema should be that of the parent DB.

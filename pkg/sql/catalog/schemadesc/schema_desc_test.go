@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -164,7 +165,7 @@ func TestValidateCrossSchemaReferences(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		privilege := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+		privilege := catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 		var cb nstree.MutableCatalog
 		test.desc.Privileges = privilege
 		desc := schemadesc.NewBuilder(&test.desc).BuildImmutable()

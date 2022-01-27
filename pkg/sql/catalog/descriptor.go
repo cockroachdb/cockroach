@@ -161,7 +161,7 @@ type Descriptor interface {
 	// describes the set of privileges that users have to use, modify, or delete
 	// the object represented by this descriptor. Each descriptor type may have a
 	// different set of capabilities represented by the PrivilegeDescriptor.
-	GetPrivileges() *descpb.PrivilegeDescriptor
+	GetPrivileges() *catpb.PrivilegeDescriptor
 	// DescriptorType returns the type of this descriptor (like relation, type,
 	// schema, database).
 	DescriptorType() DescriptorType
@@ -731,9 +731,9 @@ type TypeDescriptorResolver interface {
 // DefaultPrivilegeDescriptor protos are not accessed and interacted
 // with directly.
 type DefaultPrivilegeDescriptor interface {
-	GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole) (*descpb.DefaultPrivilegesForRole, bool)
-	ForEachDefaultPrivilegeForRole(func(descpb.DefaultPrivilegesForRole) error) error
-	GetDefaultPrivilegeDescriptorType() descpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
+	GetDefaultPrivilegesForRole(catpb.DefaultPrivilegesRole) (*catpb.DefaultPrivilegesForRole, bool)
+	ForEachDefaultPrivilegeForRole(func(catpb.DefaultPrivilegesForRole) error) error
+	GetDefaultPrivilegeDescriptorType() catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an
