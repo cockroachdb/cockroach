@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -142,8 +143,8 @@ func TestReplicaRangefeed(t *testing.T) {
 	for i := 0; i < numNodes; i++ {
 		stream := newTestStream()
 		streams[i] = stream
-		ts := tc.Servers[i]
-		store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+		srv := tc.Servers[i]
+		store, err := srv.Stores().GetStore(srv.GetFirstStoreID())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,6 +165,28 @@ func TestReplicaRangefeed(t *testing.T) {
 
 	checkForExpEvents := func(expEvents []*roachpb.RangeFeedEvent) {
 		t.Helper()
+
+		// SSTs may not be equal byte-for-byte due to AddSSTable rewrites. We nil
+		// out the expected data here for require.Equal comparison, and compare
+		// the actual contents separately.
+		type sstTest struct {
+			expect     []byte
+			expectSpan roachpb.Span
+			expectTS   hlc.Timestamp
+			actual     []byte
+		}
+		var ssts []sstTest
+		for _, e := range expEvents {
+			if e.SST != nil {
+				ssts = append(ssts, sstTest{
+					expect:     e.SST.Data,
+					expectSpan: e.SST.Span,
+					expectTS:   e.SST.WriteTS,
+				})
+				e.SST.Data = nil
+			}
+		}
+
 		for _, stream := range streams {
 			var events []*roachpb.RangeFeedEvent
 			testutils.SucceedsSoon(t, func() error {
@@ -191,7 +214,52 @@ func TestReplicaRangefeed(t *testing.T) {
 			if len(streamErrC) > 0 {
 				t.Fatalf("unexpected error from stream: %v", <-streamErrC)
 			}
+
+			i := 0
+			for _, e := range events {
+				if e.SST != nil && i < len(ssts) {
+					ssts[i].actual = e.SST.Data
+					e.SST.Data = nil
+					i++
+				}
+			}
+
 			require.Equal(t, expEvents, events)
+
+			for _, sst := range ssts {
+				expIter, err := storage.NewMemSSTIterator(sst.expect, false)
+				require.NoError(t, err)
+				defer expIter.Close()
+
+				sstIter, err := storage.NewMemSSTIterator(sst.actual, false)
+				require.NoError(t, err)
+				defer sstIter.Close()
+
+				expIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+				sstIter.SeekGE(storage.MVCCKey{Key: keys.MinKey})
+				for {
+					expOK, expErr := expIter.Valid()
+					require.NoError(t, expErr)
+					sstOK, sstErr := sstIter.Valid()
+					require.NoError(t, sstErr)
+					if !expOK {
+						require.False(t, sstOK)
+						break
+					}
+
+					expKey, expValue := expIter.UnsafeKey(), expIter.UnsafeValue()
+					sstKey, sstValue := sstIter.UnsafeKey(), sstIter.UnsafeValue()
+					require.Equal(t, expKey.Key, sstKey.Key)
+					require.Equal(t, expValue, sstValue)
+					// We don't compare expKey.Timestamp and sstKey.Timestamp, because the
+					// SST timestamp may have been rewritten to the request timestamp. We
+					// assert on the write timestamp instead.
+					require.Equal(t, sst.expectTS, sstKey.Timestamp)
+
+					expIter.Next()
+					sstIter.Next()
+				}
+			}
 		}
 	}
 
@@ -257,6 +325,63 @@ func TestReplicaRangefeed(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ingest an SSTable. We use a new timestamp to avoid getting pushed by the
+	// timestamp cache due to the read above.
+	ts6 := ts.Clock().Now().Add(0, 6)
+
+	expVal6b := roachpb.Value{}
+	expVal6b.SetInt(6)
+	expVal6b.InitChecksum(roachpb.Key("b"))
+
+	expVal6q := roachpb.Value{}
+	expVal6q.SetInt(7)
+	expVal6q.InitChecksum(roachpb.Key("q"))
+
+	sstFile := &storage.MemFile{}
+	sstWriter := storage.MakeIngestionSSTWriter(sstFile)
+	defer sstWriter.Close()
+	require.NoError(t, sstWriter.PutMVCC(
+		storage.MVCCKey{Key: roachpb.Key("b"), Timestamp: ts6},
+		expVal6b.RawBytes))
+	require.NoError(t, sstWriter.PutMVCC(
+		storage.MVCCKey{Key: roachpb.Key("q"), Timestamp: ts6},
+		expVal6q.RawBytes))
+	require.NoError(t, sstWriter.Finish())
+	expSST := sstFile.Data()
+	expSSTSpan := roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("r")}
+
+	_, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		false /* ingestAsWrites */, ts6)
+	require.Nil(t, pErr)
+
+	// Ingest an SSTable as writes.
+	ts7 := ts.Clock().Now().Add(0, 7)
+
+	expVal7b := roachpb.Value{Timestamp: ts7}
+	expVal7b.SetInt(7)
+	expVal7b.InitChecksum(roachpb.Key("b"))
+
+	expVal7q := roachpb.Value{Timestamp: ts7}
+	expVal7q.SetInt(7)
+	expVal7q.InitChecksum(roachpb.Key("q"))
+
+	sstFile = &storage.MemFile{}
+	sstWriter = storage.MakeIngestionSSTWriter(sstFile)
+	defer sstWriter.Close()
+	require.NoError(t, sstWriter.PutMVCC(
+		storage.MVCCKey{Key: roachpb.Key("b"), Timestamp: ts7},
+		expVal7b.RawBytes))
+	require.NoError(t, sstWriter.PutMVCC(
+		storage.MVCCKey{Key: roachpb.Key("q"), Timestamp: ts7},
+		expVal7q.RawBytes))
+	require.NoError(t, sstWriter.Finish())
+
+	_, pErr = store1.DB().AddSSTableAtBatchTimestamp(ctx, roachpb.Key("b"), roachpb.Key("r"), sstFile.Data(),
+		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
+		true /* ingestAsWrites */, ts7)
+	require.Nil(t, pErr)
+
 	// Wait for all streams to observe the expected events.
 	expVal2 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val2"), ts2)
 	expVal3 := roachpb.MakeValueFromBytesAndTimestamp([]byte("val3"), ts3)
@@ -281,6 +406,16 @@ func TestReplicaRangefeed(t *testing.T) {
 		}},
 		{Val: &roachpb.RangeFeedValue{
 			Key: roachpb.Key("b"), Value: expVal5, PrevValue: expVal4NoTS,
+		}},
+		{SST: &roachpb.RangeFeedSSTable{
+			// Binary representation of Data may be modified by SST rewrite, see checkForExpEvents.
+			Data: expSST, Span: expSSTSpan, WriteTS: ts6,
+		}},
+		{Val: &roachpb.RangeFeedValue{
+			Key: roachpb.Key("b"), Value: expVal7b, PrevValue: expVal6b,
+		}},
+		{Val: &roachpb.RangeFeedValue{
+			Key: roachpb.Key("q"), Value: expVal7q, PrevValue: expVal6q,
 		}},
 	}...)
 	checkForExpEvents(expEvents)
@@ -784,6 +919,94 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})
+}
+
+// TestReplicaRangefeedMVCCHistoryMutationError tests that rangefeeds are
+// disconnected when an MVCC history mutation is applied.
+func TestReplicaRangefeedMVCCHistoryMutationError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	splitKey := roachpb.Key("a")
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer tc.Stopper().Stop(ctx)
+	ts := tc.Servers[0]
+	store, err := ts.Stores().GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+	tc.SplitRangeOrFatal(t, splitKey)
+	tc.AddVotersOrFatal(t, splitKey, tc.Target(1), tc.Target(2))
+	rangeID := store.LookupReplica(roachpb.RKey(splitKey)).RangeID
+
+	// Write to the RHS of the split and wait for all replicas to process it.
+	// This ensures that all replicas have seen the split before we move on.
+	incArgs := incrementArgs(splitKey, 9)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), incArgs)
+	require.Nil(t, pErr)
+	tc.WaitForValues(t, splitKey, []int64{9, 9, 9})
+
+	// Set up a rangefeed across a-c.
+	stream := newTestStream()
+	streamErrC := make(chan *roachpb.Error, 1)
+	go func() {
+		req := roachpb.RangeFeedRequest{
+			Header: roachpb.Header{RangeID: rangeID},
+			Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+		}
+		timer := time.AfterFunc(10*time.Second, stream.Cancel)
+		defer timer.Stop()
+		streamErrC <- store.RangeFeed(&req, stream)
+	}()
+
+	// Wait for a checkpoint.
+	require.Eventually(t, func() bool {
+		if len(streamErrC) > 0 {
+			require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
+		}
+		events := stream.Events()
+		for _, event := range events {
+			require.NotNil(t, event.Checkpoint, "received non-checkpoint event: %v", event)
+		}
+		return len(events) > 0
+	}, 5*time.Second, 100*time.Millisecond)
+
+	// Apply a ClearRange command that mutates MVCC history across c-e.
+	// This does not overlap with the rangefeed registration, and should
+	// not disconnect it.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), &roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("c"),
+			EndKey: roachpb.Key("e"),
+		},
+	})
+	require.Nil(t, pErr)
+	if len(streamErrC) > 0 {
+		require.Fail(t, "unexpected rangefeed error", "%v", <-streamErrC)
+	}
+
+	// Apply a ClearRange command that mutates MVCC history across b-e.
+	// This overlaps with the rangefeed, and should disconnect it.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), &roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("b"),
+			EndKey: roachpb.Key("e"),
+		},
+	})
+	require.Nil(t, pErr)
+	select {
+	case pErr = <-streamErrC:
+		require.NotNil(t, pErr)
+		var mvccErr *roachpb.MVCCHistoryMutationError
+		require.ErrorAs(t, pErr.GoError(), &mvccErr)
+		require.Equal(t, &roachpb.MVCCHistoryMutationError{
+			Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("e")},
+		}, mvccErr)
+	case <-time.After(time.Second):
+		require.Fail(t, "timed out waiting for rangefeed disconnection")
+	}
 }
 
 // TestReplicaRangefeedPushesTransactions tests that rangefeed detects intents
