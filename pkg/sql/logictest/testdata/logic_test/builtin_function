@@ -3140,6 +3140,9 @@ skipif config 3node-tenant
 statement error session revival tokens are not supported on this cluster
 select crdb_internal.create_session_revival_token()
 
+statement ok
+SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true
+
 onlyif config 3node-tenant
 statement error cannot create token for root user
 select crdb_internal.create_session_revival_token()
@@ -3194,3 +3197,6 @@ FROM
   c, a
 ----
 Ed25519  testuser  true  true  true  true
+
+statement ok
+SET CLUSTER SETTING server.user_login.session_revival_token.enabled = false
