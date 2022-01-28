@@ -128,13 +128,21 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 		}
 	case tree.RelocateNonVoters:
 		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, existingVoters, relocationTargets,
+			params.ctx,
+			rowKey,
+			existingVoters,
+			relocationTargets,
+			true, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
 		}
 	case tree.RelocateVoters:
 		if err := params.p.ExecCfg().DB.AdminRelocateRange(
-			params.ctx, rowKey, relocationTargets, existingNonVoters,
+			params.ctx,
+			rowKey,
+			relocationTargets,
+			existingNonVoters,
+			true, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
 		}
