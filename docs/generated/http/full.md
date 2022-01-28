@@ -4340,6 +4340,49 @@ Response object for issuing Transaction ID Resolution.
 
 
 
+## ToggleTraceRecording
+
+`POST /_status/toggletracerecording`
+
+!!!
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+!!!
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| trace_id | [uint64](#cockroach.server.serverpb.ToggleTraceRecordingRequest-uint64) |  |  | [reserved](#support-status) |
+| span_id | [uint64](#cockroach.server.serverpb.ToggleTraceRecordingRequest-uint64) |  |  | [reserved](#support-status) |
+| record | [bool](#cockroach.server.serverpb.ToggleTraceRecordingRequest-bool) |  |  | [reserved](#support-status) |
+| verbose | [bool](#cockroach.server.serverpb.ToggleTraceRecordingRequest-bool) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

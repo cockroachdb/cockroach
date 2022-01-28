@@ -143,10 +143,21 @@ function toggleVerbosity(event) {
   console.log(event.target);
   var traceID = event.target.dataset.traceid;
   console.log("toggling visibility for trace: " + traceID);
+  /*
   var xhttp = new XMLHttpRequest();
   xhttp.open("POST", "toggle-trace");
   xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
   xhttp.send("traceID=" + traceID);
+  */
+  fetch('/_status/toggletracerecording',
+    {
+      method: 'POST',
+      body: {
+        'record':true,
+        'verbose':true,
+        'trace_id': traceID,
+      },
+    });
 };
 
 function search(s) {
