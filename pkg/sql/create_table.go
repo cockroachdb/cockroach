@@ -2286,6 +2286,9 @@ func newTableDesc(
 			n.Persistence,
 		)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// We need to ensure sequence ownerships so that column owned sequences are
 	// correctly dropped when a column/table is dropped.
@@ -2298,7 +2301,24 @@ func newTableDesc(
 		}
 	}
 
-	return ret, err
+	// Row level TTL tables require a scheduled job to be created as well.
+	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
+	// This involves plumbing InternalExecutor in there,
+	if ret.RowLevelTTL != nil {
+		env := CreateScheduledJobEnv(params.p.ExecCfg())
+		j, err := newRowLevelTTLScheduledJob(
+			env,
+			params.p.User(),
+			ret.GetID(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := j.Create(params.ctx, params.p.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+			return nil, err
+		}
+	}
+	return ret, nil
 }
 
 // replaceLikeTableOps processes the TableDefs in the input CreateTableNode,

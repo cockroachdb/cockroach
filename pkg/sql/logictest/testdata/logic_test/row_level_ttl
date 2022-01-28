@@ -55,3 +55,21 @@ tbl                                                CREATE TABLE public.tbl (
                                                    CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
                                                    FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl_expire_after = '00:10:00':::INTERVAL)
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root
+
+let $schedule_id
+SELECT id FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+
+query IT
+SHOW CREATE SCHEDULE $schedule_id
+----
+731599530720591873  ALTER TABLE [60 as T] WITH (expire_after = ...)

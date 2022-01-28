@@ -47,6 +47,7 @@ var _ Details = MigrationDetails{}
 var _ Details = AutoSpanConfigReconciliationDetails{}
 var _ Details = ImportDetails{}
 var _ Details = StreamReplicationDetails{}
+var _ Details = RowLevelTTLDetails{}
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
@@ -62,6 +63,7 @@ var _ ProgressDetails = NewSchemaChangeProgress{}
 var _ ProgressDetails = MigrationProgress{}
 var _ ProgressDetails = AutoSpanConfigReconciliationDetails{}
 var _ ProgressDetails = StreamReplicationProgress{}
+var _ ProgressDetails = RowLevelTTLProgress{}
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -123,6 +125,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeAutoSQLStatsCompaction
 	case *Payload_StreamReplication:
 		return TypeStreamReplication
+	case *Payload_RowLevelTTL:
+		return TypeRowLevelTTL
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -165,6 +169,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	case StreamReplicationProgress:
 		return &Progress_StreamReplication{StreamReplication: &d}
+	case RowLevelTTLProgress:
+		return &Progress_RowLevelTTL{RowLevelTTL: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -202,6 +208,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.AutoSQLStatsCompaction
 	case *Payload_StreamReplication:
 		return *d.StreamReplication
+	case *Payload_RowLevelTTL:
+		return *d.RowLevelTTL
 	default:
 		return nil
 	}
@@ -239,6 +247,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.AutoSQLStatsCompaction
 	case *Progress_StreamReplication:
 		return *d.StreamReplication
+	case *Progress_RowLevelTTL:
+		return *d.RowLevelTTL
 	default:
 		return nil
 	}
@@ -289,6 +299,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_AutoSQLStatsCompaction{AutoSQLStatsCompaction: &d}
 	case StreamReplicationDetails:
 		return &Payload_StreamReplication{StreamReplication: &d}
+	case RowLevelTTLDetails:
+		return &Payload_RowLevelTTL{RowLevelTTL: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -324,7 +336,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 16
+const NumJobTypes = 17
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
 // parameters from ChangefeedDetails.
