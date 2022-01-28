@@ -4507,7 +4507,13 @@ value if you rely on the HLC for accuracy.`,
 					return tree.DBoolFalse, nil
 				}
 
-				rootSpan.SetVerbose(verbosity)
+				var recType tracing.RecordingType
+				if verbosity {
+					recType = tracing.RecordingVerbose
+				} else {
+					recType = tracing.RecordingOff
+				}
+				rootSpan.SetRecordingType(recType)
 				return tree.DBoolTrue, nil
 			},
 			Info:       "Returns true if root span was found and verbosity was set, false otherwise.",
