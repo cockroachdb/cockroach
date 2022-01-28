@@ -40,18 +40,11 @@ go_test(
         "debug_remote_test.go",
         "main_test.go",
     ],
-    args = [
-        "-e",
-        "/cockroach/cockroach",
-        "-b",
-        "../../../../../../cmd/cockroach/cockroach_/cockroach",
-    ],
     data = glob([
         "testdata/**",
         "compose/**",
     ]) + [
         "//pkg/cli:interactive_tests",
-        "//pkg/cmd/cockroach:cockroach",
     ],
     embed = [":acceptance"],
     gotags = ["acceptance"],

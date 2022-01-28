@@ -28,6 +28,7 @@ func makeAcceptanceCmd(runE func(cmd *cobra.Command, args []string) error) *cobr
 	}
 	addCommonBuildFlags(acceptanceCmd)
 	addCommonTestFlags(acceptanceCmd)
+	acceptanceCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	return acceptanceCmd
 }
 
@@ -39,6 +40,17 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 		timeout = mustGetFlagDuration(cmd, timeoutFlag)
 	)
 
+	// First we have to build cockroach.
+	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach-short:cockroach-short"}, true)
+	if err != nil {
+		return err
+	}
+	volume := mustGetFlagString(cmd, volumeFlag)
+	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+	if err != nil {
+		return err
+	}
+
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -48,6 +60,7 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	cockroachBin := filepath.Join(workspace, "artifacts", "cockroach-short")
 
 	var args []string
 	args = append(args, "run", "//pkg/acceptance:acceptance_test", "--config=test")
@@ -66,6 +79,7 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	}
 	args = append(args, fmt.Sprintf("--test_arg=-l=%s", logDir))
 	args = append(args, "--test_env=TZ=America/New_York")
+	args = append(args, fmt.Sprintf("--test_arg=-b=%s", cockroachBin))
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
