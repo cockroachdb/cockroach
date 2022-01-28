@@ -18,6 +18,7 @@ go_library(
         "remove_invalid_database_privileges.go",
         "schema_changes.go",
         "seed_tenant_span_configs.go",
+        "tenant_settings.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/migration/migrations",
     visibility = ["//visibility:public"],

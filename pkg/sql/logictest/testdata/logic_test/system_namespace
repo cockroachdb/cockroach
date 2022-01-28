@@ -36,6 +36,7 @@ SELECT * FROM system.namespace
 1    29  statement_diagnostics_requests   35
 1    29  statement_statistics             42
 1    29  table_statistics                 20
+1    29  tenant_settings                  50
 1    29  tenant_usage                     45
 1    29  tenants                          8
 1    29  transaction_statistics           43
