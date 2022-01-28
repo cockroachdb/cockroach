@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#
+# -u: we want the variables to be properly assigned.
+# -o pipefail: we want to test the result of pipes.
+# No -e because we have failing commands and that's OK.
+set -uo pipefail
+
+# deny push of a head but not a tag to cockroachdb/cochroach ssh and http URLs.
+while read local_ref local_sha remote_ref remote_sha
+do 
+  if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach.git"* ]]; then
+    echo "Refusing to push to $remote_ref on $2."
+    echo "Push your branch to your own fork and open a PR from there."
+    echo "(if this is an emergency and you need to skip this check, use --no-verify)."
+    exit 1
+  fi
+done
+
+exit 0
