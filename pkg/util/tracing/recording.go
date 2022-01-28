@@ -57,14 +57,14 @@ func (t RecordingType) ToCarrierValue() string {
 }
 
 // ToProto converts t to the corresponding proto enum.
-func (t RecordingType) ToProto() tracingpb.TraceInfo_RecordingMode {
+func (t RecordingType) ToProto() tracingpb.RecordingMode {
 	switch t {
 	case RecordingOff:
-		return tracingpb.TraceInfo_NONE
+		return tracingpb.RecordingMode_OFF
 	case RecordingStructured:
-		return tracingpb.TraceInfo_STRUCTURED
+		return tracingpb.RecordingMode_STRUCTURED
 	case RecordingVerbose:
-		return tracingpb.TraceInfo_VERBOSE
+		return tracingpb.RecordingMode_VERBOSE
 	default:
 		panic(fmt.Sprintf("invalid RecordingType: %d", t))
 	}
