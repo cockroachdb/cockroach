@@ -35,6 +35,8 @@ func registerVersionUpgradePublicSchema(r registry.Registry) {
 	})
 }
 
+const loadNode = 1
+
 func runVersionUpgradePublicSchema(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
@@ -195,6 +197,17 @@ func tryReparentingDatabase(shouldError bool, errRe string) versionStep {
 		}
 
 		_, err = conn.Exec("DROP DATABASE new_parent")
+		require.NoError(t, err)
+	}
+}
+
+func resetStep() versionStep {
+	return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+		err := u.c.WipeE(ctx, t.L())
+		require.NoError(t, err)
+		err = u.c.RunE(ctx, u.c.All(), "rm -rf "+t.PerfArtifactsDir())
+		require.NoError(t, err)
+		err = u.c.RunE(ctx, u.c.All(), "rm -rf {store-dir}")
 		require.NoError(t, err)
 	}
 }
