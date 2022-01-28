@@ -977,6 +977,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			); err != nil {
 				return err
 			}
+			descriptorChanged = true
 			// TODO(#75428): handle TTL side effects
 
 		case *tree.AlterTableResetStorageParams:
@@ -988,6 +989,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			); err != nil {
 				return err
 			}
+			descriptorChanged = true
 			// TODO(#75428): handle TTL side effects
 
 		case *tree.AlterTableRenameColumn:
