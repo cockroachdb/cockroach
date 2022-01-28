@@ -40,6 +40,9 @@ var termSignal os.Signal = unix.SIGTERM
 // quitSignal is the signal to recognize to dump Go stacks.
 var quitSignal os.Signal = unix.SIGQUIT
 
+// debugSignal is the signal to open a pprof debugging server.
+var debugSignal os.Signal = unix.SIGUSR2
+
 func handleSignalDuringShutdown(sig os.Signal) {
 	// On Unix, a signal that was not handled gracefully by the application
 	// should be reraised so it is visible in the exit code.
