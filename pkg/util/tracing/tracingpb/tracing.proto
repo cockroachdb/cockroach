@@ -14,6 +14,13 @@ option go_package = "tracingpb";
 
 import "gogoproto/gogo.proto";
 
+
+enum RecordingMode {
+  OFF = 0;
+  VERBOSE = 1;
+  STRUCTURED = 2;
+}
+
 // TraceInfo represents the tracing context of an operation. It is the proto
 // representation of tracing.SpanMeta. TraceInfos are passed around in RPC
 // payloads so that the server can create spans that are linked to the remote
@@ -23,11 +30,6 @@ message TraceInfo {
   // ID of the parent span.
   uint64 parent_span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ParentSpanID", (gogoproto.customtype) = "SpanID"];
 
-  enum RecordingMode {
-    NONE = 0;
-    VERBOSE = 1;
-    STRUCTURED = 2;
-  }
   // The type of recording, if any, that the parent span is doing. See
   // tracing.RecordingType.
   RecordingMode recording_mode = 3;
