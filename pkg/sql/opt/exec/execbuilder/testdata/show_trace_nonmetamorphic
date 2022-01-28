@@ -374,3 +374,32 @@ dist sender send  r44: sending batch 6 CPut to (n1,s1):1
 dist sender send  r44: sending batch 6 CPut to (n1,s1):1
 dist sender send  r44: sending batch 6 CPut to (n1,s1):1
 dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+
+statement ok
+CREATE TABLE streamer (pk INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute), FAMILY (pk, attribute, blob));
+INSERT INTO streamer SELECT i, 1, repeat('a', 10) FROM generate_series(1, 42) AS g(i);
+
+# Get the range id.
+let $rangeid
+SELECT range_id FROM [ SHOW RANGES FROM TABLE streamer ]
+
+# Populate table descriptor cache.
+statement ok
+SELECT * FROM streamer
+
+# Trace the statement that performs a point read followed by an index join that
+# is implemented via the Streamer API.
+statement ok
+SET tracing = on;
+SELECT * FROM streamer@streamer_attribute_idx WHERE attribute=1;
+SET tracing = off;
+
+# The index join will issue a batch with 42 Get requests, so we want to verify
+# that the corresponding log is included into the trace by the DistSender.
+query TT
+SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
+WHERE message     LIKE '%r$rangeid: sending batch 42 Get%'
+  AND message NOT LIKE '%PushTxn%'
+  AND message NOT LIKE '%QueryTxn%'
+----
+dist sender send  r44: sending batch 42 Get to (n1,s1):1

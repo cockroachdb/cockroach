@@ -107,17 +107,14 @@ func TestTraceAnalyzer(t *testing.T) {
 	for _, vectorizeMode := range []sessiondatapb.VectorizeExecMode{sessiondatapb.VectorizeOff, sessiondatapb.VectorizeOn} {
 		execCtx, finishAndCollect := tracing.ContextWithRecordingSpan(ctx, execCfg.AmbientCtx.Tracer, t.Name())
 		defer finishAndCollect()
-		ie := execCfg.InternalExecutor
-		ie.SetSessionData(
-			&sessiondata.SessionData{
-				SessionData: sessiondatapb.SessionData{
-					VectorizeMode: vectorizeMode,
-				},
-				LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-					DistSQLMode: sessiondatapb.DistSQLOn,
-				},
+		ie := execCfg.InternalExecutorFactory(ctx, &sessiondata.SessionData{
+			SessionData: sessiondatapb.SessionData{
+				VectorizeMode: vectorizeMode,
 			},
-		)
+			LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
+				DistSQLMode: sessiondatapb.DistSQLOn,
+			},
+		})
 		_, err := ie.ExecEx(
 			execCtx,
 			t.Name(),

@@ -400,7 +400,14 @@ func (s *Streamer) Enqueue(
 		var coordinatorCtx context.Context
 		coordinatorCtx, s.coordinatorCtxCancel = context.WithCancel(ctx)
 		s.waitGroup.Add(1)
-		if err := s.stopper.RunAsyncTask(coordinatorCtx, "streamer-coordinator", s.coordinator.mainLoop); err != nil {
+		if err := s.stopper.RunAsyncTaskEx(
+			coordinatorCtx,
+			stop.TaskOpts{
+				TaskName: "streamer-coordinator",
+				SpanOpt:  stop.ChildSpan,
+			},
+			s.coordinator.mainLoop,
+		); err != nil {
 			// The new goroutine wasn't spun up, so mainLoop won't get executed
 			// and we have to decrement the wait group ourselves.
 			s.waitGroup.Done()
@@ -999,6 +1006,7 @@ func (w *workerCoordinator) performRequestAsync(
 		ctx,
 		stop.TaskOpts{
 			TaskName:   "streamer-lookup-async",
+			SpanOpt:    stop.ChildSpan,
 			Sem:        w.asyncSem,
 			WaitForSem: true,
 		},
