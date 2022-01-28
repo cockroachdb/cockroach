@@ -11,7 +11,9 @@
 package kvstreamer
 
 import (
+	"container/heap"
 	"context"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
@@ -55,10 +57,6 @@ const (
 	// possible.
 	OutOfOrder
 )
-
-// Remove an unused warning for now.
-// TODO(yuzefovich): remove this when supported.
-var _ = InOrder
 
 // Result describes the result of performing a single KV request.
 //
@@ -137,7 +135,7 @@ func (r Result) Release(ctx context.Context) {
 		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.mu.numUnreleasedResults--
+		s.mu.results.releaseOne()
 		s.signalBudgetIfNoRequestsInProgressLocked()
 	}
 }
@@ -215,21 +213,16 @@ type Streamer struct {
 
 	enqueueKeys []int
 
+	// requestsToServe contains all single-range sub-requests that have yet
+	// to be served.
+	requestsToServe requestsProvider
+
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first.
 		syncutil.Mutex
 
 		avgResponseEstimator avgResponseEstimator
-
-		// requestsToServe contains all single-range sub-requests that have yet
-		// to be served.
-		// TODO(yuzefovich): consider using ring.Buffer instead of a slice.
-		requestsToServe []singleRangeBatch
-
-		// hasWork is used by the worker coordinator to block until some
-		// requests are added to requestsToServe.
-		hasWork *sync.Cond
 
 		// numRangesLeftPerScanRequest tracks how many ranges a particular
 		// originally enqueued ScanRequest touches, but scanning of those ranges
@@ -251,19 +244,13 @@ type Streamer struct {
 		// the results yet).
 		numRequestsInFlight int
 
-		// numUnreleasedResults tracks the number of Results that have already
-		// been created but haven't been Release()'d yet. This number includes
-		// those that are currently in 'results' in addition to those returned
-		// by GetResults() to the caller which the caller hasn't processed yet.
-		numUnreleasedResults int
-
 		// hasResults is used by the client's goroutine to block until there are
 		// some results to be picked up.
 		hasResults *sync.Cond
 
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
-		results []Result
+		results resultsBuffer
 
 		// err is set once the Streamer cannot make progress any more and will
 		// be returned by GetResults().
@@ -273,6 +260,287 @@ type Streamer struct {
 		// coordinator must exit.
 		done bool
 	}
+}
+
+type requestsProvider interface {
+	enqueue([]singleRangeBatch)
+	add(singleRangeBatch)
+	Lock()
+	Unlock()
+	waitLocked()
+	emptyLocked() bool
+	firstLocked() singleRangeBatch
+	removeFirstLocked()
+	close()
+}
+
+type requestsProviderBase struct {
+	syncutil.Mutex
+	// hasWork is used by the requestsProvider to block until some requests are
+	// added to be served.
+	hasWork *sync.Cond
+	// requests contains all single-range sub-requests that have yet to be
+	// served.
+	requests []singleRangeBatch
+	// done is set to true once the Streamer is Close()'d.
+	done bool
+}
+
+func (b *requestsProviderBase) waitLocked() {
+	if b.done {
+		// Don't wait if we're done.
+		return
+	}
+	b.hasWork.Wait()
+}
+
+func (b *requestsProviderBase) emptyLocked() bool {
+	return len(b.requests) == 0
+}
+
+func (b *requestsProviderBase) close() {
+	b.Lock()
+	defer b.Unlock()
+	b.done = true
+	b.hasWork.Signal()
+}
+
+type outOfOrderRequestsProvider struct {
+	*requestsProviderBase
+}
+
+var _ requestsProvider = &outOfOrderRequestsProvider{}
+
+func (p *outOfOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	p.requests = requests
+	p.hasWork.Signal()
+}
+
+func (p *outOfOrderRequestsProvider) add(request singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	p.requests = append(p.requests, request)
+	p.hasWork.Signal()
+}
+
+func (p *outOfOrderRequestsProvider) firstLocked() singleRangeBatch {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+	}
+	return p.requests[0]
+}
+
+func (p *outOfOrderRequestsProvider) removeFirstLocked() {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+	}
+	p.requests = p.requests[1:]
+}
+
+type inOrderRequestsProvider struct {
+	*requestsProviderBase
+}
+
+var _ requestsProvider = &inOrderRequestsProvider{}
+var _ heap.Interface = &inOrderRequestsProvider{}
+
+func (p *inOrderRequestsProvider) Len() int {
+	return len(p.requests)
+}
+
+func (p *inOrderRequestsProvider) Less(i, j int) bool {
+	return p.requests[i].priority < p.requests[j].priority
+}
+
+func (p *inOrderRequestsProvider) Swap(i, j int) {
+	p.requests[i], p.requests[j] = p.requests[j], p.requests[i]
+}
+
+func (p *inOrderRequestsProvider) Push(x interface{}) {
+	p.requests = append(p.requests, x.(singleRangeBatch))
+}
+
+func (p *inOrderRequestsProvider) Pop() interface{} {
+	x := p.requests[len(p.requests)-1]
+	p.requests = p.requests[:len(p.requests)-1]
+	return x
+}
+
+func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	//fmt.Printf("enqueued %d requests\n", len(requests))
+	p.requests = requests
+	heap.Init(p)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	//fmt.Printf("added new request for positions %v\n", request.positions)
+	heap.Push(p, request)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) firstLocked() singleRangeBatch {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+	}
+	return p.requests[0]
+}
+
+func (p *inOrderRequestsProvider) removeFirstLocked() {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+	}
+	heap.Remove(p, 0)
+}
+
+// resultsBuffer is not thread-safe.
+// TODO: figure out how to treat unreleased vs buffered results.
+type resultsBuffer interface {
+	// add is responsible for notifying hasResults condition variable if any
+	// Results are available to be returned.
+	add([]Result)
+	get() []Result
+	empty() bool
+	numUnreleased() int
+	releaseOne()
+	// spill returns true if the resultsBuffer is able to spill already buffered
+	// results to disk so that atLeastBytes or more bytes are returned to the
+	// budget.
+	spill(atLeastBytes int64) bool
+	reset()
+}
+
+type outOfOrderResultsBuffer struct {
+	s       *Streamer
+	results []Result
+	// numUnreleasedResults tracks the number of Results that have already been
+	// created but haven't been Release()'d yet. This number includes those that
+	// are currently in 'results' in addition to those returned by GetResults()
+	// to the caller which the caller hasn't processed yet.
+	numUnreleasedResults int
+}
+
+var _ resultsBuffer = &outOfOrderResultsBuffer{}
+
+func (b *outOfOrderResultsBuffer) add(results []Result) {
+	b.results = append(b.results, results...)
+	b.numUnreleasedResults += len(results)
+	b.s.mu.hasResults.Signal()
+}
+
+func (b *outOfOrderResultsBuffer) get() []Result {
+	results := b.results
+	b.results = nil
+	return results
+}
+
+func (b *outOfOrderResultsBuffer) empty() bool {
+	return len(b.results) == 0
+}
+
+func (b *outOfOrderResultsBuffer) numUnreleased() int {
+	return b.numUnreleasedResults
+}
+
+func (b *outOfOrderResultsBuffer) releaseOne() {
+	b.numUnreleasedResults--
+}
+
+func (b *outOfOrderResultsBuffer) spill(int64) bool {
+	return false
+}
+
+func (b *outOfOrderResultsBuffer) reset() {}
+
+type inOrderResultsBuffer struct {
+	s                  *Streamer
+	headOfLinePosition int
+	buffered           []Result
+	// TODO: comment.
+	// TODO: should this be zeroes in reset()?
+	numUnreleasedResults int
+}
+
+var _ resultsBuffer = &inOrderResultsBuffer{}
+var _ heap.Interface = &inOrderResultsBuffer{}
+
+func (b *inOrderResultsBuffer) Len() int {
+	return len(b.buffered)
+}
+
+func (b *inOrderResultsBuffer) Less(i, j int) bool {
+	return b.buffered[i].position < b.buffered[j].position
+}
+
+func (b *inOrderResultsBuffer) Swap(i, j int) {
+	b.buffered[i], b.buffered[j] = b.buffered[j], b.buffered[i]
+}
+
+func (b *inOrderResultsBuffer) Push(x interface{}) {
+	b.buffered = append(b.buffered, x.(Result))
+}
+
+func (b *inOrderResultsBuffer) Pop() interface{} {
+	x := b.buffered[len(b.buffered)-1]
+	b.buffered = b.buffered[:len(b.buffered)-1]
+	return x
+}
+
+func (b *inOrderResultsBuffer) add(results []Result) {
+	foundHeadOfLine := false
+	for _, r := range results {
+		//fmt.Printf("adding a result for position %d of size %d\n", r.position, r.memoryTok.toRelease)
+		heap.Push(b, r)
+		if r.position == b.headOfLinePosition {
+			foundHeadOfLine = true
+		}
+	}
+	if foundHeadOfLine {
+		//fmt.Println("found head-of-the-line")
+		b.s.mu.hasResults.Signal()
+	}
+}
+
+func (b *inOrderResultsBuffer) get() []Result {
+	var res []Result
+	//fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
+	for len(b.buffered) > 0 && b.buffered[0].position == b.headOfLinePosition {
+		res = append(res, b.buffered[0])
+		heap.Remove(b, 0)
+		b.headOfLinePosition++
+	}
+	b.numUnreleasedResults += len(res)
+	return res
+}
+
+func (b *inOrderResultsBuffer) empty() bool {
+	return len(b.buffered) == 0
+}
+
+func (b *inOrderResultsBuffer) numUnreleased() int {
+	return b.numUnreleasedResults
+}
+
+func (b *inOrderResultsBuffer) releaseOne() {
+	b.numUnreleasedResults--
+}
+
+func (b *inOrderResultsBuffer) spill(atLeastBytes int64) bool {
+	if len(b.buffered) == 0 {
+		return false
+	}
+	// Spill some results to disk.
+	return false
+}
+
+func (b *inOrderResultsBuffer) reset() {
+	b.headOfLinePosition = 0
 }
 
 // streamerConcurrencyLimit is an upper bound on the number of asynchronous
@@ -325,7 +593,6 @@ func NewStreamer(
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
-	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
 	s.mu.hasResults = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
@@ -355,10 +622,16 @@ func NewStreamer(
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
 func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
-	if mode != OutOfOrder {
-		panic(errors.AssertionFailedf("only OutOfOrder mode is supported"))
-	}
 	s.mode = mode
+	var base requestsProviderBase
+	base.hasWork = sync.NewCond(&base.Mutex)
+	if mode == OutOfOrder {
+		s.requestsToServe = &outOfOrderRequestsProvider{requestsProviderBase: &base}
+		s.mu.results = &outOfOrderResultsBuffer{s: s}
+	} else {
+		s.requestsToServe = &inOrderRequestsProvider{requestsProviderBase: &base}
+		s.mu.results = &inOrderResultsBuffer{s: s}
+	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
 	}
@@ -437,6 +710,13 @@ func (s *Streamer) Enqueue(
 		s.mu.err = retErr
 	}()
 
+	// At the moment, the Streamer's implementation is limited so that the
+	// callers never specify enqueueKeys.
+	// TODO(yuzefovich): remove this check once the Streamer supports the
+	// range-based lookup joins.
+	if enqueueKeys != nil {
+		return errors.AssertionFailedf("unexpectedly non-nil enqueueKeys")
+	}
 	if enqueueKeys != nil && len(enqueueKeys) != len(reqs) {
 		return errors.AssertionFailedf("invalid enqueueKeys: len(reqs) = %d, len(enqueueKeys) = %d", len(reqs), len(enqueueKeys))
 	}
@@ -445,12 +725,13 @@ func (s *Streamer) Enqueue(
 	if s.mu.numEnqueuedRequests != s.mu.numCompleteRequests {
 		return errors.AssertionFailedf("Enqueue is called before the previous requests have been completed")
 	}
-	if len(s.mu.results) > 0 {
+	if !s.mu.results.empty() {
 		return errors.AssertionFailedf("Enqueue is called before the results of the previous requests have been retrieved")
 	}
 
 	s.mu.numEnqueuedRequests = len(reqs)
 	s.mu.numCompleteRequests = 0
+	s.mu.results.reset()
 
 	// The minimal key range encompassing all requests contained within.
 	// Local addressing has already been resolved.
@@ -463,12 +744,11 @@ func (s *Streamer) Enqueue(
 	// requestsToServe, and the worker coordinator will then pick those batches
 	// up to execute asynchronously.
 	var totalReqsMemUsage int64
-	// Use a local variable for requestsToServe rather than
-	// s.mu.requestsToServe. This is needed in order for the worker coordinator
-	// to not pick up any work until we account for totalReqsMemUsage.
+	// Use a local variable for requestsToServe rather than adding them to the
+	// requestProvider right away. This is needed in order for the worker
+	// coordinator to not pick up any work until we account for
+	// totalReqsMemUsage.
 	var requestsToServe []singleRangeBatch
-	// TODO(yuzefovich): in InOrder mode we need to treat the head-of-the-line
-	// request differently.
 	seekKey := rs.Key
 	const scanDir = kvcoord.Ascending
 	ri := kvcoord.MakeRangeIterator(s.distSender)
@@ -517,14 +797,9 @@ func (s *Streamer) Enqueue(
 			reqs:              singleRangeReqs,
 			positions:         positions,
 			reqsReservedBytes: requestsMemUsage(singleRangeReqs),
+			priority:          positions[0],
 		}
 		totalReqsMemUsage += r.reqsReservedBytes
-
-		if s.mode == OutOfOrder {
-			// Sort all single-range requests to be in the key order.
-			sort.Sort(&r)
-		}
-
 		requestsToServe = append(requestsToServe, r)
 
 		// Determine next seek key, taking potentially sparse requests into
@@ -550,8 +825,7 @@ func (s *Streamer) Enqueue(
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
-	s.mu.requestsToServe = requestsToServe
-	s.mu.hasWork.Signal()
+	s.requestsToServe.enqueue(requestsToServe)
 	return nil
 }
 
@@ -586,12 +860,13 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for {
-		results := s.mu.results
-		s.mu.results = nil
+		results := s.mu.results.get()
 		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
 		if len(results) > 0 || allComplete || s.mu.err != nil {
+			//fmt.Printf("returning %d results to the client\n", len(results))
 			return results, s.mu.err
 		}
+		//fmt.Println("blocking for results")
 		s.mu.hasResults.Wait()
 		// Check whether the Streamer has been canceled or closed while we were
 		// waiting for the results.
@@ -632,14 +907,14 @@ func (s *Streamer) Close() {
 		s.coordinatorCtxCancel()
 		s.mu.Lock()
 		s.mu.done = true
-		// Unblock the coordinator in case it is waiting for more work.
-		s.mu.hasWork.Signal()
 		// Note that only the client's goroutine can be blocked waiting for the
 		// results, and Close() is called only by the same goroutine, so
-		// signaling hasResult condition variable isn't necessary. However, we
+		// signaling hasResults condition variable isn't necessary. However, we
 		// choose to be safe and do it anyway.
 		s.mu.hasResults.Signal()
 		s.mu.Unlock()
+		// Unblock the coordinator in case it is waiting for more work.
+		s.requestsToServe.close()
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
 	}
@@ -654,7 +929,7 @@ func (s *Streamer) Close() {
 func (s *Streamer) getNumRequestsInProgress() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.numRequestsInFlight + s.mu.numUnreleasedResults
+	return s.mu.numRequestsInFlight + s.mu.results.numUnreleased()
 }
 
 // signalBudgetIfNoRequestsInProgressLocked checks whether there are no requests
@@ -667,7 +942,7 @@ func (s *Streamer) getNumRequestsInProgress() int {
 // The mutex of s must be held.
 func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
 	s.mu.AssertHeld()
-	if s.mu.numRequestsInFlight == 0 && s.mu.numUnreleasedResults == 0 {
+	if s.mu.numRequestsInFlight == 0 && s.mu.results.numUnreleased() == 0 {
 		s.budget.mu.waitForBudget.Signal()
 	}
 }
@@ -696,6 +971,8 @@ type singleRangeBatch struct {
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs.
 	reqsReservedBytes int64
+	// priority is the smallest number in positions.
+	priority int
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -737,18 +1014,9 @@ type workerCoordinator struct {
 func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	defer w.s.waitGroup.Done()
 	for {
-		// Get next requests to serve.
-		requestsToServe, avgResponseSize, shouldExit := w.getRequests(ctx)
+		avgResponseSize, shouldExit := w.getAvgResponseSize()
 		if shouldExit {
 			return
-		}
-		if buildutil.CrdbTestBuild {
-			if len(requestsToServe) == 0 {
-				panic(errors.AssertionFailedf(
-					"unexpectedly zero requests to serve returned by " +
-						"getRequests when shouldExit is false",
-				))
-			}
 		}
 
 		// At the moment, we're using a simple average which is suboptimal
@@ -768,7 +1036,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 
-		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, avgResponseSize)
+		err := w.issueRequestsForAsyncProcessing(ctx, avgResponseSize)
 		if err != nil {
 			w.s.setError(err)
 			return
@@ -776,53 +1044,18 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 	}
 }
 
-// getRequests returns all currently enqueued requests to be served, and if
-// there are none, it waits until some requests are added. It assumes that the
-// Streamer's mutex is not held.
-//
-// A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequests(
-	ctx context.Context,
-) (requestsToServe []singleRangeBatch, avgResponseSize int64, shouldExit bool) {
+func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldExit bool) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
-	requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
-	if shouldExit {
-		return requestsToServe, avgResponseSize, shouldExit
-	}
-	if len(requestsToServe) == 0 {
-		w.s.mu.hasWork.Wait()
-		// Check whether the Streamer has been canceled or closed while we
-		// were waiting for work.
-		if ctx.Err() != nil {
-			// Note that if it was a graceful closure, we still will see a
-			// context cancellation error; however, it won't be propagated
-			// to the client because no more calls after Close() are
-			// allowed.
-			w.s.setErrorLocked(ctx.Err())
-			shouldExit = true
-			return
-		}
-		requestsToServe, avgResponseSize, shouldExit = w.getRequestsLocked()
-	}
-	return requestsToServe, avgResponseSize, shouldExit
-}
-
-// getRequestsLocked returns all currently enqueued requests to be served.
-// Unlike getRequests, it doesn't block if there are no requests at the moment.
-// It assumes that the Streamer's mutex is being held.
-//
-// A boolean that indicates whether the coordinator should exit is returned.
-func (w *workerCoordinator) getRequestsLocked() (
-	requestsToServe []singleRangeBatch,
-	avgResponseSize int64,
-	shouldExit bool,
-) {
-	w.s.mu.AssertHeld()
-	requestsToServe = w.s.mu.requestsToServe
 	avgResponseSize = w.s.mu.avgResponseEstimator.getAvgResponseSize()
 	shouldExit = w.s.mu.err != nil || w.s.mu.done
-	return requestsToServe, avgResponseSize, shouldExit
+	return avgResponseSize, shouldExit
+}
+
+func (w *workerCoordinator) trySpillingBuffer(atLeastBytes int64) bool {
+	w.s.mu.Lock()
+	defer w.s.mu.Unlock()
+	return w.s.mu.results.spill(atLeastBytes)
 }
 
 // waitUntilEnoughBudget waits until there is enough budget to at least receive
@@ -836,8 +1069,16 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 	defer w.s.budget.mu.Unlock()
 	// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
 	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < avgResponseSize {
-		// There isn't enough budget at the moment. Check whether there are any
-		// requests in progress.
+		// There isn't enough budget at the moment.
+		//
+		// First, ask the results buffer to spill some results to disk in order
+		// to free up budget.
+		// TODO: think more when we want trying spilling to disk.
+		if w.trySpillingBuffer(avgResponseSize - (w.s.budget.limitBytes - w.s.budget.mu.acc.Used())) {
+			// The spilling was successful.
+			return false
+		}
+		// Check whether there are any requests in progress.
 		if w.s.getNumRequestsInProgress() == 0 {
 			// We have a degenerate case when a single row is expected to exceed
 			// the budget.
@@ -861,28 +1102,36 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 // issued, the only exception is made for the case when there are no requests in
 // progress (both requests in flight as well as unreleased results), and in that
 // scenario, a single request will be issued.
-//
-// It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
-// (i.e. it is possible that some other requests have been appended to
-// w.s.mu.requestsToServe after requestsToServe have been grabbed). All issued
-// requests are removed from w.s.mu.requestToServe.
+// TODO: comment.
 func (w *workerCoordinator) issueRequestsForAsyncProcessing(
-	ctx context.Context, requestsToServe []singleRangeBatch, avgResponseSize int64,
+	ctx context.Context, avgResponseSize int64,
 ) error {
-	var numRequestsIssued int
-	defer func() {
+	w.s.requestsToServe.Lock()
+	defer w.s.requestsToServe.Unlock()
+	if w.s.requestsToServe.emptyLocked() {
+		w.s.requestsToServe.waitLocked()
+		// Check if the Streamer has been canceled or closed while we were
+		// waiting.
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		w.s.mu.Lock()
-		// We can just slice here since we only append to requestToServe at
-		// the moment.
-		w.s.mu.requestsToServe = w.s.mu.requestsToServe[numRequestsIssued:]
+		shouldExit := w.s.mu.err != nil || w.s.mu.done
 		w.s.mu.Unlock()
-	}()
+		if shouldExit {
+			return nil
+		}
+		if buildutil.CrdbTestBuild {
+			if w.s.requestsToServe.emptyLocked() {
+				panic(errors.AssertionFailedf("unexpectedly zero requests to serve after waiting "))
+			}
+		}
+	}
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
-
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
-	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
+	for !w.s.requestsToServe.emptyLocked() && !budgetIsExhausted {
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
 		if availableBudget < avgResponseSize {
 			if !headOfLine {
@@ -901,7 +1150,7 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				availableBudget = 1
 			}
 		}
-		singleRangeReqs := requestsToServe[numRequestsIssued]
+		singleRangeReqs := w.s.requestsToServe.firstLocked()
 		// Calculate what TargetBytes limit to use for the BatchRequest that
 		// will be issued based on singleRangeReqs. We use the estimate to guess
 		// how much memory the response will need, and we reserve this
@@ -954,19 +1203,15 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// any more responses at the moment.
 			return err
 		}
+		//fmt.Printf(
+		//	"issuing request with positions %v with targetBytes %d, headOfLine=%t\n",
+		//	singleRangeReqs.positions, targetBytes, headOfLine,
+		//)
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
-		numRequestsIssued++
+		w.s.requestsToServe.removeFirstLocked()
 		headOfLine = false
 	}
 	return nil
-}
-
-// addRequest adds a single-range batch to be processed later.
-func (w *workerCoordinator) addRequest(req singleRangeBatch) {
-	w.s.mu.Lock()
-	defer w.s.mu.Unlock()
-	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
-	w.s.mu.hasWork.Signal()
 }
 
 func (w *workerCoordinator) asyncRequestCleanup() {
@@ -1019,6 +1264,15 @@ func (w *workerCoordinator) performRequestAsync(
 			// We always have some memory reserved against the memory account,
 			// regardless of the value of headOfLine.
 			ba.AdmissionHeader.NoMemoryReservedAtSource = false
+
+			if !headOfLine || w.s.mode == OutOfOrder {
+				// Sort all single-range requests to be in the key order.
+				//
+				// We only don't do this in InOrder mode for head-of-line
+				// requests so that in a degenerate case when a single large row
+				// exceeds the budget, the Streamer would still make progress.
+				sort.Sort(&req)
+			}
 			ba.Requests = req.reqs
 
 			// TODO(yuzefovich): in Enqueue we split all requests into
@@ -1087,7 +1341,7 @@ func (w *workerCoordinator) performRequestAsync(
 						// TODO(yuzefovich): consider updating the
 						// avgResponseSize and/or storing the information about
 						// the returned bytes size in req.
-						w.addRequest(req)
+						w.s.requestsToServe.add(req)
 						return
 					}
 					// The error indicates that the root memory pool has been
@@ -1209,6 +1463,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = resumeReqsMemUsage
+	resumeReq.priority = math.MaxInt
 	gets := make([]struct {
 		req   roachpb.GetRequest
 		union roachpb.RequestUnion_Get
@@ -1227,9 +1482,10 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// memoryFootprintBytes, so we use it only as an additional check.
 	var memoryTokensBytes int64
 	for i, resp := range br.Responses {
-		enqueueKey := req.positions[i]
+		position := req.positions[i]
+		enqueueKey := position
 		if w.s.enqueueKeys != nil {
-			enqueueKey = w.s.enqueueKeys[req.positions[i]]
+			enqueueKey = w.s.enqueueKeys[position]
 		}
 		reply := resp.GetInner()
 		switch origRequest := req.reqs[i].GetInner().(type) {
@@ -1245,7 +1501,10 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newGet.req.KeyLocking = origRequest.KeyLocking
 				newGet.union.Get = &newGet.req
 				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
-				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReq.positions[resumeReqIdx] = position
+				if position < resumeReq.priority {
+					resumeReq.priority = position
+				}
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
@@ -1254,7 +1513,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests are
 					// unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             req.positions[i],
+					position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = getResponseSize(get)
@@ -1278,7 +1537,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests
 					// are unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             req.positions[i],
+					position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = scanResponseSize(scan)
@@ -1298,7 +1557,10 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newScan.req.KeyLocking = origRequest.KeyLocking
 				newScan.union.Scan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
-				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				resumeReq.positions[resumeReqIdx] = position
+				if position < resumeReq.priority {
+					resumeReq.priority = position
+				}
 				resumeReqIdx++
 			}
 		}
@@ -1322,7 +1584,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// If we have any incomplete requests, add them back into the work
 	// pool.
 	if len(resumeReq.reqs) > 0 {
-		w.addRequest(resumeReq)
+		w.s.requestsToServe.add(resumeReq)
 	}
 }
 
@@ -1378,9 +1640,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
-	w.s.mu.numUnreleasedResults += len(results)
-	w.s.mu.results = append(w.s.mu.results, results...)
-	w.s.mu.hasResults.Signal()
+	w.s.mu.results.add(results)
 }
 
 var zeroIntSlice []int
