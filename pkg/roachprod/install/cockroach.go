@@ -489,11 +489,17 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	logDir := c.LogDir(node)
-	if vers.AtLeast(version.MustParse("v21.1.0-alpha.0")) {
-		// Specify exit-on-error=false to work around #62763.
-		args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
-	} else {
-		args = append(args, `--log-dir`, logDir)
+	idx1 := argExists(startOpts.ExtraArgs, "--log")
+	idx2 := argExists(startOpts.ExtraArgs, "--log-config-file")
+
+	// if neither --log nor --log-config-file are present
+	if idx1 == -1 && idx2 == -1 {
+		if vers.AtLeast(version.MustParse("v21.1.0-alpha.0")) {
+			// Specify exit-on-error=false to work around #62763.
+			args = append(args, "--log", `file-defaults: {dir: '`+logDir+`', exit-on-error: false}`)
+		} else {
+			args = append(args, `--log-dir`, logDir)
+		}
 	}
 
 	listenHost := ""
