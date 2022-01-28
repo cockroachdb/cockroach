@@ -386,10 +386,9 @@ INSERT INTO foo VALUES (1), (10), (100);
 			&alloc,
 			mm.Monitor(),
 			row.FetcherTableArgs{
-				Desc:             table,
-				Index:            idx,
-				Columns:          fetcherCols,
-				IsSecondaryIndex: !idx.Primary(),
+				Desc:    table,
+				Index:   idx,
+				Columns: fetcherCols,
 			},
 		))
 

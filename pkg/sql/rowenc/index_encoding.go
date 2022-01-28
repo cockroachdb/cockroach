@@ -493,12 +493,11 @@ func DecodeIndexKey(
 // DecodeKeyVals returns whether or not NULL was encountered in the key.
 func DecodeKeyVals(
 	types []*types.T, vals []EncDatum, directions []descpb.IndexDescriptor_Direction, key []byte,
-) ([]byte, bool, error) {
+) (remainingKey []byte, foundNull bool, _ error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, false, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
 			len(directions), len(vals))
 	}
-	foundNull := false
 	for j := range vals {
 		enc := descpb.DatumEncoding_ASCENDING_KEY
 		if directions != nil && (directions[j] == descpb.IndexDescriptor_DESC) {
@@ -506,6 +505,29 @@ func DecodeKeyVals(
 		}
 		var err error
 		vals[j], key, err = EncDatumFromBuffer(types[j], enc, key)
+		if err != nil {
+			return nil, false, err
+		}
+		if vals[j].IsNull() {
+			foundNull = true
+		}
+	}
+	return key, foundNull, nil
+}
+
+// DecodeKeyValsUsingSpec is a variant of DecodeKeyVals which uses
+// descpb.IndexFetchSpec_KeyColumn for column metadata.
+func DecodeKeyValsUsingSpec(
+	keyCols []descpb.IndexFetchSpec_KeyColumn, key []byte, vals []EncDatum,
+) (remainingKey []byte, foundNull bool, _ error) {
+	for j := range vals {
+		c := keyCols[j]
+		enc := descpb.DatumEncoding_ASCENDING_KEY
+		if c.Direction == descpb.IndexDescriptor_DESC {
+			enc = descpb.DatumEncoding_DESCENDING_KEY
+		}
+		var err error
+		vals[j], key, err = EncDatumFromBuffer(c.Type, enc, key)
 		if err != nil {
 			return nil, false, err
 		}
