@@ -47,7 +47,11 @@ func relocateAndCheck(
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().
 			AdminRelocateRange(
-				context.Background(), startKey.AsRawKey(), voterTargets, nonVoterTargets,
+				context.Background(),
+				startKey.AsRawKey(),
+				voterTargets,
+				nonVoterTargets,
+				true, /* transferLeaseToFirstVoter */
 			)
 		if err != nil {
 			if every.ShouldLog() {
@@ -77,7 +81,11 @@ func requireRelocationFailure(
 ) {
 	testutils.SucceedsSoon(t, func() error {
 		err := tc.Servers[0].DB().AdminRelocateRange(
-			ctx, startKey.AsRawKey(), voterTargets, nonVoterTargets,
+			ctx,
+			startKey.AsRawKey(),
+			voterTargets,
+			nonVoterTargets,
+			true, /* transferLeaseToFirstVoter */
 		)
 		if kv.IsExpectedRelocateError(err) {
 			return err
@@ -299,6 +307,43 @@ func TestAdminRelocateRange(t *testing.T) {
 	}
 }
 
+// TestAdminRelocateRangeWithoutLeaseTransfer tests that `AdminRelocateRange`
+// only transfers the lease away to the first voting replica in the target slice
+// if the callers asks it to.
+func TestAdminRelocateRangeWithoutLeaseTransfer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	}
+
+	tc := testcluster.StartTestCluster(t, 5 /* numNodes */, args)
+	defer tc.Stopper().Stop(ctx)
+
+	k := keys.MustAddr(tc.ScratchRange(t))
+
+	// Add voters to the first three nodes.
+	relocateAndCheck(t, tc, k, tc.Targets(0, 1, 2), nil /* nonVoterTargets */)
+
+	// Move the last voter without asking for the lease to move.
+	err := tc.Servers[0].DB().AdminRelocateRange(
+		context.Background(),
+		k.AsRawKey(),
+		tc.Targets(3, 1, 0),
+		nil,   /* nonVoterTargets */
+		false, /* transferLeaseToFirstVoter */
+	)
+	require.NoError(t, err)
+	leaseholder, err := tc.FindRangeLeaseHolder(tc.LookupRangeOrFatal(t, k.AsRawKey()), nil /* hint */)
+	require.Equal(
+		t,
+		roachpb.ReplicationTarget{NodeID: leaseholder.NodeID, StoreID: leaseholder.StoreID},
+		tc.Target(0),
+	)
+}
+
 func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -339,7 +384,11 @@ func TestAdminRelocateRangeFailsWithDuplicates(t *testing.T) {
 	}
 	for _, subtest := range tests {
 		err := tc.Servers[0].DB().AdminRelocateRange(
-			context.Background(), k.AsRawKey(), tc.Targets(subtest.voterTargets...), tc.Targets(subtest.nonVoterTargets...),
+			context.Background(),
+			k.AsRawKey(),
+			tc.Targets(subtest.voterTargets...),
+			tc.Targets(subtest.nonVoterTargets...),
+			true, /* transferLeaseToFirstVoter */
 		)
 		require.Regexp(t, subtest.expectedErr, err)
 	}
