@@ -11,7 +11,8 @@ do
   if [[ "$remote_ref" == "refs/heads/"* ]] && [[ "$2" == *"cockroachdb/cockroach.git"* ]]; then
     echo "Refusing to push to $remote_ref on $2."
     echo "Push your branch to your own fork and open a PR from there."
-    echo "(if this is an emergency and you need to skip this check, use --no-verify)."
+    echo "If you just want to see what CI thinks, you can push branch:refs/ci/branch to trigger a CI run."
+    echo "If this is an emergency or unusual circumstance that requires a branch on origin, push with --no-verify."
     exit 1
   fi
 done
