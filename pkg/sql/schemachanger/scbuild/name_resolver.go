@@ -134,6 +134,19 @@ func (b buildCtx) ResolveRelation(
 	}
 	if !isOwner {
 		if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
+			relationType := "table"
+			if rel.IsView() {
+				relationType = "view"
+			} else if rel.IsSequence() {
+				relationType = " sequence"
+			}
+			err := pgerror.Newf(pgcode.InsufficientPrivilege,
+				"must be owner of %s %s or have %s privilege on %s %s",
+				relationType,
+				tree.Name(rel.GetName()),
+				p.RequiredPrivilege,
+				relationType,
+				tree.Name(rel.GetName()))
 			panic(err)
 		}
 	}
