@@ -1285,6 +1285,11 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 	} else {
 		newURL.WithTransport(pgurl.TransportNone())
 	}
+	if optionsParam := currURL.ToPQ().Query().Get("options"); optionsParam != "" {
+		if err := newURL.SetOption("options", optionsParam); err != nil {
+			return err
+		}
+	}
 
 	// Parse the arguments to \connect:
 	// it accepts newdb, user, host, port in that order.

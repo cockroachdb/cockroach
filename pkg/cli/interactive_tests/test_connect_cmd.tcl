@@ -145,6 +145,27 @@ end_test
 send "\\q\r"
 eexpect eof
 
+start_test "Check that the options URL param is preserved when changing database"
+
+spawn $argv sql --certs-dir=$certs_dir --url=postgres://root@localhost:26257/defaultdb?options=--search_path%3Dcustom_path
+eexpect root@
+eexpect "/defaultdb>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+eexpect root@
+eexpect "/defaultdb>"
+send "\\c postgres\r"
+eexpect "using new connection URL"
+eexpect root@
+eexpect "/postgres>"
+send "SHOW search_path;\r"
+eexpect "custom_path"
+
+end_test
+
+send "\\q\r"
+eexpect eof
+
 stop_secure_server $argv $certs_dir
 
 # Some more tests with the insecure mode.
