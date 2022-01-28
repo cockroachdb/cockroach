@@ -119,6 +119,12 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
 		postRaftAppliedIndexTermMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.tenant_settings table",
+		toCV(clusterversion.TenantSettingsTable),
+		NoPrecondition,
+		tenantSettingsTableMigration,
+	),
 }
 
 func init() {
