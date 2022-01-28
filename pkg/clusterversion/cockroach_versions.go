@@ -263,6 +263,8 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
+	// TenantSettingsTable adds the system table for tracking tenant usage.
+	TenantSettingsTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -415,6 +417,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     TenantSettingsTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
 
 	// *************************************************
