@@ -2461,9 +2461,14 @@ func TestRandomConcurrentAdminChangeReplicasRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	key := roachpb.Key("a")
 	db := tc.Servers[0].DB()
-	require.Nil(t, db.AdminRelocateRange(
-		ctx, key, makeReplicationTargets(1, 2, 3), nil,
-	))
+	require.Nil(
+		t,
+		db.AdminRelocateRange(
+			ctx, key, makeReplicationTargets(1, 2, 3),
+			nil,  /* nonVoterTargets */
+			true, /* transferLeaseToFirstVoter */
+		),
+	)
 	// Random targets consisting of a random number of nodes from the set of nodes
 	// in the cluster which currently do not have a replica.
 	pickTargets := func() []roachpb.ReplicationTarget {
@@ -3015,8 +3020,13 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 
 	key := roachpb.Key("a")
 	assert.Nil(t, db.AdminRelocateRange(
-		ctx, key, makeReplicationTargets(1, 2, 3), makeReplicationTargets(),
-	))
+		ctx,
+		key,
+		makeReplicationTargets(1, 2, 3),
+		makeReplicationTargets(),
+		true, /* transferLeaseToFirstVoter */
+	),
+	)
 	rangeInfo, err := getRangeInfo(ctx, db, key)
 	assert.Nil(t, err)
 	assert.Len(t, rangeInfo.Desc.InternalReplicas, 3)
@@ -3052,7 +3062,11 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(
-			ctx, key, makeReplicationTargets(1, 2, 4), makeReplicationTargets(),
+			ctx,
+			key,
+			makeReplicationTargets(1, 2, 4),
+			makeReplicationTargets(),
+			true, /* transferLeaseToFirstVoter */
 		)
 	}
 	useSeenAdd.Store(true)

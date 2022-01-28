@@ -349,7 +349,11 @@ func (mq *mergeQueue) process(
 		// The merge queue will only merge ranges that have the same zone config
 		// (see check inside mergeQueue.shouldQueue).
 		if err := mq.store.DB().AdminRelocateRange(
-			ctx, rhsDesc.StartKey, voterTargets, nonVoterTargets,
+			ctx,
+			rhsDesc.StartKey,
+			voterTargets,
+			nonVoterTargets,
+			true, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
 		}
