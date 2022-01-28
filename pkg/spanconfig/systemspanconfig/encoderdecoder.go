@@ -72,3 +72,13 @@ func DecodeTarget(span roachpb.Span) (Target, error) {
 
 	return Target{}, errors.AssertionFailedf("did not find prefix")
 }
+
+// GetHostTenantOnTenantKeyspaceSpan returns the keyspan which contains all
+// host tenant installed system span configurations that target secondary
+// tenants.
+func GetHostTenantOnTenantKeyspaceSpan() roachpb.Span {
+	return roachpb.Span{
+		Key:    keys.SystemSpanConfigHostOnTenantKeyspace,
+		EndKey: keys.SystemSpanConfigHostOnTenantKeyspace.PrefixEnd(),
+	}
+}

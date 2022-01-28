@@ -19,7 +19,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidation(t *testing.T) {
+// TestValidateUpdateArgs ensures we validate arguments to
+// UpdateSpanConfigEntries correctly.
+func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, tc := range []struct {
@@ -93,5 +95,85 @@ func TestValidation(t *testing.T) {
 		},
 	} {
 		require.True(t, testutils.IsError(validateUpdateArgs(tc.toDelete, tc.toUpsert), tc.expErr))
+	}
+}
+
+// TestValidateSystemSpanConfigUpdateArgs ensures we validate arguments to
+// UpdateSystemSpanConfigEntries correctly.
+func TestValidateSystemSpanConfigUpdateArgs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	makeTarget := func(id uint64) roachpb.SystemSpanConfigTarget {
+		tenID := roachpb.MakeTenantID(id)
+		return roachpb.SystemSpanConfigTarget{
+			TenantID: &tenID,
+		}
+	}
+	clusterTarget := roachpb.SystemSpanConfigTarget{}
+	for _, tc := range []struct {
+		toDelete []roachpb.SystemSpanConfigTarget
+		toUpsert []roachpb.SystemSpanConfigEntry
+		expErr   string
+	}{
+		{
+			// Duplicate across toDelete.
+			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), makeTarget(10)},
+			expErr:   "duplicate target found",
+		},
+		{
+			// Duplicate across both lists.
+			toUpsert: []roachpb.SystemSpanConfigEntry{
+				{
+					SystemSpanConfigTarget: makeTarget(10),
+				},
+				{
+					SystemSpanConfigTarget: makeTarget(10),
+				},
+			},
+			expErr: "duplicate target found",
+		},
+		{
+			// Duplicate across both lists.
+			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), makeTarget(20)},
+			toUpsert: []roachpb.SystemSpanConfigEntry{
+				{
+					SystemSpanConfigTarget: makeTarget(10),
+				},
+			},
+			expErr: "duplicate target found",
+		},
+		{
+			// Duplicate cluster target in toDelete.
+			toDelete: []roachpb.SystemSpanConfigTarget{clusterTarget, clusterTarget},
+			expErr:   "duplicate cluster target found",
+		},
+		{
+			// Duplicate cluster target in toUpsert.
+			toUpsert: []roachpb.SystemSpanConfigEntry{
+				{SystemSpanConfigTarget: clusterTarget},
+				{SystemSpanConfigTarget: clusterTarget},
+			},
+			expErr: "duplicate cluster target found",
+		},
+		{
+			// Duplicate cluster target across lists.
+			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), clusterTarget},
+			toUpsert: []roachpb.SystemSpanConfigEntry{
+				{SystemSpanConfigTarget: makeTarget(20)},
+				{SystemSpanConfigTarget: clusterTarget},
+			},
+			expErr: "duplicate cluster target found",
+		},
+		{
+			// Should work.
+			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), clusterTarget},
+			toUpsert: []roachpb.SystemSpanConfigEntry{
+				{SystemSpanConfigTarget: makeTarget(20)},
+			},
+		},
+	} {
+		require.True(
+			t,
+			testutils.IsError(validateUpdateSystemSpanConfigArgs(tc.toDelete, tc.toUpsert), tc.expErr),
+		)
 	}
 }
