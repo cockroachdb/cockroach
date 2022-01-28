@@ -1325,7 +1325,7 @@ user testuser
 statement ok
 SET experimental_use_new_schema_changer = 'on'
 
-statement error must be owner of schema \"sc1\"
+statement error must be owner of schema sc1
 DROP SCHEMA sc1;
 
 statement error user testuser does not have DROP privilege on database db1
