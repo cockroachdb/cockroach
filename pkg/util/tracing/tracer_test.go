@@ -94,14 +94,14 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s1.SetVerbose(true)
+	s1.SetRecordingType(RecordingVerbose)
 	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	s1.SetVerbose(false)
+	s1.SetRecordingType(RecordingOff)
 
 	// Real parent --> real child.
 	real3 := tr.StartSpan("noop3", WithRemoteParentFromSpanMeta(s1.Meta()))
@@ -111,7 +111,7 @@ func TestTracerRecording(t *testing.T) {
 	real3.Finish()
 
 	s1.Recordf("x=%d", 1)
-	s1.SetVerbose(true)
+	s1.SetRecordingType(RecordingVerbose)
 	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParent(s1))
 	if !s2.IsVerbose() {
@@ -176,7 +176,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.Finish()
 
 	s4 := tr.StartSpan("a", WithRecording(RecordingStructured))
-	s4.SetVerbose(false)
+	s4.SetRecordingType(RecordingOff)
 	s4.Recordf("x=%d", 100)
 	require.Nil(t, s4.GetRecording(RecordingStructured))
 	s4.Finish()
