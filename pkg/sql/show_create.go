@@ -181,6 +181,10 @@ func ShowCreateTable(
 		f.Buffer.WriteString(`)`)
 	}
 
+	if exclude := desc.GetExcludeDataFromBackup(); exclude {
+		f.Buffer.WriteString(` WITH (exclude_data_from_backup = true)`)
+	}
+
 	if err := showCreateLocality(desc, f); err != nil {
 		return "", err
 	}

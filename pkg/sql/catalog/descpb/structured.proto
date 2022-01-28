@@ -1188,7 +1188,7 @@ message TableDescriptor {
   // It is important to note that we will still backup the table descriptor, and
   // all other objects that reference this table egs: jobs, and so restoring
   // such a table will result in an empty table on the restoring cluster.
-  optional bool exclude_data_from_backup = 47 [(gogoproto.nullable) = false];
+  optional bool exclude_data_from_backup = 48 [(gogoproto.nullable) = false];
 
   // Next ID: 48
 }
