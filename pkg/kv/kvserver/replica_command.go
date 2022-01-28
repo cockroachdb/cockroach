@@ -2657,6 +2657,7 @@ func (s *Store) AdminRelocateRange(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) error {
 	if containsDuplicates(voterTargets) {
 		return errors.AssertionFailedf(
@@ -2686,7 +2687,9 @@ func (s *Store) AdminRelocateRange(
 	}
 	rangeDesc = *newDesc
 
-	rangeDesc, err = s.relocateReplicas(ctx, rangeDesc, voterTargets, nonVoterTargets)
+	rangeDesc, err = s.relocateReplicas(
+		ctx, rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+	)
 	if err != nil {
 		return err
 	}
@@ -2718,6 +2721,7 @@ func (s *Store) relocateReplicas(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
 	transferLease := func(target roachpb.ReplicationTarget) error {
@@ -2748,17 +2752,27 @@ func (s *Store) relocateReplicas(
 			if err != nil {
 				return rangeDesc, err
 			}
+
+			if len(ops) == 0 {
+				// If there are no more ops remaining, ignore the `leaseTarget` returned
+				// by the call to `relocateOne`.
+				//
+				// If the caller asked for the lease to be transfered to the first
+				// voting replica in the target slice, we do so here.
+				if transferLeaseToFirstVoter {
+					if err := transferLease(voterTargets[0]); err != nil {
+						return rangeDesc, err
+					}
+				}
+
+				// We're done.
+				return rangeDesc, ctx.Err()
+			}
+
 			if leaseTarget != nil {
-				// NB: we may need to transfer even if there are no ops, to make
-				// sure the attempt is made to make the first target the final
-				// leaseholder.
 				if err := transferLease(*leaseTarget); err != nil {
 					return rangeDesc, err
 				}
-			}
-			if len(ops) == 0 {
-				// Done.
-				return rangeDesc, ctx.Err()
 			}
 
 			opss := [][]roachpb.ReplicationChange{ops}
