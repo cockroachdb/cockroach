@@ -110,12 +110,9 @@ type crdbSpanMu struct {
 
 	recording recordingState
 
-	// tags are only captured when recording. These are tags that have been
-	// added to this Span, and will be appended to the tags in logTags when
-	// someone needs to actually observe the total set of tags that is a part of
-	// this Span.
-	// TODO(radu): perhaps we want a recording to capture all the tags (even
-	// those that were set before recording started)?
+	// tags are a list of key/value pairs associated with the span through
+	// SetTag(). They will be appended to the tags in logTags when someone needs
+	// to actually observe the total set of tags that is a part of this Span.
 	tags []attribute.KeyValue
 }
 
