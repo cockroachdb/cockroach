@@ -842,11 +842,11 @@ func SpanMetaFromProto(info tracingpb.TraceInfo) SpanMeta {
 		sterile: false,
 	}
 	switch info.RecordingMode {
-	case tracingpb.TraceInfo_NONE:
+	case tracingpb.RecordingMode_OFF:
 		sm.recordingType = RecordingOff
-	case tracingpb.TraceInfo_STRUCTURED:
+	case tracingpb.RecordingMode_STRUCTURED:
 		sm.recordingType = RecordingStructured
-	case tracingpb.TraceInfo_VERBOSE:
+	case tracingpb.RecordingMode_VERBOSE:
 		sm.recordingType = RecordingVerbose
 	default:
 		sm.recordingType = RecordingOff
