@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -134,6 +135,21 @@ func (b buildCtx) ResolveRelation(
 	}
 	if !isOwner {
 		if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
+			if p.RequiredPrivilege == privilege.CREATE {
+				relationType := "table"
+				if rel.IsView() {
+					relationType = "view"
+				} else if rel.IsSequence() {
+					relationType = "sequence"
+				}
+				panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+					"must be owner of %s %s or have %s privilege on %s %s",
+					relationType,
+					tree.Name(rel.GetName()),
+					p.RequiredPrivilege,
+					relationType,
+					tree.Name(rel.GetName())))
+			}
 			panic(err)
 		}
 	}
