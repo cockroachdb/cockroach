@@ -512,6 +512,13 @@ message IndexDescriptor {
   // index backfiller
   // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // ForcePut, if true, forces all writes to the the index to
+  // use Put (rather than CPut or InitPut).
+  //
+  // This is used by the MVCC-compatible index backfiller to ensure
+  // that unique indexes do not produce erroneous conflicts.
+  optional bool force_put = 25 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

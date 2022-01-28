@@ -421,10 +421,8 @@ func (ru *Updater) UpdateRow(
 						continue
 					}
 
-					if index.UseDeletePreservingEncoding() {
-						// Delete preserving encoding indexes are used only as a log of
-						// index writes during backfill, thus we can blindly put values into
-						// them.
+					if index.ForcePut() {
+						// See the comemnt on (catalog.Index).ForcePut() for more details.
 						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						if traceKV {
@@ -459,10 +457,8 @@ func (ru *Updater) UpdateRow(
 						)
 					}
 
-					if index.UseDeletePreservingEncoding() {
-						// Delete preserving encoding indexes are used only as a log of
-						// index writes during backfill, thus we can blindly put values into
-						// them.
+					if index.ForcePut() {
+						// See the comemnt on (catalog.Index).ForcePut() for more details.
 						insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 					} else {
 						// In this case, the index now has a k/v that did not exist in the
@@ -497,7 +493,8 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				if index.UseDeletePreservingEncoding() {
+				if index.ForcePut() {
+					// See the comemnt on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, batch, &newEntry.Key, &newEntry.Value, traceKV)
 				} else {
 					if traceKV {
@@ -518,9 +515,8 @@ func (ru *Updater) UpdateRow(
 			}
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				if index.UseDeletePreservingEncoding() {
-					// Delete preserving encoding indexes are used only as a log of index
-					// writes during backfill, thus we can blindly put values into them.
+				if index.ForcePut() {
+					// See the comemnt on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)
 				} else {
 					insertInvertedPutFn(ctx, batch, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV)

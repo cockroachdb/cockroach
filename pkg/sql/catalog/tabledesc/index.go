@@ -327,6 +327,13 @@ func (w index) UseDeletePreservingEncoding() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
+// ForcePut returns true if writes to the index should only use Put
+// (rather than CPut or InitPut). This is used by indexes currently
+// being backfilled by the MVCC-compliant index backfiller.
+func (w index) ForcePut() bool {
+	return w.desc.ForcePut || w.desc.UseDeletePreservingEncoding
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *descpb.PartitioningDescriptor
