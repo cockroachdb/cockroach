@@ -872,11 +872,6 @@ func (s *crdbSpan) SetVerbose(to bool) {
 	for _, child := range s.mu.openChildren {
 		child.SetVerbose(to)
 	}
-
-	// TODO(andrei): The children that have started while this span was not
-	// recording are not linked into openChildren. The children that are still
-	// open can be found through the registry, so we could go spelunking in there
-	// and link them into the parent.
 }
 
 // withLock calls f while holding s' lock.
