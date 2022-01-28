@@ -47,10 +47,6 @@ func RegisterHTTPHandlers(ambientCtx log.AmbientContext, mux *http.ServeMux, tr 
 		func(w http.ResponseWriter, req *http.Request) {
 			serveHTTPTrace(ambientCtx.AnnotateCtx(req.Context()), w, req, tr)
 		})
-	mux.HandleFunc("/debug/toggle-trace",
-		func(w http.ResponseWriter, req *http.Request) {
-			serveHTTPToggleTrace(ambientCtx.AnnotateCtx(req.Context()), w, req, tr)
-		})
 	mux.HandleFunc("/debug/assets/list.min.js", fileServer.ServeHTTP)
 }
 
@@ -471,6 +467,8 @@ func serveHTTPTrace(
 		goto Error
 	}
 
+	log.Infof(ctx, "!!! form: %+v", r.Form)
+
 	w.Write([]byte(tracePageScripts))
 
 	{
@@ -493,11 +491,6 @@ func serveHTTPTrace(
 		var snapshot tracing.SpansSnapshot
 		snapID := r.Form.Get("snap")
 		if snapID != "" {
-
-			w.Write([]byte(`
-				<div><button onclick="reloadWithoutSnapshotArg()">Switch to latest</button></div>
-			`))
-
 			var id int
 			id, err = strconv.Atoi(snapID)
 			if err != nil {
@@ -516,59 +509,88 @@ func serveHTTPTrace(
 					break
 				}
 			}
-		} else {
-			tr.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
-				if sp.TraceID() == traceID {
-					recording = sp.GetFullRecording(tracing.RecordingVerbose)
-					return iterutil.StopIteration()
-				}
-				return nil
-			})
 		}
 
-		if recording != nil {
-			_, err = w.Write([]byte("<pre>" + recording.String() + "\n</pre>"))
-			if err != nil {
-				goto Error
+		// Look for the trace in the registry to see if it's present and read its
+		// recording mode. If we were asked to display the current trace (as opposed
+		// to the trace saved in a snapshot), we also collect the recording.
+		var recType tracing.RecordingType
+		traceStillExists := false
+		if err := tr.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+			if sp.TraceID() != traceID {
+				return nil
 			}
-			return
+
+			traceStillExists = true
+			if recording == nil {
+				recording = sp.GetFullRecording(tracing.RecordingVerbose)
+			}
+			requestedMode := r.Form.Get("rec-mode")
+			// A new recording mode was selected from the dropdown. We need to update the spans.
+			if requestedMode != "" {
+				var newMode tracing.RecordingType
+				switch requestedMode {
+				case "verbose":
+					newMode = tracing.RecordingVerbose
+				case "structured":
+					newMode = tracing.RecordingStructured
+				case "off":
+					newMode = tracing.RecordingOff
+				default:
+					return errors.Errorf("Invalid recording mode: %s.", requestedMode)
+				}
+				sp.SetRecordingType(newMode)
+			}
+			recType = sp.RecordingType()
+			return iterutil.StopIteration()
+		}); err != nil {
+			goto Error
 		}
-		err = errors.Errorf("trace %d not found", traceID)
-		goto Error
+
+		if recording == nil {
+			err = errors.Errorf("Trace %d not found.", traceID)
+			goto Error
+		}
+
+		if snapID != "" {
+			w.Write([]byte("<div>"))
+			w.Write([]byte("Visualizing a snapshot."))
+			if !traceStillExists {
+				w.Write([]byte("Trace no longer exists."))
+			} else {
+				w.Write([]byte(`<button onclick="reloadWithoutSnapshotArg()">Switch to latest</button>`))
+			}
+			w.Write([]byte("</div>"))
+		} else {
+			// If we're looking at a live trace, present a drop-down for changing
+			// the recording mode.
+			_, err = w.Write([]byte(`<div><form method="POST"><label for="rec-mode">Change recording mode:</label>
+					<select id='rec-mode' onchange="this.form.submit()" name='rec-mode'>
+						<option value="off">Off</option>
+						<option value="verbose">Verbose</option>
+						<option value="structured">Structured</option>
+					</select></form></div>`))
+			w.Write([]byte("<script>"))
+			// Select the current recording mode.
+			switch recType {
+			case tracing.RecordingOff:
+				w.Write([]byte("document.getElementById('rec-mode').value = 'off';\n"))
+			case tracing.RecordingVerbose:
+				w.Write([]byte("document.getElementById('rec-mode').value = 'verbose';\n"))
+			case tracing.RecordingStructured:
+				w.Write([]byte("document.getElementById('rec-mode').value = 'structured';\n"))
+			}
+
+			// Prevent refreshing the page from POSTing again.
+			w.Write([]byte(`window.history.replaceState(null, null, window.location.href);`))
+			w.Write([]byte("</script>"))
+		}
+
+		w.Write([]byte("<p>\n"))
+		w.Write([]byte("<pre>" + recording.String() + "\n</pre>"))
+		return
 	}
 
 Error:
 	http.Error(w, err.Error(), http.StatusInternalServerError)
-}
-
-func serveHTTPToggleTrace(
-	ctx context.Context, w http.ResponseWriter, r *http.Request, tr *tracing.Tracer,
-) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := r.ParseForm(); err != nil {
-		panic(err)
-	}
-	for k, v := range r.Form {
-		log.Infof(ctx, "!!! form: %s : %v", k, v)
-	}
-	traceIDs, ok := r.Form["traceID"]
-	if !ok {
-		panic("!!!")
-	}
-	if len(traceIDs) != 1 {
-		panic("!!!")
-	}
-	traceIDi, err := strconv.Atoi(traceIDs[0])
-	if err != nil {
-		panic(err) // !!!
-	}
-	traceID := tracingpb.TraceID(traceIDi)
-
-	tr.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
-		if sp.TraceID() != traceID {
-			return nil
-		}
-		sp.SetRecordingType(tracing.RecordingVerbose) // NB: The recording type propagates to the children, recursively.
-		return nil
-	})
 }

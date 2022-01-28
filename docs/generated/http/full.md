@@ -4340,11 +4340,12 @@ Response object for issuing Transaction ID Resolution.
 
 
 
-## ToggleTraceRecording
+## SetTraceRecordingType
 
-`POST /_status/toggletracerecording`
+`POST /_status/settracerecordingtype`
 
-!!!
+SetTraceRecordingType sets the recording mode of all or some of the spans
+in a trace.
 
 Support status: [reserved](#support-status)
 
@@ -4353,15 +4354,15 @@ Support status: [reserved](#support-status)
 
 
 
-!!!
+SetTraceRecordingTypeRequest is the request for SetTraceRecordingType, which
+sets the recording mode of all or some of the spans in a trace.
 
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| trace_id | [uint64](#cockroach.server.serverpb.ToggleTraceRecordingRequest-uint64) |  |  | [reserved](#support-status) |
-| span_id | [uint64](#cockroach.server.serverpb.ToggleTraceRecordingRequest-uint64) |  |  | [reserved](#support-status) |
-| record | [bool](#cockroach.server.serverpb.ToggleTraceRecordingRequest-bool) |  |  | [reserved](#support-status) |
-| verbose | [bool](#cockroach.server.serverpb.ToggleTraceRecordingRequest-bool) |  |  | [reserved](#support-status) |
+| trace_id | [uint64](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-uint64) |  | TraceID identifies the trace to toggle the recording of. It must always be specified. | [reserved](#support-status) |
+| span_id | [uint64](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-uint64) |  | SpanID, if not zero, controls which spans in the trace get their recording mode set. If zero, all spans in the trace are updated. If not zero, only the respective span and its descendants get updated. | [reserved](#support-status) |
+| recording_mode | [cockroach.util.tracing.tracingpb.RecordingMode](#cockroach.server.serverpb.SetTraceRecordingTypeRequest-cockroach.util.tracing.tracingpb.RecordingMode) |  |  | [reserved](#support-status) |
 
 
 
@@ -4374,7 +4375,7 @@ Support status: [reserved](#support-status)
 
 
 
-
+SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
 
 
 

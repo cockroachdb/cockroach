@@ -21,6 +21,7 @@ import "roachpb/index_usage_stats.proto";
 import "roachpb/metadata.proto";
 import "server/diagnostics/diagnosticspb/diagnostics.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
+import "util/tracing/tracingpb/tracing.proto";
 import "server/status/statuspb/status.proto";
 import "sql/contentionpb/contention.proto";
 import "sql/execinfrapb/api.proto";
@@ -1471,15 +1472,21 @@ message TableIndexStatsResponse {
   google.protobuf.Timestamp last_reset = 2 [(gogoproto.stdtime) = true];
 }
 
-// !!!
-message ToggleTraceRecordingRequest {
+// SetTraceRecordingTypeRequest is the request for SetTraceRecordingType, which
+// sets the recording mode of all or some of the spans in a trace.
+message SetTraceRecordingTypeRequest {
+  // TraceID identifies the trace to toggle the recording of. It must always be
+  // specified.
   uint64 trace_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+  // SpanID, if not zero, controls which spans in the trace get their recording
+  // mode set. If zero, all spans in the trace are updated. If not zero, only
+  // the respective span and its descendants get updated.
   uint64 span_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "SpanID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.SpanID"];
-  bool record = 3;
-  bool verbose = 4;
+  util.tracing.tracingpb.RecordingMode recording_mode = 3;
 }
 
-message ToggleTraceRecordingResponse{}
+// SetTraceRecordingTypeRequest is the response for SetTraceRecordingType.
+message SetTraceRecordingTypeResponse{}
 
 // Request object for issuing a index usage stats reset request.
 message ResetIndexUsageStatsRequest {
@@ -1927,10 +1934,11 @@ service Status {
   //   is not returned in the RPC response.
   rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
 
-  // !!!
-  rpc ToggleTraceRecording(ToggleTraceRecordingRequest) returns (ToggleTraceRecordingResponse) {
+  // SetTraceRecordingType sets the recording mode of all or some of the spans
+  // in a trace.
+  rpc SetTraceRecordingType(SetTraceRecordingTypeRequest) returns (SetTraceRecordingTypeResponse) {
     option (google.api.http) = {
-      post: "/_status/toggletracerecording"
+      post: "/_status/settracerecordingtype"
       body: "*"
     };
   }

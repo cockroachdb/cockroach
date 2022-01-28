@@ -3088,10 +3088,12 @@ func (s *statusServer) TxnIDResolution(
 	return statusClient.TxnIDResolution(ctx, req)
 }
 
-func (s *statusServer) ToggleTraceRecording(
-	ctx context.Context, req *serverpb.ToggleTraceRecordingRequest,
-) (*serverpb.ToggleTraceRecordingResponse, error) {
-	log.Infof(ctx, "!!! ToggleTraceRecording: %+v", req)
+// SetTraceRecordingType updates the recording mode of all or some of the spans
+// in a trace.
+func (s *statusServer) SetTraceRecordingType(
+	ctx context.Context, req *serverpb.SetTraceRecordingTypeRequest,
+) (*serverpb.SetTraceRecordingTypeResponse, error) {
+	log.Infof(ctx, "!!! SetTraceRecordingType: %+v", req)
 	if req.TraceID == 0 {
 		return nil, errors.Errorf("missing trace id")
 	}
@@ -3102,5 +3104,5 @@ func (s *statusServer) ToggleTraceRecording(
 		sp.SetRecordingType(tracing.RecordingVerbose) // NB: The recording type propagates to the children, recursively.
 		return nil
 	})
-	return &serverpb.ToggleTraceRecordingResponse{}, nil
+	return &serverpb.SetTraceRecordingTypeResponse{}, nil
 }
