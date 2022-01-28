@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,6 +39,7 @@ import (
 type testServerShim struct {
 	serverutils.TestTenantInterface
 	kvServer serverutils.TestServerInterface
+	kvSQL    *gosql.DB
 }
 
 const unsupportedShimMethod = `
