@@ -192,8 +192,8 @@ func (ri *Inserter) InsertRow(
 			for i := range entries {
 				e := &entries[i]
 
-				// We don't want to check any conflicts when trying to preserve deletes.
-				if ri.Helper.Indexes[idx].UseDeletePreservingEncoding() {
+				if ri.Helper.Indexes[idx].ForcePut() {
+					// See the comemnt on (catalog.Index).ForcePut() for more details.
 					insertPutFn(ctx, b, &e.Key, &e.Value, traceKV)
 				} else {
 					putFn(ctx, b, &e.Key, &e.Value, traceKV)
