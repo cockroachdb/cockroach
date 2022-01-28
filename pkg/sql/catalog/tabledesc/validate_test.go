@@ -1701,6 +1701,52 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 2,
 			}},
+		{`non-index mutation in state BACKFILLING`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Column{
+							Column: &descpb.ColumnDescriptor{
+								ID:   2,
+								Name: "c2",
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_BACKFILLING,
+					},
+				},
+				NextColumnID: 3,
+			}},
+		{`non-index mutation in state MERGING`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Column{
+							Column: &descpb.ColumnDescriptor{
+								ID:   2,
+								Name: "c2",
+							},
+						},
+						Direction: descpb.DescriptorMutation_ADD,
+						State:     descpb.DescriptorMutation_MERGING,
+					},
+				},
+				NextColumnID: 3,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {

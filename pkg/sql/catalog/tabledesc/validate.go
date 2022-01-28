@@ -285,6 +285,18 @@ func validateMutation(m *descpb.DescriptorMutation) error {
 			"mutation in state %s, direction %s, and no column/index descriptor",
 			errors.Safe(m.State), errors.Safe(m.Direction))
 	}
+
+	switch m.State {
+	case descpb.DescriptorMutation_BACKFILLING:
+		if _, ok := m.Descriptor_.(*descpb.DescriptorMutation_Index); !ok {
+			return errors.AssertionFailedf("non-index mutation in state %s", errors.Safe(m.State))
+		}
+	case descpb.DescriptorMutation_MERGING:
+		if _, ok := m.Descriptor_.(*descpb.DescriptorMutation_Index); !ok {
+			return errors.AssertionFailedf("non-index mutation in state %s", errors.Safe(m.State))
+		}
+	}
+
 	return nil
 }
 

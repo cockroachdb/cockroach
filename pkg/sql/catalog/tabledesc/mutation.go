@@ -68,6 +68,12 @@ func (mm maybeMutation) Backfilling() bool {
 	return mm.mutationState == descpb.DescriptorMutation_BACKFILLING
 }
 
+// Merging returns true iff the table element is a mutation in the
+// merging state.
+func (mm maybeMutation) Merging() bool {
+	return mm.mutationState == descpb.DescriptorMutation_MERGING
+}
+
 // Adding returns true iff the table element is in an add mutation.
 func (mm maybeMutation) Adding() bool {
 	return mm.mutationDirection == descpb.DescriptorMutation_ADD

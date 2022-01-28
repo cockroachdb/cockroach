@@ -45,6 +45,10 @@ type TableElementMaybeMutation interface {
 	// mutation in the backfilling state.
 	Backfilling() bool
 
+	// Mergin returns true iff the table element is in a
+	// mutation in the merging state.
+	Merging() bool
+
 	// Adding returns true iff the table element is in an add mutation.
 	Adding() bool
 
@@ -186,6 +190,24 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
+	// ForcePut, if true, forces all writes to use Put rather than CPut or InitPut.
+	//
+	// Users of this options should take great care as it
+	// effectively mean unique constraints are not respected.
+	//
+	// Currently (2022-01-19) this two users: delete preserving
+	// indexes and merging indexes.
+	//
+	// Delete preserving encoding indexes are used only as a log of
+	// index writes during backfill, thus we can blindly put values into
+	// them.
+	//
+	// New indexes may miss updates during the backfilling process
+	// that would lead to CPut failures until the missed updates
+	// are merged into the index. Uniqueness for such indexes is
+	// checked by the schema changer before they are brought back
+	// online.
+	ForcePut() bool
 }
 
 // Column is an interface around the column descriptor types.
