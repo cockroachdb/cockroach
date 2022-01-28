@@ -128,6 +128,10 @@ var (
 				ppFunc: timeseriesKeyPrint,
 				PSFunc: parseUnsupported,
 			},
+			{Name: "/SystemSpanConfigKeys", prefix: SystemSpanConfigPrefix,
+				ppFunc: decodeKeyPrint,
+				PSFunc: parseUnsupported,
+			},
 		}},
 		{Name: "/NamespaceTable", start: NamespaceTableMin, end: NamespaceTableMax, Entries: []DictEntry{
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},

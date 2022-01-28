@@ -209,6 +209,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		// Add spans for the system range without the timeseries and
 		// liveness ranges, which are individually captured above.
 		//
+		// We also don't apply configurations over the SystemSpanConfigSpan; spans
+		// carved from this range have no data, instead, associated configurations
+		// for these spans have special meaning in `system.span_configurations`.
+		//
 		// Note that the NodeLivenessSpan sorts before the rest of the system
 		// keyspace, so the first span here starts at the end of the
 		// NodeLivenessSpan.
@@ -218,7 +222,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		})
 		spans = append(spans, roachpb.Span{
 			Key:    keys.TimeseriesSpan.EndKey,
-			EndKey: keys.SystemMax,
+			EndKey: keys.SystemSpanConfigSpan.Key,
 		})
 	case zonepb.TenantsZoneName: // nothing to do.
 	default:
