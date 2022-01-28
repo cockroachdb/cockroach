@@ -15,13 +15,13 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -46,6 +46,10 @@ func RegisterHTTPHandlers(ambientCtx log.AmbientContext, mux *http.ServeMux, tr 
 	mux.HandleFunc("/debug/show-trace",
 		func(w http.ResponseWriter, req *http.Request) {
 			serveHTTPTrace(ambientCtx.AnnotateCtx(req.Context()), w, req, tr)
+		})
+	mux.HandleFunc("/debug/toggle-trace",
+		func(w http.ResponseWriter, req *http.Request) {
+			serveHTTPToggleTrace(ambientCtx.AnnotateCtx(req.Context()), w, req, tr)
 		})
 	mux.HandleFunc("/debug/assets/list.min.js", fileServer.ServeHTTP)
 }
@@ -446,6 +450,18 @@ func findTxnState(txnID string, snap tracing.SpansSnapshot) txnState {
 	}
 }
 
+const tracePageScripts = `
+<script>
+// reloadWithoutSnapshotArg reloads the page without the "snap" query argument,
+// thus showing the latest recording.
+function reloadWithoutSnapshotArg() {
+	let url = new URL(window.location);
+	url.searchParams.delete('snap');
+	window.location.href = url.href;
+}
+</script>
+`
+
 func serveHTTPTrace(
 	ctx context.Context, w http.ResponseWriter, r *http.Request, tr *tracing.Tracer,
 ) {
@@ -454,6 +470,8 @@ func serveHTTPTrace(
 	if err = r.ParseForm(); err != nil {
 		goto Error
 	}
+
+	w.Write([]byte(tracePageScripts))
 
 	{
 		var traceID tracingpb.TraceID
@@ -470,10 +488,16 @@ func serveHTTPTrace(
 		}
 		traceID = tracingpb.TraceID(id)
 
+		var recording tracing.Recording
 		var snapshotID tracing.SnapshotID
 		var snapshot tracing.SpansSnapshot
 		snapID := r.Form.Get("snap")
 		if snapID != "" {
+
+			w.Write([]byte(`
+				<div><button onclick="reloadWithoutSnapshotArg()">Switch to latest</button></div>
+			`))
+
 			var id int
 			id, err = strconv.Atoi(snapID)
 			if err != nil {
@@ -485,32 +509,66 @@ func serveHTTPTrace(
 			if err != nil {
 				goto Error
 			}
+
+			for _, r := range snapshot.Traces {
+				if r[0].TraceID == traceID {
+					recording = r
+					break
+				}
+			}
 		} else {
-			// If no snapshot is specified, we'll take a new one now and redirect to
-			// it.
-			snapshotID = tr.SaveSnapshot()
-			var newURL *url.URL
-			newURL, err = r.URL.Parse(fmt.Sprintf("?trace=%d&snap=%d", traceID, snapshotID))
+			tr.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+				if sp.TraceID() == traceID {
+					recording = sp.GetFullRecording(tracing.RecordingVerbose)
+					return iterutil.StopIteration()
+				}
+				return nil
+			})
+		}
+
+		if recording != nil {
+			_, err = w.Write([]byte("<pre>" + recording.String() + "\n</pre>"))
 			if err != nil {
 				goto Error
 			}
-			http.Redirect(w, r, newURL.String(), http.StatusFound)
 			return
 		}
-
-		for _, r := range snapshot.Traces {
-			if r[0].TraceID == traceID {
-				_, err = w.Write([]byte("<pre>" + r.String() + "\n</pre>"))
-				if err != nil {
-					goto Error
-				}
-				return
-			}
-		}
-		err = errors.Errorf("trace %d not found in snapshot", traceID)
+		err = errors.Errorf("trace %d not found", traceID)
 		goto Error
 	}
 
 Error:
 	_, _ = w.Write([]byte(err.Error()))
+}
+
+func serveHTTPToggleTrace(
+	ctx context.Context, w http.ResponseWriter, r *http.Request, tr *tracing.Tracer,
+) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := r.ParseForm(); err != nil {
+		panic(err)
+	}
+	for k, v := range r.Form {
+		log.Infof(ctx, "!!! form: %s : %v", k, v)
+	}
+	traceIDs, ok := r.Form["traceID"]
+	if !ok {
+		panic("!!!")
+	}
+	if len(traceIDs) != 1 {
+		panic("!!!")
+	}
+	traceIDi, err := strconv.Atoi(traceIDs[0])
+	if err != nil {
+		panic(err) // !!!
+	}
+	traceID := tracingpb.TraceID(traceIDi)
+
+	tr.SpanRegistry().VisitSpans(func(sp tracing.RegistrySpan) error {
+		if sp.TraceID() != traceID {
+			return nil
+		}
+		sp.SetVerbose(true) // NB: SetVerbose propagates to the children, recursively.
+		return nil
+	})
 }

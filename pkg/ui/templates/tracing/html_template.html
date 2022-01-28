@@ -138,6 +138,17 @@ function toggleVisibility(event) {
   }
 };
 
+function toggleVerbosity(event) {
+  // !!!
+  console.log(event.target);
+  var traceID = event.target.dataset.traceid;
+  console.log("toggling visibility for trace: " + traceID);
+  var xhttp = new XMLHttpRequest();
+  xhttp.open("POST", "toggle-trace");
+  xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+  xhttp.send("traceID=" + traceID);
+};
+
 function search(s) {
     var searchBox = document.getElementById("searchBox");
     searchBox.value = s;
@@ -158,7 +169,9 @@ var options = {
     return `
         <tr>
           <td>
-            ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a><br>
+            ${values.operation} <a href="javascript:openTrace('${values.traceID}')">[+]</a>
+            <button data-traceid='${values.traceID}' onclick="toggleVerbosity(event)">Record</button>
+            <br>
             <span class="tags">${values.tags}</span>
             <button data-toggle-target='hiddenTags-${values.spanID}' data-show="more" data-hide="less" onclick="toggleVisibility(event)">more</button>
             <div style="display:none;" class="tags" id="hiddenTags-${values.spanID}">${values.hiddenTags}</div>
