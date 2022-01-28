@@ -976,7 +976,11 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 
 	check := func(voterTargets []roachpb.ReplicationTarget) {
 		require.NoError(t, tc.Server(0).DB().AdminRelocateRange(
-			ctx, scratchStartKey, voterTargets, []roachpb.ReplicationTarget{},
+			ctx,
+			scratchStartKey,
+			voterTargets,
+			[]roachpb.ReplicationTarget{},
+			true, /* transferLeaseToFirstVoter */
 		))
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		voters := desc.Replicas().VoterDescriptors()
