@@ -1115,6 +1115,7 @@ indexrelid  indrelid  indnatts  indisunique  indisprimary  indisexclusion  indim
 2621181446  15        6         false        false         false           false         false           true        false         false       true       false           8 2 3 11 10 9  0 3403232968 0             0 0 0        2 2 2        NULL      status IN ('running'::STRING, 'reverting'::STRING, 'pending'::STRING, 'pause-requested'::STRING, 'cancel-requested'::STRING)  3
 2667577107  31        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 2834522046  34        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
+2880917710  50        2         true         true          false           true          false           true        false         false       true       false           1 2            0 3403232968               0 0          2 2          NULL      NULL                                                                                                                          2
 3094258317  33        2         true         true          false           true          false           true        false         false       true       false           1 2            3403232968 3403232968      0 0          2 2          NULL      NULL                                                                                                                          2
 3353994584  36        1         true         true          false           true          false           true        false         false       true       false           1              0                          0            2            NULL      NULL                                                                                                                          1
 3446785912  4         1         true         true          false           true          false           true        false         false       true       false           1              3403232968                 0            2            NULL      NULL                                                                                                                          1
@@ -1200,6 +1201,8 @@ indexrelid  operator_argument_type_oid  operator_argument_position
 2621181446  0                           3
 2667577107  0                           1
 2834522046  0                           1
+2880917710  0                           1
+2880917710  0                           2
 3094258317  0                           1
 3094258317  0                           2
 3353994584  0                           1

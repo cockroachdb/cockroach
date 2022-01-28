@@ -649,6 +649,24 @@ CREATE TABLE system.span_configurations (
     CONSTRAINT check_bounds CHECK (start_key < end_key),
     FAMILY "primary" (start_key, end_key, config)
 )`
+
+	TenantSettingsTableSchema = `
+CREATE TABLE system.tenant_settings (
+	-- A non-zero tenant_id indicates that this is a setting specific to that
+	-- particular tenant. A zero tenant_id indicates an "all tenant" setting that
+	-- applies to all tenants which don't a tenant-specific value for this
+	-- setting.
+	tenant_id    INT8 NOT NULL,
+	name         STRING NOT NULL,
+	value        STRING NOT NULL,
+	last_updated TIMESTAMP NOT NULL DEFAULT now(),
+	value_type   STRING NOT NULL,
+
+	-- reason is unused for now.
+	reason       STRING,
+	CONSTRAINT "primary" PRIMARY KEY (tenant_id, name),
+	FAMILY (tenant_id, name, value, last_updated, value_type, reason)
+);`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -2297,6 +2315,43 @@ var (
 			}}
 		},
 	)
+
+	// TenantSettingsTable is the descriptor for the tenant settings table.
+	// It contains overrides for cluster settings for tenants.
+	TenantSettingsTable = registerSystemTable(
+		TenantSettingsTableSchema,
+		systemTable(
+			catconstants.TenantSettingsTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "tenant_id", ID: 1, Type: types.Int},
+				{Name: "name", ID: 2, Type: types.String},
+				{Name: "value", ID: 3, Type: types.String},
+				{Name: "last_updated", ID: 4, Type: types.Timestamp, DefaultExpr: &nowString},
+				{Name: "value_type", ID: 5, Type: types.String},
+				{Name: "reason", ID: 6, Type: types.String, Nullable: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "fam_0_tenant_id_name_value_last_updated_value_type_reason",
+					ID:          0,
+					ColumnNames: []string{"tenant_id", "name", "value", "last_updated", "value_type", "reason"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:           tabledesc.LegacyPrimaryKeyIndexName,
+				ID:             1,
+				Unique:         true,
+				KeyColumnNames: []string{"tenant_id", "name"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{
+					descpb.IndexDescriptor_ASC,
+					descpb.IndexDescriptor_ASC,
+				},
+				KeyColumnIDs: []descpb.ColumnID{1, 2},
+				Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
+			},
+		))
 )
 
 type descRefByName struct {

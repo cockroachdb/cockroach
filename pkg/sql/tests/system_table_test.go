@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -175,16 +176,24 @@ func TestSystemTableLiterals(t *testing.T) {
 		}
 	}
 
-	const expectedNumberOfSystemTables = 37
+	const expectedNumberOfSystemTables = 38
 	require.Equal(t, expectedNumberOfSystemTables, len(testcases))
 
 	for name, test := range testcases {
 		t.Run(name, func(t *testing.T) {
 			privs := *test.pkg.GetPrivileges()
+			desc := test.pkg
+			// Allocate an ID to dynamically allocated system tables.
+			if desc.GetID() == 0 {
+				mut := desc.NewBuilder().BuildCreatedMutable().(*tabledesc.Mutable)
+				mut.ID = keys.MaxReservedDescID + 1
+				desc = mut.ImmutableCopy().(catalog.TableDescriptor)
+			}
+
 			gen, err := sql.CreateTestTableDescriptor(
 				context.Background(),
 				keys.SystemDatabaseID,
-				test.pkg.GetID(),
+				desc.GetID(),
 				test.schema,
 				&privs,
 			)
@@ -193,12 +202,12 @@ func TestSystemTableLiterals(t *testing.T) {
 			}
 			require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
 
-			if test.pkg.TableDesc().Equal(gen.TableDesc()) {
+			if desc.TableDesc().Equal(gen.TableDesc()) {
 				return
 			}
-			diff := strings.Join(pretty.Diff(test.pkg.TableDesc(), gen.TableDesc()), "\n")
+			diff := strings.Join(pretty.Diff(desc.TableDesc(), gen.TableDesc()), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+
-				"hardcoded table descriptor:\n%s", test.pkg.GetName(), diff)
+				"hardcoded table descriptor:\n%s", desc.GetName(), diff)
 		})
 	}
 }
