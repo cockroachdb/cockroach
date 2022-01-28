@@ -798,7 +798,7 @@ func BenchmarkEventf_WithVerboseTraceSpan(b *testing.B) {
 			tracer.SetRedactable(redactable)
 			ctx, sp := tracer.StartSpanCtx(ctx, "benchspan", tracing.WithForceRealSpan())
 			defer sp.Finish()
-			sp.SetVerbose(true)
+			sp.SetRecordingType(tracing.RecordingVerbose)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				Eventf(ctx, "%s %s %s", "foo", "bar", "baz")

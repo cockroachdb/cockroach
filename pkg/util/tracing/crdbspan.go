@@ -320,15 +320,6 @@ func (s *crdbSpan) enableRecording(recType RecordingType) {
 	s.mu.recording.recordingType.swap(recType)
 }
 
-func (s *crdbSpan) disableRecording() {
-	if s.recordingType() == RecordingOff {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.recording.recordingType.swap(RecordingOff)
-}
-
 // TraceID is part of the RegistrySpan interface.
 func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
@@ -859,18 +850,14 @@ func (s *crdbSpan) parentFinished() {
 	s.mu.parent.release()
 }
 
-// SetVerbose is part of the RegistrySpan interface.
-func (s *crdbSpan) SetVerbose(to bool) {
-	if to {
-		s.enableRecording(RecordingVerbose)
-	} else {
-		s.disableRecording()
-	}
+// SetRecordingType is part of the RegistrySpan interface.
+func (s *crdbSpan) SetRecordingType(to RecordingType) {
+	s.mu.recording.recordingType.swap(to)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, child := range s.mu.openChildren {
-		child.SetVerbose(to)
+		child.SetRecordingType(to)
 	}
 }
 
