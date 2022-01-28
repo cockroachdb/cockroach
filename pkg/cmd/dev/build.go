@@ -99,6 +99,9 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
 	skipGenerate := mustGetFlagBool(cmd, skipGenerateFlag)
+	if cross != "" {
+		skipGenerate = true
+	}
 
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets, skipGenerate)
 	if err != nil {
@@ -121,9 +124,15 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 			return fmt.Errorf("cannot cross-compile target %s because it is not a go binary", target.fullName)
 		}
 	}
-	cross = "cross" + cross
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args = append(args, fmt.Sprintf("--config=%s", cross), "--config=ci")
+	cross = "cross" + cross
+	return d.crossBuild(ctx, args, buildTargets, cross, volume)
+}
+
+func (d *dev) crossBuild(
+	ctx context.Context, bazelArgs []string, targets []buildTarget, crossConfig string, volume string,
+) error {
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -134,17 +143,18 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	script.WriteString("set -euxo pipefail\n")
 	// TODO(ricky): Actually, we need to shell-quote the arguments,
 	// but that's hard and I don't think it's necessary for now.
-	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(args, " ")))
-	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", cross))
-	for _, target := range buildTargets {
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n",
-			bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(cross, "windows"))))
+	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(bazelArgs, " ")))
+	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", crossConfig))
+	for _, target := range targets {
+		output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
+		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", output))
+		script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s", filepath.Base(output)))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
 	if err != nil {
 		return err
 	}
-	for _, target := range buildTargets {
+	for _, target := range targets {
 		logSuccessfulBuild(target.fullName, filepath.Join("artifacts", targetToBinBasename(target.fullName)))
 	}
 	return nil
