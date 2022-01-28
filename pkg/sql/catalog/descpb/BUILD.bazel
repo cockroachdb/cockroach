@@ -11,6 +11,7 @@ go_library(
         "default_privilege.go",
         "descriptor.go",
         "index.go",
+        "index_fetch.go",
         "join_type.go",
         "locking.go",
         "privilege.go",
@@ -65,6 +66,7 @@ proto_library(
     name = "descpb_proto",
     srcs = [
         "encoded_datum.proto",
+        "index_fetch.proto",
         "join_type.proto",
         "locking.proto",
         "privilege.proto",
