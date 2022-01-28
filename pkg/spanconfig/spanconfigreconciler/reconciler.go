@@ -270,7 +270,7 @@ func (f *fullReconciler) reconcile(
 func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
-	var tenantSpan roachpb.Span
+	var spans []roachpb.Span
 	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
@@ -278,28 +278,30 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		// TODO(irfansharif): Should we include the scratch range here? Some
 		// tests make use of it; we may want to declare configs over it and have
 		// it considered all the same.
-		tenantSpan = roachpb.Span{
+		spans = append(spans, roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
+			EndKey: keys.SystemSpanConfigSpan.Key,
+		})
+		spans = append(spans, roachpb.Span{
+			Key:    keys.TableDataMin,
 			EndKey: keys.TableDataMax,
-		}
+		})
 		if f.knobs.ConfigureScratchRange {
-			tenantSpan.EndKey = keys.ScratchRangeMax
+			spans[1].EndKey = keys.ScratchRangeMax
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
 		tenPrefix := keys.MakeTenantPrefix(f.tenID)
-		tenantSpan = roachpb.Span{
+		spans = append(spans, roachpb.Span{
 			Key:    tenPrefix,
 			EndKey: tenPrefix.PrefixEnd(),
-		}
+		})
 	}
 
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
 		// Fully populate the store with KVAccessor contents.
-		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
-		})
+		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(ctx, spans)
 		if err != nil {
 			return nil, err
 		}

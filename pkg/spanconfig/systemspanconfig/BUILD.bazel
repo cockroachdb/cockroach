@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "systemspanconfig",
+    srcs = [
+        "encoderdecoder.go",
+        "target.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/systemspanconfig",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/encoding",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "systemspanconfig_test",
+    srcs = ["target_test.go"],
+    embed = [":systemspanconfig"],
+    deps = [
+        "//pkg/roachpb:with-mocks",
+        "//pkg/testutils",
+        "@com_github_stretchr_testify//require",
+    ],
+)
