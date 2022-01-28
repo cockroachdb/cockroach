@@ -90,9 +90,10 @@ func TestValidatePayloadContents(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			valid, err := validatePayloadContents(tc.payload, username)
-			require.Equal(t, tc.valid, valid)
-			if !valid {
+			err := validatePayloadContents(tc.payload, username)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
 				require.EqualError(t, err, tc.errorText)
 			}
 		})
