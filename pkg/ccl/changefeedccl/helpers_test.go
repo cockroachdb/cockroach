@@ -410,7 +410,7 @@ func startTestTenant(
 ) (serverutils.TestServerInterface, *gosql.DB, func()) {
 	ctx := context.Background()
 
-	kvServer, _, cleanupCluster := startTestFullServer(t, options)
+	kvServer, kvSQL, cleanupCluster := startTestFullServer(t, options)
 	knobs := base.TestingKnobs{
 		DistSQL:          &execinfra.TestingKnobs{Changefeed: &TestingKnobs{}},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -433,7 +433,11 @@ func startTestTenant(
 	_, err := tenantDB.ExecContext(ctx, serverSetupStatements)
 	require.NoError(t, err)
 
-	server := &testServerShim{tenantServer, kvServer}
+	server := &testServerShim{
+		TestTenantInterface: tenantServer,
+		kvServer:            kvServer,
+		kvSQL:               kvSQL,
+	}
 	// Log so that it is clear if a failed test happened
 	// to run on a tenant.
 	t.Logf("Running test using tenant %s", tenantID)
