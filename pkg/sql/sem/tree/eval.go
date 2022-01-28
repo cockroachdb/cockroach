@@ -3077,6 +3077,17 @@ type DatabaseRegionConfig interface {
 	PrimaryRegionString() string
 }
 
+type HasAnyPrivilegeResult = int8
+
+const (
+	// At least one of the specified privileges is granted
+	HasPrivilege HasAnyPrivilegeResult = 1
+	// No privileges are granted
+	HasNoPrivilege HasAnyPrivilegeResult = 0
+	// The object that privileges are being checked on was not found
+	ObjectNotFound HasAnyPrivilegeResult = -1
+)
+
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
 type EvalDatabase interface {
@@ -3109,14 +3120,9 @@ type EvalDatabase interface {
 		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
 	) (isVisible bool, exists bool, err error)
 
-	// HasPrivilege returns whether the current user has privilege to access
+	// HasAnyPrivilege returns whether the current user has privilege to access
 	// the given object.
-	HasPrivilege(
-		ctx context.Context,
-		specifier HasPrivilegeSpecifier,
-		user security.SQLUsername,
-		priv privilege.Privilege,
-	) (bool, error)
+	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user security.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
@@ -3130,13 +3136,16 @@ type HasPrivilegeSpecifier struct {
 	// Schema privilege
 	// Schema OID must be converted to name before using HasPrivilegeSpecifier.
 	SchemaName *string
-	// SchemaDatabaseName is required when SchemaName is used
+	// SchemaDatabaseName is required when SchemaName is used.
 	SchemaDatabaseName *string
+	// Because schemas cannot be looked up by OID directly,
+	// this controls whether the result is nil (originally queried by OID) or an error (originally queried by name).
+	SchemaIsRequired *bool
 
 	// Table privilege
 	TableName *string
 	TableOID  *oid.Oid
-	// Sequences are stored internally as a table
+	// Sequences are stored internally as a table.
 	IsSequence *bool
 
 	// Column privilege

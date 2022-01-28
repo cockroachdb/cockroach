@@ -340,7 +340,7 @@ var strOrOidTypes = []*types.T{types.String, types.Oid}
 func makePGPrivilegeInquiryDef(
 	infoDetail string,
 	objSpecArgs argTypeOpts,
-	fn func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error),
+	fn func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error),
 ) builtinDefinition {
 	// Collect the different argument type variations.
 	//
@@ -416,7 +416,20 @@ func makePGPrivilegeInquiryDef(
 					}
 					user = ctx.SessionData().User()
 				}
-				return fn(ctx, args, user)
+				if ret, err := fn(ctx, args, user); err != nil {
+					return nil, err
+				} else {
+					switch ret {
+					case tree.HasPrivilege:
+						return tree.DBoolTrue, nil
+					case tree.HasNoPrivilege:
+						return tree.DBoolFalse, nil
+					case tree.ObjectNotFound:
+						return tree.DNull, nil
+					default:
+						panic(fmt.Sprintf("unrecognized HasAnyPrivilegeResult %d", ret))
+					}
+				}
 			},
 			Info:       fmt.Sprintf(infoFmt, infoDetail),
 			Volatility: tree.VolatilityStable,
@@ -454,6 +467,20 @@ func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string)
 // privMap maps a privilege string to a Privilege.
 type privMap map[string]privilege.Privilege
 
+func normalizePrivilegeStr(arg tree.Datum) []string {
+	argStr := string(tree.MustBeDString(arg))
+	privStrs := strings.Split(argStr, ",")
+	res := make([]string, len(privStrs))
+	for i, privStr := range privStrs {
+		// Privileges are case-insensitive.
+		privStr = strings.ToUpper(privStr)
+		// Extra whitespace is allowed between but not within privilege names.
+		privStr = strings.TrimSpace(privStr)
+		res[i] = privStr
+	}
+	return res
+}
+
 // parsePrivilegeStr recognizes privilege strings for has_foo_privilege
 // builtins, which are known as Access Privilege Inquiry Functions.
 //
@@ -462,14 +489,9 @@ type privMap map[string]privilege.Privilege
 // items, not so much about whitespace within items. The allowed privilege names
 // and their corresponding privileges are given as a privMap.
 func parsePrivilegeStr(arg tree.Datum, m privMap) ([]privilege.Privilege, error) {
-	argStr := string(tree.MustBeDString(arg))
-	privStrs := strings.Split(argStr, ",")
+	privStrs := normalizePrivilegeStr(arg)
 	res := make([]privilege.Privilege, len(privStrs))
 	for i, privStr := range privStrs {
-		// Privileges are case-insensitive.
-		privStr = strings.ToUpper(privStr)
-		// Extra whitespace is allowed between but not within privilege names.
-		privStr = strings.TrimSpace(privStr)
 		// Check the privilege map.
 		p, ok := m[privStr]
 		if !ok {
@@ -479,28 +501,6 @@ func parsePrivilegeStr(arg tree.Datum, m privMap) ([]privilege.Privilege, error)
 		res[i] = p
 	}
 	return res, nil
-}
-
-// runPrivilegeChecks runs the provided function for each privilege in the list.
-// If any of the checks return True or NULL, the function short-circuits with
-// that result. Otherwise, it returns False.
-func runPrivilegeChecks(
-	privs []privilege.Privilege, check func(privilege.Privilege) (tree.Datum, error),
-) (tree.Datum, error) {
-	for _, p := range privs {
-		d, err := check(p)
-		if err != nil {
-			return nil, err
-		}
-		switch d {
-		case tree.DBoolFalse:
-		case tree.DBoolTrue, tree.DNull:
-			return d, nil
-		default:
-			return nil, errors.AssertionFailedf("unexpected privilege check result %v", d)
-		}
-	}
-	return tree.DBoolFalse, nil
 }
 
 func makeCreateRegDef(typ *types.T) builtinDefinition {
@@ -1326,11 +1326,11 @@ SELECT description
 	"has_any_column_privilege": makePGPrivilegeInquiryDef(
 		"any column of table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1344,24 +1344,21 @@ SELECT description
 				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleTableHasPrivilegeError(specifier, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			colArg := tree.UnwrapDatum(ctx, args[1])
 			specifier, err := columnHasPrivilegeSpecifier(tableArg, colArg)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[2], privMap{
@@ -1375,24 +1372,21 @@ SELECT description
 				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleTableHasPrivilegeError(specifier, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_database_privilege": makePGPrivilegeInquiryDef(
 		"database",
 		argTypeOpts{{"database", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 
 			databaseArg := tree.UnwrapDatum(ctx, args[0])
 			specifier, err := databaseHasPrivilegeSpecifier(databaseArg)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1406,30 +1400,27 @@ SELECT description
 				"TEMP WITH GRANT OPTION":      {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleDatabaseHasPrivilegeError(specifier, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_foreign_data_wrapper_privilege": makePGPrivilegeInquiryDef(
 		"foreign-data wrapper",
 		argTypeOpts{{"fdw", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			fdwArg := tree.UnwrapDatum(ctx, args[0])
 			fdw, err := getNameForArg(ctx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if fdw == "" {
 				switch fdwArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.UndefinedObject,
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"foreign-data wrapper %s does not exist", fdwArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching foreign data wrapper is found
@@ -1443,21 +1434,21 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all foreign-data wrappers.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"has_function_privilege": makePGPrivilegeInquiryDef(
 		"function",
 		argTypeOpts{{"function", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			oidArg := tree.UnwrapDatum(ctx, args[0])
 			// When specifying a function by a text string rather than by OID,
 			// the allowed input is the same as for the regprocedure data type.
@@ -1467,7 +1458,7 @@ SELECT description
 				var err error
 				oid, err = tree.ParseDOid(ctx, string(*t), types.RegProcedure)
 				if err != nil {
-					return nil, err
+					return tree.HasNoPrivilege, err
 				}
 			case *tree.DOid:
 				oid = t
@@ -1475,7 +1466,7 @@ SELECT description
 
 			fn, err := getNameForArg(ctx, oid, "pg_proc", "proname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if fn == "" {
@@ -1492,31 +1483,31 @@ SELECT description
 				"EXECUTE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have EXECUTE privileges for all functions.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"has_language_privilege": makePGPrivilegeInquiryDef(
 		"language",
 		argTypeOpts{{"language", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			langArg := tree.UnwrapDatum(ctx, args[0])
 			lang, err := getNameForArg(ctx, langArg, "pg_language", "lanname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if lang == "" {
 				switch langArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.UndefinedObject,
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"language %s does not exist", langArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching language is found
@@ -1530,26 +1521,26 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all languages.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"has_schema_privilege": makePGPrivilegeInquiryDef(
 		"schema",
 		argTypeOpts{{"schema", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			schemaArg := tree.UnwrapDatum(ctx, args[0])
 			databaseName := ctx.SessionData().Database
-			specifier, isOidSpecified, err := schemaHasPrivilegeSpecifier(ctx, schemaArg, databaseName)
+			specifier, err := schemaHasPrivilegeSpecifier(ctx, schemaArg, databaseName)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1559,28 +1550,25 @@ SELECT description
 				"USAGE WITH GRANT OPTION":  {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if len(databaseName) == 0 {
 				// If no database is set, return NULL.
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleSchemaHasPrivilegeError(isOidSpecified, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_sequence_privilege": makePGPrivilegeInquiryDef(
 		"sequence",
 		argTypeOpts{{"sequence", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			seqArg := tree.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(seqArg, true /* isSequence */)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
@@ -1593,29 +1581,26 @@ SELECT description
 				"UPDATE WITH GRANT OPTION": {Kind: privilege.UPDATE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasPrivilege, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleTableHasPrivilegeError(specifier, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_server_privilege": makePGPrivilegeInquiryDef(
 		"foreign server",
 		argTypeOpts{{"server", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			serverArg := tree.UnwrapDatum(ctx, args[0])
 			server, err := getNameForArg(ctx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if server == "" {
 				switch serverArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.UndefinedObject,
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"server %s does not exist", serverArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching foreign server is found when
@@ -1629,25 +1614,25 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all foreign servers.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"has_table_privilege": makePGPrivilegeInquiryDef(
 		"table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1669,29 +1654,26 @@ SELECT description
 				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				ret, err := ctx.Planner.HasPrivilege(ctx.Context, specifier, user, priv)
-				return handleTableHasPrivilegeError(specifier, ret, err)
-			})
+			return ctx.Planner.HasAnyPrivilege(ctx.Context, specifier, user, privs)
 		},
 	),
 
 	"has_tablespace_privilege": makePGPrivilegeInquiryDef(
 		"tablespace",
 		argTypeOpts{{"tablespace", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			tablespaceArg := tree.UnwrapDatum(ctx, args[0])
 			tablespace, err := getNameForArg(ctx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if tablespace == "" {
 				switch tablespaceArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.UndefinedObject,
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"tablespace %s does not exist", tablespaceArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching tablespace is found when given
@@ -1705,21 +1687,21 @@ SELECT description
 				"CREATE WITH GRANT OPTION": {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have CREATE privileges in all tablespaces.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"has_type_privilege": makePGPrivilegeInquiryDef(
 		"type",
 		argTypeOpts{{"type", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			oidArg := tree.UnwrapDatum(ctx, args[0])
 			// When specifying a type by a text string rather than by OID, the
 			// allowed input is the same as for the regtype data type.
@@ -1729,7 +1711,7 @@ SELECT description
 				var err error
 				oid, err = tree.ParseDOid(ctx, string(*t), types.RegType)
 				if err != nil {
-					return nil, err
+					return tree.HasNoPrivilege, err
 				}
 			case *tree.DOid:
 				oid = t
@@ -1737,7 +1719,7 @@ SELECT description
 
 			typ, err := getNameForArg(ctx, oid, "pg_type", "typname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			retNull := false
 			if typ == "" {
@@ -1751,74 +1733,68 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			if retNull {
-				return tree.DNull, nil
+				return tree.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges to all types.
 			_ = privs
-			return tree.DBoolTrue, nil
+			return tree.HasPrivilege, nil
 		},
 	),
 
 	"pg_has_role": makePGPrivilegeInquiryDef(
 		"role",
 		argTypeOpts{{"role", strOrOidTypes}},
-		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.Datum, error) {
+		func(ctx *tree.EvalContext, args tree.Datums, user security.SQLUsername) (tree.HasAnyPrivilegeResult, error) {
 			roleArg := tree.UnwrapDatum(ctx, args[0])
 			roleS, err := getNameForArg(ctx, roleArg, "pg_roles", "rolname")
 			if err != nil {
-				return nil, err
+				return tree.HasNoPrivilege, err
 			}
 			// Note: the username in pg_roles is already normalized, so we can safely
 			// turn it into a SQLUsername without re-normalization.
 			role := security.MakeSQLUsernameFromPreNormalizedString(roleS)
-			retNull := false
 			if role.Undefined() {
 				switch roleArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.Newf(pgcode.UndefinedObject,
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"role %s does not exist", roleArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching role is found when given an
 					// OID.
-					retNull = true
+					return tree.ObjectNotFound, nil
 				}
 			}
 
-			privs, err := parsePrivilegeStr(args[1], privMap{
-				// This privMap is handled a little differently than in other cases
-				// (but similar to in PostgreSQL, see convert_role_priv_string and
-				// pg_role_aclcheck). We use USAGE to denote whether the privileges of
-				// the role are accessible (hasPrivsOfRole), CREATE to denote whether
-				// the user is a member of the role (isMemberOfRole), and GRANT to
-				// denote whether the user is an admin of the role (isAdminOfRole).
-				"USAGE":                    {Kind: privilege.USAGE},
-				"MEMBER":                   {Kind: privilege.CREATE},
-				"USAGE WITH GRANT OPTION":  {Kind: privilege.GRANT},
-				"USAGE WITH ADMIN OPTION":  {Kind: privilege.GRANT},
-				"MEMBER WITH GRANT OPTION": {Kind: privilege.GRANT},
-				"MEMBER WITH ADMIN OPTION": {Kind: privilege.GRANT},
-			})
-			if err != nil {
-				return nil, err
-			}
-			if retNull {
-				return tree.DNull, nil
-			}
-			return runPrivilegeChecks(privs, func(priv privilege.Privilege) (tree.Datum, error) {
-				switch priv.Kind {
-				case privilege.USAGE:
-					return hasPrivsOfRole(ctx, user, role)
-				case privilege.CREATE:
-					return isMemberOfRole(ctx, user, role)
-				case privilege.GRANT:
-					return isAdminOfRole(ctx, user, role)
+			privStrs := normalizePrivilegeStr(args[1])
+			for _, privStr := range privStrs {
+				var hasAnyPrivilegeResult tree.HasAnyPrivilegeResult
+				var err error
+				switch privStr {
+				case "USAGE":
+					hasAnyPrivilegeResult, err = hasPrivsOfRole(ctx, user, role)
+				case "MEMBER":
+					hasAnyPrivilegeResult, err = isMemberOfRole(ctx, user, role)
+				case
+					"USAGE WITH GRANT OPTION",
+					"USAGE WITH ADMIN OPTION",
+					"MEMBER WITH GRANT OPTION",
+					"MEMBER WITH ADMIN OPTION":
+					hasAnyPrivilegeResult, err = isAdminOfRole(ctx, user, role)
 				default:
-					panic("unexpected")
+					return tree.HasNoPrivilege, pgerror.Newf(pgcode.InvalidParameterValue,
+						"unrecognized privilege type: %q", privStr)
 				}
-			})
+				if err != nil {
+					return tree.HasNoPrivilege, err
+				}
+				if hasAnyPrivilegeResult == tree.HasPrivilege {
+					return hasAnyPrivilegeResult, nil
+				}
+			}
+			return tree.HasNoPrivilege, nil
 		},
 	),
 
@@ -2292,62 +2268,27 @@ func columnHasPrivilegeSpecifier(
 
 func schemaHasPrivilegeSpecifier(
 	ctx *tree.EvalContext, schemaArg tree.Datum, databaseName string,
-) (tree.HasPrivilegeSpecifier, bool, error) {
+) (tree.HasPrivilegeSpecifier, error) {
 	specifier := tree.HasPrivilegeSpecifier{
 		SchemaDatabaseName: &databaseName,
 	}
+	var schemaIsRequired bool
 	switch t := schemaArg.(type) {
 	case *tree.DString:
 		s := string(*t)
 		specifier.SchemaName = &s
-		return specifier, false, nil
+		schemaIsRequired = true
 	case *tree.DOid:
 		schemaName, err := getNameForArg(ctx, schemaArg, "pg_namespace", "nspname")
 		if err != nil {
-			return specifier, true, err
+			return specifier, err
 		}
 		specifier.SchemaName = &schemaName
-		return specifier, true, nil
 	default:
-		return specifier, false, errors.AssertionFailedf("unknown privilege specifier: %#v", schemaArg)
+		return specifier, errors.AssertionFailedf("unknown privilege specifier: %#v", schemaArg)
 	}
-}
-
-func handleDatabaseHasPrivilegeError(
-	specifier tree.HasPrivilegeSpecifier, ret bool, err error,
-) (tree.Datum, error) {
-	if err != nil {
-		// When a DatabaseOID is specified and the relation is not found, we return NULL.
-		if specifier.DatabaseOID != nil && sqlerrors.IsUndefinedDatabaseError(err) {
-			return tree.DNull, nil
-		}
-		return nil, err
-	}
-	return tree.MakeDBool(tree.DBool(ret)), nil
-}
-
-func handleSchemaHasPrivilegeError(isOidSpecified bool, ret bool, err error) (tree.Datum, error) {
-	if err != nil {
-		// When a Schema OID is specified and the relation is not found, we return NULL.
-		if isOidSpecified && sqlerrors.IsUndefinedSchemaError(err) {
-			return tree.DNull, nil
-		}
-		return nil, err
-	}
-	return tree.MakeDBool(tree.DBool(ret)), nil
-}
-
-func handleTableHasPrivilegeError(
-	specifier tree.HasPrivilegeSpecifier, ret bool, err error,
-) (tree.Datum, error) {
-	if err != nil {
-		// When a TableOID is specified and the relation is not found, we return NULL.
-		if specifier.TableOID != nil && sqlerrors.IsUndefinedRelationError(err) {
-			return tree.DNull, nil
-		}
-		return nil, err
-	}
-	return tree.MakeDBool(tree.DBool(ret)), nil
+	specifier.SchemaIsRequired = &schemaIsRequired
+	return specifier, nil
 }
 
 func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefinition {
@@ -2410,7 +2351,9 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 // member of a role is equivalent to a user having the privileges of that
 // role, so this is currently equivalent to isMemberOfRole.
 // See https://github.com/cockroachdb/cockroach/issues/69583.
-func hasPrivsOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+func hasPrivsOfRole(
+	ctx *tree.EvalContext, user, role security.SQLUsername,
+) (tree.HasAnyPrivilegeResult, error) {
 	return isMemberOfRole(ctx, user, role)
 }
 
@@ -2418,39 +2361,46 @@ func hasPrivsOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tre
 // (directly or indirectly).
 //
 // This is defined to recurse through roles regardless of rolinherit.
-func isMemberOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+func isMemberOfRole(
+	ctx *tree.EvalContext, user, role security.SQLUsername,
+) (tree.HasAnyPrivilegeResult, error) {
 	// Fast path for simple case.
 	if user == role {
-		return tree.DBoolTrue, nil
+		return tree.HasPrivilege, nil
 	}
 
 	// Superusers have every privilege and are part of every role.
 	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, user); err != nil {
-		return nil, err
+		return tree.HasNoPrivilege, err
 	} else if isSuper {
-		return tree.DBoolTrue, nil
+		return tree.HasPrivilege, nil
 	}
 
 	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
 	if err != nil {
-		return nil, err
+		return tree.HasNoPrivilege, err
 	}
 	_, member := allRoleMemberships[role]
-	return tree.MakeDBool(tree.DBool(member)), nil
+	if member {
+		return tree.HasPrivilege, nil
+	}
+	return tree.HasNoPrivilege, nil
 }
 
 // isAdminOfRole returns whether the user is an admin of the specified role.
 //
 // That is, is member the role itself (subject to restrictions below), a
 // member (directly or indirectly) WITH ADMIN OPTION, or a superuser?
-func isAdminOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree.Datum, error) {
+func isAdminOfRole(
+	ctx *tree.EvalContext, user, role security.SQLUsername,
+) (tree.HasAnyPrivilegeResult, error) {
 	// Superusers are an admin of every role.
 	//
 	// NB: this is intentionally before the user == role check here.
 	if isSuper, err := ctx.Planner.UserHasAdminRole(ctx.Context, user); err != nil {
-		return nil, err
+		return tree.HasNoPrivilege, err
 	} else if isSuper {
-		return tree.DBoolTrue, nil
+		return tree.HasPrivilege, nil
 	}
 
 	// Fast path for simple case.
@@ -2487,14 +2437,18 @@ func isAdminOfRole(ctx *tree.EvalContext, user, role security.SQLUsername) (tree
 		// Because CockroachDB does not have "security-restricted operation", so
 		// for compatibility, we just need to check whether the user matches the
 		// session user.
-		isSessionUser := user == ctx.SessionData().SessionUser()
-		return tree.MakeDBool(tree.DBool(isSessionUser)), nil
+		if isSessionUser := user == ctx.SessionData().SessionUser(); isSessionUser {
+			return tree.HasPrivilege, nil
+		}
+		return tree.HasNoPrivilege, nil
 	}
 
 	allRoleMemberships, err := ctx.Planner.MemberOfWithAdminOption(ctx.Context, user)
 	if err != nil {
-		return nil, err
+		return tree.HasNoPrivilege, err
 	}
-	isAdmin := allRoleMemberships[role]
-	return tree.MakeDBool(tree.DBool(isAdmin)), nil
+	if isAdmin := allRoleMemberships[role]; isAdmin {
+		return tree.HasPrivilege, nil
+	}
+	return tree.HasNoPrivilege, nil
 }
