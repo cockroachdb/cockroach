@@ -19,6 +19,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -187,7 +188,7 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		if err != nil {
 			panic(err)
 		}
-		grpcOpts = append(grpcOpts, grpc.Creds(credentials.NewTLS(tlsConfig)))
+		grpcOpts = append(grpcOpts, grpc.Creds(&protectCredentials{credentials.NewTLS(tlsConfig)}))
 	}
 
 	// These interceptors will be called in the order in which they appear, i.e.
@@ -872,7 +873,7 @@ func (rpcCtx *Context) grpcDialOptions(
 		if err != nil {
 			return nil, err
 		}
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(&protectCredentials{credentials.NewTLS(tlsConfig)}))
 	}
 
 	// The limiting factor for lowering the max message size is the fact
@@ -969,6 +970,47 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
 	}
 	return dialOpts, nil
+}
+
+type protectCredentials struct {
+	p credentials.TransportCredentials
+}
+
+var _ credentials.TransportCredentials = (*protectCredentials)(nil)
+
+func (p *protectCredentials) Info() credentials.ProtocolInfo    { return p.p.Info() }
+func (p *protectCredentials) OverrideServerName(s string) error { return p.p.OverrideServerName(s) }
+
+func (p *protectCredentials) ClientHandshake(
+	ctx context.Context, s string, c net.Conn,
+) (rc net.Conn, ra credentials.AuthInfo, resErr error) {
+	defer func() {
+		// This is to work around https://github.com/golang/go/issues/42554 until
+		// this build of CockroachDB is using Go 1.15.5.
+		if r := recover(); r != nil && strings.Contains(fmt.Sprint(r), "index out of range") {
+			resErr = errors.CombineErrors(resErr, errors.Newf("panic during key load: %v", r))
+		}
+	}()
+
+	return p.p.ClientHandshake(ctx, s, c)
+}
+
+func (p *protectCredentials) ServerHandshake(
+	c net.Conn,
+) (rc net.Conn, ra credentials.AuthInfo, resErr error) {
+	defer func() {
+		// This is to work around https://github.com/golang/go/issues/42554 until
+		// this build of CockroachDB is using Go 1.15.5.
+		if r := recover(); r != nil && strings.Contains(fmt.Sprint(r), "index out of range") {
+			resErr = errors.CombineErrors(resErr, errors.Newf("panic during key load: %v", r))
+		}
+	}()
+
+	return p.p.ServerHandshake(c)
+}
+
+func (p *protectCredentials) Clone() credentials.TransportCredentials {
+	return &protectCredentials{p.p.Clone()}
 }
 
 // growStackCodec wraps the default grpc/encoding/proto codec to detect

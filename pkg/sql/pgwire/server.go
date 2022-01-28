@@ -1084,6 +1084,16 @@ func (s *Server) maybeUpgradeToSecureConn(
 		}
 		newConn = tls.Server(conn, tlsConfig)
 		newConnType = hba.ConnHostSSL
+
+		defer func() {
+			// This is to work around https://github.com/golang/go/issues/42554 until
+			// this build of CockroachDB is using Go 1.15.5.
+			if r := recover(); r != nil && strings.Contains(fmt.Sprint(r), "index out of range") {
+				serverErr = errors.CombineErrors(serverErr, errors.Newf("panic during key load: %v", r))
+				newConn = conn
+				conn.Close()
+			}
+		}()
 	}
 	s.metrics.BytesOutCount.Inc(int64(n))
 

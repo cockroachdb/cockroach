@@ -82,7 +82,7 @@ func newTestServer(t testing.TB, ctx *Context, extraOpts ...grpc.ServerOption) *
 		t.Fatal(err)
 	}
 	opts := []grpc.ServerOption{
-		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.Creds(&protectCredentials{credentials.NewTLS(tlsConfig)}),
 		grpc.StatsHandler(&ctx.stats),
 	}
 	opts = append(opts, extraOpts...)
@@ -593,7 +593,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)))
+	s := grpc.NewServer(grpc.Creds(&protectCredentials{credentials.NewTLS(tlsConfig)}))
 	RegisterHeartbeatServer(s, &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
