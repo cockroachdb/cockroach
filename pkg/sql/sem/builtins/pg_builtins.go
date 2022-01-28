@@ -488,51 +488,19 @@ func runPrivilegeChecks(
 	privs []privilege.Privilege, check func(privilege.Privilege) (tree.Datum, error),
 ) (tree.Datum, error) {
 	for _, p := range privs {
-		d, err := runSinglePrivilegeCheck(p, check)
+		d, err := check(p)
 		if err != nil {
 			return nil, err
 		}
-		if d == tree.DBoolTrue || d == tree.DNull {
+		switch d {
+		case tree.DBoolFalse:
+		case tree.DBoolTrue, tree.DNull:
 			return d, nil
+		default:
+			return nil, errors.AssertionFailedf("unexpected privilege check result %v", d)
 		}
 	}
 	return tree.DBoolFalse, nil
-}
-
-// runSinglePrivilegeCheck runs the provided check function for the privilege.
-// If the privilege has the GrantOption flag set to true, it also runs the
-// provided function with the GRANT privilege and only returns True if both
-// calls returns True. See the comment on Privilege for justification.
-func runSinglePrivilegeCheck(
-	priv privilege.Privilege, check func(privilege.Privilege) (tree.Datum, error),
-) (tree.Datum, error) {
-	d, err := check(priv)
-	if err != nil {
-		return nil, err
-	}
-	switch d {
-	case tree.DBoolFalse, tree.DNull:
-	case tree.DBoolTrue:
-		// todo remove this check after migrating from evalPrivilegeCheck to hasPrivilege
-		// https://github.com/cockroachdb/cockroach/issues/66173
-		if priv.GrantOption {
-			// GrantOption is set, so AND the result with check(GRANT).
-			d, err = check(privilege.Privilege{Kind: privilege.GRANT})
-			if err != nil {
-				return nil, err
-			}
-			switch d {
-			case tree.DBoolFalse, tree.DBoolTrue, tree.DNull:
-			default:
-				return nil, errors.AssertionFailedf(
-					"unexpected privilege check result %v", d)
-			}
-		}
-	default:
-		return nil, errors.AssertionFailedf(
-			"unexpected privilege check result %v", d)
-	}
-	return d, nil
 }
 
 func makeCreateRegDef(typ *types.T) builtinDefinition {
