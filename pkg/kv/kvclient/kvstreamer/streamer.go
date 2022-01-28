@@ -760,6 +760,18 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			}
 		}
 
+		// At the moment, we're using a simple average which is suboptimal
+		// because it is not reactive enough to larger responses coming back
+		// later. As a result, we can have a degenerate behavior where many
+		// requests end up coming back empty. Furthermore, at the moment we're
+		// not incorporating the response size information from those empty
+		// requests.
+		//
+		// In order to work around this we'll just use a larger estimate for
+		// each response for now.
+		// TODO(yuzefovich): improve this.
+		avgResponseSize = 2 * avgResponseSize
+
 		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
 		if shouldExit {
 			return
