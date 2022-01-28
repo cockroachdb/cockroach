@@ -63,13 +63,6 @@ func TestStreamerLimitations(t *testing.T) {
 		return getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
 	}
 
-	t.Run("InOrder mode unsupported", func(t *testing.T) {
-		require.Panics(t, func() {
-			streamer := getStreamer()
-			streamer.Init(InOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
-		})
-	})
-
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
 		require.Panics(t, func() {
 			streamer := getStreamer()
@@ -119,8 +112,8 @@ func TestStreamerLimitations(t *testing.T) {
 }
 
 // TestLargeKeys verifies that the Streamer successfully completes the queries
-// when the keys to lookup are large (i.e. the enqueued requests themselves have
-// large memory footprint).
+// when the keys to lookup (i.e. the enqueued requests themselves) as well as
+// the looked up rows are large.
 func TestLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -144,18 +137,18 @@ func TestLargeKeys(t *testing.T) {
 	// process each row on its own.
 	// - 40000 is interesting because a single row already exceeds the buffer
 	// size.
-	for _, blobSize := range []int{20000, 40000} {
+	for _, blobSize := range []uint64{20000, 40000} {
 		// onlyLarge determines whether only large blobs are inserted or a mix
 		// of large and small blobs.
 		for _, onlyLarge := range []bool{false, true} {
 			_, err = db.Exec("DROP TABLE IF EXISTS foo")
 			require.NoError(t, err)
-			// We set up such a table that contains two large columns, one of them
-			// being the primary key. The idea is that the query below will first
-			// read from the secondary index which would include only the PK blob,
-			// and that will be used to construct index join lookups (i.e. the PK
-			// blobs will be the enqueued requests for the Streamer) whereas the
-			// other blob will be part of the response.
+			// We set up such a table that contains two large columns, one of
+			// them being the primary key. The idea is that the query below will
+			// first read from the secondary index which would include only the
+			// PK blob, and that will be used to construct index join lookups
+			// (i.e. the PK blobs will be the enqueued requests for the
+			// Streamer) whereas the other blob will be part of the response.
 			_, err = db.Exec("CREATE TABLE foo (pk_blob STRING PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute))")
 			require.NoError(t, err)
 
@@ -165,26 +158,62 @@ func TestLargeKeys(t *testing.T) {
 				letter := string(byte('a') + byte(i))
 				valueSize := blobSize
 				if !onlyLarge && rng.Float64() < 0.5 {
-					// If we're using a mix of large and small values, with 50%
-					// use a small value now.
-					valueSize = rng.Intn(10) + 1
+					// If we're using a mix of large and small values, with
+					// 50% use a small value now.
+					valueSize = uint64(rng.Intn(10) + 1)
 				}
 				_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, repeat($1, $2)", letter, valueSize)
 				require.NoError(t, err)
 			}
 
-			// Perform an index join so that the Streamer API is used.
-			query := "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1"
-			testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
-				vectorizeMode := "off"
-				if vectorize {
-					vectorizeMode = "on"
+			// Try two scenarios: one with a single range (so no parallelism
+			// within the Streamer) and another with a random number of ranges
+			// (which might add parallelism within the Streamer).
+			for _, newRangeProbability := range []float64{0, rng.Float64()} {
+				for i := 1; i < numRows; i++ {
+					if rng.Float64() < newRangeProbability {
+						// Create a new range.
+						letter := string(byte('a') + byte(i))
+						_, err = db.Exec("ALTER TABLE foo SPLIT AT VALUES ($1)", letter)
+						require.NoError(t, err)
+					}
 				}
-				_, err = db.Exec("SET vectorize = " + vectorizeMode)
+				// Populate the range cache.
+				_, err = db.Exec("SELECT count(*) FROM foo")
 				require.NoError(t, err)
-				_, err = db.Exec(query)
-				require.NoError(t, err)
-			})
+
+				testutils.RunTrueAndFalse(t, "vectorize", func(t *testing.T, vectorize bool) {
+					vectorizeMode := "off"
+					if vectorize {
+						vectorizeMode = "on"
+					}
+					_, err = db.Exec("SET vectorize = " + vectorizeMode)
+					require.NoError(t, err)
+					for _, tc := range []struct {
+						name  string
+						query string
+					}{
+						{
+							name:  "index join no ordering",
+							query: "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1",
+						},
+						{
+							name:  "index join with ordering",
+							query: "SELECT max(length(blob)) FROM foo@foo_attribute_idx GROUP BY attribute",
+						},
+					} {
+						t.Run(
+							fmt.Sprintf(
+								"%s/blobSize=%s/onlyLarge=%t/newRangeProbability=%.2f",
+								tc.name, humanize.Bytes(blobSize), onlyLarge, newRangeProbability,
+							),
+							func(t *testing.T) {
+								_, err = db.Exec(tc.query)
+								require.NoError(t, err)
+							})
+					}
+				})
+			}
 		}
 	}
 }
@@ -213,7 +242,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 		var get roachpb.GetRequest
 		var union roachpb.RequestUnion_Get
 		key := make([]byte, keySize+6)
-		key[0] = 190
+		key[0] = 240
 		key[1] = 137
 		key[2] = 18
 		for i := 0; i < keySize; i++ {

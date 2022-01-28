@@ -304,9 +304,8 @@ func newJoinReader(
 	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
 		shouldLimitBatches = false
 	}
-	tryStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings) &&
-		!spec.MaintainOrdering
+	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
+		row.CanUseStreamer(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Settings)
 
 	jr := &joinReader{
 		desc:                              tableDesc,
@@ -318,7 +317,7 @@ func newJoinReader(
 		readerType:                        readerType,
 		keyLocking:                        spec.LockingStrength,
 		lockWaitPolicy:                    row.GetWaitPolicy(spec.LockingWaitPolicy),
-		usesStreamer:                      (readerType == indexJoinReaderType) && tryStreamer,
+		usesStreamer:                      useStreamer,
 		lookupBatchBytesLimit:             rowinfra.BytesLimit(spec.LookupBatchBytesLimit),
 	}
 	if readerType != indexJoinReaderType {
@@ -1051,8 +1050,12 @@ func (jr *joinReader) Start(ctx context.Context) {
 			jr.streamerInfo.budgetLimit,
 			&jr.streamerInfo.budgetAcc,
 		)
+		mode := kvstreamer.OutOfOrder
+		if jr.maintainOrdering {
+			mode = kvstreamer.InOrder
+		}
 		jr.streamerInfo.Streamer.Init(
-			kvstreamer.OutOfOrder,
+			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			jr.streamerInfo.maxKeysPerRow,
 		)
