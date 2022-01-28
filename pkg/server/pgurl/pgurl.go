@@ -129,6 +129,11 @@ func (u *URL) GetOption(opt string) string {
 	return getVal(u.extraOptions, opt)
 }
 
+// GetExtraOptions retrieves all of the extra options.
+func (u *URL) GetExtraOptions() url.Values {
+	return u.extraOptions
+}
+
 // WithInsecure configures the URL for CockroachDB servers running with
 // all security controls disabled.
 func (u *URL) WithInsecure() *URL {
