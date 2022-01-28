@@ -46,16 +46,18 @@ configs version=current offset=4 limit=3
 configs version=current offset=41
 ----
 ...
-/Table/46                                  database system (host)
-/Table/47                                  database system (host)
+/Table/46                                  range system
+/Table/47                                  range system
+/Table/48                                  range system
 /Table/56                                  num_replicas=7 num_voters=5
 /Table/57                                  num_replicas=7
 
 configs version=legacy offset=41
 ----
 ...
-/Table/46                                  database system (host)
-/Table/47                                  database system (host)
+/Table/46                                  range system
+/Table/47                                  range system
+/Table/48                                  range system
 /Table/56                                  num_replicas=7 num_voters=5
 /Table/57                                  num_replicas=7
 
