@@ -205,6 +205,25 @@ message SystemSpanConfigEntry {
   SystemSpanConfig system_span_config = 2 [(gogoproto.nullable) = false];
 }
 
+
+// Config is a union type for span configurations and system span
+// configurations.
+message Config {
+  option(gogoproto.equal) = true;
+  oneof union {
+    SpanConfig span_config = 1;
+    SystemSpanConfig system_span_config = 2;
+  }
+};
+
+// SystemSpanConfigurationsTableEntry is the proto corresponding to what is
+// stored in the `system.span_configurations` table.
+message SystemSpanConfigurationsTableEntry {
+  Span span = 1 [(gogoproto.nullable) = false];
+  Config config = 2 [(gogoproto.nullable) = false];
+};
+
+
 // GetSpanConfigsRequest is used to fetch the span configurations over the
 // specified keyspans.
 message GetSpanConfigsRequest {

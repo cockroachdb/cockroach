@@ -48,6 +48,8 @@ import (
 // count towards the spans being deleted, and for "upsert" they correspond to
 // the span config entries being upserted. See
 // spanconfigtestutils.Parse{Span,Config,SpanConfigEntry} for more details.
+//
+// TODO(arul): Run these things for secondary tenants as well.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -86,6 +88,26 @@ func TestDataDriven(t *testing.T) {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"
+			case "kvaccessor-system-scfgs-update":
+				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateSystemSpanConfigsArguments(t, d.Input)
+				if err := accessor.UpdateSystemSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+					return fmt.Sprintf("err: %s", err.Error())
+				}
+				return "ok"
+			case "kvaccessor-system-scfgs-get":
+				entries, err := accessor.GetSystemSpanConfigEntries(ctx)
+				if err != nil {
+					return fmt.Sprintf("err: %s", err.Error())
+				}
+
+				var output strings.Builder
+				for _, entry := range entries {
+					output.WriteString(fmt.Sprintf(
+						"%s\n", spanconfigtestutils.PrintSystemSpanConfigEntry(entry),
+					))
+				}
+				return output.String()
+
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}

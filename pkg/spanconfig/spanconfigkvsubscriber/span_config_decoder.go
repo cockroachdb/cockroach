@@ -80,9 +80,15 @@ func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConf
 		entry.Span.EndKey = []byte(tree.MustBeDBytes(endKey))
 	}
 	if config := datums[2]; config != tree.DNull {
-		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(config)), &entry.Config); err != nil {
+		var conf roachpb.Config
+		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(config)), &conf); err != nil {
 			return roachpb.SpanConfigEntry{}, err
 		}
+		spanConfig := conf.GetSpanConfig()
+		if spanConfig == nil {
+			return roachpb.SpanConfigEntry{}, errors.AssertionFailedf("config corresponding to span %s did not contain span config", entry.Span)
+		}
+		entry.Config = *conf.GetSpanConfig()
 	}
 
 	return entry, nil
