@@ -130,6 +130,7 @@ var validationMap = []struct {
 			"PartitionAllBy":                {status: iSolemnlySwearThisFieldIsValidated},
 			"NewSchemaChangeJobID":          {status: iSolemnlySwearThisFieldIsValidated},
 			"RowLevelTTL":                   {status: iSolemnlySwearThisFieldIsValidated},
+			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
