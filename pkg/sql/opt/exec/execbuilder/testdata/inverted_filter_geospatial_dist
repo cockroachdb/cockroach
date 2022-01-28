@@ -246,11 +246,11 @@ start_key             end_key               replicas  lease_holder
 NULL                  /1152921574000000000  {2}       2
 /1152921574000000000  NULL                  {2}       2
 
-query ITTTI colnames,rowsort
-SELECT range_id, start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE geo_table]
+query TTTI colnames,rowsort
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE geo_table]
 ----
-range_id  start_key  end_key  replicas  lease_holder
-43        NULL       NULL     {2}       2
+start_key  end_key  replicas  lease_holder
+NULL       NULL     {2}       2
 
 # We should see a distributed execution (though need to retry to purge possibly
 # stale dist sender caches).

@@ -17,6 +17,7 @@ initialize tenant=11
 configs version=current offset=43
 ----
 ...
+/Table/48                                  range system
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
@@ -31,16 +32,17 @@ reconcile tenant=11
 configs version=current offset=43 limit=5
 ----
 ...
+/Table/48                                  range system
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 /Tenant/11/Table/4                         range default
 /Tenant/11/Table/5                         range default
-/Tenant/11/Table/6                         range default
 ...
 
 configs version=legacy offset=43
 ----
 ...
+/Table/48                                  range system
 /Tenant/10                                 range default
 /Tenant/11                                 range default
 
@@ -48,7 +50,7 @@ diff limit=10
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-@@ -44,3 +44,36 @@
+@@ -45,3 +45,36 @@
  /Tenant/10                                 range default
  /Tenant/11                                 range default
 +/Tenant/11/Table/4                         range default
@@ -73,7 +75,7 @@ diff
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-@@ -44,3 +44,38 @@
+@@ -45,3 +45,38 @@
  /Tenant/10                                 range default
  /Tenant/11                                 range default
 +/Tenant/11/Table/4                         range default

@@ -41,6 +41,7 @@ public  statement_diagnostics            table  NULL  0  NULL
 public  statement_diagnostics_requests   table  NULL  0  NULL
 public  statement_statistics             table  NULL  0  NULL
 public  table_statistics                 table  NULL  0  NULL
+public  tenant_settings                  table  NULL  0  NULL
 public  tenant_usage                     table  NULL  0  NULL
 public  tenants                          table  NULL  0  NULL
 public  transaction_statistics           table  NULL  0  NULL
@@ -131,6 +132,7 @@ SELECT id FROM system.descriptor
 45
 46
 47
+48
 50
 51
 52
@@ -562,6 +564,16 @@ system  public  table_statistics                 root    GRANT   true
 system  public  table_statistics                 root    INSERT  true
 system  public  table_statistics                 root    SELECT  true
 system  public  table_statistics                 root    UPDATE  true
+system  public  tenant_settings                  admin   DELETE  true
+system  public  tenant_settings                  admin   GRANT   true
+system  public  tenant_settings                  admin   INSERT  true
+system  public  tenant_settings                  admin   SELECT  true
+system  public  tenant_settings                  admin   UPDATE  true
+system  public  tenant_settings                  root    DELETE  true
+system  public  tenant_settings                  root    GRANT   true
+system  public  tenant_settings                  root    INSERT  true
+system  public  tenant_settings                  root    SELECT  true
+system  public  tenant_settings                  root    UPDATE  true
 system  public  tenant_usage                     admin   DELETE  true
 system  public  tenant_usage                     admin   GRANT   true
 system  public  tenant_usage                     admin   INSERT  true
@@ -924,7 +936,6 @@ system  public  zones                            root    GRANT   true
 system  public  zones                            root    INSERT  true
 system  public  zones                            root    SELECT  true
 system  public  zones                            root    UPDATE  true
-
 
 statement error user root does not have DROP privilege on database system
 ALTER DATABASE system RENAME TO not_system

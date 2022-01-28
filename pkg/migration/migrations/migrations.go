@@ -97,6 +97,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		grantOptionMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.tenant_settings table",
+		toCV(clusterversion.TenantSettingsTable),
+		NoPrecondition,
+		tenantSettingsTableMigration,
+	),
 }
 
 func init() {

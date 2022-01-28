@@ -251,6 +251,8 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
+	// TenantSettingsTable adds the system table for tracking tenant usage.
+	TenantSettingsTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -386,6 +388,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
+	},
+	{
+		Key:     TenantSettingsTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
 
 	// *************************************************
