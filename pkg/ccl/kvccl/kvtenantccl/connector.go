@@ -460,6 +460,39 @@ func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
 }
 
+// GetSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSystemSpanConfigEntries(
+	ctx context.Context,
+) (entries []roachpb.SystemSpanConfigEntry, _ error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		resp, err := c.GetSystemSpanConfigs(ctx, &roachpb.GetSystemSpanConfigsRequest{})
+		if err != nil {
+			return err
+		}
+
+		entries = resp.SystemSpanConfigEntries
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// UpdateSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
+func (c *Connector) UpdateSystemSpanConfigEntries(
+	ctx context.Context,
+	toDelete []roachpb.SystemSpanConfigTarget,
+	toUpsert []roachpb.SystemSpanConfigEntry,
+) error {
+	return c.withClient(ctx, func(ctx context.Context, c *client) error {
+		_, err := c.UpdateSystemSpanConfigs(ctx, &roachpb.UpdateSystemSpanConfigsRequest{
+			ToDelete: toDelete,
+			ToUpsert: toUpsert,
+		})
+		return err
+	})
+}
+
 // withClient is a convenience wrapper that executes the given closure while
 // papering over InternalClient retrieval errors.
 func (c *Connector) withClient(
