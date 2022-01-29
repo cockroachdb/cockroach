@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -53,25 +52,17 @@ func TestReconciler(t *testing.T) {
 		toRemove map[string]struct{}
 	}{}
 	state.toRemove = map[string]struct{}{}
-	cfg := ptreconcile.Config{
-		Settings: settings,
-		Stores:   s0.GetStores().(*kvserver.Stores),
-		DB:       s0.DB(),
-		Storage:  ptp,
-		Cache:    ptp,
-		StatusFuncs: ptreconcile.StatusFuncs{
-			testTaskType: func(
-				ctx context.Context, txn *kv.Txn, meta []byte,
-			) (shouldRemove bool, err error) {
-				state.mu.Lock()
-				defer state.mu.Unlock()
-				_, shouldRemove = state.toRemove[string(meta)]
-				return shouldRemove, nil
-			},
+	r := ptreconcile.New(settings, s0.DB(), ptp, ptreconcile.StatusFuncs{
+		testTaskType: func(
+			ctx context.Context, txn *kv.Txn, meta []byte,
+		) (shouldRemove bool, err error) {
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			_, shouldRemove = state.toRemove[string(meta)]
+			return shouldRemove, nil
 		},
-	}
-	r := ptreconcile.NewReconciler(cfg)
-	require.NoError(t, r.Start(ctx, s0.Stopper()))
+	})
+	require.NoError(t, r.StartReconciler(ctx, s0.Stopper()))
 	recMeta := "a"
 	rec1 := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),

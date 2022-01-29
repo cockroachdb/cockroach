@@ -19,6 +19,7 @@ ALL_TESTS = [
     "//pkg/ccl/changefeedccl:changefeedccl_test",
     "//pkg/ccl/cliccl:cliccl_test",
     "//pkg/ccl/importccl:importccl_test",
+    "//pkg/ccl/jobsccl/jobsprotectedtsccl:jobsprotectedts_test",
     "//pkg/ccl/kvccl/kvfollowerreadsccl:kvfollowerreadsccl_test",
     "//pkg/ccl/kvccl/kvtenantccl:kvtenantccl_test",
     "//pkg/ccl/logictestccl:logictestccl_test",

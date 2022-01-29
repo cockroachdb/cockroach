@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -38,6 +39,7 @@ type Provider interface {
 	Storage
 	Cache
 	Verifier
+	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
 }
@@ -137,6 +139,30 @@ type Verifier interface {
 	// verified. If nil is returned then the record has been proven to apply
 	// until it is removed.
 	Verify(context.Context, uuid.UUID) error
+}
+
+// Metrics encapsulates the metrics exported by the reconciler.
+type Metrics struct {
+	ReconcilationRuns    *metric.Counter
+	RecordsProcessed     *metric.Counter
+	RecordsRemoved       *metric.Counter
+	ReconciliationErrors *metric.Counter
+}
+
+var _ metric.Struct = (*Metrics)(nil)
+
+// MetricStruct makes Metrics a metric.Struct.
+func (m *Metrics) MetricStruct() {}
+
+// Reconciler provides a mechanism to reconcile protected timestamp records with
+// external state.
+type Reconciler interface {
+	// StartReconciler will start the reconciliation where each record's status is
+	// determined using the record's meta type and meta in conjunction with the
+	// configured StatusFunc.
+	StartReconciler(ctx context.Context, stopper *stop.Stopper) error
+	// Metrics returns the metrics exported by the reconciler.
+	Metrics() *Metrics
 }
 
 // EmptyCache returns a Cache which always returns the current time and no

@@ -86,6 +86,7 @@
 /pkg/server/                 @cockroachdb/server-prs
 /pkg/server/testserver*.go   @cockroachdb/server-prs @cockroachdb/test-eng
 
+/pkg/ccl/jobsccl/            @cockroachdb/cdc-prs
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/ccl/streamingccl/       @cockroachdb/cdc-prs
 # last-rule-wins so *after* CDC takes most of streamingccl bulk-prs takes ingest pkg.

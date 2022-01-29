@@ -42,6 +42,7 @@ type provider struct {
 	protectedts.Storage
 	protectedts.Verifier
 	protectedts.Cache
+	protectedts.Reconciler
 }
 
 // New creates a new protectedts.Provider.
@@ -51,6 +52,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
 	verifier := ptverifier.New(cfg.DB, storage)
+	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
 	return &provider{
 		Storage: storage,
 		Cache: ptcache.New(ptcache.Config{
@@ -58,7 +60,8 @@ func New(cfg Config) (protectedts.Provider, error) {
 			Storage:  storage,
 			Settings: cfg.Settings,
 		}),
-		Verifier: verifier,
+		Verifier:   verifier,
+		Reconciler: reconciler,
 	}, nil
 }
 

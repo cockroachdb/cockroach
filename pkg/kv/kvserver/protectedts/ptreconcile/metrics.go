@@ -11,31 +11,19 @@
 package ptreconcile
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-// Metrics encapsulates the metrics exported by the Reconciler.
-type Metrics struct {
-	ReconcilationRuns    *metric.Counter
-	RecordsProcessed     *metric.Counter
-	RecordsRemoved       *metric.Counter
-	ReconciliationErrors *metric.Counter
-}
-
-func makeMetrics() Metrics {
-	return Metrics{
+func makeMetrics() protectedts.Metrics {
+	return protectedts.Metrics{
 		ReconcilationRuns:    metric.NewCounter(metaReconciliationRuns),
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),
 		ReconciliationErrors: metric.NewCounter(metaReconciliationErrors),
 	}
 }
-
-var _ metric.Struct = (*Metrics)(nil)
-
-// MetricStruct makes Metrics a metric.Struct.
-func (m *Metrics) MetricStruct() {}
 
 var (
 	metaReconciliationRuns = metric.Metadata{

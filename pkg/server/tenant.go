@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -446,22 +448,28 @@ func makeTenantSQLServerArgs(
 	}
 
 	circularInternalExecutor := &sql.InternalExecutor{}
-	// Protected timestamps won't be available (at first) in multi-tenant
-	// clusters.
+	circularJobRegistry := &jobs.Registry{}
+
+	// Initialize the protectedts subsystem in multi-tenant clusters.
 	var protectedTSProvider protectedts.Provider
-	{
-		protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
-		pp, err := ptprovider.New(ptprovider.Config{
-			DB:               db,
-			InternalExecutor: circularInternalExecutor,
-			Settings:         st,
-			Knobs:            protectedtsKnobs,
-		})
-		if err != nil {
-			panic(err)
-		}
-		protectedTSProvider = tenantProtectedTSProvider{Provider: pp, st: st}
+	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
+	pp, err := ptprovider.New(ptprovider.Config{
+		DB:               db,
+		InternalExecutor: circularInternalExecutor,
+		Settings:         st,
+		Knobs:            protectedtsKnobs,
+		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Jobs),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
+				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Schedules),
+		},
+	})
+	if err != nil {
+		return sqlServerArgs{}, err
 	}
+	registry.AddMetricStruct(pp.Metrics())
+	protectedTSProvider = tenantProtectedTSProvider{Provider: pp, st: st}
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
@@ -528,7 +536,7 @@ func makeTenantSQLServerArgs(
 		contentionRegistry:       contentionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: circularInternalExecutor,
-		circularJobRegistry:      &jobs.Registry{},
+		circularJobRegistry:      circularJobRegistry,
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
