@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -72,5 +73,10 @@ func (p *FakeJobExecContext) MigrationJobDeps() migration.JobDeps {
 
 // SpanConfigReconciler implements the JobExecContext interface.
 func (p *FakeJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
+	panic("unimplemented")
+}
+
+// ProtectedTimestampReconciler implements the JobExecContext interface.
+func (p *FakeJobExecContext) ProtectedTimestampReconciler() *ptreconcile.Reconciler {
 	panic("unimplemented")
 }

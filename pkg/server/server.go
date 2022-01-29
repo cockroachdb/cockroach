@@ -727,10 +727,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	protectedtsReconciler := ptreconcile.NewReconciler(ptreconcile.Config{
 		Settings: st,
-		Stores:   node.stores,
 		DB:       db,
 		Storage:  protectedtsProvider,
-		Cache:    protectedtsProvider,
 		StatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
@@ -824,6 +822,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
+		protectedtsReconciler:    protectedtsReconciler,
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
 		regionsServer:            sStatus,
@@ -1748,9 +1747,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//
 	// See https://github.com/cockroachdb/cockroach/issues/73897.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
-		return err
-	}
-	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 

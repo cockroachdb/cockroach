@@ -43,6 +43,19 @@ var reconciliationJobCheckpointInterval = settings.RegisterDurationSetting(
 func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	rc := execCtx.SpanConfigReconciler()
+	ptsRC := execCtx.ProtectedTimestampReconciler()
+	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
+
+	// Start the protected timestamp reconciler. This will periodically poll the
+	// protected timestamp table to cleanup stale records. We take advantage of
+	// the fact that there can only be one instance of the spanconfig.Resumer
+	// running in a cluster, and so consequently the reconciler is only started on
+	// the coordinator node.
+	ptsRCContext, cancel := stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+	if err := ptsRC.Start(ptsRCContext, execCtx.ExecCfg().DistSQLSrv.Stopper); err != nil {
+		return errors.Wrap(err, "could not start protected timestamp reconciliation")
+	}
 
 	// TODO(irfansharif): #73086 bubbles up retryable errors from the
 	// reconciler/underlying watcher in the (very) unlikely event that it's

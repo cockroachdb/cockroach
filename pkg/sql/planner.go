@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -559,6 +560,11 @@ func (p *planner) MigrationJobDeps() migration.JobDeps {
 // SpanConfigReconciler returns the spanconfig.Reconciler.
 func (p *planner) SpanConfigReconciler() spanconfig.Reconciler {
 	return p.execCfg.SpanConfigReconciler
+}
+
+// ProtectedTimestampReconciler returns the ptreconcile.Reconciler.
+func (p *planner) ProtectedTimestampReconciler() *ptreconcile.Reconciler {
+	return p.execCfg.ProtectedTimestampReconciler
 }
 
 // GetTypeFromValidSQLSyntax implements the tree.EvalPlanner interface.

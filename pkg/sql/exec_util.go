@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1196,6 +1197,10 @@ type ExecutorConfig struct {
 
 	// ProtectedTimestampProvider encapsulates the protected timestamp subsystem.
 	ProtectedTimestampProvider protectedts.Provider
+
+	// ProtectedTimestampReconciler holds the protected timestamp reconciler used
+	// to find and release stale records.
+	ProtectedTimestampReconciler *ptreconcile.Reconciler
 
 	// StmtDiagnosticsRecorder deals with recording statement diagnostics.
 	StmtDiagnosticsRecorder *stmtdiagnostics.Registry

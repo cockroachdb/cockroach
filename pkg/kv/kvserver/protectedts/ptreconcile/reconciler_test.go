@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
@@ -55,10 +54,8 @@ func TestReconciler(t *testing.T) {
 	state.toRemove = map[string]struct{}{}
 	cfg := ptreconcile.Config{
 		Settings: settings,
-		Stores:   s0.GetStores().(*kvserver.Stores),
 		DB:       s0.DB(),
 		Storage:  ptp,
-		Cache:    ptp,
 		StatusFuncs: ptreconcile.StatusFuncs{
 			testTaskType: func(
 				ctx context.Context, txn *kv.Txn, meta []byte,

@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -101,6 +102,7 @@ type PlanHookState interface {
 		schemaID descpb.ID) error
 	MigrationJobDeps() migration.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
+	ProtectedTimestampReconciler() *ptreconcile.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 }
 

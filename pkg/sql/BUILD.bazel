@@ -269,6 +269,7 @@ go_library(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/migration",
         "//pkg/multitenant",
         "//pkg/roachpb:with-mocks",

@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationcluster"
 	"github.com/cockroachdb/cockroach/pkg/migration/migrationmanager"
@@ -283,6 +284,9 @@ type sqlServerArgs struct {
 
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
+
+	// The executorConfig uses the ptreconciler.
+	protectedtsReconciler *ptreconcile.Reconciler
 
 	// Used to list activity (sessions, queries, contention, DistSQL flows) on
 	// the node/cluster and cancel sessions/queries.
@@ -694,14 +698,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			collectionFactory,
 		),
 
-		QueryCache:                 querycache.New(cfg.QueryCacheSize),
-		RowMetrics:                 &rowMetrics,
-		InternalRowMetrics:         &internalRowMetrics,
-		ProtectedTimestampProvider: cfg.protectedtsProvider,
-		ExternalIODirConfig:        cfg.ExternalIODirConfig,
-		GCJobNotifier:              gcJobNotifier,
-		RangeFeedFactory:           cfg.rangeFeedFactory,
-		CollectionFactory:          collectionFactory,
+		QueryCache:                   querycache.New(cfg.QueryCacheSize),
+		RowMetrics:                   &rowMetrics,
+		InternalRowMetrics:           &internalRowMetrics,
+		ProtectedTimestampProvider:   cfg.protectedtsProvider,
+		ProtectedTimestampReconciler: cfg.protectedtsReconciler,
+		ExternalIODirConfig:          cfg.ExternalIODirConfig,
+		GCJobNotifier:                gcJobNotifier,
+		RangeFeedFactory:             cfg.rangeFeedFactory,
+		CollectionFactory:            collectionFactory,
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
