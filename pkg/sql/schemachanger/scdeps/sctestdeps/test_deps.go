@@ -396,6 +396,21 @@ func (s *TestState) CurrentDatabase() string {
 	return s.currentDatabase
 }
 
+// MustGetSchemasForDatabase implements the scbuild.CatalogReader interface.
+func (s *TestState) MustGetSchemasForDatabase(
+	ctx context.Context, database catalog.DatabaseDescriptor,
+) map[descpb.ID]string {
+	schemas := make(map[descpb.ID]string)
+	err := database.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
+		schemas[id] = name
+		return nil
+	})
+	if err != nil {
+		panic(err)
+	}
+	return schemas
+}
+
 // MustReadDescriptor implements the scbuild.CatalogReader interface.
 func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor {
 	desc, err := s.mustReadImmutableDescriptor(id)

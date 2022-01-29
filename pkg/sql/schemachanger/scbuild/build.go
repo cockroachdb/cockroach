@@ -37,11 +37,12 @@ func Build(
 		return scpb.CurrentState{}, err
 	}
 	b := buildCtx{
-		Context:       ctx,
-		Dependencies:  dependencies,
-		BuilderState:  bs,
-		EventLogState: els,
-		TreeAnnotator: an,
+		Context:              ctx,
+		Dependencies:         dependencies,
+		BuilderState:         bs,
+		EventLogState:        els,
+		TreeAnnotator:        an,
+		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -86,6 +87,10 @@ type (
 	// AstFormatter contains operations for formatting out AST nodes into
 	// SQL statement text.
 	AstFormatter = scbuildstmt.AstFormatter
+
+	// FeatureChecker contains operations for checking if a schema change
+	// feature is allowed by the database administrator.
+	FeatureChecker = scbuildstmt.SchemaFeatureChecker
 )
 
 type elementState struct {
@@ -171,6 +176,7 @@ type buildCtx struct {
 	scbuildstmt.BuilderState
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
+	scbuildstmt.SchemaFeatureChecker
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
