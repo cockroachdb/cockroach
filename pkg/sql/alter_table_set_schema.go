@@ -120,7 +120,7 @@ func (n *alterTableSetSchemaNode) startExec(params runParams) error {
 		return nil
 	}
 
-	objectID, err := p.Descriptors().LookupObjectID(
+	objectID, err := p.Descriptors().Direct().LookupObjectID(
 		ctx, p.txn, tableDesc.GetParentID(), desiredSchemaID, tableDesc.GetName(),
 	)
 	if err == nil && objectID != descpb.InvalidID {

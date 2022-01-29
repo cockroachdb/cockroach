@@ -158,7 +158,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 			}
 
 			if err := tbDesc.ForeachDependedOnBy(func(dependedOn *descpb.TableDescriptor_Reference) error {
-				dependentDesc, err := p.Descriptors().MustGetTableDescByID(ctx, p.txn, dependedOn.ID)
+				dependentDesc, err := p.Descriptors().Direct().MustGetTableDescByID(ctx, p.txn, dependedOn.ID)
 				if err != nil {
 					return err
 				}

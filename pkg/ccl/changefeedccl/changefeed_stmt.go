@@ -895,7 +895,7 @@ func getQualifiedTableName(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (string, error) {
 	col := execCfg.CollectionFactory.MakeCollection(nil /* temporarySchemaProvider */)
-	dbDesc, err := col.MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
+	dbDesc, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 	if err != nil {
 		return "", err
 	}
