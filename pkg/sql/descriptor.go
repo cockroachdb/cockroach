@@ -71,10 +71,10 @@ func (p *planner) createDatabase(
 	dbName := string(database.Name)
 	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
-	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
+	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
 			// Check if the database is in a dropping state
-			desc, err := p.Descriptors().MustGetDatabaseDescByID(ctx, p.txn, dbID)
+			desc, err := p.Descriptors().Direct().MustGetDatabaseDescByID(ctx, p.txn, dbID)
 			if err != nil {
 				return nil, false, err
 			}
@@ -254,7 +254,7 @@ func (p *planner) createDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := p.Descriptors().WriteNewDescToBatch(
+	if err := p.Descriptors().Direct().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		b,

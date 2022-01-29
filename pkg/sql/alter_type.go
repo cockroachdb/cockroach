@@ -214,7 +214,7 @@ func (p *planner) dropEnumValue(
 }
 
 func (p *planner) renameType(ctx context.Context, n *alterTypeNode, newName string) error {
-	err := p.Descriptors().CheckObjectCollision(
+	err := p.Descriptors().Direct().CheckObjectCollision(
 		ctx,
 		p.txn,
 		n.desc.ParentID,

@@ -124,7 +124,7 @@ func createPublicSchemaDescriptor(
 	// Remove namespace entry for old public schema.
 	b.Del(oldKey)
 	b.CPut(newKey, publicSchemaID, nil)
-	if err := descriptors.WriteNewDescToBatch(
+	if err := descriptors.Direct().WriteNewDescToBatch(
 		ctx,
 		false,
 		b,

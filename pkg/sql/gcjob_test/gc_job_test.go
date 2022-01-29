@@ -98,12 +98,12 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.MustGetTableDescByID(ctx, txn, myTableID)
+				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.MustGetTableDescByID(ctx, txn, myOtherTableID)
+				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -230,7 +230,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 			}
 
 			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.MustGetTableDescByID(ctx, txn, myTableID)
+				myImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myTableID)
 				if ttlTime != FUTURE && (dropItem == TABLE || dropItem == DATABASE) {
 					// We dropped the table, so expect it to not be found.
 					require.EqualError(t, err, "descriptor not found")
@@ -240,7 +240,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.MustGetTableDescByID(ctx, txn, myOtherTableID)
+				myOtherImm, err := col.Direct().MustGetTableDescByID(ctx, txn, myOtherTableID)
 				if ttlTime != FUTURE && dropItem == DATABASE {
 					// We dropped the entire database, so expect none of the tables to be found.
 					require.EqualError(t, err, "descriptor not found")

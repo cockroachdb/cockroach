@@ -42,7 +42,7 @@ func (p *planner) renameDatabase(
 	}
 
 	// Check that the new name is available.
-	if dbID, err := p.Descriptors().LookupDatabaseID(ctx, p.txn, newName); err == nil && dbID != descpb.InvalidID {
+	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, newName); err == nil && dbID != descpb.InvalidID {
 		return pgerror.Newf(pgcode.DuplicateDatabase,
 			"the new database name %q already exists", newName)
 	} else if err != nil {

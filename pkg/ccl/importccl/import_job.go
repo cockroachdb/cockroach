@@ -519,7 +519,7 @@ func prepareNewTablesForIngestion(
 	// collisions with any importing tables.
 	for i := range newMutableTableDescriptors {
 		tbl := newMutableTableDescriptors[i]
-		err := descsCol.CheckObjectCollision(
+		err := descsCol.Direct().CheckObjectCollision(
 			ctx,
 			txn,
 			tbl.GetParentID(),
@@ -672,7 +672,7 @@ func createSchemaDescriptorWithID(
 		log.VEventf(ctx, 2, "CPut %s -> %d", idKey, descID)
 	}
 	b.CPut(idKey, descID, nil)
-	if err := descsCol.WriteNewDescToBatch(
+	if err := descsCol.Direct().WriteNewDescToBatch(
 		ctx,
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 		b,
@@ -1125,7 +1125,7 @@ func (r *importResumer) checkForUDTModification(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 		savedTypeDesc *descpb.TypeDescriptor,
 	) error {
-		typeDesc, err := col.MustGetTypeDescByID(ctx, txn, savedTypeDesc.GetID())
+		typeDesc, err := col.Direct().MustGetTypeDescByID(ctx, txn, savedTypeDesc.GetID())
 		if err != nil {
 			return errors.Wrap(err, "resolving type descriptor when checking version mismatch")
 		}

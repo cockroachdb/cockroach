@@ -1300,7 +1300,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 ) (tableDesc catalog.TableDescriptor, err error) {
 	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
 		// Read table descriptor without holding a lease.
-		tableDesc, err = col.MustGetTableDescByID(ctx, txn, sc.descID)
+		tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, sc.descID)
 		if err != nil {
 			return err
 		}
@@ -2209,7 +2209,7 @@ func validateFkInTxn(
 	if fk == nil {
 		return errors.AssertionFailedf("foreign key %s does not exist", fkName)
 	}
-	targetTable, err := descsCol.MustGetTableDescByID(ctx, txn, fk.ReferencedTableID)
+	targetTable, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, fk.ReferencedTableID)
 	if err != nil {
 		return err
 	}

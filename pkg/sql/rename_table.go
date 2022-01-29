@@ -221,7 +221,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 		return nil
 	}
 
-	err := p.Descriptors().CheckObjectCollision(
+	err := p.Descriptors().Direct().CheckObjectCollision(
 		params.ctx,
 		params.p.txn,
 		targetDbDesc.GetID(),
@@ -278,7 +278,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentViewError(
 	ctx context.Context, typeName, objName string, parentID, viewID descpb.ID, op string,
 ) error {
-	viewDesc, err := p.Descriptors().MustGetTableDescByID(ctx, p.txn, viewID)
+	viewDesc, err := p.Descriptors().Direct().MustGetTableDescByID(ctx, p.txn, viewID)
 	if err != nil {
 		return err
 	}

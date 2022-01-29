@@ -5357,7 +5357,7 @@ value if you rely on the HLC for accuracy.`,
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
-				tableDesc, err := descsCol.MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}
@@ -5395,7 +5395,7 @@ value if you rely on the HLC for accuracy.`,
 				// instead of cobbling a descs.Collection in this way.
 				cf := descs.NewBareBonesCollectionFactory(ctx.Settings, ctx.Codec)
 				descsCol := cf.MakeCollection(descs.NewTemporarySchemaProvider(ctx.SessionDataStack))
-				tableDesc, err := descsCol.MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
+				tableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx.Ctx(), ctx.Txn, descpb.ID(tableID))
 				if err != nil {
 					return nil, err
 				}

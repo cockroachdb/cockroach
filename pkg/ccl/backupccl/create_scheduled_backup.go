@@ -774,7 +774,7 @@ func fullyQualifyScheduledBackupTargetTables(
 					if err != nil {
 						return err
 					}
-					schemaID, err = col.ResolveSchemaID(ctx, txn, dbDesc.GetID(), tp.SchemaName.String())
+					schemaID, err = col.Direct().ResolveSchemaID(ctx, txn, dbDesc.GetID(), tp.SchemaName.String())
 					return err
 				}); err != nil {
 					return nil, err
