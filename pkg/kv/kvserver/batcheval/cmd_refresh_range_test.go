@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -121,6 +122,9 @@ func TestRefreshRangeTimeBoundIterator(t *testing.T) {
 	// resulting in an error from RefreshRange.
 	var resp roachpb.RefreshRangeResponse
 	_, err := RefreshRange(ctx, db, CommandArgs{
+		EvalCtx: (&MockEvalCtx{
+			ClusterSettings: cluster.MakeTestingClusterSettings(),
+		}).EvalContext(),
 		Args: &roachpb.RefreshRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    k,
@@ -193,6 +197,9 @@ func TestRefreshRangeError(t *testing.T) {
 		// 2, therefore the refresh should fail.
 		var resp roachpb.RefreshRangeResponse
 		_, err := RefreshRange(ctx, db, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+			}).EvalContext(),
 			Args: &roachpb.RefreshRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    k,
@@ -219,4 +226,67 @@ func TestRefreshRangeError(t *testing.T) {
 				err.Error())
 		}
 	})
+}
+
+// TestRefreshRangeTimestampBounds verifies that a RefreshRange treats its
+// RefreshFrom timestamp as exclusive and its txn.ReadTimestamp (i.e. its
+// "RefreshTo" timestamp) as inclusive.
+func TestRefreshRangeTimestampBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+
+	k := roachpb.Key("key")
+	v := roachpb.MakeValueFromString("val")
+	ts1 := hlc.Timestamp{WallTime: 1}
+	ts2 := hlc.Timestamp{WallTime: 2}
+	ts3 := hlc.Timestamp{WallTime: 3}
+
+	// Write to a key at time ts2.
+	require.NoError(t, storage.MVCCPut(ctx, db, nil, k, ts2, v, nil))
+
+	for _, tc := range []struct {
+		from, to hlc.Timestamp
+		expErr   bool
+	}{
+		// Sanity-check.
+		{ts1, ts3, true},
+		// RefreshTo is inclusive, so expect error on collision.
+		{ts1, ts2, true},
+		// RefreshFrom is exclusive, so expect no error on collision.
+		{ts2, ts3, false},
+	} {
+		var resp roachpb.RefreshRangeResponse
+		_, err := RefreshRange(ctx, db, CommandArgs{
+			EvalCtx: (&MockEvalCtx{
+				ClusterSettings: cluster.MakeTestingClusterSettings(),
+			}).EvalContext(),
+			Args: &roachpb.RefreshRangeRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    k,
+					EndKey: k.Next(),
+				},
+				RefreshFrom: tc.from,
+			},
+			Header: roachpb.Header{
+				Txn: &roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{
+						WriteTimestamp: tc.to,
+					},
+					ReadTimestamp: tc.to,
+				},
+				Timestamp: tc.to,
+			},
+		}, &resp)
+
+		if tc.expErr {
+			require.Error(t, err)
+			require.Regexp(t, "encountered recently written committed value", err)
+		} else {
+			require.NoError(t, err)
+		}
+	}
 }

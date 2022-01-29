@@ -682,7 +682,8 @@ CREATE TABLE crdb_internal.jobs (
   last_run              TIMESTAMP,
   next_run              TIMESTAMP,
   num_runs              INT,
-  execution_errors      STRING[]
+  execution_errors      STRING[],
+  execution_events      JSONB
 )`,
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -742,10 +743,10 @@ CREATE TABLE crdb_internal.jobs (
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID, lastRun, nextRun, numRuns, executionErrors = tree.DNull, tree.DNull, tree.DNull,
+					traceID, lastRun, nextRun, numRuns, executionErrors, executionEvents = tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull
+					tree.DNull, tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -833,7 +834,7 @@ CREATE TABLE crdb_internal.jobs (
 
 						if len(progress.RunningStatus) > 0 {
 							if s, ok := status.(*tree.DString); ok {
-								if jobs.Status(string(*s)) == jobs.StatusRunning {
+								if jobs.Status(*s) == jobs.StatusRunning {
 									runningStatus = tree.NewDString(progress.RunningStatus)
 								}
 							}
@@ -844,8 +845,21 @@ CREATE TABLE crdb_internal.jobs (
 
 				lastRun, numRuns, nextRun = r[7], r[8], r[9]
 				if payload != nil {
-					executionErrors = jobs.
-						FormatRetriableExecutionErrorLogToStringArray(ctx, payload)
+					executionErrors = jobs.FormatRetriableExecutionErrorLogToStringArray(
+						ctx, payload.RetriableExecutionFailureLog,
+					)
+					// It's not clear why we'd ever see an error here,
+					var err error
+					executionEvents, err = jobs.FormatRetriableExecutionErrorLogToJSON(
+						ctx, payload.RetriableExecutionFailureLog,
+					)
+					if err != nil {
+						if errorStr == tree.DNull {
+							errorStr = tree.NewDString(errors.Wrap(err, "failed to marshal execution error log").Error())
+						} else {
+							executionEvents = tree.DNull
+						}
+					}
 				}
 
 				container = container[:0]
@@ -871,6 +885,7 @@ CREATE TABLE crdb_internal.jobs (
 					nextRun,
 					numRuns,
 					executionErrors,
+					executionEvents,
 				)
 				return container, nil
 			}

@@ -86,7 +86,7 @@ func (i *CatchUpIterator) Close() {
 type outputEventFn func(e *roachpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes for the given span of keys,
-// starting at catchUpTimestamp.  Keys and Values are emitted as
+// starting at catchUpTimestamp. Keys and Values are emitted as
 // RangeFeedEvents passed to the given outputFn.
 func (i *CatchUpIterator) CatchUpScan(
 	startKey, endKey storage.MVCCKey,
@@ -143,18 +143,21 @@ func (i *CatchUpIterator) CatchUpScan(
 			}
 			if !meta.IsInline() {
 				// This is an MVCCMetadata key for an intent. The catchUp scan
-				// only cares about committed values, so ignore this and skip
-				// past the corresponding provisional key-value. To do this,
-				// scan to the timestamp immediately before (i.e. the key
-				// immediately after) the provisional key.
-				//
-				// Make a copy since should not pass an unsafe key from the iterator
-				// that provided it, when asking it to seek.
-				a, unsafeKey.Key = a.Copy(unsafeKey.Key, 0)
-				i.SeekGE(storage.MVCCKey{
-					Key:       unsafeKey.Key,
-					Timestamp: meta.Timestamp.ToTimestamp().Prev(),
-				})
+				// only cares about committed values, so ignore this and skip past
+				// the corresponding provisional key-value. To do this, iterate to
+				// the provisional key-value, validate its timestamp, then iterate
+				// again.
+				i.Next()
+				if ok, err := i.Valid(); err != nil {
+					return errors.Wrap(err, "iterating to provisional value for intent")
+				} else if !ok {
+					return errors.Errorf("expected provisional value for intent")
+				}
+				if !meta.Timestamp.ToTimestamp().EqOrdering(i.UnsafeKey().Timestamp) {
+					return errors.Errorf("expected provisional value for intent with ts %s, found %s",
+						meta.Timestamp, i.UnsafeKey().Timestamp)
+				}
+				i.Next()
 				continue
 			}
 
