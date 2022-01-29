@@ -29,10 +29,15 @@ send "$argv demo --no-example-database\r"
 eexpect root@
 # Dump goroutines in server.
 system "killall -QUIT `basename \$(realpath $argv)`"
-eexpect "SIGQUIT: quit"
+eexpect "SIGQUIT received"
 eexpect "RunAsyncTask"
 
-# Check that the client terminates.
+# Check that the client has survived.
+send "\r"
+eexpect root@
+
+# Finish the test.
+interrupt
 eexpect ":/# "
 end_test
 
