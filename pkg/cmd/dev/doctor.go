@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"io/ioutil"
 	"log"
 	"os"
@@ -95,8 +96,67 @@ func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Co
 
 func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
-	success := true
 
+	if err := d.setupGithooks(ctx); err != nil {
+		return err
+	}
+	success, err := d.checkRequiredTools(ctx)
+	if err != nil {
+		return err
+	}
+	if !success {
+		return errors.New("please address the errors described above and try again")
+	}
+	if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
+		return err
+	}
+	log.Println("You are ready to build :)")
+	return nil
+}
+
+func (d *dev) setupGithooks(ctx context.Context) error {
+	hookdirStdout, err := d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return err
+	}
+	hooksDir, err := filepath.Abs(strings.TrimSpace(string(hookdirStdout)))
+	if err != nil {
+		return err
+	}
+	if err := os.Mkdir(hooksDir, 0700); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+
+	dir, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	srcHooks := filepath.Join(dir, "githooks")
+
+	return filepath.Walk(srcHooks, func(s string, i fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if i.IsDir() {
+			return nil
+		}
+		link := filepath.Join(hooksDir, filepath.Base(s))
+		if _, err := os.Stat(link); err == nil {
+			return nil
+		}
+
+		target, err := filepath.Rel(hooksDir, s)
+		if err != nil {
+			return err
+		}
+		log.Printf("linking %s to %s", link, target)
+		os.Symlink(target, link)
+		return nil
+	})
+}
+
+func (d *dev) checkRequiredTools(ctx context.Context) (bool, error) {
+	success := true
 	// If we're running on macOS, we need to check whether XCode is installed.
 	d.log.Println("doctor: running xcode check")
 	if runtime.GOOS == "darwin" {
@@ -150,16 +210,16 @@ Please perform the following steps:
 	d.log.Println("doctor: running submodules check")
 	if _, err := os.Stat(submodulesMarkerPath); errors.Is(err, os.ErrNotExist) {
 		if _, err = d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--is-inside-work-tree"); err != nil {
-			return err
+			return false, err
 		}
 		if _, err = d.exec.CommandContextSilent(ctx, "git", "submodule", "update", "--init", "--recursive"); err != nil {
-			return err
+			return false, err
 		}
 		if err = d.os.MkdirAll(binDir); err != nil {
-			return err
+			return false, err
 		}
 		if err = d.os.WriteFile(submodulesMarkerPath, ""); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -170,12 +230,12 @@ Please perform the following steps:
 	} else {
 		bazelBin, err := d.getBazelBin(ctx)
 		if err != nil {
-			return err
+			return false, err
 		}
 		fileContents, err := d.os.ReadFile(
 			filepath.Join(bazelBin, "build", "bazelutil", "test_stamping.txt"))
 		if err != nil {
-			return err
+			return false, err
 		}
 		if !strings.Contains(fileContents, "STABLE_BUILD_GIT_BUILD_TYPE") {
 			passedStampTest = false
@@ -183,7 +243,7 @@ Please perform the following steps:
 	}
 	workspace, err := d.getWorkspace(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !passedStampTest {
 		success = false
@@ -200,13 +260,5 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 			log.Printf("    build --config=dev")
 		}
 	}
-
-	if success {
-		if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
-			return err
-		}
-		log.Println("You are ready to build :)")
-		return nil
-	}
-	return errors.New("please address the errors described above and try again")
+	return success, nil
 }
