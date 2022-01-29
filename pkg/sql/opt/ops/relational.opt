@@ -1122,6 +1122,14 @@ define OrdinalityPrivate {
 define ProjectSet {
     Input RelExpr
     Zip ZipExpr
+
+    # notNullCols is the set of columns (input or synthesized) that are known to
+    # be not-null.
+    notNullCols ColSet
+
+    # internalFuncDeps are the functional dependencies between all columns
+    # (input or synthesized).
+    internalFuncDeps FuncDepSet
 }
 
 # Window represents a window function. Window functions are operators which

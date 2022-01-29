@@ -831,6 +831,53 @@ func (prj *ProjectExpr) InternalFDs() *props.FuncDepSet {
 	return &prj.internalFuncDeps
 }
 
+func (prjs *ProjectSetExpr) initUnexportedFields(mem *Memo) {
+	inputProps := prjs.Input.Relational()
+	// Determine the not-null columns.
+	prjs.notNullCols = inputProps.NotNullCols.Copy()
+	for i := range prjs.Zip {
+		item := &prjs.Zip[i]
+		if ExprIsNeverNull(item.Fn, inputProps.NotNullCols) {
+			for _, col := range item.Cols {
+				prjs.notNullCols.Add(col)
+			}
+		}
+	}
+
+	// Determine the "internal" functional dependencies (for the union of input
+	// columns and synthesized columns).
+	prjs.internalFuncDeps.CopyFrom(&inputProps.FuncDeps)
+	for i := range prjs.Zip {
+		item := &prjs.Zip[i]
+		if v, ok := item.Fn.(*VariableExpr); ok && inputProps.OutputCols.Contains(v.Col) {
+			// Handle any column that is a direct reference to an input column.
+			prjs.internalFuncDeps.AddEquivalency(v.Col, item.Cols[0])
+			continue
+		}
+
+		if !item.scalar.VolatilitySet.HasVolatile() {
+			from := item.scalar.OuterCols.Intersection(inputProps.OutputCols)
+
+			// We want to set up the FD: from --> colID.
+			// This does not necessarily hold for "composite" types like decimals or
+			// collated strings. For example if d is a decimal, d::TEXT can have
+			// different values for equal values of d, like 1 and 1.0.
+			if !CanBeCompositeSensitive(mem.Metadata(), item.Fn) {
+				for _, col := range item.Cols {
+					prjs.internalFuncDeps.AddSynthesizedCol(from, col)
+				}
+			}
+		}
+	}
+	prjs.internalFuncDeps.MakeNotNull(prjs.notNullCols)
+}
+
+// InternalFDs returns the functional dependencies for the set of all input
+// columns plus the synthesized columns.
+func (prjs *ProjectSetExpr) InternalFDs() *props.FuncDepSet {
+	return &prjs.internalFuncDeps
+}
+
 // ExprIsNeverNull makes a best-effort attempt to prove that the provided
 // scalar is always non-NULL, given the set of outer columns that are known
 // to be not null. This is particularly useful with check constraints.

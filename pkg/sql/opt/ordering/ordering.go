@@ -109,6 +109,11 @@ func init() {
 		buildChildReqOrdering: projectBuildChildReqOrdering,
 		buildProvidedOrdering: projectBuildProvided,
 	}
+	funcMap[opt.ProjectSetOp] = funcs{
+		canProvideOrdering:    projectSetCanProvideOrdering,
+		buildChildReqOrdering: projectSetBuildChildReqOrdering,
+		buildProvidedOrdering: projectSetBuildProvided,
+	}
 	funcMap[opt.UnionOp] = funcs{
 		canProvideOrdering:    setOpCanProvideOrdering,
 		buildChildReqOrdering: setOpBuildChildReqOrdering,

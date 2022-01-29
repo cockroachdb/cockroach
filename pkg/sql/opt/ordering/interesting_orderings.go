@@ -41,6 +41,9 @@ func DeriveInterestingOrderings(e memo.RelExpr) props.OrderingSet {
 	case opt.ProjectOp:
 		res = interestingOrderingsForProject(e.(*memo.ProjectExpr))
 
+	case opt.ProjectSetOp:
+		res = interestingOrderingsForProjectSet(e.(*memo.ProjectSetExpr))
+
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		res = interestingOrderingsForGroupBy(e)
 
@@ -132,6 +135,15 @@ func interestingOrderingsForProject(prj *memo.ProjectExpr) props.OrderingSet {
 	res := inOrd.Copy()
 	outCols := prj.Relational().OutputCols
 	fds := prj.InternalFDs()
+	res.RestrictToCols(outCols, fds)
+	return res
+}
+
+func interestingOrderingsForProjectSet(prjs *memo.ProjectSetExpr) props.OrderingSet {
+	inOrd := DeriveInterestingOrderings(prjs.Input)
+	res := inOrd.Copy()
+	outCols := prjs.Relational().OutputCols
+	fds := prjs.InternalFDs()
 	res.RestrictToCols(outCols, fds)
 	return res
 }
