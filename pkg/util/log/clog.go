@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // logging is the global state of the logging setup.
@@ -376,11 +377,13 @@ func (l *loggerT) outputLogEntry(entry logEntry) {
 	}
 }
 
-// DumpStacks produces a dump of the stack traces in the logging output.
-func DumpStacks(ctx context.Context) {
+// DumpStacks produces a dump of the stack traces in the logging
+// output, and also to stderr if the remainder of the logs don't go to
+// stderr by default.
+func DumpStacks(ctx context.Context, reason redact.RedactableString) {
 	allStacks := getStacks(true)
 	// TODO(knz): This should really be a "debug" level, not "info".
-	Infof(ctx, "stack traces:\n%s", allStacks)
+	Shoutf(ctx, severity.INFO, "%s. stack traces:\n%s", reason, allStacks)
 }
 
 func setActive() {
