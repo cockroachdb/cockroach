@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // featureSchemaChangeEnabled is the cluster setting used to enable and disable
@@ -42,4 +43,9 @@ func checkSchemaChangeEnabled(
 		return err
 	}
 	return nil
+}
+
+// CheckFeature checks if a schema change feature is allowed.
+func (p *planner) CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error {
+	return checkSchemaChangeEnabled(ctx, p.ExecCfg(), string(featureName))
 }

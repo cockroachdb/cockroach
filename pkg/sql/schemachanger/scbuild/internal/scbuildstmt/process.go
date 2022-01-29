@@ -91,5 +91,10 @@ func Process(b BuildCtx, n tree.Statement) {
 	// Next invoke the callback function, with the concrete types.
 	fn := reflect.ValueOf(info.fn)
 	in := []reflect.Value{reflect.ValueOf(b), reflect.ValueOf(n)}
+	// Check if the feature flag for it is enabled.
+	err := b.CheckFeature(b, tree.GetSchemaFeatureNameFromStmt(n))
+	if err != nil {
+		panic(err)
+	}
 	fn.Call(in)
 }

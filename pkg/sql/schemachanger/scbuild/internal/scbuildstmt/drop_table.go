@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -41,6 +42,10 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
 		name.ObjectNamePrefix = prefix.NamePrefix()
+		// We don't support dropping temporary tables.
+		if tbl.IsTemporary() {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary table"))
+		}
 		// Only decompose the tables first into elements, next we will check for
 		// dependent objects, in case they are all dropped *together*.
 		newCtx := dropTableBasic(b, tbl)
@@ -89,6 +94,10 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 					pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
 					name.Object(), depViewName.Object())
 			}
+			onErrPanic(b.AuthorizationAccessor().CheckPrivilege(
+				b.EvalCtx().Ctx(),
+				dependentDesc,
+				privilege.DROP))
 			dropView(c, dependentDesc, behavior)
 			return nil
 		}))
@@ -145,7 +154,8 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				}
 				panic(pgerror.Newf(
 					pgcode.DependentObjectsStillExist,
-					"cannot drop table a because other objects depend on it"))
+					"cannot drop table %s because other objects depend on it",
+					tree.Name(tbl.GetName())))
 			})
 		}
 		scpb.ForEachSequenceOwnedBy(c, func(_, _ scpb.Status, sequenceOwnedBy *scpb.SequenceOwnedBy) {

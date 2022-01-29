@@ -102,7 +102,7 @@ func (p *planner) DropSchema(ctx context.Context, n *tree.DropSchema) (planNode,
 			}
 			if !(isAdmin || hasOwnership) {
 				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"must be owner of schema %q", sc.GetName())
+					"must be owner of schema %s", tree.Name(sc.GetName()))
 			}
 			namesBefore := len(d.objectNamesToDelete)
 			if err := d.collectObjectsInSchema(ctx, p, db, sc); err != nil {

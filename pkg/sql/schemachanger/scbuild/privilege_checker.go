@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 var _ scbuildstmt.PrivilegeChecker = buildCtx{}
@@ -34,6 +35,6 @@ func (b buildCtx) MustOwn(desc catalog.Descriptor) {
 	}
 	if !hasOwnership {
 		panic(pgerror.Newf(pgcode.InsufficientPrivilege,
-			"must be owner of %s %q", desc.DescriptorType(), desc.GetName()))
+			"must be owner of %s %s", desc.DescriptorType(), tree.Name(desc.GetName())))
 	}
 }

@@ -36,6 +36,7 @@ func NewBuilderDependencies(
 	schemaResolver resolver.SchemaResolver,
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
+	featureChecker scbuild.FeatureChecker,
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
@@ -50,6 +51,7 @@ func NewBuilderDependencies(
 		settings:        settings,
 		statements:      statements,
 		astFormatter:    astFormatter,
+		featureChecker:  featureChecker,
 	}
 }
 
@@ -63,6 +65,7 @@ type buildDeps struct {
 	settings        *cluster.Settings
 	statements      []string
 	astFormatter    scbuild.AstFormatter
+	featureChecker  scbuild.FeatureChecker
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -195,6 +198,17 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 	return desc
 }
 
+// MustGetSchemasForDatabase  implements the scbuild.CatalogReader interface.
+func (d *buildDeps) MustGetSchemasForDatabase(
+	ctx context.Context, database catalog.DatabaseDescriptor,
+) map[descpb.ID]string {
+	schemas, err := d.descsCollection.GetSchemasForDatabase(ctx, d.txn, database)
+	if err != nil {
+		panic(err)
+	}
+	return schemas
+}
+
 var _ scbuild.Dependencies = (*buildDeps)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.
@@ -227,6 +241,12 @@ func (d *buildDeps) Statements() []string {
 	return d.statements
 }
 
+// AstFormatter implements the scbuild.Dependencies interface.
 func (d *buildDeps) AstFormatter() scbuild.AstFormatter {
 	return d.astFormatter
+}
+
+// FeatureChecker implements the scbuild.Dependencies interface.
+func (d *buildDeps) FeatureChecker() scbuild.FeatureChecker {
+	return d.featureChecker
 }
