@@ -71,6 +71,7 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import "styl/app.styl";
+import { Tracez } from "oss/src/views/tracez/tracez";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -267,6 +268,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                 {/* debug pages */}
                 <Route exact path="/debug" component={Debug} />
+                <Route exact path="/debug/tracez" component={Tracez} />
                 <Route exact path="/debug/redux" component={ReduxDebug} />
                 <Route exact path="/debug/chart" component={CustomChart} />
                 <Route

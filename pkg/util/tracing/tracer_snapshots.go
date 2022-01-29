@@ -112,8 +112,8 @@ func (t *Tracer) GetSnapshot(id SnapshotID) (SpansSnapshot, error) {
 // SnapshotInfo represents minimal info about a stored snapshot, as returned by
 // Tracer.GetSnapshots().
 type SnapshotInfo struct {
-	ID         SnapshotID
-	CapturedAt time.Time
+	ID         SnapshotID `json:"id"`
+	CapturedAt time.Time  `json:"captured_at"`
 }
 
 // GetSnapshots returns info on all stored span snapshots.

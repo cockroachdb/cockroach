@@ -12,6 +12,7 @@ package tracingui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -51,23 +52,146 @@ func RegisterHTTPHandlers(ambientCtx log.AmbientContext, mux *http.ServeMux, tr 
 		func(w http.ResponseWriter, req *http.Request) {
 			serveHTTPToggleTrace(ambientCtx.AnnotateCtx(req.Context()), w, req, tr)
 		})
+	mux.HandleFunc("/debug/tracez/snapshot", snapshotHandler(ambientCtx.AnnotateCtx(context.Background()), tr))
 	mux.HandleFunc("/debug/assets/list.min.js", fileServer.ServeHTTP)
 }
 
+func snapshotHandler(ctx context.Context, tr *tracing.Tracer) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method == "POST" {
+			// Creates a new snapshot and returns the ID.
+			snapshotID := tr.SaveSnapshot()
+			sc := snapshotCreated{SnapshotID: snapshotID}
+			returnJSON(w, sc)
+			return
+		}
+
+		if err := req.ParseForm(); err != nil {
+			log.Warningf(ctx, "error parsing /tracez form: %s", err.Error())
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+		snapID := req.Form.Get("snap")
+
+		// List snapshots if we don't have an ID to retrieve.
+		if snapID == "" {
+			pd := pageData{AllSnapshots: tr.GetSnapshots()}
+			returnJSON(w, pd)
+			return
+		}
+
+		// Otherwise, get the snapshot identified by `snapID`
+		getSnapshotHandler(snapID, tr, w)
+	}
+}
+
+type snapshotCreated struct {
+	SnapshotID tracing.SnapshotID `json:"snapshot_id"`
+}
+
+func returnJSON(w http.ResponseWriter, obj interface{}) {
+	w.Header().Set("content-type", "application/json")
+	err := json.NewEncoder(w).Encode(obj)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getSnapshotHandler(snapID string, tr *tracing.Tracer, w http.ResponseWriter) {
+	var pageErr error
+
+	id, err := strconv.Atoi(snapID)
+	if err != nil {
+		pageErr = errors.Errorf("invalid snapshot ID: %s", snapID)
+	}
+	snapshotID := tracing.SnapshotID(id)
+	snapshot, err := tr.GetSnapshot(snapshotID)
+	if err != nil {
+		pageErr = err
+	}
+
+	// Flatten the recordings.
+	spans := make([]tracingpb.RecordedSpan, 0, len(snapshot.Traces)*3)
+	for _, r := range snapshot.Traces {
+		spans = append(spans, r...)
+	}
+
+	spansMap := make(map[uint64]*processedSpan)
+	childrenMap := make(map[uint64][]*processedSpan)
+	processedSpans := make([]processedSpan, len(spans))
+	for i, s := range spans {
+		p := processSpan(s, snapshot)
+		ptr := &processedSpans[i]
+		*ptr = p
+		spansMap[p.SpanID] = &processedSpans[i]
+		if _, ok := childrenMap[p.ParentSpanID]; !ok {
+			childrenMap[p.ParentSpanID] = []*processedSpan{&processedSpans[i]}
+		} else {
+			childrenMap[p.ParentSpanID] = append(childrenMap[p.ParentSpanID], &processedSpans[i])
+		}
+	}
+	// Propagate tags up.
+	for _, s := range processedSpans {
+		for _, t := range s.Tags {
+			if !t.propagateUp || t.copiedFromChild {
+				continue
+			}
+			propagateTagUpwards(t, &s, spansMap)
+		}
+	}
+	// Propagate tags down.
+	for _, s := range processedSpans {
+		for _, t := range s.Tags {
+			if !t.inherit || t.inherited {
+				continue
+			}
+			propagateInheritTagDownwards(t, &s, childrenMap)
+		}
+	}
+
+	// Copy the stack traces and augment the map.
+	stacks := make(map[int]string, len(snapshot.Stacks))
+	for k, v := range snapshot.Stacks {
+		stacks[k] = v
+	}
+	// Fill in messages for the goroutines for which we don't have a stack trace.
+	for _, s := range spans {
+		gid := int(s.GoroutineID)
+		if _, ok := stacks[gid]; !ok {
+			stacks[gid] = "Goroutine not found. Goroutine must have finished since the span was created."
+		}
+	}
+
+	if pageErr != nil {
+		snapshot.Err = pageErr
+	}
+	pd := pageData{
+		Now:          timeutil.Now(),
+		CapturedAt:   snapshot.CapturedAt,
+		SnapshotID:   snapshotID,
+		AllSnapshots: tr.GetSnapshots(),
+		Err:          snapshot.Err,
+		SpansList: spansList{
+			Spans:  processedSpans,
+			Stacks: stacks,
+		},
+	}
+	returnJSON(w, pd)
+}
+
 type pageData struct {
-	SnapshotID   tracing.SnapshotID
-	Now          time.Time
-	CapturedAt   time.Time
-	Err          error
-	AllSnapshots []tracing.SnapshotInfo
-	SpansList    spansList
+	SnapshotID   tracing.SnapshotID     `json:"snapshot_id"`
+	Now          time.Time              `json:"now"`
+	CapturedAt   time.Time              `json:"captured_at"`
+	Err          error                  `json:"err"`
+	AllSnapshots []tracing.SnapshotInfo `json:"all_snapshots"`
+	SpansList    spansList              `json:"spans_list"`
 }
 
 type spansList struct {
-	Spans []processedSpan
+	Spans []processedSpan `json:"spans"`
 	// Stacks contains stack traces for the goroutines referenced by the Spans
 	// through their GoroutineID field.
-	Stacks map[int]string // GoroutineID to stack trace
+	Stacks map[int]string `json:"stacks"` // GoroutineID to stack trace
 }
 
 var spansTableTemplate *template.Template
