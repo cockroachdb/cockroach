@@ -109,7 +109,7 @@ func createPublicSchemaDescriptor(
 		ctx, d.DB, d.Codec, desc, tree.PublicSchema, security.AdminRoleName(), security.AdminRoleName(), true, /* allocateID */
 	)
 	// The public role has hardcoded privileges; see comment in
-	// maybeCreatePublicSchemaWithDescriptor.
+	// descpb.NewPublicSchemaPrivilegeDescriptor.
 	publicSchemaDesc.Privileges.Grant(
 		security.PublicRoleName(),
 		privilege.List{privilege.CREATE, privilege.USAGE},

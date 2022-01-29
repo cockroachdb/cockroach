@@ -12,10 +12,8 @@ package schemadesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -45,12 +43,7 @@ func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }
 func (p public) GetName() string        { return tree.PublicSchema }
 func (p public) GetPrivileges() *descpb.PrivilegeDescriptor {
-	publicSchemaPrivileges := descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
-	// By default, everyone has USAGE and CREATE on the public schema.
-	// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
-	// the public role will no longer have CREATE privileges.
-	publicSchemaPrivileges.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
-	return publicSchemaPrivileges
+	return descpb.NewPublicSchemaPrivilegeDescriptor()
 }
 
 type publicBase struct{}
