@@ -649,49 +649,48 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 	}
 
 	ownIntent := p.txn != nil && p.meta.Txn.ID.Equal(p.txn.ID)
-	conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
-
-	if !ownIntent && !conflictingIntent {
-		// 8. The key contains an intent, but we're reading below the intent.
-		// Seek to the desired version, checking for uncertainty if necessary.
-		//
-		// Note that if we own the intent (i.e. we're reading transactionally)
-		// we want to read the intent regardless of our read timestamp and fall
-		// into case 11 below.
-		if p.checkUncertainty {
-			// The intent's provisional value may be within the uncertainty window. Or
-			// there could be a different, uncertain committed value in the window. To
-			// detect either case, seek to and past the uncertainty interval's global
-			// limit and check uncertainty as we scan.
-			return p.seekVersion(ctx, p.uncertainty.GlobalLimit, true)
-		}
-		return p.seekVersion(ctx, p.ts, false)
-	}
-
-	if p.inconsistent {
-		// 9. The key contains an intent and we're doing an inconsistent
-		// read at a timestamp newer than the intent. We ignore the
-		// intent by insisting that the timestamp we're reading at is a
-		// historical timestamp < the intent timestamp. However, we
-		// return the intent separately; the caller may want to resolve
-		// it.
-		//
-		// p.intents is a pebble.Batch which grows its byte slice capacity in
-		// chunks to amortize allocations. The memMonitor is under-counting here
-		// by only accounting for the key and value bytes.
-		if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
-			p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
-			return false
-		}
-		p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
-		if p.err != nil {
-			return false
-		}
-
-		return p.seekVersion(ctx, prevTS, false)
-	}
-
 	if !ownIntent {
+		conflictingIntent := metaTS.LessEq(p.ts) || p.failOnMoreRecent
+		if !conflictingIntent {
+			// 8. The key contains an intent, but we're reading below the intent.
+			// Seek to the desired version, checking for uncertainty if necessary.
+			//
+			// Note that if we own the intent (i.e. we're reading transactionally)
+			// we want to read the intent regardless of our read timestamp and fall
+			// into case 11 below.
+			if p.checkUncertainty {
+				// The intent's provisional value may be within the uncertainty window. Or
+				// there could be a different, uncertain committed value in the window. To
+				// detect either case, seek to and past the uncertainty interval's global
+				// limit and check uncertainty as we scan.
+				return p.seekVersion(ctx, p.uncertainty.GlobalLimit, true)
+			}
+			return p.seekVersion(ctx, p.ts, false)
+		}
+
+		if p.inconsistent {
+			// 9. The key contains an intent and we're doing an inconsistent
+			// read at a timestamp newer than the intent. We ignore the
+			// intent by insisting that the timestamp we're reading at is a
+			// historical timestamp < the intent timestamp. However, we
+			// return the intent separately; the caller may want to resolve
+			// it.
+			//
+			// p.intents is a pebble.Batch which grows its byte slice capacity in
+			// chunks to amortize allocations. The memMonitor is under-counting here
+			// by only accounting for the key and value bytes.
+			if p.err = p.memAccount.Grow(ctx, int64(len(p.curRawKey)+len(p.curRawValue))); p.err != nil {
+				p.err = errors.Wrapf(p.err, "scan with start key %s", p.start)
+				return false
+			}
+			p.err = p.intents.Set(p.curRawKey, p.curRawValue, nil)
+			if p.err != nil {
+				return false
+			}
+
+			return p.seekVersion(ctx, prevTS, false)
+		}
+
 		// 10. The key contains an intent which was not written by our
 		// transaction and either:
 		// - our read timestamp is equal to or newer than that of the
