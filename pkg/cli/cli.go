@@ -306,13 +306,34 @@ func UsageAndErr(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("unknown sub-command: %q", strings.Join(args, " "))
 }
 
-// debugSignalSetup sets up a signal handler for SIGUSR2 to enable debugging a
-// stuck or misbehaving process by opening an http server that exposes the pprof
-// endpoints on localhost. The resturned shutdown function should be called at
-// process exit to stop its associated goroutines.
+// debugSignalSetup sets up signal handlers for SIGQUIT and SIGUSR2 to enable
+// debugging a stuck or misbehaving process, with the former logging all stacks
+// (but not killing the process, unlike its default go handler) and the latter
+// opening an http server that exposes the pprof endpoints on localhost. The
+// resturned shutdown function should be called at process exit to stop any
+// associated goroutines.
 func debugSignalSetup() func() {
 	exit := make(chan struct{})
 	ctx := context.Background()
+
+	// For SIGQUIT we spawn a goroutine and we always handle it, no matter at
+	// which point during execution we are. This makes it possible to use SIGQUIT
+	// to inspect a running process and determine what it is currently doing, even
+	// if it gets stuck somewhere.
+	if quitSignal != nil {
+		quitSignalCh := make(chan os.Signal, 1)
+		signal.Notify(quitSignalCh, quitSignal)
+		go func() {
+			for {
+				select {
+				case <-exit:
+					return
+				case <-quitSignalCh:
+					log.DumpStacks(context.Background())
+				}
+			}
+		}()
+	}
 
 	// For SIGUSR, we spawn a goroutine that when signaled will then start an http
 	// server, bound to localhost, which serves the go pprof endpoints. While a
