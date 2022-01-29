@@ -93,7 +93,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 			selectorPrefix = "TestLogic"
 		case "ccl":
 			testTarget = "//pkg/ccl/logictestccl:logictestccl_test"
-			selectorPrefix = "TestCCLLogic"
+			selectorPrefix = "Test(CCL|Tenant)Logic"
 		case "opt":
 			testTarget = "//pkg/sql/opt/exec/execbuilder:execbuilder_test"
 			selectorPrefix = "TestExecBuild"
