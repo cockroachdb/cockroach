@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -89,19 +90,35 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.RegrAvgy:                2,
 	execinfrapb.TransitionRegrAggregate: 2,
 	execinfrapb.FinalCovarPop:           1,
-	execinfrapb.FinalRegrSxx:            2,
-	execinfrapb.FinalRegrSxy:            2,
-	execinfrapb.FinalRegrSyy:            2,
+	execinfrapb.FinalRegrSxx:            1,
+	execinfrapb.FinalRegrSxy:            1,
+	execinfrapb.FinalRegrSyy:            1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are
 // present in the map above.
 func TestAggregateFuncToNumArguments(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	for aggFn, aggFnName := range execinfrapb.AggregatorSpec_Func_name {
-		if _, found := aggregateFuncToNumArguments[execinfrapb.AggregatorSpec_Func(aggFn)]; !found {
-			t.Fatalf("didn't find number of arguments for %s", aggFnName)
+
+	checkForOverload := func(t *testing.T, expected int, overloads []tree.Overload) {
+		for _, overload := range overloads {
+			if overload.Types.Length() == expected {
+				return
+			}
 		}
+		t.Fatalf("expected %d inputs, but no matching overload found", expected)
+	}
+	check := func(t *testing.T, fn execinfrapb.AggregatorSpec_Func) {
+		n, ok := aggregateFuncToNumArguments[fn]
+		require.Truef(t, ok, "didn't find number of arguments for %s", fn)
+		_, overloads := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+		checkForOverload(t, n, overloads)
+	}
+	for i := 0; i < len(execinfrapb.AggregatorSpec_Func_name)+1; i++ {
+		fn := execinfrapb.AggregatorSpec_Func(i)
+		t.Run(fn.String(), func(t *testing.T) {
+			check(t, fn)
+		})
 	}
 }
 
