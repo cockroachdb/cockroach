@@ -141,11 +141,20 @@ var workdir string
 
 func pathInWorkdir(ctx context.Context, ex *exec.Exec, subPath string) (string, error) {
 	if workdir == "" {
-		stdout, err := ex.CommandContextSilent(ctx, "git", "rev-parse", "--show-toplevel")
-		if err != nil {
-			return "", err
+		// If ./go.mod exists, assume we're in the root and fast-path return cwd in
+		// ~30us, otherwise shell out to ask git where the root is (8-10ms).
+		if _, err := os.Stat("go.mod"); err == nil {
+			workdir, err = os.Getwd()
+			if err != nil {
+				return "", err
+			}
+		} else {
+			stdout, err := ex.CommandContextSilent(ctx, "git", "rev-parse", "--show-toplevel")
+			if err != nil {
+				return "", err
+			}
+			workdir = strings.TrimSpace(string(stdout))
 		}
-		workdir = strings.TrimSpace(string(stdout))
 	}
 
 	return filepath.Join(workdir, subPath), nil
