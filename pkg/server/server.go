@@ -182,9 +182,8 @@ type Server struct {
 	debug    *debug.Server
 	kvProber *kvprober.Prober
 
-	replicationReporter   *reports.Reporter
-	protectedtsProvider   protectedts.Provider
-	protectedtsReconciler *ptreconcile.Reconciler
+	replicationReporter *reports.Reporter
+	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
@@ -590,10 +589,17 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		InternalExecutor: internalExecutor,
 		Settings:         st,
 		Knobs:            protectedtsKnobs,
+		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
+				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry,
+				internalExecutor, jobsprotectedts.Schedules),
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
+	registry.AddMetricStruct(protectedtsProvider.Metrics())
 
 	// Break a circular dependency: we need the rootSQLMemoryMonitor to construct
 	// the KV memory monitor for the StoreConfig.
@@ -724,21 +730,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
-
-	protectedtsReconciler := ptreconcile.NewReconciler(ptreconcile.Config{
-		Settings: st,
-		Stores:   node.stores,
-		DB:       db,
-		Storage:  protectedtsProvider,
-		Cache:    protectedtsProvider,
-		StatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
-				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry,
-				internalExecutor, jobsprotectedts.Schedules),
-		},
-	})
-	registry.AddMetricStruct(protectedtsReconciler.Metrics())
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
@@ -872,7 +863,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvProber:               kvProber,
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
-		protectedtsReconciler:  protectedtsReconciler,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
 		drainSleepFn:           drainSleepFn,
@@ -1748,9 +1738,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//
 	// See https://github.com/cockroachdb/cockroach/issues/73897.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
-		return err
-	}
-	if err := s.protectedtsReconciler.Start(ctx, s.stopper); err != nil {
 		return err
 	}
 

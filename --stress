@@ -1,0 +1,875 @@
+PASSED: //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsccl_test (see /private/var/tmp/_bazel_adityamaru/2592a7600a28e43d0b132c217219adf9/execroot/cockroach/bazel-out/darwin-fastbuild/testlogs/pkg/ccl/jobsccl/jobsprotectedtsccl/jobsccl_test/test.log)
+INFO: From Testing //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsccl_test
+==================== Test output for //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsccl_test:
+initialized metamorphic constant "span-reuse-rate" with value 99
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "inverted-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 7
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 3714832
+initialized metamorphic constant "max-batch-size" with value 2572
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 21
+initialized metamorphic constant "span-reuse-rate" with value 4
+initialized metamorphic constant "coldata-batch-size" with value 1177
+initialized metamorphic constant "kv.rangefeed.catchup_scan_iterator_optimization.enabled" with value false
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "inverted-joiner-batch-size" with value 1
+initialized metamorphic constant "zig-zag-joiner-batch-size" with value 1
+initialized metamorphic constant "spilling-queue-initial-len" with value 13
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 14
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 716445
+initialized metamorphic constant "max-batch-size" with value 3219
+initialized metamorphic constant "max-batch-byte-size" with value 23759851
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 9
+I220131 20:34:45.566590 1 (gostd) rand.go:147  [-] 1  random seed: -3947025973846740312
+=== RUN   TestJobsProtectedTimestamp
+I220131 20:34:45.568932 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 2  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.569050 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 3  [JOB 1] WAL created 000002
+I220131 20:34:45.569193 20 server/config.go:654  [n?] 4  1 storage engine initialized
+I220131 20:34:45.569225 20 server/config.go:657  [n?] 5  Pebble cache size: 128 MiB
+I220131 20:34:45.569307 20 server/config.go:657  [n?] 7  store 0: in-memory, size 512 MiB
+I220131 20:34:45.569204 92 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,s?] 6  [JOB 2] all initial table stats loaded
+I220131 20:34:45.571381 20 1@rpc/pkg/rpc/tls.go:267  [n?] 8  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:45.571419 20 1@rpc/pkg/rpc/tls.go:316  [n?] 9  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:45.581543 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 10  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.581647 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 11  [JOB 1] WAL created 000002
+I220131 20:34:45.581787 128 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,stemp] 12  [JOB 2] all initial table stats loaded
+I220131 20:34:45.606701 20 1@server/server.go:1049  [n?] 13  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I220131 20:34:45.607240 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 14  upgraded to format version: 002
+I220131 20:34:45.607312 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 15  upgraded to format version: 003
+I220131 20:34:45.607335 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 16  upgraded to format version: 004
+I220131 20:34:45.607685 20 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 17  upgraded to format version: 005
+I220131 20:34:45.611141 20 server/init.go:197  [n?] 18  no stores initialized
+I220131 20:34:45.611189 20 server/init.go:198  [n?] 19  awaiting `cockroach init` or join with an already initialized node
+I220131 20:34:45.611213 20 server/init.go:262  [n?] 20  cluster f6812f0a-736b-43ec-8efc-e64342fc7d77 has been created
+I220131 20:34:45.611249 20 server/init.go:263  [n?] 21  allocated node ID: n1 (for self)
+I220131 20:34:45.611271 20 server/init.go:264  [n?] 22  active cluster version: 21.2-50
+I220131 20:34:45.611360 76 1@server/server.go:1616  [n1] 23  connecting to gossip network to verify cluster ID "f6812f0a-736b-43ec-8efc-e64342fc7d77"
+W220131 20:34:45.611363 20 1@gossip/pkg/gossip/gossip.go:1472  [n1] 24  no addresses found; use --join to specify a connected node
+I220131 20:34:45.611490 20 gossip/pkg/gossip/gossip.go:401  [n1] 25  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:54573" > attrs:<> locality:<tiers:<key:"region" value:"test" > tiers:<key:"dc" value:"dc1" > > ServerVersion:<major_val:21 minor_val:2 patch:0 internal:50 > build_tag:"v22.1.0-alpha.1-602-g158f05c900-dirty" started_at:1643661285611479000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:54575" >
+I220131 20:34:45.614536 20 server/node.go:451  [n1] 26  initialized store s1
+I220131 20:34:45.614587 76 1@server/server.go:1619  [n1] 27  node connected via gossip
+I220131 20:34:45.614636 20 kv/kvserver/pkg/kv/kvserver/stores.go:250  [n1] 28  read 0 node addresses from persistent storage
+I220131 20:34:45.614737 20 server/node.go:528  [n1] 29  started with engine type 2
+I220131 20:34:45.614763 20 server/node.go:530  [n1] 30  started with attributes []
+I220131 20:34:45.614887 20 1@server/server.go:1761  [n1] 31  starting https server at 127.0.0.1:54574 (use: 127.0.0.1:54574)
+I220131 20:34:45.614932 20 1@server/server.go:1766  [n1] 32  starting postgres server at 127.0.0.1:54575 (use: 127.0.0.1:54575)
+I220131 20:34:45.614967 20 1@server/server.go:1768  [n1] 33  starting grpc server at 127.0.0.1:54573
+I220131 20:34:45.615000 20 1@server/server.go:1769  [n1] 34  advertising CockroachDB node at 127.0.0.1:54573
+W220131 20:34:45.657575 181 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Meta2/Table/20/NULL] 35  range lookup of key /Meta2/Table/20/NULL found only non-matching ranges []; retrying
+W220131 20:34:45.659098 180 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Table/20] 36  range lookup of key /Table/20 found only non-matching ranges []; retrying
+I220131 20:34:45.668699 358 spanconfig/spanconfigkvsubscriber/kvsubscriber.go:323  [n1] 37  established range feed over system.span_configurations starting at time 1643661285.668215000,0
+I220131 20:34:45.669859 20 1@util/log/event_log.go:32  [n1] 38 ={"Timestamp":1643661285669855000,"EventType":"node_join","NodeID":1,"StartedAt":1643661285611479000,"LastUp":1643661285611479000}
+I220131 20:34:45.669947 20 sql/sqlliveness/slinstance/slinstance.go:300  [n1] 39  starting SQL liveness instance
+I220131 20:34:45.671231 510 sql/temporary_schema.go:510  [n1] 40  running temporary object cleanup background job
+I220131 20:34:45.671243 405 sql/sqlliveness/slstorage/slstorage.go:406  [n1] 41  inserted sqlliveness session cd1e6028344649e99bcc7b13fcf2f393
+I220131 20:34:45.671342 405 sql/sqlliveness/slinstance/slinstance.go:187  [n1] 42  created new SQL liveness session cd1e6028344649e99bcc7b13fcf2f393
+I220131 20:34:45.671353 318 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [n1] 43  starting sql-stats-worker with initial delay: 11m0.679816951s
+I220131 20:34:45.672001 510 sql/temporary_schema.go:555  [n1] 44  found 0 temporary schemas
+I220131 20:34:45.672033 510 sql/temporary_schema.go:558  [n1] 45  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:45.672073 510 sql/temporary_schema.go:559  [n1] 46  completed temporary object cleanup job
+I220131 20:34:45.672092 510 sql/temporary_schema.go:642  [n1] 47  temporary object cleaner next scheduled to run at 2022-01-31 21:04:45.67119 +0000 UTC
+I220131 20:34:45.678321 642 kv/kvserver/pkg/kv/kvserver/replica_rangefeed.go:685  [n1,rangefeed=lease,s1,r6/1:/Table/{SystemCon…-11}] 48  RangeFeed closed timestamp is empty
+I220131 20:34:45.681517 629 spanconfig/spanconfigmanager/manager.go:147  [n1] 49  started auto span config reconciliation job
+I220131 20:34:45.681580 541 jobs/adopt.go:240  [n1] 50  job 732662614190358529: resuming execution
+I220131 20:34:45.682402 26 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 51 ={"Timestamp":1643661285678936000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:45.685520 625 migration/migrationmanager/manager.go:110  [n1,intExec=set-setting,migration-mgr] 52  no need to migrate, cluster already at newest version
+I220131 20:34:45.686601 544 jobs/registry.go:1093  [n1] 53  AUTO SPAN CONFIG RECONCILIATION job 732662614190358529: stepping through state running with error: <nil>
+I220131 20:34:45.686660 625 util/log/event_log.go:32  [n1,intExec=set-setting] 54 ={"Timestamp":1643661285684526000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'21.2-50'"],"SettingName":"version","Value":"21.2-50"}
+I220131 20:34:45.694056 287 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 55  [JOB 3] WAL created 000004
+I220131 20:34:45.697410 723 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 56 ={"Timestamp":1643661285694568000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"acf687e6-122f-42ff-9d1d-e85e69afb327"}
+I220131 20:34:45.702676 183 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 57 ={"Timestamp":1643661285699689000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:45.705332 710 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 58 ={"Timestamp":1643661285702875000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:45.715862 20 server/server_sql.go:1170  [n1] 59  done ensuring all necessary startup migrations have run
+I220131 20:34:45.715996 779 jobs/job_scheduler.go:357  [n1] 60  waiting 3m0s before scheduled jobs daemon start
+I220131 20:34:45.717306 781 server/auto_upgrade.go:55  [n1] 61  no need to upgrade, cluster already at the newest version
+I220131 20:34:45.725001 252 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 62  [JOB 4] WAL created 000005
+I220131 20:34:45.725971 20 1@server/server.go:2517  [n1] 63  serving sql connections
+I220131 20:34:45.727311 20 testutils/testcluster/testcluster.go:1163  [-] 64  WaitForFullReplication
+I220131 20:34:45.727348 20 testutils/testcluster/testcluster.go:1167  [-] 65  WaitForFullReplication took: 0s
+I220131 20:34:45.727393 20 2@rpc/pkg/rpc/context.go:1211  [n1,rnode=1,raddr=127.0.0.1:54573,class=default] 66  dialing
+=== RUN   TestJobsProtectedTimestamp/secondary-tenant
+I220131 20:34:45.764583 840 kv/kvserver/pkg/kv/kvserver/replica_command.go:400  [n1,s1,r43/1:/{Table/47-Max}] 67  initiating a split of this range at key /Tenant/10 [r44] (manual)
+I220131 20:34:45.765011 544 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [n1,job=732662614190358529] 68  established range feed over system.descriptors starting at time 1643661285.692373000,0
+I220131 20:34:45.765097 544 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [n1,job=732662614190358529] 69  established range feed over system.zones starting at time 1643661285.692373000,0
+I220131 20:34:45.767076 270 kv/kvserver/tenantrate/factory.go:98  [n1,s1,r44/1:{-}] 70  tenant 10 rate limiter initialized (rate: 3200 RU/s; burst: 32000 RU)
+I220131 20:34:45.779499 839 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [nsql?,pebble,s?] 71  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.779635 839 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [nsql?,pebble,s?] 72  [JOB 1] WAL created 000002
+I220131 20:34:45.779750 949 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [nsql?,pebble,stemp] 73  [JOB 2] all initial table stats loaded
+I220131 20:34:45.803047 996 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=63,raddr=127.0.0.1:54573,class=system] 74  dialing
+I220131 20:34:45.809235 839 sql/sqlliveness/slinstance/slinstance.go:300  [nsql?] 75  starting SQL liveness instance
+I220131 20:34:45.809437 1001 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54573,class=default] 76  dialing
+I220131 20:34:45.816709 885 sql/sqlliveness/slstorage/slstorage.go:406  [nsql?] 77  inserted sqlliveness session bc52109abd6b4edea54433da71e3e47d
+I220131 20:34:45.816829 885 sql/sqlliveness/slinstance/slinstance.go:187  [nsql?] 78  created new SQL liveness session bc52109abd6b4edea54433da71e3e47d
+I220131 20:34:45.819388 839 1@sql/sqlinstance/instanceprovider/instanceprovider.go:118  [nsql?] 79  created SQL instance 1
+I220131 20:34:45.819503 1051 sql/temporary_schema.go:510  [nsql1] 80  running temporary object cleanup background job
+I220131 20:34:45.819522 1053 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [nsql1] 81  starting sql-stats-worker with initial delay: 8m52.335961643s
+I220131 20:34:45.820560 1051 sql/temporary_schema.go:555  [nsql1] 82  found 0 temporary schemas
+I220131 20:34:45.820588 1051 sql/temporary_schema.go:558  [nsql1] 83  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:45.820604 1051 sql/temporary_schema.go:559  [nsql1] 84  completed temporary object cleanup job
+I220131 20:34:45.820616 1051 sql/temporary_schema.go:642  [nsql1] 85  temporary object cleaner next scheduled to run at 2022-01-31 21:04:45.819481 +0000 UTC
+I220131 20:34:45.826637 1122 server/settingswatcher/settings_watcher.go:222  [nsql1,rangefeed=settings] 86  set cluster version to: 21.2-50
+I220131 20:34:45.833183 1089 spanconfig/spanconfigmanager/manager.go:147  [nsql1] 87  started auto span config reconciliation job
+I220131 20:34:45.833228 1130 jobs/adopt.go:240  [nsql1] 88  job 732662614674898945: resuming execution
+I220131 20:34:45.838352 1134 jobs/registry.go:1093  [nsql1] 89  AUTO SPAN CONFIG RECONCILIATION job 732662614674898945: stepping through state running with error: <nil>
+I220131 20:34:45.906736 955 util/log/event_log.go:32  [nsql1,intExec=optInToDiagnosticsStatReporting] 90 ={"Timestamp":1643661285828907000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:45.919911 1539 util/log/event_log.go:32  [nsql1,intExec=initializeClusterSecret] 91 ={"Timestamp":1643661285917227000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"c2b1b2fa-c6c2-47cd-881e-d18f6c69cad2"}
+I220131 20:34:45.925399 1541 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 92 ={"Timestamp":1643661285921539000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:45.929239 1568 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 93 ={"Timestamp":1643661285925564000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:45.942484 839 server/server_sql.go:1170  [nsql1] 94  done ensuring all necessary startup migrations have run
+I220131 20:34:45.942549 839 1@server/server.go:2517  [nsql1] 95  serving sql connections
+I220131 20:34:45.942572 1681 jobs/job_scheduler.go:357  [nsql1] 96  waiting 3m0s before scheduled jobs daemon start
+I220131 20:34:45.952728 1134 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [nsql1,job=732662614674898945] 97  established range feed over system.descriptors starting at time 1643661285.842667000,0
+I220131 20:34:45.952813 1134 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [nsql1,job=732662614674898945] 98  established range feed over system.zones starting at time 1643661285.842667000,0
+I220131 20:34:45.954311 1720 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54588,user=root] 99 ={"Timestamp":1643661285948885000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.closed_timestamp.target_duration\" = '100ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.closed_timestamp.target_duration","Value":"00:00:00.1"}
+I220131 20:34:45.957333 1720 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54588,user=root] 100 ={"Timestamp":1643661285954594000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+=== RUN   TestJobsProtectedTimestamp/system-tenant
+I220131 20:34:45.995605 1967 util/log/event_log.go:32  [n1,client=127.0.0.1:54589,user=root] 101 ={"Timestamp":1643661285993610000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.closed_timestamp.target_duration\" = '100ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.closed_timestamp.target_duration","Value":"00:00:00.1"}
+I220131 20:34:45.997729 1967 util/log/event_log.go:32  [n1,client=127.0.0.1:54589,user=root] 102 ={"Timestamp":1643661285995817000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+I220131 20:34:46.002548 1992 jobs/adopt.go:240  [n1] 103  job 732662615237754881: resuming execution
+I220131 20:34:46.005594 2024 jobs/registry.go:1093  [n1] 104  SCHEMA CHANGE GC job 732662615237754881: stepping through state running with error: <nil>
+E220131 20:34:46.007605 2024 jobs/adopt.go:406  [n1] 105  job 732662615237754881: adoption completed with error job 732662615237754881: job with status failed cannot be marked started
+I220131 20:34:46.021462 1755 jobs/adopt.go:240  [n1] 106  job 732662615285760001: resuming execution
+I220131 20:34:46.023946 1757 jobs/registry.go:1093  [n1] 107  SCHEMA CHANGE GC job 732662615285760001: stepping through state running with error: <nil>
+I220131 20:34:46.029375 1757 sql/gcjob/gc_job_utils.go:266  [n1,job=732662615285760001] 108  updated progress payload: tables:<id:42 > ranges_unsplit_done:true
+I220131 20:34:46.030699 1757 sql/gcjob/gc_job_utils.go:273  [n1,job=732662615285760001] 109  updated running status: waiting for GC TTL
+I220131 20:34:46.043521 20 testutils/testcluster/testcluster.go:107  [-] 110  TestCluster quiescing nodes
+W220131 20:34:46.043620 2148 kv/kvserver/intentresolver/intent_resolver.go:793  [-] 111  failed to gc transaction record: could not GC completed transaction anchored at /Table/31/1/1/0: node unavailable; try another peer
+W220131 20:34:46.043711 405 sql/sqlliveness/slinstance/slinstance.go:224  [n1] 112  exiting heartbeat loop
+I220131 20:34:46.043722 93 2@rpc/pkg/rpc/context.go:817  [n1] 113  closing [{n0: 127.0.0.1:54573 (default)}]
+I220131 20:34:46.043794 93 2@rpc/pkg/rpc/context.go:817  [n1] 115  closing [{n1: 127.0.0.1:54573 (default)}]
+I220131 20:34:46.043799 823 2@rpc/pkg/rpc/context.go:817  [n1] 116  closing [{n1: 127.0.0.1:54573 (default)} {n0: 127.0.0.1:54573 (default)}]
+W220131 20:34:46.043714 626 jobs/registry.go:765  [n1] 114  canceling all adopted jobs due to stopper quiescing
+I220131 20:34:46.044011 544 jobs/registry.go:1093  [n1] 117  AUTO SPAN CONFIG RECONCILIATION job 732662614190358529: stepping through state succeeded with error: <nil>
+W220131 20:34:46.043943 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 118  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.044061 544 kv/txn.go:712  [n1] 119  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.044288 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 120  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.044537 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 121  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.044745 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 122  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.044935 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 123  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.045127 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 124  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.045305 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 125  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.045491 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 126  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.045672 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 127  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.045848 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 128  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046022 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 129  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046186 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 130  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046354 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 131  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046550 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 132  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046726 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 133  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.046915 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 134  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.047088 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 135  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.047259 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 136  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.047456 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 137  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.047666 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 138  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.047930 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 139  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.048219 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 140  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.048539 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 141  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.048850 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 142  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.049181 990 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 143  error consuming GossipSubscription RPC: rpc error: code = Unavailable desc = error reading from server: EOF
+I220131 20:34:46.049397 999 2@rpc/pkg/rpc/context.go:817  [nsql1] 145  closing [{n0: 127.0.0.1:54573 (system)}]
+W220131 20:34:46.049404 990 ccl/kvccl/kvtenantccl/connector.go:172  [nsql1,tenant-connector] 144  error issuing GossipSubscription RPC: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing cannot reuse client connection"
+I220131 20:34:46.049574 2388 2@rpc/pkg/rpc/context.go:1211  [nsql1,rnode=63,raddr=127.0.0.1:54573,class=system] 146  dialing
+W220131 20:34:46.049982 2388 ccl/kvccl/kvtenantccl/connector.go:531  [nsql1,tenant-connector] 147  error dialing tenant KV address 127.0.0.1:54573: initial connection heartbeat failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing dial tcp 127.0.0.1:54573: connect: connection refused"
+I220131 20:34:46.051235 2391 2@rpc/pkg/rpc/context.go:817  [nsql1] 148  closing [{n0: 127.0.0.1:54573 (system)}]
+W220131 20:34:46.051319 1086 jobs/registry.go:765  [nsql1] 149  canceling all adopted jobs due to stopper quiescing
+W220131 20:34:46.051312 885 sql/sqlliveness/slinstance/slinstance.go:224  [nsql1] 150  exiting heartbeat loop
+I220131 20:34:46.051347 1134 jobs/registry.go:1093  [nsql1] 152  AUTO SPAN CONFIG RECONCILIATION job 732662614674898945: stepping through state succeeded with error: <nil>
+I220131 20:34:46.051316 654 2@rpc/pkg/rpc/context.go:817  [nsql1] 151  closing [{n1: 127.0.0.1:54573 (default)}]
+I220131 20:34:46.051325 1004 2@rpc/pkg/rpc/context.go:817  [nsql1] 153  closing [{n1: 127.0.0.1:54573 (default)} {n0: 127.0.0.1:54573 (default)}]
+W220131 20:34:46.051404 1134 kv/txn.go:712  [nsql1] 154  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.051676 1236 kv/txn.go:712  [nsql1,job=732662614674898945] 155  failure aborting transaction: node unavailable; try another peer; abort caused by: failed to read records: protectedts-deprecated-GetRecords: context canceled
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156  failed to load protected timestamp records: failed to read records: protectedts-deprecated-GetRecords: context canceled
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +(1) attached stack trace
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  -- stack trace:
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).deprecatedGetRecords
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:350
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | [...repeated from below...]
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +Wraps: (2) failed to read records
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +Wraps: (3) attached stack trace
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  -- stack trace:
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal.func1.1
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:676
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next.func1
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:276
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:283
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).deprecatedGetRecords
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:342
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).getRecords
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:357
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetState
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:322
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile.func1
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:126
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn.func1
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:874
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv.(*Txn).exec
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/txn.go:972
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:873
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:855
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:124
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).run
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:109
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).StartReconciler.func1
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:80
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | runtime.goexit
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +  | 	GOROOT/src/runtime/asm_amd64.s:1581
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +Wraps: (4) protectedts-deprecated-GetRecords
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +Wraps: (5) context canceled
+E220131 20:34:46.051737 1236 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662614674898945] 156 +Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *errors.errorString
+--- PASS: TestJobsProtectedTimestamp (0.50s)
+    --- PASS: TestJobsProtectedTimestamp/secondary-tenant (0.25s)
+    --- PASS: TestJobsProtectedTimestamp/system-tenant (0.05s)
+=== RUN   TestSchedulesProtectedTimestamp
+I220131 20:34:46.066660 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 157  [JOB 1] MANIFEST created 000001
+I220131 20:34:46.066749 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 158  [JOB 1] WAL created 000002
+I220131 20:34:46.066817 2261 server/config.go:654  [n?] 159  1 storage engine initialized
+I220131 20:34:46.066834 2261 server/config.go:657  [n?] 160  Pebble cache size: 128 MiB
+I220131 20:34:46.066846 2261 server/config.go:657  [n?] 161  store 0: in-memory, size 512 MiB
+I220131 20:34:46.066839 2408 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,s?] 162  [JOB 2] all initial table stats loaded
+I220131 20:34:46.068491 2261 1@rpc/pkg/rpc/tls.go:267  [n?] 163  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:46.068518 2261 1@rpc/pkg/rpc/tls.go:316  [n?] 164  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:46.078837 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 165  [JOB 1] MANIFEST created 000001
+I220131 20:34:46.078983 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 166  [JOB 1] WAL created 000002
+I220131 20:34:46.079208 2433 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,stemp] 167  [JOB 2] all initial table stats loaded
+I220131 20:34:46.103332 2261 1@server/server.go:1049  [n?] 168  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I220131 20:34:46.103774 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 169  upgraded to format version: 002
+I220131 20:34:46.103833 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 170  upgraded to format version: 003
+I220131 20:34:46.103861 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 171  upgraded to format version: 004
+I220131 20:34:46.104440 2261 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 172  upgraded to format version: 005
+I220131 20:34:46.108306 2261 server/init.go:197  [n?] 173  no stores initialized
+I220131 20:34:46.108345 2261 server/init.go:198  [n?] 174  awaiting `cockroach init` or join with an already initialized node
+I220131 20:34:46.108367 2261 server/init.go:262  [n?] 175  cluster f67e34c1-0a30-4ea1-bdb9-da8943176cfb has been created
+I220131 20:34:46.108387 2261 server/init.go:263  [n?] 176  allocated node ID: n1 (for self)
+I220131 20:34:46.108401 2261 server/init.go:264  [n?] 177  active cluster version: 21.2-50
+W220131 20:34:46.108456 2261 1@gossip/pkg/gossip/gossip.go:1472  [n1] 178  no addresses found; use --join to specify a connected node
+I220131 20:34:46.108459 2265 1@server/server.go:1616  [n1] 179  connecting to gossip network to verify cluster ID "f67e34c1-0a30-4ea1-bdb9-da8943176cfb"
+I220131 20:34:46.108489 2261 gossip/pkg/gossip/gossip.go:401  [n1] 180  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:54594" > attrs:<> locality:<tiers:<key:"region" value:"test" > tiers:<key:"dc" value:"dc1" > > ServerVersion:<major_val:21 minor_val:2 patch:0 internal:50 > build_tag:"v22.1.0-alpha.1-602-g158f05c900-dirty" started_at:1643661286108486000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:54598" >
+I220131 20:34:46.110803 2261 server/node.go:451  [n1] 181  initialized store s1
+I220131 20:34:46.110838 2261 kv/kvserver/pkg/kv/kvserver/stores.go:250  [n1] 182  read 0 node addresses from persistent storage
+I220131 20:34:46.110853 2265 1@server/server.go:1619  [n1] 183  node connected via gossip
+I220131 20:34:46.110887 2261 server/node.go:528  [n1] 184  started with engine type 2
+I220131 20:34:46.110913 2261 server/node.go:530  [n1] 185  started with attributes []
+I220131 20:34:46.110985 2261 1@server/server.go:1761  [n1] 186  starting https server at 127.0.0.1:54597 (use: 127.0.0.1:54597)
+I220131 20:34:46.111011 2261 1@server/server.go:1766  [n1] 187  starting postgres server at 127.0.0.1:54598 (use: 127.0.0.1:54598)
+I220131 20:34:46.111035 2261 1@server/server.go:1768  [n1] 188  starting grpc server at 127.0.0.1:54594
+I220131 20:34:46.111062 2261 1@server/server.go:1769  [n1] 189  advertising CockroachDB node at 127.0.0.1:54594
+I220131 20:34:46.113421 2631 spanconfig/spanconfigkvsubscriber/kvsubscriber.go:323  [n1] 190  established range feed over system.span_configurations starting at time 1643661286.113390000,0
+I220131 20:34:46.113757 2261 1@util/log/event_log.go:32  [n1] 191 ={"Timestamp":1643661286113756000,"EventType":"node_join","NodeID":1,"StartedAt":1643661286108486000,"LastUp":1643661286108486000}
+I220131 20:34:46.113801 2261 sql/sqlliveness/slinstance/slinstance.go:300  [n1] 192  starting SQL liveness instance
+I220131 20:34:46.114473 2723 sql/temporary_schema.go:510  [n1] 193  running temporary object cleanup background job
+I220131 20:34:46.114592 2367 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [n1] 194  starting sql-stats-worker with initial delay: 11m14.822476263s
+I220131 20:34:46.114742 2635 sql/sqlliveness/slstorage/slstorage.go:406  [n1] 195  inserted sqlliveness session 6ada081dcfb64f1ab19b07653a9f81b4
+I220131 20:34:46.114772 2635 sql/sqlliveness/slinstance/slinstance.go:187  [n1] 196  created new SQL liveness session 6ada081dcfb64f1ab19b07653a9f81b4
+I220131 20:34:46.115189 2723 sql/temporary_schema.go:555  [n1] 197  found 0 temporary schemas
+I220131 20:34:46.115216 2723 sql/temporary_schema.go:558  [n1] 198  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:46.115234 2723 sql/temporary_schema.go:559  [n1] 199  completed temporary object cleanup job
+I220131 20:34:46.115246 2723 sql/temporary_schema.go:642  [n1] 200  temporary object cleaner next scheduled to run at 2022-01-31 21:04:46.114459 +0000 UTC
+I220131 20:34:46.119132 2401 kv/kvserver/pkg/kv/kvserver/replica_rangefeed.go:685  [n1,rangefeed=lease,s1,r6/1:/Table/{SystemCon…-11}] 201  RangeFeed closed timestamp is empty
+I220131 20:34:46.122867 2795 spanconfig/spanconfigmanager/manager.go:147  [n1] 202  started auto span config reconciliation job
+I220131 20:34:46.122909 2883 jobs/adopt.go:240  [n1] 203  job 732662615634903041: resuming execution
+I220131 20:34:46.123001 2765 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 204 ={"Timestamp":1643661286119818000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:46.124993 2800 migration/migrationmanager/manager.go:110  [n1,intExec=set-setting,migration-mgr] 205  no need to migrate, cluster already at newest version
+I220131 20:34:46.125952 2800 util/log/event_log.go:32  [n1,intExec=set-setting] 206 ={"Timestamp":1643661286124342000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'21.2-50'"],"SettingName":"version","Value":"21.2-50"}
+I220131 20:34:46.126414 2886 jobs/registry.go:1093  [n1] 207  AUTO SPAN CONFIG RECONCILIATION job 732662615634903041: stepping through state running with error: <nil>
+I220131 20:34:46.134279 2607 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 208  [JOB 3] WAL created 000004
+I220131 20:34:46.136214 2936 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 209 ={"Timestamp":1643661286134351000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"04371897-9448-48d8-b511-e162991bcf3d"}
+I220131 20:34:46.139438 2896 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 210 ={"Timestamp":1643661286137144000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:46.141907 2857 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 211 ={"Timestamp":1643661286139606000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+W220131 20:34:46.145209 2467 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Meta2/Table/20/NULL] 212  range lookup of key /Meta2/Table/20/NULL found only non-matching ranges []; retrying
+W220131 20:34:46.146448 2466 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Table/20] 213  range lookup of key /Table/20 found only non-matching ranges []; retrying
+I220131 20:34:46.151690 2261 server/server_sql.go:1170  [n1] 214  done ensuring all necessary startup migrations have run
+I220131 20:34:46.151776 3049 jobs/job_scheduler.go:357  [n1] 215  waiting 2m0s before scheduled jobs daemon start
+I220131 20:34:46.152844 3051 server/auto_upgrade.go:55  [n1] 216  no need to upgrade, cluster already at the newest version
+I220131 20:34:46.158709 2576 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 217  [JOB 4] WAL created 000005
+I220131 20:34:46.159621 2261 1@server/server.go:2517  [n1] 218  serving sql connections
+I220131 20:34:46.160919 2261 testutils/testcluster/testcluster.go:1163  [-] 219  WaitForFullReplication
+I220131 20:34:46.160944 2261 testutils/testcluster/testcluster.go:1167  [-] 220  WaitForFullReplication took: 1µs
+I220131 20:34:46.160976 2261 2@rpc/pkg/rpc/context.go:1211  [n1,rnode=1,raddr=127.0.0.1:54594,class=default] 221  dialing
+=== RUN   TestSchedulesProtectedTimestamp/secondary-tenant
+I220131 20:34:46.200118 3123 kv/kvserver/pkg/kv/kvserver/replica_command.go:400  [n1,s1,r43/1:/{Table/47-Max}] 222  initiating a split of this range at key /Tenant/10 [r44] (manual)
+I220131 20:34:46.200618 2886 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [n1,job=732662615634903041] 223  established range feed over system.descriptors starting at time 1643661286.131683000,0
+I220131 20:34:46.200684 2886 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [n1,job=732662615634903041] 224  established range feed over system.zones starting at time 1643661286.131683000,0
+I220131 20:34:46.202411 2591 kv/kvserver/tenantrate/factory.go:98  [n1,s1,r44/1:{-}] 225  tenant 10 rate limiter initialized (rate: 3200 RU/s; burst: 32000 RU)
+I220131 20:34:46.215766 3122 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [nsql?,pebble,s?] 226  [JOB 1] MANIFEST created 000001
+I220131 20:34:46.216002 3122 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [nsql?,pebble,s?] 227  [JOB 1] WAL created 000002
+I220131 20:34:46.216151 3165 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [nsql?,pebble,stemp] 228  [JOB 2] all initial table stats loaded
+I220131 20:34:46.239254 3204 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=63,raddr=127.0.0.1:54594,class=system] 229  dialing
+I220131 20:34:46.244961 3122 sql/sqlliveness/slinstance/slinstance.go:300  [nsql?] 230  starting SQL liveness instance
+I220131 20:34:46.245141 3266 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54594,class=default] 231  dialing
+I220131 20:34:46.250450 3266 sql/sqlliveness/slstorage/slstorage.go:406  [nsql?] 232  inserted sqlliveness session 3f5a8d7de4ca4f10a856b7fa579ed495
+I220131 20:34:46.250500 3266 sql/sqlliveness/slinstance/slinstance.go:187  [nsql?] 233  created new SQL liveness session 3f5a8d7de4ca4f10a856b7fa579ed495
+I220131 20:34:46.251707 3122 1@sql/sqlinstance/instanceprovider/instanceprovider.go:118  [nsql?] 234  created SQL instance 1
+I220131 20:34:46.251793 3288 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [nsql1] 236  starting sql-stats-worker with initial delay: 10m30.807427069s
+I220131 20:34:46.251786 3286 sql/temporary_schema.go:510  [nsql1] 235  running temporary object cleanup background job
+I220131 20:34:46.252859 3286 sql/temporary_schema.go:555  [nsql1] 237  found 0 temporary schemas
+I220131 20:34:46.252896 3286 sql/temporary_schema.go:558  [nsql1] 238  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:46.252912 3286 sql/temporary_schema.go:559  [nsql1] 239  completed temporary object cleanup job
+I220131 20:34:46.252924 3286 sql/temporary_schema.go:642  [nsql1] 240  temporary object cleaner next scheduled to run at 2022-01-31 21:04:46.251766 +0000 UTC
+I220131 20:34:46.259342 3322 server/settingswatcher/settings_watcher.go:222  [nsql1,rangefeed=settings] 241  set cluster version to: 21.2-50
+I220131 20:34:46.268194 3321 spanconfig/spanconfigmanager/manager.go:147  [nsql1] 242  started auto span config reconciliation job
+I220131 20:34:46.268234 3369 jobs/adopt.go:240  [nsql1] 243  job 732662616092835841: resuming execution
+I220131 20:34:46.274587 3373 jobs/registry.go:1093  [nsql1] 244  AUTO SPAN CONFIG RECONCILIATION job 732662616092835841: stepping through state running with error: <nil>
+I220131 20:34:46.342176 3309 util/log/event_log.go:32  [nsql1,intExec=optInToDiagnosticsStatReporting] 245 ={"Timestamp":1643661286261385000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:46.361195 3737 util/log/event_log.go:32  [nsql1,intExec=initializeClusterSecret] 246 ={"Timestamp":1643661286357672000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"db61a1a9-c858-43eb-85bb-6d4b7515925d"}
+I220131 20:34:46.367770 3744 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 247 ={"Timestamp":1643661286362939000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:46.375685 3230 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 248 ={"Timestamp":1643661286367999000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:46.392050 3373 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [nsql1,job=732662616092835841] 249  established range feed over system.descriptors starting at time 1643661286.278922000,0
+I220131 20:34:46.392140 3373 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [nsql1,job=732662616092835841] 250  established range feed over system.zones starting at time 1643661286.278922000,0
+I220131 20:34:46.393493 3122 server/server_sql.go:1170  [nsql1] 251  done ensuring all necessary startup migrations have run
+I220131 20:34:46.393546 3122 1@server/server.go:2517  [nsql1] 252  serving sql connections
+I220131 20:34:46.393567 3945 jobs/job_scheduler.go:357  [nsql1] 253  waiting 3m0s before scheduled jobs daemon start
+I220131 20:34:46.402377 3928 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54607,user=root] 254 ={"Timestamp":1643661286399379000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+=== RUN   TestSchedulesProtectedTimestamp/system-tenant
+I220131 20:34:46.433382 4068 util/log/event_log.go:32  [n1,client=127.0.0.1:54608,user=root] 255 ={"Timestamp":1643661286431449000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+I220131 20:34:46.463654 2261 testutils/testcluster/testcluster.go:107  [-] 256  TestCluster quiescing nodes
+W220131 20:34:46.463727 2792 jobs/registry.go:765  [n1] 257  canceling all adopted jobs due to stopper quiescing
+W220131 20:34:46.463813 4180 kv/kvserver/intentresolver/intent_resolver.go:793  [-] 258  failed to gc transaction record: could not GC completed transaction anchored at /Table/31/1/1/0: node unavailable; try another peer
+I220131 20:34:46.463822 2409 2@rpc/pkg/rpc/context.go:817  [n1] 259  closing [{n1: 127.0.0.1:54594 (default)}]
+W220131 20:34:46.463863 2635 sql/sqlliveness/slinstance/slinstance.go:224  [n1] 260  exiting heartbeat loop
+I220131 20:34:46.463895 2409 2@rpc/pkg/rpc/context.go:817  [n1] 261  closing [{n0: 127.0.0.1:54594 (default)}]
+I220131 20:34:46.463906 2989 2@rpc/pkg/rpc/context.go:817  [n1] 262  closing [{n1: 127.0.0.1:54594 (default)} {n0: 127.0.0.1:54594 (default)}]
+I220131 20:34:46.464021 2886 jobs/registry.go:1093  [n1] 263  AUTO SPAN CONFIG RECONCILIATION job 732662615634903041: stepping through state succeeded with error: <nil>
+W220131 20:34:46.464114 2886 kv/txn.go:712  [n1] 265  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.464062 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 264  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.464282 2888 kv/txn.go:712  [n1,job=732662615634903041] 266  failure aborting transaction: node unavailable; try another peer; abort caused by: failed to read metadata: protectedts-GetMetadata: context canceled
+W220131 20:34:46.464360 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 268  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267  failed to load protected timestamp records: failed to read metadata: protectedts-GetMetadata: context canceled
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +(1) attached stack trace
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  -- stack trace:
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:301
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | [...repeated from below...]
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +Wraps: (2) failed to read metadata
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +Wraps: (3) attached stack trace
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  -- stack trace:
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal.func1.1
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:676
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next.func1
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:276
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:283
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).queryInternalBuffered
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:433
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowExWithCols
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:485
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowEx
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:471
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:297
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetState
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:318
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile.func1
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:126
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn.func1
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:874
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv.(*Txn).exec
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/txn.go:972
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:873
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:855
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:124
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).run
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:109
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).StartReconciler.func1
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:80
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | runtime.goexit
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +  | 	GOROOT/src/runtime/asm_amd64.s:1581
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +Wraps: (4) protectedts-GetMetadata
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +Wraps: (5) context canceled
+E220131 20:34:46.464331 2888 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662615634903041] 267 +Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *errors.errorString
+W220131 20:34:46.464555 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 269  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.464739 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 270  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.464950 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 271  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.465151 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 272  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.465348 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 273  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.465566 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 274  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.465751 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 275  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.465916 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 276  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.466109 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 277  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.466286 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 278  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.466469 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 279  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.466659 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 280  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.466848 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 281  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467023 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 282  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467201 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 283  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467373 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 284  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467543 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 285  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467709 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 286  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.467885 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 287  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468055 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 288  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468224 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 289  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468418 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 290  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468591 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 291  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468777 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 292  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.468954 3199 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 293  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+I220131 20:34:46.469116 3207 2@rpc/pkg/rpc/context.go:817  [nsql1] 294  closing [{n0: 127.0.0.1:54594 (system)}]
+W220131 20:34:46.469144 3199 ccl/kvccl/kvtenantccl/connector.go:172  [nsql1,tenant-connector] 295  error issuing GossipSubscription RPC: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing cannot reuse client connection"
+I220131 20:34:46.469216 4323 2@rpc/pkg/rpc/context.go:1211  [nsql1,rnode=63,raddr=127.0.0.1:54594,class=system] 296  dialing
+W220131 20:34:46.469461 4323 ccl/kvccl/kvtenantccl/connector.go:531  [nsql1,tenant-connector] 297  error dialing tenant KV address 127.0.0.1:54594: initial connection heartbeat failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing dial tcp 127.0.0.1:54594: connect: connection refused"
+W220131 20:34:46.470769 3318 jobs/registry.go:765  [nsql1] 299  canceling all adopted jobs due to stopper quiescing
+I220131 20:34:46.470737 4326 2@rpc/pkg/rpc/context.go:817  [nsql1] 298  closing [{n0: 127.0.0.1:54594 (system)}]
+I220131 20:34:46.470781 3212 2@rpc/pkg/rpc/context.go:817  [nsql1] 300  closing [{n1: 127.0.0.1:54594 (default)} {n0: 127.0.0.1:54594 (default)}]
+W220131 20:34:46.470799 3266 sql/sqlliveness/slinstance/slinstance.go:224  [nsql1] 301  exiting heartbeat loop
+I220131 20:34:46.470830 3373 jobs/registry.go:1093  [nsql1] 302  AUTO SPAN CONFIG RECONCILIATION job 732662616092835841: stepping through state succeeded with error: <nil>
+W220131 20:34:46.470925 3373 kv/txn.go:712  [nsql1] 303  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.471120 3459 kv/txn.go:712  [nsql1,job=732662616092835841] 304  failure aborting transaction: node unavailable; try another peer; abort caused by: lookup-schedule: context canceled
+E220131 20:34:46.471167 3459 kv/kvserver/protectedts/ptreconcile/reconciler.go:157  [nsql1,job=732662616092835841] 305  failed to reconcile protected timestamp with id a97f005e-9ff4-4d43-ad3d-e5ab079562a4: lookup-schedule: context canceled
+--- PASS: TestSchedulesProtectedTimestamp (0.42s)
+    --- PASS: TestSchedulesProtectedTimestamp/secondary-tenant (0.26s)
+    --- PASS: TestSchedulesProtectedTimestamp/system-tenant (0.04s)
+PASS
+================================================================================
+PASSED: //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsprotectedtsccl_test (see /private/var/tmp/_bazel_adityamaru/2592a7600a28e43d0b132c217219adf9/execroot/cockroach/bazel-out/darwin-fastbuild/testlogs/pkg/ccl/jobsccl/jobsprotectedtsccl/jobsprotectedtsccl_test/test.log)
+INFO: From Testing //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsprotectedtsccl_test
+==================== Test output for //pkg/ccl/jobsccl/jobsprotectedtsccl:jobsprotectedtsccl_test:
+initialized metamorphic constant "span-reuse-rate" with value 42
+initialized metamorphic constant "kv.rangefeed.use_dedicated_connection_class.enabled" with value true
+initialized metamorphic constant "coldata-batch-size" with value 966
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 12
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 3904075
+initialized metamorphic constant "max-batch-size" with value 3474
+initialized metamorphic constant "max-batch-byte-size" with value 22162735
+initialized metamorphic constant "async-IE-result-channel-buffer-size" with value 27
+initialized metamorphic constant "span-reuse-rate" with value 88
+initialized metamorphic constant "kv.rangefeed.use_dedicated_connection_class.enabled" with value true
+initialized metamorphic constant "coldata-batch-size" with value 2126
+initialized metamorphic constant "kv-batch-size" with value 1
+initialized metamorphic constant "datum-row-converter-batch-size" with value 1
+initialized metamorphic constant "row-container-rows-per-chunk-shift" with value 1
+initialized metamorphic constant "spilling-queue-initial-len" with value 10
+initialized metamorphic constant "merge-joiner-groups-buffer" with value 7
+initialized metamorphic constant "ColIndexJoin-batch-size" with value 1402333
+I220131 20:34:44.509237 1 (gostd) rand.go:147  [-] 1  random seed: 8969723084316868454
+=== RUN   TestJobsProtectedTimestamp
+I220131 20:34:44.512091 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 2  [JOB 1] MANIFEST created 000001
+I220131 20:34:44.512246 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 3  [JOB 1] WAL created 000002
+I220131 20:34:44.512416 30 server/config.go:654  [n?] 4  1 storage engine initialized
+I220131 20:34:44.512450 30 server/config.go:657  [n?] 5  Pebble cache size: 128 MiB
+I220131 20:34:44.512518 30 server/config.go:657  [n?] 6  store 0: in-memory, size 512 MiB
+I220131 20:34:44.512439 68 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,s?] 7  [JOB 2] all initial table stats loaded
+I220131 20:34:44.514895 30 1@rpc/pkg/rpc/tls.go:267  [n?] 8  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:44.514938 30 1@rpc/pkg/rpc/tls.go:316  [n?] 9  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:44.532642 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 10  [JOB 1] MANIFEST created 000001
+I220131 20:34:44.532786 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 11  [JOB 1] WAL created 000002
+I220131 20:34:44.532929 90 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,stemp] 12  [JOB 2] all initial table stats loaded
+I220131 20:34:44.558381 30 1@server/server.go:1049  [n?] 13  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I220131 20:34:44.558865 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 14  upgraded to format version: 002
+I220131 20:34:44.558936 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 15  upgraded to format version: 003
+I220131 20:34:44.558958 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 16  upgraded to format version: 004
+I220131 20:34:44.559278 30 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 17  upgraded to format version: 005
+I220131 20:34:44.562916 30 server/init.go:197  [n?] 18  no stores initialized
+I220131 20:34:44.562995 30 server/init.go:198  [n?] 19  awaiting `cockroach init` or join with an already initialized node
+I220131 20:34:44.563019 30 server/init.go:262  [n?] 20  cluster b43444d2-36bd-4471-8ec8-0408e47b0c63 has been created
+I220131 20:34:44.563047 30 server/init.go:263  [n?] 21  allocated node ID: n1 (for self)
+I220131 20:34:44.563065 30 server/init.go:264  [n?] 22  active cluster version: 21.2-50
+W220131 20:34:44.563137 30 1@gossip/pkg/gossip/gossip.go:1472  [n1] 23  no addresses found; use --join to specify a connected node
+I220131 20:34:44.563128 184 1@server/server.go:1616  [n1] 24  connecting to gossip network to verify cluster ID "b43444d2-36bd-4471-8ec8-0408e47b0c63"
+I220131 20:34:44.563184 30 gossip/pkg/gossip/gossip.go:401  [n1] 25  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:54563" > attrs:<> locality:<tiers:<key:"region" value:"test" > tiers:<key:"dc" value:"dc1" > > ServerVersion:<major_val:21 minor_val:2 patch:0 internal:50 > build_tag:"v22.1.0-alpha.1-602-g158f05c900-dirty" started_at:1643661284563177000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:54565" >
+I220131 20:34:44.566137 30 server/node.go:451  [n1] 26  initialized store s1
+I220131 20:34:44.566166 184 1@server/server.go:1619  [n1] 27  node connected via gossip
+I220131 20:34:44.566191 30 kv/kvserver/pkg/kv/kvserver/stores.go:250  [n1] 28  read 0 node addresses from persistent storage
+I220131 20:34:44.566300 30 server/node.go:528  [n1] 29  started with engine type 2
+I220131 20:34:44.566337 30 server/node.go:530  [n1] 30  started with attributes []
+I220131 20:34:44.566445 30 1@server/server.go:1761  [n1] 31  starting https server at 127.0.0.1:54564 (use: 127.0.0.1:54564)
+I220131 20:34:44.566489 30 1@server/server.go:1766  [n1] 32  starting postgres server at 127.0.0.1:54565 (use: 127.0.0.1:54565)
+I220131 20:34:44.566526 30 1@server/server.go:1768  [n1] 33  starting grpc server at 127.0.0.1:54563
+I220131 20:34:44.566568 30 1@server/server.go:1769  [n1] 34  advertising CockroachDB node at 127.0.0.1:54563
+W220131 20:34:44.604700 14 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Meta2/Table/20/NULL] 35  range lookup of key /Meta2/Table/20/NULL found only non-matching ranges []; retrying
+W220131 20:34:44.606003 13 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Table/20] 36  range lookup of key /Table/20 found only non-matching ranges []; retrying
+I220131 20:34:44.627874 30 1@util/log/event_log.go:32  [n1] 37 ={"Timestamp":1643661284627869000,"EventType":"node_join","NodeID":1,"StartedAt":1643661284563177000,"LastUp":1643661284563177000}
+I220131 20:34:44.628008 30 sql/sqlliveness/slinstance/slinstance.go:300  [n1] 38  starting SQL liveness instance
+I220131 20:34:44.628478 418 spanconfig/spanconfigkvsubscriber/kvsubscriber.go:323  [n1] 39  established range feed over system.span_configurations starting at time 1643661284.628310000,0
+I220131 20:34:44.629711 157 sql/temporary_schema.go:510  [n1] 40  running temporary object cleanup background job
+I220131 20:34:44.629875 394 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [n1] 41  starting sql-stats-worker with initial delay: 9m46.665119024s
+I220131 20:34:44.630195 157 sql/temporary_schema.go:555  [n1] 43  found 0 temporary schemas
+I220131 20:34:44.630236 157 sql/temporary_schema.go:558  [n1] 44  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:44.630270 157 sql/temporary_schema.go:559  [n1] 45  completed temporary object cleanup job
+I220131 20:34:44.630166 133 sql/sqlliveness/slstorage/slstorage.go:406  [n1] 42  inserted sqlliveness session 733880923b514a00be89f10dac26c70d
+I220131 20:34:44.630306 157 sql/temporary_schema.go:642  [n1] 46  temporary object cleaner next scheduled to run at 2022-01-31 21:04:44.629667 +0000 UTC
+I220131 20:34:44.630361 133 sql/sqlliveness/slinstance/slinstance.go:187  [n1] 47  created new SQL liveness session 733880923b514a00be89f10dac26c70d
+I220131 20:34:44.634403 431 kv/kvserver/pkg/kv/kvserver/replica_rangefeed.go:685  [n1,rangefeed=lease,s1,r6/1:/Table/{SystemCon…-11}] 48  RangeFeed closed timestamp is empty
+I220131 20:34:44.638349 590 spanconfig/spanconfigmanager/manager.go:147  [n1] 49  started auto span config reconciliation job
+I220131 20:34:44.638394 660 jobs/adopt.go:240  [n1] 50  job 732662610769739777: resuming execution
+I220131 20:34:44.638764 611 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 51 ={"Timestamp":1643661284635156000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:44.641207 170 migration/migrationmanager/manager.go:110  [n1,intExec=set-setting,migration-mgr] 52  no need to migrate, cluster already at newest version
+I220131 20:34:44.642144 170 util/log/event_log.go:32  [n1,intExec=set-setting] 53 ={"Timestamp":1643661284640495000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'21.2-50'"],"SettingName":"version","Value":"21.2-50"}
+I220131 20:34:44.642868 663 jobs/registry.go:1093  [n1] 54  AUTO SPAN CONFIG RECONCILIATION job 732662610769739777: stepping through state running with error: <nil>
+I220131 20:34:44.649631 303 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 55  [JOB 3] WAL created 000004
+I220131 20:34:44.652466 624 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 56 ={"Timestamp":1643661284649909000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"18af8933-8cb5-4900-99f8-4a5d3d3b2f43"}
+I220131 20:34:44.658538 724 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 57 ={"Timestamp":1643661284653490000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:44.661611 755 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 58 ={"Timestamp":1643661284658736000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:44.673539 30 server/server_sql.go:1170  [n1] 59  done ensuring all necessary startup migrations have run
+I220131 20:34:44.673677 825 jobs/job_scheduler.go:357  [n1] 60  waiting 4m0s before scheduled jobs daemon start
+I220131 20:34:44.675550 827 server/auto_upgrade.go:55  [n1] 61  no need to upgrade, cluster already at the newest version
+I220131 20:34:44.682545 266 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 62  [JOB 4] WAL created 000005
+I220131 20:34:44.683516 30 1@server/server.go:2517  [n1] 63  serving sql connections
+I220131 20:34:44.686777 30 testutils/testcluster/testcluster.go:1163  [-] 64  WaitForFullReplication
+I220131 20:34:44.686809 30 testutils/testcluster/testcluster.go:1167  [-] 65  WaitForFullReplication took: 1µs
+I220131 20:34:44.686857 30 2@rpc/pkg/rpc/context.go:1211  [n1,rnode=1,raddr=127.0.0.1:54563,class=default] 66  dialing
+=== RUN   TestJobsProtectedTimestamp/secondary-tenant
+I220131 20:34:44.720128 869 kv/kvserver/pkg/kv/kvserver/replica_command.go:400  [n1,s1,r43/1:/{Table/47-Max}] 67  initiating a split of this range at key /Tenant/10 [r44] (manual)
+I220131 20:34:44.720337 663 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [n1,job=732662610769739777] 68  established range feed over system.descriptors starting at time 1643661284.648301000,0
+I220131 20:34:44.720423 663 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [n1,job=732662610769739777] 69  established range feed over system.zones starting at time 1643661284.648301000,0
+I220131 20:34:44.722286 283 kv/kvserver/tenantrate/factory.go:98  [n1,s1,r44/1:{-}] 70  tenant 10 rate limiter initialized (rate: 3200 RU/s; burst: 32000 RU)
+I220131 20:34:45.468407 868 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [nsql?,pebble,s?] 71  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.468515 868 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [nsql?,pebble,s?] 72  [JOB 1] WAL created 000002
+I220131 20:34:45.468633 1253 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [nsql?,pebble,stemp] 73  [JOB 2] all initial table stats loaded
+I220131 20:34:45.484622 985 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=63,raddr=127.0.0.1:54563,class=system] 74  dialing
+I220131 20:34:45.491689 868 sql/sqlliveness/slinstance/slinstance.go:300  [nsql?] 75  starting SQL liveness instance
+I220131 20:34:45.491924 1224 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54563,class=rangefeed] 77  dialing
+I220131 20:34:45.491905 1165 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54563,class=default] 76  dialing
+I220131 20:34:45.497279 1165 sql/sqlliveness/slstorage/slstorage.go:406  [nsql?] 78  inserted sqlliveness session d8d1a6b9a1d34801a3d1f6fb000341d8
+I220131 20:34:45.497319 1165 sql/sqlliveness/slinstance/slinstance.go:187  [nsql?] 79  created new SQL liveness session d8d1a6b9a1d34801a3d1f6fb000341d8
+I220131 20:34:45.498434 868 1@sql/sqlinstance/instanceprovider/instanceprovider.go:118  [nsql?] 80  created SQL instance 1
+I220131 20:34:45.498520 1319 sql/temporary_schema.go:510  [nsql1] 81  running temporary object cleanup background job
+I220131 20:34:45.498545 1321 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [nsql1] 82  starting sql-stats-worker with initial delay: 9m58.006616632s
+I220131 20:34:45.499500 1319 sql/temporary_schema.go:555  [nsql1] 83  found 0 temporary schemas
+I220131 20:34:45.499539 1319 sql/temporary_schema.go:558  [nsql1] 84  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:45.499557 1319 sql/temporary_schema.go:559  [nsql1] 85  completed temporary object cleanup job
+I220131 20:34:45.499573 1319 sql/temporary_schema.go:642  [nsql1] 86  temporary object cleaner next scheduled to run at 2022-01-31 21:04:45.498497 +0000 UTC
+I220131 20:34:45.501469 10 util/admission/granter.go:873  [n1] 87  CPULoad switching to period 250ms
+I220131 20:34:45.505037 1369 server/settingswatcher/settings_watcher.go:222  [nsql1,rangefeed=settings] 88  set cluster version to: 21.2-50
+I220131 20:34:45.510095 1368 spanconfig/spanconfigmanager/manager.go:147  [nsql1] 89  started auto span config reconciliation job
+I220131 20:34:45.510146 1400 jobs/adopt.go:240  [nsql1] 90  job 732662613620490241: resuming execution
+I220131 20:34:45.514857 635 jobs/registry.go:1093  [nsql1] 91  AUTO SPAN CONFIG RECONCILIATION job 732662613620490241: stepping through state running with error: <nil>
+I220131 20:34:45.582959 1382 util/log/event_log.go:32  [nsql1,intExec=optInToDiagnosticsStatReporting] 92 ={"Timestamp":1643661285507083000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:45.597346 1761 util/log/event_log.go:32  [nsql1,intExec=initializeClusterSecret] 93 ={"Timestamp":1643661285594397000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"45aaf437-03b9-4c72-8b5e-65f480beba91"}
+I220131 20:34:45.603419 1829 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 94 ={"Timestamp":1643661285598965000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:45.608484 1866 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 95 ={"Timestamp":1643661285603633000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:45.626508 868 server/server_sql.go:1170  [nsql1] 96  done ensuring all necessary startup migrations have run
+I220131 20:34:45.626579 868 1@server/server.go:2517  [nsql1] 97  serving sql connections
+I220131 20:34:45.626597 1964 jobs/job_scheduler.go:357  [nsql1] 98  waiting 2m0s before scheduled jobs daemon start
+I220131 20:34:45.630387 635 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [nsql1,job=732662613620490241] 99  established range feed over system.descriptors starting at time 1643661285.518928000,0
+I220131 20:34:45.630446 635 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [nsql1,job=732662613620490241] 100  established range feed over system.zones starting at time 1643661285.518928000,0
+I220131 20:34:45.638298 2026 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54576,user=root] 101 ={"Timestamp":1643661285635345000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.closed_timestamp.target_duration\" = '100ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.closed_timestamp.target_duration","Value":"00:00:00.1"}
+I220131 20:34:45.641136 2026 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54576,user=root] 102 ={"Timestamp":1643661285638487000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+=== RUN   TestJobsProtectedTimestamp/system-tenant
+I220131 20:34:45.680621 2145 util/log/event_log.go:32  [n1,client=127.0.0.1:54577,user=root] 103 ={"Timestamp":1643661285677983000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.closed_timestamp.target_duration\" = '100ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.closed_timestamp.target_duration","Value":"00:00:00.1"}
+I220131 20:34:45.684415 2145 util/log/event_log.go:32  [n1,client=127.0.0.1:54577,user=root] 104 ={"Timestamp":1643661285680885000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+I220131 20:34:45.710616 2314 jobs/adopt.go:240  [n1] 105  job 732662614264512513: resuming execution
+I220131 20:34:45.713427 2316 jobs/registry.go:1093  [n1] 106  SCHEMA CHANGE GC job 732662614264512513: stepping through state running with error: <nil>
+I220131 20:34:45.719477 2316 sql/gcjob/gc_job_utils.go:266  [n1,job=732662614264512513] 107  updated progress payload: tables:<id:42 > ranges_unsplit_done:true
+I220131 20:34:45.721331 2316 sql/gcjob/gc_job_utils.go:273  [n1,job=732662614264512513] 108  updated running status: waiting for GC TTL
+I220131 20:34:45.732142 2594 kv/kvserver/pkg/kv/kvserver/replica_command.go:400  [n1,split,s1,r44/1:/{Tenant/10-Max}] 109  initiating a split of this range at key /Tenant/10/Table/4 [r45] (span config)
+I220131 20:34:45.734310 30 testutils/testcluster/testcluster.go:107  [-] 110  TestCluster quiescing nodes
+W220131 20:34:45.734431 587 jobs/registry.go:765  [n1] 111  canceling all adopted jobs due to stopper quiescing
+W220131 20:34:45.734418 2231 kv/kvserver/intentresolver/intent_resolver.go:793  [-] 112  failed to gc transaction record: could not GC completed transaction anchored at /Table/15/1/732662614211690497/0: node unavailable; try another peer
+I220131 20:34:45.734499 781 2@rpc/pkg/rpc/context.go:817  [n1] 113  closing [{n1: 127.0.0.1:54563 (default)} {n0: 127.0.0.1:54563 (default)}]
+W220131 20:34:45.734596 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 114  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.734678 2594 kv/txn.go:712  [n1,split,s1,r44/1:/{Tenant/10-Max}] 115  failure aborting transaction: failed to send RPC: sending to all replicas failed; last error: node unavailable; try another peer; abort caused by: failed to send RPC: sending to all replicas failed; last error: node unavailable; try another peer
+W220131 20:34:45.734758 133 sql/sqlliveness/slinstance/slinstance.go:224  [n1] 116  exiting heartbeat loop
+I220131 20:34:45.734823 663 jobs/registry.go:1093  [n1] 117  AUTO SPAN CONFIG RECONCILIATION job 732662610769739777: stepping through state succeeded with error: <nil>
+E220131 20:34:45.734805 2594 kv/kvserver/pkg/kv/kvserver/queue.go:1095  [n1,split,s1,r44/1:/{Tenant/10-Max}] 118  unable to split [n1,s1,r44/1:/{Tenant/10-Max}] at key "/Tenant/10/Table/4": split at key /Tenant/10/Table/4 failed: failed to send RPC: sending to all replicas failed; last error: node unavailable; try another peer
+W220131 20:34:45.734880 663 kv/txn.go:712  [n1] 119  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:45.734958 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 120  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.735143 677 kv/txn.go:712  [n1,job=732662610769739777] 121  failure aborting transaction: node unavailable; try another peer; abort caused by: failed to read metadata: protectedts-GetMetadata: context canceled
+W220131 20:34:45.735166 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 122  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123  failed to load protected timestamp records: failed to read metadata: protectedts-GetMetadata: context canceled
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +(1) attached stack trace
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  -- stack trace:
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:301
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | [...repeated from below...]
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +Wraps: (2) failed to read metadata
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +Wraps: (3) attached stack trace
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  -- stack trace:
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal.func1.1
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:676
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next.func1
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:276
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:283
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).queryInternalBuffered
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:433
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowExWithCols
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:485
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowEx
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:471
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:297
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetState
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:318
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile.func1
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:126
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn.func1
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:874
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv.(*Txn).exec
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/txn.go:972
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:873
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:855
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:124
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).run
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:109
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).StartReconciler.func1
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:80
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | runtime.goexit
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +  | 	GOROOT/src/runtime/asm_amd64.s:1581
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +Wraps: (4) protectedts-GetMetadata
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +Wraps: (5) context canceled
+E220131 20:34:45.735188 677 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [n1,job=732662610769739777] 123 +Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *errors.errorString
+W220131 20:34:45.735362 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 124  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.735549 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 125  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.735734 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 126  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.735908 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 127  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.736134 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 128  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.736337 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 129  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.736561 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 130  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.736777 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 131  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.736974 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 132  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.737181 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 133  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.737369 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 134  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.737536 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 135  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.737708 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 136  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.737874 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 137  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738042 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 138  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738217 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 139  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738400 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 140  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738575 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 141  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738743 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 142  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.738919 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 143  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.739110 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 144  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.739295 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 145  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.739467 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 146  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.739669 458 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 147  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+I220131 20:34:45.739881 988 2@rpc/pkg/rpc/context.go:817  [nsql1] 148  closing [{n0: 127.0.0.1:54563 (system)}]
+W220131 20:34:45.739890 458 ccl/kvccl/kvtenantccl/connector.go:172  [nsql1,tenant-connector] 149  error issuing GossipSubscription RPC: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing cannot reuse client connection"
+I220131 20:34:45.739998 2863 2@rpc/pkg/rpc/context.go:1211  [nsql1,rnode=63,raddr=127.0.0.1:54563,class=system] 150  dialing
+W220131 20:34:45.740286 2863 ccl/kvccl/kvtenantccl/connector.go:531  [nsql1,tenant-connector] 151  error dialing tenant KV address 127.0.0.1:54563: initial connection heartbeat failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing dial tcp 127.0.0.1:54563: connect: connection refused"
+W220131 20:34:45.741608 1365 jobs/registry.go:765  [nsql1] 152  canceling all adopted jobs due to stopper quiescing
+I220131 20:34:45.741603 2914 2@rpc/pkg/rpc/context.go:817  [nsql1] 153  closing [{n0: 127.0.0.1:54563 (system)}]
+I220131 20:34:45.741640 1227 2@rpc/pkg/rpc/context.go:817  [nsql1] 154  closing [{n1: 127.0.0.1:54563 (rangefeed)} {n0: 127.0.0.1:54563 (rangefeed)}]
+I220131 20:34:45.741673 1214 2@rpc/pkg/rpc/context.go:817  [nsql1] 155  closing [{n1: 127.0.0.1:54563 (default)} {n0: 127.0.0.1:54563 (default)}]
+W220131 20:34:45.741699 1165 sql/sqlliveness/slinstance/slinstance.go:224  [nsql1] 156  exiting heartbeat loop
+W220131 20:34:45.741690 635 kv/txn.go:712  [nsql1,job=732662613620490241] 157  failure aborting transaction: node unavailable; try another peer; abort caused by: failed to send RPC: sending to all replicas failed; last error: routing information detected to be stale: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:45.742147 1490 kv/txn.go:712  [nsql1,job=732662613620490241] 158  failure aborting transaction: node unavailable; try another peer; abort caused by: txn already encountered an error; cannot be used anymore (previous err: failed to send RPC: sending to all replicas failed; last error: rpc error: code = Unknown desc = node unavailable; try another peer)
+E220131 20:34:45.742201 1490 kv/kvserver/protectedts/ptreconcile/reconciler.go:157  [nsql1,job=732662613620490241] 159  failed to reconcile protected timestamp with id d48df1f5-5e7e-43d1-96ea-be48fa5c7632: txn already encountered an error; cannot be used anymore (previous err: failed to send RPC: sending to all replicas failed; last error: rpc error: code = Unknown desc = node unavailable; try another peer)
+--- PASS: TestJobsProtectedTimestamp (1.24s)
+    --- PASS: TestJobsProtectedTimestamp/secondary-tenant (0.98s)
+    --- PASS: TestJobsProtectedTimestamp/system-tenant (0.06s)
+=== RUN   TestSchedulesProtectedTimestamp
+I220131 20:34:45.758173 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 160  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.758254 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 161  [JOB 1] WAL created 000002
+I220131 20:34:45.758332 577 server/config.go:654  [n?] 162  1 storage engine initialized
+I220131 20:34:45.758351 577 server/config.go:657  [n?] 163  Pebble cache size: 128 MiB
+I220131 20:34:45.758363 577 server/config.go:657  [n?] 164  store 0: in-memory, size 512 MiB
+I220131 20:34:45.758352 2933 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,s?] 165  [JOB 2] all initial table stats loaded
+I220131 20:34:45.760045 577 1@rpc/pkg/rpc/tls.go:267  [n?] 166  server certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:45.760073 577 1@rpc/pkg/rpc/tls.go:316  [n?] 167  web UI certificate addresses: IP=127.0.0.1,::1; DNS=localhost,*.local; CN=node
+I220131 20:34:45.771171 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [n?,pebble,s?] 168  [JOB 1] MANIFEST created 000001
+I220131 20:34:45.771314 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n?,pebble,s?] 169  [JOB 1] WAL created 000002
+I220131 20:34:45.771515 2965 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [n?,pebble,stemp] 170  [JOB 2] all initial table stats loaded
+I220131 20:34:45.795448 577 1@server/server.go:1049  [n?] 171  monitoring forward clock jumps based on server.clock.forward_jump_check_enabled
+I220131 20:34:45.796047 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 172  upgraded to format version: 002
+I220131 20:34:45.796201 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 173  upgraded to format version: 003
+I220131 20:34:45.796223 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 174  upgraded to format version: 004
+I220131 20:34:45.796533 577 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:645  [n?,pebble,s?] 175  upgraded to format version: 005
+I220131 20:34:45.800068 577 server/init.go:197  [n?] 176  no stores initialized
+I220131 20:34:45.800127 577 server/init.go:198  [n?] 177  awaiting `cockroach init` or join with an already initialized node
+I220131 20:34:45.800161 577 server/init.go:262  [n?] 178  cluster ad921ecd-2907-41eb-9bb5-e033115035e9 has been created
+I220131 20:34:45.800182 577 server/init.go:263  [n?] 179  allocated node ID: n1 (for self)
+I220131 20:34:45.800196 577 server/init.go:264  [n?] 180  active cluster version: 21.2-50
+W220131 20:34:45.800259 577 1@gossip/pkg/gossip/gossip.go:1472  [n1] 181  no addresses found; use --join to specify a connected node
+I220131 20:34:45.800259 2942 1@server/server.go:1616  [n1] 182  connecting to gossip network to verify cluster ID "ad921ecd-2907-41eb-9bb5-e033115035e9"
+I220131 20:34:45.800295 577 gossip/pkg/gossip/gossip.go:401  [n1] 183  NodeDescriptor set to node_id:1 address:<network_field:"tcp" address_field:"127.0.0.1:54580" > attrs:<> locality:<tiers:<key:"region" value:"test" > tiers:<key:"dc" value:"dc1" > > ServerVersion:<major_val:21 minor_val:2 patch:0 internal:50 > build_tag:"v22.1.0-alpha.1-602-g158f05c900-dirty" started_at:1643661285800291000 cluster_name:"" sql_address:<network_field:"tcp" address_field:"127.0.0.1:54584" >
+I220131 20:34:45.802596 577 server/node.go:451  [n1] 184  initialized store s1
+I220131 20:34:45.802643 2942 1@server/server.go:1619  [n1] 185  node connected via gossip
+I220131 20:34:45.802653 577 kv/kvserver/pkg/kv/kvserver/stores.go:250  [n1] 186  read 0 node addresses from persistent storage
+I220131 20:34:45.802727 577 server/node.go:528  [n1] 187  started with engine type 2
+I220131 20:34:45.802754 577 server/node.go:530  [n1] 188  started with attributes []
+I220131 20:34:45.802862 577 1@server/server.go:1761  [n1] 189  starting https server at 127.0.0.1:54583 (use: 127.0.0.1:54583)
+I220131 20:34:45.802887 577 1@server/server.go:1766  [n1] 190  starting postgres server at 127.0.0.1:54584 (use: 127.0.0.1:54584)
+I220131 20:34:45.802909 577 1@server/server.go:1768  [n1] 191  starting grpc server at 127.0.0.1:54580
+I220131 20:34:45.802924 577 1@server/server.go:1769  [n1] 192  advertising CockroachDB node at 127.0.0.1:54580
+I220131 20:34:45.805509 3156 spanconfig/spanconfigkvsubscriber/kvsubscriber.go:323  [n1] 193  established range feed over system.span_configurations starting at time 1643661285.805468000,0
+I220131 20:34:45.805952 577 1@util/log/event_log.go:32  [n1] 194 ={"Timestamp":1643661285805950000,"EventType":"node_join","NodeID":1,"StartedAt":1643661285800291000,"LastUp":1643661285800291000}
+I220131 20:34:45.805990 577 sql/sqlliveness/slinstance/slinstance.go:300  [n1] 195  starting SQL liveness instance
+I220131 20:34:45.806652 3252 sql/temporary_schema.go:510  [n1] 196  running temporary object cleanup background job
+I220131 20:34:45.806671 3254 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [n1] 197  starting sql-stats-worker with initial delay: 9m17.324921959s
+I220131 20:34:45.806990 3160 sql/sqlliveness/slstorage/slstorage.go:406  [n1] 198  inserted sqlliveness session 9c09446348b641be93d3ad2294dbde3d
+I220131 20:34:45.807019 3160 sql/sqlliveness/slinstance/slinstance.go:187  [n1] 199  created new SQL liveness session 9c09446348b641be93d3ad2294dbde3d
+I220131 20:34:45.807405 3252 sql/temporary_schema.go:555  [n1] 200  found 0 temporary schemas
+I220131 20:34:45.807449 3252 sql/temporary_schema.go:558  [n1] 201  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:45.807466 3252 sql/temporary_schema.go:559  [n1] 202  completed temporary object cleanup job
+I220131 20:34:45.807478 3252 sql/temporary_schema.go:642  [n1] 203  temporary object cleaner next scheduled to run at 2022-01-31 21:04:45.806627 +0000 UTC
+I220131 20:34:45.811911 3289 kv/kvserver/pkg/kv/kvserver/replica_rangefeed.go:685  [n1,rangefeed=lease,s1,r6/1:/Table/{SystemCon…-11}] 204  RangeFeed closed timestamp is empty
+I220131 20:34:45.816009 3355 spanconfig/spanconfigmanager/manager.go:147  [n1] 205  started auto span config reconciliation job
+I220131 20:34:45.816094 3337 jobs/adopt.go:240  [n1] 206  job 732662614628106241: resuming execution
+I220131 20:34:45.816351 3379 util/log/event_log.go:32  [n1,intExec=optInToDiagnosticsStatReporting] 207 ={"Timestamp":1643661285812440000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:45.818835 3328 migration/migrationmanager/manager.go:110  [n1,intExec=set-setting,migration-mgr] 208  no need to migrate, cluster already at newest version
+I220131 20:34:45.819966 3328 util/log/event_log.go:32  [n1,intExec=set-setting] 209 ={"Timestamp":1643661285818062000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING version = $1","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-set-setting","PlaceholderValues":["'21.2-50'"],"SettingName":"version","Value":"21.2-50"}
+I220131 20:34:45.820447 3366 jobs/registry.go:1093  [n1] 210  AUTO SPAN CONFIG RECONCILIATION job 732662614628106241: stepping through state running with error: <nil>
+I220131 20:34:45.826717 3123 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 211  [JOB 3] WAL created 000004
+I220131 20:34:45.830043 3344 util/log/event_log.go:32  [n1,intExec=initializeClusterSecret] 212 ={"Timestamp":1643661285826788000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"21e8f5df-b6ba-4d93-b93f-ba46ce824e16"}
+I220131 20:34:45.835728 3475 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 213 ={"Timestamp":1643661285832498000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:45.838802 3377 5@util/log/event_log.go:32  [n1,intExec=create-default-DB] 214 ={"Timestamp":1643661285835919000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+W220131 20:34:45.845828 2225 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Meta2/Table/20/NULL] 215  range lookup of key /Meta2/Table/20/NULL found only non-matching ranges []; retrying
+W220131 20:34:45.847253 2224 kv/range_lookup.go:243  [n1,rangefeed=table-stats-cache,range-lookup=/Table/20] 216  range lookup of key /Table/20 found only non-matching ranges []; retrying
+I220131 20:34:45.849653 577 server/server_sql.go:1170  [n1] 217  done ensuring all necessary startup migrations have run
+I220131 20:34:45.849735 3503 jobs/job_scheduler.go:357  [n1] 218  waiting 4m0s before scheduled jobs daemon start
+I220131 20:34:45.850909 3505 server/auto_upgrade.go:55  [n1] 219  no need to upgrade, cluster already at the newest version
+I220131 20:34:45.857011 3093 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [n1,pebble,s1] 220  [JOB 4] WAL created 000005
+I220131 20:34:45.857989 577 1@server/server.go:2517  [n1] 221  serving sql connections
+I220131 20:34:45.859319 577 testutils/testcluster/testcluster.go:1163  [-] 222  WaitForFullReplication
+I220131 20:34:45.859343 577 testutils/testcluster/testcluster.go:1167  [-] 223  WaitForFullReplication took: 0s
+I220131 20:34:45.859376 577 2@rpc/pkg/rpc/context.go:1211  [n1,rnode=1,raddr=127.0.0.1:54580,class=default] 224  dialing
+=== RUN   TestSchedulesProtectedTimestamp/secondary-tenant
+I220131 20:34:46.016564 3366 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [n1,job=732662614628106241] 225  established range feed over system.descriptors starting at time 1643661285.825910000,0
+I220131 20:34:46.016643 3366 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [n1,job=732662614628106241] 226  established range feed over system.zones starting at time 1643661285.825910000,0
+I220131 20:34:46.022183 3540 kv/kvserver/pkg/kv/kvserver/replica_command.go:400  [n1,s1,r43/1:/{Table/47-Max}] 227  initiating a split of this range at key /Tenant/10 [r44] (manual)
+I220131 20:34:46.024430 3036 kv/kvserver/tenantrate/factory.go:98  [n1,s1,r44/1:{-}] 228  tenant 10 rate limiter initialized (rate: 3200 RU/s; burst: 32000 RU)
+I220131 20:34:46.038852 3539 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:649  [nsql?,pebble,s?] 229  [JOB 1] MANIFEST created 000001
+I220131 20:34:46.038959 3539 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:677  [nsql?,pebble,s?] 230  [JOB 1] WAL created 000002
+I220131 20:34:46.039102 3711 3@github.com/cockroachdb/pebble/external/com_github_cockroachdb_pebble/event.go:669  [nsql?,pebble,stemp] 231  [JOB 2] all initial table stats loaded
+I220131 20:34:46.062967 3671 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=63,raddr=127.0.0.1:54580,class=system] 232  dialing
+I220131 20:34:46.069148 3539 sql/sqlliveness/slinstance/slinstance.go:300  [nsql?] 233  starting SQL liveness instance
+I220131 20:34:46.069433 3543 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54580,class=rangefeed] 234  dialing
+I220131 20:34:46.069913 3688 2@rpc/pkg/rpc/context.go:1211  [nsql?,rnode=1,raddr=127.0.0.1:54580,class=default] 235  dialing
+I220131 20:34:46.075074 3687 sql/sqlliveness/slstorage/slstorage.go:406  [nsql?] 236  inserted sqlliveness session bb4b7e20bfae4802ac00363c26b5db1d
+I220131 20:34:46.075129 3687 sql/sqlliveness/slinstance/slinstance.go:187  [nsql?] 237  created new SQL liveness session bb4b7e20bfae4802ac00363c26b5db1d
+I220131 20:34:46.076254 3539 1@sql/sqlinstance/instanceprovider/instanceprovider.go:118  [nsql?] 238  created SQL instance 1
+I220131 20:34:46.076327 3816 sql/temporary_schema.go:510  [nsql1] 239  running temporary object cleanup background job
+I220131 20:34:46.076340 3818 sql/sqlstats/persistedsqlstats/pkg/sql/sqlstats/persistedsqlstats/provider.go:137  [nsql1] 240  starting sql-stats-worker with initial delay: 9m51.23687692s
+I220131 20:34:46.077215 3816 sql/temporary_schema.go:555  [nsql1] 241  found 0 temporary schemas
+I220131 20:34:46.077243 3816 sql/temporary_schema.go:558  [nsql1] 242  early exiting temporary schema cleaner as no temporary schemas were found
+I220131 20:34:46.077262 3816 sql/temporary_schema.go:559  [nsql1] 243  completed temporary object cleanup job
+I220131 20:34:46.077277 3816 sql/temporary_schema.go:642  [nsql1] 244  temporary object cleaner next scheduled to run at 2022-01-31 21:04:46.076311 +0000 UTC
+I220131 20:34:46.082863 3809 server/settingswatcher/settings_watcher.go:222  [nsql1,rangefeed=settings] 245  set cluster version to: 21.2-50
+I220131 20:34:46.088127 3808 spanconfig/spanconfigmanager/manager.go:147  [nsql1] 246  started auto span config reconciliation job
+I220131 20:34:46.088180 3913 jobs/adopt.go:240  [nsql1] 247  job 732662615515136001: resuming execution
+I220131 20:34:46.095615 3774 jobs/registry.go:1093  [nsql1] 248  AUTO SPAN CONFIG RECONCILIATION job 732662615515136001: stepping through state running with error: <nil>
+I220131 20:34:46.163572 3907 util/log/event_log.go:32  [nsql1,intExec=optInToDiagnosticsStatReporting] 249 ={"Timestamp":1643661286084751000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"diagnostics.reporting.enabled\" = true","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-optInToDiagnosticsStatReporting","SettingName":"diagnostics.reporting.enabled","Value":"true"}
+I220131 20:34:46.179435 3951 util/log/event_log.go:32  [nsql1,intExec=initializeClusterSecret] 250 ={"Timestamp":1643661286176518000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"cluster.secret\" = gen_random_uuid()::STRING","Tag":"SET CLUSTER SETTING","User":"root","ApplicationName":"$ internal-initializeClusterSecret","SettingName":"cluster.secret","Value":"cbd31f99-2aee-4a75-b2e3-5a2a3979a93f"}
+I220131 20:34:46.185189 4271 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 251 ={"Timestamp":1643661286181075000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS defaultdb","Tag":"CREATE DATABASE","User":"root","DescriptorID":50,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"defaultdb"}
+I220131 20:34:46.189346 4327 5@util/log/event_log.go:32  [nsql1,intExec=create-default-DB] 252 ={"Timestamp":1643661286185355000,"EventType":"create_database","Statement":"CREATE DATABASE IF NOT EXISTS postgres","Tag":"CREATE DATABASE","User":"root","DescriptorID":52,"ApplicationName":"$ internal-create-default-DB","DatabaseName":"postgres"}
+I220131 20:34:46.207492 3539 server/server_sql.go:1170  [nsql1] 253  done ensuring all necessary startup migrations have run
+I220131 20:34:46.207557 3539 1@server/server.go:2517  [nsql1] 254  serving sql connections
+I220131 20:34:46.207575 4469 jobs/job_scheduler.go:357  [nsql1] 255  waiting 4m0s before scheduled jobs daemon start
+I220131 20:34:46.209336 3774 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:264  [nsql1,job=732662615515136001] 256  established range feed over system.descriptors starting at time 1643661286.099607000,0
+I220131 20:34:46.209416 3774 spanconfig/spanconfigsqlwatcher/sqlwatcher.go:320  [nsql1,job=732662615515136001] 257  established range feed over system.zones starting at time 1643661286.099607000,0
+I220131 20:34:46.216929 4363 util/log/event_log.go:32  [nsql1,client=127.0.0.1:54600,user=root] 258 ={"Timestamp":1643661286213651000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+=== RUN   TestSchedulesProtectedTimestamp/system-tenant
+I220131 20:34:46.248067 4591 util/log/event_log.go:32  [n1,client=127.0.0.1:54604,user=root] 259 ={"Timestamp":1643661286246105000,"EventType":"set_cluster_setting","Statement":"SET CLUSTER SETTING \"kv.protectedts.reconciliation.interval\" = '1ms'","Tag":"SET CLUSTER SETTING","User":"root","SettingName":"kv.protectedts.reconciliation.interval","Value":"00:00:00.001"}
+I220131 20:34:46.281725 577 testutils/testcluster/testcluster.go:107  [-] 260  TestCluster quiescing nodes
+W220131 20:34:46.281825 3160 sql/sqlliveness/slinstance/slinstance.go:224  [n1] 261  exiting heartbeat loop
+W220131 20:34:46.281821 3494 kv/kvserver/intentresolver/intent_resolver.go:793  [-] 262  failed to gc transaction record: could not GC completed transaction anchored at /Table/SystemConfigSpan/Start: node unavailable; try another peer
+W220131 20:34:46.281894 3352 jobs/registry.go:765  [n1] 263  canceling all adopted jobs due to stopper quiescing
+I220131 20:34:46.281892 3582 2@rpc/pkg/rpc/context.go:817  [n1] 264  closing [{n1: 127.0.0.1:54580 (default)} {n0: 127.0.0.1:54580 (default)}]
+I220131 20:34:46.281968 3366 jobs/registry.go:1093  [n1] 265  AUTO SPAN CONFIG RECONCILIATION job 732662614628106241: stepping through state succeeded with error: <nil>
+W220131 20:34:46.281984 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 266  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.282033 3366 kv/txn.go:712  [n1] 267  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.282337 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 268  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.282596 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 269  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.282788 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 270  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.282987 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 271  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.283181 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 272  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.283366 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 273  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.283560 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 274  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.283750 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 275  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.283938 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 276  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.284130 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 277  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.284345 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 278  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.284541 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 279  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.284740 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 280  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.284934 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 281  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.285129 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 282  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.285322 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 283  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.285532 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 284  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.285726 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 285  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.285903 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 286  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.286088 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 287  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.286283 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 288  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.286458 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 289  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.286611 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 290  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.286793 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 291  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.287013 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 292  error consuming GossipSubscription RPC: rpc error: code = Unknown desc = node unavailable; try another peer
+W220131 20:34:46.287153 3744 ccl/kvccl/kvtenantccl/connector.go:183  [nsql1,tenant-connector] 293  error consuming GossipSubscription RPC: rpc error: code = Unavailable desc = error reading from server: EOF
+I220131 20:34:46.287253 3674 2@rpc/pkg/rpc/context.go:817  [nsql1] 294  closing [{n0: 127.0.0.1:54580 (system)}]
+W220131 20:34:46.287291 3744 ccl/kvccl/kvtenantccl/connector.go:172  [nsql1,tenant-connector] 295  error issuing GossipSubscription RPC: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing cannot reuse client connection"
+I220131 20:34:46.287352 4832 2@rpc/pkg/rpc/context.go:1211  [nsql1,rnode=63,raddr=127.0.0.1:54580,class=system] 296  dialing
+W220131 20:34:46.287602 4832 ccl/kvccl/kvtenantccl/connector.go:531  [nsql1,tenant-connector] 297  error dialing tenant KV address 127.0.0.1:54580: initial connection heartbeat failed: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing dial tcp 127.0.0.1:54580: connect: connection refused"
+W220131 20:34:46.288998 3805 jobs/registry.go:765  [nsql1] 298  canceling all adopted jobs due to stopper quiescing
+I220131 20:34:46.288989 4883 2@rpc/pkg/rpc/context.go:817  [nsql1] 299  closing [{n0: 127.0.0.1:54580 (system)}]
+I220131 20:34:46.289029 3546 2@rpc/pkg/rpc/context.go:817  [nsql1] 301  closing [{n1: 127.0.0.1:54580 (rangefeed)} {n0: 127.0.0.1:54580 (rangefeed)}]
+I220131 20:34:46.289030 3692 2@rpc/pkg/rpc/context.go:817  [nsql1] 300  closing [{n1: 127.0.0.1:54580 (default)} {n0: 127.0.0.1:54580 (default)}]
+W220131 20:34:46.289060 3687 sql/sqlliveness/slinstance/slinstance.go:224  [nsql1] 302  exiting heartbeat loop
+I220131 20:34:46.289082 3774 jobs/registry.go:1093  [nsql1] 303  AUTO SPAN CONFIG RECONCILIATION job 732662615515136001: stepping through state succeeded with error: <nil>
+W220131 20:34:46.289173 3774 kv/txn.go:712  [nsql1] 304  failure aborting transaction: node unavailable; try another peer; abort caused by: context canceled
+W220131 20:34:46.289440 3904 kv/txn.go:712  [nsql1,job=732662615515136001] 305  failure aborting transaction: node unavailable; try another peer; abort caused by: failed to read metadata: protectedts-GetMetadata: context canceled
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306  failed to load protected timestamp records: failed to read metadata: protectedts-GetMetadata: context canceled
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +(1) attached stack trace
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  -- stack trace:
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:301
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | [...repeated from below...]
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +Wraps: (2) failed to read metadata
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +Wraps: (3) attached stack trace
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  -- stack trace:
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).execInternal.func1.1
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:676
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next.func1
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:276
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*rowsIterator).Next
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:283
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).queryInternalBuffered
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:433
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowExWithCols
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:485
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/sql.(*InternalExecutor).QueryRowEx
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/sql/internal.go:471
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetMetadata
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:297
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage.(*storage).GetState
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage/pkg/kv/kvserver/protectedts/ptstorage/storage.go:318
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile.func1
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:126
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn.func1
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:874
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv.(*Txn).exec
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/txn.go:972
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv.runTxn
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:873
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv.(*DB).Txn
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/db.go:855
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).reconcile
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:124
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).run
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:109
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile.(*Reconciler).StartReconciler.func1
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile/reconciler.go:80
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | github.com/cockroachdb/cockroach/pkg/util/stop.(*Stopper).RunAsyncTaskEx.func2
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	github.com/cockroachdb/cockroach/pkg/util/stop/stopper.go:494
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | runtime.goexit
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +  | 	GOROOT/src/runtime/asm_amd64.s:1581
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +Wraps: (4) protectedts-GetMetadata
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +Wraps: (5) context canceled
+E220131 20:34:46.289486 3904 kv/kvserver/protectedts/ptreconcile/reconciler.go:130  [nsql1,job=732662615515136001] 306 +Error types: (1) *withstack.withStack (2) *errutil.withPrefix (3) *withstack.withStack (4) *errutil.withPrefix (5) *errors.errorString
+--- PASS: TestSchedulesProtectedTimestamp (0.55s)
+    --- PASS: TestSchedulesProtectedTimestamp/secondary-tenant (0.37s)
+    --- PASS: TestSchedulesProtectedTimestamp/system-tenant (0.04s)
+PASS
+================================================================================
+//pkg/ccl/jobsccl/jobsprotectedtsccl:jobsccl_test               (cached) PASSED in 4.4s
+//pkg/ccl/jobsccl/jobsprotectedtsccl:jobsprotectedtsccl_test    (cached) PASSED in 4.2s
+
+Executed 0 out of 2 tests: 2 tests pass.
+There were tests whose specified size is too big. Use the --test_verbose_timeout_warnings command line option to see which ones these are.
