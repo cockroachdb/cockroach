@@ -127,10 +127,18 @@ Typical usage:
 		subCmd.Flags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
 	}
 	for _, subCmd := range ret.cli.Commands() {
-		subCmd.PreRun = func(cmd *cobra.Command, args []string) {
+		isDoctor := subCmd.Name() == "doctor"
+
+		subCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+			if !isTesting && !isDoctor {
+				if err := checkDoctorStatus(cmd.Context(), ret.exec); err != nil {
+					return err
+				}
+			}
 			if debugVar {
 				ret.log.SetOutput(stdos.Stderr)
 			}
+			return nil
 		}
 	}
 

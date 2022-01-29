@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/alessio/shellescape"
+	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/spf13/cobra"
 )
 
@@ -134,6 +135,20 @@ func addCommonTestFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP(filterFlag, "f", "", "run unit tests matching this regex")
 	cmd.Flags().Duration(timeoutFlag, 0*time.Minute, "timeout for test")
 	cmd.Flags().Bool(shortFlag, false, "run only short tests")
+}
+
+var workdir string
+
+func pathInWorkdir(ctx context.Context, ex *exec.Exec, subPath string) (string, error) {
+	if workdir == "" {
+		stdout, err := ex.CommandContextSilent(ctx, "git", "rev-parse", "--show-toplevel")
+		if err != nil {
+			return "", err
+		}
+		workdir = strings.TrimSpace(string(stdout))
+	}
+
+	return filepath.Join(workdir, subPath), nil
 }
 
 func (d *dev) ensureBinaryInPath(bin string) error {

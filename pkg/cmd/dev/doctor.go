@@ -11,22 +11,64 @@
 package main
 
 import (
-	"errors"
+	"context"
+	"io/ioutil"
 	"log"
-	"os/exec"
+	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+const devStatusFile = "bin/.dev-status"
+
+// devStatusVersion is the current "version" of the status checks performed by
+// `dev doctor``. Increasing it will force doctor to be re-run before other dev
+// commands can be run.
+const devStatusVersion = 1
+
+func checkDoctorStatus(ctx context.Context, ex *exec.Exec) error {
+	statusFile, err := pathInWorkdir(ctx, ex, devStatusFile)
+	if err != nil {
+		return err
+	}
+	content, err := ioutil.ReadFile(statusFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			content = []byte("0")
+		} else {
+			return err
+		}
+	}
+	status, err := strconv.Atoi(strings.TrimSpace(string(content)))
+	if err != nil {
+		return err
+	}
+	if status < devStatusVersion {
+		return errors.Errorf("Please run `dev setup` to refresh dev status, then try again.")
+	}
+	return nil
+}
+
+func writeDoctorStatus(ctx context.Context, ex *exec.Exec) error {
+	statusFile, err := pathInWorkdir(ctx, ex, "bin/.dev-status")
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(statusFile, []byte(strconv.Itoa(devStatusVersion)), 0600)
+}
 
 func printStdoutAndErr(stdoutStr string, err error) {
 	if len(stdoutStr) > 0 {
 		log.Printf("stdout:   %s", stdoutStr)
 	}
-	var cmderr *exec.ExitError
+	var cmderr *osexec.ExitError
 	if errors.As(err, &cmderr) {
 		stderrStr := strings.TrimSpace(string(cmderr.Stderr))
 		if len(stderrStr) > 0 {
@@ -39,6 +81,7 @@ func printStdoutAndErr(stdoutStr string, err error) {
 func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
 	return &cobra.Command{
 		Use:     "doctor",
+		Aliases: []string{"setup"},
 		Short:   "Check whether your machine is ready to build",
 		Long:    "Check whether your machine is ready to build.",
 		Example: "dev doctor",
@@ -138,6 +181,9 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 	}
 
 	if success {
+		if err := writeDoctorStatus(ctx, d.exec); err != nil {
+			return err
+		}
 		log.Println("You are ready to build :)")
 		return nil
 	}
