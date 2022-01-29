@@ -307,6 +307,21 @@ func UsageAndErr(cmd *cobra.Command, args []string) error {
 }
 
 func debugSignalSetup() {
+	// For SIGQUIT we spawn a goroutine and we always handle it, no matter at
+	// which point during execution we are. This makes it possible to use SIGQUIT
+	// to inspect a running process and determine what it is currently doing, even
+	// if it gets stuck somewhere.
+	if quitSignal != nil {
+		quitSignalCh := make(chan os.Signal, 1)
+		signal.Notify(quitSignalCh, quitSignal)
+		go func() {
+			for {
+				<-quitSignalCh
+				log.DumpStacks(context.Background())
+			}
+		}()
+	}
+
 	// For SIGUSR, we spawn a goroutine that when signaled will then start an http
 	// server, bound to localhost, which serves the go pprof endpoints. While a
 	// cockroach server process already serves theese on its HTTP port, other CLI
