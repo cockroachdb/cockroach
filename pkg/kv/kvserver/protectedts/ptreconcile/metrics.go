@@ -23,8 +23,8 @@ type Metrics struct {
 	ReconciliationErrors *metric.Counter
 }
 
-func makeMetrics() Metrics {
-	return Metrics{
+func MakeMetrics() *Metrics {
+	return &Metrics{
 		ReconcilationRuns:    metric.NewCounter(metaReconciliationRuns),
 		RecordsProcessed:     metric.NewCounter(metaRecordsProcessed),
 		RecordsRemoved:       metric.NewCounter(metaRecordsRemoved),

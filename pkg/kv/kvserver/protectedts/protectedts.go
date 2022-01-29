@@ -38,6 +38,7 @@ type Provider interface {
 	Storage
 	Cache
 	Verifier
+	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
 }
@@ -137,6 +138,18 @@ type Verifier interface {
 	// verified. If nil is returned then the record has been proven to apply
 	// until it is removed.
 	Verify(context.Context, uuid.UUID) error
+}
+
+// Reconciler provides a mechanism to reconcile protected timestamp records with
+// external state.
+type Reconciler interface {
+	// StartReconciler will start the reconciliation where each record's status is
+	// determined using the record's meta type and meta in conjunction with the
+	// configured StatusFunc.
+	//
+	// StartReconciler can be called more than once since the work it does is
+	// idempotent.
+	StartReconciler(ctx context.Context, stopper *stop.Stopper) error
 }
 
 // EmptyCache returns a Cache which always returns the current time and no
