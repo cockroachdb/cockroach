@@ -17,22 +17,22 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
-// ReconcileInterval is the interval between two generations of the reports.
-// When set to zero - disables the report generation.
+// ReconcileInterval is the interval between two reconciliations of protected
+// timestamp records.
+//
+// TODO(adityamaru): Set to TenantReadOnly once the work for #73349 is
+// completed.
 var ReconcileInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"kv.protectedts.reconciliation.interval",
@@ -50,56 +50,40 @@ type StatusFunc func(
 // StatusFuncs maps from MetaType to a StatusFunc.
 type StatusFuncs map[string]StatusFunc
 
-// Config configures a Reconciler.
-type Config struct {
-	Settings *cluster.Settings
-	// Stores is used to ensure that we only run the reconciliation loop on
-	Stores  *kvserver.Stores
-	DB      *kv.DB
-	Storage protectedts.Storage
-	Cache   protectedts.Cache
-
-	// We want a map from metaType to a function which determines whether we
-	// should clean it up.
-	StatusFuncs StatusFuncs
-}
-
-// Reconciler runs an a loop to reconcile the protected timestamps with external
+// Reconciler runs a loop to reconcile the protected timestamps with external
 // state. Each record's status is determined using the record's meta type and
 // meta in conjunction with the configured StatusFunc.
 type Reconciler struct {
 	settings    *cluster.Settings
-	localStores *kvserver.Stores
 	db          *kv.DB
-	cache       protectedts.Cache
 	pts         protectedts.Storage
 	metrics     Metrics
 	statusFuncs StatusFuncs
 }
 
-// NewReconciler constructs a Reconciler.
-func NewReconciler(cfg Config) *Reconciler {
+// New constructs a Reconciler.
+func New(
+	st *cluster.Settings, db *kv.DB, storage protectedts.Storage, statusFuncs StatusFuncs,
+) *Reconciler {
 	return &Reconciler{
-		settings:    cfg.Settings,
-		localStores: cfg.Stores,
-		db:          cfg.DB,
-		cache:       cfg.Cache,
-		pts:         cfg.Storage,
+		settings:    st,
+		db:          db,
+		pts:         storage,
 		metrics:     makeMetrics(),
-		statusFuncs: cfg.StatusFuncs,
+		statusFuncs: statusFuncs,
 	}
 }
 
-// Metrics returns the Reconciler's metrics.
-func (r *Reconciler) Metrics() *Metrics {
-	return &r.metrics
-}
-
-// Start will start the Reconciler.
-func (r *Reconciler) Start(ctx context.Context, stopper *stop.Stopper) error {
+// StartReconciler implements the protectedts.Reconciler interface.
+func (r *Reconciler) StartReconciler(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "protectedts-reconciliation", func(ctx context.Context) {
 		r.run(ctx, stopper)
 	})
+}
+
+// Metrics returns the reconciler's metrics.
+func (r *Reconciler) Metrics() *Metrics {
+	return &r.metrics
 }
 
 func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
@@ -134,30 +118,23 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 	}
 }
 
-func (r *Reconciler) isMeta1Leaseholder(ctx context.Context, now hlc.ClockTimestamp) (bool, error) {
-	return r.localStores.IsMeta1Leaseholder(ctx, now)
-}
-
 func (r *Reconciler) reconcile(ctx context.Context) {
-	now := r.db.Clock().NowAsClockTimestamp()
-	isLeaseholder, err := r.isMeta1Leaseholder(ctx, now)
-	if err != nil {
-		log.Errorf(ctx, "failed to determine whether the local store contains the meta1 lease: %v", err)
+	// Load protected timestamp records.
+	var state ptpb.State
+	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		state, err = r.pts.GetState(ctx, txn)
+		return err
+	}); err != nil {
+		r.metrics.ReconciliationErrors.Inc(1)
+		log.Errorf(ctx, "failed to load protected timestamp records: %+v", err)
 		return
 	}
-	if !isLeaseholder {
-		return
-	}
-	if err := r.cache.Refresh(ctx, now.ToTimestamp()); err != nil {
-		log.Errorf(ctx, "failed to refresh the protected timestamp cache to %v: %v", now, err)
-		return
-	}
-	r.cache.Iterate(ctx, keys.MinKey, keys.MaxKey, func(rec *ptpb.Record) (wantMore bool) {
+	for _, rec := range state.Records {
 		task, ok := r.statusFuncs[rec.MetaType]
 		if !ok {
 			// NB: We don't expect to ever hit this case outside of testing.
-			log.Infof(ctx, "found protected timestamp record with unknown meta type %q, skipping", rec.MetaType)
-			return true
+			continue
 		}
 		var didRemove bool
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
@@ -185,7 +162,6 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 				r.metrics.RecordsRemoved.Inc(1)
 			}
 		}
-		return true
-	})
+	}
 	r.metrics.ReconcilationRuns.Inc(1)
 }
