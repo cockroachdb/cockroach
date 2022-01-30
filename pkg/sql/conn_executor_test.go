@@ -104,8 +104,8 @@ Wraps: (3) some error
 Error types: (1) *safedetails.withSafeDetails (2) *withstack.withStack (3) *errutil.leafError`
 
 	// Edit non-determinstic stack trace filenames from the message.
-	actSafeRedactedMessage := fileref.ReplaceAllString(
-		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN")
+	actSafeRedactedMessage := strings.ReplaceAll(fileref.ReplaceAllString(
+		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN"), "asm_arm64", "asm_amd64")
 
 	if actSafeRedactedMessage != expSafeRedactedMessage {
 		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
