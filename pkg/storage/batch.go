@@ -14,8 +14,6 @@ import (
 	"encoding/binary"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -52,66 +50,6 @@ const (
 	headerSize int = 12
 	countPos   int = 8
 )
-
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKey(key MVCCKey) []byte {
-	keyLen := key.Len()
-	buf := make([]byte, keyLen)
-	encodeKeyToBuf(buf, key, keyLen)
-	return buf
-}
-
-// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
-	keyLen := key.Len()
-	if cap(buf) < keyLen {
-		buf = make([]byte, keyLen)
-	} else {
-		buf = buf[:keyLen]
-	}
-	encodeKeyToBuf(buf, key, keyLen)
-	return buf
-}
-
-func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
-	const (
-		timestampSentinelLen = 1
-		walltimeEncodedLen   = 8
-		logicalEncodedLen    = 4
-		syntheticEncodedLen  = 1
-	)
-
-	copy(buf, key.Key)
-
-	pos := len(key.Key)
-	timestampLength := keyLen - pos - 1
-	if timestampLength > 0 {
-		buf[pos] = 0
-		pos += timestampSentinelLen
-		binary.BigEndian.PutUint64(buf[pos:], uint64(key.Timestamp.WallTime))
-		pos += walltimeEncodedLen
-		if key.Timestamp.Logical != 0 || key.Timestamp.Synthetic {
-			binary.BigEndian.PutUint32(buf[pos:], uint32(key.Timestamp.Logical))
-			pos += logicalEncodedLen
-		}
-		if key.Timestamp.Synthetic {
-			buf[pos] = 1
-			pos += syntheticEncodedLen
-		}
-	}
-	buf[len(buf)-1] = byte(timestampLength)
-}
-
-func encodeTimestamp(ts hlc.Timestamp) []byte {
-	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(MVCCKey{Timestamp: ts}))
-	return encodedTS
-}
-
-// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation.
-func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
-	k, ts, err := enginepb.DecodeKey(encodedKey)
-	return MVCCKey{k, ts}, err
-}
 
 // Decode the header of RocksDB batch repr, returning both the count of the
 // entries in the batch and the suffix of data remaining in the batch.
