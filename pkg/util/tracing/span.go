@@ -267,9 +267,32 @@ func (sp *Span) finishInternal() {
 // would be forced to collect the recording before finishing and so the span
 // would appear to be unfinished in the recording (it's illegal to collect the
 // recording after the span finishes, except by using this method).
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
 func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
+	rec := Recording(nil)
+	if sp.RecordingType() != RecordingOff {
+		rec = sp.i.GetRecording(recType, true /* finishing */)
+	}
 	// Reach directly into sp.i to pass the finishing argument.
-	rec := sp.i.GetRecording(recType, true /* finishing */)
+	sp.finishInternal()
+	return rec
+}
+
+// FinishAndGetConfiguredRecording is like FinishAndGetRecording, except that
+// the type of recording returned is the type that the span was configured to
+// record.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
+func (sp *Span) FinishAndGetConfiguredRecording() Recording {
+	rec := Recording(nil)
+	recType := sp.RecordingType()
+	if recType != RecordingOff {
+		rec = sp.i.GetRecording(recType, true /* finishing */)
+	}
+	// Reach directly into sp.i to pass the finishing argument.
 	sp.finishInternal()
 	return rec
 }
@@ -277,6 +300,9 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // GetRecording retrieves the current recording, if the Span has recording
 // enabled. This can be called while spans that are part of the recording are
 // still open; it can run concurrently with operations on those spans.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
 //
 // recType indicates the type of information to be returned: structured info or
 // structured + verbose info. The caller can ask for either regardless of the
@@ -298,6 +324,25 @@ func (sp *Span) FinishAndGetRecording(recType RecordingType) Recording {
 // doesn't have any structured events.
 func (sp *Span) GetRecording(recType RecordingType) Recording {
 	if sp.detectUseAfterFinish() {
+		return nil
+	}
+	if sp.RecordingType() == RecordingOff {
+		return nil
+	}
+	return sp.i.GetRecording(recType, false /* finishing */)
+}
+
+// GetConfiguredRecording is like GetRecording, except the type of recording it
+// returns is the one that the span has been previously configured with.
+//
+// Returns nil if the span is not currently recording (even if it had been
+// recording in the past).
+func (sp *Span) GetConfiguredRecording() Recording {
+	if sp.detectUseAfterFinish() {
+		return nil
+	}
+	recType := sp.RecordingType()
+	if recType == RecordingOff {
 		return nil
 	}
 	return sp.i.GetRecording(recType, false /* finishing */)
