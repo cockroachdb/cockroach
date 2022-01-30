@@ -1164,6 +1164,10 @@ type logicQuery struct {
 	// rawOpts are the query options, before parsing. Used to display in error
 	// messages.
 	rawOpts string
+
+	// roundFloatsInStrings can be set to use a regular expression to find floats
+	// that may be embedded in strings and replace them with rounded versions.
+	roundFloatsInStrings bool
 }
 
 var allowedKVOpTypes = []string{
@@ -2306,6 +2310,9 @@ func (t *logicTest) processSubtest(subtest subtestDetails, path string) error {
 						case "noticetrace":
 							query.noticetrace = true
 
+						case "round-in-strings":
+							query.roundFloatsInStrings = true
+
 						default:
 							if strings.HasPrefix(opt, "nodeidx=") {
 								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
@@ -2963,7 +2970,11 @@ func (t *logicTest) execQuery(query logicQuery) error {
 						if val == "" {
 							val = "·"
 						}
-						actualResultsRaw = append(actualResultsRaw, fmt.Sprint(val))
+						s := fmt.Sprint(val)
+						if query.roundFloatsInStrings {
+							s = roundFloatsInString(s)
+						}
+						actualResultsRaw = append(actualResultsRaw, s)
 					} else {
 						actualResultsRaw = append(actualResultsRaw, "NULL")
 					}
@@ -3911,4 +3922,14 @@ func (t *logicTest) printCompletion(path string, config testClusterConfig) {
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.name,
 		t.progress, t.failures, unsupportedMsg)
+}
+
+func roundFloatsInString(s string) string {
+	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
+		f, err := strconv.ParseFloat(string(x), 64)
+		if err != nil {
+			return []byte(err.Error())
+		}
+		return []byte(fmt.Sprintf("%.6g", f))
+	}))
 }
