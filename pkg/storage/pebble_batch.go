@@ -349,7 +349,7 @@ func (p *pebbleBatch) clear(key MVCCKey) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Delete(p.buf, nil)
 }
 
@@ -381,8 +381,8 @@ func (p *pebbleBatch) ClearMVCCRange(start, end MVCCKey) error {
 }
 
 func (p *pebbleBatch) clearRange(start, end MVCCKey) error {
-	p.buf = EncodeKeyToBuf(p.buf[:0], start)
-	buf2 := EncodeKey(end)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], start)
+	buf2 := EncodeMVCCKey(end)
 	return p.batch.DeleteRange(p.buf, buf2, nil)
 }
 
@@ -419,7 +419,7 @@ func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Merge(p.buf, value, nil)
 }
 
@@ -460,7 +460,7 @@ func (p *pebbleBatch) put(key MVCCKey, value []byte) error {
 		return emptyKeyError()
 	}
 
-	p.buf = EncodeKeyToBuf(p.buf[:0], key)
+	p.buf = EncodeMVCCKeyToBuf(p.buf[:0], key)
 	return p.batch.Set(p.buf, value, nil)
 }
 

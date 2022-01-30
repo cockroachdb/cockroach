@@ -88,7 +88,7 @@ func (r *sstIterator) SeekGE(key MVCCKey) {
 			return
 		}
 	}
-	r.keyBuf = EncodeKeyToBuf(r.keyBuf, key)
+	r.keyBuf = EncodeMVCCKeyToBuf(r.keyBuf, key)
 	var iKey *sstable.InternalKey
 	trySeekUsingNext := false
 	if r.seekGELastOp {
