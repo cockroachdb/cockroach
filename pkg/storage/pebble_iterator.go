@@ -131,8 +131,8 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 	doClone := iterToClone != nil
 	if !opts.MaxTimestampHint.IsEmpty() {
 		doClone = false
-		encodedMinTS := string(encodeTimestamp(opts.MinTimestampHint))
-		encodedMaxTS := string(encodeTimestamp(opts.MaxTimestampHint))
+		encodedMinTS := string(encodeMVCCTimestamp(opts.MinTimestampHint))
+		encodedMaxTS := string(encodeMVCCTimestamp(opts.MaxTimestampHint))
 		p.options.TableFilter = func(userProps map[string]string) bool {
 			tableMinTS := userProps["crdb.ts.min"]
 			if len(tableMinTS) == 0 {
@@ -267,7 +267,7 @@ func (p *pebbleIterator) Close() {
 func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	p.mvccDirIsReverse = false
 	p.mvccDone = false
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
 	if p.prefix {
 		p.iter.SeekPrefixGE(p.keyBuf)
 	} else {
@@ -471,7 +471,7 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 func (p *pebbleIterator) SeekLT(key MVCCKey) {
 	p.mvccDirIsReverse = true
 	p.mvccDone = false
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], key)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
 	p.iter.SeekLT(p.keyBuf)
 }
 

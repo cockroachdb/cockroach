@@ -658,7 +658,7 @@ func (v *validator) checkCommittedTxn(
 			}
 			if !o.Timestamp.IsEmpty() {
 				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-				if err := batch.Delete(storage.EncodeKey(mvccKey), nil); err != nil {
+				if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
 					panic(err)
 				}
 			}
@@ -693,7 +693,7 @@ func (v *validator) checkCommittedTxn(
 					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
 				}
 			}
-			if err := batch.Set(storage.EncodeKey(mvccKey), o.Value.RawBytes, nil); err != nil {
+			if err := batch.Set(storage.EncodeMVCCKey(mvccKey), o.Value.RawBytes, nil); err != nil {
 				panic(err)
 			}
 		case *observedRead:
@@ -931,7 +931,7 @@ func validReadTimes(
 
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
@@ -996,7 +996,7 @@ func validScanTime(
 	missingKeys := make(map[string]disjointTimeSpans)
 	iter := b.NewIter(nil)
 	defer func() { _ = iter.Close() }()
-	iter.SeekGE(storage.EncodeKey(storage.MVCCKey{Key: span.Key}))
+	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {

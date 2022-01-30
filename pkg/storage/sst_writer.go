@@ -120,8 +120,8 @@ func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 		return errors.New("cannot call ClearRange on a closed writer")
 	}
 	fw.DataSize += int64(len(start.Key)) + int64(len(end.Key))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], start)
-	return fw.fw.DeleteRange(fw.scratch, EncodeKey(end))
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], start)
+	return fw.fw.DeleteRange(fw.scratch, EncodeMVCCKey(end))
 }
 
 // Put puts a kv entry into the sstable being built. An error is returned if it
@@ -135,7 +135,7 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -189,7 +189,7 @@ func (fw *SSTWriter) put(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Put on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Set(fw.scratch, value)
 }
 
@@ -247,7 +247,7 @@ func (fw *SSTWriter) clear(key MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call Clear on a closed writer")
 	}
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	fw.DataSize += int64(len(key.Key))
 	return fw.fw.Delete(fw.scratch)
 }
@@ -268,7 +268,7 @@ func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 		return errors.New("cannot call Merge on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
-	fw.scratch = EncodeKeyToBuf(fw.scratch[:0], key)
+	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)
 	return fw.fw.Merge(fw.scratch, value)
 }
 

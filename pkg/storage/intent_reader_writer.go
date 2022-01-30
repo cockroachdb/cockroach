@@ -126,7 +126,7 @@ var intentInterleavingReaderPool = sync.Pool{
 
 // Get implements the Reader interface.
 func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
-	val, err := imr.wrappableReader.rawGet(EncodeKey(key))
+	val, err := imr.wrappableReader.rawGet(EncodeMVCCKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
 	}

@@ -36,7 +36,7 @@ func TestStringifyWriteBatch(t *testing.T) {
 	}
 
 	batch := pebble.Batch{}
-	require.NoError(t, batch.Set(storage.EncodeKey(storage.MVCCKey{
+	require.NoError(t, batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{
 		Key:       roachpb.Key("/db1"),
 		Timestamp: hlc.Timestamp{WallTime: math.MaxInt64},
 	}), []byte("test value"), nil /* WriteOptions */))

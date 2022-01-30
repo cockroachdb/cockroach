@@ -64,17 +64,17 @@ func TestEngineComparer(t *testing.T) {
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	}
 
-	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyAMetadata), EncodeKey(keyA1)),
+	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyAMetadata), EncodeMVCCKey(keyA1)),
 		"expected key metadata to sort first")
-	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyA1)),
+	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyA1)),
 		"expected higher timestamp to sort first")
-	require.Equal(t, -1, EngineComparer.Compare(EncodeKey(keyA2), EncodeKey(keyB2)),
+	require.Equal(t, -1, EngineComparer.Compare(EncodeMVCCKey(keyA2), EncodeMVCCKey(keyB2)),
 		"expected lower key to sort first")
 
 	suffix := func(key []byte) []byte {
 		return key[EngineComparer.Split(key):]
 	}
-	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeKey(keyA2)), suffix(EncodeKey(keyA1))),
+	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeMVCCKey(keyA2)), suffix(EncodeMVCCKey(keyA1))),
 		"expected bare suffix with higher timestamp to sort first")
 }
 
@@ -102,7 +102,7 @@ func TestPebbleTimeBoundPropCollector(t *testing.T) {
 					return err.Error()
 				}
 				ikey := pebble.InternalKey{
-					UserKey: EncodeKey(MVCCKey{
+					UserKey: EncodeMVCCKey(MVCCKey{
 						Key:       key,
 						Timestamp: hlc.Timestamp{WallTime: int64(timestamp)},
 					}),
@@ -416,8 +416,8 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	}
 	for _, tc := range sepCases {
 		t.Run("", func(t *testing.T) {
-			got := string(EngineComparer.Separator(nil, EncodeKey(tc.a), EncodeKey(tc.b)))
-			if got != string(EncodeKey(tc.want)) {
+			got := string(EngineComparer.Separator(nil, EncodeMVCCKey(tc.a), EncodeMVCCKey(tc.b)))
+			if got != string(EncodeMVCCKey(tc.want)) {
 				t.Errorf("a, b = %q, %q: got %q, want %q", tc.a, tc.b, got, tc.want)
 			}
 		})
@@ -451,8 +451,8 @@ func TestPebbleSeparatorSuccessor(t *testing.T) {
 	}
 	for _, tc := range succCases {
 		t.Run("", func(t *testing.T) {
-			got := string(EngineComparer.Successor(nil, EncodeKey(tc.a)))
-			if got != string(EncodeKey(tc.want)) {
+			got := string(EngineComparer.Successor(nil, EncodeMVCCKey(tc.a)))
+			if got != string(EncodeMVCCKey(tc.want)) {
 				t.Errorf("a = %q: got %q, want %q", tc.a, got, tc.want)
 			}
 		})
@@ -610,7 +610,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 				WallTime: int64(rng.Intn(5)),
 			},
 		}
-		keys[i] = EncodeKey(k)
+		keys[i] = EncodeMVCCKey(k)
 	}
 
 	b.ResetTimer()
@@ -1111,15 +1111,15 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 	// The added key was not an MVCCKey.
 	finishAndCheck(0, 0)
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})},
 		[]byte("foo")))
 	// Added 1 MVCCKey which sets both the upper and lower bound.
 	finishAndCheck(2, 3)
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}})},
 		[]byte("foo")))
 	require.NoError(t, collector.Add(pebble.InternalKey{
-		UserKey: EncodeKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25, Logical: 1}})},
+		UserKey: EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25, Logical: 1}})},
 		[]byte("foo")))
 	// Added 2 MVCCKeys.
 	finishAndCheck(22, 26)
