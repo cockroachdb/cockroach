@@ -1477,7 +1477,7 @@ inner-join (lookup geo_table)
  │    ├── columns: geo_table2.k:1 geo_table2.geom:2 geo_table.k:11
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, avgsize(1)=4, distinct(11)=999.957, null(11)=0, avgsize(11)=4]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
@@ -1571,7 +1571,7 @@ left-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.957, null(11)=0, avgsize(11)=4]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
@@ -1610,7 +1610,7 @@ semi-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=999.956829, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=999.957, null(1)=0, avgsize(1)=4, distinct(11)=999.957, null(11)=0, avgsize(11)=4]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)
@@ -1650,7 +1650,7 @@ anti-join (lookup geo_table)
  │    ├── first join in paired joiner; continuation column: continuation:16
  │    ├── inverted-expr
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:12)
- │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.956829, null(11)=0, avgsize(11)=4]
+ │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(11)=999.957, null(11)=0, avgsize(11)=4]
  │    ├── cost: 41804.84
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2), (11)-->(16)

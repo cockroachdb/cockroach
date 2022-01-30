@@ -1170,7 +1170,7 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── immutable
- ├── stats: [rows=333.333333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1074.45
  ├── key: (1)
  ├── fd: (1)-->(2)

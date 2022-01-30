@@ -1517,14 +1517,14 @@ root
            ├── project
            │    ├── columns: p_cast:18(int2!null) t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
            │    ├── immutable
-           │    ├── stats: [rows=3.3, distinct(18)=0.333317413, null(18)=0, avgsize(18)=4]
+           │    ├── stats: [rows=3.3, distinct(18)=0.333317, null(18)=0, avgsize(18)=4]
            │    ├── key: (12)
            │    ├── fd: ()-->(13,16-18), (13)==(16), (16)==(13)
            │    ├── prune: (12,13,16-18)
            │    ├── inner-join (hash)
            │    │    ├── columns: t.public.child_diff_type.c:12(int!null) t.public.child_diff_type.p:13(int2!null) p_old:16(int!null) p_new:17(int!null)
            │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           │    │    ├── stats: [rows=3.3, distinct(13)=0.333333333, null(13)=0, avgsize(13)=4, distinct(16)=0.333333333, null(16)=0, avgsize(16)=4, distinct(17)=0.333317413, null(17)=0, avgsize(17)=4]
+           │    │    ├── stats: [rows=3.3, distinct(13)=0.333333, null(13)=0, avgsize(13)=4, distinct(16)=0.333333, null(16)=0, avgsize(16)=4, distinct(17)=0.333317, null(17)=0, avgsize(17)=4]
            │    │    ├── key: (12)
            │    │    ├── fd: ()-->(13,16,17), (13)==(16), (16)==(13)
            │    │    ├── scan t.public.child_diff_type
@@ -1537,7 +1537,7 @@ root
            │    │    ├── select
            │    │    │    ├── columns: p_old:16(int!null) p_new:17(int!null)
            │    │    │    ├── cardinality: [0 - 1]
-           │    │    │    ├── stats: [rows=0.333333333, distinct(16)=0.333333333, null(16)=0, avgsize(16)=4, distinct(17)=0.333333333, null(17)=0, avgsize(17)=4]
+           │    │    │    ├── stats: [rows=0.3333333, distinct(16)=0.333333, null(16)=0, avgsize(16)=4, distinct(17)=0.333333, null(17)=0, avgsize(17)=4]
            │    │    │    ├── key: ()
            │    │    │    ├── fd: ()-->(16,17)
            │    │    │    ├── with-scan &1
@@ -1573,7 +1573,7 @@ root
                           │    ├── columns: p:19(int2!null)
                           │    ├── mapping:
                           │    │    └──  p_cast:18(int2) => p:19(int2)
-                          │    ├── stats: [rows=3.3, distinct(19)=0.333317413, null(19)=0, avgsize(19)=4]
+                          │    ├── stats: [rows=3.3, distinct(19)=0.333317, null(19)=0, avgsize(19)=4]
                           │    ├── fd: ()-->(19)
                           │    └── cte-uses
                           │         └── &2: count=1 used-columns=(18)
