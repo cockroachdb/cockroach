@@ -43,18 +43,18 @@ SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s
 project
  ├── columns: count:7(int!null)
  ├── immutable
- ├── stats: [rows=28.5478625]
+ ├── stats: [rows=28.54786]
  └── group-by (hash)
       ├── columns: y:2(int) count_rows:7(int!null)
       ├── grouping columns: y:2(int)
       ├── immutable
-      ├── stats: [rows=28.5478625, distinct(2)=28.5478625, null(2)=0, avgsize(2)=3]
+      ├── stats: [rows=28.54786, distinct(2)=28.5479, null(2)=0, avgsize(2)=3]
       ├── key: (2)
       ├── fd: (2)-->(7)
       ├── select
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
       │    ├── immutable
-      │    ├── stats: [rows=33.3333333, distinct(2)=28.5478625, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9]
+      │    ├── stats: [rows=33.33333, distinct(2)=28.5479, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(2)
       │    ├── index-join a
@@ -79,7 +79,7 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── immutable
- ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, avgsize(1)=2, distinct(2)=28.5478625, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(4)=30.9412676, null(4)=0, avgsize(4)=4, distinct(1-3)=33.3333333, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=33.33333, distinct(1)=33.3333, null(1)=0, avgsize(1)=2, distinct(2)=28.5479, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(4)=30.9413, null(4)=0, avgsize(4)=4, distinct(1-3)=33.3333, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── index-join a
@@ -101,7 +101,7 @@ SELECT * FROM a WHERE s = 'foo'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=64.1514078, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=64.1514, null(2)=0, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  └── scan a@a_s_d_key
@@ -121,7 +121,7 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=200, distinct(1)=200, null(1)=0, avgsize(1)=2, distinct(2)=87.8423345, null(2)=0, avgsize(2)=3, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(2,3)=175.684669, null(2,3)=0, avgsize(2,3)=12, distinct(1-3)=200, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=200, distinct(1)=200, null(1)=0, avgsize(1)=2, distinct(2)=87.8423, null(2)=0, avgsize(2)=3, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(2,3)=175.685, null(2,3)=0, avgsize(2,3)=12, distinct(1-3)=200, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── scan a@a_s_d_key
@@ -191,7 +191,7 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── immutable
- ├── stats: [rows=33.3333334, distinct(1)=33.3333334, null(1)=0, avgsize(1)=2, distinct(2)=28.5927601, null(2)=16.6666667, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(4)=30.9412677, null(4)=0, avgsize(4)=4, distinct(1-3)=33.3333334, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=33.33333, distinct(1)=33.3333, null(1)=0, avgsize(1)=2, distinct(2)=28.5928, null(2)=16.6667, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(4)=30.9413, null(4)=0, avgsize(4)=4, distinct(1-3)=33.3333, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── index-join a
@@ -213,7 +213,7 @@ SELECT * FROM a WHERE s = 'foo'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=64.4232894, null(2)=50, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=64.4233, null(2)=50, avgsize(2)=3, distinct(3)=1, null(3)=0, avgsize(3)=9, distinct(1-3)=100, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  └── scan a@a_s_d_key
@@ -237,7 +237,7 @@ SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=200, distinct(1)=200, null(1)=0, avgsize(1)=2, distinct(2)=88.4618792, null(2)=100, avgsize(2)=3, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(2,3)=176.923758, null(2,3)=0, avgsize(2,3)=12, distinct(1-3)=200, null(1-3)=0, avgsize(1-3)=14]
+ ├── stats: [rows=200, distinct(1)=200, null(1)=0, avgsize(1)=2, distinct(2)=88.4619, null(2)=100, avgsize(2)=3, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(2,3)=176.924, null(2,3)=0, avgsize(2,3)=12, distinct(1-3)=200, null(1-3)=0, avgsize(1-3)=14]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  └── scan a@a_s_d_key

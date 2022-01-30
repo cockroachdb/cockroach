@@ -218,14 +218,14 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM uv WHERE u < 30 GROUP BY u, v
 distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
- ├── stats: [rows=20.0617284, distinct(1,2)=20.0617284, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=20.06173, distinct(1,2)=20.0617, null(1,2)=0, avgsize(1,2)=8]
  ├── cost: 51.917284
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(1,2)=20.0617284, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=33.33333, distinct(1)=6.66667, null(1)=0, avgsize(1)=4, distinct(1,2)=20.0617, null(1,2)=0, avgsize(1,2)=8]
       ├── cost: 50.6866667
       ├── distribution: test
       ├── prune: (2)
@@ -240,14 +240,14 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM uv WHERE u < 30 GROUP BY u, v
 distinct-on
  ├── columns: u:1 v:2
  ├── grouping columns: u:1 v:2
- ├── stats: [rows=33.3333333, distinct(1,2)=33.3333333, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=33.33333, distinct(1,2)=33.3333, null(1,2)=0, avgsize(1,2)=8]
  ├── cost: 52.05
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
       ├── columns: u:1 v:2
       ├── constraint: /1/3: (/NULL - /29]
-      ├── stats: [rows=33.3333333, distinct(1)=6.66666667, null(1)=0, avgsize(1)=4, distinct(1,2)=33.3333333, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=33.33333, distinct(1)=6.66667, null(1)=0, avgsize(1)=4, distinct(1,2)=33.3333, null(1,2)=0, avgsize(1,2)=8]
       ├── cost: 50.6866667
       ├── distribution: test
       ├── prune: (2)
@@ -324,7 +324,7 @@ limit
  ├── select
  │    ├── columns: j:1
  │    ├── immutable
- │    ├── stats: [rows=10.0000001, distinct(1)=1, null(1)=10, avgsize(1)=4]
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=10, avgsize(1)=4]
  │    ├── cost: 121.049999
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
