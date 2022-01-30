@@ -173,7 +173,7 @@ RETURNING id;`).Scan(&secondID))
 		// no processors actually create their own spans). Instead, a different
 		// way to observe the status of the migration manager should be
 		// introduced and should be used here.
-		rec := sp.GetRecording(tracing.RecordingVerbose)
+		rec := sp.GetConfiguredRecording()
 		if tracing.FindMsgInRecording(rec, "found existing migration job") > 0 {
 			return nil
 		}
