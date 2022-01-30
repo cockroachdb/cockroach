@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -248,42 +247,6 @@ func TestMVCCStatsAddSubForward(t *testing.T) {
 	exp.GCBytesAge = -3
 	exp.IntentAge = -3
 	cmp(neg, exp)
-}
-
-// Verify the sort ordering of successive keys with metadata and
-// versioned values. In particular, the following sequence of keys /
-// versions:
-//
-// a
-// a<t=max>
-// a<t=1>
-// a<t=0>
-// a\x00
-// a\x00<t=max>
-// a\x00<t=1>
-// a\x00<t=0>
-func TestMVCCKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	aKey := roachpb.Key("a")
-	a0Key := roachpb.Key("a\x00")
-	keys := mvccKeys{
-		mvccKey(aKey),
-		mvccVersionKey(aKey, hlc.Timestamp{WallTime: math.MaxInt64}),
-		mvccVersionKey(aKey, hlc.Timestamp{WallTime: 1}),
-		mvccVersionKey(aKey, hlc.Timestamp{Logical: 1}),
-		mvccKey(a0Key),
-		mvccVersionKey(a0Key, hlc.Timestamp{WallTime: math.MaxInt64}),
-		mvccVersionKey(a0Key, hlc.Timestamp{WallTime: 1}),
-		mvccVersionKey(a0Key, hlc.Timestamp{Logical: 1}),
-	}
-	sortKeys := make(mvccKeys, len(keys))
-	copy(sortKeys, keys)
-	shuffle.Shuffle(sortKeys)
-	sort.Sort(sortKeys)
-	if !reflect.DeepEqual(sortKeys, keys) {
-		t.Errorf("expected keys to sort in order %s, but got %s", keys, sortKeys)
-	}
 }
 
 func TestMVCCGetNotExist(t *testing.T) {
