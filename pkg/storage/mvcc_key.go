@@ -107,30 +107,30 @@ func (k MVCCKey) Format(f fmt.State, c rune) {
 // Len returns the size of the MVCCKey when encoded. Implements the
 // pebble.Encodeable interface.
 func (k MVCCKey) Len() int {
-	return encodedKeyLength(k)
+	return encodedMVCCKeyLength(k)
 }
 
-// EncodeKey encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKey(key MVCCKey) []byte {
+// EncodeMVCCKey encodes an engine.MVCC key into the RocksDB representation.
+func EncodeMVCCKey(key MVCCKey) []byte {
 	keyLen := key.Len()
 	buf := make([]byte, keyLen)
-	encodeKeyToBuf(buf, key, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
-// EncodeKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
-func EncodeKeyToBuf(buf []byte, key MVCCKey) []byte {
+// EncodeMVCCKeyToBuf encodes an engine.MVCC key into the RocksDB representation.
+func EncodeMVCCKeyToBuf(buf []byte, key MVCCKey) []byte {
 	keyLen := key.Len()
 	if cap(buf) < keyLen {
 		buf = make([]byte, keyLen)
 	} else {
 		buf = buf[:keyLen]
 	}
-	encodeKeyToBuf(buf, key, keyLen)
+	encodeMVCCKeyToBuf(buf, key, keyLen)
 	return buf
 }
 
-func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
+func encodeMVCCKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 	const (
 		timestampSentinelLen = 1
 		walltimeEncodedLen   = 8
@@ -159,8 +159,8 @@ func encodeKeyToBuf(buf []byte, key MVCCKey, keyLen int) {
 	buf[len(buf)-1] = byte(timestampLength)
 }
 
-func encodeTimestamp(ts hlc.Timestamp) []byte {
-	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeKey(MVCCKey{Timestamp: ts}))
+func encodeMVCCTimestamp(ts hlc.Timestamp) []byte {
+	_, encodedTS, _ := enginepb.SplitMVCCKey(EncodeMVCCKey(MVCCKey{Timestamp: ts}))
 	return encodedTS
 }
 
@@ -172,7 +172,7 @@ func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
 	return MVCCKey{k, ts}, err
 }
 
-func encodedKeyLength(key MVCCKey) int {
+func encodedMVCCKeyLength(key MVCCKey) int {
 	const (
 		timestampSentinelLen      = 1
 		walltimeEncodedLen        = 8
