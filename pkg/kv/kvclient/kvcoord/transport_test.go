@@ -158,7 +158,7 @@ func (m *mockInternalClient) Batch(
 	log.Eventf(ctx, "mockInternalClient processing batch")
 	br := &roachpb.BatchResponse{}
 	br.Error = m.pErr
-	if rec := sp.GetRecording(tracing.RecordingVerbose); rec != nil {
+	if rec := sp.GetConfiguredRecording(); rec != nil {
 		br.CollectedSpans = append(br.CollectedSpans, rec...)
 	}
 	return br, nil

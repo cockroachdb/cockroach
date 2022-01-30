@@ -666,7 +666,7 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 				pb.span.RecordStructured(stats)
 			}
 		}
-		if trace := pb.span.GetRecording(pb.span.RecordingType()); trace != nil {
+		if trace := pb.span.GetConfiguredRecording(); trace != nil {
 			pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{TraceData: trace})
 		}
 	}
