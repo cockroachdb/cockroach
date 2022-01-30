@@ -318,13 +318,24 @@ func (w index) GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID 
 
 // UseDeletePreservingEncoding returns true if the index is to be encoded with
 // an additional bit that indicates whether or not the value has been deleted.
+//
 // Index key-values that are deleted in this way are not actually deleted,
 // but remain in the index with a value which has the delete bit set to true.
 // This is necessary to preserve the delete history for the MVCC-compatible
 // index backfiller
 // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+//
+// We only use the delete preserving encoding if the index is
+// writable. Otherwise, we may preserve a delete when in DELETE_ONLY but never
+// see a subsequent write that replaces it. This a problem for the
+// MVCC-compatible index backfiller which merges entries from a
+// delete-preserving index into a newly-added index. A delete preserved in
+// DELETE_ONLY could result in a value being erroneously deleted during the
+// merge process. While we could filter such deletes, the filtering would
+// require more data being stored in each deleted entry and further complicate
+// the merge process. See #75720 for further details.
 func (w index) UseDeletePreservingEncoding() bool {
-	return w.desc.UseDeletePreservingEncoding
+	return w.desc.UseDeletePreservingEncoding && !w.maybeMutation.DeleteOnly()
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.

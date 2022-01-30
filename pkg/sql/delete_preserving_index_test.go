@@ -242,10 +242,80 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 	}
 }
 
-// TestDeletePreservingIndexEncodingWithEmptyValues tests
+// TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly
+// tests that deletes from an index in DELETE_ONLY uses actual deletes
+// and not preserved deletes.
+func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
+
+	params, _ := tests.CreateTestServerParams()
+	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+
+	setupSQL := `
+CREATE DATABASE t;
+CREATE TABLE t.test (a INT PRIMARY KEY, b INT);
+CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
+`
+	_, err := sqlDB.Exec(setupSQL)
+	require.NoError(t, err)
+	codec := server.ExecutorConfig().(sql.ExecutorConfig).Codec
+	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", "test")
+
+	// Move index to DELETE_ONLY. The following delete should not
+	// be preserved even though the index sees the delete.
+	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", func(idx *descpb.IndexDescriptor) error {
+		idx.UseDeletePreservingEncoding = true
+		return nil
+	}, descpb.DescriptorMutation_DELETE_ONLY)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1)`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`DELETE FROM t.test WHERE a = 1`)
+	require.NoError(t, err)
+
+	// Move index to DELETE_AND_WRITE_ONLY. The following inserts
+	// are seen by the index and deletes should be preserved.
+	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (2, 2), (3, 3)`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`DELETE FROM t.test WHERE a = 2`)
+	require.NoError(t, err)
+
+	idx, err := tableDesc.FindIndexWithName("test_index_to_mutate")
+	require.NoError(t, err)
+
+	span := tableDesc.IndexSpan(codec, idx.GetID())
+	kvs, err := kvDB.Scan(context.Background(), span.Key, span.EndKey, 0)
+	require.NoError(t, err)
+
+	// We should have 2 values, 1 deleted value and 1 normal.
+	require.Len(t, kvs, 2)
+	wrappedValue, err := rowenc.DecodeWrapper(kvs[0].Value)
+	require.NoError(t, err)
+	require.True(t, wrappedValue.Deleted)
+	wrappedValue, err = rowenc.DecodeWrapper(kvs[1].Value)
+	require.NoError(t, err)
+	require.False(t, wrappedValue.Deleted)
+}
+
+// TestDeletePreservingIndexEncodingWithEmptyValues is a regression
+// test for a panic when attempting to encode a KV with an empty body.
 func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// The descriptor changes made must have an immediate effect
+	// so disable leases on tables.
+	defer lease.TestingDisableTableLeases()()
+
 	params, _ := tests.CreateTestServerParams()
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -271,7 +341,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
 		idx.StoreColumnIDs = []catid.ColumnID{0x1, 0x3, 0x4}
 		idx.KeySuffixColumnIDs = nil
 		return nil
-	})
+	}, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1, 1, 1); DELETE FROM t.test WHERE x = 1;`)
 	require.NoError(t, err)
@@ -283,22 +353,36 @@ func mutateIndexByName(
 	tableDesc *tabledesc.Mutable,
 	index string,
 	fn func(*descpb.IndexDescriptor) error,
+	state descpb.DescriptorMutation_State,
 ) error {
 	idx, err := tableDesc.FindIndexWithName(index)
 	if err != nil {
 		return err
 	}
 	idxCopy := *idx.IndexDesc()
-	if err := fn(&idxCopy); err != nil {
-		return err
+	if fn != nil {
+		if err := fn(&idxCopy); err != nil {
+			return err
+		}
 	}
 
-	tableDesc.RemovePublicNonPrimaryIndex(idx.Ordinal())
 	m := descpb.DescriptorMutation{}
 	m.Descriptor_ = &descpb.DescriptorMutation_Index{Index: &idxCopy}
 	m.Direction = descpb.DescriptorMutation_ADD
-	m.State = descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
-	tableDesc.Mutations = append(tableDesc.Mutations, m)
+	m.State = state
+	if !idx.IsMutation() {
+		tableDesc.RemovePublicNonPrimaryIndex(idx.Ordinal())
+		tableDesc.Mutations = append(tableDesc.Mutations, m)
+	} else {
+		var ord int
+		for _, m := range tableDesc.AllMutations() {
+			if idx := m.AsIndex(); idx != nil && idx.GetID() == idxCopy.ID {
+				ord = m.MutationOrdinal()
+				break
+			}
+		}
+		tableDesc.Mutations[ord] = m
+	}
 	tableDesc.Version++
 	return kvDB.Put(
 		context.Background(),
