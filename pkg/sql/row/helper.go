@@ -317,7 +317,8 @@ func (rh *rowHelper) deleteIndexEntry(
 	entry *rowenc.IndexEntry,
 	traceKV bool,
 ) error {
-	if index.UseDeletePreservingEncoding() {
+	preserveDelete := index.UseDeletePreservingEncoding() && !index.DeleteOnly()
+	if preserveDelete {
 		if traceKV {
 			log.VEventf(ctx, 2, "Put (delete) %s", entry.Key)
 		}
