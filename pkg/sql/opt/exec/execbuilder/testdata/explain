@@ -1441,7 +1441,7 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 sort
  ├── columns: a:1 b:2  [hidden: column6:6]
  ├── immutable
- ├── stats: [rows=333.333333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1214.30951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
@@ -1450,7 +1450,7 @@ sort
  └── project
       ├── columns: column6:6 a:1 b:2
       ├── immutable
-      ├── stats: [rows=333.333333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1141.73667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
@@ -1458,7 +1458,7 @@ sort
       ├── select
       │    ├── columns: a:1 b:2
       │    ├── immutable
-      │    ├── stats: [rows=333.333333]
+      │    ├── stats: [rows=333.3333]
       │    ├── cost: 1135.05
       │    ├── interesting orderings: (+1)
       │    ├── scan tc
@@ -1478,7 +1478,7 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 sort
  ├── columns: a:1(int) b:2(int)  [hidden: column6:6(int)]
  ├── immutable
- ├── stats: [rows=333.333333]
+ ├── stats: [rows=333.3333]
  ├── cost: 1214.30951
  ├── fd: (1,2)-->(6)
  ├── ordering: +6
@@ -1487,7 +1487,7 @@ sort
  └── project
       ├── columns: column6:6(int) a:1(int) b:2(int)
       ├── immutable
-      ├── stats: [rows=333.333333]
+      ├── stats: [rows=333.3333]
       ├── cost: 1141.73667
       ├── fd: (1,2)-->(6)
       ├── prune: (1,2,6)
@@ -1495,7 +1495,7 @@ sort
       ├── select
       │    ├── columns: a:1(int) b:2(int)
       │    ├── immutable
-      │    ├── stats: [rows=333.333333]
+      │    ├── stats: [rows=333.3333]
       │    ├── cost: 1135.05
       │    ├── interesting orderings: (+1)
       │    ├── scan tc

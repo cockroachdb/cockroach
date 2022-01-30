@@ -119,7 +119,7 @@ union
  ├── columns: x:12(int) y:13(int) s:14(string) x:15(int!null)
  ├── left columns: a.x:1(int) a.y:2(int) a.s:3(string) a.x:1(int)
  ├── right columns: b.x:6(int) z:7(int) b.s:8(string) rowid:9(int)
- ├── stats: [rows=15000, distinct(12-15)=15000, null(12-15)=0, avgsize(12-15)=31.6666667]
+ ├── stats: [rows=15000, distinct(12-15)=15000, null(12-15)=0, avgsize(12-15)=31.6667]
  ├── key: (12-15)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:3(string)
@@ -949,13 +949,13 @@ except
  ├── left columns: column1:1(int) column2:2(int)
  ├── right columns: column1:3(int) column2:4(int)
  ├── cardinality: [0 - 3]
- ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0.666666667, avgsize(1,2)=8]
+ ├── stats: [rows=2, distinct(1,2)=2, null(1,2)=0.666667, avgsize(1,2)=8]
  ├── key: (2)
  ├── fd: ()-->(1)
  ├── select
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, avgsize(1)=4, distinct(1,2)=2, null(1,2)=0.666666667, avgsize(1,2)=8]
+ │    ├── stats: [rows=2, distinct(1)=1, null(1)=2, avgsize(1)=4, distinct(1,2)=2, null(1,2)=0.666667, avgsize(1,2)=8]
  │    ├── fd: ()-->(1)
  │    ├── values
  │    │    ├── columns: column1:1(int) column2:2(int)

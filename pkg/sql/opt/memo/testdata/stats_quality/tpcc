@@ -56,7 +56,7 @@ project
  ├── save-table-name: new_order_02_project_1
  ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(6)=0.999501832, null(6)=0, avgsize(6)=4, distinct(14)=0.786939691, null(14)=0, avgsize(14)=4, distinct(16)=0.999901673, null(16)=0, avgsize(16)=4]
+ ├── stats: [rows=1, distinct(6)=0.999502, null(6)=0, avgsize(6)=4, distinct(14)=0.78694, null(14)=0, avgsize(14)=4, distinct(16)=0.999902, null(16)=0, avgsize(16)=4]
  ├── key: ()
  ├── fd: ()-->(6,14,16)
  └── scan customer
@@ -64,7 +64,7 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(6)=0.999501832, null(6)=0, avgsize(6)=4, distinct(14)=0.786939691, null(14)=0, avgsize(14)=4, distinct(16)=0.999901673, null(16)=0, avgsize(16)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(6)=0.999502, null(6)=0, avgsize(6)=4, distinct(14)=0.78694, null(14)=0, avgsize(14)=4, distinct(16)=0.999902, null(16)=0, avgsize(16)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
       ├── key: ()
       └── fd: ()-->(1-3,6,14,16)
 
@@ -111,7 +111,7 @@ scan item
  │    ├── [/275 - /275]
  │    └── [/300 - /300]
  ├── cardinality: [0 - 12]
- ├── stats: [rows=12, distinct(1)=12, null(1)=0, avgsize(1)=4, distinct(3)=11.8957521, null(3)=0, avgsize(3)=4, distinct(4)=11.9934177, null(4)=0, avgsize(4)=4, distinct(5)=11.9945581, null(5)=0, avgsize(5)=4]
+ ├── stats: [rows=12, distinct(1)=12, null(1)=0, avgsize(1)=4, distinct(3)=11.8958, null(3)=0, avgsize(3)=4, distinct(4)=11.9934, null(4)=0, avgsize(4)=4, distinct(5)=11.9946, null(5)=0, avgsize(5)=4]
  ├── key: (1)
  ├── fd: (1)-->(3-5)
  └── ordering: +1
@@ -142,7 +142,7 @@ project
  ├── save-table-name: new_order_04_project_1
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── cardinality: [0 - 5]
- ├── stats: [rows=5, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(3)=4.86513081, null(3)=0, avgsize(3)=4, distinct(8)=4.8037108, null(8)=0, avgsize(8)=4, distinct(14)=0.993262137, null(14)=0, avgsize(14)=4, distinct(15)=0.993262137, null(15)=0, avgsize(15)=4, distinct(16)=0.993262137, null(16)=0, avgsize(16)=4, distinct(17)=4.99972957, null(17)=0, avgsize(17)=4]
+ ├── stats: [rows=5, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(3)=4.86513, null(3)=0, avgsize(3)=4, distinct(8)=4.80371, null(8)=0, avgsize(8)=4, distinct(14)=0.993262, null(14)=0, avgsize(14)=4, distinct(15)=0.993262, null(15)=0, avgsize(15)=4, distinct(16)=0.993262, null(16)=0, avgsize(16)=4, distinct(17)=4.99973, null(17)=0, avgsize(17)=4]
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -156,7 +156,7 @@ project
       │    ├── [/4/1400 - /4/1400]
       │    └── [/4/1500 - /4/1500]
       ├── cardinality: [0 - 5]
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=4.86513081, null(3)=0, avgsize(3)=4, distinct(8)=4.8037108, null(8)=0, avgsize(8)=4, distinct(14)=0.993262137, null(14)=0, avgsize(14)=4, distinct(15)=0.993262137, null(15)=0, avgsize(15)=4, distinct(16)=0.993262137, null(16)=0, avgsize(16)=4, distinct(17)=4.99972957, null(17)=0, avgsize(17)=4, distinct(1,2)=5, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=5, distinct(1)=5, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=4.86513, null(3)=0, avgsize(3)=4, distinct(8)=4.80371, null(8)=0, avgsize(8)=4, distinct(14)=0.993262, null(14)=0, avgsize(14)=4, distinct(15)=0.993262, null(15)=0, avgsize(15)=4, distinct(16)=0.993262, null(16)=0, avgsize(16)=4, distinct(17)=4.99973, null(17)=0, avgsize(17)=4, distinct(1,2)=5, null(1,2)=0, avgsize(1,2)=8]
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       └── ordering: +1 opt(2) [actual: +1]
@@ -203,7 +203,7 @@ ORDER BY c_first ASC
 project
  ├── save-table-name: payment_01_project_1
  ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar)]
- ├── stats: [rows=2.02642983, distinct(1)=2.02575219, null(1)=0, avgsize(1)=4, distinct(4)=2.02276151, null(4)=0, avgsize(4)=4]
+ ├── stats: [rows=2.02643, distinct(1)=2.02575, null(1)=0, avgsize(1)=4, distinct(4)=2.02276, null(4)=0, avgsize(4)=4]
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
@@ -211,7 +211,7 @@ project
       ├── save-table-name: payment_01_scan_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
       ├── constraint: /3/2/6/4/1: [/1/1/'ANTIABLEABLE' - /1/1/'ANTIABLEABLE']
-      ├── stats: [rows=2.02642983, distinct(1)=2.02575219, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=2.02276151, null(4)=0, avgsize(4)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
+      ├── stats: [rows=2.02643, distinct(1)=2.02575, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=2.02276, null(4)=0, avgsize(4)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
       │   histogram(2)=  0 2.0264
       │                <---- 1 --
       │   histogram(3)=  0 2.0264
@@ -258,7 +258,7 @@ project
  ├── save-table-name: order_status_01_project_1
  ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(4)=0.999106141, null(4)=0, avgsize(4)=4, distinct(5)=0.632121172, null(5)=0, avgsize(5)=4, distinct(6)=0.999501832, null(6)=0, avgsize(6)=4, distinct(17)=0.632121172, null(17)=0, avgsize(17)=4]
+ ├── stats: [rows=1, distinct(4)=0.999106, null(4)=0, avgsize(4)=4, distinct(5)=0.632121, null(5)=0, avgsize(5)=4, distinct(6)=0.999502, null(6)=0, avgsize(6)=4, distinct(17)=0.632121, null(17)=0, avgsize(17)=4]
  ├── key: ()
  ├── fd: ()-->(4-6,17)
  └── scan customer
@@ -266,7 +266,7 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=0.999106141, null(4)=0, avgsize(4)=4, distinct(5)=0.632121172, null(5)=0, avgsize(5)=4, distinct(6)=0.999501832, null(6)=0, avgsize(6)=4, distinct(17)=0.632121172, null(17)=0, avgsize(17)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=0.999106, null(4)=0, avgsize(4)=4, distinct(5)=0.632121, null(5)=0, avgsize(5)=4, distinct(6)=0.999502, null(6)=0, avgsize(6)=4, distinct(17)=0.632121, null(17)=0, avgsize(17)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
       ├── key: ()
       └── fd: ()-->(1-6,17)
 
@@ -301,14 +301,14 @@ ORDER BY c_first ASC
 project
  ├── save-table-name: order_status_02_project_1
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
- ├── stats: [rows=1.9405917, distinct(1)=1.93997024, null(1)=0, avgsize(1)=4, distinct(4)=1.9372274, null(4)=0, avgsize(4)=4, distinct(5)=0.856381956, null(5)=0, avgsize(5)=4, distinct(17)=0.856381956, null(17)=0, avgsize(17)=4]
+ ├── stats: [rows=1.940592, distinct(1)=1.93997, null(1)=0, avgsize(1)=4, distinct(4)=1.93723, null(4)=0, avgsize(4)=4, distinct(5)=0.856382, null(5)=0, avgsize(5)=4, distinct(17)=0.856382, null(17)=0, avgsize(17)=4]
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  └── index-join customer
       ├── save-table-name: order_status_02_index_join_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
-      ├── stats: [rows=1.9405917, distinct(1)=1.93997024, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1.9372274, null(4)=0, avgsize(4)=4, distinct(5)=0.856381956, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(17)=0.856381956, null(17)=0, avgsize(17)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
+      ├── stats: [rows=1.940592, distinct(1)=1.93997, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1.93723, null(4)=0, avgsize(4)=4, distinct(5)=0.856382, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(17)=0.856382, null(17)=0, avgsize(17)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
       │   histogram(2)=  0 1.9406
       │                <---- 2 --
       │   histogram(3)=  0 1.9406
@@ -322,7 +322,7 @@ project
            ├── save-table-name: order_status_02_scan_3
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/2/2/'ANTIBARESE' - /2/2/'ANTIBARESE']
-           ├── stats: [rows=1.9405917, distinct(1)=1.93997024, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1.9372274, null(4)=0, avgsize(4)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
+           ├── stats: [rows=1.940592, distinct(1)=1.93997, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(4)=1.93723, null(4)=0, avgsize(4)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(2,3,6)=1, null(2,3,6)=0, avgsize(2,3,6)=12]
            │   histogram(1)=  0 0.00058218 0.0093148 0.0015525 0.0091208 0.00058218 0.0095089 0.00058218 0.0089267 0.00077624 0.0095089 0.00077624 0.0091208 0.00058218 0.0093148 0.00058218 0.0095089 0.0009703 0.0091208 0.0011644 0.0095089 0.00019406 0.0095089 0.00038812 0.0081505 0.0019406 0.0087327 0.0013584 0.0093148 0.0009703 0.0093148 0.00077624 0.0087327 0.0013584 0.0089267 0.00077624 0.0093148 0.0009703 0.0095089 0.00038812 0.0087327 0.0011644 0.0085386 0.0011644 0.0091208 0.0013584 0.0089267 0.00077624 0.0083445 0.0013584 0.0095089 0.00038812 0.0095089 0.00077624 0.0095089 0.00058218 0.0091208 0.00058218 0.0095089 0.0011644 0.0089267 0.00058218 0.0087327 0.00077624 0.0089267 0.0011644 0.0089267 0.00058218 0.0093148 0.0011644 0.0085386 0.0011644 0.0093148 0.00058218 0.0093148 0.00019406 0.0083445 0.0011644 0.0093148 0.00077624 0.0091208 0.00058218 0.0091208 0.00038812 0.0089267 0.0009703 0.0091208 0.00077624 0.0087327 0.0011644 0.0091208 0.00038812 0.0091208 0.00058218 0.0093148 0.00019406 0.0085386 0.0009703 0.0085386 0.0011644 0.0083445 0.0011644 0.0087327 0.00077624 0.0091208 0.0009703 0.0093148 0.00077624 0.0093148 0.00038812 0.0091208 0.00077624 0.0087327 0.0015525 0.0091208 0.00058218 0.0081505 0.0015525 0.0089267 0.0011644 0.0093148 0.0011644 0.0093148 0.0013584 0.0091208 0.00077624 0.0089267 0.0015525 0.0091208 0.00077624 0.0093148 0.00058218 0.0093148 0.00038812 0.0093148 0.00058218 0.0089267 0.00058218 0.0081505 0.0013584 0.0093148 0.0009703 0.0085386 0.0013584 0.0091208 0.0009703 0.0093148 0.00019406 0.0093148 0.00058218 0.0087327 0.00077624 0.0093148 0.00038812 0.0093148 0.00077624 0.0079564 0.0017465 0.0091208 0.00077624 0.0091208 0.00058218 0.0089267 0.00077624 0.0085386 0.0011644 0.0093148 0.00038812 0.0091208 0.0009703 0.0091208 0.0011644 0.0087327 0.0013584 0.0093148 0.0009703 0.0093148 0.0013584 0.0091208 0.00038812 0.0089267 0.00077624 0.0091208 0.00058218 0.0091208 0.00058218 0.0093148 0.00077624 0.0091208 0.00058218 0.0089267 0.00058218 0.0089267 0.0009703 0.0091208 0.00038812 0.0093148 0.0009703 0.0091208 0.00058218 0.0093148 0.0011644 0.0089267 0.0009703 0.0089267 0.0015525 0.0093148 0.00058218 0.0093148 0.00038812 0.0089267 0.00058218 0.0085386 0.0009703 0.0091208 0.00038812 0.0089267 0.0013584 0.0089267 0.00077624 0.0087327 0.00077624 0.0089267 0.00077624 0.0085386 0.0009703 0.0087327 0.00077624 0.0091208 0.00058218 0.0093148 0.00038812 0.0093148 0.0011644 0.0091208 0.00058218 0.0085386 0.0011644 0.0089267 0.00058218 0.0089267 0.00058218 0.0091208 0.00038812 0.0091208 0.00038812 0.0093148 0.00058218 0.0091208 0.0011644 0.0085386 0.0011644 0.0093148 0.00058218 0.0093148 0.0011644 0.0091208 0.00077624 0.0083445 0.0013584 0.0091208 0.0017465 0.0087327 0.0013584 0.0081505 0.0011644 0.0089267 0.00058218 0.0087327 0.00077624 0.0091208 0.00077624 0.0091208 0.00019406 0.0089267 0.00058218 0.0087327 0.00058218 0.0091208 0.00019406 0.0085386 0.0015525 0.0091208 0.00077624 0.0087327 0.00058218 0.0089267 0.00058218 0.0083445 0.0011644 0.0087327 0.00058218 0.0091208 0.00019406 0.0087327 0.00058218 0.0085386 0.00077624 0.0087327 0.00058218 0.0089267 0.00077624 0.0091208 0.00058218 0.0089267 0.00058218 0.0085386 0.0009703 0.0091208 0.00019406 0.0089267 0.00038812 0.0083445 0.0009703 0.0089267 0.00058218 0.0087327 0.00058218 0.0085386 0.0011644 0.0079564 0.0013584 0.0089267 0.00038812 0.0079564 0.0013584 0.0085386 0.0009703 0.0087327 0.00058218 0.0091208 0.00038812 0.0091208 0.00058218 0.0091208 0.00038812 0.0089267 0.00038812 0.0091208 0.00038812 0.0089267 0.0009703 0.0085386 0.00077624 0.0087327 0.0009703 0.0091208 0.0013584 0.0087327 0.0011644 0.0087327 0.0011644 0.0089267 0.0009703 0.0089267 0.00077624 0.0089267 0.00058218 0.0089267 0.00077624 0.0085386 0.00077624 0.0085386 0.0009703 0.0083445 0.0009703 0.0089267 0.00077624 0.0085386 0.0013584 0.0085386 0.00077624 0.0081505 0.0009703 0.0087327 0.00077624 0.0081505 0.0009703 0.0089267 0.00038812 0.0085386 0.00058218 0.0087327 0.00038812 0.0083445 0.00077624 0.0087327 0.00077624 0.0085386 0.0013584 0.0083445 0.0009703 0.0087327 0.00077624 0.0079564 0.00077624 0.0081505 0.00077624 0.0079564 0.0009703
            │                <------ 1 ----------------- 14 ----------------- 30 ----------------- 44 ----------------- 59 ----------------- 74 ----------------- 94 ---------------- 113 ---------------- 130 --------------- 148 --------------- 164 ---------------- 178 ---------------- 189 --------------- 207 --------------- 222 --------------- 240 ---------------- 257 --------------- 270 ---------------- 283 --------------- 296 ---------------- 312 --------------- 326 --------------- 341 --------------- 355 ---------------- 368 --------------- 382 ---------------- 400 ---------------- 414 ---------------- 433 ---------------- 448 --------------- 460 ---------------- 472 ---------------- 486 --------------- 503 ---------------- 520 --------------- 533 --------------- 548 ---------------- 563 ---------------- 577 --------------- 590 ---------------- 605 ---------------- 620 ---------------- 633 --------------- 648 ---------------- 662 --------------- 676 ---------------- 693 ---------------- 710 ---------------- 722 --------------- 738 --------------- 752 --------------- 767 ---------------- 784 --------------- 800 ---------------- 815 ---------------- 825 ---------------- 839 --------------- 853 ---------------- 867 --------------- 881 --------------- 895 --------------- 915 --------------- 928 ---------------- 942 --------------- 958 ---------------- 975 ---------------- 991 ---------------- 1008 --------------- 1023 -------------- 1036 -------------- 1053 -------------- 1067 -------------- 1083 --------------- 1099 --------------- 1116 --------------- 1134 --------------- 1146 --------------- 1165 -------------- 1184 --------------- 1200 --------------- 1217 --------------- 1230 -------------- 1247 --------------- 1260 -------------- 1276 -------------- 1288 -------------- 1301 -------------- 1315 -------------- 1328 --------------- 1344 --------------- 1361 --------------- 1377 --------------- 1391 --------------- 1410 --------------- 1424 --------------- 1440 -------------- 1455 --------------- 1470 -------------- 1486 --------------- 1502 -------------- 1514 -------------- 1528 -------------- 1541 --------------- 1558 --------------- 1574 --------------- 1587 -------------- 1602 --------------- 1618 -------------- 1632 --------------- 1646 --------------- 1657 --------------- 1670 -------------- 1687 --------------- 1702 --------------- 1719 --------------- 1735 -------------- 1750 --------------- 1765 -------------- 1781 --------------- 1799 --------------- 1816 --------------- 1835 --------------- 1851 --------------- 1868 -------------- 1881 -------------- 1897 --------------- 1910 -------------- 1923 --------------- 1939 -------------- 1954 -------------- 1965 -------------- 1979 -------------- 1993 --------------- 2008 --------------- 2020 --------------- 2034 --------------- 2048 --------------- 2066 --------------- 2081 --------------- 2097 -------------- 2110 --------------- 2130 --------------- 2144 --------------- 2159 -------------- 2175 --------------- 2191 --------------- 2208 --------------- 2224 --------------- 2243 --------------- 2258 --------------- 2271 --------------- 2282 --------------- 2295 -------------- 2308 --------------- 2322 --------------- 2336 -------------- 2350 --------------- 2366 --------------- 2382 -------------- 2400 -------------- 2412 --------------- 2428 -------------- 2444 -------------- 2456 --------------- 2466 --------------- 2481 --------------- 2496 --------------- 2511 --------------- 2524 --------------- 2537 -------------- 2553 --------------- 2566 -------------- 2582 -------------- 2597 -------------- 2609 -------------- 2625 -------------- 2644 --------------- 2659 --------------- 2675 --------------- 2690 --------------- 2706 -------------- 2723 -------------- 2739 --------------- 2752 -------------- 2768 --------------- 2782 -------------- 2797 --------------- 2813 -------------- 2829 --------------- 2845 --------------- 2858 --------------- 2875 --------------- 2894 --------------- 2905 -------------- 2922 -------------- 2935 --------------- 2954 --------------- 2969 --------------- 2987 -------------- 3000 --
            │   histogram(2)=  0 1.9406
@@ -370,7 +370,7 @@ project
  ├── save-table-name: order_status_03_project_1
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.980363078, distinct(1)=0.980204458, null(1)=0, avgsize(1)=4, distinct(5)=0.624825745, null(5)=0, avgsize(5)=4, distinct(6)=0.937947085, null(6)=0.294108923, avgsize(6)=4]
+ ├── stats: [rows=0.9803631, distinct(1)=0.980204, null(1)=0, avgsize(1)=4, distinct(5)=0.624826, null(5)=0, avgsize(5)=4, distinct(6)=0.937947, null(6)=0.294109, avgsize(6)=4]
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  └── scan order@order_idx
@@ -378,7 +378,7 @@ project
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
       ├── limit: 1
-      ├── stats: [rows=0.980363078, distinct(1)=0.980204458, null(1)=0, avgsize(1)=4, distinct(2)=0.980363078, null(2)=0, avgsize(2)=4, distinct(3)=0.980363078, null(3)=0, avgsize(3)=4, distinct(4)=0.980363078, null(4)=0, avgsize(4)=4, distinct(5)=0.624825745, null(5)=0, avgsize(5)=4, distinct(6)=0.937947085, null(6)=0.294108923, avgsize(6)=4]
+      ├── stats: [rows=0.9803631, distinct(1)=0.980204, null(1)=0, avgsize(1)=4, distinct(2)=0.980363, null(2)=0, avgsize(2)=4, distinct(3)=0.980363, null(3)=0, avgsize(3)=4, distinct(4)=0.980363, null(4)=0, avgsize(4)=4, distinct(5)=0.624826, null(5)=0, avgsize(5)=4, distinct(6)=0.937947, null(6)=0.294109, avgsize(6)=4]
       ├── key: ()
       └── fd: ()-->(1-6)
 
@@ -410,12 +410,12 @@ WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
 project
  ├── save-table-name: order_status_04_project_1
  ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
- ├── stats: [rows=8.89976817, distinct(5)=8.89938399, null(5)=0, avgsize(5)=4, distinct(6)=5.89335269, null(6)=0, avgsize(6)=4, distinct(7)=1.97664031, null(7)=2.66627532, avgsize(7)=4, distinct(8)=0.999863581, null(8)=0, avgsize(8)=4, distinct(9)=8.89971412, null(9)=0, avgsize(9)=4]
+ ├── stats: [rows=8.899768, distinct(5)=8.89938, null(5)=0, avgsize(5)=4, distinct(6)=5.89335, null(6)=0, avgsize(6)=4, distinct(7)=1.97664, null(7)=2.66628, avgsize(7)=4, distinct(8)=0.999864, null(8)=0, avgsize(8)=4, distinct(9)=8.89971, null(9)=0, avgsize(9)=4]
  └── scan order_line
       ├── save-table-name: order_status_04_scan_2
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/1/1/1000 - /1/1/1000]
-      ├── stats: [rows=8.89976817, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=8.89938399, null(5)=0, avgsize(5)=4, distinct(6)=5.89335269, null(6)=0, avgsize(6)=4, distinct(7)=1.97664031, null(7)=2.66627532, avgsize(7)=4, distinct(8)=0.999863581, null(8)=0, avgsize(8)=4, distinct(9)=8.89971412, null(9)=0, avgsize(9)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
+      ├── stats: [rows=8.899768, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=8.89938, null(5)=0, avgsize(5)=4, distinct(6)=5.89335, null(6)=0, avgsize(6)=4, distinct(7)=1.97664, null(7)=2.66628, avgsize(7)=4, distinct(8)=0.999864, null(8)=0, avgsize(8)=4, distinct(9)=8.89971, null(9)=0, avgsize(9)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
       │   histogram(1)=  0 8.8998
       │                <--- 1000
       │   histogram(2)=  0 8.8998
@@ -475,7 +475,7 @@ project
  ├── save-table-name: delivery_01_project_1
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(1)=0.999677645, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1, distinct(1)=0.999678, null(1)=0, avgsize(1)=4]
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan new_order
@@ -483,7 +483,7 @@ project
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
       ├── constraint: /3/2/1: [/7/6 - /7/6]
       ├── limit: 1
-      ├── stats: [rows=1, distinct(1)=0.999677645, null(1)=0, avgsize(1)=4, distinct(2)=0.632318135, null(2)=0, avgsize(2)=4, distinct(3)=0.632318135, null(3)=0, avgsize(3)=4]
+      ├── stats: [rows=1, distinct(1)=0.999678, null(1)=0, avgsize(1)=4, distinct(2)=0.632318, null(2)=0, avgsize(2)=4, distinct(3)=0.632318, null(3)=0, avgsize(3)=4]
       ├── key: ()
       └── fd: ()-->(1-3)
 
@@ -517,7 +517,7 @@ scalar-group-by
  │    ├── save-table-name: delivery_02_scan_2
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
  │    ├── constraint: /3/2/-1/4: [/8/6/1000 - /8/6/1000]
- │    ├── stats: [rows=10.0552626, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(9)=10.0551936, null(9)=0, avgsize(9)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
+ │    ├── stats: [rows=10.05526, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(9)=10.0552, null(9)=0, avgsize(9)=4, distinct(1-3)=1, null(1-3)=0, avgsize(1-3)=12]
  │    │   histogram(1)=  0 10.055
  │    │                <--- 1000
  │    │   histogram(2)=  0 10.055
@@ -569,7 +569,7 @@ project
  ├── save-table-name: stock_level_01_project_1
  ├── columns: d_next_o_id:11(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(11)=0.633967659, null(11)=0, avgsize(11)=4]
+ ├── stats: [rows=1, distinct(11)=0.633968, null(11)=0, avgsize(11)=4]
  ├── key: ()
  ├── fd: ()-->(11)
  └── scan district
@@ -577,7 +577,7 @@ project
       ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(11)=0.633967659, null(11)=0, avgsize(11)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(11)=0.633968, null(11)=0, avgsize(11)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8]
       ├── key: ()
       └── fd: ()-->(1,2,11)
 
@@ -616,20 +616,20 @@ scalar-group-by
  │    ├── save-table-name: stock_level_02_distinct_on_2
  │    ├── columns: s_i_id:13(int!null)
  │    ├── grouping columns: s_i_id:13(int!null)
- │    ├── stats: [rows=188.673761, distinct(13)=188.673761, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=188.6738, distinct(13)=188.674, null(13)=0, avgsize(13)=4]
  │    ├── key: (13)
  │    └── inner-join (lookup stock)
  │         ├── save-table-name: stock_level_02_lookup_join_3
  │         ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:13(int!null) s_w_id:14(int!null) s_quantity:15(int!null)
  │         ├── key columns: [3 5] = [14 13]
  │         ├── lookup columns are key
- │         ├── stats: [rows=193.530157, distinct(1)=19.9923221, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=188.673761, null(5)=0, avgsize(5)=4, distinct(13)=188.673761, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4]
+ │         ├── stats: [rows=193.5302, distinct(1)=19.9923, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=188.674, null(5)=0, avgsize(5)=4, distinct(13)=188.674, null(13)=0, avgsize(13)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4]
  │         ├── fd: ()-->(2,3,14), (13)-->(15), (5)==(13), (13)==(5), (3)==(14), (14)==(3)
  │         ├── scan order_line
  │         │    ├── save-table-name: stock_level_02_scan_4
  │         │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │         │    ├── constraint: /3/2/-1/4: [/1/1/999 - /1/1/980]
- │         │    ├── stats: [rows=188.846645, distinct(1)=19.9935714, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=188.673761, null(5)=0, avgsize(5)=4, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=8, distinct(1-3)=19.9935714, null(1-3)=0, avgsize(1-3)=12]
+ │         │    ├── stats: [rows=188.8466, distinct(1)=19.9936, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=1, null(3)=0, avgsize(3)=4, distinct(5)=188.674, null(5)=0, avgsize(5)=4, distinct(2,3)=1, null(2,3)=0, avgsize(2,3)=8, distinct(1-3)=19.9936, null(1-3)=0, avgsize(1-3)=12]
  │         │    │   histogram(1)=  0   0   61.592 11.599 106.76 8.8966
  │         │    │                <--- 979 -------- 986 --------- 999 -
  │         │    │   histogram(2)=  0 188.85
@@ -724,7 +724,7 @@ scalar-group-by
  │    ├── left ordering: +1
  │    ├── right ordering: +13
  │    ├── immutable
- │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333, null(1)=0, avgsize(1)=4, distinct(9)=1, null(9)=0, avgsize(9)=4, distinct(13)=3.33333333, null(13)=0, avgsize(13)=4, distinct(25)=3.33333333, null(25)=0, avgsize(25)=4]
+ │    ├── stats: [rows=3.333333, distinct(1)=3.33333, null(1)=0, avgsize(1)=4, distinct(9)=1, null(9)=0, avgsize(9)=4, distinct(13)=3.33333, null(13)=0, avgsize(13)=4, distinct(25)=3.33333, null(25)=0, avgsize(25)=4]
  │    ├── key: (13)
  │    ├── fd: (1)-->(9), (13)-->(25), (1)==(13), (13)==(1)
  │    ├── scan warehouse
@@ -978,7 +978,7 @@ scalar-group-by
  │    ├── save-table-name: consistency_05_select_2
  │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:6(int!null) min:7(int!null) count_rows:8(int!null)
  │    ├── immutable
- │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, avgsize(2)=4, distinct(3)=9.8265847, null(3)=0, avgsize(3)=4, distinct(6)=33.3333333, null(6)=0, avgsize(6)=8, distinct(7)=33.3333333, null(7)=0, avgsize(7)=8, distinct(8)=33.3333333, null(8)=0, avgsize(8)=8]
+ │    ├── stats: [rows=33.33333, distinct(2)=9.82658, null(2)=0, avgsize(2)=4, distinct(3)=9.82658, null(3)=0, avgsize(3)=4, distinct(6)=33.3333, null(6)=0, avgsize(6)=8, distinct(7)=33.3333, null(7)=0, avgsize(7)=8, distinct(8)=33.3333, null(8)=0, avgsize(8)=8]
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(6-8)
  │    ├── group-by (streaming)
@@ -1649,12 +1649,12 @@ scalar-group-by
  ├── select
  │    ├── save-table-name: consistency_12_select_2
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
- │    ├── stats: [rows=629603.668, distinct(1)=2999, null(1)=440659.586, avgsize(1)=4, distinct(2)=10, null(2)=440659.586, avgsize(2)=4, distinct(3)=10, null(3)=440659.586, avgsize(3)=4, distinct(11)=2999, null(11)=0, avgsize(11)=4, distinct(12)=10, null(12)=0, avgsize(12)=4, distinct(13)=10, null(13)=0, avgsize(13)=4]
+ │    ├── stats: [rows=629603.7, distinct(1)=2999, null(1)=440660, avgsize(1)=4, distinct(2)=10, null(2)=440660, avgsize(2)=4, distinct(3)=10, null(3)=440660, avgsize(3)=4, distinct(11)=2999, null(11)=0, avgsize(11)=4, distinct(12)=10, null(12)=0, avgsize(12)=4, distinct(13)=10, null(13)=0, avgsize(13)=4]
  │    ├── full-join (hash)
  │    │    ├── save-table-name: consistency_12_full_join_3
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:11(int) ol_d_id:12(int) ol_w_id:13(int)
  │    │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
- │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629303.857, avgsize(1)=4, distinct(2)=10, null(2)=629303.857, avgsize(2)=4, distinct(3)=10, null(3)=629303.857, avgsize(3)=4, distinct(11)=2999, null(11)=0, avgsize(11)=4, distinct(12)=10, null(12)=0, avgsize(12)=4, distinct(13)=10, null(13)=0, avgsize(13)=4]
+ │    │    ├── stats: [rows=899134, distinct(1)=2999, null(1)=629304, avgsize(1)=4, distinct(2)=10, null(2)=629304, avgsize(2)=4, distinct(3)=10, null(3)=629304, avgsize(3)=4, distinct(11)=2999, null(11)=0, avgsize(11)=4, distinct(12)=10, null(12)=0, avgsize(12)=4, distinct(13)=10, null(13)=0, avgsize(13)=4]
  │    │    ├── project
  │    │    │    ├── save-table-name: consistency_12_project_4
  │    │    │    ├── columns: ol_o_id:11(int!null) ol_d_id:12(int!null) ol_w_id:13(int!null)

@@ -811,7 +811,7 @@ locality-optimized-search
  ├── left columns: t.public.abc_part.r:7(string) t.public.abc_part.a:8(int) t.public.abc_part.b:9(int) t.public.abc_part.c:10(string)
  ├── right columns: t.public.abc_part.r:13(string) t.public.abc_part.a:14(int) t.public.abc_part.b:15(int) t.public.abc_part.c:16(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.910000001, distinct(3)=0.910000001, null(3)=0, avgsize(3)=4, distinct(4)=0.910000001, null(4)=0, avgsize(4)=4, distinct(3,4)=0.910000001, null(3,4)=0, avgsize(3,4)=8]
+ ├── stats: [rows=0.91, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
  ├── cost: 3.468444
  ├── key: ()
  ├── fd: ()-->(1-4)
@@ -861,7 +861,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    │         └── a2.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.900900001, distinct(1)=0.89738934, null(1)=0, avgsize(1)=4, distinct(2)=0.900900001, null(2)=0, avgsize(2)=4, distinct(3)=0.900900001, null(3)=0, avgsize(3)=4, distinct(4)=0.900900001, null(4)=0, avgsize(4)=4]
+ │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, avgsize(1)=4, distinct(2)=0.9009, null(2)=0, avgsize(2)=4, distinct(3)=0.9009, null(3)=0, avgsize(3)=4, distinct(4)=0.9009, null(4)=0, avgsize(4)=4]
  │    ├── cost: 10.8432087
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
@@ -871,7 +871,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── left columns: a1.r:13 a1.a:14 a1.b:15 a1.c:16
  │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=0.910000001, distinct(1)=0.906282579, null(1)=0, avgsize(1)=4, distinct(2)=0.910000001, null(2)=0, avgsize(2)=4, distinct(3)=0.910000001, null(3)=0, avgsize(3)=4, distinct(4)=0.910000001, null(4)=0, avgsize(4)=4, distinct(3,4)=0.910000001, null(3,4)=0, avgsize(3,4)=8]
+ │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, avgsize(1)=4, distinct(2)=0.91, null(2)=0, avgsize(2)=4, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
  │    │    ├── cost: 3.468444
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)

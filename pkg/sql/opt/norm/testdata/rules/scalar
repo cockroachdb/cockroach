@@ -1162,7 +1162,7 @@ SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
 ----
 project
  ├── columns: k:1(int!null)
- ├── stats: [rows=10.0000001]
+ ├── stats: [rows=10]
  ├── cost: 24.5400001
  ├── key: (1)
  ├── prune: (1)
@@ -1170,7 +1170,7 @@ project
  └── scan t.public.e@e_i_idx
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
-      ├── stats: [rows=10.0000001, distinct(2)=1, null(2)=10, avgsize(2)=4]
+      ├── stats: [rows=10, distinct(2)=1, null(2)=10, avgsize(2)=4]
       ├── cost: 24.4200001
       ├── key: (1)
       ├── fd: ()-->(2)

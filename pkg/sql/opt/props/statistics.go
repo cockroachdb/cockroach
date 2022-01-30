@@ -164,16 +164,16 @@ func (s *Statistics) StringWithoutHistograms() string {
 func (s *Statistics) stringImpl(includeHistograms bool) string {
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "[rows=%.9g", s.RowCount)
+	fmt.Fprintf(&buf, "[rows=%.7g", s.RowCount)
 	colStats := make(ColumnStatistics, s.ColStats.Count())
 	for i := 0; i < s.ColStats.Count(); i++ {
 		colStats[i] = s.ColStats.Get(i)
 	}
 	sort.Sort(colStats)
 	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
-		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
-		fmt.Fprintf(&buf, ", avgsize%s=%.9g", col.Cols.String(), col.AvgSize)
+		fmt.Fprintf(&buf, ", distinct%s=%.6g", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", null%s=%.6g", col.Cols.String(), col.NullCount)
+		fmt.Fprintf(&buf, ", avgsize%s=%.6g", col.Cols.String(), col.AvgSize)
 	}
 	buf.WriteString("]")
 	if includeHistograms {
