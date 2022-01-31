@@ -289,7 +289,7 @@ func TestWindowFunctions(t *testing.T) {
 				expected: colexectestutils.Tuples{
 					{1, 7, dec("1.6666666666666666667")}, {1, 3, dec("1.6666666666666666667")},
 					{1, -5, dec("1.6666666666666666667")}, {2, nil, dec("0")},
-					{2, 0, dec("0")}, {3, 6, dec("6")},
+					{2, 0, dec("0")}, {3, 6, dec("6.0000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -512,8 +512,8 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{nil, 4}, {nil, -6}, {1, 2}, {1, nil}, {2, -3}, {3, 1}, {3, 7}},
 				expected: colexectestutils.Tuples{
-					{nil, 4, dec("-1")}, {nil, -6, dec("-1")},
-					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75")},
+					{nil, 4, dec("-1.0000000000000000000")}, {nil, -6, dec("-1.0000000000000000000")},
+					{1, 2, dec("0")}, {1, nil, dec("0")}, {2, -3, dec("-0.75000000000000000000")},
 					{3, 1, dec("0.83333333333333333333")}, {3, 7, dec("0.83333333333333333333")}},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{
@@ -781,10 +781,10 @@ func TestWindowFunctions(t *testing.T) {
 					{1, 2, 5}, {2, 1, nil}, {3, 1, 8}, {3, 2, 1},
 				},
 				expected: colexectestutils.Tuples{
-					{nil, nil, -10, dec("-3")}, {nil, nil, 4, dec("-3")},
-					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2")},
-					{1, 2, 5, dec("3.5")}, {2, 1, nil, nil},
-					{3, 1, 8, dec("8")}, {3, 2, 1, dec("4.5")},
+					{nil, nil, -10, dec("-3.0000000000000000000")}, {nil, nil, 4, dec("-3.0000000000000000000")},
+					{nil, 1, 6, dec("0")}, {1, nil, 2, dec("2.0000000000000000000")},
+					{1, 2, 5, dec("3.5000000000000000000")}, {2, 1, nil, nil},
+					{3, 1, 8, dec("8.0000000000000000000")}, {3, 2, 1, dec("4.5000000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					PartitionBy: []uint32{0},
@@ -1003,8 +1003,9 @@ func TestWindowFunctions(t *testing.T) {
 			{
 				tuples: colexectestutils.Tuples{{1}, {2}, {nil}, {4}, {nil}, {6}},
 				expected: colexectestutils.Tuples{
-					{1, dec("3.25")}, {2, dec("3.25")}, {nil, dec("3.25")},
-					{4, dec("3.25")}, {nil, dec("3.25")}, {6, dec("3.25")},
+					{1, dec("3.2500000000000000000")}, {2, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {4, dec("3.2500000000000000000")},
+					{nil, dec("3.2500000000000000000")}, {6, dec("3.2500000000000000000")},
 				},
 				windowerSpec: execinfrapb.WindowerSpec{
 					WindowFns: []execinfrapb.WindowerSpec_WindowFn{

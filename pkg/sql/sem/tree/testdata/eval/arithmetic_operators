@@ -256,7 +256,7 @@ eval
 eval
 2:::decimal ^ -3:::decimal
 ----
-0.125
+0.12500000000000000000
 
 eval
 -2:::decimal ^ 3:::decimal
@@ -266,7 +266,7 @@ eval
 eval
 -2:::decimal ^ -3:::decimal
 ----
--0.125
+-0.12500000000000000000
 
 eval
 3:::decimal ^ 2:::decimal

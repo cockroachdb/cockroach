@@ -612,7 +612,7 @@ SELECT jsonb_agg(s) FROM kv WHERE s IS NULL
 query RRRR
 SELECT avg(k), avg(v), sum(k), sum(v) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000000  2.8000000000000000000  30  14
 
 query TTTT
 SELECT min(i), avg(i), max(i), sum(i) FROM kv
@@ -622,24 +622,24 @@ SELECT min(i), avg(i), max(i), sum(i) FROM kv
 query RRRR
 SELECT avg(k::decimal), avg(v::decimal), sum(k::decimal), sum(v::decimal) FROM kv
 ----
-5 2.8 30 14
+5.0000000000000000000  2.8000000000000000000  30  14
 
 query RRRR
 SELECT avg(DISTINCT k), avg(DISTINCT v), sum(DISTINCT k), sum(DISTINCT v) FROM kv
 ----
-5 3 30 6
+5.0000000000000000000  3.0000000000000000000  30  6
 
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv
 ----
-14.0
+14.00000000000000000000
 
 # Verify things work with distsql when some of the nodes emit no results in the
 # local stage.
 query R
 SELECT avg(k) * 2.0 + max(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
-14.0
+14.00000000000000000000
 
 # Grouping columns can be eliminated, but should still return zero rows (i.e.
 # shouldn't use scalar GroupBy).
@@ -677,7 +677,7 @@ two 2 true 5
 query RRRR
 SELECT avg(b), sum(b), avg(d), sum(d) FROM abc
 ----
-1.75 3.5 3.05 6.1
+1.75  3.5  3.0500000000000000000  6.1
 
 # Verify summing of intervals
 statement ok
@@ -864,7 +864,7 @@ SELECT var_pop(x) FROM xyz WHERE x = 1
 query RRR
 SELECT stddev_samp(x), stddev(y::decimal), round(stddev_samp(z), 14) FROM xyz
 ----
-3  2.1213203435596425732  2.51661147842358
+3.0000000000000000000  2.1213203435596425732  2.51661147842358
 
 query R
 SELECT stddev(x) FROM xyz WHERE x = 1
@@ -874,7 +874,7 @@ NULL
 query RRR
 SELECT stddev_pop(x), stddev_pop(y::decimal), round(stddev_pop(z), 14) FROM xyz
 ----
-2.4494897427831780982  1.5  2.05480466765633
+2.4494897427831780982  1.5000000000000000000  2.05480466765633
 
 query R
 SELECT stddev_pop(x) FROM xyz WHERE x = 1

@@ -115,7 +115,7 @@ func Example_sql() {
 	// ERROR: -e: woops! COPY has confused this client! Suggestion: use 'psql' for COPY
 	// sql -e select 1/(@1-2) from generate_series(1,3)
 	// ?column?
-	// -1
+	// -1.0000000000000000000
 	// (error encountered after some results were delivered)
 	// ERROR: division by zero
 	// SQLSTATE: 22012
@@ -190,9 +190,9 @@ func Example_sql_watch() {
 	// INSERT 1
 	// sql --watch .1s -e update d set x=x-1 returning 1/x as dec
 	// dec
-	// 0.5
+	// 0.50000000000000000000
 	// dec
-	// 1
+	// 1.0000000000000000000
 	// ERROR: division by zero
 	// SQLSTATE: 22012
 }
