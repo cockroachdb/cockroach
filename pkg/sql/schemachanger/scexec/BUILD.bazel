@@ -25,7 +25,6 @@ go_library(
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/schemachanger/screl",
         "//pkg/sql/sessiondata",
         "//pkg/util/hlc",
         "//pkg/util/log",
