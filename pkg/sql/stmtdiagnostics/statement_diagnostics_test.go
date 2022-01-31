@@ -202,7 +202,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 	// Verify that an error is returned when attempting to cancel non-existent
 	// request.
 	t.Run("cancel non-existent request", func(t *testing.T) {
-		require.NotNil(t, registry.CancelRequest(ctx, "foo"))
+		require.NotNil(t, registry.CancelRequest(ctx, 123456789))
 	})
 
 	// Verify that if a request (either conditional or unconditional, w/ or w/o
@@ -227,7 +227,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 							require.NoError(t, err)
 							checkNotCompleted(reqID)
 
-							err = registry.CancelRequest(ctx, fprint)
+							err = registry.CancelRequest(ctx, reqID)
 							require.NoError(t, err)
 							checkNotCompleted(reqID)
 
@@ -271,7 +271,7 @@ func TestDiagnosticsRequest(t *testing.T) {
 					go func() {
 						defer wg.Done()
 						<-waitCh
-						err := registry.CancelRequest(ctx, fprint)
+						err := registry.CancelRequest(ctx, reqID)
 						require.NoError(t, err)
 					}()
 
