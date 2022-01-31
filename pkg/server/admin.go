@@ -2707,9 +2707,9 @@ func (s *adminServer) SendKVBatch(
 	}
 	log.StructuredEvent(ctx, event)
 
-	ctx, finishSpan := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
+	ctx, sp := s.server.node.setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba)
 	var br *roachpb.BatchResponse
-	defer func() { finishSpan(ctx, br) }()
+	defer func() { sp.finish(ctx, br) }()
 	br, pErr := s.server.db.NonTransactionalSender().Send(ctx, *ba)
 	br.Error = pErr
 	return br, nil
