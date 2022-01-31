@@ -153,6 +153,7 @@ const (
 	CrdbInternalDefaultPrivilegesTable
 	CrdbInternalActiveRangeFeedsTable
 	CrdbInternalTenantUsageDetailsViewID
+	CrdbInternalPgCatalogTableIsImplementedTableID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
