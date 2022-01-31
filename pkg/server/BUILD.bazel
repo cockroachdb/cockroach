@@ -32,6 +32,7 @@ go_library(
         "init_handshake.go",
         "listen_and_update_addrs.go",
         "loopback.go",
+        "loss_of_quorum.go",
         "migration.go",
         "node.go",
         "node_tenant.go",
