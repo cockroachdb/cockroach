@@ -88,7 +88,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -2530,9 +2529,7 @@ func (s *SQLServer) startServeSQL(
 	// Start servicing SQL connections.
 
 	pgCtx := s.pgServer.AmbientCtx.AnnotateCtx(context.Background())
-	tcpKeepAlive := tcpKeepAliveManager{
-		tcpKeepAlive: envutil.EnvOrDefaultDuration("COCKROACH_SQL_TCP_KEEP_ALIVE", time.Minute),
-	}
+	tcpKeepAlive := makeTCPKeepAliveManager()
 
 	_ = stopper.RunAsyncTaskEx(pgCtx,
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
@@ -2897,51 +2894,6 @@ func (s *Server) StartDiagnostics(ctx context.Context) {
 
 func init() {
 	tracing.RegisterTagRemapping("n", "node")
-}
-
-// configure attempts to set TCP keep-alive on
-// connection. Does not fail on errors.
-func (k *tcpKeepAliveManager) configure(ctx context.Context, conn net.Conn) {
-	if k.tcpKeepAlive == 0 {
-		return
-	}
-
-	muxConn, ok := conn.(*cmux.MuxConn)
-	if !ok {
-		return
-	}
-	tcpConn, ok := muxConn.Conn.(*net.TCPConn)
-	if !ok {
-		return
-	}
-
-	// Only log success/failure once.
-	doLog := atomic.CompareAndSwapInt32(&k.loggedKeepAliveStatus, 0, 1)
-	if err := tcpConn.SetKeepAlive(true); err != nil {
-		if doLog {
-			log.Ops.Warningf(ctx, "failed to enable TCP keep-alive for pgwire: %v", err)
-		}
-		return
-
-	}
-	if err := tcpConn.SetKeepAlivePeriod(k.tcpKeepAlive); err != nil {
-		if doLog {
-			log.Ops.Warningf(ctx, "failed to set TCP keep-alive duration for pgwire: %v", err)
-		}
-		return
-	}
-
-	if doLog {
-		log.VEventf(ctx, 2, "setting TCP keep-alive to %s for pgwire", k.tcpKeepAlive)
-	}
-}
-
-type tcpKeepAliveManager struct {
-	// The keepalive duration.
-	tcpKeepAlive time.Duration
-	// loggedKeepAliveStatus ensures that errors about setting the TCP
-	// keepalive status are only reported once.
-	loggedKeepAliveStatus int32
 }
 
 // ListenAndUpdateAddrs starts a TCP listener on the specified address
