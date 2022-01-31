@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package tabledesc
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -48,7 +47,7 @@ func (v *fixCastForStyleVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr
 	if v.err != nil {
 		return false, expr
 	}
-
+	//If the expression is immutable this will exit early
 	_, _, _, err := schemaexpr.DequalifyAndValidateExpr(
 		v.ctx,
 		v.tDesc,
@@ -73,6 +72,19 @@ func (v *fixCastForStyleVisitor) VisitPost(expr tree.Expr) tree.Expr {
 	}
 
 	if expr, ok := expr.(*tree.CastExpr); ok {
+
+		typedExpr, err := schemaexpr.DequalifyAndTypeCheckExpr(
+			v.ctx,
+			v.tDesc,
+			expr,
+			v.semaCtx,
+			tree.NewUnqualifiedTableName(tree.Name(v.tDesc.GetName())),
+		)
+		if err != nil {
+			return expr
+		}
+		expr = typedExpr.(*tree.CastExpr)
+
 		sd := sessiondata.SessionData{
 			SessionData: sessiondatapb.SessionData{
 				IntervalStyleEnabled: v.semaCtx.IntervalStyleEnabled,
@@ -154,23 +166,13 @@ func makeFixCastForStyleVisitor(
 // ResolveCastForStyleUsingVisitor checks expression for stable cast that affect
 // DateStyle/IntervalStyle and rewrites them.
 func ResolveCastForStyleUsingVisitor(
-	ctx context.Context,
-	semaCtx *tree.SemaContext,
-	desc *descpb.TableDescriptor,
-	expr tree.Expr,
-	tn *tree.TableName,
+	ctx context.Context, semaCtx *tree.SemaContext, desc *descpb.TableDescriptor, expr tree.Expr,
 ) (tree.Expr, bool, error) {
 	v := makeFixCastForStyleVisitor(ctx, semaCtx)
-
-	descBuilder := tabledesc.NewBuilder(desc)
+	descBuilder := NewBuilder(desc)
 	tDesc := descBuilder.BuildImmutableTable()
 	v.tDesc = tDesc
 
-	typedExpr, err := schemaexpr.DequalifyAndTypeCheckExpr(ctx, tDesc, expr, semaCtx, tn)
-	if err != nil {
-		v.err = err
-		return nil, false, err
-	}
-	expr, changed := tree.WalkExpr(&v, typedExpr)
+	expr, changed := tree.WalkExpr(&v, expr)
 	return expr, changed, v.err
 }

@@ -312,6 +312,9 @@ const (
 	// RowLevelTTL is the version where we allow row level TTL tables.
 	RowLevelTTL
 
+	// DateStyleIntervalStyleCastRewrite rewrites cast that cause inconsistencies
+	// when DateStyle/IntervalStyle is enabled.
+	DateStyleIntervalStyleCastRewrite
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -513,6 +516,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RowLevelTTL,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 88},
+	},
+	{
+		Key:     DateStyleIntervalStyleCastRewrite,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 90},
 	},
 
 	// *************************************************
