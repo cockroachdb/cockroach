@@ -258,7 +258,7 @@ SELECT a*b, a*c, b*c, b*d, c*d FROM intdecfloat
 query RRRRR
 SELECT a/b, a/c, b/c, b/d, c/d FROM intdecfloat
 ----
-0.5  0.33333333333333333333  0.66666666666666666667  0.5  0.75
+0.50000000000000000000  0.33333333333333333333  0.66666666666666666667  0.50000000000000000000  0.75000000000000000000
 
 # vectorized decimal arithmetic
 statement ok
@@ -273,7 +273,7 @@ SELECT a*b FROM decimals
 query R
 SELECT a/b FROM decimals
 ----
-1.0E+201
+1.0000000000000000000E+201
 
 query R
 SELECT a+b FROM decimals
@@ -499,7 +499,7 @@ SELECT * FROM t38754
 query T
 SELECT a/b FROM a WHERE b = 2
 ----
-0.5
+0.50000000000000000000
 
 # Test mixed types comparison.
 query I
