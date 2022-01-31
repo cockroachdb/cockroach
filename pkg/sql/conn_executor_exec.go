@@ -1882,6 +1882,56 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+	if ex.extraTxnState.shouldExecuteOnTxnFinish {
+		ex.extraTxnState.shouldExecuteOnTxnFinish = false
+		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
+		implicit := ex.extraTxnState.txnFinishClosure.implicit
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
+		transactionFingerprintID :=
+			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+		if !implicit {
+			ex.statsCollector.EndExplicitTransaction(
+				ctx,
+				transactionFingerprintID,
+			)
+		}
+		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
+			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
+				ex.sessionData(),
+				ev.txnID,
+				transactionFingerprintID,
+			)
+		}
+		err := ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to record transaction stats: %s", err)
+			}
+			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+		}
+	}
+}
+
+func (ex *connExecutor) onTxnRestart() {
+	if ex.extraTxnState.shouldExecuteOnTxnRestart {
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
+		ex.extraTxnState.transactionStatementFingerprintIDs = nil
+		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
+		ex.extraTxnState.numRows = 0
+		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
+		// unchanged.
+		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.rowsRead = 0
+		ex.extraTxnState.bytesRead = 0
+		ex.extraTxnState.rowsWritten = 0
+
+		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
+			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
+		}
+	}
+}
+
 // recordTransactionStart records the start of the transaction.
 func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	// Transaction fingerprint ID will be available once transaction finishes
@@ -1929,57 +1979,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	}
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
-	if ex.extraTxnState.shouldExecuteOnTxnFinish {
-		ex.extraTxnState.shouldExecuteOnTxnFinish = false
-		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
-		implicit := ex.extraTxnState.txnFinishClosure.implicit
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
-		transactionFingerprintID :=
-			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
-		if !implicit {
-			ex.statsCollector.EndExplicitTransaction(
-				ctx,
-				transactionFingerprintID,
-			)
-		}
-		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
-			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
-				ex.sessionData(),
-				ev.txnID,
-				transactionFingerprintID,
-			)
-		}
-		err := ex.recordTransaction(ctx, transactionFingerprintID, ev, implicit, txnStart)
-		if err != nil {
-			if log.V(1) {
-				log.Warningf(ctx, "failed to record transaction stats: %s", err)
-			}
-			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
-		}
-	}
-}
-
-func (ex *connExecutor) onTxnRestart() {
-	if ex.extraTxnState.shouldExecuteOnTxnRestart {
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
-		ex.extraTxnState.transactionStatementFingerprintIDs = nil
-		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
-		ex.extraTxnState.numRows = 0
-		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
-		// unchanged.
-		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
-		ex.extraTxnState.rowsRead = 0
-		ex.extraTxnState.bytesRead = 0
-		ex.extraTxnState.rowsWritten = 0
-
-		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
-			ex.server.cfg.TestingKnobs.BeforeRestart(ex.Ctx(), ex.extraTxnState.autoRetryReason)
-		}
-	}
-}
-
-func (ex *connExecutor) recordTransaction(
+func (ex *connExecutor) recordTransactionFinish(
 	ctx context.Context,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	ev txnEvent,
