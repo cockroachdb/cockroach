@@ -112,18 +112,6 @@ func waitForSignals(
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
 
-	// Dump the stacks when QUIT is received.
-	if quitSignal != nil {
-		quitSignalCh := make(chan os.Signal, 1)
-		signal.Notify(quitSignalCh, quitSignal)
-		go func() {
-			for {
-				<-quitSignalCh
-				log.DumpStacks(context.Background())
-			}
-		}()
-	}
-
 	select {
 	case err := <-errChan:
 		log.StartAlwaysFlush()

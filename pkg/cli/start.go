@@ -378,22 +378,6 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
 
-	// SIGQUIT is handled differently: for SIGQUIT we spawn a goroutine
-	// and we always handle it, no matter at which point during
-	// execution we are. This makes it possible to use SIGQUIT to
-	// inspect a running process and determine what it is currently
-	// doing, even if it gets stuck somewhere.
-	if quitSignal != nil {
-		quitSignalCh := make(chan os.Signal, 1)
-		signal.Notify(quitSignalCh, quitSignal)
-		go func() {
-			for {
-				<-quitSignalCh
-				log.DumpStacks(context.Background())
-			}
-		}()
-	}
-
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
