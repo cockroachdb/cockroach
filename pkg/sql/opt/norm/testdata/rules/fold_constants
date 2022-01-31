@@ -778,7 +778,7 @@ values
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1)
- └── (1,)
+ └── (1.0000000000000000000,)
 
 norm no-stable-folds expect-not=FoldCast
 SELECT '2020-01-01'::TIMESTAMPTZ

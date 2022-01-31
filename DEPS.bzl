@@ -1114,10 +1114,10 @@ def go_deps():
         name = "com_github_cockroachdb_apd_v3",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/apd/v3",
-        sha256 = "29727b520b1239e501cbad8d1215ca2d1d5f79c60ca26e6c954153fc81f6ceb4",
-        strip_prefix = "github.com/cockroachdb/apd/v3@v3.0.1",
+        sha256 = "0571a4bf35a79df25f1e4a0b807ce3e30f7edbf69412d0272affaa925e25f625",
+        strip_prefix = "github.com/cockroachdb/apd/v3@v3.1.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/apd/v3/com_github_cockroachdb_apd_v3-v3.0.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/apd/v3/com_github_cockroachdb_apd_v3-v3.1.0.zip",
         ],
     )
     go_repository(
