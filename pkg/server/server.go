@@ -1616,7 +1616,11 @@ func (s *Server) startServeUI(
 	})
 }
 
-// Stop stops the server.
+// Stop shuts down this server instance. Note that this method exists
+// solely for the benefit of the `\demo shutdown` command in
+// `cockroach demo`. It is not called as part of the regular server
+// shutdown sequence; for this, see cli/start.go and the Drain()
+// RPC.
 func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
 }
