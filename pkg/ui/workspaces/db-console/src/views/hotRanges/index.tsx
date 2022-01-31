@@ -30,26 +30,34 @@ const HotRangesPage = () => {
   const hotRanges = useSelector(selectHotRanges);
 
   useEffect(() => {
-    if(!hotRanges.valid) {
+    if (!hotRanges.valid) {
       dispatch(refreshHotRanges(new HotRangesRequest()));
     }
   }, [dispatch, hotRanges.valid]);
 
   const formatCurrentDateTime = (datetime: moment.Moment) => {
     return (
-      datetime.format("MMM DD, YYYY") + " at " + datetime.format("h:mm A") + " (UTC)"
+      datetime.format("MMM DD, YYYY") +
+      " at " +
+      datetime.format("h:mm A") +
+      " (UTC)"
     );
   };
-  // TODO: Alex S add url to anchor once it's available
+  // TODO(santamaura): add url to anchor once it's available
   return (
     <div className="section">
       <Helmet title="Hot Ranges" />
       <h1 className="base-heading">Hot ranges</h1>
       <Text className={cx("hotranges-description")}>
-        The hot ranges table shows ranges receiving a high number of reads or writes. By default the table is sorted by 
-        <br /> 
-        ranges with the highest QPS (Queries Per Second). Use this information to... 
-        <Anchor href="" target="_blank"> Learn more</Anchor>
+        The hot ranges table shows ranges receiving a high number of reads or
+        writes. By default the table is sorted by
+        <br />
+        ranges with the highest QPS (Queries Per Second). Use this information
+        to...
+        <Anchor href="" target="_blank">
+          {" "}
+          Learn more
+        </Anchor>
       </Text>
       <ErrorBoundary>
         <Loading
