@@ -774,13 +774,14 @@ SET experimental_computed_column_rewrites = "(ts :: STRING) -> ((ts AT TIME ZONE
 statement ok
 ALTER TABLE trewrite ADD COLUMN c STRING AS (ts::STRING) STORED
 
+# The cast also gets rewritten to use to_char during PostDeserializationChanges.
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
+   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
    CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
    FAMILY fam_0_k_ts (k, ts, c)
 )
