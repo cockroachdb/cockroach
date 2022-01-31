@@ -87,7 +87,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,8 +95,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
@@ -853,17 +850,6 @@ func (s *Server) InitialStart() bool {
 	return s.node.initialStart
 }
 
-// grpcGatewayServer represents a grpc service with HTTP endpoints through GRPC
-// gateway.
-type grpcGatewayServer interface {
-	RegisterService(g *grpc.Server)
-	RegisterGateway(
-		ctx context.Context,
-		mux *gwruntime.ServeMux,
-		conn *grpc.ClientConn,
-	) error
-}
-
 // inspectEngines goes through engines and constructs an initState. The
 // initState returned by this method will reflect a zero NodeID if none has
 // been assigned yet (i.e. if none of the engines is initialized). See
@@ -1155,13 +1141,6 @@ func (s *Server) startPersistingHLCUpperBound(
 		},
 	)
 	return nil
-}
-
-// getServerEndpointCounter returns a telemetry Counter corresponding to the
-// given grpc method.
-func getServerEndpointCounter(method string) telemetry.Counter {
-	const counterPrefix = "http.grpc-gateway"
-	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
 }
 
 // Start calls PreStart() and AcceptClient() in sequence.
@@ -1955,104 +1934,6 @@ func publishPendingLossOfQuorumRecoveryEvents(
 			log.Errorf(ctx, "failed to update range log with loss of quorum recovery events: %v", err)
 		}
 	})
-}
-
-// ConfigureGRPCGateway initializes services necessary for running the
-// GRPC Gateway services proxied against the server at `grpcSrv`.
-//
-// The connection between the reverse proxy provided by grpc-gateway
-// and our grpc server uses a loopback-based listener to create
-// connections between the two.
-//
-// The function returns 3 arguments that are necessary to call
-// `RegisterGateway` which generated for each of your gRPC services
-// by grpc-gateway.
-func ConfigureGRPCGateway(
-	ctx, workersCtx context.Context,
-	ambientCtx log.AmbientContext,
-	rpcContext *rpc.Context,
-	stopper *stop.Stopper,
-	grpcSrv *grpcServer,
-	GRPCAddr string,
-) (*gwruntime.ServeMux, context.Context, *grpc.ClientConn, error) {
-	jsonpb := &protoutil.JSONPb{
-		EnumsAsInts:  true,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}
-	protopb := new(protoutil.ProtoPb)
-	gwMux := gwruntime.NewServeMux(
-		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
-		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
-		gwruntime.WithMetadata(forwardAuthenticationMetadata),
-	)
-	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
-	stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	// loopback handles the HTTP <-> RPC loopback connection.
-	loopback := newLoopbackListener(workersCtx, stopper)
-
-	waitQuiesce := func(context.Context) {
-		<-stopper.ShouldQuiesce()
-		_ = loopback.Close()
-	}
-	if err := stopper.RunAsyncTask(workersCtx, "gw-quiesce", waitQuiesce); err != nil {
-		waitQuiesce(workersCtx)
-	}
-
-	_ = stopper.RunAsyncTask(workersCtx, "serve-loopback", func(context.Context) {
-		netutil.FatalIfUnexpected(grpcSrv.Serve(loopback))
-	})
-
-	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
-	// uniquely in-process connection.
-	dialOpts, err := rpcContext.GRPCDialOptions()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	callCountInterceptor := func(
-		ctx context.Context,
-		method string,
-		req, reply interface{},
-		cc *grpc.ClientConn,
-		invoker grpc.UnaryInvoker,
-		opts ...grpc.CallOption,
-	) error {
-		telemetry.Inc(getServerEndpointCounter(method))
-		return invoker(ctx, method, req, reply, cc, opts...)
-	}
-	conn, err := grpc.DialContext(ctx, GRPCAddr, append(append(
-		dialOpts,
-		grpc.WithUnaryInterceptor(callCountInterceptor)),
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return loopback.Connect(ctx)
-		}),
-	)...)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	{
-		waitQuiesce := func(workersCtx context.Context) {
-			<-stopper.ShouldQuiesce()
-			// NB: we can't do this as a Closer because (*Server).ServeWith is
-			// running in a worker and usually sits on accept() which unblocks
-			// only when the listener closes. In other words, the listener needs
-			// to close when quiescing starts to allow that worker to shut down.
-			err := conn.Close() // nolint:grpcconnclose
-			if err != nil {
-				log.Ops.Fatalf(workersCtx, "%v", err)
-			}
-		}
-		if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
-			waitQuiesce(workersCtx)
-		}
-	}
-	return gwMux, gwCtx, conn, nil
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.
