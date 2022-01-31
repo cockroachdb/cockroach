@@ -1464,8 +1464,8 @@ COMMIT
 statement ok
 DROP TABLE t
 
-# Test that DROP INDEX on an index with dependent foreign keys is correctly
-# rolled back when there is an error
+# Test that DROP INDEX on an index with dependent foreign keys doesn't
+# leave table in inconsistent state.
 subtest 38733
 
 statement ok
@@ -1491,7 +1491,7 @@ BEGIN
 statement ok
 DROP INDEX y_b_idx CASCADE;
 
-# This will fail, causing the previous DROP INDEX to also be rolled back
+# This will fail, but DROP INDEX won't be rolled back
 statement ok
 CREATE UNIQUE INDEX ON y (b);
 
@@ -1517,7 +1517,7 @@ BEGIN
 statement ok
 DROP INDEX x_b_key CASCADE;
 
-# This will fail, causing the previous DROP INDEX to also be rolled back
+# This will fail, but the previous DROP INDEX won't be rolled back
 statement ok
 CREATE UNIQUE INDEX ON x (c);
 
@@ -1529,8 +1529,15 @@ COMMIT
 query TTTTB
 SHOW CONSTRAINTS FROM x
 ----
-x  x_b_key  UNIQUE       UNIQUE (b ASC)       true
 x  x_pkey   PRIMARY KEY  PRIMARY KEY (a ASC)  true
+
+# Verify that table y is in a consistent state (otherwise, SHOW
+# CONSTRAINTS would fail with an error). The foreign constraint here
+# hasn't been rolled back because the index hasn't been rolled back.
+query TTTTB
+SHOW CONSTRAINTS FROM y
+----
+y  y_pkey    PRIMARY KEY  PRIMARY KEY (a ASC)              true
 
 statement ok
 DROP TABLE x, y
