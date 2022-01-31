@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -566,10 +566,10 @@ func cloudStorageTestWithOptions(testFn cdcTestFn, options feedTestOptions) func
 			}
 			blobClientFactory := blobs.NewLocalOnlyBlobClientFactory(options.externalIODir)
 			if serverKnobs, ok := knobs.Server.(*server.TestingKnobs); ok {
-				serverKnobs.TenantBlobClientFactory = blobClientFactory
+				serverKnobs.BlobClientFactory = blobClientFactory
 			} else {
 				knobs.Server = &server.TestingKnobs{
-					TenantBlobClientFactory: blobClientFactory,
+					BlobClientFactory: blobClientFactory,
 				}
 			}
 		}

@@ -17,8 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -32,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -468,20 +465,20 @@ func makeTenantSQLServerArgs(
 	registry.AddMetricStruct(runtime)
 
 	esb := &externalStorageBuilder{}
-	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
-		ExternalStorage, error) {
-		return esb.makeExternalStorage(ctx, dest)
-	}
-	externalStorageFromURI := func(ctx context.Context, uri string,
-		user security.SQLUsername) (cloud.ExternalStorage, error) {
-		return esb.makeExternalStorageFromURI(ctx, uri, user)
-	}
+	externalStorage := esb.makeExternalStorage
+	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	var blobClientFactory blobs.BlobClientFactory
-	if p, ok := baseCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.TenantBlobClientFactory != nil {
-		blobClientFactory = p.TenantBlobClientFactory
-	}
-	esb.init(sqlCfg.ExternalIODirConfig, baseCfg.Settings, blobClientFactory, circularInternalExecutor, db)
+	// TODO(aditya): This call seems to occur too early, see
+	// https://github.com/cockroachdb/cockroach/issues/75725
+	esb.init(
+		sqlCfg.ExternalIODirConfig,
+		baseCfg.Settings,
+		baseCfg.IDContainer,
+		nodeDialer,
+		baseCfg.TestingKnobs,
+		circularInternalExecutor,
+		db,
+	)
 
 	// We don't need this for anything except some services that want a gRPC
 	// server to register against (but they'll never get RPCs at the time of
