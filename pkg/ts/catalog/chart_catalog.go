@@ -567,6 +567,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Memory",
+				Metrics: []string{
+					"kv.rangefeed.over_budget_events",
+				},
+			},
+			{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",

@@ -25,11 +25,18 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangeFeedOverBudgetEvents = metric.Metadata{
+		Name:        "kv.rangefeed.over_budget_events",
+		Help:        "Number of events that exceed whole allocated budget in size",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
 	RangeFeedCatchUpScanNanos *metric.Counter
+	RangeFeedOverBudgetEvents *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
 	RangeFeedSlowClosedTimestampNudge singleflight.Group
@@ -47,6 +54,7 @@ func (*Metrics) MetricStruct() {}
 func NewMetrics() *Metrics {
 	return &Metrics{
 		RangeFeedCatchUpScanNanos:            metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangeFeedOverBudgetEvents:            metric.NewCounter(metaRangeFeedOverBudgetEvents),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}
