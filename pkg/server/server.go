@@ -28,8 +28,6 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -188,54 +186,6 @@ type Server struct {
 
 	// The following fields are populated at start time, i.e. in `(*Server).Start`.
 	startTime time.Time
-}
-
-// externalStorageBuilder is a wrapper around the ExternalStorage factory
-// methods. It allows us to separate the creation and initialization of the
-// builder between NewServer() and Start() respectively.
-// TODO(adityamaru): Consider moving this to pkg/cloud/impl at a future
-// stage of the ongoing refactor.
-type externalStorageBuilder struct {
-	conf              base.ExternalIODirConfig
-	settings          *cluster.Settings
-	blobClientFactory blobs.BlobClientFactory
-	initCalled        bool
-	ie                *sql.InternalExecutor
-	db                *kv.DB
-}
-
-func (e *externalStorageBuilder) init(
-	conf base.ExternalIODirConfig,
-	settings *cluster.Settings,
-	blobClientFactory blobs.BlobClientFactory,
-	ie *sql.InternalExecutor,
-	db *kv.DB,
-) {
-	e.conf = conf
-	e.settings = settings
-	e.blobClientFactory = blobClientFactory
-	e.initCalled = true
-	e.ie = ie
-	e.db = db
-}
-
-func (e *externalStorageBuilder) makeExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
-) (cloud.ExternalStorage, error) {
-	if !e.initCalled {
-		return nil, errors.New("cannot create external storage before init")
-	}
-	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db)
-}
-
-func (e *externalStorageBuilder) makeExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
-) (cloud.ExternalStorage, error) {
-	if !e.initCalled {
-		return nil, errors.New("cannot create external storage before init")
-	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
 }
 
 // NewServer creates a Server from a server.Config.
@@ -561,14 +511,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// Create an ExternalStorageBuilder. This is only usable after Start() where
 	// we initialize all the configuration params.
 	externalStorageBuilder := &externalStorageBuilder{}
-	externalStorage := func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.
-		ExternalStorage, error) {
-		return externalStorageBuilder.makeExternalStorage(ctx, dest)
-	}
-	externalStorageFromURI := func(ctx context.Context, uri string,
-		user security.SQLUsername) (cloud.ExternalStorage, error) {
-		return externalStorageBuilder.makeExternalStorageFromURI(ctx, uri, user)
-	}
+	externalStorage := externalStorageBuilder.makeExternalStorage
+	externalStorageFromURI := externalStorageBuilder.makeExternalStorageFromURI
 
 	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
@@ -1297,10 +1241,17 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
+	// TODO(aditya): This call seems to occur too early, see
+	// https://github.com/cockroachdb/cockroach/issues/75725
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
-	s.externalStorageBuilder.init(s.cfg.ExternalIODirConfig, s.st,
-		blobs.NewBlobClientFactory(s.nodeIDContainer.Get(),
-			s.nodeDialer, s.st.ExternalIODir), &fileTableInternalExecutor, s.db)
+	s.externalStorageBuilder.init(
+		s.cfg.ExternalIODirConfig,
+		s.st,
+		s.nodeIDContainer,
+		s.nodeDialer,
+		s.cfg.TestingKnobs,
+		&fileTableInternalExecutor,
+		s.db)
 
 	// Filter out self from the gossip bootstrap addresses.
 	filtered := s.cfg.FilterGossipBootstrapAddresses(ctx)
