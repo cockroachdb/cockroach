@@ -593,6 +593,9 @@ func (ts *TestServer) StartTenant(
 	if stopper == nil {
 		stopper = ts.Stopper()
 	}
+	if params.RPCHeartbeatInterval != 0 {
+		baseCfg.RPCHeartbeatInterval = params.RPCHeartbeatInterval
+	}
 	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
 		stopper,

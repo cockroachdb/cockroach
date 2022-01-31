@@ -282,4 +282,7 @@ type TestTenantArgs struct {
 	// Locality is used to initialize the same-named field on the server.Config
 	// struct.
 	Locality roachpb.Locality
+
+	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
+	RPCHeartbeatInterval time.Duration
 }

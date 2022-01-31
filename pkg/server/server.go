@@ -323,13 +323,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Clock:      clock,
 		Stopper:    stopper,
 		Settings:   cfg.Settings,
-		OnOutgoingPing: func(req *rpc.PingRequest) error {
+		OnOutgoingPing: func(ctx context.Context, req *rpc.PingRequest) error {
 			// Outgoing ping will block requests with codes.FailedPrecondition to
 			// notify caller that this replica is decommissioned but others could
 			// still be tried as caller node is valid, but not the destination.
 			return checkPingFor(ctx, req.TargetNodeID, codes.FailedPrecondition)
 		},
-		OnIncomingPing: func(req *rpc.PingRequest) error {
+		OnIncomingPing: func(ctx context.Context, req *rpc.PingRequest) error {
+			// Decommission state is only tracked for the system tenant.
+			if tenantID, isTenant := roachpb.TenantFromContext(ctx); isTenant &&
+				!roachpb.IsSystemTenantID(tenantID.ToUint64()) {
+				return nil
+			}
 			// Incoming ping will reject requests with codes.PermissionDenied to
 			// signal remote node that it is not considered valid anymore and
 			// operations should fail immediately.
