@@ -27,6 +27,7 @@ go_library(
         "index_usage_stats.go",
         "init.go",
         "init_handshake.go",
+        "listen_and_update_addrs.go",
         "loopback.go",
         "migration.go",
         "node.go",
