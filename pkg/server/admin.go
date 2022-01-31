@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -72,6 +72,8 @@ const (
 	// administrative interface to the cockroach cluster.
 	adminPrefix = "/_admin/v1/"
 
+	adminHealth = adminPrefix + "health"
+
 	// defaultAPIEventLimit is the default maximum number of events returned by any
 	// endpoints returning events.
 	defaultAPIEventLimit = 1000
@@ -112,9 +114,11 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
+func newAdminServer(
+	s *Server, adminAuthzCheck *adminPrivilegeChecker, ie *sql.InternalExecutor,
+) *adminServer {
 	server := &adminServer{
-		adminPrivilegeChecker: &adminPrivilegeChecker{ie: ie},
+		adminPrivilegeChecker: adminAuthzCheck,
 		internalExecutor:      ie,
 		server:                s,
 	}
