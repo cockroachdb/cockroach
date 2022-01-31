@@ -682,10 +682,9 @@ func fetchIndex(
 		&alloc,
 		mm.Monitor(),
 		row.FetcherTableArgs{
-			Desc:             table,
-			Index:            idx,
-			Columns:          columns,
-			IsSecondaryIndex: !idx.Primary(),
+			Desc:    table,
+			Index:   idx,
+			Columns: columns,
 		},
 	))
 

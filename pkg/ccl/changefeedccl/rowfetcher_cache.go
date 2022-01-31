@@ -165,10 +165,9 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 
 	// TODO(dan): Allow for decoding a subset of the columns.
 	rfArgs := row.FetcherTableArgs{
-		Desc:             tableDesc,
-		Index:            tableDesc.GetPrimaryIndex(),
-		IsSecondaryIndex: false,
-		Columns:          tableDesc.PublicColumns(),
+		Desc:    tableDesc,
+		Index:   tableDesc.GetPrimaryIndex(),
+		Columns: tableDesc.PublicColumns(),
 	}
 	if err := rf.Init(
 		context.TODO(),
