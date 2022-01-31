@@ -53,10 +53,9 @@ func makeFetcherArgs(entry initFetcherArgs) FetcherTableArgs {
 	}
 
 	return FetcherTableArgs{
-		Desc:             entry.tableDesc,
-		Index:            index,
-		IsSecondaryIndex: !index.Primary(),
-		Columns:          columns,
+		Desc:    entry.tableDesc,
+		Index:   index,
+		Columns: columns,
 	}
 }
 

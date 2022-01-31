@@ -51,12 +51,12 @@ scalar-group-by
  │    └── project
  │         ├── columns: column6:6
  │         ├── immutable
- │         ├── stats: [rows=333.333333]
+ │         ├── stats: [rows=333.3333]
  │         ├── cost: 1071.03667
  │         ├── select
  │         │    ├── columns: j:3
  │         │    ├── immutable
- │         │    ├── stats: [rows=333.333333]
+ │         │    ├── stats: [rows=333.3333]
  │         │    ├── cost: 1064.35
  │         │    ├── scan a@j
  │         │    │    ├── columns: j:3
@@ -117,7 +117,7 @@ top-k
  ├── internal-ordering: +3,+2
  ├── k: 10
  ├── cardinality: [0 - 10]
- ├── stats: [rows=10, distinct(3)=9.95511979, null(3)=0, avgsize(3)=4]
+ ├── stats: [rows=10, distinct(3)=9.95512, null(3)=0, avgsize(3)=4]
  ├── cost: 7805.20825
  ├── key: (1)
  ├── fd: (1)-->(2,3)

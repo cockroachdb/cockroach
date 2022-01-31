@@ -1285,6 +1285,9 @@ func (c *cliState) handleConnectInternal(cmd []string) error {
 	} else {
 		newURL.WithTransport(pgurl.TransportNone())
 	}
+	if err := newURL.AddOptions(currURL.GetExtraOptions()); err != nil {
+		return err
+	}
 
 	// Parse the arguments to \connect:
 	// it accepts newdb, user, host, port in that order.
