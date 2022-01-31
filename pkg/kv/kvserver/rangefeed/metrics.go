@@ -25,11 +25,32 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangeFeedOverBudgetEvents = metric.Metadata{
+		Name:        "kv.rangefeed.over_budget_events",
+		Help:        "Number of RangeFeed events that were sent through despite each exceeding whole range budget",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeFeedOverBudgetAllocation = metric.Metadata{
+		Name:        "kv.rangefeed.allocated_over_budget",
+		Help:        "Amount of bytes currently used by RangeFeeds for sending single events exceeding whole range budget",
+		Measurement: "Bytes",
+		Unit:        metric.Unit_BYTES,
+	}
+	metaRangeFeedExhausted = metric.Metadata{
+		Name:        "kv.rangefeed.budget_allocation_failed",
+		Help:        "Number of times RangeFeed failed because memory budget was exceeded",
+		Measurement: "Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchUpScanNanos *metric.Counter
+	RangeFeedCatchUpScanNanos     *metric.Counter
+	RangeFeedOverBudgetEvents     *metric.Counter
+	RangeFeedOverBudgetAllocation *metric.Gauge
+	RangeFeedBudgetExhausted      *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
 	RangeFeedSlowClosedTimestampNudge singleflight.Group
@@ -47,6 +68,9 @@ func (*Metrics) MetricStruct() {}
 func NewMetrics() *Metrics {
 	return &Metrics{
 		RangeFeedCatchUpScanNanos:            metric.NewCounter(metaRangeFeedCatchUpScanNanos),
+		RangeFeedOverBudgetEvents:            metric.NewCounter(metaRangeFeedOverBudgetEvents),
+		RangeFeedOverBudgetAllocation:        metric.NewGauge(metaRangeFeedOverBudgetAllocation),
+		RangeFeedBudgetExhausted:             metric.NewCounter(metaRangeFeedExhausted),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}
