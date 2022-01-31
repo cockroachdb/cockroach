@@ -19,7 +19,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -70,9 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -115,7 +112,7 @@ type Server struct {
 	updates          *diagnostics.UpdateChecker
 	ctSender         *sidetransport.Sender
 
-	http            httpServer
+	http            *httpServer
 	adminAuthzCheck *adminPrivilegeChecker
 	admin           *adminServer
 	status          *statusServer
@@ -620,6 +617,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
+	sHTTP := newHTTPServer(cfg)
 	sessionRegistry := sql.NewSessionRegistry()
 	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
@@ -739,6 +737,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates:                updates,
 		ctSender:               ctSender,
 		runtime:                runtimeSampler,
+		http:                   sHTTP,
 		adminAuthzCheck:        adminAuthzCheck,
 		admin:                  sAdmin,
 		status:                 sStatus,
@@ -887,7 +886,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// - SQL client connections with a TLS handshake over TCP.
 	// (gRPC connections are handled separately via s.grpc and perform
 	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(s.stopper, uiTLSConfig, s)
+	connManager := netutil.MakeServer(s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
 
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
@@ -1382,7 +1381,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
 	if err := s.http.setupRoutes(ctx,
-		s.cfg,
 		s.authentication,                      /* authnServer */
 		s.adminAuthzCheck,                     /* adminAuthzCheck */
 		gwMux,                                 /* handleRequestsUnauthenticated */
@@ -1525,7 +1523,7 @@ func (s *Server) startServeUI(
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
-			mux.Handle("/health", s)
+			mux.Handle(healthPath, http.HandlerFunc(s.http.baseHandler))
 
 			plainRedirectServer := netutil.MakeServer(s.stopper, uiTLSConfig, mux)
 
@@ -1553,48 +1551,6 @@ func (s *Server) startServeUI(
 // RPC.
 func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
-}
-
-// ServeHTTP is necessary to implement the http.Handler interface.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
-
-	ae := r.Header.Get(httputil.AcceptEncodingHeader)
-	switch {
-	case strings.Contains(ae, httputil.GzipEncoding):
-		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-		gzw := newGzipResponseWriter(w)
-		defer func() {
-			// Certain requests must not have a body, yet closing the gzip writer will
-			// attempt to write the gzip header. Avoid logging a warning in this case.
-			// This is notably triggered by:
-			//
-			// curl -H 'Accept-Encoding: gzip' \
-			// 	    -H 'If-Modified-Since: Thu, 29 Mar 2018 22:36:32 GMT' \
-			//      -v http://localhost:8080/favicon.ico > /dev/null
-			//
-			// which results in a 304 Not Modified.
-			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
-				ctx := s.AnnotateCtx(r.Context())
-				log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
-			}
-		}()
-		w = gzw
-	}
-
-	// This is our base handler.
-	// Intercept all panics, log them, and return an internal server error as a response.
-	defer func() {
-		if p := recover(); p != nil {
-			// Note: use of a background context here so we can log even with the absence of a client.
-			// Assumes appropriate timeouts are used.
-			logcrash.ReportPanic(context.Background(), &s.st.SV, p, 1 /* depth */)
-			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
-		}
-	}()
-
-	s.http.mux.ServeHTTP(w, r)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
