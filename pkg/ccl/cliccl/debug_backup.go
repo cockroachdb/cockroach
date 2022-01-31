@@ -577,10 +577,9 @@ func makeRowFetcher(
 	}
 
 	table := row.FetcherTableArgs{
-		Desc:             entry.Desc,
-		Index:            entry.Desc.GetPrimaryIndex(),
-		IsSecondaryIndex: false,
-		Columns:          colDescs,
+		Desc:    entry.Desc,
+		Index:   entry.Desc.GetPrimaryIndex(),
+		Columns: colDescs,
 	}
 
 	var rf row.Fetcher

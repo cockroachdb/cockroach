@@ -35,7 +35,6 @@ go_test(
     name = "amazon_test",
     srcs = [
         "aws_kms_test.go",
-        "kms_test.go",
         "s3_storage_test.go",
     ],
     embed = [":amazon"],

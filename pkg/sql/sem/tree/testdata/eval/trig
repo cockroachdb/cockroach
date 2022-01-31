@@ -1,4 +1,7 @@
 # Trig functions
+# In some cases x64 and arm64 may yeild slightly different results due to float
+# operation ordering/fusing differences, as allowed by spec, so some results are
+# checks using round(expr, 10) to ignore any minute float differences.
 
 eval
 cos(0)
@@ -16,7 +19,7 @@ tan(0)
 0.0
 
 eval
-cot(0.7853981633974483)
+round(cot(0.7853981633974483), 10)
 ----
 1.0
 
@@ -51,12 +54,12 @@ sind(90)
 1.0
 
 eval
-tand(45)
+round(tand(45), 10)
 ----
 1.0
 
 eval
-cotd(45)
+round(cotd(45), 10)
 ----
 1.0
 

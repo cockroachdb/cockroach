@@ -213,10 +213,9 @@ func DecodeRowInfo(
 	}
 
 	tableArgs := FetcherTableArgs{
-		Desc:             tableDesc,
-		Index:            index,
-		IsSecondaryIndex: indexID != tableDesc.GetPrimaryIndexID(),
-		Columns:          cols,
+		Desc:    tableDesc,
+		Index:   index,
+		Columns: cols,
 	}
 	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(

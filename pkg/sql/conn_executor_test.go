@@ -99,13 +99,15 @@ Wraps: (2) attached stack trace
   | testing.tRunner
   | 	...testing.go:NN
   | runtime.goexit
-  | 	...asm_amd64.s:NN
+  | 	...asm_scrubbed.s:NN
 Wraps: (3) some error
 Error types: (1) *safedetails.withSafeDetails (2) *withstack.withStack (3) *errutil.leafError`
 
 	// Edit non-determinstic stack trace filenames from the message.
-	actSafeRedactedMessage := fileref.ReplaceAllString(
-		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN")
+	actSafeRedactedMessage := strings.ReplaceAll(strings.ReplaceAll(fileref.ReplaceAllString(
+		redact.Sprintf("%+v", safeErr).Redact().StripMarkers(), "...$2:NN"),
+		"asm_arm64", "asm_scrubbed"),
+		"asm_amd64", "asm_scrubbed")
 
 	if actSafeRedactedMessage != expSafeRedactedMessage {
 		diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{

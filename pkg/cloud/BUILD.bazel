@@ -7,6 +7,7 @@ go_library(
         "external_storage.go",
         "impl_registry.go",
         "kms.go",
+        "kms_test_utils.go",
         "uris.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cloud",
@@ -26,5 +27,6 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

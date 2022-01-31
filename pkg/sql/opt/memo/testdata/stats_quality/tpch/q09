@@ -58,7 +58,7 @@ sort
  ├── save-table-name: q9_sort_1
  ├── columns: nation:58(char!null) o_year:63(float) sum_profit:65(float!null)
  ├── immutable
- ├── stats: [rows=1548.77708, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.29487, null(63)=0, avgsize(63)=4, distinct(65)=1548.77708, null(65)=0, avgsize(65)=8, distinct(58,63)=1548.77708, null(58,63)=0, avgsize(58,63)=8]
+ ├── stats: [rows=1548.777, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.295, null(63)=0, avgsize(63)=4, distinct(65)=1548.78, null(65)=0, avgsize(65)=8, distinct(58,63)=1548.78, null(58,63)=0, avgsize(58,63)=8]
  ├── key: (58,63)
  ├── fd: (58,63)-->(65)
  ├── ordering: +58,-63
@@ -67,25 +67,25 @@ sort
       ├── columns: n_name:58(char!null) o_year:63(float) sum:65(float!null)
       ├── grouping columns: n_name:58(char!null) o_year:63(float)
       ├── immutable
-      ├── stats: [rows=1548.77708, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.29487, null(63)=0, avgsize(63)=4, distinct(65)=1548.77708, null(65)=0, avgsize(65)=8, distinct(58,63)=1548.77708, null(58,63)=0, avgsize(58,63)=8]
+      ├── stats: [rows=1548.777, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.295, null(63)=0, avgsize(63)=4, distinct(65)=1548.78, null(65)=0, avgsize(65)=8, distinct(58,63)=1548.78, null(58,63)=0, avgsize(58,63)=8]
       ├── key: (58,63)
       ├── fd: (58,63)-->(65)
       ├── project
       │    ├── save-table-name: q9_project_3
       │    ├── columns: o_year:63(float) amount:64(float!null) n_name:58(char!null)
       │    ├── immutable
-      │    ├── stats: [rows=2450.85648, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.29487, null(63)=0, avgsize(63)=4, distinct(64)=958.498508, null(64)=0, avgsize(64)=16, distinct(58,63)=1548.77708, null(58,63)=0, avgsize(58,63)=8]
+      │    ├── stats: [rows=2450.856, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(63)=957.295, null(63)=0, avgsize(63)=4, distinct(64)=958.499, null(64)=0, avgsize(64)=16, distinct(58,63)=1548.78, null(58,63)=0, avgsize(58,63)=8]
       │    ├── inner-join (hash)
       │    │    ├── save-table-name: q9_inner_join_4
       │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) s_suppkey:12(int!null) s_nationkey:15(int!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) o_orderkey:46(int!null) o_orderdate:50(date!null) n_nationkey:57(int!null) n_name:58(char!null)
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │    ├── stats: [rows=2450.85648, distinct(1)=1065.2038, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(12)=1064.71508, null(12)=0, avgsize(12)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(21)=1066.62384, null(21)=0, avgsize(21)=4, distinct(22)=1065.2038, null(22)=0, avgsize(22)=4, distinct(23)=1064.71508, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=958.344453, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=958.498508, null(39)=0, avgsize(39)=4, distinct(40)=958.498508, null(40)=0, avgsize(40)=4, distinct(42)=734.534203, null(42)=0, avgsize(42)=4, distinct(46)=1066.62384, null(46)=0, avgsize(46)=4, distinct(50)=957.29487, null(50)=0, avgsize(50)=4, distinct(57)=25, null(57)=0, avgsize(57)=4, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(50,58)=1548.77708, null(50,58)=0, avgsize(50,58)=8, distinct(25-27,42)=958.498508, null(25-27,42)=0, avgsize(25-27,42)=16]
+      │    │    ├── stats: [rows=2450.856, distinct(1)=1065.2, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(12)=1064.72, null(12)=0, avgsize(12)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(21)=1066.62, null(21)=0, avgsize(21)=4, distinct(22)=1065.2, null(22)=0, avgsize(22)=4, distinct(23)=1064.72, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=958.344, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=958.499, null(39)=0, avgsize(39)=4, distinct(40)=958.499, null(40)=0, avgsize(40)=4, distinct(42)=734.534, null(42)=0, avgsize(42)=4, distinct(46)=1066.62, null(46)=0, avgsize(46)=4, distinct(50)=957.295, null(50)=0, avgsize(50)=4, distinct(57)=25, null(57)=0, avgsize(57)=4, distinct(58)=25, null(58)=0, avgsize(58)=4, distinct(50,58)=1548.78, null(50,58)=0, avgsize(50,58)=8, distinct(25-27,42)=958.499, null(25-27,42)=0, avgsize(25-27,42)=16]
       │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (23)==(12,40), (40)==(12,23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (12)==(23,40), (57)-->(58), (15)==(57), (57)==(15), (1)==(22,39)
       │    │    ├── inner-join (hash)
       │    │    │    ├── save-table-name: q9_inner_join_5
       │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) s_suppkey:12(int!null) s_nationkey:15(int!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) o_orderkey:46(int!null) o_orderdate:50(date!null)
       │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
-      │    │    │    ├── stats: [rows=2450.85648, distinct(1)=1224.06495, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(12)=1224.40152, null(12)=0, avgsize(12)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(21)=1227.57145, null(21)=0, avgsize(21)=4, distinct(22)=1224.06495, null(22)=0, avgsize(22)=4, distinct(23)=1224.40152, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1058.55075, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1058.77685, null(39)=0, avgsize(39)=4, distinct(40)=1058.77685, null(40)=0, avgsize(40)=4, distinct(42)=763.514127, null(42)=0, avgsize(42)=4, distinct(46)=1227.57145, null(46)=0, avgsize(46)=4, distinct(50)=1057.0113, null(50)=0, avgsize(50)=4]
+      │    │    │    ├── stats: [rows=2450.856, distinct(1)=1224.06, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(12)=1224.4, null(12)=0, avgsize(12)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(21)=1227.57, null(21)=0, avgsize(21)=4, distinct(22)=1224.06, null(22)=0, avgsize(22)=4, distinct(23)=1224.4, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1058.55, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1058.78, null(39)=0, avgsize(39)=4, distinct(40)=1058.78, null(40)=0, avgsize(40)=4, distinct(42)=763.514, null(42)=0, avgsize(42)=4, distinct(46)=1227.57, null(46)=0, avgsize(46)=4, distinct(50)=1057.01, null(50)=0, avgsize(50)=4]
       │    │    │    ├── fd: (1)-->(2), (12)-->(15), (39,40)-->(42), (23)==(12,40), (40)==(12,23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (12)==(23,40), (1)==(22,39)
       │    │    │    ├── scan supplier@s_nk
       │    │    │    │    ├── save-table-name: q9_scan_6
@@ -102,20 +102,20 @@ sort
       │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) o_orderkey:46(int!null) o_orderdate:50(date!null)
       │    │    │    │    ├── key columns: [21] = [46]
       │    │    │    │    ├── lookup columns are key
-      │    │    │    │    ├── stats: [rows=2431.24963, distinct(1)=1535.73681, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(21)=1535.87578, null(21)=0, avgsize(21)=4, distinct(22)=1535.73681, null(22)=0, avgsize(22)=4, distinct(23)=1220.40117, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1220.02401, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1220.40117, null(39)=0, avgsize(39)=4, distinct(40)=1220.40117, null(40)=0, avgsize(40)=4, distinct(42)=800.087388, null(42)=0, avgsize(42)=4, distinct(46)=1535.87578, null(46)=0, avgsize(46)=4, distinct(50)=1217.45885, null(50)=0, avgsize(50)=4]
+      │    │    │    │    ├── stats: [rows=2431.25, distinct(1)=1535.74, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(21)=1535.88, null(21)=0, avgsize(21)=4, distinct(22)=1535.74, null(22)=0, avgsize(22)=4, distinct(23)=1220.4, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1220.02, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1220.4, null(39)=0, avgsize(39)=4, distinct(40)=1220.4, null(40)=0, avgsize(40)=4, distinct(42)=800.087, null(42)=0, avgsize(42)=4, distinct(46)=1535.88, null(46)=0, avgsize(46)=4, distinct(50)=1217.46, null(50)=0, avgsize(50)=4]
       │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (23)==(40), (40)==(23), (22)==(1,39), (39)==(1,22), (46)-->(50), (21)==(46), (46)==(21), (1)==(22,39)
       │    │    │    │    ├── inner-join (lookup lineitem)
       │    │    │    │    │    ├── save-table-name: q9_lookup_join_8
       │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_quantity:25(float!null) l_extendedprice:26(float!null) l_discount:27(float!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
       │    │    │    │    │    ├── key columns: [21 24] = [21 24]
       │    │    │    │    │    ├── lookup columns are key
-      │    │    │    │    │    ├── stats: [rows=2431.24963, distinct(1)=2429.49939, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(21)=1535.87578, null(21)=0, avgsize(21)=4, distinct(22)=2429.49939, null(22)=0, avgsize(22)=4, distinct(23)=1536.38686, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1535.58313, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1536.38686, null(39)=0, avgsize(39)=4, distinct(40)=1536.38686, null(40)=0, avgsize(40)=4, distinct(42)=848.519925, null(42)=0, avgsize(42)=4]
+      │    │    │    │    │    ├── stats: [rows=2431.25, distinct(1)=2429.5, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(21)=1535.88, null(21)=0, avgsize(21)=4, distinct(22)=2429.5, null(22)=0, avgsize(22)=4, distinct(23)=1536.39, null(23)=0, avgsize(23)=4, distinct(25)=50, null(25)=0, avgsize(25)=4, distinct(26)=1535.58, null(26)=0, avgsize(26)=4, distinct(27)=11, null(27)=0, avgsize(27)=4, distinct(39)=1536.39, null(39)=0, avgsize(39)=4, distinct(40)=1536.39, null(40)=0, avgsize(40)=4, distinct(42)=848.52, null(42)=0, avgsize(42)=4]
       │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (23)==(40), (40)==(23), (22)==(1,39), (39)==(1,22), (1)==(22,39)
       │    │    │    │    │    ├── inner-join (lookup lineitem@l_pk_sk)
       │    │    │    │    │    │    ├── save-table-name: q9_lookup_join_9
       │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) l_orderkey:21(int!null) l_partkey:22(int!null) l_suppkey:23(int!null) l_linenumber:24(int!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
       │    │    │    │    │    │    ├── key columns: [39 40] = [22 23]
-      │    │    │    │    │    │    ├── stats: [rows=812.918153, distinct(1)=807.978498, null(1)=0, avgsize(1)=4, distinct(2)=119.86287, null(2)=0, avgsize(2)=4, distinct(21)=812.701919, null(21)=0, avgsize(21)=4, distinct(22)=812.918153, null(22)=0, avgsize(22)=4, distinct(23)=812.918153, null(23)=0, avgsize(23)=4, distinct(24)=7, null(24)=0, avgsize(24)=4, distinct(39)=812.918153, null(39)=0, avgsize(39)=4, distinct(40)=812.918153, null(40)=0, avgsize(40)=4, distinct(42)=556.438238, null(42)=0, avgsize(42)=4]
+      │    │    │    │    │    │    ├── stats: [rows=812.9182, distinct(1)=807.978, null(1)=0, avgsize(1)=4, distinct(2)=119.863, null(2)=0, avgsize(2)=4, distinct(21)=812.702, null(21)=0, avgsize(21)=4, distinct(22)=812.918, null(22)=0, avgsize(22)=4, distinct(23)=812.918, null(23)=0, avgsize(23)=4, distinct(24)=7, null(24)=0, avgsize(24)=4, distinct(39)=812.918, null(39)=0, avgsize(39)=4, distinct(40)=812.918, null(40)=0, avgsize(40)=4, distinct(42)=556.438, null(42)=0, avgsize(42)=4]
       │    │    │    │    │    │    ├── key: (21,24)
       │    │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (1)==(22,39), (39)==(1,22), (21,24)-->(22,23), (22)==(1,39), (23)==(40), (40)==(23)
       │    │    │    │    │    │    ├── inner-join (merge)
@@ -123,7 +123,7 @@ sort
       │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
       │    │    │    │    │    │    │    ├── left ordering: +39
       │    │    │    │    │    │    │    ├── right ordering: +1
-      │    │    │    │    │    │    │    ├── stats: [rows=267682.522, distinct(1)=66618.6736, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(39)=66618.6736, null(39)=0, avgsize(39)=4, distinct(40)=9920, null(40)=0, avgsize(40)=4, distinct(42)=1000, null(42)=0, avgsize(42)=4]
+      │    │    │    │    │    │    │    ├── stats: [rows=267682.5, distinct(1)=66618.7, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4, distinct(39)=66618.7, null(39)=0, avgsize(39)=4, distinct(40)=9920, null(40)=0, avgsize(40)=4, distinct(42)=1000, null(42)=0, avgsize(42)=4]
       │    │    │    │    │    │    │    ├── key: (39,40)
       │    │    │    │    │    │    │    ├── fd: (1)-->(2), (39,40)-->(42), (1)==(39), (39)==(1)
       │    │    │    │    │    │    │    ├── scan partsupp
@@ -142,7 +142,7 @@ sort
       │    │    │    │    │    │    │    ├── select
       │    │    │    │    │    │    │    │    ├── save-table-name: q9_select_12
       │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(varchar!null)
-      │    │    │    │    │    │    │    │    ├── stats: [rows=66666.6667, distinct(1)=66618.6736, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4]
+      │    │    │    │    │    │    │    │    ├── stats: [rows=66666.67, distinct(1)=66618.7, null(1)=0, avgsize(1)=4, distinct(2)=120, null(2)=0, avgsize(2)=4]
       │    │    │    │    │    │    │    │    ├── key: (1)
       │    │    │    │    │    │    │    │    ├── fd: (1)-->(2)
       │    │    │    │    │    │    │    │    ├── ordering: +1

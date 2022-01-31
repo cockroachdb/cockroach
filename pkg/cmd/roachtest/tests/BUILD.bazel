@@ -158,6 +158,7 @@ go_library(
         "//pkg/cli",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
+        "//pkg/cloud/gcp",
         "//pkg/clusterversion",
         "//pkg/cmd/cmpconn",
         "//pkg/cmd/roachtest/cluster",

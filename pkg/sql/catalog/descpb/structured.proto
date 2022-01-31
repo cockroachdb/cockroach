@@ -511,6 +511,16 @@ message IndexDescriptor {
   // This is necessary to preserve the delete history for the MVCC-compatible
   // index backfiller
   // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
+  //
+  // We only use the delete preserving encoding if the index is
+  // writable. Otherwise, we may preserve a delete when in DELETE_ONLY but never
+  // see a subsequent write that replaces it. This a problem for the
+  // MVCC-compatible index backfiller which merges entries from a
+  // delete-preserving index into a newly-added index. A delete preserved in
+  // DELETE_ONLY could result in a value being erroneously deleted during the
+  // merge process. While we could filter such deletes, the filtering would
+  // require more data being stored in each deleted entry and further complicate
+  // the merge process. See #75720 for further details.
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
 }
 
