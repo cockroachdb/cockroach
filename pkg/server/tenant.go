@@ -244,15 +244,14 @@ func StartTenant(
 
 	// TODO(tbg): the log dir is not configurable at this point
 	// since it is integrated too tightly with the `./cockroach start` command.
-	if err := startSampleEnvironment(ctx, sampleEnvironmentCfg{
-		st:                   args.Settings,
-		stopper:              args.stopper,
-		minSampleInterval:    base.DefaultMetricsSampleInterval,
-		goroutineDumpDirName: args.GoroutineDumpDirName,
-		heapProfileDirName:   args.HeapProfileDirName,
-		runtime:              args.runtime,
-		sessionRegistry:      args.sessionRegistry,
-	}); err != nil {
+	if err := startSampleEnvironment(ctx,
+		args.Settings,
+		args.stopper,
+		args.GoroutineDumpDirName,
+		args.HeapProfileDirName,
+		args.runtime,
+		args.sessionRegistry,
+	); err != nil {
 		return nil, "", "", err
 	}
 
