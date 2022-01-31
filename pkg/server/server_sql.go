@@ -681,6 +681,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			isAvailable,
 			cfg.nodeDialer,
+			codec,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(

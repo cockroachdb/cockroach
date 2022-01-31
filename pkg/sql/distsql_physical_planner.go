@@ -120,6 +120,9 @@ type DistSQLPlanner struct {
 	nodeDescs kvcoord.NodeDescStore
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
+
+	// bulk IO interface
+	distSQLTenantPlanner
 }
 
 // ReplicaOraclePolicy controls which policy the physical planner uses to choose
@@ -150,6 +153,7 @@ func NewDistSQLPlanner(
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
 	nodeDialer *nodedialer.Dialer,
+	codec keys.SQLCodec,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
@@ -168,6 +172,12 @@ func NewDistSQLPlanner(
 		nodeDescs:             nodeDescs,
 		rpcCtx:                rpcCtx,
 		metadataTestTolerance: execinfra.NoExplain,
+	}
+
+	if codec.ForSystemTenant() {
+		dsp.distSQLTenantPlanner = &multiTenantPlanner{dsp}
+	} else {
+		dsp.distSQLTenantPlanner = &singleTenantPlanner{dsp}
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
