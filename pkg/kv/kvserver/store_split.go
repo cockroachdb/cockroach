@@ -42,7 +42,7 @@ func splitPreApply(
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
 	// enabled.
-	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
 		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
@@ -100,8 +100,17 @@ func splitPreApply(
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
+			// Cleared the HardState and RaftReplicaID, so rewrite them to the
+			// current values.
+			// TODO(sumeer): we know HardState.Commit cannot advance since the RHS
+			// cannot apply a snapshot yet. But what prevents a concurrent change to
+			// HardState.{Term,Vote} that we would accidentally undo here.
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+			}
+			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
+				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
+				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
 			}
 		}
 		return
@@ -114,7 +123,10 @@ func splitPreApply(
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-
+	// Write the RaftReplicaID for the RHS.
+	if err := rsl.SetRaftReplicaID(ctx, readWriter, rightDesc.ReplicaID); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
 	// Persist the closed timestamp.
 	//
 	// In order to tolerate a nil initClosedTS input, let's forward to
@@ -161,6 +173,9 @@ func splitPostApply(
 			log.Fatalf(ctx, "%s: found replica which is RHS of a split "+
 				"without a valid tenant ID", rightReplOrNil)
 		}
+		rightReplOrNil.mu.Lock()
+		rightReplOrNil.mu.wroteReplicaID = true
+		rightReplOrNil.mu.Unlock()
 	}
 
 	now := r.store.Clock().NowAsClockTimestamp()

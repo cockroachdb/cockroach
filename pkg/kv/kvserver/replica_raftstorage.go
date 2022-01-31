@@ -864,6 +864,17 @@ func (r *Replica) applySnapshot(
 		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
 
+	// The HardState and RaftReplicaID should typically already exist for this
+	// replica, unless this snapshot application is the first time raft.Ready is
+	// being processed. In that case we must write the RaftReplicaID so that it
+	// shares the same lifetime as the HardState. Additionally, we've cleared
+	// all the raft state above, so we are forced to write the RaftReplicaID
+	// here regardless of what happened before.
+	if err := r.raftMu.stateLoader.SetRaftReplicaID(
+		ctx, &unreplicatedSST, r.mu.replicaID); err != nil {
+		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+	}
+
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)
 
@@ -989,6 +1000,9 @@ func (r *Replica) applySnapshot(
 	// Snapshots typically have fewer log entries than the leaseholder. The next
 	// time we hold the lease, recompute the log size before making decisions.
 	r.mu.raftLogSizeTrusted = false
+	// RaftReplicaID is definitely written due to the earlier logic in this
+	// function.
+	r.mu.wroteReplicaID = true
 
 	// Invoke the leasePostApply method to ensure we properly initialize the
 	// replica according to whether it holds the lease. We allow jumps in the

@@ -2647,7 +2647,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
 	if err := stateloader.WriteInitialRangeState(
-		ctx, s.Engine(), uninitDesc, roachpb.Version{},
+		ctx, s.Engine(), uninitDesc, 2, roachpb.Version{},
 	); err != nil {
 		t.Fatal(err)
 	}

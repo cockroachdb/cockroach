@@ -515,6 +515,9 @@ type Replica struct {
 		// a newer replicaID, the replica immediately replicaGCs itself to make
 		// way for the newer incarnation.
 		replicaID roachpb.ReplicaID
+		// wroteReplicaID transitions once to true, when RaftReplicaID is written
+		// to the store.
+		wroteReplicaID bool
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
@@ -711,6 +714,12 @@ func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // ReplicaID returns the ID for the Replica. It may be zero if the replica does
 // not know its ID. Once a Replica has a non-zero ReplicaID it will never change.
+//
+// TODO(sumeer): The preceding sentence is not consistent with the comment at
+// Replica.mu.replicaID that says "This value may never be 0". I wonder
+// whether this comment is stale since the only time we write to this field is
+// in newUnloadedReplica. If so, we should lift replicaID out of the mu
+// struct.
 func (r *Replica) ReplicaID() roachpb.ReplicaID {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
