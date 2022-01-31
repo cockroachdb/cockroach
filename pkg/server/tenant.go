@@ -182,7 +182,7 @@ func StartTenant(
 	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
-	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
+	gwMux, gwCtx, conn, err := configureGRPCGateway(
 		ctx,
 		background,
 		args.AmbientCtx,
