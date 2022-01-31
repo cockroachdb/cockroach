@@ -523,13 +523,13 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 	ctx := context.Background()
 	startKey := []byte("a")
 
-	setup := func(t *testing.T) (
-		*testcluster.TestCluster, roachpb.RangeID) {
+	setup := func(t *testing.T, knobs base.TestingKnobs) (*testcluster.TestCluster, roachpb.RangeID) {
 		t.Helper()
 
 		tc := testcluster.StartTestCluster(t, 3,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
+				ServerArgs:      base.TestServerArgs{Knobs: knobs},
 			},
 		)
 
@@ -619,7 +619,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 	t.Run(roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED.String(), func(t *testing.T) {
 		const removeStore = 2
-		tc, rangeID := setup(t)
+		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to remove.
@@ -654,7 +654,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT.String(), func(t *testing.T) {
-		tc, rangeID := setup(t)
+		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
 		// Establish a rangefeed on the replica we plan to split.
@@ -689,7 +689,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RANGE_MERGED.String(), func(t *testing.T) {
-		tc, rangeID := setup(t)
+		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
@@ -754,7 +754,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErrRight, roachpb.RangeFeedRetryError_REASON_RANGE_MERGED)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT.String(), func(t *testing.T) {
-		tc, rangeID := setup(t)
+		tc, rangeID := setup(t, base.TestingKnobs{})
 		defer tc.Stopper().Stop(ctx)
 
 		ts2 := tc.Servers[2]
@@ -867,7 +867,24 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT)
 	})
 	t.Run(roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
-		tc, _ := setup(t)
+		startKey := bootstrap.TestingUserTableDataMin()
+		knobs := base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// This test splits off a range manually from system table ranges.
+				// Because this happens "underneath" the span configs infra, when
+				// applying a config over the replicas, we fallback to one that
+				// enables rangefeeds by default. The sub-test doesn't want that, so
+				// we add an intercept and disable it for the test range.
+				SetSpanConfigInterceptor: func(desc *roachpb.RangeDescriptor, conf roachpb.SpanConfig) roachpb.SpanConfig {
+					if !desc.ContainsKey(roachpb.RKey(startKey)) {
+						return conf
+					}
+					conf.RangefeedEnabled = false
+					return conf
+				},
+			},
+		}
+		tc, _ := setup(t, knobs)
 		defer tc.Stopper().Stop(ctx)
 
 		ts := tc.Servers[0]
@@ -877,7 +894,6 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		}
 		// Split the range so that the RHS is not a system range and thus will
 		// respect the rangefeed_enabled cluster setting.
-		startKey := bootstrap.TestingUserTableDataMin()
 		tc.SplitRangeOrFatal(t, startKey)
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
