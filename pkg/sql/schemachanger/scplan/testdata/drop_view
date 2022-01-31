@@ -36,21 +36,23 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 105
       TableID: 104
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 105
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP VIEW defaultdb.v1
-          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
-          statementtag: DROP VIEW
+      Statements:
+      - statement: DROP VIEW defaultdb.v1
+        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1›
+        statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -69,10 +71,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 105
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 105
       JobID: 1
     *scop.UpdateSchemaChangerJob
@@ -261,33 +263,39 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 111
       TableID: 108
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 105
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 106
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 107
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 108
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 111
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 111
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP VIEW defaultdb.v1 CASCADE
-          redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
-          statementtag: DROP VIEW
+      Statements:
+      - statement: DROP VIEW defaultdb.v1 CASCADE
+        redactedstatement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
+        statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
     [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -366,22 +374,22 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 111
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 105
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 106
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 107
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 108
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 111
       JobID: 1
     *scop.UpdateSchemaChangerJob
