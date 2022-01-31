@@ -1791,12 +1791,26 @@ func handleTruncatedStateBelowRaft(
 	// perform well here because the tombstones could be "collapsed",
 	// but it is hardly worth the risk at this point.
 	prefixBuf := &loader.RangeIDPrefixBuf
-	for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
-		// avoid allocating when constructing Raft log keys (16 bytes).
-		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := readWriter.ClearUnversioned(unsafeKey); err != nil {
+	if newTruncatedState.Index-oldTruncatedState.Index >= 2 { // FIXME: 10000
+		unsafeKey := prefixBuf.RaftLogKey(oldTruncatedState.Index + 1)
+		start := make(roachpb.Key, len(unsafeKey))
+		copy(start, unsafeKey)
+
+		unsafeKey = prefixBuf.RaftLogKey(newTruncatedState.Index + 1) // end is exclusive
+		end := make(roachpb.Key, len(unsafeKey))
+		copy(end, unsafeKey)
+
+		if err := readWriter.ClearRawRange(start, end); err != nil {
 			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
+		}
+	} else {
+		for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
+			// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
+			// avoid allocating when constructing Raft log keys (16 bytes).
+			unsafeKey := prefixBuf.RaftLogKey(idx)
+			if err := readWriter.ClearUnversioned(unsafeKey); err != nil {
+				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
+			}
 		}
 	}
 
