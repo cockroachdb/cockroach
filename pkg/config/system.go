@@ -290,8 +290,12 @@ func (s *SystemConfig) GetLargestObjectID(
 // GetZoneConfigForKey looks up the zone config for the object (table
 // or database, specified by key.id). It is the caller's
 // responsibility to ensure that the range does not need to be split.
-func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*zonepb.ZoneConfig, error) {
-	return s.getZoneConfigForKey(DecodeKeyIntoZoneIDAndSuffix(key))
+func (s *SystemConfig) GetZoneConfigForKey(
+	key roachpb.RKey,
+) (SystemTenantObjectID, *zonepb.ZoneConfig, error) {
+	id, suffix := DecodeKeyIntoZoneIDAndSuffix(key)
+	zoneCfg, err := s.getZoneConfigForKey(id, suffix)
+	return id, zoneCfg, err
 }
 
 // GetSpanConfigForKey looks of the span config for the given key. It's part of
@@ -299,11 +303,21 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*zonepb.ZoneConfig
 func (s *SystemConfig) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
 ) (roachpb.SpanConfig, error) {
-	zone, err := s.GetZoneConfigForKey(key)
+	id, zone, err := s.GetZoneConfigForKey(key)
 	if err != nil {
 		return roachpb.SpanConfig{}, err
 	}
-	return zone.AsSpanConfig(), nil
+	spanConfig := zone.AsSpanConfig()
+	if id <= keys.MaxReservedDescID {
+		// We enable rangefeeds for system tables; various internal
+		// subsystems (leveraging system tables) rely on rangefeeds to
+		// function.
+		spanConfig.RangefeedEnabled = true
+		// We exclude system tables from strict GC enforcement, it's
+		// only really applicable to user tables.
+		spanConfig.GCPolicy.IgnoreStrictEnforcement = true
+	}
+	return spanConfig, nil
 }
 
 // DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.

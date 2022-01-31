@@ -2484,7 +2484,7 @@ func getRestorePrivilegesForTableOrSchema(
 			}
 		}
 	} else if descCoverage == tree.RequestedDescriptors {
-		parentDB, err := descsCol.MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
+		parentDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
 		}

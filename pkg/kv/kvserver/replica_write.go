@@ -648,7 +648,7 @@ func (r *Replica) newBatchedEngine(
 		panic("expected consistent iterators")
 	}
 	var opLogger *storage.OpLoggerBatch
-	if r.isSystemRange() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+	if r.isRangefeedEnabled() || RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
 		// cluster setting we'll need a way to turn this on when any
 		// replica (not just the leaseholder) wants it and off when no

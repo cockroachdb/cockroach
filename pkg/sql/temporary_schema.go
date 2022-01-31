@@ -255,7 +255,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for i, tbName := range tbNames {
-		desc, err := descsCol.MustGetTableDescByID(ctx, txn, tbIDs[i])
+		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, tbIDs[i])
 		if err != nil {
 			return err
 		}
@@ -313,11 +313,11 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					dTableDesc, err := descsCol.MustGetTableDescByID(ctx, txn, d.ID)
+					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
+					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}

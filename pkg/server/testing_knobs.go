@@ -102,10 +102,9 @@ type TestingKnobs struct {
 	// a custom function that counts the number of times the sleep function is called.
 	DrainSleepFn func(time.Duration)
 
-	// TenantBlobClientFactory supplies a BlobClientFactory for
-	// use by tenants. By default, tenants have no blob client
-	// factory.
-	TenantBlobClientFactory blobs.BlobClientFactory
+	// BlobClientFactory supplies a BlobClientFactory for
+	// use by servers.
+	BlobClientFactory blobs.BlobClientFactory
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

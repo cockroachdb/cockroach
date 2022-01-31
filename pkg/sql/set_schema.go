@@ -78,7 +78,7 @@ func (p *planner) prepareSetSchema(
 		return desiredSchemaID, nil
 	}
 
-	err = p.Descriptors().CheckObjectCollision(ctx, p.txn, db.GetID(), desiredSchemaID, objectName)
+	err = p.Descriptors().Direct().CheckObjectCollision(ctx, p.txn, db.GetID(), desiredSchemaID, objectName)
 	if err != nil {
 		return descpb.InvalidID, err
 	}

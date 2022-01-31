@@ -404,6 +404,7 @@ func newStatusServer(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
 	cfg *base.Config,
+	adminAuthzCheck *adminPrivilegeChecker,
 	adminServer *adminServer,
 	db *kv.DB,
 	gossip *gossip.Gossip,
@@ -422,7 +423,7 @@ func newStatusServer(
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
 			AmbientContext:     ambient,
-			privilegeChecker:   adminServer.adminPrivilegeChecker,
+			privilegeChecker:   adminAuthzCheck,
 			sessionRegistry:    sessionRegistry,
 			contentionRegistry: contentionRegistry,
 			flowScheduler:      flowScheduler,

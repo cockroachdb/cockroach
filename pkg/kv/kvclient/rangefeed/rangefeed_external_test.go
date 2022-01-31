@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -618,7 +619,15 @@ func TestUnrecoverableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	srv0 := tc.Server(0)
@@ -649,6 +658,15 @@ func TestUnrecoverableErrors(t *testing.T) {
 		syncutil.Mutex
 		internalErr error
 	}{}
+
+	testutils.SucceedsSoon(t, func() error {
+		repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(scratchKey))
+		if repl.SpanConfig().GCPolicy.IgnoreStrictEnforcement {
+			return errors.New("waiting for span config to apply")
+		}
+		return nil
+	})
+
 	r, err := f.RangeFeed(ctx, "test", []roachpb.Span{sp}, preGCThresholdTS,
 		func(context.Context, *roachpb.RangeFeedValue) {},
 		rangefeed.WithDiff(),

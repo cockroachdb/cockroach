@@ -202,6 +202,11 @@ s1               {a}           256        4               0
 
 # Test AS OF SYSTEM TIME
 
+# We're reading from timestamps that precede the GC thresholds, disable strict
+# enforcement.
+statement ok
+SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false
+
 statement error pgcode 3D000 database "test" does not exist
 CREATE STATISTICS s2 ON a FROM data AS OF SYSTEM TIME '2017'
 

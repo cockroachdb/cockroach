@@ -2135,7 +2135,7 @@ func forEachSchema(
 		}
 	}
 
-	userDefinedSchemas, err := p.Descriptors().GetSchemaDescriptorsFromIDs(ctx, p.txn, userDefinedSchemaIDs)
+	userDefinedSchemas, err := p.Descriptors().Direct().GetSchemaDescriptorsFromIDs(ctx, p.txn, userDefinedSchemaIDs)
 	if err != nil {
 		return err
 	}

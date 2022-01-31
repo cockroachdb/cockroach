@@ -45,7 +45,7 @@ func gcTables(
 
 		var table catalog.TableDescriptor
 		if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			table, err = col.MustGetTableDescByID(ctx, txn, droppedTable.ID)
+			table, err = col.Direct().MustGetTableDescByID(ctx, txn, droppedTable.ID)
 			return err
 		}); err != nil {
 			if errors.Is(err, catalog.ErrDescriptorNotFound) {

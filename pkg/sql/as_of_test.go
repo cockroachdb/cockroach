@@ -122,6 +122,11 @@ func TestAsOfTime(t *testing.T) {
 		}
 	})
 
+	// We'll be querying against non-existent timestamps.
+	if _, err := db.Exec(" SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	// Future queries shouldn't work if not marked as synthetic.
 	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
 		t.Fatal(err)

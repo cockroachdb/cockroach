@@ -1,50 +1,51 @@
 # Translating the system database itself should surface entries for all system
-# tables (including pseudo table IDs).
+# tables (including pseudo table IDs). Pseudo table ID keyspans show up as
+# "range system" since rangefeeds/ignore_strict_gc are unset.
 
 translate database=system
 ----
-/Table/{SystemConfigSpan/Start-4}          range system
-/Table/{4-5}                               range system
-/Table/{5-6}                               range system
-/Table/{6-7}                               range system
-/Table/{8-9}                               range system
-/Table/1{1-2}                              range system
-/Table/1{2-3}                              range system
-/Table/1{3-4}                              range system
-/Table/1{4-5}                              range system
-/Table/1{5-6}                              range system
+/Table/{SystemConfigSpan/Start-4}          database system (host)
+/Table/{4-5}                               database system (host)
+/Table/{5-6}                               database system (host)
+/Table/{6-7}                               database system (host)
+/Table/{8-9}                               database system (host)
+/Table/1{1-2}                              database system (host)
+/Table/1{2-3}                              database system (host)
+/Table/1{3-4}                              database system (host)
+/Table/1{4-5}                              database system (host)
+/Table/1{5-6}                              database system (host)
 /Table/1{6-7}                              range system
 /Table/1{7-8}                              range system
 /Table/1{8-9}                              range system
-/Table/{19-20}                             range system
-/Table/2{0-1}                              range system
-/Table/2{1-2}                              range system
+/Table/{19-20}                             database system (host)
+/Table/2{0-1}                              database system (host)
+/Table/2{1-2}                              database system (host)
 /Table/2{2-3}                              range system
-/Table/2{3-4}                              range system
-/Table/2{4-5}                              range system
-/Table/2{5-6}                              ttl_seconds=600 num_replicas=5
-/Table/2{6-7}                              range system
-/Table/2{7-8}                              ttl_seconds=600 num_replicas=5
-/Table/2{8-9}                              range system
+/Table/2{3-4}                              database system (host)
+/Table/2{4-5}                              database system (host)
+/Table/2{5-6}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/2{6-7}                              database system (host)
+/Table/2{7-8}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/2{8-9}                              database system (host)
 /{Table/29-NamespaceTable/30}              range system
-/NamespaceTable/{30-Max}                   range system
-/{NamespaceTable/Max-Table/32}             range system
-/Table/3{2-3}                              range system
-/Table/3{3-4}                              range system
-/Table/3{4-5}                              range system
-/Table/3{5-6}                              range system
-/Table/3{6-7}                              range system
-/Table/3{7-8}                              range system
+/NamespaceTable/{30-Max}                   database system (host)
+/{NamespaceTable/Max-Table/32}             database system (host)
+/Table/3{2-3}                              database system (host)
+/Table/3{3-4}                              database system (host)
+/Table/3{4-5}                              database system (host)
+/Table/3{5-6}                              database system (host)
+/Table/3{6-7}                              database system (host)
+/Table/3{7-8}                              database system (host)
 /Table/3{8-9}                              range system
-/Table/{39-40}                             range system
-/Table/4{0-1}                              range system
-/Table/4{1-2}                              range system
-/Table/4{2-3}                              range system
-/Table/4{3-4}                              range system
-/Table/4{4-5}                              range system
-/Table/4{5-6}                              ttl_seconds=7200 num_replicas=5
-/Table/4{6-7}                              range system
-/Table/4{7-8}                              range system
+/Table/{39-40}                             database system (host)
+/Table/4{0-1}                              database system (host)
+/Table/4{1-2}                              database system (host)
+/Table/4{2-3}                              database system (host)
+/Table/4{3-4}                              database system (host)
+/Table/4{4-5}                              database system (host)
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+/Table/4{6-7}                              database system (host)
+/Table/4{7-8}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -53,48 +54,48 @@ ALTER DATABASE system CONFIGURE ZONE USING num_replicas = 7
 
 translate database=system
 ----
-/Table/{SystemConfigSpan/Start-4}          num_replicas=7
-/Table/{4-5}                               num_replicas=7
-/Table/{5-6}                               num_replicas=7
-/Table/{6-7}                               num_replicas=7
-/Table/{8-9}                               num_replicas=7
-/Table/1{1-2}                              num_replicas=7
-/Table/1{2-3}                              num_replicas=7
-/Table/1{3-4}                              num_replicas=7
-/Table/1{4-5}                              num_replicas=7
-/Table/1{5-6}                              num_replicas=7
+/Table/{SystemConfigSpan/Start-4}          ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{4-5}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{5-6}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{6-7}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{8-9}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{6-7}                              num_replicas=7
 /Table/1{7-8}                              num_replicas=7
 /Table/1{8-9}                              num_replicas=7
-/Table/{19-20}                             num_replicas=7
-/Table/2{0-1}                              num_replicas=7
-/Table/2{1-2}                              num_replicas=7
+/Table/{19-20}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/2{2-3}                              num_replicas=7
-/Table/2{3-4}                              num_replicas=7
-/Table/2{4-5}                              num_replicas=7
-/Table/2{5-6}                              ttl_seconds=600 num_replicas=7
-/Table/2{6-7}                              num_replicas=7
-/Table/2{7-8}                              ttl_seconds=600 num_replicas=7
-/Table/2{8-9}                              num_replicas=7
+/Table/2{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{5-6}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{7-8}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{8-9}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /{Table/29-NamespaceTable/30}              num_replicas=7
-/NamespaceTable/{30-Max}                   num_replicas=7
-/{NamespaceTable/Max-Table/32}             num_replicas=7
-/Table/3{2-3}                              num_replicas=7
-/Table/3{3-4}                              num_replicas=7
-/Table/3{4-5}                              num_replicas=7
-/Table/3{5-6}                              num_replicas=7
-/Table/3{6-7}                              num_replicas=7
-/Table/3{7-8}                              num_replicas=7
+/NamespaceTable/{30-Max}                   ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/{NamespaceTable/Max-Table/32}             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/3{8-9}                              num_replicas=7
-/Table/{39-40}                             num_replicas=7
-/Table/4{0-1}                              num_replicas=7
-/Table/4{1-2}                              num_replicas=7
-/Table/4{2-3}                              num_replicas=7
-/Table/4{3-4}                              num_replicas=7
-/Table/4{4-5}                              num_replicas=7
-/Table/4{5-6}                              ttl_seconds=7200 num_replicas=7
-/Table/4{6-7}                              num_replicas=7
-/Table/4{7-8}                              num_replicas=7
+/Table/{39-40}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -109,45 +110,45 @@ full-translate
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
 /System{tse-/Max}                          range system
-/Table/{SystemConfigSpan/Start-4}          num_replicas=7
-/Table/{4-5}                               num_replicas=7
-/Table/{5-6}                               num_replicas=7
-/Table/{6-7}                               num_replicas=7
-/Table/{8-9}                               num_replicas=7
-/Table/1{1-2}                              num_replicas=7
-/Table/1{2-3}                              num_replicas=7
-/Table/1{3-4}                              num_replicas=7
-/Table/1{4-5}                              num_replicas=7
-/Table/1{5-6}                              num_replicas=7
+/Table/{SystemConfigSpan/Start-4}          ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{4-5}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{5-6}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{6-7}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/{8-9}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/1{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/1{6-7}                              num_replicas=7
 /Table/1{7-8}                              num_replicas=7
 /Table/1{8-9}                              num_replicas=7
-/Table/{19-20}                             num_replicas=7
-/Table/2{0-1}                              num_replicas=7
-/Table/2{1-2}                              num_replicas=7
+/Table/{19-20}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/2{2-3}                              num_replicas=7
-/Table/2{3-4}                              num_replicas=7
-/Table/2{4-5}                              num_replicas=7
-/Table/2{5-6}                              ttl_seconds=600 num_replicas=7
-/Table/2{6-7}                              num_replicas=7
-/Table/2{7-8}                              ttl_seconds=600 num_replicas=7
-/Table/2{8-9}                              num_replicas=7
+/Table/2{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{5-6}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{7-8}                              ttl_seconds=600 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/2{8-9}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /{Table/29-NamespaceTable/30}              num_replicas=7
-/NamespaceTable/{30-Max}                   num_replicas=7
-/{NamespaceTable/Max-Table/32}             num_replicas=7
-/Table/3{2-3}                              num_replicas=7
-/Table/3{3-4}                              num_replicas=7
-/Table/3{4-5}                              num_replicas=7
-/Table/3{5-6}                              num_replicas=7
-/Table/3{6-7}                              num_replicas=7
-/Table/3{7-8}                              num_replicas=7
+/NamespaceTable/{30-Max}                   ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/{NamespaceTable/Max-Table/32}             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{5-6}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/3{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/3{8-9}                              num_replicas=7
-/Table/{39-40}                             num_replicas=7
-/Table/4{0-1}                              num_replicas=7
-/Table/4{1-2}                              num_replicas=7
-/Table/4{2-3}                              num_replicas=7
-/Table/4{3-4}                              num_replicas=7
-/Table/4{4-5}                              num_replicas=7
-/Table/4{5-6}                              ttl_seconds=7200 num_replicas=7
-/Table/4{6-7}                              num_replicas=7
-/Table/4{7-8}                              num_replicas=7
+/Table/{39-40}                             ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{1-2}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{2-3}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{3-4}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{4-5}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/4{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

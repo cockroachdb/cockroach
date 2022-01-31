@@ -343,6 +343,9 @@ type StoreTestingKnobs struct {
 	// SpanConfigUpdateInterceptor is called after the store hears about a span
 	// config update.
 	SpanConfigUpdateInterceptor func(spanconfig.Update)
+	// SetSpanConfigInterceptor is called before updating a replica's embedded
+	// SpanConfig. The returned SpanConfig is used instead.
+	SetSpanConfigInterceptor func(*roachpb.RangeDescriptor, roachpb.SpanConfig) roachpb.SpanConfig
 	// If set, use the given version as the initial replica version when
 	// bootstrapping ranges. This is used for testing the migration
 	// infrastructure.
@@ -378,6 +381,9 @@ type StoreTestingKnobs struct {
 	// TODO(irfansharif): Get rid of this knob, maybe by first moving
 	// DisableSpanConfigs into a testing knob instead of a server arg.
 	UseSystemConfigSpanForQueues bool
+	// IgnoreStrictGCEnforcement is used by tests to op out of strict GC
+	// enforcement.
+	IgnoreStrictGCEnforcement bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

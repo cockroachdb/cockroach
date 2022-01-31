@@ -1,11 +1,20 @@
+# This test makes use of 'kv.gc_ttl.strict_enforcement.enabled = false', which
+# is not available to tenants. We use a cluster option instead.
+# cluster-opt: ignore-tenant-strict-gc-enforcement
+
 statement ok
 CREATE TABLE t (i INT)
 
 statement ok
 INSERT INTO t VALUES (2)
 
-# Verify that transacations can be used for historical reads using BEGIN
+# Verify that transactions can be used for historical reads using BEGIN
 # or SET TRANSACTION
+
+# We're reading from timestamps that precede the GC thresholds, disable strict
+# enforcement.
+statement ok
+SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false
 
 statement error pgcode 3D000 pq: database "test" does not exist
 BEGIN AS OF SYSTEM TIME '-1h'; SELECT * FROM t

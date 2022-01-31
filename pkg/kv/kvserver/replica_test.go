@@ -187,6 +187,11 @@ func (tc *testContext) StartWithStoreConfigAndVersion(
 	require.Nil(t, tc.store)
 	require.Nil(t, tc.repl)
 
+	// testContext doesn't make use of the span configs infra (uses gossip
+	// in fact); it's not able to craft ranges that know that they're part
+	// of system tables and therefore can opt out of strict GC enforcement.
+	cfg.TestingKnobs.IgnoreStrictGCEnforcement = true
+
 	// NB: this also sets up fake zone config handlers via TestingSetupZoneConfigHook.
 	//
 	// TODO(tbg): the above is not good, figure out which tests need this and make them

@@ -33,7 +33,7 @@ func TestDatabaseAccessors(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		if _, err := col.MustGetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID); err != nil {
+		if _, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, keys.SystemDatabaseID); err != nil {
 			return err
 		}
 		return nil

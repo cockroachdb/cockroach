@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -3577,7 +3578,12 @@ func TestProposalOverhead(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{TestingProposalFilter: filter},
+				Store: &kvserver.StoreTestingKnobs{
+					TestingProposalFilter: filter,
+				},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
 			},
 		},
 	})
@@ -3597,6 +3603,16 @@ func TestProposalOverhead(t *testing.T) {
 	)
 	t.Run("user-key overhead", func(t *testing.T) {
 		userKey := tc.ScratchRange(t)
+		testutils.SucceedsSoon(t, func() error {
+			repl := tc.GetFirstStoreFromServer(t, 0).LookupReplica(roachpb.RKey(userKey))
+			if repl == nil {
+				return errors.New("scratch range replica not found")
+			}
+			if repl.SpanConfig().RangefeedEnabled {
+				return errors.New("waiting for span configs to apply")
+			}
+			return nil
+		})
 		k := roachpb.Key(encoding.EncodeStringAscending(userKey, "foo"))
 		key.Store(k)
 		require.NoError(t, db.Put(ctx, k, "v"))
