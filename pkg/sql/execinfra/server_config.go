@@ -293,13 +293,13 @@ func (*TestingKnobs) ModuleTestingKnobs() {}
 var DefaultMemoryLimit = int64(util.ConstantWithMetamorphicTestRange(
 	"workmem",
 	ProductionDefaultMemoryLimit,
-	1,     /* min */
-	8<<20, /* max, 8 MiB */
+	2, /* min */
+	2, /* max, 8 MiB */
 ))
 
 // ProductionDefaultMemoryLimit is the value used for DefaultMemoryLimit in the
 // production setting.
-const ProductionDefaultMemoryLimit = 64 << 20 /* 64 MiB */
+const ProductionDefaultMemoryLimit = 2
 
 // GetWorkMemLimit returns the number of bytes determining the amount of RAM
 // available to a single processor or operator.
