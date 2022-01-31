@@ -15,6 +15,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStoreSetRangesMaxBytes creates a set of ranges via splitting and then
@@ -69,4 +72,39 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestStoreRaftReplicaID tests that initialized replicas have a
+// RaftReplicaID.
+func TestStoreRaftReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+	require.NoError(t, err)
+
+	scratchKey := tc.ScratchRange(t)
+	desc, err := tc.LookupRange(scratchKey)
+	require.NoError(t, err)
+	repl, err := store.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	replicaID, found, err := stateloader.Make(desc.RangeID).LoadRaftReplicaID(ctx, store.Engine())
+	require.True(t, found)
+	require.NoError(t, err)
+	require.Equal(t, repl.ReplicaID(), replicaID.ReplicaID)
+
+	// RHS of a split also has ReplicaID.
+	splitKey := append(scratchKey, '0', '0')
+	_, rhsDesc, err := tc.SplitRange(splitKey)
+	require.NoError(t, err)
+	rhsRepl, err := store.GetReplica(rhsDesc.RangeID)
+	require.NoError(t, err)
+	rhsReplicaID, found, err :=
+		stateloader.Make(rhsDesc.RangeID).LoadRaftReplicaID(ctx, store.Engine())
+	require.True(t, found)
+	require.NoError(t, err)
+	require.Equal(t, rhsRepl.ReplicaID(), rhsReplicaID.ReplicaID)
 }

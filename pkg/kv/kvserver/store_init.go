@@ -173,11 +173,12 @@ func WriteInitialClusterData(
 			EndKey:        endKey,
 			NextReplicaID: 2,
 		}
+		const firstReplicaID = 1
 		replicas := []roachpb.ReplicaDescriptor{
 			{
 				NodeID:    FirstNodeID,
 				StoreID:   FirstStoreID,
-				ReplicaID: 1,
+				ReplicaID: firstReplicaID,
 			},
 		}
 		desc.SetReplicas(roachpb.MakeReplicaSet(replicas))
@@ -244,7 +245,8 @@ func WriteInitialClusterData(
 			}
 		}
 
-		if err := stateloader.WriteInitialRangeState(ctx, batch, *desc, initialReplicaVersion); err != nil {
+		if err := stateloader.WriteInitialRangeState(
+			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
 			return err
 		}
 		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
