@@ -61,9 +61,6 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	// avoid restarts.
 
 	payload := n.job.Payload()
-	progress := n.job.Progress()
-	newSchemaChangeProgress := progress.GetNewSchemaChange()
-	newSchemaChangeDetails := payload.GetNewSchemaChange()
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
@@ -91,8 +88,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Settings,
 		deps,
 		n.job.ID(),
-		*newSchemaChangeDetails,
-		*newSchemaChangeProgress,
+		payload.DescriptorIDs,
 		n.rollback,
 	)
 }

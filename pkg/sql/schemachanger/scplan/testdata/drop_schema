@@ -622,48 +622,59 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
     *scop.RemoveTypeBackRef
       DescID: 113
       TypeID: 112
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 100
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 104
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 105
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 106
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 107
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 108
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 109
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 110
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 111
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 112
-      JobID: 1
-    *scop.AddJobReference
+      Initialize: true
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 113
+      Initialize: true
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 100
+      - 104
+      - 105
+      - 106
+      - 107
+      - 108
+      - 109
+      - 110
+      - 111
+      - 112
+      - 113
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
-      JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP SCHEMA defaultdb.sc1 CASCADE
-          redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
-          statementtag: DROP SCHEMA
+      Statements:
+      - statement: DROP SCHEMA defaultdb.sc1 CASCADE
+        redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
+        statementtag: DROP SCHEMA
 PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -833,37 +844,37 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 104
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 100
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 105
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 106
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 107
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 108
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 109
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 110
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 111
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 112
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 113
       JobID: 1
     *scop.UpdateSchemaChangerJob
