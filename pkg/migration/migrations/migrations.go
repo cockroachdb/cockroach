@@ -125,6 +125,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		tenantSettingsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"DateStyle enabled",
+		toCV(clusterversion.DateStyleIntervalStyleEnabled),
+		NoPrecondition,
+		fixCastForStyleMigration,
+	),
 }
 
 func init() {
