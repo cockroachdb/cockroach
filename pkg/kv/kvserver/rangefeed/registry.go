@@ -36,6 +36,11 @@ type Stream interface {
 	Send(*roachpb.RangeFeedEvent) error
 }
 
+type sharedEvent struct {
+	event      *roachpb.RangeFeedEvent
+	allocation *sharedBudgetAllocation
+}
+
 // registration is an instance of a rangefeed subscriber who has
 // registered to receive updates for a specific range of keys.
 // Updates are delivered to its stream until one of the following
@@ -68,9 +73,10 @@ type registration struct {
 	errC   chan<- *roachpb.Error
 
 	// Internal.
-	id   int64
-	keys interval.Range
-	buf  chan *roachpb.RangeFeedEvent
+	id        int64
+	keys      interval.Range
+	buf       chan *sharedEvent
+	memBudget *feedBudget
 
 	mu struct {
 		sync.Locker
@@ -99,6 +105,7 @@ func newRegistration(
 	withDiff bool,
 	bufferSz int,
 	metrics *Metrics,
+	memBudget *feedBudget,
 	stream Stream,
 	errC chan<- *roachpb.Error,
 ) registration {
@@ -110,7 +117,8 @@ func newRegistration(
 		metrics:                metrics,
 		stream:                 stream,
 		errC:                   errC,
-		buf:                    make(chan *roachpb.RangeFeedEvent, bufferSz),
+		buf:                    make(chan *sharedEvent, bufferSz),
+		memBudget:              memBudget,
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -122,22 +130,26 @@ func newRegistration(
 // indicating that live events were lost and a catch-up scan should be initiated.
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
-func (r *registration) publish(event *roachpb.RangeFeedEvent) {
+func (r *registration) publish(event *roachpb.RangeFeedEvent, allocation *sharedBudgetAllocation) {
 	r.validateEvent(event)
-	event = r.maybeStripEvent(event)
+	e := &sharedEvent{event: r.maybeStripEvent(event), allocation: allocation}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
 		return
 	}
+	allocation.use()
 	select {
-	case r.buf <- event:
+	case r.buf <- e:
 		r.mu.caughtUp = false
 	default:
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
+		if allocation.release() {
+			r.memBudget.Return(allocation.size)
+		}
 	}
 }
 
@@ -279,7 +291,11 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			if err := r.stream.Send(nextEvent); err != nil {
+			err := r.stream.Send(nextEvent.event)
+			if nextEvent.allocation.release() {
+				r.memBudget.Return(nextEvent.allocation.size)
+			}
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -380,7 +396,9 @@ func (reg *registry) nextID() int64 {
 
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
-func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
+func (reg *registry) PublishToOverlapping(
+	span roachpb.Span, event *roachpb.RangeFeedEvent, allocation *sharedBudgetAllocation,
+) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
 	var minTS hlc.Timestamp
@@ -404,7 +422,7 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
 		if r.catchUpTimestamp.Less(minTS) {
-			r.publish(event)
+			r.publish(event, allocation)
 		}
 		return false, nil
 	})

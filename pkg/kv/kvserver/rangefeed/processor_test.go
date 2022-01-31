@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +144,6 @@ func newTestProcessorWithTxnPusher(
 		pushTxnInterval = 10 * time.Millisecond
 		pushTxnAge = 50 * time.Millisecond
 	}
-
 	p := NewProcessor(Config{
 		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
 		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
@@ -529,6 +530,335 @@ func TestProcessorSlowConsumer(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestProcessorMemoryBudgetExceeded tests that memory budget will limit amount
+// of data buffered for the feed and result in registrations being removed as a
+// result of overflow.
+func TestProcessorMemoryBudgetExceeded(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(40))
+	b := m.MakeBoundAccount()
+
+	stopper := stop.NewStopper()
+	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
+	p := NewProcessor(Config{
+		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval:     pushTxnInterval,
+		PushTxnsAge:          pushTxnAge,
+		EventChanCap:         testProcessorEventCCap,
+		CheckStreamsInterval: 10 * time.Millisecond,
+		Metrics:              NewMetrics(),
+		MemBudget:            &b,
+	})
+	p.Start(stopper, nil)
+	defer stopper.Stop(context.Background())
+
+	// Add a registration.
+	r1Stream := newTestStream()
+	r1ErrC := make(chan *roachpb.Error, 1)
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		nil,   /* catchUpIter */
+		false, /* withDiff */
+		r1Stream,
+		r1ErrC,
+	)
+	p.syncEventAndRegistrations()
+
+	// Block it.
+	unblock := r1Stream.BlockSend()
+	defer func() {
+		if unblock != nil {
+			unblock()
+		}
+	}()
+
+	// Write entries till budget is exhausted
+	for i := 0; i < 10; i++ {
+		p.ConsumeLogicalOps(
+			writeValueOpWithKV(
+				roachpb.Key("k"),
+				hlc.Timestamp{WallTime: int64(i + 2)},
+				[]byte("this is big value")),
+		)
+	}
+
+	// Unblock stream processing part to consume error.
+	p.syncEventAndRegistrationSpan(spXY)
+
+	require.Equal(t, 0, p.reg.Len(), "registration was not removed")
+
+	// Unblock the 'send' channel. The events should quickly be consumed.
+	unblock()
+	unblock = nil
+	p.syncEventAndRegistrations()
+
+	require.Equal(t, newErrBufferCapacityExceeded().GoError(), (<-r1ErrC).GoError())
+}
+
+// TestProcessorMemoryBudgetLargeEvent verifies that given a single event that
+// exceeds a memory budget, processor could let it through in absence of any
+// other pending events.
+func TestProcessorMemoryBudgetLargeEvent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(30))
+	b := m.MakeBoundAccount()
+
+	stopper := stop.NewStopper()
+	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
+	p := NewProcessor(Config{
+		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval:     pushTxnInterval,
+		PushTxnsAge:          pushTxnAge,
+		EventChanCap:         testProcessorEventCCap,
+		CheckStreamsInterval: 10 * time.Millisecond,
+		Metrics:              NewMetrics(),
+		MemBudget:            &b,
+	})
+	p.Start(stopper, nil)
+	defer stopper.Stop(context.Background())
+
+	// Add a registration.
+	r1Stream := newTestStream()
+	r1ErrC := make(chan *roachpb.Error, 1)
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		nil,   /* catchUpIter */
+		false, /* withDiff */
+		r1Stream,
+		r1ErrC,
+	)
+	p.syncEventAndRegistrations()
+
+	p.ConsumeLogicalOps(
+		writeValueOpWithKV(
+			roachpb.Key("k"),
+			hlc.Timestamp{WallTime: int64(5)},
+			[]byte("this is big value that exceeds any reasonable capacity we have")),
+	)
+
+	p.syncEventAndRegistrations()
+
+	// Count consumed values
+	consumedOps := 0
+	for _, e := range r1Stream.Events() {
+		if e.Val != nil {
+			consumedOps++
+		}
+	}
+	require.Equal(t, 1, consumedOps)
+	require.Equal(t, 1, p.reg.Len(), "registration was removed")
+}
+
+func TestFeedBudget(t *testing.T) {
+	makeBudgetWithSize := func(size int64) (feedBudget, *mon.BoundAccount) {
+		m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+		m.Start(context.Background(), nil, mon.MakeStandaloneBudget(size))
+		b := m.MakeBoundAccount()
+
+		f := feedBudget{}
+		f.init(&b, NewMetrics())
+		return f, &b
+	}
+
+	t.Run("allocate one", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		// Basic case of getting and returning allocation
+		a, err := f.Get(13, nil)
+		require.NoError(t, err)
+		require.Equal(t, int64(13), b.Used(), "")
+		if a.release() {
+			f.Return(a.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	t.Run("allocate multiple", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		// Multiple allocations returned out of order.
+		// Basic case of getting and returning allocation
+		a1, err := f.Get(13, nil)
+		require.NoError(t, err)
+		a2, err := f.Get(20, nil)
+		require.NoError(t, err)
+		require.Equal(t, int64(33), b.Used(), "allocated budget")
+		if a2.release() {
+			f.Return(a2.size)
+		}
+		if a1.release() {
+			f.Return(a1.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	// Wait for allocation to return some budget.
+	t.Run("wait for replenish", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		// Multiple allocations returned out of order.
+		// Basic case of getting and returning allocation
+		a1, err := f.Get(30, nil)
+		require.NoError(t, err)
+		started := make(chan interface{})
+		result := make(chan error)
+		go func() {
+			started <- struct{}{}
+			a, err := f.Get(20, time.After(time.Second*5))
+			if err != nil {
+				result <- err
+			} else {
+				f.Return(a.size)
+				result <- nil
+			}
+		}()
+		<-started
+		require.Equal(t, int64(30), b.Used(), "allocated budget")
+		if a1.release() {
+			f.Return(a1.size)
+		}
+		err = <-result
+		require.NoError(t, err)
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	// Fail allocation if used all budget
+	t.Run("fail over budget", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		a1, err := f.Get(30, nil)
+		require.NoError(t, err)
+		_, err = f.Get(20, nil)
+		require.Error(t, err)
+		require.Equal(t, int64(30), b.Used(), "allocated budget")
+		if a1.release() {
+			f.Return(a1.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	// Timeout allocation if used all budget
+	t.Run("timeout over budget", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		a1, err := f.Get(30, time.After(time.Microsecond))
+		require.NoError(t, err)
+		_, err = f.Get(20, time.After(time.Microsecond))
+		require.Error(t, err)
+		require.Equal(t, int64(30), b.Used(), "allocated budget")
+		if a1.release() {
+			f.Return(a1.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	// Get one over budget allocation when no others are present.
+	t.Run("pass single oversized", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		// Basic case of getting and returning allocation
+		a, err := f.Get(50, nil)
+		require.NoError(t, err)
+		// We don't allocate anything for now
+		require.Equal(t, int64(0), b.Used(), "")
+		if a.release() {
+			f.Return(a.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+	})
+
+	// Fail if oversized message in progress.
+	t.Run("fail while oversized", func(t *testing.T) {
+		f, b := makeBudgetWithSize(40)
+		// Basic case of getting and returning allocation
+		a, err := f.Get(50, nil)
+		require.NoError(t, err)
+
+		// Allocations should fail now that oversized object is in progress.
+		_, err = f.Get(20, nil)
+		require.Error(t, err)
+
+		if a.release() {
+			f.Return(a.size)
+		}
+		require.Equal(t, int64(0), b.Used(), "used budget after free")
+
+		// Now that oversized object is released, proceed as normal.
+		_, err = f.Get(30, time.After(time.Microsecond))
+		require.NoError(t, err)
+		require.Equal(t, int64(30), b.Used(), "used budget after free")
+	})
+}
+
+// TestProcessorMemoryBudgetReleased that memory budget is correctly released.
+// TODO(oleg): this test surfaces a problem with timeout. if writing too fast
+// we will hit timeout which is set to maximum so there would be a delay in
+// test.
+func TestProcessorMemoryBudgetReleased(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	m := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	m.Start(context.Background(), nil, mon.MakeStandaloneBudget(40))
+	b := m.MakeBoundAccount()
+
+	stopper := stop.NewStopper()
+	var pushTxnInterval, pushTxnAge time.Duration = 0, 0 // disable
+	p := NewProcessor(Config{
+		AmbientContext:       log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:                hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		Span:                 roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
+		PushTxnsInterval:     pushTxnInterval,
+		PushTxnsAge:          pushTxnAge,
+		EventChanCap:         testProcessorEventCCap,
+		CheckStreamsInterval: 10 * time.Millisecond,
+		MemBudget:            &b,
+		EventChanTimeout:     50 * time.Millisecond, // Enable timeout to allow consumer to process
+		// events even if we reach memory budget capacity.
+	})
+	p.Start(stopper, nil)
+	defer stopper.Stop(context.Background())
+
+	// Add a registration.
+	r1Stream := newTestStream()
+	r1ErrC := make(chan *roachpb.Error, 1)
+	p.Register(
+		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
+		hlc.Timestamp{WallTime: 1},
+		nil,   /* catchUpIter */
+		false, /* withDiff */
+		r1Stream,
+		r1ErrC,
+	)
+	p.syncEventAndRegistrations()
+
+	// Write entries and check they are consumed so that we could write more
+	// data than total budget if inflight messages are within budget.
+	const eventCount = 10
+	for i := 0; i < eventCount; i++ {
+		p.ConsumeLogicalOps(
+			writeValueOpWithKV(
+				roachpb.Key("k"),
+				hlc.Timestamp{WallTime: int64(i + 2)},
+				[]byte("value")),
+		)
+	}
+	p.syncEventAndRegistrations()
+
+	// Count consumed values
+	consumedOps := 0
+	for _, e := range r1Stream.Events() {
+		if e.Val != nil {
+			consumedOps++
+		}
+	}
+	require.Equal(t, 1, p.reg.Len(), "registration was removed")
+	require.Equal(t, 10, consumedOps)
 }
 
 // TestProcessorInitializeResolvedTimestamp tests that when a Processor is given

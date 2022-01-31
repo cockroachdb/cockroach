@@ -14,13 +14,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -76,6 +79,9 @@ type Config struct {
 
 	// Metrics is for production monitoring of RangeFeeds.
 	Metrics *Metrics
+
+	// Processor memory budget
+	MemBudget *mon.BoundAccount
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -109,8 +115,9 @@ func (sc *Config) SetDefaults() {
 //    timestamp.
 type Processor struct {
 	Config
-	reg registry
-	rts resolvedTimestamp
+	reg       registry
+	rts       resolvedTimestamp
+	memBudget *feedBudget
 
 	regC       chan registration
 	unregC     chan *registration
@@ -157,6 +164,29 @@ type event struct {
 	// has to be done by the processor in order to avoid race conditions with the
 	// registry. Should be used only in tests.
 	testRegCatchupSpan roachpb.Span
+	// Budget allocated to process the event
+	allocation *sharedBudgetAllocation
+}
+
+// sharedBudgetAllocation is a token that is passed around with range events
+// and further downstream to registrations to maintain RangeFeed memory budget
+// across shared queues.
+type sharedBudgetAllocation struct {
+	refCount int32
+	size     int64
+}
+
+// release decreases ref count and returns true if budget could be released.
+func (a *sharedBudgetAllocation) release() bool {
+	return a != nil && atomic.AddInt32(&a.refCount, -1) == 0
+}
+
+func (a *sharedBudgetAllocation) use() {
+	if a != nil {
+		if atomic.AddInt32(&a.refCount, 1) == 1 {
+			panic("unexpected shared memory allocation usage increase after free")
+		}
+	}
 }
 
 // spanErr is an error across a key span that will disconnect overlapping
@@ -171,7 +201,7 @@ type spanErr struct {
 func NewProcessor(cfg Config) *Processor {
 	cfg.SetDefaults()
 	cfg.AmbientContext.AddLogTag("rangefeed", nil)
-	return &Processor{
+	p := &Processor{
 		Config: cfg,
 		reg:    makeRegistry(),
 		rts:    makeResolvedTimestamp(),
@@ -187,6 +217,9 @@ func NewProcessor(cfg Config) *Processor {
 		stopC:      make(chan *roachpb.Error, 1),
 		stoppedC:   make(chan struct{}),
 	}
+	p.memBudget = &feedBudget{}
+	p.memBudget.init(cfg.MemBudget, p.Metrics)
+	return p
 }
 
 // IntentScannerConstructor is used to construct an IntentScanner. It
@@ -282,7 +315,7 @@ func (p *Processor) run(
 			// timestamp might be empty but the checkpoint event is still useful to indicate that the
 			// catch-up scan has completed. This allows clients to rely on stronger ordering semantics
 			// once they observe the first checkpoint event.
-			r.publish(p.newCheckpointEvent())
+			r.publish(p.newCheckpointEvent(), nil)
 
 			// Run an output loop for the registry.
 			runOutputLoop := func(ctx context.Context) {
@@ -319,6 +352,9 @@ func (p *Processor) run(
 		// Transform and route events.
 		case e := <-p.eventC:
 			p.consumeEvent(ctx, e)
+			if e.allocation.release() {
+				p.memBudget.Return(e.allocation.size)
+			}
 			putPooledEvent(e)
 
 		// Check whether any unresolved intents need a push.
@@ -448,9 +484,10 @@ func (p *Processor) Register(
 	// it should see these events during its catch up scan.
 	p.syncEventC()
 
+	// TODO(oleg): do we need to split memory budgets here?
 	r := newRegistration(
 		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
+		p.Config.EventChanCap, p.Metrics, p.memBudget, stream, errC,
 	)
 	select {
 	case p.regC <- r:
@@ -537,11 +574,128 @@ func (p *Processor) ForwardClosedTS(closedTS hlc.Timestamp) bool {
 	return p.sendEvent(event{ct: closedTS}, p.EventChanTimeout)
 }
 
+// Feed budget wraps BoundAccount and allows waiting for budget to be
+// replenished as well as sending of single oversized messages.
+type feedBudget struct {
+	// Since budget is accessed from producer and consumer we need to protect
+	// access to memBudget inside.
+	mu struct {
+		syncutil.Mutex
+		// Memory pool from which we allocate memory.
+		memBudget *mon.BoundAccount
+		// Whenever we try to pass oversized message this would go to true to prevent
+		// other attempts of subsequent small messages.
+		oversize bool
+	}
+	// Channel to notify that memory was returned to the pool.
+	replenishC chan interface{}
+
+	metrics *Metrics
+}
+
+func (f *feedBudget) init(budget *mon.BoundAccount, metrics *Metrics) {
+	f.mu.memBudget = budget
+	if budget != nil {
+		f.replenishC = make(chan interface{})
+		f.metrics = metrics
+	}
+}
+
+// Get allocates amount from budget.
+// TODO(oleg): this is BS currently as we have to juggle 2 vars - size and flag
+// If we are constrained to a single producer (which should be the case as we
+// can't otherwise guarantee consistency within replica) then we can rely on
+// get order.
+// TODO(oleg): need to pass stopper
+func (f *feedBudget) Get(x int64, timeout <-chan time.Time) (*sharedBudgetAllocation, error) {
+	// Function to allocate from budget or if there's nothing there borrow from emergency ether.
+	allocWithOverride := func() (*sharedBudgetAllocation, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.mu.oversize {
+			return nil, errors.New("failed to allocate mem budget")
+		}
+		err := f.mu.memBudget.Grow(context.Background(), x)
+		if err == nil {
+			// TODO(oleg): pool as needed later or change to value and pool outsize
+			return &sharedBudgetAllocation{size: x, refCount: 1}, nil
+		}
+		// If we didn't use any budget yet and not currently sending an oversized
+		// object then we can send one.
+		if f.mu.memBudget.Used() == 0 {
+			f.metrics.RangeFeedOverBudgetEvents.Inc(1)
+			f.mu.oversize = true
+
+			// We are in override mode pass through with special size.
+			// TODO(oleg): pool as needed later
+			return &sharedBudgetAllocation{size: 0, refCount: 1}, nil
+		}
+		return nil, err
+	}
+
+	alloc, err := allocWithOverride()
+	if alloc != nil {
+		return alloc, nil
+	}
+	if timeout == nil {
+		return nil, errors.Wrap(err, "failed to allocate mem budget")
+	}
+	for {
+		select {
+		case <-f.replenishC:
+			alloc, err = allocWithOverride()
+			if alloc != nil {
+				return alloc, nil
+			}
+		case <-timeout:
+			return nil, errors.New("failed to allocate mem budget")
+		}
+	}
+}
+
+// Return returns amount to budget. Usually called when shared allocation is freed.
+func (f *feedBudget) Return(x int64) {
+	f.mu.Lock()
+	f.mu.oversize = false
+	if x > 0 {
+		f.mu.memBudget.Shrink(context.Background(), x)
+	}
+	f.mu.Unlock()
+	select {
+	case f.replenishC <- struct{}{}:
+	default:
+	}
+}
+
+// Close frees up all allocated budget.
+func (f *feedBudget) Close() {
+	f.mu.Lock()
+	f.mu.memBudget.Close(context.Background())
+	f.mu.Unlock()
+}
+
 // sendEvent informs the Processor of a new event. If a timeout is specified,
 // the method will wait for no longer than that duration before giving up,
 // shutting down the Processor, and returning false. 0 for no timeout.
 func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
+	size := estimateEventSize(e)
+	var allocation *sharedBudgetAllocation
+	var timer <-chan time.Time
+	if timeout > 0 {
+		timer = time.After(timeout)
+	}
+	// We don't have a good way to wait for budget as it is not channel driven.
+	// We would simply fall back to a maximum timeout instead if allowed.
+	if size > 0 && p.memBudget != nil {
+		var err error
+		allocation, err = p.memBudget.Get(size, timer)
+		if err != nil {
+			p.sendStop(newErrBufferCapacityExceeded())
+			return false
+		}
+	}
 	ev := getPooledEvent(e)
+	ev.allocation = allocation
 	if timeout == 0 {
 		select {
 		case p.eventC <- ev:
@@ -558,10 +712,13 @@ func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
 			case p.eventC <- ev:
 			case <-p.stoppedC:
 				// Already stopped. Do nothing.
-			case <-time.After(timeout):
+			case <-timer:
 				// Sending on the eventC channel would have blocked.
 				// Instead, tear down the processor and return immediately.
 				p.sendStop(newErrBufferCapacityExceeded())
+				if allocation.release() {
+					p.memBudget.Return(e.allocation.size)
+				}
 				return false
 			}
 		}
@@ -597,9 +754,9 @@ func (p *Processor) syncEventC() {
 func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case len(e.ops) > 0:
-		p.consumeLogicalOps(ctx, e.ops)
+		p.consumeLogicalOps(ctx, e.ops, e.allocation)
 	case len(e.sst) > 0:
-		p.consumeSSTable(ctx, e.sst, e.sstSpan, e.sstWTS)
+		p.consumeSSTable(ctx, e.sst, e.sstSpan, e.sstWTS, e.allocation)
 	case !e.ct.IsEmpty():
 		p.forwardClosedTS(ctx, e.ct)
 	case e.initRTS:
@@ -620,13 +777,15 @@ func (p *Processor) consumeEvent(ctx context.Context, e *event) {
 	}
 }
 
-func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLogicalOp) {
+func (p *Processor) consumeLogicalOps(
+	ctx context.Context, ops []enginepb.MVCCLogicalOp, allocation *sharedBudgetAllocation,
+) {
 	for _, op := range ops {
 		// Publish RangeFeedValue updates, if necessary.
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
 			// Publish the new value directly.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, allocation)
 
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
@@ -636,7 +795,7 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 
 		case *enginepb.MVCCCommitIntentOp:
 			// Publish the newly committed value.
-			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue)
+			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue, allocation)
 
 		case *enginepb.MVCCAbortIntentOp:
 			// No updates to publish.
@@ -657,9 +816,13 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 }
 
 func (p *Processor) consumeSSTable(
-	ctx context.Context, sst []byte, sstSpan roachpb.Span, sstWTS hlc.Timestamp,
+	ctx context.Context,
+	sst []byte,
+	sstSpan roachpb.Span,
+	sstWTS hlc.Timestamp,
+	allocation *sharedBudgetAllocation,
 ) {
-	p.publishSSTable(ctx, sst, sstSpan, sstWTS)
+	p.publishSSTable(ctx, sst, sstSpan, sstWTS, allocation)
 }
 
 func (p *Processor) forwardClosedTS(ctx context.Context, newClosedTS hlc.Timestamp) {
@@ -675,7 +838,11 @@ func (p *Processor) initResolvedTS(ctx context.Context) {
 }
 
 func (p *Processor) publishValue(
-	ctx context.Context, key roachpb.Key, timestamp hlc.Timestamp, value, prevValue []byte,
+	ctx context.Context,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value, prevValue []byte,
+	allocation *sharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
 		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
@@ -694,11 +861,15 @@ func (p *Processor) publishValue(
 		},
 		PrevValue: prevVal,
 	})
-	p.reg.PublishToOverlapping(roachpb.Span{Key: key}, &event)
+	p.reg.PublishToOverlapping(roachpb.Span{Key: key}, &event, allocation)
 }
 
 func (p *Processor) publishSSTable(
-	ctx context.Context, sst []byte, sstSpan roachpb.Span, sstWTS hlc.Timestamp,
+	ctx context.Context,
+	sst []byte,
+	sstSpan roachpb.Span,
+	sstWTS hlc.Timestamp,
+	allocation *sharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
 		panic(errors.AssertionFailedf("received SSTable without span"))
@@ -712,7 +883,7 @@ func (p *Processor) publishSSTable(
 			Span:    sstSpan,
 			WriteTS: sstWTS,
 		},
-	})
+	}, allocation)
 }
 
 func (p *Processor) publishCheckpoint(ctx context.Context) {
@@ -720,7 +891,7 @@ func (p *Processor) publishCheckpoint(ctx context.Context) {
 	// TODO(nvanbenschoten): rate limit these? send them periodically?
 
 	event := p.newCheckpointEvent()
-	p.reg.PublishToOverlapping(all, event)
+	p.reg.PublishToOverlapping(all, event, nil)
 }
 
 func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
@@ -733,4 +904,14 @@ func (p *Processor) newCheckpointEvent() *roachpb.RangeFeedEvent {
 		ResolvedTS: p.rts.Get(),
 	})
 	return &event
+}
+
+// estimateEventSize returns the size of the event
+func estimateEventSize(e event) int64 {
+	var size int64
+	for _, op := range e.ops {
+		size += int64(op.Size())
+	}
+	size += int64(len(e.sst))
+	return size
 }
