@@ -26,6 +26,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// MakeDummyColForTypeCheck replaces the column variables with dummyColumns and returns an expr.
+// This is useful for when a subexpression's type needs to be checked.
+func MakeDummyColForTypeCheck(
+	ctx context.Context, desc catalog.TableDescriptor, expr tree.Expr, tn *tree.TableName,
+) (tree.Expr, error) {
+	nonDropColumns := desc.NonDropColumns()
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+	)
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	return replacedExpr, nil
+}
+
 // DequalifyAndValidateExpr validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression, the type of the expression, and
