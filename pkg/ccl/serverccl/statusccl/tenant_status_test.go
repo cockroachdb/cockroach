@@ -508,7 +508,7 @@ WHERE
 }
 
 func testTableIndexStats(ctx context.Context, t *testing.T, testHelper *tenantTestHelper) {
-	getTableIndexStats := func(helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
+	getTableIndexStats := func(t *testing.T, helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
 		// Get index usage stats using function call.
 		cluster := helper.testCluster()
 		status := cluster.tenantStatusSrv(randomServer)
@@ -519,6 +519,8 @@ func testTableIndexStats(ctx context.Context, t *testing.T, testHelper *tenantTe
 	}
 
 	cluster := testHelper.testCluster()
+
+	timePreCreate := timeutil.Now()
 
 	// Create table on a database.
 	cluster.tenantConn(0).Exec(t, `
@@ -555,21 +557,61 @@ FROM pg_catalog.pg_indexes
 WHERE tablename = 'test' AND indexname = $1`
 
 	// Get index usage stats and assert expected results.
-	resp := getTableIndexStats(testHelper, "test_db1")
-	require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
-	require.True(t, resp.Statistics[0].Statistics.Stats.LastRead.After(timePreRead))
-	indexName := resp.Statistics[0].IndexName
-	createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
-	print(createStmt)
-	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+	requireAfter := func(t *testing.T, a, b *time.Time) {
+		t.Helper()
+		require.NotNil(t, a)
+		require.NotNil(t, b)
+		require.Truef(t, a.After(*b), "%v is not after %v", a, b)
+	}
+	requireBetween := func(t *testing.T, before time.Time, ts *time.Time, after time.Time) {
+		t.Helper()
+		requireAfter(t, ts, &before)
+		requireAfter(t, &after, ts)
+	}
 
-	resp = getTableIndexStats(testHelper, "test_db2")
-	require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
-	require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
-	indexName = resp.Statistics[0].IndexName
-	cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
-	createStmt = cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
-	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+	t.Run("validate read index", func(t *testing.T) {
+		resp := getTableIndexStats(t, testHelper, "test_db1")
+		require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
+		requireAfter(t, &resp.Statistics[0].Statistics.Stats.LastRead, &timePreRead)
+		indexName := resp.Statistics[0].IndexName
+		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		print(createStmt)
+		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
+	})
+
+	t.Run("validate unread index", func(t *testing.T) {
+		resp := getTableIndexStats(t, testHelper, "test_db2")
+		require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
+		require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
+		indexName := resp.Statistics[0].IndexName
+		cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
+		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
+	})
+
+	// Test that a subsequent index creation has an appropriate timestamp.
+	t.Run("validate CreatedAt for new index", func(t *testing.T) {
+		timeBeforeCreateNewIndex := timeutil.Now()
+		cluster.tenantConn(0).Exec(t, `
+SET DATABASE=test_db2;
+CREATE INDEX idx2 ON test (b, a)`)
+		timeAfterCreateNewIndex := timeutil.Now()
+
+		resp := getTableIndexStats(t, testHelper, "test_db2")
+		var stat serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics
+		var found bool
+		for _, idx := range resp.Statistics {
+			if found = idx.IndexName == "idx2"; found {
+				stat = *idx
+				break
+			}
+		}
+		require.True(t, found)
+		requireBetween(t,
+			timeBeforeCreateNewIndex, stat.CreatedAt, timeAfterCreateNewIndex)
+	})
 }
 
 func ensureExpectedStmtFingerprintExistsInRPCResponse(

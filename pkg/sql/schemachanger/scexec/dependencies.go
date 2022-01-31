@@ -31,6 +31,7 @@ import (
 type Dependencies interface {
 	Catalog() Catalog
 	Partitioner() scmutationexec.Partitioner
+	Clock() scmutationexec.Clock
 	TransactionalJobRegistry() TransactionalJobRegistry
 	IndexBackfiller() Backfiller
 	BackfillProgressTracker() BackfillTracker

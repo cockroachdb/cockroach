@@ -11,8 +11,11 @@
 package sctestdeps
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -40,9 +43,19 @@ func WithNamespace(c nstree.Catalog) Option {
 }
 
 // WithDescriptors sets the TestState descriptors to the provided value.
+// This function also scrubs any volatile timestamps from the descriptor.
 func WithDescriptors(c nstree.Catalog) Option {
 	return optionFunc(func(state *TestState) {
 		_ = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			if table, isTable := desc.(catalog.TableDescriptor); isTable {
+				mut := table.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+				for _, idx := range mut.AllIndexes() {
+					if !idx.CreatedAt().IsZero() {
+						idx.IndexDesc().CreatedAtNanos = defaultOverriddenCreatedAt.UnixNano()
+					}
+				}
+				desc = mut.ImmutableCopy()
+			}
 			state.catalog.UpsertDescriptorEntry(desc)
 			return nil
 		})
@@ -95,10 +108,22 @@ func WithBackfiller(backfiller scexec.Backfiller) Option {
 	})
 }
 
+var (
+	// defaultOverriddenCreatedAt is used to populate the CreatedAt timestamp for
+	// all descriptors injected into the catalog. We inject this to make the
+	// tests deterministic.
+	defaultOverriddenCreatedAt = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	// defaultCreatedAt is used to populated the CreatedAt timestamp for all newly
+	// created indexes.
+	defaultCreatedAt = defaultOverriddenCreatedAt.Add(time.Hour)
+)
+
 var defaultOptions = []Option{
 	optionFunc(func(state *TestState) {
 		state.backfillTracker = &testBackfillTracker{deps: state}
 		state.backfiller = &testBackfiller{s: state}
 		state.indexSpanSplitter = &indexSpanSplitter{}
+		state.approximateTimestamp = defaultCreatedAt
 	}),
 }

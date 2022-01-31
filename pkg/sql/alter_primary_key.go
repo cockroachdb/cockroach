@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -180,6 +181,7 @@ func (p *planner) AlterPrimaryKey(
 		Type:              descpb.IndexDescriptor_FORWARD,
 		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
 		ConstraintID:      tableDesc.GetNextConstraintID(),
+		CreatedAtNanos:    p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 	tableDesc.NextConstraintID++
 
