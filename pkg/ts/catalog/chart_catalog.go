@@ -567,6 +567,19 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Memory Budgeting",
+				Metrics: []string{
+					"kv.rangefeed.over_budget_events",
+					"kv.rangefeed.budget_allocation_failed",
+				},
+			},
+			{
+				Title: "Rangefeed Memory Allocation",
+				Metrics: []string{
+					"kv.rangefeed.allocated_over_budget",
+				},
+			},
+			{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",
