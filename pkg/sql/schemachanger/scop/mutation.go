@@ -338,36 +338,44 @@ type DeleteDatabaseSchemaEntry struct {
 	SchemaID   descpb.ID
 }
 
-// RemoveJobReference removes the reference to a job from the descriptor.
-type RemoveJobReference struct {
+// RemoveJobStateFromDescriptor removes the reference to a job from the
+// descriptor and clears the pending targets.
+type RemoveJobStateFromDescriptor struct {
 	mutationOp
 	DescriptorID descpb.ID
 	JobID        jobspb.JobID
 }
 
-// AddJobReference adds the reference to a job to the descriptor.
-type AddJobReference struct {
+// SetJobStateOnDescriptor adds the reference to a job to the descriptor.
+type SetJobStateOnDescriptor struct {
 	mutationOp
 	DescriptorID descpb.ID
-	JobID        jobspb.JobID
+	// Initialize indicates whether this op ought to be setting the JobID and
+	// state for the first time for this job or whether it's an update. In true
+	// case, the expectation is that the job and state are currently unset. In
+	// the false case, the expectation is that they are set and match the values
+	// in the op.
+	Initialize bool
+	State      scpb.DescriptorState
 }
 
-// CreateDeclarativeSchemaChangerJob constructs the job for the
-// declarative schema changer post-commit phases.
-type CreateDeclarativeSchemaChangerJob struct {
-	mutationOp
-	JobID       jobspb.JobID
-	TargetState scpb.TargetState
-	Current     []scpb.Status
-}
-
-// UpdateSchemaChangerJob is used to update the progress and payload of the
-// schema changer job.
+// UpdateSchemaChangerJob may update the job's cancelable status.
 type UpdateSchemaChangerJob struct {
 	mutationOp
-	JobID           jobspb.JobID
-	Current         []scpb.Status
 	IsNonCancelable bool
+	JobID           jobspb.JobID
+
+	// TODO(ajwerner): Plumb and set RunningStatus.
+}
+
+// CreateSchemaChangerJob constructs the job for the
+// declarative schema changer post-commit phases.
+type CreateSchemaChangerJob struct {
+	mutationOp
+	JobID         jobspb.JobID
+	Authorization scpb.Authorization
+	Statements    []scpb.Statement
+	DescriptorIDs []descpb.ID
 }
 
 // RemoveTableComment is used to delete a comment associated with a table.

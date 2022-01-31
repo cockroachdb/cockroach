@@ -31,7 +31,7 @@ func GetDescID(e scpb.Element) descpb.ID {
 }
 
 // GetDescIDs returns the descriptor IDs referenced in the state's elements.
-func GetDescIDs(s scpb.TargetState) descpb.IDs {
+func GetDescIDs(s scpb.TargetState) catalog.DescriptorIDSet {
 	descIDSet := catalog.MakeDescriptorIDSet()
 	for i := range s.Targets {
 		// Depending on the element type either a single descriptor ID
@@ -40,5 +40,5 @@ func GetDescIDs(s scpb.TargetState) descpb.IDs {
 			descIDSet.Add(id)
 		}
 	}
-	return descIDSet.Ordered()
+	return descIDSet
 }

@@ -156,10 +156,9 @@ func execStatementWithTestDeps(
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		details := job.Details.(jobspb.NewSchemaChangeDetails)
-		progress := job.Progress.(jobspb.NewSchemaChangeProgress)
 		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, details, progress, rollback,
+			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, details, rollback,
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
