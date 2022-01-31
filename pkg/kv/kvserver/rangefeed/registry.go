@@ -36,6 +36,32 @@ type Stream interface {
 	Send(*roachpb.RangeFeedEvent) error
 }
 
+// Shared event is an entry stored in registration channel. Each entry is
+// specific to registration but allocation is shared between all registrations
+// to track memory budgets. event itself could either be shared or not in case
+// we optimized unused fields in it based on registration options.
+type sharedEvent struct {
+	event      *roachpb.RangeFeedEvent
+	allocation *SharedBudgetAllocation
+}
+
+var sharedEventSyncPool = sync.Pool{
+	New: func() interface{} {
+		return new(sharedEvent)
+	},
+}
+
+func getPooledSharedEvent(e sharedEvent) *sharedEvent {
+	ev := sharedEventSyncPool.Get().(*sharedEvent)
+	*ev = e
+	return ev
+}
+
+func putPooledSharedEvent(e *sharedEvent) {
+	*e = sharedEvent{}
+	sharedEventSyncPool.Put(e)
+}
+
 // registration is an instance of a rangefeed subscriber who has
 // registered to receive updates for a specific range of keys.
 // Updates are delivered to its stream until one of the following
@@ -70,7 +96,7 @@ type registration struct {
 	// Internal.
 	id   int64
 	keys interval.Range
-	buf  chan *roachpb.RangeFeedEvent
+	buf  chan *sharedEvent
 
 	mu struct {
 		sync.Locker
@@ -110,7 +136,7 @@ func newRegistration(
 		metrics:                metrics,
 		stream:                 stream,
 		errC:                   errC,
-		buf:                    make(chan *roachpb.RangeFeedEvent, bufferSz),
+		buf:                    make(chan *sharedEvent, bufferSz),
 	}
 	r.mu.Locker = &syncutil.Mutex{}
 	r.mu.caughtUp = true
@@ -122,22 +148,26 @@ func newRegistration(
 // indicating that live events were lost and a catch-up scan should be initiated.
 // If overflowed is already set, events are ignored and not written to the
 // buffer.
-func (r *registration) publish(event *roachpb.RangeFeedEvent) {
+func (r *registration) publish(
+	ctx context.Context, event *roachpb.RangeFeedEvent, allocation *SharedBudgetAllocation,
+) {
 	r.validateEvent(event)
-	event = r.maybeStripEvent(event)
+	e := getPooledSharedEvent(sharedEvent{event: r.maybeStripEvent(event), allocation: allocation})
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.mu.overflowed {
 		return
 	}
+	allocation.Use()
 	select {
-	case r.buf <- event:
+	case r.buf <- e:
 		r.mu.caughtUp = false
 	default:
 		// Buffer exceeded and we are dropping this event. Registration will need
 		// a catch-up scan.
 		r.mu.overflowed = true
+		allocation.Release(ctx)
 	}
 }
 
@@ -279,7 +309,10 @@ func (r *registration) outputLoop(ctx context.Context) error {
 
 		select {
 		case nextEvent := <-r.buf:
-			if err := r.stream.Send(nextEvent); err != nil {
+			err := r.stream.Send(nextEvent.event)
+			nextEvent.allocation.Release(ctx)
+			putPooledSharedEvent(nextEvent)
+			if err != nil {
 				return err
 			}
 		case <-ctx.Done():
@@ -301,6 +334,23 @@ func (r *registration) runOutputLoop(ctx context.Context, _forStacks roachpb.Ran
 	r.mu.Unlock()
 	err := r.outputLoop(ctx)
 	r.disconnect(roachpb.NewError(err))
+}
+
+// drainAllocations should be done after registration is disconnected from
+// processor to release all memory budget that its pending events hold.
+func (r *registration) drainAllocations(ctx context.Context) {
+	for {
+		select {
+		case e, ok := <-r.buf:
+			if !ok {
+				return
+			}
+			e.allocation.Release(ctx)
+			putPooledSharedEvent(e)
+		default:
+			return
+		}
+	}
 }
 
 // maybeRunCatchUpScan starts a catch-up scan which will output entries for all
@@ -380,7 +430,12 @@ func (reg *registry) nextID() int64 {
 
 // PublishToOverlapping publishes the provided event to all registrations whose
 // range overlaps the specified span.
-func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.RangeFeedEvent) {
+func (reg *registry) PublishToOverlapping(
+	ctx context.Context,
+	span roachpb.Span,
+	event *roachpb.RangeFeedEvent,
+	allocation *SharedBudgetAllocation,
+) {
 	// Determine the earliest starting timestamp that a registration
 	// can have while still needing to hear about this event.
 	var minTS hlc.Timestamp
@@ -404,7 +459,7 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		// Don't publish events if they are equal to or less
 		// than the registration's starting timestamp.
 		if r.catchUpTimestamp.Less(minTS) {
-			r.publish(event)
+			r.publish(ctx, event, allocation)
 		}
 		return false, nil
 	})
@@ -413,10 +468,14 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 // Unregister removes a registration from the registry. It is assumed that the
 // registration has already been disconnected, this is intended only to clean
 // up the registry.
-func (reg *registry) Unregister(r *registration) {
+// We also drain all pending events for the sake of memory accounting. To do
+// that we rely on a fact that caller is not going to post any more events
+// concurrently or after this function is called.
+func (reg *registry) Unregister(ctx context.Context, r *registration) {
 	if err := reg.tree.Delete(r, false /* fast */); err != nil {
 		panic(err)
 	}
+	r.drainAllocations(ctx)
 }
 
 // Disconnect disconnects all registrations that overlap the specified span with

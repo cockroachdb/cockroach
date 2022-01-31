@@ -624,7 +624,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !p.ConsumeLogicalOps(ops.Ops...) {
+	if !p.ConsumeLogicalOps(ctx, ops.Ops...) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
@@ -647,7 +647,7 @@ func (r *Replica) handleSSTableRaftMuLocked(
 	if p == nil {
 		return
 	}
-	if !p.ConsumeSSTable(sst, sstSpan, writeTS) {
+	if !p.ConsumeSSTable(ctx, sst, sstSpan, writeTS) {
 		r.unsetRangefeedProcessor(p)
 	}
 }
@@ -730,7 +730,7 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 	if closedTS.IsEmpty() {
 		return
 	}
-	if !p.ForwardClosedTS(closedTS) {
+	if !p.ForwardClosedTS(ctx, closedTS) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
