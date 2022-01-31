@@ -13,26 +13,35 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
 
 type httpServer struct {
+	cfg Config
 	mux http.ServeMux
 }
 
+func newHTTPServer(cfg Config) *httpServer {
+	return &httpServer{cfg: cfg}
+}
+
+const healthPath = "/health"
+
 func (s *httpServer) handleHealth(healthHandler http.Handler) {
-	s.mux.Handle("/health", healthHandler)
+	s.mux.Handle(healthPath, healthHandler)
 }
 
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
-	cfg Config,
 	authnServer *authenticationServer,
 	adminAuthzCheck *adminPrivilegeChecker,
 	handleRequestsUnauthenticated http.Handler,
@@ -43,8 +52,8 @@ func (s *httpServer) setupRoutes(
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
 	oidc, err := ConfigureOIDC(
-		ctx, cfg.Settings, cfg.Locality,
-		s.mux.Handle, authnServer.UserLoginFromSSO, cfg.AmbientCtx, cfg.ClusterIDContainer.Get(),
+		ctx, s.cfg.Settings, s.cfg.Locality,
+		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(),
 	)
 	if err != nil {
 		return err
@@ -52,9 +61,9 @@ func (s *httpServer) setupRoutes(
 
 	// Define the http.Handler for UI assets.
 	assetHandler := ui.Handler(ui.Config{
-		ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
-		LoginEnabled:         cfg.RequireWebSession(),
-		NodeID:               cfg.IDContainer,
+		ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+		LoginEnabled:         s.cfg.RequireWebSession(),
+		NodeID:               s.cfg.IDContainer,
 		OIDC:                 oidc,
 		GetUser: func(ctx context.Context) *string {
 			if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
@@ -75,7 +84,7 @@ func (s *httpServer) setupRoutes(
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
 	var authenticatedHandler http.Handler = handleRequestsUnauthenticated
-	if cfg.RequireWebSession() {
+	if s.cfg.RequireWebSession() {
 		authenticatedHandler = newAuthenticationMux(authnServer, authenticatedHandler)
 	}
 
@@ -85,7 +94,7 @@ func (s *httpServer) setupRoutes(
 	s.mux.Handle(logoutPath, authenticatedHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
-	if cfg.EnableDemoLoginEndpoint {
+	if s.cfg.EnableDemoLoginEndpoint {
 		s.mux.Handle(DemoLoginPath, http.HandlerFunc(authnServer.demoLogin))
 	}
 
@@ -107,7 +116,7 @@ func (s *httpServer) setupRoutes(
 
 	// Register debugging endpoints.
 	handleDebugAuthenticated := handleDebugUnauthenticated
-	if cfg.RequireWebSession() {
+	if s.cfg.RequireWebSession() {
 		// Mandate both authentication and admin authorization.
 		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
 		handleDebugAuthenticated = newAuthenticationMux(authnServer, handleDebugAuthenticated)
@@ -140,4 +149,47 @@ func makeAdminAuthzCheckHandler(
 		// Forward the request to the inner handler.
 		handler.ServeHTTP(w, req)
 	})
+}
+
+// baseHandler is the top-level HTTP handler for all HTTP traffic, before
+// authentication and authorization.
+func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
+	// Disable caching of responses.
+	w.Header().Set("Cache-control", "no-cache")
+
+	ae := r.Header.Get(httputil.AcceptEncodingHeader)
+	switch {
+	case strings.Contains(ae, httputil.GzipEncoding):
+		w.Header().Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+		gzw := newGzipResponseWriter(w)
+		defer func() {
+			// Certain requests must not have a body, yet closing the gzip writer will
+			// attempt to write the gzip header. Avoid logging a warning in this case.
+			// This is notably triggered by:
+			//
+			// curl -H 'Accept-Encoding: gzip' \
+			// 	    -H 'If-Modified-Since: Thu, 29 Mar 2018 22:36:32 GMT' \
+			//      -v http://localhost:8080/favicon.ico > /dev/null
+			//
+			// which results in a 304 Not Modified.
+			if err := gzw.Close(); err != nil && !errors.Is(err, http.ErrBodyNotAllowed) {
+				ctx := s.cfg.AmbientCtx.AnnotateCtx(r.Context())
+				log.Ops.Warningf(ctx, "error closing gzip response writer: %v", err)
+			}
+		}()
+		w = gzw
+	}
+
+	// This is our base handler.
+	// Intercept all panics, log them, and return an internal server error as a response.
+	defer func() {
+		if p := recover(); p != nil {
+			// Note: use of a background context here so we can log even with the absence of a client.
+			// Assumes appropriate timeouts are used.
+			logcrash.ReportPanic(context.Background(), &s.cfg.Settings.SV, p, 1 /* depth */)
+			http.Error(w, errAPIInternalErrorString, http.StatusInternalServerError)
+		}
+	}()
+
+	s.mux.ServeHTTP(w, r)
 }
