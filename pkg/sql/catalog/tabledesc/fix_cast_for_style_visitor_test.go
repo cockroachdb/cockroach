@@ -8,15 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql_test
+package tabledesc_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -130,7 +130,7 @@ CREATE TABLE t.ds (it INTERVAL, s STRING, vc VARCHAR, c CHAR, t TIMESTAMP, n NAM
 			semaCtx.DateStyleEnabled = true
 			expr, err := parser.ParseExpr(test.expr)
 			require.NoError(t, err)
-			newExpr, _, err := sql.ResolveCastForStyleUsingVisitor(
+			newExpr, _, err := tabledesc.ResolveCastForStyleUsingVisitor(
 				ctx,
 				&semaCtx,
 				tDesc,
