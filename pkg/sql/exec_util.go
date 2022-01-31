@@ -3080,7 +3080,7 @@ func (m *sessionDataMutator) SetIntervalStyleEnabled(enabled bool) {
 	m.data.IntervalStyleEnabled = enabled
 }
 
-// SetDateStyleEnabled sets the DateStyleEnabled for the given session.
+// SetDateStyleEnabled sets the DateStyleIntervalStyleEnabled for the given session.
 func (m *sessionDataMutator) SetDateStyleEnabled(enabled bool) {
 	m.data.DateStyleEnabled = enabled
 }

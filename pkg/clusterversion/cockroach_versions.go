@@ -270,6 +270,8 @@ const (
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
 
+	// DateStyleIntervalStyleEnabled v22.1
+	DateStyleIntervalStyleEnabled
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -428,6 +430,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     DateStyleIntervalStyleEnabled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 
 	// *************************************************
