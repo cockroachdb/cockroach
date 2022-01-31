@@ -34,7 +34,7 @@ import (
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.Partitioner())
+	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.Partitioner(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err

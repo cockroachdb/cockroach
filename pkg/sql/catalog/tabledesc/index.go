@@ -13,6 +13,7 @@ package tabledesc
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var _ catalog.Index = (*index)(nil)
@@ -349,6 +351,13 @@ func (w index) UseDeletePreservingEncoding() bool {
 // process.
 func (w index) ForcePut() bool {
 	return w.Merging() || w.desc.UseDeletePreservingEncoding
+}
+
+func (w index) CreatedAt() time.Time {
+	if w.desc.CreatedAtNanos == 0 {
+		return time.Time{}
+	}
+	return timeutil.Unix(0, w.desc.CreatedAtNanos)
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.
