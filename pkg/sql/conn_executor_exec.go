@@ -490,7 +490,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			})
 	}
 
-	defer func() {
+	defer func(ctx context.Context) {
 		if filter := ex.server.cfg.TestingKnobs.StatementFilter; retErr == nil && filter != nil {
 			var execErr error
 			if perr, ok := retPayload.(payloadWithError); ok {
@@ -506,9 +506,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if canAutoCommit && !isExtendedProtocol {
 			retEv, retPayload = ex.handleAutoCommit(ctx, ast)
-			return
 		}
-	}()
+	}(ctx)
 
 	switch s := ast.(type) {
 	case *tree.BeginTransaction:
@@ -707,25 +706,37 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var stmtThresholdSpan *tracing.Span
 	alreadyRecording := ex.transitionCtx.sessionTracing.Enabled()
-	stmtTraceThreshold := traceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	stmtTraceThreshold := TraceStmtThreshold.Get(&ex.planner.execCfg.Settings.SV)
+	var stmtCtx context.Context
+	// TODO(andrei): I think we should do this even if alreadyRecording == true.
 	if !alreadyRecording && stmtTraceThreshold > 0 {
-		ctx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.transitionCtx.tracer, tracing.WithRecording(tracing.RecordingVerbose))
+		stmtCtx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.server.cfg.AmbientCtx.Tracer, tracing.WithRecording(tracing.RecordingVerbose))
+	} else {
+		stmtCtx = ctx
 	}
 
-	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
+	if err := ex.dispatchToExecutionEngine(stmtCtx, p, res); err != nil {
 		stmtThresholdSpan.Finish()
 		return nil, nil, err
 	}
 
 	if stmtThresholdSpan != nil {
-		stmtThresholdSpan.Finish()
-		logTraceAboveThreshold(
-			ctx,
-			stmtThresholdSpan.GetRecording(tracing.RecordingVerbose),
-			fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
-			stmtTraceThreshold,
-			timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived)),
-		)
+		stmtDur := timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
+		needRecording := stmtTraceThreshold < stmtDur
+		if needRecording {
+			rec := stmtThresholdSpan.FinishAndGetRecording(tracing.RecordingVerbose)
+			// NB: This recording does not include the commit for implicit
+			// transactions if the statement didn't auto-commit.
+			logTraceAboveThreshold(
+				ctx,
+				rec,
+				fmt.Sprintf("SQL stmt %s", stmt.AST.String()),
+				stmtTraceThreshold,
+				stmtDur,
+			)
+		} else {
+			stmtThresholdSpan.Finish()
+		}
 	}
 
 	if err := res.Err(); err != nil {
