@@ -2202,6 +2202,33 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
+// ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at
+// the given timestamp using a range tombstone (rather than point tombstones).
+// This operation is non-transactional, but will check for existing intents and
+// return a WriteIntentError containing up to maxIntents intents.
+//
+// This function is EXPERIMENTAL. Range tombstones are not supported throughout
+// the MVCC API, and the on-disk format is unstable.
+//
+// TODO(erikgrinaker): Needs conflict handling, e.g. WriteTooOldError.
+// TODO(erikgrinaker): Needs MVCCStats handling.
+func ExperimentalMVCCDeleteRangeUsingTombstone(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	maxIntents int64,
+) error {
+	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+		return err
+	} else if len(intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: intents}
+	}
+	return rw.ExperimentalDeleteMVCCRange(MVCCRangeKey{
+		StartKey: startKey, EndKey: endKey, Timestamp: timestamp})
+}
+
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 	stats := iteratorStats.Stats
 	if traceSpan != nil {
@@ -3928,4 +3955,31 @@ func ComputeStatsForRange(
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
+}
+
+// MVCCScanRangeTombstones returns a list of range tombstones across the given
+// span at the given timestamp, in end,timestamp order rather that
+// start,timestamp. Any tombstones that straddle the bounds will be truncated.
+func MVCCScanRangeTombstones(
+	ctx context.Context, reader Reader, start, end roachpb.Key, ts hlc.Timestamp,
+) ([]MVCCRangeKey, error) {
+	var tombstones []MVCCRangeKey
+	iter := reader.NewMVCCRangeTombstoneIterator(RangeTombstoneIterOptions{
+		LowerBound:   start,
+		UpperBound:   end,
+		MaxTimestamp: ts,
+	})
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return nil, err
+		} else if !ok {
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		tombstones = append(tombstones, iter.Key())
+		iter.Next()
+	}
+	return tombstones, nil
 }

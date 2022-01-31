@@ -468,6 +468,12 @@ func (s spanSetReader) NewMVCCIterator(
 	return NewIteratorAt(s.r.NewMVCCIterator(iterKind, opts), s.spans, s.ts)
 }
 
+func (s spanSetReader) NewMVCCRangeTombstoneIterator(
+	opts storage.RangeTombstoneIterOptions,
+) storage.MVCCRangeTombstoneIterator {
+	panic("not implemented")
+}
+
 func (s spanSetReader) NewEngineIterator(opts storage.IterOptions) storage.EngineIterator {
 	if !s.spansOnly {
 		log.Warningf(context.Background(),
@@ -597,6 +603,20 @@ func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roac
 		return err
 	}
 	return s.w.ClearIterRange(iter, start, end)
+}
+
+func (s spanSetWriter) ExperimentalDeleteMVCCRange(rangeKey storage.MVCCRangeKey) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.ExperimentalDeleteMVCCRange(rangeKey)
+}
+
+func (s spanSetWriter) ExperimentalClearMVCCRangeTombstone(rangeKey storage.MVCCRangeKey) error {
+	if err := s.checkAllowedRange(rangeKey.StartKey, rangeKey.EndKey); err != nil {
+		return err
+	}
+	return s.w.ExperimentalClearMVCCRangeTombstone(rangeKey)
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

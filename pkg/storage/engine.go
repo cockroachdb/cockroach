@@ -196,6 +196,32 @@ type MVCCIterator interface {
 	SupportsPrev() bool
 }
 
+// MVCCRangeTombstoneIterator iterates over range tombstones in an engine. It
+// does not support seeking or backtracking, see RangeTombstoneIterOptions for
+// lower/upper bounds and other options.
+//
+// Iteration uses EndKey,Timestamp order rather than StartKey,Timestamp. For
+// example, [a-z)@3 will be emitted after [c-e)@2, but before [x-z)@1. This is a
+// memory optimization when defragmenting Pebble range keys, to allow emitting
+// tombstones as soon as possible. Otherwise, a single tombstone across the the
+// entire key span would require all other tombstones at other timestamps to be
+// buffered in memory before they could be emitted. However, see the Fragmented
+// option which emits non-deterministic fragments in StartKey,Timestamp order.
+type MVCCRangeTombstoneIterator interface {
+	// Close frees up resources held by the iterator.
+	Close()
+	// Next iterates to the next range tombstone. Note the unusual iteration
+	// order, see interface description for details.
+	Next()
+	// Key returns the current range tombstone. It will not be invalidated by the
+	// iterator, but will be shared by all callers.
+	Key() MVCCRangeKey
+	// Valid returns (true, nil) if the iterator points to a valid key, (false,
+	// nil) if the iterator is exhausted, or (false, error) if an error occurred
+	// during iteration.
+	Valid() (bool, error)
+}
+
 // EngineIterator is an iterator over key-value pairs where the key is
 // an EngineKey.
 type EngineIterator interface {
@@ -309,6 +335,35 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+}
+
+// RangeTombstoneIterOptions contains options for an MVCCRangeTombstoneIterator.
+type RangeTombstoneIterOptions struct {
+	// LowerBound sets the inclusive lower bound of the iterator. Tombstones that
+	// straddle the it will have their start key truncated to the lower bound.
+	//
+	// NB: It may be tempting to use an MVCCKey here and include a timestamp, but
+	// this would be useless: giving e.g. a@4 would skip a tombstone starting at
+	// a@5, but the tombstone would logically exist at the adjacent a.Next()@5 so
+	// it would be emitted almost immediately anyway.
+	LowerBound roachpb.Key
+	// UpperBound sets the exclusive upper bound of the iterator. Tombstones that
+	// straddle it will have their end key truncated to the upper bound.
+	UpperBound roachpb.Key
+	// MinTimestamp sets the inclusive lower timestamp bound for the iterator.
+	MinTimestamp hlc.Timestamp
+	// MaxTimestamp sets the inclusive upper timestamp bound for the iterator.
+	MaxTimestamp hlc.Timestamp
+	// Fragmented will emit tombstone fragments as they are stored in Pebble.
+	// Fragments typically begin and end where a tombstone bound overlaps with
+	// another tombstone, for all overlapping tombstones. However, fragmentation
+	// is non-deterministic as it also depends on Pebble's internal SST structure
+	// and mutation history.
+	//
+	// When enabled, this results in an iteration order of StartKey,Timestamp as
+	// opposed to the normal EndKey,Timestamp order for range tombstones. This may
+	// be useful for partial results and resumption, e.g. resume spans.
+	Fragmented bool
 }
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
@@ -461,6 +516,10 @@ type Reader interface {
 	// engine. The caller must invoke MVCCIterator.Close() when finished
 	// with the iterator to free resources.
 	NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIterator
+	// NewMVCCRangeTombstoneIterator returns an iterator over MVCC range
+	// tombstones in this engine. The caller must invoke Close() on the iterator
+	// when finished to free resources.
+	NewMVCCRangeTombstoneIterator(opts RangeTombstoneIterOptions) MVCCRangeTombstoneIterator
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
@@ -583,6 +642,26 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
 	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+
+	// ExperimentalClearMVCCRangeTombstone deletes an MVCC range tombstone from
+	// start (inclusive) to end (exclusive) at the given timestamp. For any range
+	// tombstone that straddles the start and end boundaries, only the segments
+	// within the boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intented for MVCC garbage collection and similar
+	// internal use. It mutates MVCC history, and does not check for intents or
+	// other conflicts.
+	//
+	// This method is EXPERIMENTAL. Range tombstones are not supported throughout
+	// the MVCC API, and the on-disk format is unstable.
+	ExperimentalClearMVCCRangeTombstone(rangeKey MVCCRangeKey) error
+
+	// ExperimentalDeleteMVCCRange deletes an MVCC key span at or below the
+	// given timestamp by writing an MVCC range tombstone.
+	//
+	// This function is EXPERIMENTAL. Range tombstones are not supported
+	// throughout the MVCC API, and the on-disk format is unstable.
+	ExperimentalDeleteMVCCRange(rangeKey MVCCRangeKey) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
