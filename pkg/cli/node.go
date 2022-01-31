@@ -26,8 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
@@ -425,10 +427,11 @@ func runDecommissionNodeImpl(
 	nodeIDs []roachpb.NodeID,
 ) error {
 	minReplicaCount := int64(math.MaxInt64)
+	const maxTimeBetweenUpdates = 10 * time.Second
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		Multiplier:     2,
-		MaxBackoff:     20 * time.Second,
+		MaxBackoff:     maxTimeBetweenUpdates,
 	}
 
 	// Marking a node as fully decommissioned is driven by a two-step process.
@@ -438,61 +441,87 @@ func runDecommissionNodeImpl(
 	// have been successfully marked as 'decommissioning', that we then go and
 	// mark each node as 'decommissioned'.
 	prevResponse := serverpb.DecommissionStatusResponse{}
+	var lastMessageTime time.Time
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		req := &serverpb.DecommissionRequest{
-			NodeIDs:          nodeIDs,
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		}
-		resp, err := c.Decommission(ctx, req)
-		if err != nil {
-			fmt.Fprintln(stderr)
-			return errors.Wrap(err, "while trying to mark as decommissioning")
-		}
-
-		if !reflect.DeepEqual(&prevResponse, resp) {
-			fmt.Fprintln(stderr)
-			if err := printDecommissionStatus(*resp); err != nil {
-				return err
-			}
-			prevResponse = *resp
-		} else {
-			fmt.Fprintf(stderr, ".")
-		}
-
-		anyActive := false
-		var replicaCount int64
-		for _, status := range resp.Status {
-			anyActive = anyActive || status.Membership.Active()
-			replicaCount += status.ReplicaCount
-		}
-
-		if !anyActive && replicaCount == 0 {
-			// We now mark the nodes as fully decommissioned.
+		done := false
+		// Ensure that the Decommission() request doesn't take forever to be
+		// processed server-side.
+		err := contextutil.RunWithTimeout(ctx, "send-deco-rpc", maxTimeBetweenUpdates, func(ctx context.Context) error {
 			req := &serverpb.DecommissionRequest{
 				NodeIDs:          nodeIDs,
-				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
 			}
-			_, err = c.Decommission(ctx, req)
+			resp, err := c.Decommission(ctx, req)
 			if err != nil {
 				fmt.Fprintln(stderr)
-				return errors.Wrap(err, "while trying to mark as decommissioned")
+
+				// If the deco RPC times out, onsider this to be a transient
+				// error, and try again.  This way, we let the operator see
+				// that a timeout occurred, but the command continues to
+				// run.
+				//
+				// The previous behavior here was to let the Decommission()
+				// request run without timeout (i.e. hanging forever) and
+				// the operator was left wondering what was going on.
+				done = !errors.Is(err, context.DeadlineExceeded)
+				return errors.Wrap(err, "while trying to mark as decommissioning")
 			}
 
-			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
-				"Please verify cluster health before removing the nodes.")
-			return nil
-		}
+			now := timeutil.Now()
+			if !reflect.DeepEqual(&prevResponse, resp) || now.Sub(lastMessageTime) >= maxTimeBetweenUpdates {
+				fmt.Fprintln(stderr)
+				if err := printDecommissionStatus(*resp); err != nil {
+					done = true
+					return err
+				}
+				lastMessageTime = now
+				prevResponse = *resp
+			} else {
+				fmt.Fprintf(stderr, ".")
+			}
 
-		if wait == nodeDecommissionWaitNone {
-			// The intent behind --wait=none is for it to be used when polling
-			// manually from an external system. We'll only mark nodes as
-			// fully decommissioned once the replica count hits zero and they're
-			// all marked as decommissioning.
+			anyActive := false
+			var replicaCount int64
+			for _, status := range resp.Status {
+				anyActive = anyActive || status.Membership.Active()
+				replicaCount += status.ReplicaCount
+			}
+
+			if !anyActive && replicaCount == 0 {
+				// We now mark the nodes as fully decommissioned.
+				req := &serverpb.DecommissionRequest{
+					NodeIDs:          nodeIDs,
+					TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
+				}
+				_, err = c.Decommission(ctx, req)
+				if err != nil {
+					fmt.Fprintln(stderr)
+					done = true
+					return errors.Wrap(err, "while trying to mark as decommissioned")
+				}
+
+				fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
+					"Please verify cluster health before removing the nodes.")
+				done = true
+				return nil
+			}
+
+			if wait == nodeDecommissionWaitNone {
+				// The intent behind --wait=none is for it to be used when polling
+				// manually from an external system. We'll only mark nodes as
+				// fully decommissioned once the replica count hits zero and they're
+				// all marked as decommissioning.
+				done = true
+				return nil
+			}
+			if replicaCount < minReplicaCount {
+				minReplicaCount = replicaCount
+				r.Reset()
+			}
 			return nil
-		}
-		if replicaCount < minReplicaCount {
-			minReplicaCount = replicaCount
-			r.Reset()
+		})
+		if done || err != nil {
+			return err
 		}
 	}
 	return errors.New("maximum number of retries exceeded")

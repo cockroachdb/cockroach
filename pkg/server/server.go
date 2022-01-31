@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -2653,16 +2654,20 @@ func (s *Server) Decommission(
 			// update, this would force a 2PC and potentially leave write intents in
 			// the node liveness range. Better to make the event logging best effort
 			// than to slow down future node liveness transactions.
-			if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return sql.InsertEventRecord(
-					ctx,
-					s.sqlServer.execCfg.InternalExecutor,
-					txn,
-					int32(s.NodeID()), /* reporting ID: the node where the event is logged */
-					sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */
-					int32(nodeID), /* target ID: the node that we wee a membership change for */
-					event,
-				)
+			if err := contextutil.RunWithTimeout(ctx, "write-deco-event-to-eventlog", 5*time.Second, func(ctx context.Context) error {
+				// If it doesn't complete in some reasonable time, it's OK. We still
+				// have an event in the file/network logs.
+				return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return sql.InsertEventRecord(
+						ctx,
+						s.sqlServer.execCfg.InternalExecutor,
+						txn,
+						int32(s.NodeID()), /* reporting ID: the node where the event is logged */
+						sql.LogToSystemTable|sql.LogToDevChannelIfVerbose, /* we already call log.StructuredEvent above */
+						int32(nodeID), /* target ID: the node that we wee a membership change for */
+						event,
+					)
+				})
 			}); err != nil {
 				log.Ops.Errorf(ctx, "unable to record event: %+v: %+v", event, err)
 			}
