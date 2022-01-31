@@ -33,7 +33,7 @@ func BenchmarkSetupSpanForIncomingRPC(b *testing.B) {
 		tracing.WithTracingMode(tracing.TracingModeActiveSpansRegistry),
 		tracing.WithSpanReusePercent(100))
 	for i := 0; i < b.N; i++ {
-		_, finish := setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba, tr)
-		finish(ctx, nil /* br */)
+		_, sp := setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba, tr)
+		sp.finish(ctx, nil /* br */)
 	}
 }
