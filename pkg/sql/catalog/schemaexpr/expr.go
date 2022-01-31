@@ -26,6 +26,40 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DequalifyAndTypeCheckExpr type checks the given expression and returns the
+// type-checked expression disregarding volatility. The typed expression, which contains dummyColumns,
+// does not support evaluation.
+func DequalifyAndTypeCheckExpr(
+	ctx context.Context,
+	desc catalog.TableDescriptor,
+	expr tree.Expr,
+	semaCtx *tree.SemaContext,
+	tn *tree.TableName,
+) (tree.TypedExpr, error) {
+	nonDropColumns := desc.NonDropColumns()
+	sourceInfo := colinfo.NewSourceInfoForSingleTable(
+		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+	)
+	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Replace the column variables with dummyColumns so that they can be
+	// type-checked.
+	replacedExpr, _, err := replaceColumnVars(desc, expr)
+	if err != nil {
+		return nil, err
+	}
+
+	typedExpr, err := tree.TypeCheck(ctx, replacedExpr, semaCtx, types.Any)
+	if err != nil {
+		return nil, err
+	}
+
+	return typedExpr, nil
+}
+
 // DequalifyAndValidateExpr validates that an expression has the given type and
 // contains no functions with a volatility greater than maxVolatility. The
 // type-checked and constant-folded expression, the type of the expression, and
