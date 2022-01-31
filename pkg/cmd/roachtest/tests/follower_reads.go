@@ -90,7 +90,6 @@ func registerFollowerReads(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Skip:  "https://github.com/cockroachdb/cockroach/issues/69817",
 		Name:  "follower-reads/mixed-version/single-region",
 		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
