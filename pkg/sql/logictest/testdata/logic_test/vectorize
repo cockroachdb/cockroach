@@ -273,7 +273,7 @@ SELECT a*b FROM decimals
 query R
 SELECT a/b FROM decimals
 ----
-1.0E+201
+1E+201
 
 query R
 SELECT a+b FROM decimals
