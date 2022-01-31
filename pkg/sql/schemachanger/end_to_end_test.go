@@ -99,6 +99,7 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 						// For setting up a builder inside tests we will ensure that the new schema
 						// changer will allow non-fully implemented operations.
 						sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+						sd.ApplicationName = ""
 					})),
 					sctestdeps.WithTestingKnobs(&scrun.TestingKnobs{
 						BeforeStage: func(p scplan.Plan, stageIdx int) error {
@@ -155,11 +156,9 @@ func execStatementWithTestDeps(
 		// Run post-commit phase in mock schema change job.
 		deps.IncrementPhase()
 		deps.LogSideEffectf("# begin %s", deps.Phase())
-		details := job.Details.(jobspb.NewSchemaChangeDetails)
-		progress := job.Progress.(jobspb.NewSchemaChangeProgress)
 		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, details, progress, rollback,
+			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, job.DescriptorIDs, rollback,
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())
