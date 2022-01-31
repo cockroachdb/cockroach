@@ -49,3 +49,10 @@ message RaftSnapshotData {
   repeated bytes log_entries = 3;
   reserved 1;
 }
+
+message RaftReplicaID {
+  option (gogoproto.equal) = true;
+  // ReplicaID is the ID of the replica with the corresponding HardState.
+  optional int32 replica_id = 1 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "ReplicaID", (gogoproto.casttype) = "ReplicaID"];
+}

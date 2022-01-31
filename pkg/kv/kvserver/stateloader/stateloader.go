@@ -434,3 +434,28 @@ func (rsl StateLoader) SynthesizeHardState(
 	err := rsl.SetHardState(ctx, readWriter, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
+
+// SetRaftReplicaID overwrites the RaftReplicaID.
+func (rsl StateLoader) SetRaftReplicaID(
+	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
+) error {
+	rid := roachpb.RaftReplicaID{ReplicaID: replicaID}
+	// "Blind" because ms == nil and timestamp.IsEmpty().
+	return storage.MVCCBlindPutProto(
+		ctx,
+		writer,
+		nil, /* ms */
+		rsl.RaftReplicaIDKey(),
+		hlc.Timestamp{}, /* timestamp */
+		&rid,
+		nil, /* txn */
+	)
+}
+
+func (rsl StateLoader) LoadRaftReplicaID(
+	ctx context.Context, reader storage.Reader,
+) (replicaID roachpb.RaftReplicaID, found bool, err error) {
+	found, err = storage.MVCCGetProto(ctx, reader, rsl.RaftReplicaIDKey(),
+		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
+	return
+}
