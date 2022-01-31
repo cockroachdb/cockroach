@@ -495,7 +495,7 @@ func BenchmarkHashAggregatorInputTuplesTracking(b *testing.B) {
 							return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 								UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 								Types:              args.InputTypes,
-								MemoryLimit:        execinfra.DefaultMemoryLimit,
+								MemoryLimit:        execinfra.ProductionDefaultMemoryLimit,
 								DiskQueueCfg:       queueCfg,
 								FDSemaphore:        &colexecop.TestingSemaphore{},
 								DiskAcc:            testDiskAcc,
@@ -550,7 +550,7 @@ func BenchmarkHashAggregatorPartialOrder(b *testing.B) {
 		return NewHashAggregator(args, &colexecutils.NewSpillingQueueArgs{
 			UnlimitedAllocator: colmem.NewAllocator(ctx, &spillingQueueMemAcc, testColumnFactory),
 			Types:              args.InputTypes,
-			MemoryLimit:        execinfra.DefaultMemoryLimit,
+			MemoryLimit:        execinfra.ProductionDefaultMemoryLimit,
 			DiskQueueCfg:       queueCfg,
 			FDSemaphore:        &colexecop.TestingSemaphore{},
 			DiskAcc:            testDiskAcc,

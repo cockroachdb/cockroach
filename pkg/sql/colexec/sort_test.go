@@ -322,9 +322,9 @@ func BenchmarkSort(b *testing.B) {
 						source := colexectestutils.NewFiniteBatchSource(testAllocator, batch, typs, nBatches)
 						var sorter colexecop.Operator
 						if topK {
-							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.DefaultMemoryLimit)
+							sorter = NewTopKSorter(testAllocator, source, typs, ordCols, 0 /* matchLen */, k, execinfra.ProductionDefaultMemoryLimit)
 						} else {
-							sorter = NewSorter(testAllocator, source, typs, ordCols, execinfra.DefaultMemoryLimit)
+							sorter = NewSorter(testAllocator, source, typs, ordCols, execinfra.ProductionDefaultMemoryLimit)
 						}
 						sorter.Init(ctx)
 						for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {

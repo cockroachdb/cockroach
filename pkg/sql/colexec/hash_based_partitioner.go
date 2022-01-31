@@ -254,7 +254,7 @@ func newHashBasedPartitioner(
 		// If memory limit is 1, we're likely in a "force disk spill"
 		// scenario, but we don't want to artificially limit batches when we
 		// have already spilled, so we'll use a larger limit.
-		memoryLimit = execinfra.DefaultMemoryLimit
+		memoryLimit = execinfra.ProductionDefaultMemoryLimit
 	}
 	maxPartitionSizeToProcessUsingMain := memoryLimit - int64(diskQueuesMemUsed)
 	if maxPartitionSizeToProcessUsingMain < hbpMinimalMaxPartitionSizeForMain {

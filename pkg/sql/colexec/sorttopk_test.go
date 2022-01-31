@@ -193,7 +193,7 @@ func BenchmarkSortTopK(b *testing.B) {
 							for n := 0; n < b.N; n++ {
 								var sorter colexecop.Operator
 								source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
-								sorter = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.DefaultMemoryLimit)
+								sorter = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.ProductionDefaultMemoryLimit)
 								sorter.Init(ctx)
 								for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
 								}

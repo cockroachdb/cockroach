@@ -186,7 +186,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	getNewMergeJoiner := func(leftSource, rightSource colexecop.Operator) colexecop.Operator {
 		benchMemAccount.Clear(ctx)
 		base := newMergeJoinBase(
-			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), execinfra.DefaultMemoryLimit, queueCfg, colexecop.NewTestingSemaphore(mjFDLimit),
+			colmem.NewAllocator(ctx, &benchMemAccount, testColumnFactory), execinfra.ProductionDefaultMemoryLimit, queueCfg, colexecop.NewTestingSemaphore(mjFDLimit),
 			descpb.InnerJoin, leftSource, rightSource, sourceTypes, sourceTypes,
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},
 			[]execinfrapb.Ordering_Column{{ColIdx: 0, Direction: execinfrapb.Ordering_Column_ASC}},

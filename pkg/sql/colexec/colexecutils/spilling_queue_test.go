@@ -358,7 +358,7 @@ func TestSpillingQueueMemoryAccounting(t *testing.T) {
 			newQueueArgs := &NewSpillingQueueArgs{
 				UnlimitedAllocator: spillingQueueUnlimitedAllocator,
 				Types:              typs,
-				MemoryLimit:        execinfra.DefaultMemoryLimit,
+				MemoryLimit:        execinfra.ProductionDefaultMemoryLimit,
 				DiskQueueCfg:       queueCfg,
 				FDSemaphore:        colexecop.NewTestingSemaphore(2),
 				DiskAcc:            testDiskAcc,
