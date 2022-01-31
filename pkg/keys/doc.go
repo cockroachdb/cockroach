@@ -199,6 +199,7 @@ var _ = [...]interface{}{
 	RangeTombstoneKey,              // "rftb"
 	RaftHardStateKey,               // "rfth"
 	RaftLogKey,                     // "rftl"
+	RaftReplicaIDKey,               // "rftr"
 	RaftTruncatedStateKey,          // "rftt"
 	RangeLastReplicaGCTimestampKey, // "rlrt"
 
