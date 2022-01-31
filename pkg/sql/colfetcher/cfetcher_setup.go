@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,15 +31,11 @@ import (
 // from. Note that only columns that need to be fetched (i.e. requested by the
 // caller) are included in the internal state.
 type cFetcherTableArgs struct {
-	desc  catalog.TableDescriptor
-	index catalog.Index
+	spec descpb.IndexFetchSpec
 	// ColIdxMap is a mapping from ColumnID to the ordinal of the corresponding
 	// column within the cols field.
-	ColIdxMap        catalog.TableColMap
-	isSecondaryIndex bool
-	// cols are the columns for which we need to produce values.
-	cols []catalog.Column
-	// typs are the types of only needed columns from the table.
+	ColIdxMap catalog.TableColMap
+	// typs are the types of spec.FetchColumns.
 	typs []*types.T
 }
 
@@ -49,12 +46,7 @@ var cFetcherTableArgsPool = sync.Pool{
 }
 
 func (a *cFetcherTableArgs) Release() {
-	// Deeply reset the column descriptors.
-	for i := range a.cols {
-		a.cols[i] = nil
-	}
 	*a = cFetcherTableArgs{
-		cols: a.cols[:0],
 		// The types are small objects, so we don't bother deeply resetting this
 		// slice.
 		typs: a.typs[:0],
@@ -62,14 +54,14 @@ func (a *cFetcherTableArgs) Release() {
 	cFetcherTableArgsPool.Put(a)
 }
 
-func (a *cFetcherTableArgs) populateTypes(cols []catalog.Column) {
+func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 	if cap(a.typs) < len(cols) {
 		a.typs = make([]*types.T, len(cols))
 	} else {
 		a.typs = a.typs[:len(cols)]
 	}
 	for i := range cols {
-		a.typs[i] = cols[i].GetType()
+		a.typs[i] = cols[i].Type
 	}
 }
 
@@ -85,31 +77,17 @@ func populateTableArgs(
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
-	if cap(args.cols) < len(columnIDs) {
-		args.cols = make([]catalog.Column, len(columnIDs))
-	}
-	cols := args.cols[:0]
-	for _, colID := range columnIDs {
-		if invertedCol != nil && colID == invertedCol.GetID() {
-			cols = append(cols, invertedCol)
-		} else {
-			col, err := table.FindColumnWithID(colID)
-			if err != nil {
-				return nil, err
-			}
-			cols = append(cols, col)
-		}
-	}
 	*args = cFetcherTableArgs{
-		desc:             table,
-		index:            index,
-		isSecondaryIndex: !index.Primary(),
-		cols:             cols,
-		typs:             args.typs,
+		typs: args.typs,
 	}
-	args.populateTypes(cols)
-	for i := range cols {
-		args.ColIdxMap.Set(cols[i].GetID(), i)
+	if err := rowenc.InitIndexFetchSpec(
+		&args.spec, flowCtx.Codec(), table, index, columnIDs,
+	); err != nil {
+		return nil, err
+	}
+	args.populateTypes(args.spec.FetchedColumns)
+	for i := range args.spec.FetchedColumns {
+		args.ColIdxMap.Set(args.spec.FetchedColumns[i].ColumnID, i)
 	}
 
 	// Before we can safely use types from the table descriptor, we need to
@@ -137,27 +115,35 @@ func populateTableArgsLegacy(
 	helper *colexecargs.ExprHelper,
 ) (_ *cFetcherTableArgs, neededColumns util.FastIntSet, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
-	// First, find all columns present in the table and possibly include the
-	// system columns (when requested).
-	cols := args.cols[:0]
-	cols = append(cols, table.ReadableColumns()...)
-	if invertedCol != nil {
-		for i, col := range cols {
-			if col.GetID() == invertedCol.GetID() {
-				cols[i] = invertedCol
-				break
-			}
-		}
-	}
+
+	readableColumns := table.ReadableColumns()
+	numCols := len(readableColumns)
+	var systemColumns []catalog.Column
 	if hasSystemColumns {
-		cols = append(cols, table.SystemColumns()...)
+		systemColumns = table.SystemColumns()
+		numCols += len(systemColumns)
 	}
 
 	var err error
 	// Make sure that render expressions are deserialized right away so that we
 	// don't have to re-parse them multiple times.
 	if post.RenderExprs != nil {
-		args.populateTypes(cols)
+		// Populate all column types.
+		typs := args.typs[:0]
+		if cap(typs) >= numCols {
+			typs = typs[:numCols]
+		} else {
+			typs = make([]*types.T, numCols)
+		}
+		for i := range readableColumns {
+			typs[i] = readableColumns[i].GetType()
+			if invertedCol != nil && readableColumns[i].GetID() == invertedCol.GetID() {
+				typs[i] = invertedCol.GetType()
+			}
+		}
+		for i := range systemColumns {
+			typs[len(readableColumns)+i] = systemColumns[i].GetType()
+		}
 		for i := range post.RenderExprs {
 			// It is ok to use the evalCtx of the flowCtx since it won't be
 			// mutated (we are not evaluating the expressions). It's also ok to
@@ -172,31 +158,39 @@ func populateTableArgsLegacy(
 
 	// Now find the set of columns that are actually needed based on the
 	// post-processing spec.
-	neededColumns = getNeededColumns(post, len(cols))
+	neededColumns = getNeededColumns(post, numCols)
 
-	// Prune away columns that aren't needed.
-	if neededColumns.Len() != len(cols) {
-		idxMap := make([]int, len(cols))
-		keepColIdx := 0
-		for idx, ok := neededColumns.Next(0); ok; idx, ok = neededColumns.Next(idx + 1) {
-			cols[keepColIdx] = cols[idx]
-			idxMap[idx] = keepColIdx
-			keepColIdx++
+	colIDs := make([]descpb.ColumnID, 0, neededColumns.Len())
+	for idx, ok := neededColumns.Next(0); ok; idx, ok = neededColumns.Next(idx + 1) {
+		if idx < len(readableColumns) {
+			colIDs = append(colIDs, readableColumns[idx].GetID())
+		} else {
+			colIDs = append(colIDs, systemColumns[idx-len(readableColumns)].GetID())
 		}
-		cols = cols[:keepColIdx]
+	}
+
+	// Remapt he post processing spec. away columns that aren't needed.
+	if len(colIDs) != numCols {
+		idxMap := make([]int, numCols)
+		newIdx := 0
+		for idx, ok := neededColumns.Next(0); ok; idx, ok = neededColumns.Next(idx + 1) {
+			idxMap[idx] = newIdx
+			newIdx++
+		}
 		remapPostProcessSpec(post, idxMap, flowCtx.PreserveFlowSpecs)
 	}
 
 	*args = cFetcherTableArgs{
-		desc:             table,
-		index:            index,
-		isSecondaryIndex: !index.Primary(),
-		cols:             cols,
-		typs:             args.typs,
+		typs: args.typs,
 	}
-	args.populateTypes(cols)
-	for i := range cols {
-		args.ColIdxMap.Set(cols[i].GetID(), i)
+	if err := rowenc.InitIndexFetchSpec(
+		&args.spec, flowCtx.Codec(), table, index, colIDs,
+	); err != nil {
+		return nil, util.FastIntSet{}, err
+	}
+	args.populateTypes(args.spec.FetchedColumns)
+	for i := range args.spec.FetchedColumns {
+		args.ColIdxMap.Set(args.spec.FetchedColumns[i].ColumnID, i)
 	}
 
 	// Before we can safely use types from the table descriptor, we need to

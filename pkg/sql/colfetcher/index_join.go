@@ -144,7 +144,7 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 		s.streamerInfo.Streamer.Init(
 			kvstreamer.OutOfOrder,
 			kvstreamer.Hints{UniqueRequests: true},
-			s.cf.maxKeysPerRow,
+			int(s.cf.table.spec.MaxKeysPerRow),
 		)
 	}
 }
@@ -478,7 +478,7 @@ func NewColIndexJoin(
 		flowCtx.TraceKV,
 	}
 	if err = fetcher.Init(
-		flowCtx.Codec(), fetcherAllocator, kvFetcherMemAcc, tableArgs,
+		fetcherAllocator, kvFetcherMemAcc, tableArgs,
 	); err != nil {
 		fetcher.Release()
 		return nil, err
