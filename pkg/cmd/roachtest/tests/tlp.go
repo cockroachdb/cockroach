@@ -134,6 +134,19 @@ func runOneTLP(
 	}
 	logStmt(setStmtTimeout)
 
+	if rng.Float64() < 0.5 {
+		// In 50% of cases set distsql_workmem variable to a random value in
+		// [100KB, 2.1MB] range.
+		workmem := rng.Intn(2<<20) + 100<<10
+		setDistSQLWorkmem := fmt.Sprintf("SET distsql_workem='%dB';", workmem)
+		t.Status("setting distsql_workmem")
+		t.L().Printf("%s", setDistSQLWorkmem)
+		if _, err := conn.Exec(setDistSQLWorkmem); err != nil {
+			t.Fatal(err)
+		}
+		logStmt(setDistSQLWorkmem)
+	}
+
 	// Initialize a smither that generates only INSERT, UPDATE, and DELETE
 	// statements with the MutationsOnly option. Smither.GenerateTLP always
 	// returns SELECT queries, so the MutationsOnly option is used only for
