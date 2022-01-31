@@ -24,8 +24,104 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangerState:
-  +    authorization: {}
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
   +    jobId: "1"
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
+  +          NULL DEFAULT ‹42›
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  +        statementTag: ALTER TABLE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    targets:
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          defaultExpr: 42:::INT8
+  +          familyName: primary
+  +          pgAttributeNum: 2
+  +          tableId: 106
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: j
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 2
+  +          keyColumnDirection:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 2
+  +          tableId: 106
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: tbl_pkey
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 1
+  +          keyColumnDirection:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          tableId: 106
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: tbl_pkey
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      families:
      - columnIds:
        - 1
@@ -92,9 +188,21 @@ upsert descriptor #106
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 4 with 3 MutationType ops
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 4 with 4 MutationType ops
 update progress of schema change job #1
 upsert descriptor #106
+  ...
+         appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+       currentStatuses:
+  -    - DELETE_ONLY
+  +    - DELETE_AND_WRITE_ONLY
+       - ABSENT
+  -    - DELETE_ONLY
+  +    - DELETE_AND_WRITE_ONLY
+       - ABSENT
+       - PUBLIC
   ...
        direction: ADD
        mutationId: 1
@@ -114,17 +222,17 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
-commit transaction #2
-begin transaction #3
-## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
-backfill indexes [2] from index #1 in table #106
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-validate forward indexes [2] in table #106
+## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 4 with 7 MutationType ops
+## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+validate forward indexes [2] in table #106
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 4 with 8 MutationType ops
 update progress of schema change job #1
 upsert descriptor #106
   ...
@@ -140,6 +248,21 @@ upsert descriptor #106
   +      width: 64
      createAsOfTime:
        wallTime: "1"
+  ...
+         appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+       currentStatuses:
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+       - PUBLIC
+       - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - VALIDATED
+  +    - ABSENT
+       jobId: "1"
+       relevantStatements:
   ...
        columnNames:
        - i
@@ -211,12 +334,19 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-commit transaction #5
-begin transaction #6
-## PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+commit transaction #6
+begin transaction #7
+## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 upsert descriptor #106
+  ...
+       - PUBLIC
+       - PUBLIC
+  -    - VALIDATED
+  +    - DELETE_ONLY
+       - ABSENT
+       jobId: "1"
   ...
          version: 4
        mutationId: 1
@@ -229,8 +359,8 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
-commit transaction #6
-begin transaction #7
+commit transaction #7
+begin transaction #8
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 create job #2: "GC for dropping table 106 index 1"
   descriptor IDs: [106]
@@ -240,8 +370,104 @@ upsert descriptor #106
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangerState:
-  -    authorization: {}
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - DELETE_ONLY
+  -    - ABSENT
   -    jobId: "1"
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
+  -          NULL DEFAULT ‹42›
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  -        statementTag: ALTER TABLE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    targets:
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          defaultExpr: 42:::INT8
+  -          familyName: primary
+  -          pgAttributeNum: 2
+  -          tableId: 106
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: j
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 2
+  -          keyColumnDirection:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 2
+  -          tableId: 106
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 2
+  -          name: tbl_pkey
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 1
+  -          keyColumnDirection:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          tableId: 106
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: tbl_pkey
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -276,5 +502,5 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
-commit transaction #7
+commit transaction #8
 # end PostCommitPhase

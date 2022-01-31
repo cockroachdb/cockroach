@@ -96,6 +96,12 @@ message DescriptorState {
   // those targets.
   repeated Status current_statuses = 4;
 
+  // TargetRanks is parallel to Targets and stores the rank of the target in
+  // the complete schema change. These ranks are used to deterministically
+  // reconstruct the complete TargetState from a collection of DescriptorState
+  // messages.
+  repeated uint32 target_ranks = 6;
+
   // RelevantStatements is the set of statements which are relevant to any of
   // the targets.
   map<uint32, Statement> relevant_statements = 2  [(gogoproto.nullable) = false];

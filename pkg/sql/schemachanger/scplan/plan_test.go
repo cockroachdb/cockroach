@@ -233,6 +233,11 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 		sb.WriteString("  ops:\n")
 		stageOps := ""
 		for _, op := range ops {
+			if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
+				clone := *setJobStateOp
+				clone.State = scpb.DescriptorState{}
+				op = &clone
+			}
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
 			data, err := yaml.Marshal(opMap)
