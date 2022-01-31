@@ -944,11 +944,11 @@ func (n *Node) batchInternal(
 
 	var br *roachpb.BatchResponse
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
-		var finishSpan func(context.Context, *roachpb.BatchResponse)
+		var reqSp spanForRequest
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, tenID, args)
+		ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
 		// NB: wrapped to delay br evaluation to its value when returning.
-		defer func() { finishSpan(ctx, br) }()
+		defer func() { reqSp.finish(ctx, br) }()
 		if log.HasSpanOrEvent(ctx) {
 			log.Eventf(ctx, "node received request: %s", args.Summary())
 		}
@@ -1032,6 +1032,52 @@ func (n *Node) Batch(
 	return br, nil
 }
 
+// spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
+// few variables needed when finishing an RPC's span.
+//
+// finish() must be called when the span is done.
+type spanForRequest struct {
+	sp            *tracing.Span
+	needRecording bool
+	tenID         roachpb.TenantID
+}
+
+// finish finishes the span. If the span was recording and br is not nil, the
+// recording is written to br.CollectedSpans.
+func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse) {
+	var rec tracing.Recording
+	// If we don't have a response, there's nothing to attach a trace to.
+	// Nothing more for us to do.
+	sp.needRecording = sp.needRecording && br != nil
+
+	if !sp.needRecording {
+		sp.sp.Finish()
+		return
+	}
+
+	rec = sp.sp.FinishAndGetConfiguredRecording()
+	if rec != nil {
+		// Decide if the trace for this RPC, if any, will need to be redacted. It
+		// needs to be redacted if the response goes to a tenant. In case the request
+		// is local, then the trace might eventually go to a tenant (and tenID might
+		// be set), but it will go to the tenant only indirectly, through the response
+		// of a parent RPC. In that case, that parent RPC is responsible for the
+		// redaction.
+		//
+		// Tenants get a redacted recording, i.e. with anything
+		// sensitive stripped out of the verbose messages. However,
+		// structured payloads stay untouched.
+		needRedaction := sp.tenID != roachpb.SystemTenantID
+		if needRedaction {
+			if err := redactRecordingForTenant(sp.tenID, rec); err != nil {
+				log.Errorf(ctx, "error redacting trace recording: %s", err)
+				rec = nil
+			}
+		}
+		br.CollectedSpans = append(br.CollectedSpans, rec...)
+	}
+}
+
 // setupSpanForIncomingRPC takes a context and returns a derived context with a
 // new span in it. Depending on the input context, that span might be a root
 // span or a child span. If it is a child span, it might be a child span of a
@@ -1047,13 +1093,13 @@ func (n *Node) Batch(
 // be nil in case no response is to be returned to the rpc caller.
 func (n *Node) setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest,
-) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
+) (context.Context, spanForRequest) {
 	return setupSpanForIncomingRPC(ctx, tenID, ba, n.storeCfg.AmbientCtx.Tracer)
 }
 
 func setupSpanForIncomingRPC(
 	ctx context.Context, tenID roachpb.TenantID, ba *roachpb.BatchRequest, tr *tracing.Tracer,
-) (context.Context, func(context.Context, *roachpb.BatchResponse)) {
+) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	parentSpan := tracing.SpanFromContext(ctx)
 	localRequest := grpcutil.IsLocalRequestContext(ctx)
@@ -1089,40 +1135,11 @@ func setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	finishSpan := func(ctx context.Context, br *roachpb.BatchResponse) {
-		var rec tracing.Recording
-		// If we don't have a response, there's nothing to attach a trace to.
-		// Nothing more for us to do.
-		needRecordingCollection = needRecordingCollection && br != nil
-
-		if !needRecordingCollection {
-			newSpan.Finish()
-			return
-		}
-
-		rec = newSpan.FinishAndGetConfiguredRecording()
-		if rec != nil {
-			// Decide if the trace for this RPC, if any, will need to be redacted. It
-			// needs to be redacted if the response goes to a tenant. In case the request
-			// is local, then the trace might eventually go to a tenant (and tenID might
-			// be set), but it will go to the tenant only indirectly, through the response
-			// of a parent RPC. In that case, that parent RPC is responsible for the
-			// redaction.
-			//
-			// Tenants get a redacted recording, i.e. with anything
-			// sensitive stripped out of the verbose messages. However,
-			// structured payloads stay untouched.
-			needRedaction := tenID != roachpb.SystemTenantID
-			if needRedaction {
-				if err := redactRecordingForTenant(tenID, rec); err != nil {
-					log.Errorf(ctx, "error redacting trace recording: %s", err)
-					rec = nil
-				}
-			}
-			br.CollectedSpans = append(br.CollectedSpans, rec...)
-		}
+	return ctx, spanForRequest{
+		needRecording: needRecordingCollection,
+		tenID:         tenID,
+		sp:            newSpan,
 	}
-	return ctx, finishSpan
 }
 
 // RangeLookup implements the roachpb.InternalServer interface.
