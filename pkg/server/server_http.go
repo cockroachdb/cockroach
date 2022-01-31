@@ -12,15 +12,19 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"strings"
 
+	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/metadata"
 )
@@ -148,6 +152,79 @@ func makeAdminAuthzCheckHandler(
 		}
 		// Forward the request to the inner handler.
 		handler.ServeHTTP(w, req)
+	})
+}
+
+// start starts the network listener for the HTTP interface
+// and also starts accepting incoming HTTP connections.
+func (s *httpServer) start(
+	ctx, workersCtx context.Context,
+	connManager netutil.Server,
+	uiTLSConfig *tls.Config,
+	stopper *stop.Stopper,
+) error {
+	httpLn, err := ListenAndUpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
+	if err != nil {
+		return err
+	}
+	log.Eventf(ctx, "listening on http port %s", s.cfg.HTTPAddr)
+
+	// The HTTP listener shutdown worker, which closes everything under
+	// the HTTP port when the stopper indicates we are shutting down.
+	waitQuiesce := func(ctx context.Context) {
+		// NB: we can't do this as a Closer because (*Server).ServeWith is
+		// running in a worker and usually sits on accept() which unblocks
+		// only when the listener closes. In other words, the listener needs
+		// to close when quiescing starts to allow that worker to shut down.
+		<-stopper.ShouldQuiesce()
+		if err := httpLn.Close(); err != nil {
+			log.Ops.Fatalf(ctx, "%v", err)
+		}
+	}
+	if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(workersCtx)
+		return err
+	}
+
+	if uiTLSConfig != nil {
+		httpMux := cmux.New(httpLn)
+		clearL := httpMux.Match(cmux.HTTP1())
+		tlsL := httpMux.Match(cmux.Any())
+
+		// Dispatch incoming requests to either clearL or tlsL.
+		if err := stopper.RunAsyncTask(workersCtx, "serve-ui", func(context.Context) {
+			netutil.FatalIfUnexpected(httpMux.Serve())
+		}); err != nil {
+			return err
+		}
+
+		// Serve the plain HTTP (non-TLS) connection over clearL.
+		// This produces a HTTP redirect to the `https` URL for the path /,
+		// handles the request normally (via s.ServeHTTP) for the path /health,
+		// and produces 404 for anything else.
+		if err := stopper.RunAsyncTask(workersCtx, "serve-health", func(context.Context) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
+			})
+			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
+
+			plainRedirectServer := netutil.MakeServer(stopper, uiTLSConfig, mux)
+
+			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
+		}); err != nil {
+			return err
+		}
+
+		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+	}
+
+	// Serve the HTTP endpoint. This will be the original httpLn
+	// listening on --http-addr without TLS if uiTLSConfig was
+	// nil, or overridden above if uiTLSConfig was not nil to come from
+	// the TLS negotiation over the HTTP port.
+	return stopper.RunAsyncTask(workersCtx, "server-http", func(context.Context) {
+		netutil.FatalIfUnexpected(connManager.Serve(httpLn))
 	})
 }
 
