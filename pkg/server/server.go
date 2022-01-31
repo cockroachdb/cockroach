@@ -122,7 +122,6 @@ type Server struct {
 	status          *statusServer
 	authentication  *authenticationServer
 	migrationServer *migrationServer
-	oidc            OIDC
 	tsDB            *ts.DB
 	tsServer        *ts.Server
 	raftTransport   *kvserver.RaftTransport
@@ -1386,7 +1385,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.oidc = oidc
 
 	// Serve UI assets.
 	//
