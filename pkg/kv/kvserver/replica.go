@@ -520,7 +520,12 @@ type Replica struct {
 		// It will not change over the lifetime of this replica. If addressed under
 		// a newer replicaID, the replica immediately replicaGCs itself to make
 		// way for the newer incarnation.
+		// TODO(sumeer): since this is initialized in newUnloadedReplica and never
+		// changed, lift this out of the mu struct.
 		replicaID roachpb.ReplicaID
+		// wroteReplicaID transitions once to true, when RaftReplicaID is written
+		// to the store.
+		wroteReplicaID bool
 		// The minimum allowed ID for this replica. Initialized from
 		// RangeTombstone.NextReplicaID.
 		tombstoneMinReplicaID roachpb.ReplicaID
@@ -710,9 +715,11 @@ func (r *Replica) SafeFormat(w redact.SafePrinter, _ rune) {
 		r.store.Ident.NodeID, r.store.Ident.StoreID, r.rangeStr.get())
 }
 
-// ReplicaID returns the ID for the Replica. It may be zero if the replica does
-// not know its ID. Once a Replica has a non-zero ReplicaID it will never change.
+// ReplicaID returns the ID for the Replica. This value is fixed for the
+// lifetime of the Replica.
 func (r *Replica) ReplicaID() roachpb.ReplicaID {
+	// The locking of mu is unnecessary. It will be removed when we lift
+	// replicaID out of the mu struct.
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.mu.replicaID

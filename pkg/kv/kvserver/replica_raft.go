@@ -583,6 +583,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return unquiesceAndWakeLeader, nil
 	})
 	r.mu.applyingEntries = len(rd.CommittedEntries) > 0
+	alreadyWroteReplicaID := r.mu.wroteReplicaID
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
@@ -796,6 +797,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			return stats, expl, errors.Wrap(err, expl)
 		}
 	}
+	wroteReplicaID := false
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
@@ -811,6 +813,15 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if err := r.raftMu.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
+		}
+		// It is possible that we have set HardState for the first time, in which
+		// case alreadyWroteReplicaID will be false.
+		if !alreadyWroteReplicaID {
+			if err := r.raftMu.stateLoader.SetRaftReplicaID(ctx, batch, r.ReplicaID()); err != nil {
+				const expl = "during setRaftReplicaID"
+				return stats, expl, errors.Wrap(err, expl)
+			}
+			wroteReplicaID = true
 		}
 	}
 	// Synchronously commit the batch with the Raft log entries and Raft hard
@@ -869,6 +880,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// Clear the remote proposal set. Would have been nil already if not
 		// previously the leader.
 		becameLeader = r.mu.leaderID == r.mu.replicaID
+	}
+	if wroteReplicaID {
+		r.mu.wroteReplicaID = wroteReplicaID
 	}
 	r.mu.Unlock()
 

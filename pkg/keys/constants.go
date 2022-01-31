@@ -87,10 +87,11 @@ var (
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")
-	// LocalRaftTruncatedStateSuffix is the suffix for the
+	// This was previously used for the replicated RaftTruncatedState. It is no
+	// longer used and this key has been removed via a migration. See
+	// LocalRaftTruncatedStateSuffix for the corresponding unreplicated
 	// RaftTruncatedState.
-	// Note: This suffix is also used for unreplicated Range-ID keys.
-	LocalRaftTruncatedStateSuffix = []byte("rftt")
+	_ = []byte("rftt")
 	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
 	// LocalRangePriorReadSummarySuffix is the suffix for a range's prior read
@@ -122,6 +123,13 @@ var (
 	localRaftLastIndexSuffix = []byte("rfti")
 	// LocalRaftLogSuffix is the suffix for the raft log.
 	LocalRaftLogSuffix = []byte("rftl")
+	// LocalRaftReplicaIDSuffix is the suffix for the RaftReplicaID. This is
+	// written when the HardState for a particular ReplicaID is first written.
+	LocalRaftReplicaIDSuffix = []byte("rftr")
+	// LocalRaftTruncatedStateSuffix is the suffix for the unreplicated
+	// RaftTruncatedState.
+	LocalRaftTruncatedStateSuffix = []byte("rftt")
+
 	// LocalRangeLastReplicaGCTimestampSuffix is the suffix for a range's last
 	// replica GC timestamp (for GC of old replicas).
 	LocalRangeLastReplicaGCTimestampSuffix = []byte("rlrt")

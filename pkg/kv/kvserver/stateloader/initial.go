@@ -96,6 +96,7 @@ func WriteInitialRangeState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	desc roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
 ) error {
 	initialLease := roachpb.Lease{}
@@ -108,7 +109,15 @@ func WriteInitialRangeState(
 	); err != nil {
 		return err
 	}
-	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
+	sl := Make(desc.RangeID)
+	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+		return err
+	}
+	// It is inconvenient that we cannot set Replica.mu.wroteReplicaID=true
+	// since we don't have a Replica object yet. This is harmless since we will
+	// just write the RaftReplicaID again later. The invariant that HardState
+	// and RaftReplicaID both exist in the store is not being violated.
+	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
 	return nil

@@ -146,6 +146,25 @@ func (s *Store) tryGetOrCreateReplica(
 	} else if ok && replicaID != 0 && replicaID < tombstone.NextReplicaID {
 		return nil, false, &roachpb.RaftGroupDeletedError{}
 	}
+	// It is possible that we have already created the HardState for an
+	// uninitialized replica, then crashed, and on recovery are receiving a raft
+	// message for the same or later replica. In either case we will create a
+	// Replica with Replica.mu.wroteReplicaID=false, and will eventually write
+	// the HardState and RaftReplicaID to the correct value. However, in the
+	// latter case there is some time interval during which the Replica object
+	// has a newer ReplicaID than the one in the store, and a stored HardState
+	// that is for the older ReplicaID. This seems harmless, but to be more
+	// precise about the invariants we should remove the stale
+	// persistent state here.
+	//
+	// TODO(sumeer): once we have RaftReplicaID being populated for all replicas
+	// and we have purged replicas that don't populate it, we can read the
+	// (HardState,RaftReplicaID) here and find one of the following cases:
+	// - HardState exists, RaftReplicaID not exists: must be a purged replica so
+	//   we can delete HardState.
+	// - HardState exists, RaftReplicaID exists: if the latter is old, remove
+	//   both HardState and RaftReplicaID.
+	// - Neither exits: nothing to do.
 
 	// Create a new replica and lock it for raft processing.
 	uninitializedDesc := &roachpb.RangeDescriptor{
