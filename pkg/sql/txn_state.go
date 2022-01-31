@@ -172,12 +172,12 @@ func (ts *txnState) resetForNewSQLTxn(
 	var sp *tracing.Span
 	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
 	if alreadyRecording || duration > 0 {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer,
+		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName,
 			tracing.WithRecording(tracing.RecordingVerbose))
 	} else if ts.testingForceRealTracingSpans {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer, tracing.WithForceRealSpan())
+		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName, tracing.WithForceRealSpan())
 	} else {
-		txnCtx, sp = createRootOrChildSpan(connCtx, opName, tranCtx.tracer)
+		txnCtx, sp = tracing.EnsureChildSpan(connCtx, tranCtx.tracer, opName)
 	}
 	if txnType == implicitTxn {
 		sp.SetTag("implicit", attribute.StringValue("true"))
