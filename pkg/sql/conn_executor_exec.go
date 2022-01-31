@@ -710,7 +710,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	var stmtCtx context.Context
 	// TODO(andrei): I think we should do this even if alreadyRecording == true.
 	if !alreadyRecording && stmtTraceThreshold > 0 {
-		stmtCtx, stmtThresholdSpan = createRootOrChildSpan(ctx, "trace-stmt-threshold", ex.server.cfg.AmbientCtx.Tracer, tracing.WithRecording(tracing.RecordingVerbose))
+		stmtCtx, stmtThresholdSpan = tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "trace-stmt-threshold", tracing.WithRecording(tracing.RecordingVerbose))
 	} else {
 		stmtCtx = ctx
 	}
@@ -2032,16 +2032,6 @@ func (ex *connExecutor) recordTransaction(
 		transactionFingerprintID,
 		recordedTxnStats,
 	)
-}
-
-// createRootOrChildSpan is used to create spans for txns and stmts. It inspects
-// parentCtx for an existing span and creates a root span if none is found, or a
-// child span if one is found. A context derived from parentCtx which
-// additionally contains the new span is also returned.
-func createRootOrChildSpan(
-	parentCtx context.Context, opName string, tr *tracing.Tracer, os ...tracing.SpanOption,
-) (context.Context, *tracing.Span) {
-	return tracing.EnsureChildSpan(parentCtx, tr, opName, os...)
 }
 
 // logTraceAboveThreshold logs a span's recording if the duration is above a
