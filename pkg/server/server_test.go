@@ -93,7 +93,7 @@ func TestPanicRecovery(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// Enable a test-only endpoint that induces a panic.
-	ts.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	ts.http.mux.Handle("/panic", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("induced panic for testing")
 	}))
 
