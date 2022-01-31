@@ -78,6 +78,7 @@ test           crdb_internal       node_transaction_statistics            public
 test           crdb_internal       node_transactions                      public   SELECT
 test           crdb_internal       node_txn_stats                         public   SELECT
 test           crdb_internal       partitions                             public   SELECT
+test           crdb_internal       pg_catalog_table_is_implemented        public   SELECT
 test           crdb_internal       predefined_comments                    public   SELECT
 test           crdb_internal       ranges                                 public   SELECT
 test           crdb_internal       ranges_no_leases                       public   SELECT
