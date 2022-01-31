@@ -920,20 +920,6 @@ type grpcGatewayServer interface {
 	) error
 }
 
-// ListenError is returned from Start when we fail to start listening on either
-// the main Cockroach port or the HTTP port, so that the CLI can instruct the
-// user on what might have gone wrong.
-type ListenError struct {
-	cause error
-	Addr  string
-}
-
-// Error implements error.
-func (l *ListenError) Error() string { return l.cause.Error() }
-
-// Unwrap is because ListenError is a wrapper.
-func (l *ListenError) Unwrap() error { return l.cause }
-
 // inspectEngines goes through engines and constructs an initState. The
 // initState returned by this method will reflect a zero NodeID if none has
 // been assigned yet (i.e. if none of the engines is initialized). See
@@ -2553,26 +2539,6 @@ func (s *Server) StartDiagnostics(ctx context.Context) {
 
 func init() {
 	tracing.RegisterTagRemapping("n", "node")
-}
-
-// ListenAndUpdateAddrs starts a TCP listener on the specified address
-// then updates the address and advertised address fields based on the
-// actual interface address resolved by the OS during the Listen()
-// call.
-func ListenAndUpdateAddrs(
-	ctx context.Context, addr, advertiseAddr *string, connName string,
-) (net.Listener, error) {
-	ln, err := net.Listen("tcp", *addr)
-	if err != nil {
-		return nil, &ListenError{
-			cause: err,
-			Addr:  *addr,
-		}
-	}
-	if err := base.UpdateAddrs(ctx, addr, advertiseAddr, ln.Addr()); err != nil {
-		return nil, errors.Wrapf(err, "internal error: cannot parse %s listen address", connName)
-	}
-	return ln, nil
 }
 
 // RunLocalSQL calls fn on a SQL internal executor on this server.
