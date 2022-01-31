@@ -49,6 +49,7 @@ go_library(
         "settings_cache.go",
         "settingsworker.go",
         "sql_stats.go",
+        "start_listen.go",
         "statement_diagnostics_requests.go",
         "statements.go",
         "status.go",
