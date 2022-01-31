@@ -1,0 +1,59 @@
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+)
+
+type DateStyleVisitor struct {
+	err  error
+	desc *descpb.TableDescriptor
+	typ  *types.T
+}
+
+var _ tree.Visitor = &DateStyleVisitor{}
+
+func (v *DateStyleVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if v.err != nil {
+		return false, expr
+	}
+
+	return true, expr
+}
+
+func (v *DateStyleVisitor) VisitPost(expr tree.Expr) tree.Expr {
+	if v.err != nil {
+		return expr
+	}
+	if expr, ok := expr.(*tree.CastExpr); ok {
+		ctx := context.TODO()
+		var semaCtx tree.SemaContext
+		desc := tabledesc.NewBuilder(v.desc)
+		tDesc := desc.BuildImmutableTable()
+		_, typ, _, err := schemaexpr.DequalifyAndValidateExpr(ctx, tDesc, expr, v.typ, "DateStyle visitor", &semaCtx, tree.VolatilityStable, tree.NewUnqualifiedTableName(tree.Name(v.desc.GetName())))
+		if err != nil {
+			return expr
+		}
+
+		var newExpr *tree.FuncExpr
+		switch v := typ; v {
+		case types.String:
+			newExpr = &tree.FuncExpr{Func: tree.WrapFunction("to_char"), Exprs: tree.Exprs{expr.Expr}}
+			return newExpr
+		case types.Interval:
+			newExpr = &tree.FuncExpr{Func: tree.WrapFunction("parse_interval"), Exprs: tree.Exprs{expr.Expr}}
+			return newExpr
+		}
+	}
+
+	return expr
+}
+
+func MakeDateStyleVisitor(err error, desc *descpb.TableDescriptor, typ *types.T) DateStyleVisitor {
+	return DateStyleVisitor{err: err, desc: desc, typ: typ}
+}
