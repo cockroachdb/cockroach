@@ -221,7 +221,10 @@ SELECT * FROM tpar
 
 # Make sure that the scan actually gets parallelized.
 statement ok
-SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10; SET tracing = off
+SET tracing = on; SELECT * FROM tpar WHERE a = 0 OR a = 10
+
+statement ok
+SET tracing = off
 
 # The span "sending partial batch" means that the scan was parallelized. We're
 # seeing duplicate "querying next range" entries because we first use the range
