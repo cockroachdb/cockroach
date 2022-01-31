@@ -77,7 +77,7 @@ var ConfigureOIDC = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	locality roachpb.Locality,
-	mux *http.ServeMux,
+	handleHTTP func(pattern string, handler http.Handler),
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,

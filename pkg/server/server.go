@@ -96,7 +96,6 @@ type Server struct {
 	nodeIDContainer *base.NodeIDContainer
 	cfg             Config
 	st              *cluster.Settings
-	mux             http.ServeMux
 	clock           *hlc.Clock
 	rpcContext      *rpc.Context
 	engines         Engines
@@ -118,6 +117,7 @@ type Server struct {
 	updates          *diagnostics.UpdateChecker
 	ctSender         *sidetransport.Sender
 
+	http            httpServer
 	admin           *adminServer
 	status          *statusServer
 	authentication  *authenticationServer
@@ -1051,7 +1051,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// because it needs to be available before the cluster is up and can
 	// serve authentication requests, and also because it must work for
 	// monitoring tools which operate without authentication.
-	s.mux.Handle("/health", gwMux)
+	s.http.mux.Handle("/health", gwMux)
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
@@ -1381,7 +1381,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
 	oidc, err := ConfigureOIDC(
 		ctx, s.ClusterSettings(), s.cfg.Locality,
-		&s.mux, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(),
+		s.http.mux.Handle, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(),
 	)
 	if err != nil {
 		return err
@@ -1409,7 +1409,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 			},
 		}),
 	)
-	s.mux.Handle("/", authenticatedUIHandler)
+	s.http.mux.Handle("/", authenticatedUIHandler)
 
 	// Register gRPC-gateway endpoints used by the admin UI.
 	var authHandler http.Handler = gwMux
@@ -1417,22 +1417,22 @@ func (s *Server) PreStart(ctx context.Context) error {
 		authHandler = newAuthenticationMux(s.authentication, authHandler)
 	}
 
-	s.mux.Handle(adminPrefix, authHandler)
+	s.http.mux.Handle(adminPrefix, authHandler)
 	// Exempt the health check endpoint from authentication.
 	// This mirrors the handling of /health above.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
+	s.http.mux.Handle("/_admin/v1/health", gwMux)
+	s.http.mux.Handle(ts.URLPrefix, authHandler)
+	s.http.mux.Handle(statusPrefix, authHandler)
 	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(loginPath, gwMux)
-	s.mux.Handle(logoutPath, authHandler)
+	s.http.mux.Handle(loginPath, gwMux)
+	s.http.mux.Handle(logoutPath, authHandler)
 
 	if s.cfg.EnableDemoLoginEndpoint {
-		s.mux.Handle(DemoLoginPath, http.HandlerFunc(s.authentication.demoLogin))
+		s.http.mux.Handle(DemoLoginPath, http.HandlerFunc(s.authentication.demoLogin))
 	}
 
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	s.http.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	// Register debugging endpoints.
 	var debugHandler http.Handler = s.debug
 	if s.cfg.RequireWebSession() {
@@ -1456,10 +1456,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 				s.debug.ServeHTTP(w, req)
 			}))
 	}
-	s.mux.Handle(debug.Endpoint, debugHandler)
+	s.http.mux.Handle(debug.Endpoint, debugHandler)
 
 	apiServer := newAPIV2Server(ctx, s)
-	s.mux.Handle(apiV2Path, apiServer)
+	s.http.mux.Handle(apiV2Path, apiServer)
 
 	log.Event(ctx, "added http endpoints")
 
@@ -1664,7 +1664,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	s.mux.ServeHTTP(w, r)
+	s.http.mux.ServeHTTP(w, r)
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.

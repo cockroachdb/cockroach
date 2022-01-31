@@ -45,6 +45,7 @@ go_library(
         "rlimit_darwin.go",
         "rlimit_unix.go",
         "server.go",
+        "server_http.go",
         "server_sql.go",
         "server_systemlog_gc.go",
         "settings_cache.go",
