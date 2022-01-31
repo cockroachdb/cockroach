@@ -66,7 +66,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
-	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
@@ -86,7 +85,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/sentry-go"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 )
 
 // Server is the cockroach server node.
@@ -118,6 +116,7 @@ type Server struct {
 	ctSender         *sidetransport.Sender
 
 	http            httpServer
+	adminAuthzCheck *adminPrivilegeChecker
 	admin           *adminServer
 	status          *statusServer
 	authentication  *authenticationServer
@@ -619,7 +618,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	sAdmin := newAdminServer(lateBoundServer, internalExecutor)
+	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
+	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
 	sessionRegistry := sql.NewSessionRegistry()
 	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
@@ -628,6 +628,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		cfg.AmbientCtx,
 		st,
 		cfg.Config,
+		adminAuthzCheck,
 		sAdmin,
 		db,
 		g,
@@ -738,6 +739,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		updates:                updates,
 		ctSender:               ctSender,
 		runtime:                runtimeSampler,
+		adminAuthzCheck:        adminAuthzCheck,
 		admin:                  sAdmin,
 		status:                 sStatus,
 		authentication:         sAuth,
@@ -1050,7 +1052,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// because it needs to be available before the cluster is up and can
 	// serve authentication requests, and also because it must work for
 	// monitoring tools which operate without authentication.
-	s.http.mux.Handle("/health", gwMux)
+	s.http.handleHealth(gwMux)
 
 	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
 	listenerFiles := listenerInfo{
@@ -1376,90 +1378,20 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
 
-	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
-	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
-	oidc, err := ConfigureOIDC(
-		ctx, s.ClusterSettings(), s.cfg.Locality,
-		s.http.mux.Handle, s.authentication.UserLoginFromSSO, s.cfg.AmbientCtx, s.ClusterID(),
-	)
-	if err != nil {
+	// Connect the HTTP endpoints. This also wraps the privileged HTTP
+	// endpoints served by gwMux by the HTTP cookie authentication
+	// check.
+	if err := s.http.setupRoutes(ctx,
+		s.cfg,
+		s.authentication,                      /* authnServer */
+		s.adminAuthzCheck,                     /* adminAuthzCheck */
+		gwMux,                                 /* handleRequestsUnauthenticated */
+		http.HandlerFunc(s.status.handleVars), /* handleStatusVarsUnauthenticated */
+		s.debug,                               /* handleDebugUnauthenticated */
+		newAPIV2Server(ctx, s),                /* apiServer */
+	); err != nil {
 		return err
 	}
-
-	// Serve UI assets.
-	//
-	// The authentication mux used here is created in "allow anonymous" mode so that the UI
-	// assets are served up whether or not there is a session. If there is a session, the mux
-	// adds it to the context, and it is templated into index.html so that the UI can show
-	// the username of the currently-logged-in user.
-	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
-		s.authentication,
-		ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         s.cfg.RequireWebSession(),
-			NodeID:               s.nodeIDContainer,
-			OIDC:                 oidc,
-			GetUser: func(ctx context.Context) *string {
-				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
-					return &u
-				}
-				return nil
-			},
-		}),
-	)
-	s.http.mux.Handle("/", authenticatedUIHandler)
-
-	// Register gRPC-gateway endpoints used by the admin UI.
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
-
-	s.http.mux.Handle(adminPrefix, authHandler)
-	// Exempt the health check endpoint from authentication.
-	// This mirrors the handling of /health above.
-	s.http.mux.Handle("/_admin/v1/health", gwMux)
-	s.http.mux.Handle(ts.URLPrefix, authHandler)
-	s.http.mux.Handle(statusPrefix, authHandler)
-	// The /login endpoint is, by definition, available pre-authentication.
-	s.http.mux.Handle(loginPath, gwMux)
-	s.http.mux.Handle(logoutPath, authHandler)
-
-	if s.cfg.EnableDemoLoginEndpoint {
-		s.http.mux.Handle(DemoLoginPath, http.HandlerFunc(s.authentication.demoLogin))
-	}
-
-	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.http.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	// Register debugging endpoints.
-	var debugHandler http.Handler = s.debug
-	if s.cfg.RequireWebSession() {
-		// TODO(bdarnell): Refactor our authentication stack.
-		// authenticationMux guarantees that we have a non-empty user
-		// session, but our machinery for verifying the roles of a user
-		// lives on adminServer and is tied to GRPC metadata.
-		debugHandler = newAuthenticationMux(s.authentication, http.HandlerFunc(
-			func(w http.ResponseWriter, req *http.Request) {
-				md := forwardAuthenticationMetadata(req.Context(), req)
-				authCtx := metadata.NewIncomingContext(req.Context(), md)
-				_, err := s.admin.requireAdminUser(authCtx)
-				if errors.Is(err, errRequiresAdmin) {
-					http.Error(w, "admin privilege required", http.StatusUnauthorized)
-					return
-				} else if err != nil {
-					log.Ops.Infof(authCtx, "web session error: %s", err)
-					http.Error(w, "error checking authentication", http.StatusInternalServerError)
-					return
-				}
-				s.debug.ServeHTTP(w, req)
-			}))
-	}
-	s.http.mux.Handle(debug.Endpoint, debugHandler)
-
-	apiServer := newAPIV2Server(ctx, s)
-	s.http.mux.Handle(apiV2Path, apiServer)
-
-	log.Event(ctx, "added http endpoints")
 
 	// Record node start in telemetry. Get the right counter for this storage
 	// engine type as well as type of start (initial boot vs restart).
