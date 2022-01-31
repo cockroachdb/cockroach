@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package tabledesc
 
 import (
 	"context"
@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -162,7 +161,7 @@ func ResolveCastForStyleUsingVisitor(
 ) (tree.Expr, bool, error) {
 	v := makeFixCastForStyleVisitor(ctx, semaCtx)
 
-	descBuilder := tabledesc.NewBuilder(desc)
+	descBuilder := NewBuilder(desc)
 	tDesc := descBuilder.BuildImmutableTable()
 	v.tDesc = tDesc
 
