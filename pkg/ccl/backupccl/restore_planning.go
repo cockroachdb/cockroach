@@ -273,7 +273,7 @@ func synthesizePGTempSchema(
 	var synthesizedSchemaID descpb.ID
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 		var err error
-		schemaID, err := col.LookupSchemaID(ctx, txn, dbID, schemaName)
+		schemaID, err := col.Direct().LookupSchemaID(ctx, txn, dbID, schemaName)
 		if err != nil {
 			return err
 		}
@@ -528,7 +528,7 @@ func allocateDescriptorRewrites(
 	if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 		// Check that any DBs being restored do _not_ exist.
 		for name := range restoreDBNames {
-			dbID, err := col.LookupDatabaseID(ctx, txn, name)
+			dbID, err := col.Direct().LookupDatabaseID(ctx, txn, name)
 			if err != nil {
 				return err
 			}
@@ -562,7 +562,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// See if there is an existing schema with the same name.
-				id, err := col.LookupSchemaID(ctx, txn, parentID, sc.Name)
+				id, err := col.Direct().LookupSchemaID(ctx, txn, parentID, sc.Name)
 				if err != nil {
 					return err
 				}
@@ -572,7 +572,7 @@ func allocateDescriptorRewrites(
 				} else {
 					// If we found an existing schema, then we need to remap all references
 					// to this schema to the existing one.
-					desc, err := col.MustGetSchemaDescByID(ctx, txn, id)
+					desc, err := col.Direct().MustGetSchemaDescByID(ctx, txn, id)
 					if err != nil {
 						return err
 					}
@@ -608,7 +608,7 @@ func allocateDescriptorRewrites(
 			} else {
 				var parentID descpb.ID
 				{
-					newParentID, err := col.LookupDatabaseID(ctx, txn, targetDB)
+					newParentID, err := col.Direct().LookupDatabaseID(ctx, txn, targetDB)
 					if err != nil {
 						return err
 					}
@@ -621,13 +621,13 @@ func allocateDescriptorRewrites(
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
 				tableName := tree.NewUnqualifiedTableName(tree.Name(table.GetName()))
-				err := col.CheckObjectCollision(ctx, txn, parentID, table.GetParentSchemaID(), tableName)
+				err := col.Direct().CheckObjectCollision(ctx, txn, parentID, table.GetParentSchemaID(), tableName)
 				if err != nil {
 					return err
 				}
 
 				// Check privileges.
-				parentDB, err := col.MustGetDatabaseDescByID(ctx, txn, parentID)
+				parentDB, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -680,7 +680,7 @@ func allocateDescriptorRewrites(
 				}
 
 				// Look up the parent database's ID.
-				parentID, err := col.LookupDatabaseID(ctx, txn, targetDB)
+				parentID, err := col.Direct().LookupDatabaseID(ctx, txn, targetDB)
 				if err != nil {
 					return err
 				}
@@ -689,7 +689,7 @@ func allocateDescriptorRewrites(
 						targetDB, typ.Name)
 				}
 				// Check privileges on the parent DB.
-				parentDB, err := col.MustGetDatabaseDescByID(ctx, txn, parentID)
+				parentDB, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
 				if err != nil {
 					return errors.Wrapf(err,
 						"failed to lookup parent DB %d", errors.Safe(parentID))
@@ -704,7 +704,7 @@ func allocateDescriptorRewrites(
 					}
 					return
 				}
-				desc, err := col.GetDescriptorCollidingWithObject(
+				desc, err := col.Direct().GetDescriptorCollidingWithObject(
 					ctx,
 					txn,
 					parentID,
@@ -729,7 +729,7 @@ func allocateDescriptorRewrites(
 					// Ensure that there isn't a collision with the array type name.
 					arrTyp := typesByID[typ.ArrayTypeID]
 					typeName := tree.NewUnqualifiedTypeName(arrTyp.GetName())
-					err = col.CheckObjectCollision(ctx, txn, parentID, getParentSchemaID(typ), typeName)
+					err = col.Direct().CheckObjectCollision(ctx, txn, parentID, getParentSchemaID(typ), typeName)
 					if err != nil {
 						return errors.Wrapf(err, "name collision for %q's array type", typ.Name)
 					}
@@ -911,7 +911,7 @@ func allocateDescriptorRewrites(
 func getDatabaseIDAndDesc(
 	ctx context.Context, txn *kv.Txn, col *descs.Collection, targetDB string,
 ) (dbID descpb.ID, dbDesc catalog.DatabaseDescriptor, err error) {
-	dbID, err = col.LookupDatabaseID(ctx, txn, targetDB)
+	dbID, err = col.Direct().LookupDatabaseID(ctx, txn, targetDB)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -919,7 +919,7 @@ func getDatabaseIDAndDesc(
 		return dbID, nil, errors.Errorf("a database named %q needs to exist", targetDB)
 	}
 	// Check privileges on the parent DB.
-	dbDesc, err = col.MustGetDatabaseDescByID(ctx, txn, dbID)
+	dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, dbID)
 	if err != nil {
 		return 0, nil, errors.Wrapf(err,
 			"failed to lookup parent DB %d", errors.Safe(dbID))

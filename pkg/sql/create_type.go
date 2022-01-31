@@ -165,7 +165,7 @@ func getCreateTypeParams(
 		sqltelemetry.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaUsedByObject)
 	}
 
-	err = params.p.Descriptors().CheckObjectCollision(
+	err = params.p.Descriptors().Direct().CheckObjectCollision(
 		params.ctx,
 		params.p.txn,
 		db.GetID(),
@@ -193,7 +193,7 @@ func findFreeArrayTypeName(
 	arrayName := "_" + name
 	for {
 		// See if there is a collision with the current name.
-		objectID, err := col.LookupObjectID(ctx, txn, parentID, schemaID, arrayName)
+		objectID, err := col.Direct().LookupObjectID(ctx, txn, parentID, schemaID, arrayName)
 		if err != nil {
 			return "", err
 		}

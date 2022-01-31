@@ -158,7 +158,7 @@ func getSchemaForCreateTable(
 		return nil, err
 	}
 
-	desc, err := params.p.Descriptors().GetDescriptorCollidingWithObject(
+	desc, err := params.p.Descriptors().Direct().GetDescriptorCollidingWithObject(
 		params.ctx,
 		params.p.txn,
 		db.GetID(),

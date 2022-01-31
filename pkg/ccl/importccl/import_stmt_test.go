@@ -1939,7 +1939,7 @@ func TestFailedImportGC(t *testing.T) {
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
 	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		td, err = col.MustGetTableDescByID(ctx, txn, tableID)
+		td, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -6131,7 +6131,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-				_, err = col.MustGetSchemaDescByID(ctx, txn, schemaID)
+				_, err = col.Direct().MustGetSchemaDescByID(ctx, txn, schemaID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}
@@ -6144,7 +6144,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
 			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-				_, err = col.MustGetTableDescByID(ctx, txn, tableID)
+				_, err = col.Direct().MustGetTableDescByID(ctx, txn, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

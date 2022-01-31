@@ -427,7 +427,7 @@ CREATE TABLE test.tt (x test.t);
 	typLookup := func(ctx context.Context, id descpb.ID) (tree.TypeName, catalog.TypeDescriptor, error) {
 		var typeDesc catalog.TypeDescriptor
 		if err := TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			typeDesc, err = col.MustGetTypeDescByID(ctx, txn, id)
+			typeDesc, err = col.Direct().MustGetTypeDescByID(ctx, txn, id)
 			return err
 		}); err != nil {
 			return tree.TypeName{}, nil, err

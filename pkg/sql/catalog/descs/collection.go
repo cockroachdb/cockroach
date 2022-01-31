@@ -53,6 +53,7 @@ func makeCollection(
 		leased:         makeLeasedDescriptors(leaseMgr),
 		kv:             makeKVDescriptors(codec),
 		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		direct:         makeDirect(codec, settings),
 	}
 }
 
@@ -119,6 +120,10 @@ type Collection struct {
 	// It must be set in the multi-tenant environment for ephemeral
 	// SQL pods. It should not be set otherwise.
 	sqlLivenessSession sqlliveness.Session
+
+	// direct provides low-level access to descriptors via the Direct interface.
+	// For the most part, it is in deprecated or testing settings.
+	direct direct
 }
 
 var _ catalog.Accessor = (*Collection)(nil)
