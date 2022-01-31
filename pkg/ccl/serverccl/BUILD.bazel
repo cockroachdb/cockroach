@@ -9,12 +9,13 @@ go_library(
 
 go_test(
     name = "serverccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "admin_test.go",
         "main_test.go",
         "role_authentication_test.go",
         "server_sql_test.go",
+        "tenant_decommissioned_host_test.go",
         "tenant_vars_test.go",
     ],
     embed = [":serverccl"],
@@ -24,6 +25,7 @@ go_test(
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/utilccl/licenseccl",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
         "//pkg/security/securitytest",
@@ -33,6 +35,7 @@ go_test(
         "//pkg/sql/distsql",
         "//pkg/sql/tests",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",

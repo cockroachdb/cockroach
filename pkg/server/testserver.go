@@ -716,6 +716,9 @@ func (ts *TestServer) StartTenant(
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
 	}
+	if params.RPCHeartbeatInterval != 0 {
+		baseCfg.RPCHeartbeatInterval = params.RPCHeartbeatInterval
+	}
 	sqlServer, addr, httpAddr, err := StartTenant(
 		ctx,
 		stopper,
