@@ -522,6 +522,10 @@ message IndexDescriptor {
   // require more data being stored in each deleted entry and further complicate
   // the merge process. See #75720 for further details.
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // CreatedAtNanos, if non-zero, represents an approximate time at which the
+  // index was created.
+  optional int64 created_at_nanos = 25 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

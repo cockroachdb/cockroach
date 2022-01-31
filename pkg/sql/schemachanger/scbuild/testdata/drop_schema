@@ -262,7 +262,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1

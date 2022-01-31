@@ -34,7 +34,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -45,7 +45,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -89,7 +89,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -100,7 +100,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -162,7 +162,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -173,7 +173,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -218,7 +218,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -229,7 +229,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -303,7 +303,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -314,7 +314,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -327,7 +327,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 2
@@ -340,7 +340,7 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 2

@@ -13,6 +13,7 @@ package scmutationexec
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -31,6 +32,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
+
+// Clock is used to provide a timestamp to track loosely when something
+// happened. It can be used for things like observability and telemetry and
+// not for anything involving correctness.
+type Clock interface {
+
+	// ApproximateTime provides a present timestamp.
+	ApproximateTime() time.Time
+}
 
 // CatalogReader describes catalog read operations as required by the mutation
 // visitor.
@@ -116,19 +126,21 @@ type MutationVisitorStateUpdater interface {
 
 // NewMutationVisitor creates a new scop.MutationVisitor.
 func NewMutationVisitor(
-	cr CatalogReader, s MutationVisitorStateUpdater, p Partitioner,
+	cr CatalogReader, s MutationVisitorStateUpdater, p Partitioner, clock Clock,
 ) scop.MutationVisitor {
 	return &visitor{
-		cr: cr,
-		s:  s,
-		p:  p,
+		cr:    cr,
+		s:     s,
+		p:     p,
+		clock: clock,
 	}
 }
 
 type visitor struct {
-	cr CatalogReader
-	s  MutationVisitorStateUpdater
-	p  Partitioner
+	clock Clock
+	cr    CatalogReader
+	s     MutationVisitorStateUpdater
+	p     Partitioner
 }
 
 func (m *visitor) RemoveJobReference(ctx context.Context, reference scop.RemoveJobReference) error {

@@ -1426,6 +1426,10 @@ message TableIndexStatsResponse {
     // create_statement is the SQL statement that would re-create the
     // current index if executed.
     string create_statement = 4;
+    // CreatedAt is an approximate timestamp at which the index was created.
+    // Note that it may not always be populated.
+    google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true];
+
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
