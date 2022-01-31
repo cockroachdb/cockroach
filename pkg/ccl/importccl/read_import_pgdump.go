@@ -321,6 +321,7 @@ func createPostgresSequences(
 		}
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
+			nil, /* planner */
 			schemaAndTableName.table,
 			seq.Options,
 			parentID,
@@ -329,7 +330,6 @@ func createPostgresSequences(
 			hlc.Timestamp{WallTime: walltime},
 			descpb.NewBasePrivilegeDescriptor(owner),
 			tree.PersistencePermanent,
-			nil, /* params */
 			// If this is multi-region, this will get added by WriteDescriptors.
 			false, /* isMultiRegion */
 		)
@@ -874,11 +874,11 @@ func readPostgresStmt(
 		for _, name := range names {
 			tableName := name.ToUnresolvedObjectName().String()
 			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				dbDesc, err := col.MustGetDatabaseDescByID(ctx, txn, parentID)
+				dbDesc, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, parentID)
 				if err != nil {
 					return err
 				}
-				err = col.CheckObjectCollision(
+				err = col.Direct().CheckObjectCollision(
 					ctx,
 					txn,
 					parentID,

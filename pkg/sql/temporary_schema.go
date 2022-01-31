@@ -255,7 +255,7 @@ func cleanupSchemaObjects(
 	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor, len(tbNames))
 	tblNamesByID := make(map[descpb.ID]tree.TableName, len(tbNames))
 	for i, tbName := range tbNames {
-		desc, err := descsCol.MustGetTableDescByID(ctx, txn, tbIDs[i])
+		desc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, tbIDs[i])
 		if err != nil {
 			return err
 		}
@@ -265,11 +265,16 @@ func cleanupSchemaObjects(
 
 		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
 
-		if desc.GetSequenceOpts() != nil {
+		// If a sequence is owned by a table column, it is dropped when the owner
+		// table/column is dropped. So here we want to only drop sequences not
+		// owned.
+		if desc.IsSequence() &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			desc.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
 			sequences = append(sequences, desc.GetID())
 		} else if desc.GetViewQuery() != "" {
 			views = append(views, desc.GetID())
-		} else {
+		} else if !desc.IsSequence() {
 			tables = append(tables, desc.GetID())
 		}
 	}
@@ -308,11 +313,11 @@ func cleanupSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					dTableDesc, err := descsCol.MustGetTableDescByID(ctx, txn, d.ID)
+					dTableDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
+					db, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}

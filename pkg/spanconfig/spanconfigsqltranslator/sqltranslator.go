@@ -230,7 +230,6 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, err
 	}
 	spanConfig := zoneConfig.AsSpanConfig()
-
 	var entries []roachpb.SpanConfigEntry
 	for _, span := range spans {
 		entries = append(entries, roachpb.SpanConfigEntry{
@@ -260,9 +259,18 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		return nil, err
 	}
 
+	isSystemDesc := catalog.IsSystemDescriptor(desc)
 	tableStartKey := s.codec.TablePrefix(uint32(desc.GetID()))
 	tableEndKey := tableStartKey.PrefixEnd()
 	tableSpanConfig := zone.AsSpanConfig()
+	if isSystemDesc {
+		// We enable rangefeeds for system tables; various internal subsystems
+		// (leveraging system tables) rely on rangefeeds to function.
+		tableSpanConfig.RangefeedEnabled = true
+		// We exclude system tables from strict GC enforcement, it's only really
+		// applicable to user tables.
+		tableSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
+	}
 
 	// Set the ProtectionPolicies on the table's SpanConfig to include protected
 	// timestamps that apply to the table, and its parent database.
@@ -374,6 +382,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// Copy the ProtectionPolicies that apply to the table's SpanConfig onto its
 		// SubzoneSpanConfig.
 		subzoneSpanConfig.GCPolicy.ProtectionPolicies = tableSpanConfig.GCPolicy.ProtectionPolicies[:]
+		if isSystemDesc { // same as above
+			subzoneSpanConfig.RangefeedEnabled = true
+			subzoneSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
+		}
 		entries = append(entries,
 			roachpb.SpanConfigEntry{
 				Span:   roachpb.Span{Key: span.Key, EndKey: span.EndKey},
@@ -550,16 +562,15 @@ func (s *SQLTranslator) maybeGeneratePseudoTableEntries(
 		//      emulate. As for what config to apply over said range -- we do as
 		//      the system config span does, applying the config for the system
 		//      database.
+		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
+		if err != nil {
+			return nil, err
+		}
+		tableSpanConfig := zone.AsSpanConfig()
 		var entries []roachpb.SpanConfigEntry
 		for _, pseudoTableID := range keys.PseudoTableIDs {
-			zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
-			if err != nil {
-				return nil, err
-			}
-
 			tableStartKey := s.codec.TablePrefix(pseudoTableID)
 			tableEndKey := tableStartKey.PrefixEnd()
-			tableSpanConfig := zone.AsSpanConfig()
 			entries = append(entries, roachpb.SpanConfigEntry{
 				Span: roachpb.Span{
 					Key:    tableStartKey,

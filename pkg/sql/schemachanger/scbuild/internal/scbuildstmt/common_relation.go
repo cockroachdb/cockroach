@@ -149,6 +149,7 @@ func decomposeExprToElements(
 		panic(err)
 	}
 	tree.WalkExpr(visitor, expr)
+	processedTypes := make(map[descpb.ID]struct{})
 	for oid := range visitor.OIDs {
 		baseTypeID, err := typedesc.UserDefinedTypeOIDToID(oid)
 		onErrPanic(err)
@@ -156,6 +157,13 @@ func decomposeExprToElements(
 		typeClosure, err := baseTypeDesc.GetIDClosure()
 		onErrPanic(err)
 		for typeID := range typeClosure {
+			// If a type reference has been processed via
+			// the type closure, then we don't need to generate
+			// another one here.
+			if _, ok := processedTypes[typeID]; ok {
+				continue
+			}
+			processedTypes[typeID] = struct{}{}
 			var typeRef scpb.Element
 			switch exprType {
 			case exprTypeDefault:

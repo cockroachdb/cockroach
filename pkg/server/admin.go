@@ -22,9 +22,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -71,6 +72,8 @@ const (
 	// administrative interface to the cockroach cluster.
 	adminPrefix = "/_admin/v1/"
 
+	adminHealth = adminPrefix + "health"
+
 	// defaultAPIEventLimit is the default maximum number of events returned by any
 	// endpoints returning events.
 	defaultAPIEventLimit = 1000
@@ -111,9 +114,11 @@ var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEW
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
-func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
+func newAdminServer(
+	s *Server, adminAuthzCheck *adminPrivilegeChecker, ie *sql.InternalExecutor,
+) *adminServer {
 	server := &adminServer{
-		adminPrivilegeChecker: &adminPrivilegeChecker{ie: ie},
+		adminPrivilegeChecker: adminAuthzCheck,
 		internalExecutor:      ie,
 		server:                s,
 	}
@@ -175,7 +180,7 @@ func (s *adminServer) RegisterGateway(
 // serverError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func (s *adminServer) serverError(err error) error {
-	log.ErrorfDepth(context.TODO(), 1, "%s", err)
+	log.ErrorfDepth(context.TODO(), 1, "%+s", err)
 	return errAdminAPIError
 }
 
@@ -1858,7 +1863,7 @@ func (s *adminServer) Jobs(
               when ` + retryRevertingCondition + ` then 'retry-reverting' 
               else status
             end as status, running_status, created, started, finished, modified, fraction_completed,
-            high_water_timestamp, error, last_run, next_run, num_runs
+            high_water_timestamp, error, last_run, next_run, num_runs, execution_events::string::bytes
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1921,6 +1926,7 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	var fractionCompletedOrNil *float32
 	var highwaterOrNil *apd.Decimal
 	var runningStatusOrNil *string
+	var executionFailures []byte
 	if err := scanner.ScanAll(
 		row,
 		&job.ID,
@@ -1941,8 +1947,9 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 		&job.LastRun,
 		&job.NextRun,
 		&job.NumRuns,
+		&executionFailures,
 	); err != nil {
-		return err
+		return errors.Wrap(err, "scan")
 	}
 	if highwaterOrNil != nil {
 		highwaterTimestamp, err := tree.DecimalToHLC(highwaterOrNil)
@@ -1958,6 +1965,23 @@ func scanRowIntoJob(scanner resultScanner, row tree.Datums, job *serverpb.JobRes
 	}
 	if runningStatusOrNil != nil {
 		job.RunningStatus = *runningStatusOrNil
+	}
+	{
+		failures, err := jobs.ParseRetriableExecutionErrorLogFromJSON(executionFailures)
+		if err != nil {
+			return errors.Wrap(err, "parse")
+		}
+		job.ExecutionFailures = make([]*serverpb.JobResponse_ExecutionFailure, len(failures))
+		for i, f := range failures {
+			start := time.UnixMicro(f.ExecutionStartMicros)
+			end := time.UnixMicro(f.ExecutionEndMicros)
+			job.ExecutionFailures[i] = &serverpb.JobResponse_ExecutionFailure{
+				Status: f.Status,
+				Start:  &start,
+				End:    &end,
+				Error:  f.TruncatedError,
+			}
+		}
 	}
 	return nil
 }

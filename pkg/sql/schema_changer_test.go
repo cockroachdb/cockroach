@@ -1387,8 +1387,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*lease.Manager)
 		var version descpb.DescriptorVersion
-		if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			tbl, err := col.MustGetTableDescByID(ctx, txn, tableDesc.GetID())
+
+		// Use a timeout shorter than the lease duration to ensure that we aren't
+		// just waiting for the lease to expire.
+		timeoutCtx, cancel := context.WithTimeout(ctx, base.DefaultDescriptorLeaseDuration/2)
+		defer cancel()
+		if err := sql.TestingDescsTxn(timeoutCtx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+			tbl, err := col.Direct().MustGetTableDescByID(ctx, txn, tableDesc.GetID())
 			if err != nil {
 				return err
 			}
@@ -1402,6 +1407,15 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 				return err
 			}
 			version = table.GetVersion()
+
+			// Here we don't want to actually wait for the backfill to drop its lease.
+			// To avoid that, we hack the machinery which tries oh so hard to make it
+			// impossible to avoid, by calling the ReleaseAll method on the
+			// collection to reset its state. In practice, this machinery exists only
+			// for the lower-level usages in the connExecutor and probably ought not
+			// to exist on the object passed to descs.Txn, but, we have it, and it's
+			// effective, so, let's use it.
+			defer col.ReleaseAll(ctx)
 			return txn.Run(ctx, ba)
 		}); err != nil {
 			t.Error(err)
@@ -1409,11 +1423,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 		// Grab a lease at the latest version so that we are confident
 		// that all future leases will be taken at the latest version.
-		table, err := leaseMgr.TestingAcquireAndAssertMinVersion(ctx, s.Clock().Now(), id, version)
+		table, err := leaseMgr.TestingAcquireAndAssertMinVersion(timeoutCtx, s.Clock().Now(), id, version)
 		if err != nil {
 			t.Error(err)
 		}
-		table.Release(ctx)
+		table.Release(timeoutCtx)
 	}
 
 	// Bulk insert.

@@ -1,7 +1,7 @@
 bazel test --test_env=GOTRACEBACK=all --test_output errors //pkg/sql/logictest:logictest_test --test_filter TestLogic///
 ----
 
-bazel test --test_env=GOTRACEBACK=all --test_output errors //pkg/ccl/logictestccl:logictestccl_test --test_filter TestCCLLogic///
+bazel test --test_env=GOTRACEBACK=all --test_output errors //pkg/ccl/logictestccl:logictestccl_test --test_filter 'Test(CCL|Tenant)Logic///'
 ----
 
 bazel test --test_env=GOTRACEBACK=all --test_output errors //pkg/sql/opt/exec/execbuilder:execbuilder_test --test_filter TestExecBuild///

@@ -187,7 +187,7 @@ func TestGrantOptionMigration(t *testing.T) {
 
 			err = sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				// Avoid running validation on the descriptors.
-				cat, err := col.GetCatalogUnvalidated(ctx, txn)
+				cat, err := col.Direct().GetCatalogUnvalidated(ctx, txn)
 				if err != nil {
 					return err
 				}

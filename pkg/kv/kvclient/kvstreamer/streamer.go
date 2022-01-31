@@ -142,12 +142,7 @@ func (r Result) Release(ctx context.Context) {
 	}
 }
 
-// Streamer provides a streaming oriented API for reading from the KV layer. At
-// the moment the Streamer only works when SQL rows are comprised of a single KV
-// (i.e. a single column family).
-// TODO(yuzefovich): lift the restriction on a single column family once KV is
-// updated so that rows are never split across different BatchResponses when
-// TargetBytes limitBytes is exceeded.
+// Streamer provides a streaming oriented API for reading from the KV layer.
 //
 // The example usage is roughly as follows:
 //
@@ -207,9 +202,10 @@ type Streamer struct {
 	distSender *kvcoord.DistSender
 	stopper    *stop.Stopper
 
-	mode   OperationMode
-	hints  Hints
-	budget *budget
+	mode          OperationMode
+	hints         Hints
+	maxKeysPerRow int32
+	budget        *budget
 
 	coordinator          workerCoordinator
 	coordinatorStarted   bool
@@ -353,7 +349,10 @@ func NewStreamer(
 // Hints can be used to hint the aggressiveness of the caching policy. In
 // particular, it can be used to disable caching when the client knows that all
 // looked-up keys are unique (e.g. in the case of an index-join).
-func (s *Streamer) Init(mode OperationMode, hints Hints) {
+//
+// maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
+// SQL row (i.e. the number of column families in the index being scanned).
+func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
 	if mode != OutOfOrder {
 		panic(errors.AssertionFailedf("only OutOfOrder mode is supported"))
 	}
@@ -362,6 +361,7 @@ func (s *Streamer) Init(mode OperationMode, hints Hints) {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
 	}
 	s.hints = hints
+	s.maxKeysPerRow = int32(maxKeysPerRow)
 	s.waitForResults = make(chan struct{}, 1)
 }
 
@@ -400,7 +400,14 @@ func (s *Streamer) Enqueue(
 		var coordinatorCtx context.Context
 		coordinatorCtx, s.coordinatorCtxCancel = context.WithCancel(ctx)
 		s.waitGroup.Add(1)
-		if err := s.stopper.RunAsyncTask(coordinatorCtx, "streamer-coordinator", s.coordinator.mainLoop); err != nil {
+		if err := s.stopper.RunAsyncTaskEx(
+			coordinatorCtx,
+			stop.TaskOpts{
+				TaskName: "streamer-coordinator",
+				SpanOpt:  stop.ChildSpan,
+			},
+			s.coordinator.mainLoop,
+		); err != nil {
 			// The new goroutine wasn't spun up, so mainLoop won't get executed
 			// and we have to decrement the wait group ourselves.
 			s.waitGroup.Done()
@@ -760,6 +767,18 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			}
 		}
 
+		// At the moment, we're using a simple average which is suboptimal
+		// because it is not reactive enough to larger responses coming back
+		// later. As a result, we can have a degenerate behavior where many
+		// requests end up coming back empty. Furthermore, at the moment we're
+		// not incorporating the response size information from those empty
+		// requests.
+		//
+		// In order to work around this we'll just use a larger estimate for
+		// each response for now.
+		// TODO(yuzefovich): improve this.
+		avgResponseSize = 2 * avgResponseSize
+
 		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
 		if shouldExit {
 			return
@@ -999,6 +1018,7 @@ func (w *workerCoordinator) performRequestAsync(
 		ctx,
 		stop.TaskOpts{
 			TaskName:   "streamer-lookup-async",
+			SpanOpt:    stop.ChildSpan,
 			Sem:        w.asyncSem,
 			WaitForSem: true,
 		},
@@ -1008,6 +1028,7 @@ func (w *workerCoordinator) performRequestAsync(
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
 			ba.Header.AllowEmpty = !headOfLine
+			ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
 			// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 			// applicable (#67885).
 			ba.AdmissionHeader = w.requestAdmissionHeader

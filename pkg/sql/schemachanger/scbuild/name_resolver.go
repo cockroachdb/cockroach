@@ -12,10 +12,12 @@ package scbuild
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -95,8 +97,8 @@ func (b buildCtx) ResolveType(
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(
 			pgcode.DependentObjectsStillExist,
-			"cannot drop type %q because table %q requires it",
-			typ.GetName(), typ.GetName()))
+			"cannot modify table record type %q",
+			typ.GetName()))
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
@@ -114,8 +116,42 @@ func (b buildCtx) ResolveRelation(
 		}
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
-	if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
-		panic(err)
+	if rel.IsVirtualTable() {
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
+	}
+	// If we own the schema then we can manipulate the underlying relation.
+	_, schema := b.CatalogReader().MayResolveSchema(b, prefix.NamePrefix())
+	isOwner := false
+	if schema.GetName() != catconstants.PublicSchemaName &&
+		schema.SchemaKind() != catalog.SchemaPublic &&
+		schema.SchemaKind() != catalog.SchemaVirtual &&
+		schema.SchemaKind() != catalog.SchemaTemporary {
+		var err error
+		isOwner, err = b.AuthorizationAccessor().HasOwnership(b, schema)
+		if err != nil {
+			panic(err)
+		}
+	}
+	if !isOwner {
+		if err := b.AuthorizationAccessor().CheckPrivilege(b, rel, p.RequiredPrivilege); err != nil {
+			if p.RequiredPrivilege == privilege.CREATE {
+				relationType := "table"
+				if rel.IsView() {
+					relationType = "view"
+				} else if rel.IsSequence() {
+					relationType = "sequence"
+				}
+				panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+					"must be owner of %s %s or have %s privilege on %s %s",
+					relationType,
+					tree.Name(rel.GetName()),
+					p.RequiredPrivilege,
+					relationType,
+					tree.Name(rel.GetName())))
+			}
+			panic(err)
+		}
 	}
 	return prefix, rel
 }

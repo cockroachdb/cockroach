@@ -124,7 +124,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
+		dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -288,7 +288,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
 	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		dbDesc, err = col.MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
+		dbDesc, err = col.Direct().MustGetDatabaseDescByID(ctx, txn, tbDesc.GetParentID())
 		return err
 	}))
 
@@ -859,7 +859,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
 	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		tbl, err := col.MustGetTableDescByID(ctx, txn, tableDesc.ID)
+		tbl, err := col.Direct().MustGetTableDescByID(ctx, txn, tableDesc.ID)
 		if err != nil {
 			return err
 		}

@@ -163,9 +163,12 @@ func (p *planner) CheckPrivilege(
 // grant options for. Owners implicitly have all grant options, and also grant
 // options are inherited from parent roles.
 func (p *planner) CheckGrantOptionsForUser(
-	ctx context.Context, descriptor catalog.Descriptor, privList privilege.List, isGrant bool,
+	ctx context.Context,
+	descriptor catalog.Descriptor,
+	privList privilege.List,
+	user security.SQLUsername,
+	isGrant bool,
 ) error {
-	user := p.User()
 	// Always allow the command to go through if performed by a superuser or the
 	// owner of the object
 	if isAdmin, err := p.UserHasAdminRole(ctx, user); err != nil {
@@ -218,7 +221,7 @@ func getOwnerOfDesc(desc catalog.Descriptor) security.SQLUsername {
 	return owner
 }
 
-//IsOwner returns if the role has ownership on the descriptor.
+// IsOwner returns if the role has ownership on the descriptor.
 func IsOwner(desc catalog.Descriptor, role security.SQLUsername) bool {
 	return role == getOwnerOfDesc(desc)
 }
@@ -345,7 +348,7 @@ func (p *planner) RequireAdminRole(ctx context.Context, action string) error {
 		return err
 	}
 	if !ok {
-		//raise error if user is not a super-user
+		// raise error if user is not a super-user
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with the admin role are allowed to %s", action)
 	}

@@ -275,7 +275,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 			return err
 		}
 		for seqID := range sequenceIDs {
-			seqDesc, err := descsCol.MustGetTableDescByID(ctx, txn, seqID)
+			seqDesc, err := descsCol.Direct().MustGetTableDescByID(ctx, txn, seqID)
 			if err != nil {
 				return err
 			}

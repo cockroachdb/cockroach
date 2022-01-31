@@ -62,4 +62,7 @@ const (
 	RegrAvgy                = AggregatorSpec_REGR_AVGY
 	TransitionRegrAggregate = AggregatorSpec_TRANSITION_REGRESSION_AGGREGATE
 	FinalCovarPop           = AggregatorSpec_FINAL_COVAR_POP
+	FinalRegrSxx            = AggregatorSpec_FINAL_REGR_SXX
+	FinalRegrSxy            = AggregatorSpec_FINAL_REGR_SXY
+	FinalRegrSyy            = AggregatorSpec_FINAL_REGR_SYY
 )

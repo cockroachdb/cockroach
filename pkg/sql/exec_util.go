@@ -1845,6 +1845,11 @@ type SessionArgs struct {
 	// client.
 	RemoteAddr            net.Addr
 	ConnResultsBufferSize int64
+	// SessionRevivalToken may contain a token generated from a different session
+	// that can be used to authenticate this session. If it is set, all other
+	// authentication is skipped. Once the token is used to authenticate, this
+	// value should be zeroed out.
+	SessionRevivalToken []byte
 }
 
 // SessionRegistry stores a set of all sessions on this node.

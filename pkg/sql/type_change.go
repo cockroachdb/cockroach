@@ -198,7 +198,7 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
 	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		typeDesc, err = col.MustGetTypeDescByID(ctx, txn, t.typeID)
+		typeDesc, err = col.Direct().MustGetTypeDescByID(ctx, txn, t.typeID)
 		return err
 	}); err != nil {
 		return nil, err

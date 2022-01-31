@@ -138,7 +138,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		case n.replace:
 			// If we are replacing an existing view see if what we are
 			// replacing is actually a view.
-			id, err := params.p.Descriptors().LookupObjectID(
+			id, err := params.p.Descriptors().Direct().LookupObjectID(
 				params.ctx,
 				params.p.txn,
 				n.dbDesc.GetID(),

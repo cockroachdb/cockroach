@@ -91,7 +91,8 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 		switch t := ru.GetInner().(type) {
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
-				ts.Backward(t.StartTime)
+				// NB: StartTime.Next() because StartTime is exclusive.
+				ts.Backward(t.StartTime.Next())
 			}
 		case *RevertRangeRequest:
 			// This method is only used to check GC Threshold so Revert requests that
@@ -99,6 +100,30 @@ func (ba BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 			if !t.IgnoreGcThreshold {
 				ts.Backward(t.TargetTime)
 			}
+		case *RefreshRequest:
+			// A Refresh request needs to observe all MVCC versions between its
+			// exclusive RefreshFrom time and its inclusive RefreshTo time. If it were
+			// to permit MVCC GC between these times then it could miss conflicts that
+			// should cause the refresh to fail. This could in turn lead to violations
+			// of serializability. For example:
+			//
+			//  txn1 reads value k1@10
+			//  txn2 deletes (tombstones) k1@15
+			//  mvcc gc @ 20 clears versions k1@10 and k1@15
+			//  txn1 refreshes @ 25, sees no value between (10, 25], refresh successful
+			//
+			// In the example, the refresh erroneously succeeds because the request is
+			// permitted to evaluate after part of the MVCC history it needs to read
+			// has been GCed. By considering the RefreshFrom time to be the earliest
+			// active timestamp of the request, we avoid this hazard. Instead of being
+			// allowed to evaluate, the refresh request in the example would have hit
+			// a BatchTimestampBeforeGCError.
+			//
+			// NB: RefreshFrom.Next() because RefreshFrom is exclusive.
+			ts.Backward(t.RefreshFrom.Next())
+		case *RefreshRangeRequest:
+			// The same requirement applies to RefreshRange request.
+			ts.Backward(t.RefreshFrom.Next())
 		}
 	}
 	return ts

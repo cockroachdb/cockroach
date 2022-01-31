@@ -507,6 +507,9 @@ type testClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	localities map[int]roachpb.Locality
+	// declarativeSchemaChanger determines if the declarative schema changer
+	// is enabled.
+	declarativeSchemaChanger bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -580,6 +583,13 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
+	},
+	{
+		name:                     "local-declarative-schema",
+		numNodes:                 5,
+		overrideDistSQLMode:      "off",
+		overrideAutoStats:        "false",
+		declarativeSchemaChanger: true,
 	},
 	{
 		name:                "local-vec-off",
@@ -799,6 +809,7 @@ var (
 	defaultConfigName  = "default-configs"
 	defaultConfigNames = []string{
 		"local",
+		"local-declarative-schema",
 		"local-vec-off",
 		"local-spec-planning",
 		"fakedist",
@@ -1661,6 +1672,14 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		); err != nil {
 			t.Fatal(err)
 		}
+
+		if cfg.declarativeSchemaChanger {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'on'",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	if cfg.overrideDistSQLMode != "" {
@@ -1909,6 +1928,21 @@ func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
 	args.TracingDefault = tracing.TracingModeOnDemand
 }
 
+// clusterOptIgnoreStrictGCForTenants corresponds to the
+// ignore-tenant-strict-gc-enforcement directive.
+type clusterOptIgnoreStrictGCForTenants struct{}
+
+var _ clusterOpt = clusterOptIgnoreStrictGCForTenants{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !ok {
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
+	}
+	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
+}
+
 // readClusterOptions looks around the beginning of the file for a line looking like:
 // # cluster-opt: opt1 opt2 ...
 // and parses that line into a set of clusterOpts that need to be applied to the
@@ -1949,6 +1983,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 					res = append(res, clusterOptDisableSpanConfigs{})
 				case "tracing-off":
 					res = append(res, clusterOptTracingOff{})
+				case "ignore-tenant-strict-gc-enforcement":
+					res = append(res, clusterOptIgnoreStrictGCForTenants{})
 				default:
 					t.Fatalf("unrecognized cluster option: %s", opt)
 				}

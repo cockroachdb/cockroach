@@ -42,6 +42,7 @@ type BuildCtx interface {
 	NameResolver
 	TargetEnqueuerAndChecker
 	TableElementIDGenerator
+	SchemaFeatureChecker
 
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
 	// BuildCtx return type.
@@ -68,6 +69,8 @@ type Dependencies interface {
 	Statements() []string
 
 	AstFormatter() AstFormatter
+
+	FeatureChecker() SchemaFeatureChecker
 }
 
 // CatalogReader should implement descriptor resolution, namespace lookups, and
@@ -100,6 +103,12 @@ type CatalogReader interface {
 
 	// MustReadDescriptor looks up a descriptor by ID.
 	MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor
+
+	// MustGetSchemasForDatabase gets schemas associated with
+	// a database.
+	MustGetSchemasForDatabase(
+		ctx context.Context, database catalog.DatabaseDescriptor,
+	) map[descpb.ID]string
 }
 
 // AuthorizationAccessor for checking authorization (e.g. desc privileges).
@@ -289,4 +298,12 @@ type TreeAnnotator interface {
 	// in the AST, which will cause it to skip full namespace resolution
 	// validation.
 	MarkNameAsNonExistent(name *tree.TableName)
+}
+
+// SchemaFeatureChecker checks if a schema change feature is allowed by the
+// database administrator.
+type SchemaFeatureChecker interface {
+	// CheckFeature returns if the feature name specified is allowed or disallowed,
+	// by the database administrator.
+	CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error
 }

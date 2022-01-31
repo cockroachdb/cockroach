@@ -17,7 +17,6 @@ import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 
 // GCPolicy dictates the garbage collection policy to apply over a given span.
-// It parallels the definition found in zonepb/zone.proto.
 message GCPolicy {
   option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
@@ -33,6 +32,11 @@ message GCPolicy {
   // GC TTL. The data it applies over is guaranteed to not be GC-ed provided it
   // wasn't GC-ed before the config applied.
   repeated ProtectionPolicy protection_policies = 2 [(gogoproto.nullable) = false];
+
+  // IgnoreStrictEnforcement is used to selectively opt out of strict GC TTL
+  // enforcement (where requests served at timestamps below the TTL are made to
+  // fail, even if the data exists).
+  bool ignore_strict_enforcement = 3;
 }
 
 // ProtectionPolicy dictates a protection policy against garbage collection that
@@ -156,6 +160,10 @@ message SpanConfig {
   // preferred option to least. The first preference that an existing replica of
   // a range matches will take priority for the lease.
   repeated LeasePreference lease_preferences = 9 [(gogoproto.nullable) = false];
+
+  // RangefeedEnabled determines whether rangefeeds are enabled over the
+  // specific range.
+  bool rangefeed_enabled = 10;
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
@@ -182,9 +190,6 @@ message SystemSpanConfigTarget {
    // TenantID indicates the tenant ID of the logical cluster being targeted.
    // For secondary tenants this field is left unset. For the host we can use
    // this field to protect a specific secondary tenant.
-   //
-   // TODO(arul): Ensure that secondary tenants don't populate this field when
-   // we make use of these in the RPC.
    roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = true];
 }
 
@@ -219,6 +224,18 @@ message GetSpanConfigsResponse {
   repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
 };
 
+// GetSystemSpanConfigsRequest is used to fetch all system span configurations
+// installed by the requesting tenant.
+message GetSystemSpanConfigsRequest {};
+
+// GetSystemSpanConfigsResponse lists out all system span configurations that
+// are installed by the requesting tenant.
+message GetSystemSpanConfigsResponse {
+  // SystemSpanConfigEntries captures the system span configurations that have
+  // been set by the tenant.
+  repeated SystemSpanConfigEntry system_span_config_entries = 1 [(gogoproto.nullable) = false];
+};
+
 // UpdateSpanConfigsRequest is used to update the span configurations over the
 // given spans.
 //
@@ -245,3 +262,20 @@ message UpdateSpanConfigsRequest {
 
 message UpdateSpanConfigsResponse { };
 
+// UpdateSystemSpanConfigsRequest is used to update system span configurations.
+
+// System span config targets being deleted are expected to have been present.
+// Targets are not allowed to be duplicated in the same list or across lists;
+// existing span configs should be updated by including in the upsert list
+// without deleting their targets first.
+message UpdateSystemSpanConfigsRequest {
+  // SystemSpanConfigsToDelete captures the targets of the system span
+  // configurations to delete.
+  repeated SystemSpanConfigTarget to_delete = 1 [(gogoproto.nullable) = false];
+
+  // SystemSpanConfigsToUpsert captures the system span configurations we want
+  // to upsert with.
+  repeated SystemSpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
+};
+
+message UpdateSystemSpanConfigsResponse {};

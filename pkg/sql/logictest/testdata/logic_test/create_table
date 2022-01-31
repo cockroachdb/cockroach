@@ -636,3 +636,79 @@ CREATE TABLE serial_test4 (id SERIAL4, temp string)
 
 statement ok
 CREATE TABLE regression_73648 AS select * from [SHOW CLUSTER QUERIES]
+
+# Test sequence is drop when a owner table/column is dropped
+subtest test_serial_ownership_create_table
+
+statement ok
+SET serial_normalization = sql_sequence;
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY,
+	b SERIAL
+);
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+124       test_serial_b_seq  PUBLIC  123
+123       test_serial        PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name  state  refobjid
+
+statement ok
+CREATE TABLE test_serial (
+	a INT PRIMARY KEY,
+	b SERIAL
+);
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name               state   refobjid
+126       test_serial_b_seq  PUBLIC  125
+125       test_serial        PUBLIC  NULL
+
+statement ok
+ALTER TABLE test_serial DROP COLUMN b;
+
+query ITTT colnames
+SELECT l.table_id, l.name, l.state, r.refobjid
+FROM (
+  SELECT table_id, name, state
+  FROM crdb_internal.tables WHERE name
+  LIKE 'test_serial%' AND state = 'PUBLIC'
+) l
+LEFT JOIN pg_catalog.pg_depend r ON l.table_id = r.objid;
+----
+table_id  name         state   refobjid
+125       test_serial  PUBLIC  NULL
+
+statement ok
+DROP TABLE test_serial;

@@ -684,8 +684,18 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 				if maxRunningFlows == 1 {
 					expRunning, expQueued = expQueued, expRunning
 				}
-				if getNum(db, clusterScope, runningStatus) != expRunning || getNum(db, clusterScope, queuedStatus) != expQueued {
-					t.Fatalf("unexpected output from cluster_distsql_flows on node %d", nodeID+1)
+				gotRunning, gotQueued := getNum(db, clusterScope, runningStatus), getNum(db, clusterScope, queuedStatus)
+				if gotRunning != expRunning {
+					t.Fatalf("unexpected output from cluster_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+				}
+				if maxRunningFlows == 1 {
+					if gotQueued != expQueued {
+						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+					}
+				} else {
+					if gotQueued > expQueued { // it's possible for the query to have already errored out
+						t.Fatalf("unexpected output from cluster_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+					}
 				}
 
 				// Check node level table.
@@ -698,8 +708,18 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 					if maxRunningFlows == 1 {
 						expRunning, expQueued = expQueued, expRunning
 					}
-					if getNum(db, nodeScope, runningStatus) != expRunning || getNum(db, nodeScope, queuedStatus) != expQueued {
-						t.Fatalf("unexpected output from node_distsql_flows on node %d", nodeID+1)
+					gotRunning, gotQueued = getNum(db, nodeScope, runningStatus), getNum(db, nodeScope, queuedStatus)
+					if gotRunning != expRunning {
+						t.Fatalf("unexpected output from node_distsql_flows on node %d (running=%d)", nodeID+1, gotRunning)
+					}
+					if maxRunningFlows == 1 {
+						if gotQueued != expQueued {
+							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+						}
+					} else {
+						if gotQueued > expQueued { // it's possible for the query to have already errored out
+							t.Fatalf("unexpected output from node_distsql_flows on node %d (queued=%d)", nodeID+1, gotQueued)
+						}
 					}
 				}
 			}
