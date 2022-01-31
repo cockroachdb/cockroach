@@ -90,7 +90,8 @@ table_name NOT IN (
 	'cluster_transaction_statistics',
 	'statement_statistics',
 	'transaction_statistics',
-	'tenant_usage_details'
+	'tenant_usage_details',
+  'pg_catalog_table_implemented'
 )
 ORDER BY name ASC`)
 	assert.NoError(t, err)

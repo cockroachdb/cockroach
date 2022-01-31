@@ -602,6 +602,7 @@ node_transaction_statistics            NULL
 node_transactions                      NULL
 node_txn_stats                         NULL
 partitions                             NULL
+pg_catalog_table_implemented           NULL
 predefined_comments                    NULL
 ranges                                 NULL
 ranges_no_leases                       NULL

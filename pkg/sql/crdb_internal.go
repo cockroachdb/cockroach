@@ -157,6 +157,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalDefaultPrivilegesTable:           crdbInternalDefaultPrivilegesTable,
 		catconstants.CrdbInternalActiveRangeFeedsTable:            crdbInternalActiveRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:         crdbInternalTenantUsageDetailsView,
+		catconstants.CrdbInternalPgCatalogTableImplementedTableID: crdbInternalPgCatalogTableImplementedTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -465,6 +466,40 @@ CREATE TABLE crdb_internal.tables (
 					if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
 						return err
 					}
+				}
+			}
+			return nil
+		}
+		return setupGenerator(ctx, worker, stopper)
+	},
+}
+
+var crdbInternalPgCatalogTableImplementedTable = virtualSchemaTable{
+	comment: `table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)`,
+	schema: `
+CREATE TABLE crdb_internal.pg_catalog_table_implemented (
+  name                     STRING NOT NULL,
+  implemented              BOOL
+)`,
+	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		row := make(tree.Datums, 14)
+		worker := func(ctx context.Context, pusher rowPusher) error {
+			addDesc := func(table *virtualDefEntry, dbName tree.Datum, scName string) error {
+				tableDesc := table.desc
+				row = row[:0]
+				row = append(row,
+					tree.NewDString(tableDesc.GetName()),
+					tree.MakeDBool(tree.DBool(table.unimplemented)),
+				)
+				return pusher.pushRow(row...)
+			}
+			vt := p.getVirtualTabler()
+			vSchemas := vt.getSchemas()
+			e := vSchemas["pg_catalog"]
+			for _, tName := range e.orderedDefNames {
+				vTableEntry := e.defs[tName]
+				if err := addDesc(vTableEntry, tree.DNull, "pg_catalog"); err != nil {
+					return err
 				}
 			}
 			return nil

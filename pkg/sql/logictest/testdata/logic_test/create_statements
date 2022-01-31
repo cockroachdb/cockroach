@@ -1114,6 +1114,13 @@ CREATE TABLE crdb_internal.partitions (
    zone_id INT8 NULL,
    subzone_id INT8 NULL
 )  {}  {}
+CREATE TABLE crdb_internal.pg_catalog_table_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  CREATE TABLE crdb_internal.pg_catalog_table_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  {}  {}
 CREATE TABLE crdb_internal.predefined_comments (
    type INT8 NULL,
    object_id INT8 NULL,

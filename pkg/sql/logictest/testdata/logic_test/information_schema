@@ -446,6 +446,7 @@ crdb_internal       node_transaction_statistics
 crdb_internal       node_transactions
 crdb_internal       node_txn_stats
 crdb_internal       partitions
+crdb_internal       pg_catalog_table_implemented
 crdb_internal       predefined_comments
 crdb_internal       ranges
 crdb_internal       ranges_no_leases
@@ -765,6 +766,7 @@ node_transaction_statistics
 node_transactions
 node_txn_stats
 partitions
+pg_catalog_table_implemented
 predefined_comments
 ranges
 ranges_no_leases
@@ -1122,6 +1124,7 @@ system         crdb_internal       node_transaction_statistics            SYSTEM
 system         crdb_internal       node_transactions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_stats                         SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                             SYSTEM VIEW  NO                  1
+system         crdb_internal       pg_catalog_table_implemented           SYSTEM VIEW  NO                  1
 system         crdb_internal       predefined_comments                    SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                       SYSTEM VIEW  NO                  1
@@ -2705,6 +2708,7 @@ NULL     public   system         crdb_internal       node_transaction_statistics
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
+NULL     public   system         crdb_internal       pg_catalog_table_implemented           SELECT          NO            YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES
@@ -3312,6 +3316,7 @@ NULL     public   system         crdb_internal       node_transaction_statistics
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
+NULL     public   system         crdb_internal       pg_catalog_table_implemented           SELECT          NO            YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES
