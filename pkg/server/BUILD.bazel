@@ -23,6 +23,7 @@ go_library(
         "env_sampler.go",
         "grpc_server.go",
         "gzip_response_writer.go",
+        "import_ts.go",
         "index_usage_stats.go",
         "init.go",
         "init_handshake.go",
