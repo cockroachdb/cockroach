@@ -106,11 +106,11 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptors descpb.IDs) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, current []scpb.Status, isNonCancelable bool) error
+	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
@@ -133,19 +133,11 @@ type visitor struct {
 	p  Partitioner
 }
 
-func (m *visitor) RemoveJobReference(ctx context.Context, reference scop.RemoveJobReference) error {
-	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, reference.JobID, 0)
-}
-
-func (m *visitor) AddJobReference(ctx context.Context, reference scop.AddJobReference) error {
-	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, 0, reference.JobID)
-}
-
-func (m *visitor) swapSchemaChangeJobID(
-	ctx context.Context, descID descpb.ID, exp, to jobspb.JobID,
+func (m *visitor) RemoveJobStateFromDescriptor(
+	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
 	{
-		_, err := m.cr.MustReadImmutableDescriptor(ctx, descID)
+		_, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescriptorID)
 
 		// If we're clearing the status, we might have already deleted the
 		// descriptor. Permit that by detecting the prior deletion and
@@ -154,7 +146,7 @@ func (m *visitor) swapSchemaChangeJobID(
 		// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
 		// an operation which has to happen before deleting the descriptor. If that
 		// were the case, this error would become unexpected.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) && to == 0 {
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil
 		}
 		if err != nil {
@@ -162,36 +154,58 @@ func (m *visitor) swapSchemaChangeJobID(
 		}
 	}
 
-	mut, err := m.s.CheckOutDescriptor(ctx, descID)
+	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
-	// TODO(ajwerner): We could leverage this spot to determine whether
-	// there's an outstanding concurrent schema change and bubble up the
-	// relevant error. It's probably better to detect the conflict at
-	// build time when we resolve the descriptor or perhaps immediately
-	// after building by taking a peek at the implied descriptor set so
-	// that this can remain an assertion.
-	if existing := mut.GetDeclarativeSchemaChangeJobID(); existing != exp {
+	if existing := mut.GetDeclarativeSchemaChangeJobID(); existing != op.JobID {
 		return errors.AssertionFailedf(
 			"unexpected schema change job ID %d on table %d, expected %d",
-			existing, descID, exp,
+			existing, op.DescriptorID, op.JobID,
 		)
 	}
-	mut.SetDeclarativeSchemaChangeJobID(to)
+	mut.SetDeclarativeSchemaChangeJobID(jobspb.InvalidJobID)
+	mut.SetDeclarativeSchemaChangeState(nil)
 	return nil
 }
 
-func (m *visitor) CreateDeclarativeSchemaChangerJob(
-	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
+func (m *visitor) SetJobStateOnDescriptor(
+	ctx context.Context, op scop.SetJobStateOnDescriptor,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.JobID, job.TargetState, job.Current)
+	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+
+	// TODO(ajwerner): This check here could be used as a check for a concurrent
+	// attempt to place a schema change job on a descriptor. It might deserve
+	// a special error that is not an assertion if we didn't choose to handle
+	// this at a higher level.
+	expected := op.JobID
+	if op.Initialize {
+		expected = jobspb.InvalidJobID
+	}
+	if existing := mut.GetDeclarativeSchemaChangeJobID(); existing != expected {
+		return errors.AssertionFailedf(
+			"unexpected schema change job ID %d on table %d, expected %d",
+			existing, op.DescriptorID, expected,
+		)
+	}
+	mut.SetDeclarativeSchemaChangeJobID(op.JobID)
+	mut.SetDeclarativeSchemaChangeState(&op.State)
+	return nil
+}
+
+func (m *visitor) CreateSchemaChangerJob(
+	ctx context.Context, job scop.CreateSchemaChangerJob,
+) error {
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.Statements, job.Authorization, job.DescriptorIDs)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(
-	ctx context.Context, progress scop.UpdateSchemaChangerJob,
+	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Current, progress.IsNonCancelable)
+	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {

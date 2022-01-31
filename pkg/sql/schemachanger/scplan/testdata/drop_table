@@ -179,33 +179,45 @@ PreCommitPhase stage 1 of 1 with 22 MutationType ops
     *scop.RemoveRelationDependedOnBy
       DependedOnBy: 59
       TableID: 57
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 54
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 55
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 56
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 57
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 58
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 59
+      Initialize: true
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 54
+      - 55
+      - 56
+      - 57
+      - 58
+      - 59
       JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP TABLE defaultdb.shipments CASCADE
-          redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
-          statementtag: DROP TABLE
+      Statements:
+      - statement: DROP TABLE defaultdb.shipments CASCADE
+        redactedstatement: DROP TABLE ‹defaultdb›.public.‹shipments› CASCADE
+        statementtag: DROP TABLE
 PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
   transitions:
     [[Table:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
@@ -260,22 +272,22 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 58
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 54
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 55
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 56
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 57
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 58
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 59
       JobID: 1
     *scop.UpdateSchemaChangerJob

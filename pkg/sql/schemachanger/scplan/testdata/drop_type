@@ -29,21 +29,25 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
       DescID: 55
     *scop.DrainDescriptorName
       TableID: 55
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 54
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 55
+      Initialize: true
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 54
+      - 55
       JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP TYPE defaultdb.typ
-          redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
-          statementtag: DROP TYPE
+      Statements:
+      - statement: DROP TYPE defaultdb.typ
+        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
     [[Type:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
@@ -77,10 +81,10 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 55
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 54
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 55
       JobID: 1
     *scop.UpdateSchemaChangerJob

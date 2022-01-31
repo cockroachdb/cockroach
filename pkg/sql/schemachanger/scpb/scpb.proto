@@ -81,7 +81,7 @@ message Authorization {
 // corresponding to an individual descriptor. The combination of
 // these messages for all descriptors involved in a schema change produces the
 // current state of the entire schema change.
-message DescriptorTargetsState {
+message DescriptorState {
   // Targets is the set of targets in the schema change belonging to this
   // descriptor.
   repeated Target targets = 1 [(gogoproto.nullable) = false];
@@ -89,6 +89,12 @@ message DescriptorTargetsState {
   // CurrentStatuses is parallel to Targets and stores the current status for
   // those targets.
   repeated Status current_statuses = 4;
+
+  // TargetRanks is parallel to Targets and stores the rank of the target in
+  // the complete schema change. These ranks are used to deterministically
+  // reconstruct the complete TargetState from a collection of DescriptorState
+  // messages.
+  repeated uint32 target_ranks = 5;
 
   // RelevantStatements is the set of statements which are relevant to any of
   // the targets.

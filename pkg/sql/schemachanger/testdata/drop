@@ -23,6 +23,27 @@ create job #1: "schema change job"
 upsert descriptor #54
    database:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
+  +        statement: DROP SCHEMA db.sc
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 1
+  +    targets:
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 54
+  +          schemaId: 56
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -35,6 +56,37 @@ upsert descriptor #54
 upsert descriptor #56
    schema:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc›
+  +        statement: DROP SCHEMA db.sc
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 0
+  +    - 2
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 56
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 56
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 56
      modificationTime: {}
   ...
@@ -47,6 +99,8 @@ upsert descriptor #56
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+commit transaction #2
+begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
 write *eventpb.DropSchema to event log for descriptor #56: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1
@@ -55,6 +109,27 @@ delete schema namespace entry {54 0 sc} -> 56
 upsert descriptor #54
    database:
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP SCHEMA ‹db›.‹sc›
+  -        statement: DROP SCHEMA db.sc
+  -        statementTag: DROP SCHEMA
+  -    targetRanks:
+  -    - 1
+  -    targets:
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 54
+  -          schemaId: 56
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -63,7 +138,7 @@ upsert descriptor #54
   -  version: "3"
   +  version: "4"
 delete descriptor #56
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 setup
@@ -100,6 +175,235 @@ upsert descriptor #58
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  +        statement: DROP TABLE db.sc.t
+  +        statementTag: DROP TABLE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    - 8
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    targets:
+  +    - elementProto:
+  +        table:
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 54
+  +          descriptorId: 58
+  +          name: t
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 58
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 58
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 58
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 58
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: k
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 1
+  +          tableId: 58
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: v
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 2
+  +          tableId: 58
+  +          type:
+  +            family: StringFamily
+  +            oid: 25
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 1
+  +          keyColumnDirection:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 3
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 1
+  +          - 2
+  +          tableId: 58
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t_pkey
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        constraintComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          constraintName: t_pkey
+  +          constraintType: PrimaryKey
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          indexId: 1
+  +          tableId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 58
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -113,6 +417,8 @@ upsert descriptor #58
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+commit transaction #2
+begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
 create job #2: "GC for dropping descriptor 58"
   descriptor IDs: [58]
@@ -124,6 +430,235 @@ upsert descriptor #58
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP TABLE ‹db›.‹sc›.‹t›
+  -        statement: DROP TABLE db.sc.t
+  -        statementTag: DROP TABLE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    - 8
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
+  -    - 17
+  -    targets:
+  -    - elementProto:
+  -        table:
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 54
+  -          descriptorId: 58
+  -          name: t
+  -          schemaId: 57
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 58
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 58
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 58
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 58
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: k
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 1
+  -          tableId: 58
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: v
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 2
+  -          tableId: 58
+  -          type:
+  -            family: StringFamily
+  -            oid: 25
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 1
+  -          keyColumnDirection:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 3
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 1
+  -          - 2
+  -          tableId: 58
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t_pkey
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        constraintComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          constraintName: t_pkey
+  -          constraintType: PrimaryKey
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          indexId: 1
+  -          tableId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 58
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -131,7 +666,7 @@ upsert descriptor #58
      unexposedParentSchemaId: 57
   -  version: "2"
   +  version: "3"
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 test
@@ -152,6 +687,27 @@ delete object namespace entry {54 57 _e} -> 60
 upsert descriptor #54
    database:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 5
+  +    targets:
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 54
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -164,6 +720,40 @@ upsert descriptor #54
 upsert descriptor #57
    schema:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 4
+  +    - 6
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          dependentObjects:
+  +          - 59
+  +          - 60
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 57
      modificationTime: {}
   ...
@@ -176,6 +766,38 @@ upsert descriptor #59
    type:
      arrayTypeId: 60
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 59
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 54
+  +          descriptorId: 59
+  +          name: e
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      enumMembers:
      - logicalRepresentation: a
   ...
@@ -189,6 +811,38 @@ upsert descriptor #60
        family: ArrayFamily
        oid: 100060
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  +        statement: DROP SCHEMA db.sc CASCADE
+  +        statementTag: DROP SCHEMA
+  +    targetRanks:
+  +    - 2
+  +    - 3
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 60
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 54
+  +          descriptorId: 60
+  +          name: _e
+  +          schemaId: 57
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
      id: 60
      kind: ALIAS
   ...
@@ -201,6 +855,8 @@ upsert descriptor #60
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+commit transaction #2
+begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
 write *eventpb.DropSchema to event log for descriptor #57: DROP SCHEMA ‹db›.‹sc› CASCADE
 write *eventpb.DropType to event log for descriptor #60: DROP SCHEMA ‹db›.‹sc› CASCADE
@@ -210,6 +866,27 @@ delete schema namespace entry {54 0 sc} -> 57
 upsert descriptor #54
    database:
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP SCHEMA ‹db›.‹sc› CASCADE
+  -        statement: DROP SCHEMA db.sc CASCADE
+  -        statementTag: DROP SCHEMA
+  -    targetRanks:
+  -    - 5
+  -    targets:
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 54
+  -          schemaId: 57
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -220,7 +897,7 @@ upsert descriptor #54
 delete descriptor #57
 delete descriptor #59
 delete descriptor #60
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 test
@@ -241,6 +918,59 @@ create job #1: "schema change job"
 upsert descriptor #54
    database:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db› CASCADE
+  +        statement: DROP DATABASE db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 1
+  +    - 3
+  +    - 4
+  +    - 5
+  +    targets:
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 54
+  +          schemaId: 55
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        database:
+  +          databaseId: 54
+  +          dependentObjects:
+  +          - 55
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          databaseId: 54
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseRoleSetting:
+  +          databaseId: 54
+  +          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -256,6 +986,37 @@ upsert descriptor #54
 upsert descriptor #55
    schema:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db› CASCADE
+  +        statement: DROP DATABASE db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 0
+  +    - 2
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          schemaId: 55
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 55
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 55
      modificationTime: {}
   ...
@@ -268,6 +1029,8 @@ upsert descriptor #55
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+commit transaction #2
+begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
 create job #2: "GC for dropping descriptors and parent database 54"
   descriptor IDs: []
@@ -279,6 +1042,59 @@ delete schema namespace entry {54 0 public} -> 55
 upsert descriptor #54
    database:
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db› CASCADE
+  -        statement: DROP DATABASE db CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 1
+  -    - 3
+  -    - 4
+  -    - 5
+  -    targets:
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 54
+  -          schemaId: 55
+  -      metadata:
+  -        sourceElementId: 2
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        database:
+  -          databaseId: 54
+  -          dependentObjects:
+  -          - 55
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          databaseId: 54
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseRoleSetting:
+  -          databaseId: 54
+  -          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      id: 54
      modificationTime: {}
   ...
@@ -287,7 +1103,7 @@ upsert descriptor #54
   -  version: "6"
   +  version: "7"
 delete descriptor #55
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase
 
 setup
@@ -369,6 +1185,70 @@ delete object namespace entry {61 63 v5} -> 74
 upsert descriptor #61
    database:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 32
+  +    - 118
+  +    - 120
+  +    - 121
+  +    - 122
+  +    targets:
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 61
+  +          schemaId: 62
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 61
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        database:
+  +          databaseId: 61
+  +          dependentObjects:
+  +          - 62
+  +          - 63
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          databaseId: 61
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseRoleSetting:
+  +          databaseId: 61
+  +          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 61
      modificationTime: {}
   ...
@@ -386,6 +1266,40 @@ upsert descriptor #61
 upsert descriptor #62
    schema:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 31
+  +    - 33
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          dependentObjects:
+  +          - 64
+  +          - 67
+  +          schemaId: 62
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 62
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 62
      modificationTime: {}
   ...
@@ -397,6 +1311,47 @@ upsert descriptor #62
 upsert descriptor #63
    schema:
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 117
+  +    - 119
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          dependentObjects:
+  +          - 65
+  +          - 66
+  +          - 68
+  +          - 69
+  +          - 70
+  +          - 71
+  +          - 72
+  +          - 73
+  +          - 74
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      id: 63
      modificationTime: {}
   ...
@@ -412,9 +1367,113 @@ upsert descriptor #64
   -  dependedOnBy:
   -  - byId: true
   -    columnIds:
-  -    - 3
-  -    id: 67
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+       - 3
+  -    id: 67
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    - 8
+  +    targets:
+  +    - elementProto:
+  +        sequence:
+  +          sequenceId: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 64
+  +          name: sq1
+  +          schemaId: 62
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 64
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 64
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 64
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 64
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 3
+  +          dependedOn: 67
+  +          tableId: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -434,6 +1493,111 @@ upsert descriptor #65
   -    - 3
   -    id: 66
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 34
+  +    - 35
+  +    - 36
+  +    - 37
+  +    - 38
+  +    - 39
+  +    - 40
+  +    - 41
+  +    - 42
+  +    targets:
+  +    - elementProto:
+  +        sequence:
+  +          sequenceId: 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 65
+  +          name: sq1
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 65
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 65
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 65
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 65
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 3
+  +          dependedOn: 66
+  +          tableId: 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -460,6 +1624,303 @@ upsert descriptor #66
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 43
+  +    - 44
+  +    - 45
+  +    - 46
+  +    - 47
+  +    - 48
+  +    - 49
+  +    - 50
+  +    - 51
+  +    - 52
+  +    - 53
+  +    - 54
+  +    - 55
+  +    - 56
+  +    - 57
+  +    - 58
+  +    - 59
+  +    - 60
+  +    - 61
+  +    - 62
+  +    - 63
+  +    - 64
+  +    - 65
+  +    targets:
+  +    - elementProto:
+  +        defaultExpression:
+  +          columnId: 3
+  +          defaultExpr: nextval(65:::REGCLASS)
+  +          tableId: 66
+  +          usesSequenceIDs:
+  +          - 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 66
+  +          name: t1
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 66
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 66
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 66
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 66
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          familyName: primary
+  +          pgAttributeNum: 1
+  +          tableId: 66
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: name
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 2
+  +          tableId: 66
+  +          type:
+  +            family: StringFamily
+  +            oid: 1043
+  +            visibleType: 7
+  +            width: 256
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: val
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          defaultExpr: nextval(65:::REGCLASS)
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 3
+  +          tableId: 66
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +          usesSequenceIds:
+  +          - 65
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 1
+  +          keyColumnDirection:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 2
+  +          - 3
+  +          tableId: 66
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t1_pkey
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        constraintComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          constraintName: t1_pkey
+  +          constraintType: PrimaryKey
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          indexId: 1
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 2
+  +          dependedOn: 68
+  +          tableId: 66
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependedOnBy:
   -  - columnIds:
   -    - 2
@@ -491,6 +1952,292 @@ upsert descriptor #67
      createAsOfTime:
        wallTime: "1"
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 9
+  +    - 10
+  +    - 11
+  +    - 12
+  +    - 13
+  +    - 14
+  +    - 15
+  +    - 16
+  +    - 17
+  +    - 18
+  +    - 19
+  +    - 20
+  +    - 21
+  +    - 22
+  +    - 23
+  +    - 24
+  +    - 25
+  +    - 26
+  +    - 27
+  +    - 28
+  +    - 29
+  +    - 30
+  +    targets:
+  +    - elementProto:
+  +        defaultExpression:
+  +          columnId: 3
+  +          defaultExpr: nextval(64:::REGCLASS)
+  +          tableId: 67
+  +          usesSequenceIDs:
+  +          - 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        table:
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 67
+  +          name: t1
+  +          schemaId: 62
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 67
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 67
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 67
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 67
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          familyName: primary
+  +          pgAttributeNum: 1
+  +          tableId: 67
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: name
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 2
+  +          tableId: 67
+  +          type:
+  +            family: StringFamily
+  +            oid: 1043
+  +            visibleType: 7
+  +            width: 256
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 2
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 3
+  +          name: val
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 3
+  +          defaultExpr: nextval(64:::REGCLASS)
+  +          familyName: primary
+  +          nullable: true
+  +          pgAttributeNum: 3
+  +          tableId: 67
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +          usesSequenceIds:
+  +          - 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 3
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 1
+  +          keyColumnDirection:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 2
+  +          - 3
+  +          tableId: 67
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: t1_pkey
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        constraintComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          constraintName: t1_pkey
+  +          constraintType: PrimaryKey
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          indexId: 1
+  +          tableId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 67
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
   +  dependedOnBy: []
      families:
      - columnIds:
@@ -515,6 +2262,122 @@ upsert descriptor #68
   -  dependsOn:
   -  - 66
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 66
+  +    - 67
+  +    - 68
+  +    - 69
+  +    - 70
+  +    - 71
+  +    - 72
+  +    - 73
+  +    - 74
+  +    - 75
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 68
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 68
+  +          name: v1
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 68
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 68
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 68
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 68
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 68
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 68
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 1
+  +          dependedOn: 69
+  +          tableId: 68
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 1
+  +          dependedOn: 70
+  +          tableId: 68
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      formatVersion: 3
      id: 68
   ...
@@ -541,6 +2404,122 @@ upsert descriptor #69
   -  dependsOn:
   -  - 68
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
+  +    - 80
+  +    - 81
+  +    - 82
+  +    - 83
+  +    - 84
+  +    - 85
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 69
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 69
+  +          name: v2
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 69
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 69
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 69
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 69
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 69
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 69
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 1
+  +          dependedOn: 70
+  +          tableId: 69
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 1
+  +          dependedOn: 71
+  +          tableId: 69
+  +      metadata:
+  +        sourceElementId: 9
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      formatVersion: 3
      id: 69
   ...
@@ -559,6 +2538,100 @@ upsert descriptor #70
   -  - 68
   -  - 69
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 86
+  +    - 87
+  +    - 88
+  +    - 89
+  +    - 90
+  +    - 91
+  +    - 92
+  +    - 93
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 70
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 70
+  +          name: v3
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 70
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 70
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 70
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 70
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 70
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 70
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      formatVersion: 3
      id: 70
   ...
@@ -581,6 +2654,111 @@ upsert descriptor #71
   -  dependsOn:
   -  - 69
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 94
+  +    - 95
+  +    - 96
+  +    - 97
+  +    - 98
+  +    - 99
+  +    - 100
+  +    - 101
+  +    - 102
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 71
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 71
+  +          name: v4
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 71
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 71
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 71
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 71
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 71
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 71
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnID: 1
+  +          dependedOn: 74
+  +          tableId: 71
+  +      metadata:
+  +        sourceElementId: 10
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      formatVersion: 3
      id: 71
   ...
@@ -595,6 +2773,38 @@ upsert descriptor #72
    type:
      arrayTypeId: 73
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 113
+  +    - 114
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 72
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 72
+  +          name: typ
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      enumMembers:
      - logicalRepresentation: a
   ...
@@ -611,6 +2821,38 @@ upsert descriptor #73
        family: ArrayFamily
        oid: 100073
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 115
+  +    - 116
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 73
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 73
+  +          name: _typ
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
      id: 73
      kind: ALIAS
   ...
@@ -629,6 +2871,120 @@ upsert descriptor #74
   -  dependsOn:
   -  - 71
   +  declarativeSchemaChangeJobId: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    relevantStatements:
+  +      "0":
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 103
+  +    - 104
+  +    - 105
+  +    - 106
+  +    - 107
+  +    - 108
+  +    - 109
+  +    - 110
+  +    - 111
+  +    - 112
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 74
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 61
+  +          descriptorId: 74
+  +          name: v5
+  +          schemaId: 63
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 74
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 74
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 74
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        UserPrivileges:
+  +          descriptorId: 74
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 74
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        viewDependsOnType:
+  +          tableId: 74
+  +          typeId: 72
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        viewDependsOnType:
+  +          tableId: 74
+  +          typeId: 73
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 74
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependsOnTypes:
      - 72
   ...
@@ -643,6 +2999,8 @@ upsert descriptor #74
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
+commit transaction #2
+begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
 create job #2: "GC for dropping descriptors 64 67 65 66 68 69 70 71 74 and parent database 61"
   descriptor IDs: [64 67 65 66 68 69 70 71 74]
@@ -656,6 +3014,70 @@ delete schema namespace entry {61 0 sc1} -> 63
 upsert descriptor #61
    database:
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 32
+  -    - 118
+  -    - 120
+  -    - 121
+  -    - 122
+  -    targets:
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 61
+  -          schemaId: 62
+  -      metadata:
+  -        sourceElementId: 2
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 61
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 2
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        database:
+  -          databaseId: 61
+  -          dependentObjects:
+  -          - 62
+  -          - 63
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          databaseId: 61
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseRoleSetting:
+  -          databaseId: 61
+  -          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      id: 61
      modificationTime: {}
   ...
@@ -668,6 +3090,111 @@ upsert descriptor #64
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    - 8
+  -    targets:
+  -    - elementProto:
+  -        sequence:
+  -          sequenceId: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 64
+  -          name: sq1
+  -          schemaId: 62
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 64
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 64
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 64
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 64
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 3
+  -          dependedOn: 67
+  -          tableId: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -680,6 +3207,111 @@ upsert descriptor #65
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 34
+  -    - 35
+  -    - 36
+  -    - 37
+  -    - 38
+  -    - 39
+  -    - 40
+  -    - 41
+  -    - 42
+  -    targets:
+  -    - elementProto:
+  -        sequence:
+  -          sequenceId: 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 65
+  -          name: sq1
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 65
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 65
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 65
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 65
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 3
+  -          dependedOn: 66
+  -          tableId: 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      families:
      - columnIds:
   ...
@@ -692,6 +3324,303 @@ upsert descriptor #66
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 43
+  -    - 44
+  -    - 45
+  -    - 46
+  -    - 47
+  -    - 48
+  -    - 49
+  -    - 50
+  -    - 51
+  -    - 52
+  -    - 53
+  -    - 54
+  -    - 55
+  -    - 56
+  -    - 57
+  -    - 58
+  -    - 59
+  -    - 60
+  -    - 61
+  -    - 62
+  -    - 63
+  -    - 64
+  -    - 65
+  -    targets:
+  -    - elementProto:
+  -        defaultExpression:
+  -          columnId: 3
+  -          defaultExpr: nextval(65:::REGCLASS)
+  -          tableId: 66
+  -          usesSequenceIDs:
+  -          - 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 66
+  -          name: t1
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 66
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 66
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 66
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 66
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          familyName: primary
+  -          pgAttributeNum: 1
+  -          tableId: 66
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: name
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 2
+  -          tableId: 66
+  -          type:
+  -            family: StringFamily
+  -            oid: 1043
+  -            visibleType: 7
+  -            width: 256
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: val
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          defaultExpr: nextval(65:::REGCLASS)
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 3
+  -          tableId: 66
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -          usesSequenceIds:
+  -          - 65
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 1
+  -          keyColumnDirection:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 2
+  -          - 3
+  -          tableId: 66
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t1_pkey
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        constraintComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          constraintName: t1_pkey
+  -          constraintType: PrimaryKey
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          indexId: 1
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 2
+  -          dependedOn: 68
+  -          tableId: 66
+  -      metadata:
+  -        sourceElementId: 6
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      dependedOnBy:
      - {}
   ...
@@ -704,6 +3633,292 @@ upsert descriptor #67
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - VALIDATED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 9
+  -    - 10
+  -    - 11
+  -    - 12
+  -    - 13
+  -    - 14
+  -    - 15
+  -    - 16
+  -    - 17
+  -    - 18
+  -    - 19
+  -    - 20
+  -    - 21
+  -    - 22
+  -    - 23
+  -    - 24
+  -    - 25
+  -    - 26
+  -    - 27
+  -    - 28
+  -    - 29
+  -    - 30
+  -    targets:
+  -    - elementProto:
+  -        defaultExpression:
+  -          columnId: 3
+  -          defaultExpr: nextval(64:::REGCLASS)
+  -          tableId: 67
+  -          usesSequenceIDs:
+  -          - 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        table:
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 67
+  -          name: t1
+  -          schemaId: 62
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 67
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 67
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 67
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 67
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          familyName: primary
+  -          pgAttributeNum: 1
+  -          tableId: 67
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: name
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 2
+  -          tableId: 67
+  -          type:
+  -            family: StringFamily
+  -            oid: 1043
+  -            visibleType: 7
+  -            width: 256
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 2
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 3
+  -          name: val
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 3
+  -          defaultExpr: nextval(64:::REGCLASS)
+  -          familyName: primary
+  -          nullable: true
+  -          pgAttributeNum: 3
+  -          tableId: 67
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -          usesSequenceIds:
+  -          - 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 3
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 1
+  -          keyColumnDirection:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 2
+  -          - 3
+  -          tableId: 67
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: t1_pkey
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        constraintComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          constraintName: t1_pkey
+  -          constraintType: PrimaryKey
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          indexId: 1
+  -          tableId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 67
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      dependedOnBy: []
      families:
   ...
@@ -716,6 +3931,122 @@ upsert descriptor #68
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 66
+  -    - 67
+  -    - 68
+  -    - 69
+  -    - 70
+  -    - 71
+  -    - 72
+  -    - 73
+  -    - 74
+  -    - 75
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 68
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 68
+  -          name: v1
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 68
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 68
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 68
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 68
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 68
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 68
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 1
+  -          dependedOn: 69
+  -          tableId: 68
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 1
+  -          dependedOn: 70
+  -          tableId: 68
+  -      metadata:
+  -        sourceElementId: 8
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      formatVersion: 3
      id: 68
   ...
@@ -729,6 +4060,122 @@ upsert descriptor #69
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
+  -    - 80
+  -    - 81
+  -    - 82
+  -    - 83
+  -    - 84
+  -    - 85
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 69
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 69
+  -          name: v2
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 69
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 69
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 69
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 69
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 69
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 69
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 1
+  -          dependedOn: 70
+  -          tableId: 69
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 1
+  -          dependedOn: 71
+  -          tableId: 69
+  -      metadata:
+  -        sourceElementId: 9
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      formatVersion: 3
      id: 69
   ...
@@ -742,6 +4189,100 @@ upsert descriptor #70
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 86
+  -    - 87
+  -    - 88
+  -    - 89
+  -    - 90
+  -    - 91
+  -    - 92
+  -    - 93
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 70
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 70
+  -          name: v3
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 70
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 70
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 70
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 70
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 70
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 70
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      formatVersion: 3
      id: 70
   ...
@@ -755,6 +4296,111 @@ upsert descriptor #71
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 94
+  -    - 95
+  -    - 96
+  -    - 97
+  -    - 98
+  -    - 99
+  -    - 100
+  -    - 101
+  -    - 102
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 71
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 71
+  -          name: v4
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 71
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 71
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 71
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 71
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 71
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 71
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnID: 1
+  -          dependedOn: 74
+  -          tableId: 71
+  -      metadata:
+  -        sourceElementId: 10
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      formatVersion: 3
      id: 71
   ...
@@ -768,6 +4414,120 @@ upsert descriptor #74
      createAsOfTime:
        wallTime: "1"
   -  declarativeSchemaChangeJobId: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      appName: "\x10�N0\x028\b@\x02`\x01h\x01p\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x01\x01�\x02\x01�\x02��\x01�\x02\x01�\x03\x01�\x03\0\0\0\0\0@�@�\x03\x01�\x03\x01"
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    relevantStatements:
+  -      "0":
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 103
+  -    - 104
+  -    - 105
+  -    - 106
+  -    - 107
+  -    - 108
+  -    - 109
+  -    - 110
+  -    - 111
+  -    - 112
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 74
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 61
+  -          descriptorId: 74
+  -          name: v5
+  -          schemaId: 63
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 74
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 74
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 74
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        UserPrivileges:
+  -          descriptorId: 74
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 74
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        viewDependsOnType:
+  -          tableId: 74
+  -          typeId: 72
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        viewDependsOnType:
+  -          tableId: 74
+  -          typeId: 73
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 74
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
      dependsOnTypes:
      - 72
   ...
@@ -780,5 +4540,5 @@ delete descriptor #62
 delete descriptor #63
 delete descriptor #72
 delete descriptor #73
-commit transaction #2
+commit transaction #3
 # end PostCommitPhase

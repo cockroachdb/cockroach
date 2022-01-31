@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -184,7 +183,6 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
 			progress := *md.Progress
-			progress.GetNewSchemaChange().Current = update.current
 			updateProgress(&progress)
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				setNonCancelable()
@@ -328,7 +326,7 @@ type schemaChangerJobUpdate struct {
 }
 
 func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
-	jobID jobspb.JobID, current []scpb.Status, isNonCancelable bool,
+	jobID jobspb.JobID, isNonCancelable bool,
 ) error {
 	if mvs.schemaChangerJobUpdates == nil {
 		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
@@ -336,7 +334,6 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
 	}
 	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
-		current:         current,
 		isNonCancelable: isNonCancelable,
 	}
 	return nil
@@ -447,29 +444,33 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 }
 
 func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
-	jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status,
+	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptors descpb.IDs,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	stmts := make([]string, len(targetState.Statements))
-	for i, stmt := range targetState.Statements {
-		stmts[i] = stmt.Statement
+	stmtStrs := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		stmtStrs[i] = stmt.Statement
 	}
 	mvs.schemaChangerJob = &jobs.Record{
 		JobID:       jobID,
 		Description: "schema change job", // TODO(ajwerner): use const
-		Statements:  stmts,
-		Username:    security.MakeSQLUsernameFromPreNormalizedString(targetState.Authorization.UserName),
+		Statements:  stmtStrs,
+		Username:    security.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
 		// TODO(ajwerner): It may be better in the future to have the builder be
 		// responsible for determining this set of descriptors. As of the time of
 		// writing, the descriptors to be "locked," descriptors that need schema
 		// change jobs, and descriptors with schema change mutations all coincide.
 		// But there are future schema changes to be implemented in the new schema
 		// changer (e.g., RENAME TABLE) for which this may no longer be true.
-		DescriptorIDs: screl.GetDescIDs(targetState),
-		Details:       jobspb.NewSchemaChangeDetails{TargetState: targetState},
-		Progress:      jobspb.NewSchemaChangeProgress{Current: current},
+		DescriptorIDs: descriptors,
+		Details: jobspb.NewSchemaChangeDetails{
+			Descriptors: descriptors,
+		},
+		Progress: jobspb.NewSchemaChangeProgress{},
+
+		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
 		RunningStatus: "",
 		NonCancelable: false,
 	}

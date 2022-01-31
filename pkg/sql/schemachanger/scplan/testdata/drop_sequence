@@ -28,18 +28,20 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       DescID: 54
     *scop.DrainDescriptorName
       TableID: 54
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 54
+      Initialize: true
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 54
       JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
-          statementtag: DROP SEQUENCE
+      Statements:
+      - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
@@ -58,7 +60,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 54
       JobID: 1
     *scop.UpdateSchemaChangerJob
@@ -119,24 +121,30 @@ PreCommitPhase stage 1 of 1 with 12 MutationType ops
       TableID: 56
     *scop.UpdateRelationDeps
       TableID: 56
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 54
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 55
+      Initialize: true
       JobID: 1
-    *scop.AddJobReference
+    *scop.SetJobStateOnDescriptor
       DescriptorID: 56
+      Initialize: true
       JobID: 1
-    *scop.CreateDeclarativeSchemaChangerJob
+    *scop.CreateSchemaChangerJob
+      Authorization:
+        UserName: root
+      DescriptorIDs:
+      - 54
+      - 55
+      - 56
       JobID: 1
-      TargetState:
-        Authorization:
-          UserName: root
-        Statements:
-        - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-          redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
-          statementtag: DROP SEQUENCE
+      Statements:
+      - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
+        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
   transitions:
     [[Sequence:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
@@ -155,13 +163,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 54
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 54
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 55
       JobID: 1
-    *scop.RemoveJobReference
+    *scop.RemoveJobStateFromDescriptor
       DescriptorID: 56
       JobID: 1
     *scop.UpdateSchemaChangerJob

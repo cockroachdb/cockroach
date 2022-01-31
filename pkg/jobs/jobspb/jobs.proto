@@ -473,11 +473,13 @@ message TypeSchemaChangeProgress {
 // TypeSchemaChangeDetails is the job detail information for the new schema change job.
 message NewSchemaChangeDetails {
 
-  cockroach.sql.schemachanger.scpb.TargetState target_state = 5 [(gogoproto.nullable) = false];
-
   // BackfillProgress stores the progress for index backfills which may
   // be ongoing.
   repeated BackfillProgress backfill_progress = 4 [(gogoproto.nullable) = false];
+
+  repeated uint32 descriptors = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
+
+  reserved 1, 2, 3, 5;
 }
 
 // BackfillProgress is used to track backfill progress in the declarative
@@ -519,10 +521,7 @@ message BackfillProgress {
 
 // NewSchemaChangeProgress is the persisted progress for the new schema change job.
 message NewSchemaChangeProgress {
-
-  // Current tracks the current state of elements in the same order as in the job
-  // details.
-  repeated cockroach.sql.schemachanger.scpb.Status current = 1;
+  reserved 1;
 }
 
 // AutoSpanConfigReconciliationDetails is the job detail information for the

@@ -171,12 +171,8 @@ func MakePlan(t *testing.T, state scpb.CurrentState, phase scop.Phase) scplan.Pl
 	// Remove really long ops details that aren't that important anyway.
 	for _, s := range plan.Stages {
 		for _, o := range s.ExtraOps {
-			if op, ok := o.(*scop.CreateDeclarativeSchemaChangerJob); ok {
-				op.TargetState.Targets = nil
-				op.Current = nil
-			}
-			if op, ok := o.(*scop.UpdateSchemaChangerJob); ok {
-				op.Current = nil
+			if op, ok := o.(*scop.SetJobStateOnDescriptor); ok {
+				op.State = scpb.DescriptorState{}
 			}
 		}
 	}
