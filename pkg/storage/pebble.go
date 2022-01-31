@@ -464,6 +464,8 @@ func DefaultPebbleOptions() *pebble.Options {
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 	}
+	// Used for experimental MVCC range tombstones.
+	opts.Experimental.RangeKeys = new(pebble.RangeKeysArena)
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -976,6 +978,13 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 	return iter
 }
 
+// NewMVCCRangeTombstoneIterator implements the Engine interface.
+func (p *Pebble) NewMVCCRangeTombstoneIterator(
+	opts RangeTombstoneIterOptions,
+) MVCCRangeTombstoneIterator {
+	return newPebbleRangeTombstoneIterator(p.db, opts)
+}
+
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
 	iter := newPebbleIterator(p.db, nil, opts)
@@ -1089,6 +1098,30 @@ func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
 		return err
 	}
 	return batch.Commit(true)
+}
+
+// ExperimentalDeleteMVCCRange implements the Engine interface.
+func (p *Pebble) ExperimentalDeleteMVCCRange(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	value, err := protoutil.Marshal(&enginepb.MVCCRangeValue{
+		Tombstone: &enginepb.MVCCRangeTombstone{},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to marshal MVCC range tombstone %s", rangeKey)
+	}
+	return p.db.Experimental().RangeKeySet(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp), value, pebble.Sync)
+}
+
+// ExperimentalClearMVCCRangeTombstone implements the Engine interface.
+func (p *Pebble) ExperimentalClearMVCCRangeTombstone(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyUnset(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp), pebble.Sync)
 }
 
 // Merge implements the Engine interface.
@@ -1763,6 +1796,13 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	return rv
 }
 
+// NewMVCCRangeTombstoneIterator implements the Engine interface.
+func (p *pebbleReadOnly) NewMVCCRangeTombstoneIterator(
+	opts RangeTombstoneIterOptions,
+) MVCCRangeTombstoneIterator {
+	return newPebbleRangeTombstoneIterator(p.parent.db, opts)
+}
+
 // NewEngineIterator implements the Engine interface.
 func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.closed {
@@ -1862,6 +1902,14 @@ func (p *pebbleReadOnly) ClearMVCCRange(start, end MVCCKey) error {
 }
 
 func (p *pebbleReadOnly) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalDeleteMVCCRange(_ MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalClearMVCCRangeTombstone(_ MVCCRangeKey) error {
 	panic("not implemented")
 }
 
@@ -1990,6 +2038,13 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter = wrapInUnsafeIter(iter)
 	}
 	return iter
+}
+
+// NewMVCCRangeTombstoneIterator implements the Engine interface.
+func (p *pebbleSnapshot) NewMVCCRangeTombstoneIterator(
+	opts RangeTombstoneIterOptions,
+) MVCCRangeTombstoneIterator {
+	return newPebbleRangeTombstoneIterator(p.snapshot, opts)
 }
 
 // NewEngineIterator implements the Reader interface.

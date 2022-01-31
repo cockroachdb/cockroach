@@ -5466,3 +5466,124 @@ func TestWillOverflow(t *testing.T) {
 		}
 	}
 }
+
+func TestMVCCRangeTombstoneIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("b", "c", 3)))
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("e", "g", 3)))
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("d", "f", 5)))
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("d", "f", 2)))
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("a", "m", 4)))
+	require.NoError(t, eng.ExperimentalDeleteMVCCRange(rangeKey("m", "z", 4)))
+
+	testcases := map[string]struct {
+		opts   RangeTombstoneIterOptions
+		expect []MVCCRangeKey
+	}{
+		"all tombstones": {
+			RangeTombstoneIterOptions{},
+			[]MVCCRangeKey{
+				rangeKey("b", "c", 3),
+				rangeKey("d", "f", 5),
+				rangeKey("d", "f", 2),
+				rangeKey("e", "g", 3),
+				rangeKey("a", "z", 4),
+			}},
+		"truncated tombstones": {
+			RangeTombstoneIterOptions{
+				LowerBound: roachpb.Key("c"),
+				UpperBound: roachpb.Key("e"),
+			},
+			[]MVCCRangeKey{
+				rangeKey("d", "e", 5),
+				rangeKey("c", "e", 4),
+				rangeKey("d", "e", 2),
+			}},
+		"truncation between tombstone bounds": {
+			RangeTombstoneIterOptions{
+				LowerBound: roachpb.Key("ccc"),
+				UpperBound: roachpb.Key("eee"),
+			},
+			[]MVCCRangeKey{
+				rangeKey("d", "eee", 5),
+				rangeKey("ccc", "eee", 4),
+				rangeKey("e", "eee", 3),
+				rangeKey("d", "eee", 2),
+			}},
+		"empty interval": {
+			RangeTombstoneIterOptions{
+				LowerBound: roachpb.Key("A"),
+				UpperBound: roachpb.Key("Z"),
+			},
+			nil},
+		"zero-length interval": {
+			RangeTombstoneIterOptions{
+				LowerBound: roachpb.Key("c"),
+				UpperBound: roachpb.Key("c"),
+			},
+			nil},
+		"end after start": {
+			RangeTombstoneIterOptions{
+				LowerBound: roachpb.Key("e"),
+				UpperBound: roachpb.Key("d"),
+			},
+			nil},
+		"min timestamp": {
+			RangeTombstoneIterOptions{
+				MinTimestamp: hlc.Timestamp{Logical: 3},
+			},
+			[]MVCCRangeKey{
+				rangeKey("b", "c", 3),
+				rangeKey("d", "f", 5),
+				rangeKey("e", "g", 3),
+				rangeKey("a", "z", 4),
+			}},
+		"max timestamp": {
+			RangeTombstoneIterOptions{
+				MaxTimestamp: hlc.Timestamp{Logical: 3},
+			},
+			[]MVCCRangeKey{
+				rangeKey("b", "c", 3),
+				rangeKey("d", "f", 2),
+				rangeKey("e", "g", 3),
+			}},
+		"both timestamps": {
+			RangeTombstoneIterOptions{
+				MinTimestamp: hlc.Timestamp{Logical: 3},
+				MaxTimestamp: hlc.Timestamp{Logical: 3},
+			},
+			[]MVCCRangeKey{
+				rangeKey("b", "c", 3),
+				rangeKey("e", "g", 3),
+			}},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			var tombstones []MVCCRangeKey
+			iter := eng.NewMVCCRangeTombstoneIterator(tc.opts)
+			defer iter.Close()
+			for {
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
+				}
+				tombstones = append(tombstones, iter.Key())
+				iter.Next()
+			}
+			require.Equal(t, tc.expect, tombstones)
+		})
+	}
+}
+
+func rangeKey(start, end string, ts int) MVCCRangeKey {
+	return MVCCRangeKey{
+		StartKey:  roachpb.Key(start),
+		EndKey:    roachpb.Key(end),
+		Timestamp: hlc.Timestamp{Logical: int32(ts)},
+	}
+}

@@ -305,3 +305,17 @@ message MVCCLogicalOp {
   MVCCAbortIntentOp  abort_intent  = 5;
   MVCCAbortTxnOp     abort_txn     = 6;
 }
+
+// MVCCRangeValue is a union of all ranged MVCC value types that are stored as
+// Pebble range keys.
+message MVCCRangeValue {
+  // NB: onlyone is ~3x faster than a Protobuf oneof due to fewer allocations.
+  option (gogoproto.onlyone) = true;
+
+  MVCCRangeTombstone tombstone = 1;
+}
+
+// MVCCRangeTombstone represents a range tombstone. It has no contents since it
+// is fully described by the MVCC range key (start,end,timestamp), and is only
+// used to determine the range value type.
+message MVCCRangeTombstone {}

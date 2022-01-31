@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -248,6 +249,13 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 	return rv
 }
 
+// NewMVCCRangeTombstoneIterator implements the Engine interface.
+func (p *pebbleBatch) NewMVCCRangeTombstoneIterator(
+	opts RangeTombstoneIterOptions,
+) MVCCRangeTombstoneIterator {
+	return newPebbleRangeTombstoneIterator(p.db, opts)
+}
+
 // NewEngineIterator implements the Batch interface.
 func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
@@ -411,6 +419,30 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 		}
 	}
 	return nil
+}
+
+// ExperimentalDeleteMVCCRange implements the Batch interface.
+func (p *pebbleBatch) ExperimentalDeleteMVCCRange(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	value, err := protoutil.Marshal(&enginepb.MVCCRangeValue{
+		Tombstone: &enginepb.MVCCRangeTombstone{},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to marshal MVCC range tombstone %s", rangeKey)
+	}
+	return p.batch.Experimental().RangeKeySet(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp), value, nil)
+}
+
+// ExperimentalClearMVCCRangeTombstone implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearMVCCRangeTombstone(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyUnset(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp), nil)
 }
 
 // Merge implements the Batch interface.

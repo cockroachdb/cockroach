@@ -16,9 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFormatMVCCMetadata(t *testing.T) {
@@ -102,6 +104,21 @@ func TestTxnSeqIsIgnored(t *testing.T) {
 		}
 		for _, notIgn := range tc.notIgnored {
 			assert.False(t, enginepb.TxnSeqIsIgnored(notIgn, tc.list))
+		}
+	}
+}
+
+func BenchmarkUnmarshalMVCCRangeValue(b *testing.B) {
+	rv := &enginepb.MVCCRangeValue{Tombstone: &enginepb.MVCCRangeTombstone{}}
+
+	buf, err := protoutil.Marshal(rv)
+	require.NoError(b, err)
+	b.Logf("size=%d", len(buf))
+
+	for i := 0; i < b.N; i++ {
+		err := protoutil.Unmarshal(buf, rv)
+		if err != nil { // for performance
+			require.NoError(b, err)
 		}
 	}
 }
