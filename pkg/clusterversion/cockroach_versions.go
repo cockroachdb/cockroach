@@ -289,6 +289,9 @@ const (
 	// processing.
 	MVCCIndexBackfiller
 
+	// DateStyleIntervalStyleEnabled that rewrites cast that cause inconsistencies
+	// when DateStyle/IntervalStyle is enabled.
+	DateStyleIntervalStyleEnabled
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -460,6 +463,11 @@ var versionsSingleton = keyedVersions{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
+	{
+		Key:     DateStyleIntervalStyleEnabled,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
