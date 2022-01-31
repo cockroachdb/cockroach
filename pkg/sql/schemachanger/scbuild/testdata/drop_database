@@ -393,7 +393,7 @@ DROP DATABASE db1 CASCADE
 - [[PrimaryIndex:{DescID: 59, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -407,7 +407,7 @@ DROP DATABASE db1 CASCADE
 - [[PrimaryIndex:{DescID: 60, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1

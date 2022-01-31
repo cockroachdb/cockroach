@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -168,6 +169,7 @@ func (p *planner) AlterPrimaryKey(
 		EncodingType:      descpb.PrimaryIndexEncoding,
 		Type:              descpb.IndexDescriptor_FORWARD,
 		Version:           descpb.LatestNonPrimaryIndexDescriptorVersion,
+		CreatedAtNanos:    p.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 	}
 
 	// If the new index is requested to be sharded, set up the index descriptor

@@ -16,6 +16,7 @@ import (
 	"go/constant"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/docs"
@@ -2115,6 +2116,17 @@ func NewTableDesc(
 	// See https://github.com/golang/go/issues/23188.
 	if err := desc.AllocateIDs(ctx); err != nil {
 		return nil, err
+	}
+
+	// Note that due to historical reasons, the automatic creation of the primary
+	// index occurs in AllocateIDs. That call does not have access to the current
+	// timestamp to set the created_at timestamp.
+	if desc.IsPhysicalTable() && !catalog.IsSystemDescriptor(&desc) {
+		ts := evalCtx.GetTxnTimestamp(time.Microsecond).UnixNano()
+		_ = catalog.ForEachNonDropIndex(&desc, func(idx catalog.Index) error {
+			idx.IndexDesc().CreatedAtNanos = ts
+			return nil
+		})
 	}
 
 	// Record the types of indexes that the table has.

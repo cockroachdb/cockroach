@@ -161,6 +161,7 @@ upsert descriptor #56
   +  - direction: DROP
        index:
   -      createdExplicitly: true
+  +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
@@ -184,6 +185,7 @@ upsert descriptor #56
   ...
      parentId: 54
      primaryIndex:
+  -    createdAtNanos: "1640995200000000000"
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -237,6 +239,7 @@ upsert descriptor #56
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      createdAtNanos: "1640995200000000000"
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}

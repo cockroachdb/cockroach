@@ -2587,8 +2587,6 @@ CREATE TABLE crdb_internal.table_columns (
 }
 
 // crdbInternalTableIndexesTable exposes the index descriptors.
-//
-// TODO(tbg): prefix with kv_.
 var crdbInternalTableIndexesTable = virtualSchemaTable{
 	comment: "indexes accessible by current user in current database (KV scan)",
 	schema: `
@@ -2600,7 +2598,8 @@ CREATE TABLE crdb_internal.table_indexes (
   index_type       STRING NOT NULL,
   is_unique        BOOL NOT NULL,
   is_inverted      BOOL NOT NULL,
-  is_sharded       BOOL NOT NULL
+  is_sharded       BOOL NOT NULL,
+  created_at       TIMESTAMP
 )
 `,
 	generator: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
@@ -2622,6 +2621,15 @@ CREATE TABLE crdb_internal.table_indexes (
 						if idx.Primary() {
 							idxType = primary
 						}
+						createdAt := tree.DNull
+						if ts := idx.CreatedAt(); !ts.IsZero() {
+							tsDatum, err := tree.MakeDTimestamp(ts, time.Nanosecond)
+							if err != nil {
+								log.Warningf(ctx, "failed to construct timestamp for index: %v", err)
+							} else {
+								createdAt = tsDatum
+							}
+						}
 						row = append(row,
 							tableID,
 							tableName,
@@ -2631,6 +2639,7 @@ CREATE TABLE crdb_internal.table_indexes (
 							tree.MakeDBool(tree.DBool(idx.IsUnique())),
 							tree.MakeDBool(idx.GetType() == descpb.IndexDescriptor_INVERTED),
 							tree.MakeDBool(tree.DBool(idx.IsSharded())),
+							createdAt,
 						)
 						return pusher.pushRow(row...)
 					})

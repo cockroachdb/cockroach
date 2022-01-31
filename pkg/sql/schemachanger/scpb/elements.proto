@@ -90,15 +90,15 @@ message PrimaryIndex {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  bool unique = 3  [(gogoproto.customname) = "Unique"];
+  bool unique = 3;
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
+  repeated Direction key_column_directions = 5;
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
+  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7;
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool inverted = 10  [(gogoproto.customname) = "Inverted"];
-  bool concurrently = 11  [(gogoproto.customname) = "Concurrently"];
+  bool inverted = 10;
+  bool concurrently = 11;
 
   // SourceIndexID refers to the primary index which will be used to
   // to backfill this index.
@@ -114,15 +114,15 @@ message SecondaryIndex {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  bool unique = 3  [(gogoproto.customname) = "Unique"];
+  bool unique = 3;
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
+  repeated Direction key_column_directions = 5;
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
+  cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7;
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool inverted = 10  [(gogoproto.customname) = "Inverted"];
-  bool concurrently = 11  [(gogoproto.customname) = "Concurrently"];
+  bool inverted = 10;
+  bool concurrently = 11;
 
   // SourceIndexID refers to the primary index which will be used to
   // to backfill this index.

@@ -512,6 +512,10 @@ message IndexDescriptor {
   // index backfiller
   // docs/RFCS/20211004_incremental_index_backfiller.md#new-index-encoding-for-deletions-vs-mvcc
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
+
+  // CreatedAtNanos, if non-zero, represents an approximate time at which the
+  // index was created.
+  optional int64 created_at_nanos = 25 [(gogoproto.nullable) = false];
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and

@@ -56,6 +56,7 @@ func NewExecutorDependencies(
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
 	partitioner scmutationexec.Partitioner,
+	clock scmutationexec.Clock,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
 	schemaChangerJobID jobspb.JobID,
@@ -79,6 +80,7 @@ func NewExecutorDependencies(
 		partitioner:             partitioner,
 		user:                    user,
 		sessionData:             sessionData,
+		clock:                   clock,
 	}
 }
 
@@ -314,6 +316,7 @@ func (d *txnDeps) SetResumeSpans(
 type execDeps struct {
 	txnDeps
 	partitioner             scmutationexec.Partitioner
+	clock                   scmutationexec.Clock
 	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
 	backfillTracker         scexec.BackfillTracker
@@ -321,6 +324,10 @@ type execDeps struct {
 	statements              []string
 	user                    security.SQLUsername
 	sessionData             *sessiondata.SessionData
+}
+
+func (d *execDeps) Clock() scmutationexec.Clock {
+	return d.clock
 }
 
 var _ scexec.Dependencies = (*execDeps)(nil)
@@ -438,4 +445,17 @@ func (n noopPeriodicProgressFlusher) StartPeriodicUpdates(
 	ctx context.Context, tracker scexec.BackfillProgressFlusher,
 ) (stop func() error) {
 	return func() error { return nil }
+}
+
+type constantClock struct {
+	ts time.Time
+}
+
+// NewConstantClock constructs a new clock for use in execution.
+func NewConstantClock(ts time.Time) scmutationexec.Clock {
+	return constantClock{ts: ts}
+}
+
+func (c constantClock) ApproximateTime() time.Time {
+	return c.ts
 }

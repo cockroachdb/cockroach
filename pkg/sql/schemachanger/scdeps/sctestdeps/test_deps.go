@@ -13,6 +13,7 @@ package sctestdeps
 import (
 	"context"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -453,6 +454,16 @@ func (s *TestState) descBuilderWithSynthetic(id descpb.ID) catalog.DescriptorBui
 }
 
 var _ scexec.Dependencies = (*TestState)(nil)
+
+// Clock is part of the scexec.Dependencies interface.
+func (s *TestState) Clock() scmutationexec.Clock {
+	return s
+}
+
+// ApproximateTime is part of the scmutationexec.Clock interface.
+func (s *TestState) ApproximateTime() time.Time {
+	return s.approximateTimestamp
+}
 
 // Catalog implements the scexec.Dependencies interface.
 func (s *TestState) Catalog() scexec.Catalog {

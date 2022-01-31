@@ -320,7 +320,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[PrimaryIndex:{DescID: 59, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1

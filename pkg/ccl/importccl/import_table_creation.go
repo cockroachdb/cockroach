@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -168,6 +169,7 @@ func MakeSimpleTableDescriptor(
 		Regions:            makeImportRegionOperator(""),
 		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
 		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
+		TxnTimestamp:       timeutil.Unix(0, walltime),
 		Settings:           st,
 	}
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
