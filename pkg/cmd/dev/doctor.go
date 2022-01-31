@@ -13,6 +13,7 @@ package main
 import (
 	"errors"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -96,6 +97,24 @@ Please perform the following steps:
 					success = false
 				}
 			}
+		}
+	}
+
+	const binDir = "bin"
+	const submodulesMarkerPath = binDir + "/.submodules-initialized"
+	d.log.Println("doctor: running submodules check")
+	if _, err := os.Stat(submodulesMarkerPath); errors.Is(err, os.ErrNotExist) {
+		if _, err = d.exec.CommandContextSilent(ctx, "git", "rev-parse", "--is-inside-work-tree"); err != nil {
+			return err
+		}
+		if _, err = d.exec.CommandContextSilent(ctx, "git", "submodule", "update", "--init", "--recursive"); err != nil {
+			return err
+		}
+		if _, err = d.exec.CommandContextSilent(ctx, "mkdir", "-p", binDir); err != nil {
+			return err
+		}
+		if _, err = d.exec.CommandContextSilent(ctx, "touch", submodulesMarkerPath); err != nil {
+			return err
 		}
 	}
 
