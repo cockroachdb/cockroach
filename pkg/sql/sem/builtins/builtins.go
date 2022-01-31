@@ -4085,6 +4085,9 @@ value if you rely on the HLC for accuracy.`,
 				arr := tree.MustBeDArray(args[0])
 				var aggregatedStats roachpb.StatementStatistics
 				for _, statsDatum := range arr.Array {
+					if statsDatum == tree.DNull {
+						continue
+					}
 					var stats roachpb.StatementStatistics
 					statsJSON := tree.MustBeDJSON(statsDatum).JSON
 					if err := sqlstatsutil.DecodeStmtStatsStatisticsJSON(statsJSON, &stats); err != nil {
@@ -4113,6 +4116,9 @@ value if you rely on the HLC for accuracy.`,
 				arr := tree.MustBeDArray(args[0])
 				var aggregatedStats roachpb.TransactionStatistics
 				for _, statsDatum := range arr.Array {
+					if statsDatum == tree.DNull {
+						continue
+					}
 					var stats roachpb.TransactionStatistics
 					statsJSON := tree.MustBeDJSON(statsDatum).JSON
 					if err := sqlstatsutil.DecodeTxnStatsStatisticsJSON(statsJSON, &stats); err != nil {
