@@ -79,13 +79,11 @@ func makeRowFetcher(
 		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
 	}
 	index := desc.ActiveIndexes()[indexIdx]
-	isSecondaryIndex := !index.Primary()
 
 	tableArgs := row.FetcherTableArgs{
-		Desc:             desc,
-		Index:            index,
-		IsSecondaryIndex: isSecondaryIndex,
-		Columns:          columns,
+		Desc:    desc,
+		Index:   index,
+		Columns: columns,
 	}
 
 	if err := fetcher.Init(
