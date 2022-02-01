@@ -40,6 +40,7 @@ import (
 	"github.com/lib/pq"
 	promapi "github.com/prometheus/client_golang/api"
 	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/stretchr/testify/require"
 )
 
 type tpccSetupType int
@@ -80,6 +81,11 @@ type tpccOptions struct {
 	// also be doing a rolling-restart into the new binary while the cluster
 	// is running, but that feels like jamming too much into the tpcc setup.
 	Start func(context.Context, test.Test, cluster.Cluster)
+	// EnableCircuitBreakers causes the kv.replica_circuit_breaker.slow_replication_threshold
+	// setting to be populated, which enables per-Replica circuit breakers.
+	//
+	// TODO(tbg): remove this once https://github.com/cockroachdb/cockroach/issues/74705 is completed.
+	EnableCircuitBreakers bool
 }
 
 type workloadInstance struct {
@@ -141,6 +147,10 @@ func setupTPCC(
 		opts.Start(ctx, t, c)
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
+		if opts.EnableCircuitBreakers {
+			_, err := db.Exec(`SET CLUSTER SETTING kv.replica_circuit_breaker.slow_replication_threshold = '15s'`)
+			require.NoError(t, err)
+		}
 		WaitFor3XReplication(t, c.Conn(ctx, t.L(), crdbNodes[0]))
 		switch opts.SetupType {
 		case usingExistingData:
@@ -320,9 +330,10 @@ func registerTPCC(r registry.Registry) {
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: headroomWarehouses,
-				Duration:   120 * time.Minute,
-				SetupType:  usingImport,
+				Warehouses:            headroomWarehouses,
+				Duration:              120 * time.Minute,
+				SetupType:             usingImport,
+				EnableCircuitBreakers: true,
 			})
 		},
 	})
