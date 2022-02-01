@@ -231,3 +231,18 @@ query T
 SELECT TIME '05:40:00'::TIMETZ
 ----
 0000-01-01 05:40:00 +0000 UTC
+
+statement error pq: invalid value for parameter "timezone": "'168'": cannot find time zone "168": UTC timezone offset is out of range.
+SET TIME ZONE '168'
+
+statement error pq: invalid value for parameter "timezone": "'-168'": cannot find time zone "-168": UTC timezone offset is out of range.
+SET TIME ZONE '-168'
+
+statement error pq: invalid value for parameter "timezone": "'-0500'": cannot find time zone "-0500": UTC timezone offset is out of range.
+SET TIME ZONE '-0500'
+
+statement error pq: invalid value for parameter "timezone": "'0500'": cannot find time zone "0500": UTC timezone offset is out of range.
+SET TIME ZONE '0500'
+
+statement error pq: invalid value for parameter "timezone": "'-0500'": cannot find time zone "-0500": UTC timezone offset is out of range.
+SET TIME ZONE '-0500'
