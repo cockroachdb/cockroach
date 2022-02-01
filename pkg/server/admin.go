@@ -868,6 +868,31 @@ func (s *adminServer) tableDetailsHelper(
 		resp.CreateTableStatement = createStmt
 	}
 
+	// Marshal SHOW STATISTICS result.
+	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+		ctx, "admin-show-statistics", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s]", escQualTable),
+	)
+	if row == nil {
+		return nil, s.serverErrorf("table statistics response not available.")
+	}
+	if err = s.maybeHandleNotFoundError(err); err != nil {
+		return nil, err
+	}
+	{
+		scanner := makeResultScanner(cols)
+		const createdCol = "created"
+		noTableStats, _ := scanner.IsNull(row, createdCol)
+		if !noTableStats {
+			var createdTs time.Time
+			if err := scanner.Scan(row, createdCol, &createdTs); err != nil {
+				return nil, err
+			}
+			resp.StatsLastCreatedAt = createdTs
+		}
+	}
+
 	// Marshal SHOW ZONE CONFIGURATION result.
 	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-zone-config", nil, /* txn */
@@ -2946,7 +2971,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *time.Time:
 		s, ok := src.(*tree.DTimestamp)
 		if !ok {
-			return errors.Errorf("source type assertion failed")
+			return errors.Errorf("source type assertion failed on *time.Time")
 		}
 		*d = s.Time
 

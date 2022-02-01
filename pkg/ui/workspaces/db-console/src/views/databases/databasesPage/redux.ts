@@ -23,6 +23,7 @@ import {
   refreshDatabaseDetails,
   refreshTableStats,
   refreshNodes,
+  refreshSettings,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { FixLong } from "src/util/fixLong";
@@ -31,6 +32,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
+import { selectAutomaticStatsCollectionEnabled } from "oss/src/redux/clusterSettings";
 
 const { DatabaseDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 
@@ -124,6 +126,7 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   databases: selectDatabases(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   showNodeRegionsColumn: selectIsMoreThanOneNode(state),
+  automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),
 });
 
 export const mapDispatchToProps = {
@@ -137,6 +140,7 @@ export const mapDispatchToProps = {
     return refreshTableStats(new TableStatsRequest({ database, table }));
   },
   refreshNodes,
+  refreshSettings,
   onSortingChange: (
     _tableName: string,
     columnName: string,

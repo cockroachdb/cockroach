@@ -11,6 +11,9 @@
 import React from "react";
 import classnames from "classnames/bind";
 import styles from "./summaryCard.module.scss";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
+import { CircleFilled } from "src/icon";
+import { Tooltip } from "antd";
 
 interface ISummaryCardProps {
   children: React.ReactNode;
@@ -18,6 +21,7 @@ interface ISummaryCardProps {
 }
 
 const cx = classnames.bind(styles);
+const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
 // tslint:disable-next-line: variable-name
 export const SummaryCard: React.FC<ISummaryCardProps> = ({
@@ -31,6 +35,10 @@ interface ISummaryCardItemProps {
   className?: string;
 }
 
+interface ISummaryCardItemBoolSettingProps extends ISummaryCardItemProps {
+  toolTipText: React.ReactNode;
+}
+
 export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ({
   label,
   value,
@@ -41,3 +49,43 @@ export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ({
     <p className={cx("summary--card__item--value")}>{value}</p>
   </div>
 );
+
+export const SummaryCardItemBoolSetting: React.FC<ISummaryCardItemBoolSettingProps> = ({
+  label,
+  value,
+  toolTipText,
+  className,
+}) =>
+  value ? (
+    <div className={cx("summary--card__item", className)}>
+      <h4 className={cx("summary--card__item--label")}>{label}</h4>
+      <p className={cx("summary--card__item--value")}>
+        <CircleFilled
+          className={booleanSettingCx("bool-setting-icon__enabled")}
+        />
+        <Tooltip
+          placement="bottom"
+          title={toolTipText}
+          className={cx("crl-hover-text__dashed-underline")}
+        >
+          Enabled
+        </Tooltip>
+      </p>
+    </div>
+  ) : (
+    <div className={cx("summary--card__item", className)}>
+      <h4 className={cx("summary--card__item--label")}>{label}</h4>
+      <p className={cx("summary--card__item--value")}>
+        <CircleFilled
+          className={booleanSettingCx("bool-setting-icon__disabled")}
+        />
+        <Tooltip
+          placement="bottom"
+          title={toolTipText}
+          className={cx("crl-hover-text__dashed-underline")}
+        >
+          Disabled
+        </Tooltip>
+      </p>
+    </div>
+  );
