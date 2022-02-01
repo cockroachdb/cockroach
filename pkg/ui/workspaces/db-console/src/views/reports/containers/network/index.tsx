@@ -468,6 +468,7 @@ export class Network extends React.Component<NetworkProps, INetworkState> {
         <h3 className="base-heading">Network Diagnostics</h3>
         <Loading
           loading={!contentAvailable(nodesSummary)}
+          page={"network"}
           error={this.props.nodeSummaryErrors}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           render={() => (

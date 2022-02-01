@@ -23,6 +23,7 @@ import { Anchor } from "../anchor";
 
 interface LoadingProps {
   loading: boolean;
+  page: string;
   error?: Error | Error[] | null;
   className?: string;
   image?: string;
@@ -65,6 +66,7 @@ export const Loading: React.FC<LoadingProps> = props => {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (errors) {
+    console.error(`Error Loading ${props.page}: ${errors}`);
     // - map Error to InlineAlert props. RestrictedPermissions handled as "info" message;
     // - group errors by intend to show separate alerts per intent.
     const errorAlerts = chain(errors)

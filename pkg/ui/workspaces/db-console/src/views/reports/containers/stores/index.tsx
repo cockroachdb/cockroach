@@ -115,6 +115,7 @@ export class Stores extends React.Component<StoresProps, {}> {
         <h2 className="base-heading">{header} stores</h2>
         <Loading
           loading={this.props.loading}
+          page={"containers stores"}
           error={this.props.lastError}
           render={this.renderContent}
         />

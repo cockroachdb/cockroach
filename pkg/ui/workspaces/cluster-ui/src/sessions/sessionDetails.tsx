@@ -206,6 +206,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
         >
           <Loading
             loading={_.isNil(this.props.session)}
+            page={"sessions details"}
             error={this.props.sessionError}
             render={this.renderContent}
             renderError={() =>
