@@ -545,6 +545,9 @@ func NewTracer() *Tracer {
 				tracer: t,
 			}
 			sp.i.crdb = c
+			// The spanID doesn't change across span reuses, so we allocate it here
+			// and not in Span.reset().
+			sp.i.crdb.spanID = tracingpb.SpanID(randutil.FastInt63())
 			return h
 		},
 	}
@@ -885,7 +888,6 @@ type spanAllocHelper struct {
 //+(...) must be called on the returned span before further use.
 func (t *Tracer) newSpan(
 	traceID tracingpb.TraceID,
-	spanID tracingpb.SpanID,
 	operation string,
 	goroutineID uint64,
 	startTime time.Time,
@@ -900,7 +902,7 @@ func (t *Tracer) newSpan(
 	}
 	h := t.spanPool.Get().(*spanAllocHelper)
 	h.span.reset(
-		traceID, spanID, operation, goroutineID,
+		traceID, operation, goroutineID,
 		startTime, logTags, kind,
 		otelSpan, netTr, sterile)
 	return &h.span
@@ -1103,10 +1105,9 @@ child operation: %s, tracer created at:
 	if traceID == 0 {
 		traceID = tracingpb.TraceID(randutil.FastInt63())
 	}
-	spanID := tracingpb.SpanID(randutil.FastInt63())
 
 	s := t.newSpan(
-		traceID, spanID, opName, uint64(goid.Get()),
+		traceID, opName, uint64(goid.Get()),
 		startTime, opts.LogTags, opts.SpanKind,
 		otelSpan, netTr, opts.Sterile)
 

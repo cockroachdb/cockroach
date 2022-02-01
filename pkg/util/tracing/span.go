@@ -493,7 +493,6 @@ func (sp *Span) parentFinished() {
 // the crdbSpan's lock, though. That will avoid some races.
 func (sp *Span) reset(
 	traceID tracingpb.TraceID,
-	spanID tracingpb.SpanID,
 	operation string,
 	goroutineID uint64,
 	startTime time.Time,
@@ -553,7 +552,6 @@ func (sp *Span) reset(
 	}
 
 	c.traceID = traceID
-	c.spanID = spanID
 	c.operation = operation
 	c.startTime = startTime
 	c.logTags = logTags
