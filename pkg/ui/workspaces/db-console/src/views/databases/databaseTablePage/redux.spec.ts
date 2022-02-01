@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import Long from "long";
 import { RouteComponentProps } from "react-router-dom";
@@ -26,8 +25,8 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
-import moment from "moment";
 import { makeTimestamp } from "src/views/databases/utils";
+import { assertDeepStrictEqual } from "src/test-utils";
 
 function fakeRouteComponentProps(
   k1: string,
@@ -86,21 +85,22 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      this.properties().indexStats.lastReset.isSame(
+      assertDeepStrictEqual(
         expected.indexStats.lastReset,
+        this.properties().indexStats.lastReset,
       );
     }
     delete this.properties().indexStats.lastReset;
     delete expected.indexStats.lastReset;
-    assert.deepStrictEqual(this.properties(), expected);
+    assertDeepStrictEqual(expected, this.properties());
   }
 
   assertTableDetails(expected: DatabaseTablePageDataDetails) {
-    assert.deepStrictEqual(this.properties().details, expected);
+    assertDeepStrictEqual(expected, this.properties().details);
   }
 
   assertTableStats(expected: DatabaseTablePageDataStats) {
-    assert.deepStrictEqual(this.properties().stats, expected);
+    assertDeepStrictEqual(expected, this.properties().stats);
   }
 
   assertIndexStats(
@@ -109,22 +109,27 @@ class TestDriver {
   ) {
     // Assert moments are equal if not in pre-loading state.
     if (compareTimestamps) {
-      assert(
-        this.properties().indexStats.stats[0].lastUsed.isSame(
-          expected.stats[0].lastUsed,
-        ),
+      assertDeepStrictEqual(
+        expected.stats[0].lastUsed,
+        this.properties().indexStats.stats[0].lastUsed,
       );
     }
     delete this.properties().indexStats.stats[0].lastUsed;
     delete expected.stats[0].lastUsed;
-    assert(this.properties().indexStats.lastReset.isSame(expected.lastReset));
+    assertDeepStrictEqual(
+      expected.lastReset,
+      this.properties().indexStats.lastReset,
+    );
     delete this.properties().indexStats.lastReset;
     delete expected.lastReset;
 
     // Assert objects without moments are equal.
-    assert.deepStrictEqual(this.properties().indexStats, expected);
+    assertDeepStrictEqual(expected, this.properties().indexStats);
   }
 
+  async refreshSettings() {
+    return this.actions.refreshSettings();
+  }
   async refreshTableDetails() {
     return this.actions.refreshTableDetails(this.database, this.table);
   }
@@ -153,7 +158,15 @@ describe("Database Table Page", function() {
     fakeApi.restore();
   });
 
-  it("starts in a pre-loading state", function() {
+  it("starts in a pre-loading state", async function() {
+    fakeApi.stubClusterSettings({
+      key_values: {
+        "sql.stats.automatic_collection.enabled": { value: "true" },
+      },
+    });
+
+    await driver.refreshSettings();
+
     driver.assertProperties(
       {
         databaseName: "DATABASE",
@@ -166,7 +179,9 @@ describe("Database Table Page", function() {
           replicaCount: 0,
           indexNames: [],
           grants: [],
+          statsLastUpdated: null,
         },
+        automaticStatsCollectionEnabled: true,
         stats: {
           loading: false,
           loaded: false,
@@ -178,7 +193,7 @@ describe("Database Table Page", function() {
           loading: false,
           loaded: false,
           stats: [],
-          lastReset: moment(),
+          lastReset: null,
         },
       },
       false,
@@ -200,6 +215,7 @@ describe("Database Table Page", function() {
       zone_config: {
         num_replicas: 5,
       },
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshTableDetails();
@@ -215,6 +231,9 @@ describe("Database Table Page", function() {
         { user: "admin", privilege: "DROP" },
         { user: "public", privilege: "SELECT" },
       ],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
   });
 

@@ -84,6 +84,9 @@ export const reviewOfCockroachTerminology = docsURL(
   "ui-replication-dashboard.html#review-of-cockroachdb-terminology",
 );
 export const sessionsTable = docsURL("ui-sessions-page.html");
+export const tableStatsClusterSetting = docsURL(
+  "cost-based-optimizer.html#control-automatic-statistics",
+);
 // Note that these explicitly don't use the current version, since we want to
 // link to the most up-to-date documentation available.
 export const upgradeCockroachVersion =

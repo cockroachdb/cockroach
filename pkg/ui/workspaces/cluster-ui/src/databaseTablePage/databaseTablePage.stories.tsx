@@ -26,6 +26,7 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: randomName(),
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: true,
     loaded: false,
@@ -33,6 +34,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
     replicaCount: 0,
     indexNames: [],
     grants: [],
+    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
   },
   stats: {
     loading: true,
@@ -58,6 +60,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   refreshTableStats: () => {},
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
+  refreshSettings: () => {},
 };
 
 const name = randomName();
@@ -65,6 +68,7 @@ const name = randomName();
 const withData: DatabaseTablePageProps = {
   databaseName: randomName(),
   name: name,
+  automaticStatsCollectionEnabled: true,
   details: {
     loading: false,
     loaded: true,
@@ -89,6 +93,7 @@ const withData: DatabaseTablePageProps = {
         };
       }),
     ),
+    statsLastUpdated: moment("0001-01-01T00:00:00Z"),
   },
   showNodeRegionsSection: true,
   stats: {
@@ -136,6 +141,7 @@ const withData: DatabaseTablePageProps = {
   refreshTableStats: () => {},
   refreshIndexStats: () => {},
   resetIndexUsageStats: () => {},
+  refreshSettings: () => {},
 };
 
 storiesOf("Database Table Page", module)

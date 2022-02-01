@@ -12,7 +12,11 @@ import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 import { LocalSetting } from "src/redux/localsettings";
 import _ from "lodash";
-import { DatabaseDetailsPageData, ViewMode } from "@cockroachlabs/cluster-ui";
+import {
+  DatabaseDetailsPageData,
+  util,
+  ViewMode,
+} from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
 import {
@@ -30,6 +34,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
+
 const {
   DatabaseDetailsRequest,
   TableDetailsRequest,
@@ -132,7 +137,6 @@ export const mapStateToProps = createSelector(
         const numIndexes = _.uniq(
           _.map(details?.data?.indexes, index => index.name),
         ).length;
-
         return {
           name: table,
           details: {
@@ -143,6 +147,9 @@ export const mapStateToProps = createSelector(
             userCount: roles.length,
             roles: roles,
             grants: grants,
+            statsLastUpdated: details?.data?.stats_last_created_at
+              ? util.TimestampToMoment(details?.data?.stats_last_created_at)
+              : null,
           },
           stats: {
             loading: !!stats?.inFlight,

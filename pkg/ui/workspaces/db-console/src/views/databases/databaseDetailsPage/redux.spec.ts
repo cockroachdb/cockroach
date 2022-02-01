@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import _ from "lodash";
 import Long from "long";
@@ -19,6 +18,7 @@ import {
   DatabaseDetailsPageData,
   DatabaseDetailsPageDataTableDetails,
   DatabaseDetailsPageDataTableStats,
+  util,
   ViewMode,
 } from "@cockroachlabs/cluster-ui";
 
@@ -26,6 +26,8 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
+import { makeTimestamp } from "src/views/databases/utils";
+import { assertDeepStrictEqual } from "src/test-utils";
 
 function fakeRouteComponentProps(
   key: string,
@@ -67,26 +69,26 @@ class TestDriver {
   }
 
   assertProperties(expected: DatabaseDetailsPageData) {
-    assert.deepEqual(this.properties(), expected);
+    assertDeepStrictEqual(expected, this.properties());
   }
 
   assertTableDetails(
     name: string,
     expected: DatabaseDetailsPageDataTableDetails,
   ) {
-    assert.deepEqual(this.findTable(name).details, expected);
+    assertDeepStrictEqual(expected, this.findTable(name).details);
   }
 
   assertTableRoles(name: string, expected: string[]) {
-    assert.deepEqual(this.findTable(name).details.roles, expected);
+    assertDeepStrictEqual(expected, this.findTable(name).details.roles);
   }
 
   assertTableGrants(name: string, expected: string[]) {
-    assert.deepEqual(this.findTable(name).details.grants, expected);
+    assertDeepStrictEqual(expected, this.findTable(name).details.grants);
   }
 
   assertTableStats(name: string, expected: DatabaseDetailsPageDataTableStats) {
-    assert.deepEqual(this.findTable(name).stats, expected);
+    assertDeepStrictEqual(expected, this.findTable(name).stats);
   }
 
   async refreshDatabaseDetails() {
@@ -159,6 +161,7 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: null,
           },
           stats: {
             loading: false,
@@ -178,6 +181,7 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: null,
           },
           stats: {
             loading: false,
@@ -250,6 +254,7 @@ describe("Database Details Page", function() {
           implicit: false,
         },
       ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     fakeApi.stubTableDetails("things", "bar", {
@@ -298,6 +303,7 @@ describe("Database Details Page", function() {
           implicit: false,
         },
       ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshDatabaseDetails();
@@ -312,6 +318,9 @@ describe("Database Details Page", function() {
       userCount: 2,
       roles: ["admin", "public"],
       grants: ["CREATE", "SELECT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
 
     driver.assertTableDetails("bar", {
@@ -322,6 +331,9 @@ describe("Database Details Page", function() {
       userCount: 3,
       roles: ["root", "app", "data"],
       grants: ["ALL", "SELECT", "INSERT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
   });
 
