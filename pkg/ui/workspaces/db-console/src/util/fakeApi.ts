@@ -17,6 +17,7 @@ import fetchMock from "src/util/fetch-mock";
 const {
   DatabasesResponse,
   DatabaseDetailsResponse,
+  SettingsResponse,
   TableDetailsResponse,
   TableStatsResponse,
   TableIndexStatsResponse,
@@ -52,6 +53,16 @@ const {
 
 export function restore() {
   fetchMock.restore();
+}
+
+export function stubClusterSettings(
+  response: cockroach.server.serverpb.ISettingsResponse,
+) {
+  stubGet(
+    "/settings?unredacted_values=true",
+    SettingsResponse.encode(response),
+    API_PREFIX,
+  );
 }
 
 export function stubDatabases(
