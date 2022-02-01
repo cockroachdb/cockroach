@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -31,20 +32,41 @@ var (
 	queryWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish "+
-			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
-			"after changing this setting)",
+		"the server will wait for at most this amount of time for active "+
+			"queries to finish. When all SQL queries are finished before times out, "+
+			"the server early exits and proceeds with the rest of the shutdown process. "+
+			"The maximum value allowed is 10 hours. "+
+			"(note that the --drain-wait parameter for cockroach node drain may need "+
+			"adjustment after changing this setting)",
 		10*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 
 	drainWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.drain_wait",
-		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process "+
-			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
-			"after changing this setting)",
+		"the amount of time a server waits in an unready state before "+
+			"proceeding with the rest of the shutdown process. The maximum value "+
+			"allowed is 10 hours."+
+			"(note that the --drain-wait parameter for cockroach node drain may need "+
+			"adjustment after changing this setting)",
 		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+	).WithPublic()
+
+	connectionWait = settings.RegisterDurationSetting(
+		settings.TenantReadOnly,
+		"server.shutdown.connection_wait",
+		"the maximum amount of time a server waits all SQL connections to be "+
+			"closed before proceeding with the rest of the shutdown process. "+
+			"When all SQL connections are closed before times out, the server early "+
+			"exits this phase and proceed to the rest of the shutdown process. "+
+			"It must be set with a non-negative value. The maximum value allowed is "+
+			"10 hours. "+
+			"(note that the --drain-wait parameter for cockroach node drain may need "+
+			"adjustment after changing this setting)",
+		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 )
 
@@ -244,21 +266,37 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
 	s.grpc.setMode(modeDraining)
-	s.sqlServer.acceptingClients.Set(false)
+	s.sqlServer.isReady.Set(false)
 	// Wait for drainUnreadyWait. This will fail load balancer checks and
 	// delay draining so that client traffic can move off this node.
 	// Note delay only happens on first call to drain.
-	if shouldDelayDraining {
-		s.drainSleepFn(drainWait.Get(&s.st.SV))
+
+	// Log the number of connections periodically.
+	if err := s.logActiveConns(ctx); err != nil {
+		log.Ops.Info(ctx, fmt.Sprintf("error showing alive SQL connections: %v", err))
 	}
 
-	// Disable incoming SQL clients up to the queryWait timeout.
-	queryMaxWait := queryWait.Get(&s.st.SV)
-	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
-		return err
+	if shouldDelayDraining {
+		drainWaitLogMessage := fmt.Sprintf(
+			"draining starts, health checkpoint starts to the shutting-down status."+
+				"The server will proceed to the next draining phase after %s "+
+				"(set by cluster setting \"server.shutdown.drain_wait\")",
+			drainWait.Get(&s.st.SV),
+		)
+		log.Ops.Info(ctx, drainWaitLogMessage)
+		s.drainSleepFn(drainWait.Get(&s.st.SV))
+
+		if err := s.sqlServer.pgServer.WaitSqlDraining(
+			ctx,
+			connectionWait.Get(&s.st.SV),
+			queryWait.Get(&s.st.SV),
+		); err != nil {
+			return errors.Wrapf(err, "error when waiting for pgwire server to complete draining")
+		}
 	}
+
 	// Stop ongoing SQL execution up to the queryWait timeout.
-	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
+	s.sqlServer.distSQLServer.Drain(ctx, queryWait.Get(&s.st.SV), reporter)
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
@@ -277,4 +315,22 @@ func (s *Server) drainNode(
 		return err
 	}
 	return s.node.SetDraining(true /* drain */, reporter, verbose)
+}
+
+// logActiveConns logs the number of active SQL connections every 3 seconds.
+func (s *Server) logActiveConns(ctx context.Context) error {
+	return s.stopper.RunAsyncTask(ctx, "log-active-conns", func(ctx context.Context) {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.sqlServer.pgServer.LogActiveConns(ctx)
+			case <-s.stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 }
