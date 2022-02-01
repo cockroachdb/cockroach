@@ -605,6 +605,29 @@ func TestConnector_lookupAddr(t *testing.T) {
 		require.Equal(t, "", addr)
 		require.Equal(t, 1, ensureTenantAddrFnCount)
 	})
+
+	t.Run("directory with FailedPrecondition error", func(t *testing.T) {
+		var ensureTenantAddrFnCount int
+		c := &connector{
+			ClusterName: "my-foo",
+			TenantID:    roachpb.MakeTenantID(10),
+			RoutingRule: "foo.bar",
+		}
+		c.Directory = &testTenantResolver{
+			ensureTenantAddrFn: func(fnCtx context.Context, tenantID roachpb.TenantID, clusterName string) (string, error) {
+				ensureTenantAddrFnCount++
+				require.Equal(t, ctx, fnCtx)
+				require.Equal(t, c.TenantID, tenantID)
+				require.Equal(t, c.ClusterName, clusterName)
+				return "", status.Errorf(codes.FailedPrecondition, "foo")
+			},
+		}
+
+		addr, err := c.lookupAddr(ctx)
+		require.EqualError(t, err, "foo")
+		require.Equal(t, "", addr)
+		require.Equal(t, 1, ensureTenantAddrFnCount)
+	})
 }
 
 func TestConnector_dialSQLServer(t *testing.T) {
