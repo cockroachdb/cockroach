@@ -450,6 +450,10 @@ func resolveCast(
 		telemetry.Inc(GetCastCounter(fromFamily, toFamily))
 		return nil
 
+	case toFamily == types.BytesFamily && fromFamily == types.EnumFamily:
+		// Does not allow cast from ENUM to BYTES.
+		return invalidCastError(castFrom, castTo)
+
 	case toFamily == types.EnumFamily && fromFamily == types.EnumFamily:
 		// Casts from ENUM to ENUM type can only succeed if the two types are the
 		// same.
