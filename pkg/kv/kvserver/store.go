@@ -3230,6 +3230,55 @@ func (s *Store) HottestReplicas() []HotReplicaInfo {
 	return hotRepls
 }
 
+// HottestReplicasForTenant returns the hottest replicas on a store that
+// fall within the tenant keyspace for the provided TenantID. The results
+// are sorted by their QPS. Only contains ranges for which this store is
+// the leaseholder.
+//
+// Note: unlike HottestReplicas, which uses cached information, this function
+// calculates the hottest replicas "on demand", and therefore is more expensive
+// to execute, but also provides more current data.
+func (s *Store) HottestReplicasForTenant(
+	ctx context.Context, tID roachpb.TenantID,
+) ([]HotReplicaInfo, error) {
+	tenantKeyPrefix := keys.MakeTenantPrefix(tID)
+	rStart, err := keys.Addr(tenantKeyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	rEnd, err := keys.Addr(tenantKeyPrefix.PrefixEnd())
+	if err != nil {
+		return nil, err
+	}
+
+	replRankings := newReplicaRankings()
+	rankingsAccumulator := replRankings.newAccumulator()
+
+	err = s.visitReplicasByKey(ctx, rStart, rEnd, AscendingKeyOrder, func(ctx context.Context, r *Replica) error {
+		var qps float64
+		if avgQPS, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+			qps = avgQPS
+		}
+		rankingsAccumulator.addReplica(replicaWithStats{
+			repl: r,
+			qps:  qps,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	replRankings.update(rankingsAccumulator)
+	topQPS := replRankings.topQPS()
+	hotRepls := make([]HotReplicaInfo, len(topQPS))
+	for i := range topQPS {
+		hotRepls[i].Desc = topQPS[i].repl.Desc()
+		hotRepls[i].QPS = topQPS[i].qps
+	}
+	return hotRepls, nil
+}
+
 // StoreKeySpanStats carries the result of a stats computation over a key range.
 type StoreKeySpanStats struct {
 	ReplicaCount         int

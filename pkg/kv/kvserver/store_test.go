@@ -3075,3 +3075,60 @@ func BenchmarkStoreGetReplica(b *testing.B) {
 		}
 	})
 }
+
+// TestHottestReplicasForTenant makes sure that only replicas for the
+// provided TenantID are returned.
+func TestHottestReplicasForTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	cfg := TestStoreConfig(nil)
+	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	wantedTenant := roachpb.MakeTenantID(123)
+	wantedStartKey, err := keys.Addr(keys.MakeTenantPrefix(wantedTenant))
+	require.NoError(t, err)
+
+	unwantedTenant := roachpb.MakeTenantID(124)
+	unwantedStartKey, err := keys.Addr(keys.MakeTenantPrefix(unwantedTenant))
+	require.NoError(t, err)
+
+	createTestReplica := func(rangeID int, startKey roachpb.RKey) (*Replica, error) {
+		return newReplica(
+			ctx,
+			&roachpb.RangeDescriptor{
+				RangeID:  roachpb.RangeID(rangeID),
+				StartKey: startKey,
+				EndKey:   startKey.PrefixEnd(),
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						NodeID:    1,
+						StoreID:   s.Ident.StoreID,
+						ReplicaID: roachpb.ReplicaID(rangeID),
+					},
+				},
+			},
+			s,
+			roachpb.ReplicaID(rangeID))
+	}
+
+	wantedRepl, err := createTestReplica(1, wantedStartKey)
+	require.NoError(t, err)
+	unwantedRepl, err := createTestReplica(2, unwantedStartKey)
+	require.NoError(t, err)
+
+	s.mu.Lock()
+	s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, wantedRepl)
+	s.mu.replicasByKey.ReplaceOrInsertReplica(ctx, unwantedRepl)
+	s.mu.Unlock()
+
+	repls, err := s.HottestReplicasForTenant(ctx, wantedTenant)
+	require.NoError(t, err)
+	require.Len(t, repls, 1)
+	require.Equal(t, repls[0].Desc.StartKey, wantedStartKey)
+	require.Equal(t, repls[0].Desc.EndKey, wantedStartKey.PrefixEnd())
+}
