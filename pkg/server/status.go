@@ -2359,6 +2359,9 @@ func (s *statusServer) ListSessions(
 func (s *statusServer) CancelSession(
 	ctx context.Context, req *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
