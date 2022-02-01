@@ -75,7 +75,6 @@ func RegisterTests(r registry.Registry) {
 	registerPgx(r)
 	registerNodeJSPostgres(r)
 	registerPop(r)
-	registerPrivilegeVersionUpgrade(r)
 	registerPsycopg(r)
 	registerQueue(r)
 	registerQuitAllNodes(r)
