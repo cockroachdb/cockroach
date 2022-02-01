@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "spanconfigsplitter",
+    srcs = ["splitter.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsplitter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/roachpb",
+        "//pkg/spanconfig",
+        "//pkg/sql/catalog",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

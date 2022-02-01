@@ -1,0 +1,470 @@
+# Test a bunch of partitioned table variants.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+# Our simplest case with zero partitions -- should only observe table boundary
+# and primary index start/end split points.
+exec-sql
+CREATE TABLE db.no_partitions(i INT PRIMARY KEY, j INT);
+----
+
+splits database=db table=no_partitions
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+
+# Partitioning the primary index by range -- we should observe splits along
+# named values within the index.
+exec-sql
+CREATE TABLE db.range_partitions(i INT PRIMARY KEY, j INT) PARTITION BY RANGE (i) (
+  PARTITION less_than_five       VALUES FROM (MINVALUE) to (5),
+  PARTITION between_five_and_ten VALUES FROM (5) to (10),
+  PARTITION greater_than_ten     VALUES FROM (10) to (MAXVALUE)
+);
+----
+
+splits database=db table=range_partitions
+----
+/Table/107
+/Table/107/1
+/Table/107/1/5
+/Table/107/1/10
+/Table/107/2
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.range_partitions (j);
+ALTER INDEX db.range_partitions@idx PARTITION BY RANGE (j) (
+  PARTITION less_than_five       VALUES FROM (minvalue) to (5),
+  PARTITION between_five_and_ten VALUES FROM (5) to (10),
+  PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
+);
+----
+
+splits database=db table=range_partitions
+----
+/Table/107
+/Table/107/1
+/Table/107/1/5
+/Table/107/1/10
+/Table/107/2
+/Table/107/2/5
+/Table/107/2/10
+/Table/107/3
+
+# Test partitioning by list, across unordered partitioning values, both
+# contiguous and otherwise. While here, also test for the default partition.
+exec-sql
+CREATE TABLE db.list_partitions(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION one_and_five    VALUES IN (2, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION just_nine       VALUES IN (9),
+  PARTITION everything_else VALUES IN (DEFAULT)
+);
+----
+
+# We should see subpartitions in the primary index for each value we're
+# partitioning by and the value after (marking the end of the partition). This
+# is not duplicated if the value after too appears across our lists. We should
+# also observe gaps where we fall back to the default config.
+splits database=db table=list_partitions
+----
+/Table/108
+/Table/108/1
+/Table/108/1/2
+/Table/108/1/3
+/Table/108/1/4
+/Table/108/1/5
+/Table/108/1/6
+/Table/108/1/9
+/Table/108/1/10
+/Table/108/2
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_partitions (j);
+ALTER INDEX db.list_partitions@idx PARTITION BY LIST (j) (
+  PARTITION one_and_five    VALUES IN (2, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION just_nine       VALUES IN (9),
+  PARTITION everything_else VALUES IN (DEFAULT)
+);
+----
+
+splits database=db table=list_partitions
+----
+/Table/108
+/Table/108/1
+/Table/108/1/2
+/Table/108/1/3
+/Table/108/1/4
+/Table/108/1/5
+/Table/108/1/6
+/Table/108/1/9
+/Table/108/1/10
+/Table/108/2
+/Table/108/2/2
+/Table/108/2/3
+/Table/108/2/4
+/Table/108/2/5
+/Table/108/2/6
+/Table/108/2/9
+/Table/108/2/10
+/Table/108/3
+
+# Try the same thing but with only contiguous values.
+exec-sql
+CREATE TABLE db.list_partitions_contiguous(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+  PARTITION three                   VALUES IN (3),
+  PARTITION four_and_five           VALUES IN (4, 5),
+  PARTITION six_and_everything_else VALUES IN (6, default)
+);
+----
+
+splits database=db table=list_partitions_contiguous
+----
+/Table/109
+/Table/109/1
+/Table/109/1/3
+/Table/109/1/4
+/Table/109/1/5
+/Table/109/1/6
+/Table/109/1/7
+/Table/109/2
+
+# Test partitioning by multiple column values, including with DEFAULTs. When
+# using DEFAULT in the second column, we should see splits along the first
+# column value (and the next, to mark its end). With a non-DEFAULT value for
+# the second column we should see it appear explicitly as a split key (and the
+# next value for the second column, to mark its end).
+exec-sql
+CREATE TABLE db.list_multi_column_partitions(i INT, j INT, PRIMARY KEY (i, j)) PARTITION BY LIST (i, j) (
+  PARTITION two_and_default VALUES IN ((2, DEFAULT)),
+  PARTITION six_and_seven VALUES IN ((6, 7)),
+  PARTITION four_and_eight VALUES IN ((4, 8)),
+  PARTITION default_and_default VALUES IN ((DEFAULT, DEFAULT))
+);
+----
+
+splits database=db table=list_multi_column_partitions
+----
+/Table/110
+/Table/110/1
+/Table/110/1/2
+/Table/110/1/3
+/Table/110/1/4/8
+/Table/110/1/4/9
+/Table/110/1/6/7
+/Table/110/1/6/8
+/Table/110/2
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_multi_column_partitions(i, j);
+ALTER INDEX db.list_multi_column_partitions@idx PARTITION BY LIST (i, j) (
+  PARTITION two_and_default VALUES IN ((2, DEFAULT)),
+  PARTITION six_and_seven VALUES IN ((6, 7)),
+  PARTITION four_and_eight VALUES IN ((4, 8)),
+  PARTITION default_and_default VALUES IN ((DEFAULT, DEFAULT))
+);
+----
+
+splits database=db table=list_multi_column_partitions
+----
+/Table/110
+/Table/110/1
+/Table/110/1/2
+/Table/110/1/3
+/Table/110/1/4/8
+/Table/110/1/4/9
+/Table/110/1/6/7
+/Table/110/1/6/8
+/Table/110/2
+/Table/110/2/2
+/Table/110/2/3
+/Table/110/2/4/8
+/Table/110/2/4/9
+/Table/110/2/6/7
+/Table/110/2/6/8
+/Table/110/3
+
+# We should be able to mix and patch partitioning. Each value partition should
+# be further subdivided by range.
+exec-sql
+CREATE TABLE db.list_then_range_partitions (
+    C1 STRING,
+    N2 INT,
+    PRIMARY KEY (C1, N2)
+) PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C')
+        PARTITION BY RANGE (N2) (
+            PARTITION P1C1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2C1N2 VALUES FROM (10) TO (MAXVALUE)
+        ),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY RANGE (N2) (
+            PARTITION P3C1N2 VALUES FROM (MINVALUE) TO (42),
+            PARTITION P4C1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_then_range_partitions
+----
+/Table/111
+/Table/111/1
+/Table/111/1/"A"
+/Table/111/1/"A"/10
+/Table/111/1/"A"/PrefixEnd
+/Table/111/1/"B"
+/Table/111/1/"B"/42
+/Table/111/1/"B"/PrefixEnd
+/Table/111/1/"C"
+/Table/111/1/"C"/10
+/Table/111/1/"C"/PrefixEnd
+/Table/111/1/"D"
+/Table/111/1/"D"/42
+/Table/111/1/"D"/PrefixEnd
+/Table/111/2
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_then_range_partitions (C1, N2);
+ALTER INDEX db.list_then_range_partitions@idx PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C')
+        PARTITION BY RANGE (N2) (
+            PARTITION P1C1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2C1N2 VALUES FROM (10) TO (MAXVALUE)
+        ),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY RANGE (N2) (
+            PARTITION P3C1N2 VALUES FROM (MINVALUE) TO (42),
+            PARTITION P4C1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_then_range_partitions
+----
+/Table/111
+/Table/111/1
+/Table/111/1/"A"
+/Table/111/1/"A"/10
+/Table/111/1/"A"/PrefixEnd
+/Table/111/1/"B"
+/Table/111/1/"B"/42
+/Table/111/1/"B"/PrefixEnd
+/Table/111/1/"C"
+/Table/111/1/"C"/10
+/Table/111/1/"C"/PrefixEnd
+/Table/111/1/"D"
+/Table/111/1/"D"/42
+/Table/111/1/"D"/PrefixEnd
+/Table/111/2
+/Table/111/2/"A"
+/Table/111/2/"A"/10
+/Table/111/2/"A"/PrefixEnd
+/Table/111/2/"B"
+/Table/111/2/"B"/42
+/Table/111/2/"B"/PrefixEnd
+/Table/111/2/"C"
+/Table/111/2/"C"/10
+/Table/111/2/"C"/PrefixEnd
+/Table/111/2/"D"
+/Table/111/2/"D"/42
+/Table/111/2/"D"/PrefixEnd
+/Table/111/3
+
+# We should be able to go arbitrarily deep with our partitioning, and not all
+# partitions need to be deeply nested.
+exec-sql
+CREATE TABLE db.list_then_list_then_range_partitions_mixed (
+    C1 STRING,
+    C2 STRING,
+    N3 INT,
+    PRIMARY KEY (C1, C2, N3)
+) PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C'),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY LIST (C2) (
+            PARTITION P1C1C2 VALUES IN ('G', 'J')
+                PARTITION BY RANGE (N3) (
+                    PARTITION P1C1C2N3 VALUES FROM (MINVALUE) TO (10),
+                    PARTITION P2C1C2N3 VALUES FROM (10) TO (MAXVALUE)
+                ),
+            PARTITION P2C1C2 VALUES IN ('I', 'K')
+        ),
+    PARTITION P3C1 VALUES IN ('E', 'F')
+);
+----
+
+splits database=db table=list_then_list_then_range_partitions_mixed
+----
+/Table/112
+/Table/112/1
+/Table/112/1/"A"
+/Table/112/1/"A"/PrefixEnd
+/Table/112/1/"B"
+/Table/112/1/"B"/"G"
+/Table/112/1/"B"/"G"/10
+/Table/112/1/"B"/"G"/PrefixEnd
+/Table/112/1/"B"/"I"
+/Table/112/1/"B"/"I"/PrefixEnd
+/Table/112/1/"B"/"J"
+/Table/112/1/"B"/"J"/10
+/Table/112/1/"B"/"J"/PrefixEnd
+/Table/112/1/"B"/"K"
+/Table/112/1/"B"/"K"/PrefixEnd
+/Table/112/1/"B"/PrefixEnd
+/Table/112/1/"C"
+/Table/112/1/"C"/PrefixEnd
+/Table/112/1/"D"
+/Table/112/1/"D"/"G"
+/Table/112/1/"D"/"G"/10
+/Table/112/1/"D"/"G"/PrefixEnd
+/Table/112/1/"D"/"I"
+/Table/112/1/"D"/"I"/PrefixEnd
+/Table/112/1/"D"/"J"
+/Table/112/1/"D"/"J"/10
+/Table/112/1/"D"/"J"/PrefixEnd
+/Table/112/1/"D"/"K"
+/Table/112/1/"D"/"K"/PrefixEnd
+/Table/112/1/"D"/PrefixEnd
+/Table/112/1/"E"
+/Table/112/1/"E"/PrefixEnd
+/Table/112/1/"F"
+/Table/112/1/"F"/PrefixEnd
+/Table/112/2
+
+
+# Try the same thing on a secondary index.
+exec-sql
+CREATE INDEX idx ON db.list_then_list_then_range_partitions_mixed (C1, C2, N3);
+ALTER INDEX db.list_then_list_then_range_partitions_mixed@idx PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C'),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY LIST (C2) (
+            PARTITION P1C1C2 VALUES IN ('G', 'J')
+                PARTITION BY RANGE (N3) (
+                    PARTITION P1C1C2N3 VALUES FROM (MINVALUE) TO (10),
+                    PARTITION P2C1C2N3 VALUES FROM (10) TO (MAXVALUE)
+                ),
+            PARTITION P2C1C2 VALUES IN ('I', 'K')
+        ),
+    PARTITION P3C1 VALUES IN ('E', 'F')
+);
+----
+
+splits database=db table=list_then_list_then_range_partitions_mixed
+----
+/Table/112
+/Table/112/1
+/Table/112/1/"A"
+/Table/112/1/"A"/PrefixEnd
+/Table/112/1/"B"
+/Table/112/1/"B"/"G"
+/Table/112/1/"B"/"G"/10
+/Table/112/1/"B"/"G"/PrefixEnd
+/Table/112/1/"B"/"I"
+/Table/112/1/"B"/"I"/PrefixEnd
+/Table/112/1/"B"/"J"
+/Table/112/1/"B"/"J"/10
+/Table/112/1/"B"/"J"/PrefixEnd
+/Table/112/1/"B"/"K"
+/Table/112/1/"B"/"K"/PrefixEnd
+/Table/112/1/"B"/PrefixEnd
+/Table/112/1/"C"
+/Table/112/1/"C"/PrefixEnd
+/Table/112/1/"D"
+/Table/112/1/"D"/"G"
+/Table/112/1/"D"/"G"/10
+/Table/112/1/"D"/"G"/PrefixEnd
+/Table/112/1/"D"/"I"
+/Table/112/1/"D"/"I"/PrefixEnd
+/Table/112/1/"D"/"J"
+/Table/112/1/"D"/"J"/10
+/Table/112/1/"D"/"J"/PrefixEnd
+/Table/112/1/"D"/"K"
+/Table/112/1/"D"/"K"/PrefixEnd
+/Table/112/1/"D"/PrefixEnd
+/Table/112/1/"E"
+/Table/112/1/"E"/PrefixEnd
+/Table/112/1/"F"
+/Table/112/1/"F"/PrefixEnd
+/Table/112/2
+/Table/112/2/"A"
+/Table/112/2/"A"/PrefixEnd
+/Table/112/2/"B"
+/Table/112/2/"B"/"G"
+/Table/112/2/"B"/"G"/10
+/Table/112/2/"B"/"G"/PrefixEnd
+/Table/112/2/"B"/"I"
+/Table/112/2/"B"/"I"/PrefixEnd
+/Table/112/2/"B"/"J"
+/Table/112/2/"B"/"J"/10
+/Table/112/2/"B"/"J"/PrefixEnd
+/Table/112/2/"B"/"K"
+/Table/112/2/"B"/"K"/PrefixEnd
+/Table/112/2/"B"/PrefixEnd
+/Table/112/2/"C"
+/Table/112/2/"C"/PrefixEnd
+/Table/112/2/"D"
+/Table/112/2/"D"/"G"
+/Table/112/2/"D"/"G"/10
+/Table/112/2/"D"/"G"/PrefixEnd
+/Table/112/2/"D"/"I"
+/Table/112/2/"D"/"I"/PrefixEnd
+/Table/112/2/"D"/"J"
+/Table/112/2/"D"/"J"/10
+/Table/112/2/"D"/"J"/PrefixEnd
+/Table/112/2/"D"/"K"
+/Table/112/2/"D"/"K"/PrefixEnd
+/Table/112/2/"D"/PrefixEnd
+/Table/112/2/"E"
+/Table/112/2/"E"/PrefixEnd
+/Table/112/2/"F"
+/Table/112/2/"F"/PrefixEnd
+/Table/112/3
+
+# A single default partition's splits should look no different than a table
+# with a single primary index.
+exec-sql
+CREATE TABLE db.list_default(N1 INT PRIMARY KEY) PARTITION BY LIST (N1) (
+  PARTITION every_thing VALUES IN (DEFAULT)
+);
+----
+
+splits database=db table=list_default
+----
+/Table/113
+/Table/113/1
+/Table/113/2
+
+
+# Try another variant with partitioning by default first and then by range. We
+# should observe subpartitions of the inner-most RANGE partition.
+exec-sql
+CREATE TABLE db.list_default_then_range (
+    N1 INT,
+    N2 INT,
+    PRIMARY KEY (N1, N2)
+) PARTITION BY LIST (N1) (
+    PARTITION P1N1 VALUES IN (DEFAULT)
+        PARTITION BY RANGE (N2) (
+            PARTITION P1N1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2N1N2 VALUES FROM (10) TO (42),
+            PARTITION P3N1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_default_then_range
+----
+/Table/114
+/Table/114/1
+/Table/114/1/10
+/Table/114/1/42
+/Table/114/2
