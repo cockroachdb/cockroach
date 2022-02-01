@@ -42,6 +42,9 @@ var _ catalog.SchemaDescriptor = public{}
 func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }
 func (p public) GetName() string        { return tree.PublicSchema }
+func (p public) GetPrivileges() *descpb.PrivilegeDescriptor {
+	return descpb.NewPublicSchemaPrivilegeDescriptor()
+}
 
 type publicBase struct{}
 

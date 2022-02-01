@@ -125,22 +125,31 @@ func NewCustomSuperuserPrivilegeDescriptor(
 	}
 }
 
-// NewPublicSelectPrivilegeDescriptor is used to construct a privilege descriptor
+// NewVirtualTablePrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has SELECT privilege for the public role. It is
 // used for virtual tables.
-func NewPublicSelectPrivilegeDescriptor() *PrivilegeDescriptor {
+func NewVirtualTablePrivilegeDescriptor() *PrivilegeDescriptor {
 	return NewPrivilegeDescriptor(
 		security.PublicRoleName(), privilege.List{privilege.SELECT}, privilege.List{}, security.NodeUserName(),
 	)
 }
 
-// NewPublicUsagePrivilegeDescriptor is used to construct a privilege descriptor
+// NewVirtualSchemaPrivilegeDescriptor is used to construct a privilege descriptor
 // owned by the node user which has USAGE privilege for the public role. It is
 // used for virtual schemas.
-func NewPublicUsagePrivilegeDescriptor() *PrivilegeDescriptor {
+func NewVirtualSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
 	return NewPrivilegeDescriptor(
 		security.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, security.NodeUserName(),
 	)
+}
+
+// NewTemporarySchemaPrivilegeDescriptor is used to construct a privilege
+// descriptor owned by the admin user which has CREATE and USAGE privilege for
+// the public role. It is used for temporary schemas.
+func NewTemporarySchemaPrivilegeDescriptor() *PrivilegeDescriptor {
+	p := NewBasePrivilegeDescriptor(security.AdminRoleName())
+	p.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false /* withGrantOption */)
+	return p
 }
 
 // NewPrivilegeDescriptor returns a privilege descriptor for the given
@@ -180,6 +189,22 @@ func NewBasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor
 func NewBaseDatabasePrivilegeDescriptor(owner security.SQLUsername) *PrivilegeDescriptor {
 	p := NewBasePrivilegeDescriptor(owner)
 	p.Grant(security.PublicRoleName(), privilege.List{privilege.CONNECT}, false /* withGrantOption */)
+	return p
+}
+
+// NewPublicSchemaPrivilegeDescriptor is used to construct a privilege
+// descriptor owned by the admin user which has CREATE and USAGE privilege for
+// the public role, and ALL privileges for superusers. It is used for the
+// public schema.
+func NewPublicSchemaPrivilegeDescriptor() *PrivilegeDescriptor {
+	// In postgres, the user "postgres" is the owner of the public schema in a
+	// newly created db. In CockroachDB, admin is our substitute for the postgres
+	// user.
+	p := NewBasePrivilegeDescriptor(security.AdminRoleName())
+	// By default, everyone has USAGE and CREATE on the public schema.
+	// Once https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
+	// the public role will no longer have CREATE privileges.
+	p.Grant(security.PublicRoleName(), privilege.List{privilege.CREATE, privilege.USAGE}, false)
 	return p
 }
 
