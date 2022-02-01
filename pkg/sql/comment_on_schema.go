@@ -54,7 +54,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 	}
 
 	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn,
-		db.GetSchemaID(string(n.Name)), tree.DatabaseLookupFlags{Required: true})
+		db.GetSchemaID(string(n.Name)), tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
 	}
