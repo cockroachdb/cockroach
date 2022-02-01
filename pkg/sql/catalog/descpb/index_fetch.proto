@@ -22,10 +22,13 @@ import "sql/catalog/descpb/structured.proto";
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
 message IndexFetchSpec {
   message Column {
-    optional string name = 1 [(gogoproto.nullable) = false];
-    optional uint32 column_id = 2 [(gogoproto.nullable) = false,
+    optional uint32 column_id = 1 [(gogoproto.nullable) = false,
                                    (gogoproto.customname) = "ColumnID",
                                    (gogoproto.casttype) = "ColumnID"];
+
+    // Name of the column, as it is expected to appear in debug and error
+    // messages.
+    optional string name = 2 [(gogoproto.nullable) = false];
 
     // Type of the column. If this is the key column of an inverted index, this
     // is the actual type of whan the index encodes (usually Bytes), rather than
