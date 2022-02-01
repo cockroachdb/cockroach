@@ -446,6 +446,7 @@ crdb_internal       node_transaction_statistics
 crdb_internal       node_transactions
 crdb_internal       node_txn_stats
 crdb_internal       partitions
+crdb_internal       pg_catalog_table_is_implemented
 crdb_internal       predefined_comments
 crdb_internal       ranges
 crdb_internal       ranges_no_leases
@@ -765,6 +766,7 @@ node_transaction_statistics
 node_transactions
 node_txn_stats
 partitions
+pg_catalog_table_is_implemented
 predefined_comments
 ranges
 ranges_no_leases
@@ -1122,6 +1124,7 @@ system         crdb_internal       node_transaction_statistics            SYSTEM
 system         crdb_internal       node_transactions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_txn_stats                         SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                             SYSTEM VIEW  NO                  1
+system         crdb_internal       pg_catalog_table_is_implemented        SYSTEM VIEW  NO                  1
 system         crdb_internal       predefined_comments                    SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                                 SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                       SYSTEM VIEW  NO                  1
@@ -2588,16 +2591,12 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
+public   other_db       crdb_internal       USAGE           NULL
+public   other_db       information_schema  USAGE           NULL
 admin    other_db       other_schema        ALL             NULL
 root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
+public   other_db       pg_catalog          USAGE           NULL
+public   other_db       pg_extension        USAGE           NULL
 admin    other_db       public              ALL             NULL
 public   other_db       public              CREATE          NULL
 public   other_db       public              USAGE           NULL
@@ -2610,16 +2609,12 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
+public   other_db       crdb_internal       USAGE           NULL
+public   other_db       information_schema  USAGE           NULL
 admin    other_db       other_schema        ALL             NULL
 root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
+public   other_db       pg_catalog          USAGE           NULL
+public   other_db       pg_extension        USAGE           NULL
 admin    other_db       public              ALL             NULL
 public   other_db       public              CREATE          NULL
 public   other_db       public              USAGE           NULL
@@ -2632,17 +2627,13 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema        privilege_type  is_grantable
-admin     other_db       crdb_internal       ALL             NULL
-root      other_db       crdb_internal       ALL             NULL
-admin     other_db       information_schema  ALL             NULL
-root      other_db       information_schema  ALL             NULL
+public    other_db       crdb_internal       USAGE           NULL
+public    other_db       information_schema  USAGE           NULL
 admin     other_db       other_schema        ALL             NULL
 root      other_db       other_schema        ALL             NULL
 testuser  other_db       other_schema        CREATE          NULL
-admin     other_db       pg_catalog          ALL             NULL
-root      other_db       pg_catalog          ALL             NULL
-admin     other_db       pg_extension        ALL             NULL
-root      other_db       pg_extension        ALL             NULL
+public    other_db       pg_catalog          USAGE           NULL
+public    other_db       pg_extension        USAGE           NULL
 admin     other_db       public              ALL             NULL
 public    other_db       public              CREATE          NULL
 public    other_db       public              USAGE           NULL
@@ -2705,6 +2696,7 @@ NULL     public   system         crdb_internal       node_transaction_statistics
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
+NULL     public   system         crdb_internal       pg_catalog_table_is_implemented        SELECT          NO            YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES
@@ -3312,6 +3304,7 @@ NULL     public   system         crdb_internal       node_transaction_statistics
 NULL     public   system         crdb_internal       node_transactions                      SELECT          NO            YES
 NULL     public   system         crdb_internal       node_txn_stats                         SELECT          NO            YES
 NULL     public   system         crdb_internal       partitions                             SELECT          NO            YES
+NULL     public   system         crdb_internal       pg_catalog_table_is_implemented        SELECT          NO            YES
 NULL     public   system         crdb_internal       predefined_comments                    SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges                                 SELECT          NO            YES
 NULL     public   system         crdb_internal       ranges_no_leases                       SELECT          NO            YES

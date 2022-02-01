@@ -14,71 +14,72 @@ DROP DATABASE crdb_internal
 query TTTTIT
 SHOW TABLES FROM crdb_internal
 ----
-crdb_internal  active_range_feeds              table  NULL  NULL  NULL
-crdb_internal  backward_dependencies           table  NULL  NULL  NULL
-crdb_internal  builtin_functions               table  NULL  NULL  NULL
-crdb_internal  cluster_contended_indexes       view   NULL  NULL  NULL
-crdb_internal  cluster_contended_keys          view   NULL  NULL  NULL
-crdb_internal  cluster_contended_tables        view   NULL  NULL  NULL
-crdb_internal  cluster_contention_events       table  NULL  NULL  NULL
-crdb_internal  cluster_database_privileges     table  NULL  NULL  NULL
-crdb_internal  cluster_distsql_flows           table  NULL  NULL  NULL
-crdb_internal  cluster_inflight_traces         table  NULL  NULL  NULL
-crdb_internal  cluster_queries                 table  NULL  NULL  NULL
-crdb_internal  cluster_sessions                table  NULL  NULL  NULL
-crdb_internal  cluster_settings                table  NULL  NULL  NULL
-crdb_internal  cluster_statement_statistics    table  NULL  NULL  NULL
-crdb_internal  cluster_transaction_statistics  table  NULL  NULL  NULL
-crdb_internal  cluster_transactions            table  NULL  NULL  NULL
-crdb_internal  create_schema_statements        table  NULL  NULL  NULL
-crdb_internal  create_statements               table  NULL  NULL  NULL
-crdb_internal  create_type_statements          table  NULL  NULL  NULL
-crdb_internal  cross_db_references             table  NULL  NULL  NULL
-crdb_internal  databases                       table  NULL  NULL  NULL
-crdb_internal  default_privileges              table  NULL  NULL  NULL
-crdb_internal  feature_usage                   table  NULL  NULL  NULL
-crdb_internal  forward_dependencies            table  NULL  NULL  NULL
-crdb_internal  gossip_alerts                   table  NULL  NULL  NULL
-crdb_internal  gossip_liveness                 table  NULL  NULL  NULL
-crdb_internal  gossip_network                  table  NULL  NULL  NULL
-crdb_internal  gossip_nodes                    table  NULL  NULL  NULL
-crdb_internal  index_columns                   table  NULL  NULL  NULL
-crdb_internal  index_usage_statistics          table  NULL  NULL  NULL
-crdb_internal  invalid_objects                 table  NULL  NULL  NULL
-crdb_internal  jobs                            table  NULL  NULL  NULL
-crdb_internal  kv_node_liveness                table  NULL  NULL  NULL
-crdb_internal  kv_node_status                  table  NULL  NULL  NULL
-crdb_internal  kv_store_status                 table  NULL  NULL  NULL
-crdb_internal  leases                          table  NULL  NULL  NULL
-crdb_internal  lost_descriptors_with_data      table  NULL  NULL  NULL
-crdb_internal  node_build_info                 table  NULL  NULL  NULL
-crdb_internal  node_contention_events          table  NULL  NULL  NULL
-crdb_internal  node_distsql_flows              table  NULL  NULL  NULL
-crdb_internal  node_inflight_trace_spans       table  NULL  NULL  NULL
-crdb_internal  node_metrics                    table  NULL  NULL  NULL
-crdb_internal  node_queries                    table  NULL  NULL  NULL
-crdb_internal  node_runtime_info               table  NULL  NULL  NULL
-crdb_internal  node_sessions                   table  NULL  NULL  NULL
-crdb_internal  node_statement_statistics       table  NULL  NULL  NULL
-crdb_internal  node_transaction_statistics     table  NULL  NULL  NULL
-crdb_internal  node_transactions               table  NULL  NULL  NULL
-crdb_internal  node_txn_stats                  table  NULL  NULL  NULL
-crdb_internal  partitions                      table  NULL  NULL  NULL
-crdb_internal  predefined_comments             table  NULL  NULL  NULL
-crdb_internal  ranges                          view   NULL  NULL  NULL
-crdb_internal  ranges_no_leases                table  NULL  NULL  NULL
-crdb_internal  regions                         table  NULL  NULL  NULL
-crdb_internal  schema_changes                  table  NULL  NULL  NULL
-crdb_internal  session_trace                   table  NULL  NULL  NULL
-crdb_internal  session_variables               table  NULL  NULL  NULL
-crdb_internal  statement_statistics            view   NULL  NULL  NULL
-crdb_internal  table_columns                   table  NULL  NULL  NULL
-crdb_internal  table_indexes                   table  NULL  NULL  NULL
-crdb_internal  table_row_statistics            table  NULL  NULL  NULL
-crdb_internal  tables                          table  NULL  NULL  NULL
-crdb_internal  tenant_usage_details            view   NULL  NULL  NULL
-crdb_internal  transaction_statistics          view   NULL  NULL  NULL
-crdb_internal  zones                           table  NULL  NULL  NULL
+crdb_internal  active_range_feeds               table  NULL  NULL  NULL
+crdb_internal  backward_dependencies            table  NULL  NULL  NULL
+crdb_internal  builtin_functions                table  NULL  NULL  NULL
+crdb_internal  cluster_contended_indexes        view   NULL  NULL  NULL
+crdb_internal  cluster_contended_keys           view   NULL  NULL  NULL
+crdb_internal  cluster_contended_tables         view   NULL  NULL  NULL
+crdb_internal  cluster_contention_events        table  NULL  NULL  NULL
+crdb_internal  cluster_database_privileges      table  NULL  NULL  NULL
+crdb_internal  cluster_distsql_flows            table  NULL  NULL  NULL
+crdb_internal  cluster_inflight_traces          table  NULL  NULL  NULL
+crdb_internal  cluster_queries                  table  NULL  NULL  NULL
+crdb_internal  cluster_sessions                 table  NULL  NULL  NULL
+crdb_internal  cluster_settings                 table  NULL  NULL  NULL
+crdb_internal  cluster_statement_statistics     table  NULL  NULL  NULL
+crdb_internal  cluster_transaction_statistics   table  NULL  NULL  NULL
+crdb_internal  cluster_transactions             table  NULL  NULL  NULL
+crdb_internal  create_schema_statements         table  NULL  NULL  NULL
+crdb_internal  create_statements                table  NULL  NULL  NULL
+crdb_internal  create_type_statements           table  NULL  NULL  NULL
+crdb_internal  cross_db_references              table  NULL  NULL  NULL
+crdb_internal  databases                        table  NULL  NULL  NULL
+crdb_internal  default_privileges               table  NULL  NULL  NULL
+crdb_internal  feature_usage                    table  NULL  NULL  NULL
+crdb_internal  forward_dependencies             table  NULL  NULL  NULL
+crdb_internal  gossip_alerts                    table  NULL  NULL  NULL
+crdb_internal  gossip_liveness                  table  NULL  NULL  NULL
+crdb_internal  gossip_network                   table  NULL  NULL  NULL
+crdb_internal  gossip_nodes                     table  NULL  NULL  NULL
+crdb_internal  index_columns                    table  NULL  NULL  NULL
+crdb_internal  index_usage_statistics           table  NULL  NULL  NULL
+crdb_internal  invalid_objects                  table  NULL  NULL  NULL
+crdb_internal  jobs                             table  NULL  NULL  NULL
+crdb_internal  kv_node_liveness                 table  NULL  NULL  NULL
+crdb_internal  kv_node_status                   table  NULL  NULL  NULL
+crdb_internal  kv_store_status                  table  NULL  NULL  NULL
+crdb_internal  leases                           table  NULL  NULL  NULL
+crdb_internal  lost_descriptors_with_data       table  NULL  NULL  NULL
+crdb_internal  node_build_info                  table  NULL  NULL  NULL
+crdb_internal  node_contention_events           table  NULL  NULL  NULL
+crdb_internal  node_distsql_flows               table  NULL  NULL  NULL
+crdb_internal  node_inflight_trace_spans        table  NULL  NULL  NULL
+crdb_internal  node_metrics                     table  NULL  NULL  NULL
+crdb_internal  node_queries                     table  NULL  NULL  NULL
+crdb_internal  node_runtime_info                table  NULL  NULL  NULL
+crdb_internal  node_sessions                    table  NULL  NULL  NULL
+crdb_internal  node_statement_statistics        table  NULL  NULL  NULL
+crdb_internal  node_transaction_statistics      table  NULL  NULL  NULL
+crdb_internal  node_transactions                table  NULL  NULL  NULL
+crdb_internal  node_txn_stats                   table  NULL  NULL  NULL
+crdb_internal  partitions                       table  NULL  NULL  NULL
+crdb_internal  pg_catalog_table_is_implemented  table  NULL  NULL  NULL
+crdb_internal  predefined_comments              table  NULL  NULL  NULL
+crdb_internal  ranges                           view   NULL  NULL  NULL
+crdb_internal  ranges_no_leases                 table  NULL  NULL  NULL
+crdb_internal  regions                          table  NULL  NULL  NULL
+crdb_internal  schema_changes                   table  NULL  NULL  NULL
+crdb_internal  session_trace                    table  NULL  NULL  NULL
+crdb_internal  session_variables                table  NULL  NULL  NULL
+crdb_internal  statement_statistics             view   NULL  NULL  NULL
+crdb_internal  table_columns                    table  NULL  NULL  NULL
+crdb_internal  table_indexes                    table  NULL  NULL  NULL
+crdb_internal  table_row_statistics             table  NULL  NULL  NULL
+crdb_internal  tables                           table  NULL  NULL  NULL
+crdb_internal  tenant_usage_details             view   NULL  NULL  NULL
+crdb_internal  transaction_statistics           view   NULL  NULL  NULL
+crdb_internal  zones                            table  NULL  NULL  NULL
 
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
@@ -125,6 +126,140 @@ FROM crdb_internal.tables WHERE NAME = 'descriptor'
 ----
 table_id  parent_id  name        database_name  version  format_version            state   sc_lease_node_id  sc_lease_expiration_time  drop_time  audit_mode  schema_name  parent_schema_id
 3         1          descriptor  system         1        InterleavedFormatVersion  PUBLIC  NULL              NULL                      NULL       DISABLED    public       29
+
+query TB colnames
+SELECT * FROM crdb_internal.pg_catalog_table_is_implemented
+----
+name                             implemented
+pg_aggregate                     false
+pg_am                            false
+pg_amop                          true
+pg_amproc                        true
+pg_attrdef                       false
+pg_attribute                     false
+pg_auth_members                  false
+pg_authid                        false
+pg_available_extension_versions  true
+pg_available_extensions          true
+pg_cast                          true
+pg_class                         false
+pg_collation                     false
+pg_config                        true
+pg_constraint                    false
+pg_conversion                    true
+pg_cursors                       true
+pg_database                      false
+pg_db_role_setting               false
+pg_default_acl                   false
+pg_depend                        false
+pg_description                   false
+pg_enum                          false
+pg_event_trigger                 true
+pg_extension                     true
+pg_file_settings                 true
+pg_foreign_data_wrapper          true
+pg_foreign_server                true
+pg_foreign_table                 true
+pg_group                         true
+pg_hba_file_rules                true
+pg_index                         false
+pg_indexes                       false
+pg_inherits                      true
+pg_init_privs                    true
+pg_language                      true
+pg_largeobject                   true
+pg_largeobject_metadata          true
+pg_locks                         true
+pg_matviews                      false
+pg_namespace                     false
+pg_opclass                       true
+pg_operator                      false
+pg_opfamily                      true
+pg_partitioned_table             true
+pg_policies                      true
+pg_policy                        true
+pg_prepared_statements           false
+pg_prepared_xacts                true
+pg_proc                          false
+pg_publication                   true
+pg_publication_rel               true
+pg_publication_tables            true
+pg_range                         true
+pg_replication_origin            true
+pg_replication_origin_status     true
+pg_replication_slots             true
+pg_rewrite                       false
+pg_roles                         false
+pg_rules                         true
+pg_seclabel                      true
+pg_seclabels                     true
+pg_sequence                      false
+pg_sequences                     false
+pg_settings                      false
+pg_shadow                        false
+pg_shdepend                      false
+pg_shdescription                 false
+pg_shmem_allocations             true
+pg_shseclabel                    true
+pg_stat_activity                 true
+pg_stat_all_indexes              true
+pg_stat_all_tables               true
+pg_stat_archiver                 true
+pg_stat_bgwriter                 true
+pg_stat_database                 true
+pg_stat_database_conflicts       true
+pg_stat_gssapi                   true
+pg_stat_progress_analyze         true
+pg_stat_progress_basebackup      true
+pg_stat_progress_cluster         true
+pg_stat_progress_create_index    true
+pg_stat_progress_vacuum          true
+pg_stat_replication              true
+pg_stat_slru                     true
+pg_stat_ssl                      true
+pg_stat_subscription             true
+pg_stat_sys_indexes              true
+pg_stat_sys_tables               true
+pg_stat_user_functions           true
+pg_stat_user_indexes             true
+pg_stat_user_tables              true
+pg_stat_wal_receiver             true
+pg_stat_xact_all_tables          true
+pg_stat_xact_sys_tables          true
+pg_stat_xact_user_functions      true
+pg_stat_xact_user_tables         true
+pg_statio_all_indexes            true
+pg_statio_all_sequences          true
+pg_statio_all_tables             true
+pg_statio_sys_indexes            true
+pg_statio_sys_sequences          true
+pg_statio_sys_tables             true
+pg_statio_user_indexes           true
+pg_statio_user_sequences         true
+pg_statio_user_tables            true
+pg_statistic                     true
+pg_statistic_ext                 false
+pg_statistic_ext_data            true
+pg_stats                         true
+pg_stats_ext                     true
+pg_subscription                  true
+pg_subscription_rel              true
+pg_tables                        false
+pg_tablespace                    false
+pg_timezone_abbrevs              true
+pg_timezone_names                true
+pg_transform                     true
+pg_trigger                       true
+pg_ts_config                     true
+pg_ts_config_map                 true
+pg_ts_dict                       true
+pg_ts_parser                     true
+pg_ts_template                   true
+pg_type                          false
+pg_user                          false
+pg_user_mapping                  true
+pg_user_mappings                 true
+pg_views                         false
 
 # Verify that table names are not double escaped.
 
