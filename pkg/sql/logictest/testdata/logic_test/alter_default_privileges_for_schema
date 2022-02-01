@@ -11,25 +11,25 @@ USE d;
 # The public schema is special and has hard-coded privileges for the public role.
 # When https://github.com/cockroachdb/cockroach/issues/70266 is resolved,
 # the public role will no longer have CREATE privilege.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA public
 ----
-database_name  schema_name  grantee  privilege_type
-d              public       admin    ALL
-d              public       public   CREATE
-d              public       public   USAGE
-d              public       root     ALL
+database_name  schema_name  grantee  privilege_type  is_grantable
+d              public       admin    ALL             true
+d              public       public   CREATE          false
+d              public       public   USAGE           false
+d              public       root     ALL             true
 
 statement ok
 CREATE SCHEMA testuser_s;
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA testuser_s;
 ----
-database_name  schema_name  grantee   privilege_type
-d              testuser_s   admin     ALL
-d              testuser_s   root      ALL
-d              testuser_s   testuser  ALL
+database_name  schema_name  grantee   privilege_type  is_grantable
+d              testuser_s   admin     ALL             true
+d              testuser_s   root      ALL             true
+d              testuser_s   testuser  ALL             false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser;
@@ -40,13 +40,13 @@ CREATE SCHEMA testuser_s2;
 # Note that CREATE is still present for testuser due to our current inheritance
 # behavior.
 # TODO(richardjcai): Remove this when we remove our current inheritance logic.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA testuser_s2
 ----
-database_name  schema_name  grantee   privilege_type
-d              testuser_s2  admin     ALL
-d              testuser_s2  root      ALL
-d              testuser_s2  testuser  CREATE
+database_name  schema_name  grantee   privilege_type  is_grantable
+d              testuser_s2  admin     ALL             true
+d              testuser_s2  root      ALL             true
+d              testuser_s2  testuser  CREATE          false
 
 user root
 
@@ -62,14 +62,14 @@ ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
 statement ok
 CREATE SCHEMA s
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s
 ----
-database_name  schema_name  grantee    privilege_type
-test           s            admin      ALL
-test           s            root       ALL
-test           s            testuser   ALL
-test           s            testuser2  ALL
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s            admin      ALL             true
+test           s            root       ALL             true
+test           s            testuser   ALL             true
+test           s            testuser2  ALL             true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE USAGE ON SCHEMAS FROM testuser, testuser2
@@ -77,16 +77,16 @@ ALTER DEFAULT PRIVILEGES REVOKE USAGE ON SCHEMAS FROM testuser, testuser2
 statement ok
 CREATE SCHEMA s2
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s2
 ----
-database_name  schema_name  grantee    privilege_type
-test           s2           admin      ALL
-test           s2           root       ALL
-test           s2           testuser   CREATE
-test           s2           testuser   GRANT
-test           s2           testuser2  CREATE
-test           s2           testuser2  GRANT
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s2           admin      ALL             true
+test           s2           root       ALL             true
+test           s2           testuser   CREATE          true
+test           s2           testuser   GRANT           true
+test           s2           testuser2  CREATE          true
+test           s2           testuser2  GRANT           true
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2
@@ -94,12 +94,12 @@ ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2
 statement ok
 CREATE SCHEMA s3
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s3
 ----
-database_name  schema_name  grantee  privilege_type
-test           s3           admin    ALL
-test           s3           root     ALL
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           s3           admin    ALL             true
+test           s3           root     ALL             true
 
 statement ok
 GRANT CREATE ON DATABASE d TO testuser
@@ -115,13 +115,13 @@ statement ok
 CREATE SCHEMA s4
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s4
 ----
-database_name  schema_name  grantee   privilege_type
-d              s4           admin     ALL
-d              s4           root      ALL
-d              s4           testuser  CREATE
+database_name  schema_name  grantee   privilege_type  is_grantable
+d              s4           admin     ALL             true
+d              s4           root      ALL             true
+d              s4           testuser  CREATE          false
 
 user root
 statement ok
@@ -142,13 +142,13 @@ statement ok
 CREATE SCHEMA s5
 
 # testuser still has CREATE due to "inheriting" it from the parent database.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s5
 ----
-database_name  schema_name  grantee   privilege_type
-d              s5           admin     ALL
-d              s5           root      ALL
-d              s5           testuser  CREATE
+database_name  schema_name  grantee   privilege_type  is_grantable
+d              s5           admin     ALL             true
+d              s5           root      ALL             true
+d              s5           testuser  CREATE          false
 
 statement ok
 ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO testuser, testuser2
@@ -159,10 +159,10 @@ statement ok
 CREATE SCHEMA s_72322
 
 # When root creates the table, testuser and testuser2 should not get privileges.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s_72322
 ----
-database_name  schema_name  grantee   privilege_type
-d              s_72322      admin     ALL
-d              s_72322      root      ALL
-d              s_72322      testuser  CREATE
+database_name  schema_name  grantee   privilege_type  is_grantable
+d              s_72322      admin     ALL             true
+d              s_72322      root      ALL             true
+d              s_72322      testuser  CREATE          false

@@ -40,7 +40,8 @@ SELECT database_name,
 SELECT table_catalog AS database_name,
        table_schema AS schema_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
   FROM "".information_schema.schema_privileges`
 	const tablePrivQuery = `
 SELECT table_catalog AS database_name,

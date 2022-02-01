@@ -1,4 +1,4 @@
-# LogicTest: default-configs local-mixed-21.2-22.1
+# LogicTest: default-configs
 
 statement ok
 GRANT CREATE ON DATABASE test TO testuser;
@@ -8,28 +8,28 @@ CREATE USER testuser2
 user testuser
 
 # Check pg_catalog grants.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA pg_catalog
 ----
-database_name  schema_name  grantee  privilege_type
-test           pg_catalog   public   USAGE
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           pg_catalog   public   USAGE           false
 
 # Check information_schema grants.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA information_schema
 ----
-database_name  schema_name         grantee  privilege_type
-test           information_schema  public   USAGE
+database_name  schema_name         grantee  privilege_type  is_grantable
+test           information_schema  public   USAGE           false
 
 # Check public schema grants.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA public
 ----
-database_name  schema_name  grantee  privilege_type
-test           public       admin    ALL
-test           public       public   CREATE
-test           public       public   USAGE
-test           public       root     ALL
+database_name  schema_name  grantee  privilege_type  is_grantable
+test           public       admin    ALL             true
+test           public       public   CREATE          false
+test           public       public   USAGE           false
+test           public       root     ALL             true
 
 statement ok
 SET experimental_enable_temp_tables = true;
@@ -53,14 +53,14 @@ CREATE SCHEMA s;
 GRANT CREATE ON SCHEMA s TO testuser2
 
 # Check user-defined schema grants.
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s
 ----
-database_name  schema_name  grantee    privilege_type
-test           s            admin      ALL
-test           s            root       ALL
-test           s            testuser   ALL
-test           s            testuser2  CREATE
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s            admin      ALL             true
+test           s            root       ALL             true
+test           s            testuser   ALL             false
+test           s            testuser2  CREATE          false
 
 # Check grant information in backing table. We have to strip off the session
 # identifying information from the end of the pg_temp schema name.
@@ -74,22 +74,22 @@ SELECT
 FROM information_schema.schema_privileges
 ----
 grantee    table_catalog  table_schema        privilege_type  is_grantable
-public     test           crdb_internal       USAGE           NULL
-public     test           information_schema  USAGE           NULL
-public     test           pg_catalog          USAGE           NULL
-public     test           pg_extension        USAGE           NULL
-admin      test           pg_temp             ALL             NULL
-public     test           pg_temp             CREATE          NULL
-public     test           pg_temp             USAGE           NULL
-root       test           pg_temp             ALL             NULL
-admin      test           public              ALL             NULL
-public     test           public              CREATE          NULL
-public     test           public              USAGE           NULL
-root       test           public              ALL             NULL
-admin      test           s                   ALL             NULL
-root       test           s                   ALL             NULL
-testuser   test           s                   ALL             NULL
-testuser2  test           s                   CREATE          NULL
+public     test           crdb_internal       USAGE           NO
+public     test           information_schema  USAGE           NO
+public     test           pg_catalog          USAGE           NO
+public     test           pg_extension        USAGE           NO
+admin      test           pg_temp             ALL             YES
+public     test           pg_temp             CREATE          NO
+public     test           pg_temp             USAGE           NO
+root       test           pg_temp             ALL             YES
+admin      test           public              ALL             YES
+public     test           public              CREATE          NO
+public     test           public              USAGE           NO
+root       test           public              ALL             YES
+admin      test           s                   ALL             YES
+root       test           s                   ALL             YES
+testuser   test           s                   ALL             NO
+testuser2  test           s                   CREATE          NO
 
 # Check grants for testuser2, which should inherit from the public role.
 query TBB colnames rowsort
