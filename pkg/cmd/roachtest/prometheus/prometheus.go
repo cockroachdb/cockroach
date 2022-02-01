@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-//go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . Cluster
+//go:generate mockgen -package=prometheus -destination=mock_generated.go . Cluster
 
 package prometheus
 
