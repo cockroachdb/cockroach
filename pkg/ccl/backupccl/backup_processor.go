@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -107,8 +108,11 @@ type backupDataProcessor struct {
 	spec    execinfrapb.BackupDataSpec
 	output  execinfra.RowReceiver
 
-	progCh    chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
-	backupErr error
+	// cancelAndWaitForWorker cancels the producer goroutine and waits for it to
+	// finish. It can be called multiple times.
+	cancelAndWaitForWorker func()
+	progCh                 chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
+	backupErr              error
 
 	// BoundAccount to track memory usage of the backup processor.
 	memAcc *mon.BoundAccount
@@ -155,10 +159,25 @@ func newBackupDataProcessor(
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
 	ctx = bp.StartInternal(ctx, backupProcessorName)
-	go func() {
-		defer close(bp.progCh)
+	ctx, cancel := context.WithCancel(ctx)
+	bp.cancelAndWaitForWorker = func() {
+		cancel()
+		for range bp.progCh {
+		}
+	}
+	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName:  "backup-worker",
+		ChildSpan: true,
+	}, func(ctx context.Context) {
 		bp.backupErr = runBackupProcessor(ctx, bp.flowCtx, &bp.spec, bp.progCh, bp.memAcc)
-	}()
+		cancel()
+		close(bp.progCh)
+	}); err != nil {
+		// The closure above hasn't run, so we have to do the cleanup.
+		bp.backupErr = err
+		cancel()
+		close(bp.progCh)
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -184,6 +203,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 }
 
 func (bp *backupDataProcessor) close() {
+	bp.cancelAndWaitForWorker()
 	bp.ProcessorBase.InternalClose()
 	bp.memAcc.Close(bp.Ctx)
 }
