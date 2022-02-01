@@ -457,6 +457,8 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		return nil
 	})
 
+	vea.Report(ValidateRowLevelTTL(desc.GetRowLevelTTL()))
+
 	// Validate that there are no column with both a foreign key ON UPDATE and an
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.

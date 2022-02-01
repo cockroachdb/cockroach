@@ -623,6 +623,14 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if table.IsTemporary() {
 			relPersistence = relPersistenceTemporary
 		}
+		var relOptions tree.Datum = tree.DNull
+		if ttl := table.GetRowLevelTTL(); ttl != nil {
+			relOptionsArr := tree.NewDArray(types.String)
+			if err := relOptionsArr.Append(tree.NewDString(fmt.Sprintf("ttl_expire_after=%s", ttl.DurationExpr))); err != nil {
+				return err
+			}
+			relOptions = relOptionsArr
+		}
 		namespaceOid := h.NamespaceOid(db.GetID(), scName)
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
@@ -652,7 +660,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DBoolFalse, // relhassubclass
 			zeroVal,         // relfrozenxid
 			tree.DNull,      // relacl
-			tree.DNull,      // reloptions
+			relOptions,      // reloptions
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.DNull, // relforcerowsecurity
 			tree.DNull, // relispartition

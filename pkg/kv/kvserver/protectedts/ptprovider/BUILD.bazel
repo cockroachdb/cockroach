@@ -15,6 +15,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
+        "//pkg/util/metric",
         "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
     ],

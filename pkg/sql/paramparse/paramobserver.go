@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
@@ -55,7 +57,7 @@ func SetStorageParameters(
 			return err
 		}
 
-		if err := paramObserver.onSet(evalCtx, key, datum); err != nil {
+		if err := paramObserver.onSet(ctx, semaCtx, evalCtx, key, datum); err != nil {
 			return err
 		}
 	}
@@ -82,7 +84,7 @@ func ResetStorageParameters(
 type StorageParamObserver interface {
 	// onSet is called during CREATE [TABLE | INDEX] ... WITH (...) or
 	// ALTER [TABLE | INDEX] ... WITH (...).
-	onSet(evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet(ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	// onReset is called during ALTER [TABLE | INDEX] ... RESET (...)
 	onReset(evalCtx *tree.EvalContext, key string) error
 	// runPostChecks is called after all storage parameters have been set.
@@ -92,23 +94,33 @@ type StorageParamObserver interface {
 }
 
 // TableStorageParamObserver observes storage parameters for tables.
-type TableStorageParamObserver struct{}
+type TableStorageParamObserver struct {
+	tableDesc *tabledesc.Mutable
+}
+
+// NewTableStorageParamObserver returns a new TableStorageParamObserver.
+func NewTableStorageParamObserver(tableDesc *tabledesc.Mutable) *TableStorageParamObserver {
+	return &TableStorageParamObserver{tableDesc: tableDesc}
+}
 
 var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
 // runPostChecks implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) runPostChecks() error {
+	if err := tabledesc.ValidateRowLevelTTL(po.tableDesc.GetRowLevelTTL()); err != nil {
+		return err
+	}
 	return nil
 }
 
 type tableParam struct {
-	onSet   func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
+	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
 }
 
 var tableParams = map[string]tableParam{
 	`fillfactor`: {
-		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			return setFillFactorStorageParam(evalCtx, key, datum)
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -117,7 +129,7 @@ var tableParams = map[string]tableParam{
 		},
 	},
 	`autovacuum_enabled`: {
-		onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			var boolVal bool
 			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
 				boolVal, err = ParseBoolVar(key, stringVal)
@@ -141,6 +153,45 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
 			// Operation is a no-op so do nothing.
+			return nil
+		},
+	},
+	`ttl_expire_after`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			var d *tree.DInterval
+			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+				d, err = tree.ParseDInterval(evalCtx.SessionData().GetIntervalStyle(), stringVal)
+				if err != nil || d == nil {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`value of "ttl_expire_after" must be an interval`,
+					)
+				}
+			} else {
+				var ok bool
+				d, ok = datum.(*tree.DInterval)
+				if !ok || d == nil {
+					return pgerror.Newf(
+						pgcode.InvalidParameterValue,
+						`value of "ttl_expire_after" must be an interval`,
+					)
+				}
+			}
+
+			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`value of "ttl_expire_after" must be at least zero`,
+				)
+			}
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.RowLevelTTL = nil
 			return nil
 		},
 	},
@@ -177,7 +228,7 @@ func init() {
 		`user_catalog_table`,
 	} {
 		tableParams[param] = tableParam{
-			onSet: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 				return unimplemented.NewWithIssuef(43299, "storage parameter %q", key)
 			},
 			onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
@@ -189,10 +240,14 @@ func init() {
 
 // onSet implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onSet(
-	evalCtx *tree.EvalContext, key string, datum tree.Datum,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	datum tree.Datum,
 ) error {
 	if p, ok := tableParams[key]; ok {
-		return p.onSet(po, evalCtx, key, datum)
+		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
 	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage parameter %q", key)
 }
@@ -304,7 +359,11 @@ func (po *IndexStorageParamObserver) applyGeometryIndexSetting(
 
 // onSet implements the StorageParamObserver interface.
 func (po *IndexStorageParamObserver) onSet(
-	evalCtx *tree.EvalContext, key string, expr tree.Datum,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	key string,
+	expr tree.Datum,
 ) error {
 	switch key {
 	case `fillfactor`:

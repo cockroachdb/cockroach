@@ -973,20 +973,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				params.p.SemaCtx(),
 				params.EvalContext(),
 				t.StorageParams,
-				&paramparse.TableStorageParamObserver{},
+				paramparse.NewTableStorageParamObserver(n.tableDesc),
 			); err != nil {
 				return err
 			}
+			// TODO(#75428): handle TTL side effects
 
 		case *tree.AlterTableResetStorageParams:
 			if err := paramparse.ResetStorageParameters(
 				params.ctx,
 				params.EvalContext(),
 				t.Params,
-				&paramparse.TableStorageParamObserver{},
+				paramparse.NewTableStorageParamObserver(n.tableDesc),
 			); err != nil {
 				return err
 			}
+			// TODO(#75428): handle TTL side effects
 
 		case *tree.AlterTableRenameColumn:
 			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, t.Column, t.NewName)
