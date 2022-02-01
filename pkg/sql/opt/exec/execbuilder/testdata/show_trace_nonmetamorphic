@@ -366,6 +366,9 @@ dist sender send  r45: sending batch 6 CPut to (n1,s1):1
 dist sender send  r45: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
+SET distsql_workmem='64MiB';
+
+statement ok
 CREATE TABLE streamer (pk INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute), FAMILY (pk, attribute, blob));
 INSERT INTO streamer SELECT i, 1, repeat('a', 10) FROM generate_series(1, 42) AS g(i);
 

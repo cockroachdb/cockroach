@@ -41,7 +41,7 @@ postgres       root   NULL            {}       NULL           NULL
 system         node   NULL            {}       NULL           NULL
 test           root   NULL            {}       NULL           NULL
 
-query TT colnames
+query TT colnames,rowsort
 SHOW SCHEMAS FROM a
 ----
 schema_name         owner

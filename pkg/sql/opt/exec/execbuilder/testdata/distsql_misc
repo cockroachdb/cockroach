@@ -97,6 +97,9 @@ statement ok
 INSERT INTO data SELECT a, b, c::FLOAT, 1
 FROM generate_series(1,10) AS a, generate_series(1,10) AS b, generate_series(1,10) AS c;
 
+statement ok
+SET distsql_workmem='64MiB';
+
 query T
 EXPLAIN ANALYZE (DISTSQL) CREATE STATISTICS s1 ON a FROM data
 ----
