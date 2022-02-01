@@ -1060,6 +1060,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 					scNameStr := tree.NewDString(sc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
+					populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
@@ -1074,13 +1075,18 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 									continue
 								}
 							}
-
+							var isGrantable tree.Datum
+							if populateGrantOption {
+								isGrantable = yesOrNoDatum(priv.GrantOption)
+							} else {
+								isGrantable = tree.DNull
+							}
 							if err := addRow(
 								userNameStr,                        // grantee
 								dbNameStr,                          // table_catalog
 								scNameStr,                          // table_schema
 								tree.NewDString(privKind.String()), // privilege_type
-								tree.DNull,                         // is_grantable
+								isGrantable,                        // is_grantable
 							); err != nil {
 								return err
 							}

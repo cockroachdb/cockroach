@@ -2588,20 +2588,20 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
-admin    other_db       other_schema        ALL             NULL
-root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
-admin    other_db       public              ALL             NULL
-public   other_db       public              CREATE          NULL
-public   other_db       public              USAGE           NULL
-root     other_db       public              ALL             NULL
+admin    other_db       crdb_internal       ALL             YES
+root     other_db       crdb_internal       ALL             YES
+admin    other_db       information_schema  ALL             YES
+root     other_db       information_schema  ALL             YES
+admin    other_db       other_schema        ALL             YES
+root     other_db       other_schema        ALL             YES
+admin    other_db       pg_catalog          ALL             YES
+root     other_db       pg_catalog          ALL             YES
+admin    other_db       pg_extension        ALL             YES
+root     other_db       pg_extension        ALL             YES
+admin    other_db       public              ALL             YES
+public   other_db       public              CREATE          NO
+public   other_db       public              USAGE           NO
+root     other_db       public              ALL             YES
 
 statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser
@@ -2610,20 +2610,20 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-admin    other_db       crdb_internal       ALL             NULL
-root     other_db       crdb_internal       ALL             NULL
-admin    other_db       information_schema  ALL             NULL
-root     other_db       information_schema  ALL             NULL
-admin    other_db       other_schema        ALL             NULL
-root     other_db       other_schema        ALL             NULL
-admin    other_db       pg_catalog          ALL             NULL
-root     other_db       pg_catalog          ALL             NULL
-admin    other_db       pg_extension        ALL             NULL
-root     other_db       pg_extension        ALL             NULL
-admin    other_db       public              ALL             NULL
-public   other_db       public              CREATE          NULL
-public   other_db       public              USAGE           NULL
-root     other_db       public              ALL             NULL
+admin    other_db       crdb_internal       ALL             YES
+root     other_db       crdb_internal       ALL             YES
+admin    other_db       information_schema  ALL             YES
+root     other_db       information_schema  ALL             YES
+admin    other_db       other_schema        ALL             YES
+root     other_db       other_schema        ALL             YES
+admin    other_db       pg_catalog          ALL             YES
+root     other_db       pg_catalog          ALL             YES
+admin    other_db       pg_extension        ALL             YES
+root     other_db       pg_extension        ALL             YES
+admin    other_db       public              ALL             YES
+public   other_db       public              CREATE          NO
+public   other_db       public              USAGE           NO
+root     other_db       public              ALL             YES
 
 statement ok
 GRANT CREATE ON SCHEMA other_schema TO testuser
@@ -2632,21 +2632,21 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema        privilege_type  is_grantable
-admin     other_db       crdb_internal       ALL             NULL
-root      other_db       crdb_internal       ALL             NULL
-admin     other_db       information_schema  ALL             NULL
-root      other_db       information_schema  ALL             NULL
-admin     other_db       other_schema        ALL             NULL
-root      other_db       other_schema        ALL             NULL
-testuser  other_db       other_schema        CREATE          NULL
-admin     other_db       pg_catalog          ALL             NULL
-root      other_db       pg_catalog          ALL             NULL
-admin     other_db       pg_extension        ALL             NULL
-root      other_db       pg_extension        ALL             NULL
-admin     other_db       public              ALL             NULL
-public    other_db       public              CREATE          NULL
-public    other_db       public              USAGE           NULL
-root      other_db       public              ALL             NULL
+admin     other_db       crdb_internal       ALL             YES
+root      other_db       crdb_internal       ALL             YES
+admin     other_db       information_schema  ALL             YES
+root      other_db       information_schema  ALL             YES
+admin     other_db       other_schema        ALL             YES
+root      other_db       other_schema        ALL             YES
+testuser  other_db       other_schema        CREATE          NO
+admin     other_db       pg_catalog          ALL             YES
+root      other_db       pg_catalog          ALL             YES
+admin     other_db       pg_extension        ALL             YES
+root      other_db       pg_extension        ALL             YES
+admin     other_db       public              ALL             YES
+public    other_db       public              CREATE          NO
+public    other_db       public              USAGE           NO
+root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
