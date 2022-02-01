@@ -509,10 +509,12 @@ a list of key spans we need to restore from the restoring descriptors. A key spa
 
 We're now ready to begin loading the backup data into our cockroach cluster.
 
-**Important note**: the last range in the restoring cluster's key space is one big
-empty range, with a key span starting above the highest key with data in the
+**Important note**: the last range in the restoring cluster's key space is one
+big empty range, with a key span starting above the highest key with data in the
 cluster up to the max key allowed in the cluster.  We want to restore to that
-empty range.
+empty range. Recall that a key span is merely an interval of keys while a range
+has deeply physical representation: it represents stored data, in a given
+key span, that is replicated across nodes.
 
 Our first task is to split this massive empty range up into smaller ranges that we will restore 
 data into, and randomly assign nodes to be leaseholders for these new ranges. More concretely, 
@@ -527,10 +529,11 @@ Each split and scatter processor will then do the following, for each key span i
   into. I recommend reading the [code and comments here](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L352) 
 because the indexing is a little confusing. 
   - Note:  before the split request, we [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L84) 
-    this key (currently in the backup space) so it maps nicely to the restore key space.
+    this key (currently in the backup's key space) so it maps nicely to the restore cluster's key 
+    space.
     E.g. suppose we want to restore a table with a key span in the backup from 57/1 to 57/2; but the
-    restore cluster already has data in that key space. To avoid collisions, we have to remap this 
-    key span into the keyspan of that empty range.
+    restore cluster already has data in that span. To avoid collisions, we have to remap this 
+    key span into the key span of that empty range.
 - Issue a [scatter request](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/split_and_scatter_processor.go#L123) 
   to the kv layer on the span's first key. This asks kv to randomly reassign 
   the lease of this key's range. KV may not obey the request. 
@@ -541,8 +544,9 @@ In addition to running a split and scatter processor, each node will run a resto
 For each empty range the restore data processor receives, it will [read](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L167) 
 the relevant Backup SSTables in external storage, [remap](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L433) 
 each key to the restore's key space, and [flush](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/ccl/backupccl/restore_data_processor.go#L458) 
-SSTable(s) to disk, bypassing much of the infrastructure related to writing data to disk from conventional 
-queries. Note: all the kv shenanigans (e.g. range data replication, range splitting/merging, 
+SSTable(s) to disk, using the [kv client](https://github.com/cockroachdb/cockroach/blob/master/docs/tech-notes/life_of_a_query.md#the-kv-client-interface)
+interface's [AddSStable](https://github.com/cockroachdb/cockroach/blob/4149ca74099cee7a698fcade6d8ba6891f47dfed/pkg/kv/bulk/sst_batcher.go#L490)
+method, which bypasses much of the infrastructure related to writing data to disk from conventional queries. Note: all the kv shenanigans (e.g. range data replication, range splitting/merging, 
 leaseholder reassignment) is abstracted away from the bulk codebase, though these things can happen 
 while the restore is in process!  
 
