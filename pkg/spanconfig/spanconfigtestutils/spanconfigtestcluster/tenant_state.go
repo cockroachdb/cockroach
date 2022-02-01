@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -147,29 +148,49 @@ func (s *Tenant) WithMutableTableDescriptor(
 	}))
 }
 
+// descLookupFlags is the set of look up flags used when fetching descriptors.
+var descLookupFlags = tree.CommonLookupFlags{
+	IncludeDropped: true,
+	IncludeOffline: true,
+	AvoidLeased:    true, // we want consistent reads
+}
+
+// LookupTableDescriptorByID returns the table identified by the given ID.
+func (s *Tenant) LookupTableDescriptorByID(
+	ctx context.Context, id descpb.ID,
+) (desc catalog.TableDescriptor) {
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		var err error
+		desc, err = descsCol.GetImmutableTableByID(ctx, txn, id,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: descLookupFlags,
+			},
+		)
+		return err
+	}))
+	return desc
+}
+
 // LookupTableByName returns the table descriptor identified by the given name.
 func (s *Tenant) LookupTableByName(
 	ctx context.Context, dbName string, tbName string,
 ) (desc catalog.TableDescriptor) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg,
-		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			var err error
-			_, desc, err = descsCol.GetMutableTableByName(ctx, txn,
-				tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						IncludeOffline: true,
-						AvoidLeased:    true,
-					},
-				},
-			)
-			if err != nil {
-				return err
-			}
-			return nil
-		}))
+	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		var err error
+		_, desc, err = descsCol.GetImmutableTableByName(ctx, txn,
+			tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: descLookupFlags,
+			},
+		)
+		return err
+	}))
 	return desc
 }
 
@@ -182,17 +203,13 @@ func (s *Tenant) LookupDatabaseByName(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			var err error
-			desc, err = descsCol.GetMutableDatabaseByName(ctx, txn, dbName,
+			desc, err = descsCol.GetImmutableDatabaseByName(ctx, txn, dbName,
 				tree.DatabaseLookupFlags{
-					Required:       true,
 					IncludeOffline: true,
 					AvoidLeased:    true,
 				},
 			)
-			if err != nil {
-				return err
-			}
-			return nil
+			return err
 		}))
 	return desc
 }

@@ -1,0 +1,169 @@
+# Test a bunch of partitioning variants on secondary indexes. This file mirrors
+# the 'partitions' file. See comments there for more details.
+
+exec-sql
+CREATE DATABASE db;
+----
+
+exec-sql
+CREATE TABLE db.range_partitions(i INT PRIMARY KEY, j INT);
+CREATE INDEX secondary ON db.range_partitions (j);
+ALTER INDEX db.range_partitions@secondary PARTITION BY RANGE (j) (
+  PARTITION less_than_five       VALUES FROM (minvalue) to (5),
+  PARTITION between_five_and_ten VALUES FROM (5) to (10),
+  PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
+);
+----
+
+splits database=db table=range_partitions
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+/Table/106/2/5
+/Table/106/2/10
+/Table/106/3
+
+exec-sql
+CREATE TABLE db.list_partitions(i INT PRIMARY KEY, j INT);
+CREATE INDEX secondary ON db.list_partitions (j);
+ALTER INDEX db.list_partitions@secondary PARTITION BY LIST (j) (
+  PARTITION one_and_five    VALUES IN (2, 5),
+  PARTITION four_and_three  VALUES IN (4, 3),
+  PARTITION just_nine       VALUES IN (9),
+  PARTITION everything_else VALUES IN (default)
+);
+----
+
+splits database=db table=list_partitions
+----
+/Table/107
+/Table/107/1
+/Table/107/2
+/Table/107/2/2
+/Table/107/2/3
+/Table/107/2/4
+/Table/107/2/5
+/Table/107/2/6
+/Table/107/2/9
+/Table/107/2/10
+/Table/107/3
+
+exec-sql
+CREATE TABLE db.list_multi_column_partitions(i INT PRIMARY KEY, j INT);
+CREATE INDEX secondary ON db.list_multi_column_partitions(i, j);
+ALTER INDEX db.list_multi_column_partitions@secondary PARTITION BY LIST (i, j) (
+  PARTITION two_and_default VALUES IN ((2, default)),
+  PARTITION five_and_six VALUES IN ((5, 6))
+);
+----
+
+splits database=db table=list_multi_column_partitions
+----
+/Table/108
+/Table/108/1
+/Table/108/2
+/Table/108/2/2
+/Table/108/2/3
+/Table/108/2/5/6
+/Table/108/2/5/7
+/Table/108/3
+
+# XXX:
+#
+exec-sql
+CREATE TABLE db.list_then_range_partitions (C1 STRING PRIMARY KEY, N2 INT);
+CREATE INDEX secondary ON db.list_then_range_partitions (C1, N2);
+ALTER INDEX db.list_then_range_partitions@secondary PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C')
+        PARTITION BY RANGE (N2) (
+            PARTITION P1C1N2 VALUES FROM (MINVALUE) TO (10),
+            PARTITION P2C1N2 VALUES FROM (10) TO (MAXVALUE)
+        ),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY RANGE (N2) (
+            PARTITION P3C1N2 VALUES FROM (MINVALUE) TO (42),
+            PARTITION P4C1N2 VALUES FROM (42) TO (MAXVALUE)
+        )
+);
+----
+
+splits database=db table=list_then_range_partitions
+----
+/Table/109
+/Table/109/1
+/Table/109/2
+/Table/109/2/"A"
+/Table/109/2/"A"/10
+/Table/109/2/"A"/PrefixEnd
+/Table/109/2/"B"
+/Table/109/2/"B"/42
+/Table/109/2/"B"/PrefixEnd
+/Table/109/2/"C"
+/Table/109/2/"C"/10
+/Table/109/2/"C"/PrefixEnd
+/Table/109/2/"D"
+/Table/109/2/"D"/42
+/Table/109/2/"D"/PrefixEnd
+/Table/109/3
+
+exec-sql
+CREATE TABLE db.list_then_list_then_range_partitions_mixed (
+    C1 STRING PRIMARY KEY,
+    C2 STRING,
+    N3 INT
+);
+CREATE INDEX secondary ON db.list_then_list_then_range_partitions_mixed (C1, C2, N3);
+ALTER INDEX db.list_then_list_then_range_partitions_mixed@secondary PARTITION BY LIST (C1) (
+    PARTITION P1C1 VALUES IN ('A', 'C'),
+    PARTITION P2C1 VALUES IN ('B', 'D')
+        PARTITION BY LIST (C2) (
+            PARTITION P1C1C2 VALUES IN ('G', 'J')
+                PARTITION BY RANGE (N3) (
+                    PARTITION P1C1C2N3 VALUES FROM (MINVALUE) TO (10),
+                    PARTITION P2C1C2N3 VALUES FROM (10) TO (MAXVALUE)
+                ),
+            PARTITION P2C1C2 VALUES IN ('I', 'K')
+        ),
+    PARTITION P3C1 VALUES IN ('E', 'F')
+);
+----
+
+splits database=db table=list_then_list_then_range_partitions_mixed
+----
+/Table/110
+/Table/110/1
+/Table/110/2
+/Table/110/2/"A"
+/Table/110/2/"A"/PrefixEnd
+/Table/110/2/"B"
+/Table/110/2/"B"/"G"
+/Table/110/2/"B"/"G"/10
+/Table/110/2/"B"/"G"/PrefixEnd
+/Table/110/2/"B"/"I"
+/Table/110/2/"B"/"I"/PrefixEnd
+/Table/110/2/"B"/"J"
+/Table/110/2/"B"/"J"/10
+/Table/110/2/"B"/"J"/PrefixEnd
+/Table/110/2/"B"/"K"
+/Table/110/2/"B"/"K"/PrefixEnd
+/Table/110/2/"B"/PrefixEnd
+/Table/110/2/"C"
+/Table/110/2/"C"/PrefixEnd
+/Table/110/2/"D"
+/Table/110/2/"D"/"G"
+/Table/110/2/"D"/"G"/10
+/Table/110/2/"D"/"G"/PrefixEnd
+/Table/110/2/"D"/"I"
+/Table/110/2/"D"/"I"/PrefixEnd
+/Table/110/2/"D"/"J"
+/Table/110/2/"D"/"J"/10
+/Table/110/2/"D"/"J"/PrefixEnd
+/Table/110/2/"D"/"K"
+/Table/110/2/"D"/"K"/PrefixEnd
+/Table/110/2/"D"/PrefixEnd
+/Table/110/2/"E"
+/Table/110/2/"E"/PrefixEnd
+/Table/110/2/"F"
+/Table/110/2/"F"/PrefixEnd
+/Table/110/3

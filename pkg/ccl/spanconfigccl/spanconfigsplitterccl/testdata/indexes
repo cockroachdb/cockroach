@@ -1,0 +1,69 @@
+# Test splits for simple tables with indexes, dropping some and then adding
+# some new others.
+
+exec-sql
+CREATE DATABASE db;
+CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+----
+
+# We should observe splits at the table start, index start, and start of
+# (non-existent) next index.
+splits database=db table=t
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+
+# Create a bunch of indexes of the form idx<index ID>.
+exec-sql
+CREATE INDEX idx2 ON db.t (j);
+CREATE INDEX idx3 ON db.t (j);
+CREATE INDEX idx4 ON db.t (j);
+CREATE INDEX idx5 ON db.t (j);
+----
+
+# We should observe splits for each one, in addition to what we had earlier. We
+# should continue to observe a split at the next index ID.
+splits database=db table=t
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+/Table/106/3
+/Table/106/4
+/Table/106/5
+/Table/106/6
+
+# Drop a bunch of indexes to create a "gap" in the keyspace.
+exec-sql
+DROP INDEX db.t@idx2;
+DROP INDEX db.t@idx3;
+DROP INDEX db.t@idx4;
+----
+
+# The gap should appear. /Table/106/2 is there as that marks the end of the
+# first non-dropped index, and should extend to the next non-dropped index
+# start /Table/106/5.
+splits database=db table=t
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+/Table/106/5
+/Table/106/6
+
+# Create a few more and make sure they appear as you'd expect.
+exec-sql
+CREATE INDEX idx6 ON db.t (j);
+CREATE INDEX idx7 ON db.t (j);
+----
+
+splits database=db table=t
+----
+/Table/106
+/Table/106/1
+/Table/106/2
+/Table/106/5
+/Table/106/6
+/Table/106/7
+/Table/106/8
