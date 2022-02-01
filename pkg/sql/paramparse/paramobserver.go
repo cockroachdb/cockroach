@@ -113,6 +113,17 @@ func (po *TableStorageParamObserver) runPostChecks() error {
 	return nil
 }
 
+func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (bool, error) {
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		return ParseBoolVar(key, stringVal)
+	}
+	s, err := GetSingleBool(key, datum)
+	if err != nil {
+		return false, err
+	}
+	return bool(*s), nil
+}
+
 type tableParam struct {
 	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
@@ -130,18 +141,9 @@ var tableParams = map[string]tableParam{
 	},
 	`autovacuum_enabled`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
-			var boolVal bool
-			if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
-				boolVal, err = ParseBoolVar(key, stringVal)
-				if err != nil {
-					return err
-				}
-			} else {
-				s, err := GetSingleBool(key, datum)
-				if err != nil {
-					return err
-				}
-				boolVal = bool(*s)
+			boolVal, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
 			}
 			if !boolVal && evalCtx != nil {
 				evalCtx.ClientNoticeSender.BufferClientNotice(
