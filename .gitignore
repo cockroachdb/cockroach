@@ -51,3 +51,5 @@ pkg/kv/kvclient/rangefeed/mocks_generated.go
 pkg/roachprod/vm/aws/embedded.go
 pkg/security/certmgr/mocks_generated.go
 pkg/security/securitytest/embedded.go
+pkg/sql/schemachanger/scexec/mocks_generated_test.go
+pkg/util/log/mock_generated_test.go

@@ -1,7 +1,7 @@
 load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
-# gazelle:exclude mock_generated.go
+# gazelle:exclude mock_generated_test.go
 
 go_library(
     name = "log",
@@ -150,6 +150,7 @@ go_test(
         "intercept_test.go",
         "log_decoder_test.go",
         "main_test.go",
+        "mocks_generated_test.go",
         "redact_test.go",
         "secondary_log_test.go",
         "test_log_scope_test.go",
@@ -206,10 +207,12 @@ genrule(
 
 gomock(
     name = "mock_logsink",
-    out = "mock_generated.go",
-    interfaces = ["logSink"],
+    out = "mocks_generated_test.go",
+    interfaces = [
+        "TestingLogSink",
+    ],
     library = ":log",
-    mock_names = {"logSink": "MockLogSink"},
+    mock_names = {"TestingLogSink": "MockLogSink"},
     package = "log",
-    source = "sinks.go",
+    self_package = "github.com/cockroachdb/cockroach/pkg/util/log",
 )

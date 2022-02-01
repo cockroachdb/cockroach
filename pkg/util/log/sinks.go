@@ -12,7 +12,15 @@ package log
 
 import "github.com/cockroachdb/cockroach/pkg/cli/exit"
 
-//go:generate mockgen -package=log -source=sinks.go -destination=mock_generated.go -mock_names=logSink=MockLogSink logSink
+//go:generate mockgen -package=log -destination=mock_generated_test.go --mock_names=TestingLogSink=MockLogSink . TestingLogSink
+
+// TestingLogSink is exported for mock generation.
+// This is painful, but it seems to be the only way, for the moment, to
+// generate this mock.
+//
+// The reason is that there's no way to inject build tags into the current
+// bazel rules for gomock.
+type TestingLogSink = logSink
 
 // sinkOutputOptions provides various options for a logSink.output call.
 type sinkOutputOptions struct {
