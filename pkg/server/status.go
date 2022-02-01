@@ -2365,6 +2365,9 @@ func (s *statusServer) CancelSession(
 	}
 
 	if !local {
+		// This request needs to be forwarded to another node.
+		ctx = propagateGatewayMetadata(ctx)
+		ctx = s.AnnotateCtx(ctx)
 		status, err := s.dialNode(ctx, nodeID)
 		if err != nil {
 			return nil, err
