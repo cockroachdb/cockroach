@@ -57,7 +57,8 @@ func InitIndexFetchSpec(
 
 	families := table.GetFamilies()
 	for i := range families {
-		if f := &families[i]; f.DefaultColumnID != 0 {
+		f := &families[i]
+		if f.DefaultColumnID != 0 {
 			if s.FamilyDefaultColumns == nil {
 				s.FamilyDefaultColumns = oldFamilies[:0]
 			}
@@ -65,6 +66,9 @@ func InitIndexFetchSpec(
 				FamilyID:        f.ID,
 				DefaultColumnID: f.DefaultColumnID,
 			})
+		}
+		if f.ID > s.MaxFamilyID {
+			s.MaxFamilyID = f.ID
 		}
 	}
 
@@ -113,6 +117,7 @@ func InitIndexFetchSpec(
 			IndexFetchSpec_Column: mkCol(col, colID),
 			Direction:             dir,
 			IsComposite:           compositeIDs.Contains(colID),
+			IsInverted:            colID == invertedColumnID,
 		}
 	}
 

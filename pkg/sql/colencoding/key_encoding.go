@@ -49,14 +49,12 @@ func DecodeKeyValsToCols(
 	rowIdx int,
 	indexColIdx []int,
 	checkAllColsForNull bool,
-	types []*types.T,
-	directions []descpb.IndexDescriptor_Direction,
+	keyCols []descpb.IndexFetchSpec_KeyColumn,
 	unseen *util.FastIntSet,
 	key []byte,
-	invertedColIdx int,
 	scratch []byte,
 ) (remainingKey []byte, foundNull bool, retScratch []byte, _ error) {
-	for j := range types {
+	for j := range keyCols {
 		var err error
 		vecIdx := indexColIdx[j]
 		if vecIdx == -1 {
@@ -71,8 +69,11 @@ func DecodeKeyValsToCols(
 				unseen.Remove(vecIdx)
 			}
 			var isNull bool
-			isInverted := invertedColIdx == vecIdx
-			key, isNull, scratch, err = decodeTableKeyToCol(da, vecs, vecIdx, rowIdx, types[j], key, directions[j], isInverted, scratch)
+			key, isNull, scratch, err = decodeTableKeyToCol(
+				da, vecs, vecIdx, rowIdx,
+				keyCols[j].Type, key, keyCols[j].Direction, keyCols[j].IsInverted,
+				scratch,
+			)
 			foundNull = isNull || foundNull
 		}
 		if err != nil {

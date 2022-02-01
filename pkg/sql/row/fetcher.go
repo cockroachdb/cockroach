@@ -1116,7 +1116,7 @@ func (rf *Fetcher) finalizeRow() error {
 					}
 				}
 				var indexColNames []string
-				for i := range table.spec.KeyAndSuffixColumns {
+				for i := range table.spec.KeyFullColumns() {
 					indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
 				}
 				return errors.AssertionFailedf(
