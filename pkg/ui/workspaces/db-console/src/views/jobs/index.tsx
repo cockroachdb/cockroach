@@ -248,6 +248,7 @@ export class JobsTable extends React.Component<JobsTableProps> {
         <section className="section">
           <Loading
             loading={!this.props.jobs || !this.props.jobs.data}
+            page={"jobs"}
             error={this.props.jobs && this.props.jobs.lastError}
             render={() => (
               <JobTable

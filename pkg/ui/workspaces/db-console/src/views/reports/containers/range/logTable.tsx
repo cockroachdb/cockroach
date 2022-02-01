@@ -158,6 +158,7 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         <h2 className="base-heading">Range Log</h2>
         <Loading
           loading={!log || log.inFlight}
+          page={"log table"}
           error={log && log.lastError}
           render={this.renderContent}
         />

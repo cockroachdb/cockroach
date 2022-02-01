@@ -184,6 +184,7 @@ export class DataDistributionPage extends React.Component<
             loading={
               !this.props.dataDistribution.data || !this.props.localityTree
             }
+            page={"data distribution"}
             error={[
               this.props.dataDistribution.lastError,
               ...this.props.localityTreeErrors,

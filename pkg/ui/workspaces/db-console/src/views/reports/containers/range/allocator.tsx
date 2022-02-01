@@ -90,6 +90,7 @@ export default class AllocatorOutput extends React.Component<
         <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
         <Loading
           loading={!allocator || allocator.inFlight}
+          page={"allocator"}
           error={allocator && allocator.lastError}
           render={this.renderContent}
         />

@@ -212,6 +212,7 @@ export class Certificates extends React.Component<CertificatesProps, {}> {
         <section className="section">
           <Loading
             loading={!this.props.certificates}
+            page={"certificates"}
             error={this.props.lastError}
             render={this.renderContent}
           />
