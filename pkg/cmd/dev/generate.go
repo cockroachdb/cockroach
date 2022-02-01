@@ -50,9 +50,10 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
 
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
-		"bazel": d.generateBazel,
-		"docs":  d.generateDocs,
-		"go":    d.generateGo,
+		"bazel":    d.generateBazel,
+		"docs":     d.generateDocs,
+		"go":       d.generateGo,
+		"protobuf": d.generateProtobuf,
 	}
 
 	if len(targets) == 0 {
@@ -176,4 +177,14 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 		return err
 	}
 	return d.hoistGeneratedCode(ctx, workspace, bazelBin)
+}
+
+func (d *dev) generateProtobuf(cmd *cobra.Command) error {
+	// The bazel target //pkg/gen:go_proto builds and hoists the protobuf
+	// go files.
+	return d.exec.CommandContextInheritingStdStreams(
+		cmd.Context(), "bazel", append(append([]string{"run"},
+			mustGetRemoteCacheArgs(remoteCacheAddr)...),
+			"//pkg/gen:go_proto")...,
+	)
 }

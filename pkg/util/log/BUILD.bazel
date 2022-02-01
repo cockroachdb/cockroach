@@ -206,7 +206,7 @@ genrule(
 
 gomock(
     name = "mock_logsink",
-    out = "mock_generated.go",
+    ougt = "mock_generated.go",
     interfaces = ["logSink"],
     library = ":log",
     mock_names = {"logSink": "MockLogSink"},
