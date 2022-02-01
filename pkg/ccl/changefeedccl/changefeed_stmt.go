@@ -506,8 +506,6 @@ func changefeedJobDescription(
 		return "", err
 	}
 
-	cleanedSinkURI = redactUser(cleanedSinkURI)
-
 	c := &tree.CreateChangefeed{
 		Targets: changefeed.Targets,
 		SinkURI: tree.NewDString(cleanedSinkURI),
@@ -525,14 +523,6 @@ func changefeedJobDescription(
 	sort.Slice(c.Options, func(i, j int) bool { return c.Options[i].Key < c.Options[j].Key })
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(c, ann), nil
-}
-
-func redactUser(uri string) string {
-	u, _ := url.Parse(uri)
-	if u.User != nil {
-		u.User = url.User(`redacted`)
-	}
-	return u.String()
 }
 
 // validateNonNegativeDuration returns a nil error if optValue can be

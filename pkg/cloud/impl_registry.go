@@ -125,6 +125,10 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 		}
 	}
 
+	if uri.User != nil {
+		uri.User = url.User(`redacted`)
+	}
+
 	uri.RawQuery = params.Encode()
 	return uri.String(), nil
 }
