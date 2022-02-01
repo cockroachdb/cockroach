@@ -2311,3 +2311,17 @@ table_id  name         state   refobjid
 
 statement ok
 DROP TABLE test_serial;
+
+# Tests for issue #71709, which happens when a primary index that is used to
+# enforce the uniqueness of a foreign key reference is dropped.
+subtest pk-swap-fk-ref
+
+statement ok
+CREATE TABLE pk_fk_src(id int8 primary key, legacy_id int8 not null);
+CREATE TABLE pk_fk_ref(a_id int8 references pk_fk_src (id));
+
+statement error "pk_fk_src_pkey" is referenced by foreign key from table "pk_fk_ref"
+BEGIN;
+ALTER TABLE pk_fk_src DROP CONSTRAINT "pk_fk_src_pkey";
+ALTER TABLE pk_fk_src ADD CONSTRAINT "pk_fk_src_pkey" PRIMARY KEY (legacy_id);
+COMMIT;
