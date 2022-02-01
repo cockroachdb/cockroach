@@ -971,6 +971,7 @@ func bestStoreToMinimizeQPSDelta(
 		return 0, existingNotOverfull
 	}
 
+	currentQPSDelta := getQPSDelta(storeQPSMap, domain)
 	// Simulate the coldest candidate's QPS after it receives a lease/replica for
 	// the range.
 	storeQPSMap[bestCandidate] += replQPS
@@ -993,7 +994,6 @@ func bestStoreToMinimizeQPSDelta(
 	// store to the coldest store is not going to reduce the delta between all
 	// these stores, but it is still a desirable action to take.
 
-	currentQPSDelta := getQPSDelta(storeQPSMap, domain)
 	newQPSDelta := getQPSDelta(storeQPSMap, domain)
 	if currentQPSDelta < newQPSDelta {
 		panic(
