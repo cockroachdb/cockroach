@@ -1489,8 +1489,11 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 		if node.PartitionByTable != nil {
 			ctx.FormatNode(node.PartitionByTable)
 		}
-		// No storage parameters are implemented, so we never list the storage
-		// parameters in the output format.
+		if node.StorageParams != nil {
+			ctx.WriteString(` WITH (`)
+			ctx.FormatNode(&node.StorageParams)
+			ctx.WriteByte(')')
+		}
 		if node.Locality != nil {
 			ctx.WriteString(" ")
 			ctx.FormatNode(node.Locality)

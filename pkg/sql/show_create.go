@@ -175,6 +175,12 @@ func ShowCreateTable(
 		return "", err
 	}
 
+	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+		f.Buffer.WriteString(` WITH (ttl_expire_after = `)
+		f.Buffer.WriteString(ttl.DurationExpr)
+		f.Buffer.WriteString(`)`)
+	}
+
 	if err := showCreateLocality(desc, f); err != nil {
 		return "", err
 	}

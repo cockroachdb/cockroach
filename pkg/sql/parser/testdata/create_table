@@ -2196,10 +2196,10 @@ CREATE TABLE _ (_ INT4) LOCALITY REGIONAL BY ROW AS _ -- identifiers removed
 parse
 CREATE TABLE a (b INT) WITH (fillfactor=100)
 ----
-CREATE TABLE a (b INT8) -- normalized!
-CREATE TABLE a (b INT8) -- fully parenthesized
-CREATE TABLE a (b INT8) -- literals removed
-CREATE TABLE _ (_ INT8) -- identifiers removed
+CREATE TABLE a (b INT8) WITH (fillfactor = 100) -- normalized!
+CREATE TABLE a (b INT8) WITH (fillfactor = (100)) -- fully parenthesized
+CREATE TABLE a (b INT8) WITH (fillfactor = _) -- literals removed
+CREATE TABLE _ (_ INT8) WITH (_ = 100) -- identifiers removed
 
 parse
 CREATE TABLE arr_t (i STRING DEFAULT (('{' || 'a' || '}')::STRING[])[1]::STRING)
