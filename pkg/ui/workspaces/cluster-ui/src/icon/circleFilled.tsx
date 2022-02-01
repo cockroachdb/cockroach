@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,6 +8,14 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-export * from "./cockroachLabsLockupIcon";
-export * from "./backIcon";
-export * from "./circleFilled";
+import * as React from "react";
+
+interface IconProps {
+  className: string;
+}
+
+export const CircleFilled = ({ className, ...props }: IconProps) => (
+  <svg viewBox="0 0 12 12" className={className} {...props}>
+    <circle cx="6" cy="6" r="6" fillRule="evenodd" />
+  </svg>
+);
