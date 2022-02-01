@@ -1179,8 +1179,11 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		}
 		return c.invalidSyntax(errState)
 	case `\dd`:
-		c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
-		return cliRunStatement
+		if len(cmd) == 2 {
+			c.concatLines = `SHOW CONSTRAINTS FROM ` + cmd[1] + ` WITH COMMENT`
+			return cliRunStatement
+		}
+		return c.invalidSyntax(errState)
 	case `\connect`, `\c`:
 		return c.handleConnect(cmd[1:], loopState, errState)
 
