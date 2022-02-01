@@ -442,14 +442,14 @@ ALTER DEFAULT PRIVILEGES GRANT ALL PRIVILEGES ON SCHEMAS TO testuser, testuser2
 statement ok
 CREATE SCHEMA s1
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s1
 ----
-database_name  schema_name  grantee    privilege_type
-test           s1           admin      ALL
-test           s1           root       ALL
-test           s1           testuser   ALL
-test           s1           testuser2  ALL
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s1           admin      ALL             true
+test           s1           root       ALL             true
+test           s1           testuser   ALL             true
+test           s1           testuser2  ALL             true
 
 user testuser
 
@@ -469,14 +469,14 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT OPTION FOR ALL PRIVILEGES ON SCHEMAS FROM 
 statement ok
 CREATE SCHEMA s2
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s2
 ----
-database_name  schema_name  grantee    privilege_type
-test           s2           admin      ALL
-test           s2           root       ALL
-test           s2           testuser   ALL
-test           s2           testuser2  ALL
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s2           admin      ALL             true
+test           s2           root       ALL             true
+test           s2           testuser   ALL             false
+test           s2           testuser2  ALL             true
 
 user testuser
 
@@ -527,15 +527,15 @@ ALTER DEFAULT PRIVILEGES REVOKE GRANT ON SCHEMAS FROM testuser2
 statement ok
 CREATE SCHEMA s3
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s3
 ----
-database_name  schema_name  grantee    privilege_type
-test           s3           admin      ALL
-test           s3           root       ALL
-test           s3           testuser   CREATE
-test           s3           testuser2  CREATE
-test           s3           testuser2  USAGE
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s3           admin      ALL             true
+test           s3           root       ALL             true
+test           s3           testuser   CREATE          false
+test           s3           testuser2  CREATE          false
+test           s3           testuser2  USAGE           false
 
 user testuser2
 
