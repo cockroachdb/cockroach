@@ -20,6 +20,7 @@ import {
   refreshTableStats,
   refreshNodes,
   refreshIndexStats,
+  refreshSettings,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { databaseNameAttr, tableNameAttr } from "src/util/constants";
@@ -31,6 +32,7 @@ import {
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
 import { resetIndexUsageStatsAction } from "src/redux/indexUsageStats";
+import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
 const {
   TableDetailsRequest,
@@ -49,6 +51,7 @@ export const mapStateToProps = createSelector(
   state => state.cachedData.indexStats,
   state => nodeRegionsByIDSelector(state),
   state => selectIsMoreThanOneNode(state),
+  state => selectAutomaticStatsCollectionEnabled(state),
 
   (
     database,
@@ -58,6 +61,7 @@ export const mapStateToProps = createSelector(
     indexUsageStats,
     nodeRegions,
     showNodeRegionsSection,
+    automaticStatsCollectionEnabled,
   ): DatabaseTablePageData => {
     const details = tableDetails[generateTableID(database, table)];
     const stats = tableStats[generateTableID(database, table)];
@@ -102,8 +106,12 @@ export const mapStateToProps = createSelector(
         replicaCount: details?.data?.zone_config?.num_replicas || 0,
         indexNames: _.uniq(_.map(details?.data?.indexes, index => index.name)),
         grants: grants,
+        statsLastUpdated: details?.data?.stats_last_created_at
+          ? util.TimestampToMoment(details?.data?.stats_last_created_at)
+          : null,
       },
       showNodeRegionsSection,
+      automaticStatsCollectionEnabled,
       stats: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
@@ -139,4 +147,6 @@ export const mapDispatchToProps = {
   resetIndexUsageStats: resetIndexUsageStatsAction,
 
   refreshNodes,
+
+  refreshSettings,
 };

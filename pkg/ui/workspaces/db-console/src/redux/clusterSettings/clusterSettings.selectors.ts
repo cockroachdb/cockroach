@@ -41,3 +41,14 @@ export const selectResolution30mStorageTTL = createSelector(
     return util.durationFromISO8601String(value);
   },
 );
+
+export const selectAutomaticStatsCollectionEnabled = createSelector(
+  selectClusterSettings,
+  (settings): boolean | undefined => {
+    if (!settings) {
+      return undefined;
+    }
+    const value = settings["sql.stats.automatic_collection.enabled"]?.value;
+    return value === "true";
+  },
+);
