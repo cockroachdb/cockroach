@@ -45,9 +45,15 @@ message IndexFetchSpec {
   message KeyColumn {
     optional Column column = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
     optional IndexDescriptor.Direction direction = 2 [(gogoproto.nullable) = false];
+
     // IsComposite is true if this column can have a composite encoding (i.e. it
     // can appear in the value in addition to the key).
     optional bool is_composite = 3 [(gogoproto.nullable) = false];
+
+    // IsInverted is true if this column is the inverted key of an inverted index.
+    // In this case, the type of this column is the type of the data element
+    // (currently always Bytes).
+    optional bool is_inverted = 4 [(gogoproto.nullable) = false];
   }
 
   // FamilyDefaultColumn specifies the default column ID for a given family ID.
@@ -98,17 +104,21 @@ message IndexFetchSpec {
   // index ID.
   optional uint32 key_prefix_length = 10 [(gogoproto.nullable) = false];
 
+  optional uint32 max_family_id = 11 [(gogoproto.nullable) = false,
+                                      (gogoproto.customname) = "MaxFamilyID",
+                                      (gogoproto.casttype) = "FamilyID"];
+
   // FamilyDefaultColumns contains the default column IDs for families with a
   // default column. This is used to decode values that use the single column
   // optimization (where the column ID is omitted).
-  repeated FamilyDefaultColumn family_default_columns = 11 [(gogoproto.nullable) = false];
+  repeated FamilyDefaultColumn family_default_columns = 12 [(gogoproto.nullable) = false];
 
   // KeyAndSuffixColumns contains all the key and suffix columns, in order.
-  repeated KeyColumn key_and_suffix_columns = 12 [(gogoproto.nullable) = false];
+  repeated KeyColumn key_and_suffix_columns = 13 [(gogoproto.nullable) = false];
 
   // FetchedColumns contains all the columns we are producing values for. The
   // fetched columns can overlap with the key columns.
   //
   // Any other column IDs present in the fetched KVs will be ignored.
-  repeated Column fetched_columns = 13 [(gogoproto.nullable) = false];
+  repeated Column fetched_columns = 14 [(gogoproto.nullable) = false];
 }
