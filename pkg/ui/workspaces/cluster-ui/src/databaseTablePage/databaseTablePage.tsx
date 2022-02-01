@@ -21,7 +21,11 @@ import { CaretRight } from "src/icon/caretRight";
 import { StackIcon } from "src/icon/stackIcon";
 import { SqlBox } from "src/sql";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
+import {
+  SummaryCard,
+  SummaryCardItem,
+  SummaryCardItemBoolSetting,
+} from "src/summaryCard";
 import * as format from "src/util/format";
 import { syncHistory } from "src/util";
 
@@ -32,7 +36,10 @@ import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
 import { formatDate } from "antd/es/date-picker/utils";
 import { Link } from "react-router-dom";
+import classnames from "classnames/bind";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 const cx = classNames.bind(styles);
+const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
 const { TabPane } = Tabs;
 
@@ -84,6 +91,7 @@ export interface DatabaseTablePageData {
   stats: DatabaseTablePageDataStats;
   indexStats: DatabaseTablePageIndexStats;
   showNodeRegionsSection?: boolean;
+  automaticStatsCollectionEnabled: boolean;
 }
 
 export interface DatabaseTablePageDataDetails {
@@ -93,6 +101,7 @@ export interface DatabaseTablePageDataDetails {
   replicaCount: number;
   indexNames: string[];
   grants: Grant[];
+  statsLastUpdated: Moment;
 }
 
 export interface DatabaseTablePageIndexStats {
@@ -125,6 +134,7 @@ export interface DatabaseTablePageDataStats {
 export interface DatabaseTablePageActions {
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  refreshSettings: () => void;
   refreshIndexStats?: (database: string, table: string) => void;
   resetIndexUsageStats?: (database: string, table: string) => void;
   refreshNodes?: () => void;
@@ -202,6 +212,10 @@ export class DatabaseTablePage extends React.Component<
         this.props.databaseName,
         this.props.name,
       );
+    }
+
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
     }
   }
 
@@ -358,6 +372,37 @@ export class DatabaseTablePage extends React.Component<
                     <SummaryCardItem
                       label="Ranges"
                       value={this.props.stats.rangeCount}
+                    />
+                    {!this.props.details.statsLastUpdated.isSame(
+                      this.minDate,
+                    ) && (
+                      <SummaryCardItem
+                        label="Table Stats Last Updated"
+                        value={formatDate(
+                          this.props.details.statsLastUpdated,
+                          "MMM DD, YYYY [at] h:mm A [(UTC)]",
+                        )}
+                      />
+                    )}
+                    <SummaryCardItemBoolSetting
+                      label="Auto Stats Collection"
+                      value={this.props.automaticStatsCollectionEnabled}
+                      toolTipText={
+                        <span>
+                          {" "}
+                          Automatic statistics can help improve query
+                          performance. Learn how to{" "}
+                          <a
+                            className={booleanSettingCx(
+                              "crl-hover-text__link-text",
+                            )}
+                            href="https://www.cockroachlabs.com/docs/stable/cost-based-optimizer#control-automatic-statistics"
+                          >
+                            manage statistics collection
+                          </a>
+                          .
+                        </span>
+                      }
                     />
                   </SummaryCard>
                 </Col>

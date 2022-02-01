@@ -156,6 +156,7 @@ describe("Database Table Page", function() {
   it("starts in a pre-loading state", function() {
     driver.assertProperties(
       {
+        automaticStatsCollectionEnabled: false,
         databaseName: "DATABASE",
         name: "TABLE",
         showNodeRegionsSection: false,
@@ -166,6 +167,7 @@ describe("Database Table Page", function() {
           replicaCount: 0,
           indexNames: [],
           grants: [],
+          statsLastUpdated: moment(),
         },
         stats: {
           loading: false,
@@ -200,6 +202,7 @@ describe("Database Table Page", function() {
       zone_config: {
         num_replicas: 5,
       },
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshTableDetails();
@@ -215,6 +218,9 @@ describe("Database Table Page", function() {
         { user: "admin", privilege: "DROP" },
         { user: "public", privilege: "SELECT" },
       ],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
   });
 

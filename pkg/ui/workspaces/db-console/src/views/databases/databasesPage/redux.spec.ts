@@ -48,6 +48,10 @@ class TestDriver {
     return this.actions.refreshTableStats(database, table);
   }
 
+  async refreshSettings() {
+    return this.actions.refreshSettings();
+  }
+
   assertProperties(expected: DatabasesPageData) {
     assert.deepEqual(this.properties(), expected);
   }
@@ -97,6 +101,7 @@ describe("Databases Page", function() {
       databases: [],
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
+      automaticStatsCollectionEnabled: false,
     });
   });
 
@@ -106,6 +111,7 @@ describe("Databases Page", function() {
     });
 
     await driver.refreshDatabases();
+    await driver.refreshSettings();
 
     driver.assertProperties({
       loading: false,
@@ -134,6 +140,7 @@ describe("Databases Page", function() {
       ],
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
+      automaticStatsCollectionEnabled: false,
     });
   });
 

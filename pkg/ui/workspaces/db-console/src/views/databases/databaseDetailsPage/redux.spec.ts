@@ -19,6 +19,7 @@ import {
   DatabaseDetailsPageData,
   DatabaseDetailsPageDataTableDetails,
   DatabaseDetailsPageDataTableStats,
+  util,
   ViewMode,
 } from "@cockroachlabs/cluster-ui";
 
@@ -26,6 +27,8 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
+import moment from "moment";
+import { makeTimestamp } from "oss/src/views/databases/utils";
 
 function fakeRouteComponentProps(
   key: string,
@@ -159,6 +162,7 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: moment(),
           },
           stats: {
             loading: false,
@@ -178,6 +182,7 @@ describe("Database Details Page", function() {
             userCount: 0,
             roles: [],
             grants: [],
+            statsLastUpdated: moment(),
           },
           stats: {
             loading: false,
@@ -250,6 +255,7 @@ describe("Database Details Page", function() {
           implicit: false,
         },
       ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     fakeApi.stubTableDetails("things", "bar", {
@@ -298,6 +304,7 @@ describe("Database Details Page", function() {
           implicit: false,
         },
       ],
+      stats_last_created_at: makeTimestamp("0001-01-01T00:00:00Z"),
     });
 
     await driver.refreshDatabaseDetails();
@@ -312,6 +319,9 @@ describe("Database Details Page", function() {
       userCount: 2,
       roles: ["admin", "public"],
       grants: ["CREATE", "SELECT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
 
     driver.assertTableDetails("bar", {
@@ -322,6 +332,9 @@ describe("Database Details Page", function() {
       userCount: 3,
       roles: ["root", "app", "data"],
       grants: ["ALL", "SELECT", "INSERT"],
+      statsLastUpdated: util.TimestampToMoment(
+        makeTimestamp("0001-01-01T00:00:00Z"),
+      ),
     });
   });
 

@@ -16,6 +16,7 @@ import _ from "lodash";
 
 import { StackIcon } from "src/icon/stackIcon";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { BooleanSetting } from "src/settings/booleanSetting";
 import {
   ColumnDescriptor,
   ISortedTablePagination,
@@ -31,9 +32,12 @@ import {
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
 import { syncHistory } from "../util";
+import classnames from "classnames/bind";
+import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+const booleanSettingCx = classnames.bind(booleanSettingStyles);
 
 // We break out separate interfaces for some of the nested objects in our data
 // both so that they can be available as SortedTable rows and for making
@@ -67,6 +71,7 @@ export interface DatabasesPageData {
   loaded: boolean;
   databases: DatabasesPageDataDatabase[];
   sortSetting: SortSetting;
+  automaticStatsCollectionEnabled: boolean;
   showNodeRegionsColumn?: boolean;
 }
 
@@ -99,6 +104,7 @@ export interface DatabasesPageActions {
   refreshDatabases: () => void;
   refreshDatabaseDetails: (database: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  refreshSettings: () => void;
   refreshNodes?: () => void;
   onSortingChange?: (
     name: string,
@@ -158,6 +164,10 @@ export class DatabasesPage extends React.Component<
   private refresh(): void {
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
+    }
+
+    if (this.props.refreshSettings != null) {
+      this.props.refreshSettings();
     }
 
     if (!this.props.loaded && !this.props.loading) {
@@ -280,9 +290,29 @@ export class DatabasesPage extends React.Component<
     const displayColumns = this.columns.filter(
       col => col.showByDefault !== false,
     );
+    const tipText = (
+      <span>
+        {" "}
+        Automatic statistics can help improve query performance. Learn how to{" "}
+        <a
+          className={booleanSettingCx("crl-hover-text__link-text")}
+          href="https://www.cockroachlabs.com/docs/stable/cost-based-optimizer#control-automatic-statistics"
+        >
+          manage statistics collection
+        </a>
+        .
+      </span>
+    );
     return (
       <div>
-        <h3 className={baseHeadingClasses.tableName}>Databases</h3>
+        <div className={baseHeadingClasses.wrapper}>
+          <h3 className={baseHeadingClasses.tableName}>Databases</h3>
+          <BooleanSetting
+            text={"Auto stats collection"}
+            enabled={this.props.automaticStatsCollectionEnabled}
+            tooltipText={tipText}
+          />
+        </div>
         <section className={sortableTableCx("cl-table-container")}>
           <div className={statisticsClasses.statistic}>
             <h4 className={statisticsClasses.countTitle}>
