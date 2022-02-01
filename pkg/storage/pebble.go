@@ -295,7 +295,7 @@ func (t *pebbleTimeBoundPropCollector) Finish(userProps map[string]string) error
 			return nil //nolint:returnerrcheck
 		}
 		if meta.Txn != nil {
-			ts := encodeTimestamp(meta.Timestamp.ToTimestamp())
+			ts := encodeMVCCTimestamp(meta.Timestamp.ToTimestamp())
 			t.updateBounds(ts)
 		}
 	}
@@ -1052,7 +1052,7 @@ func (p *Pebble) clear(key MVCCKey) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	return p.db.Delete(EncodeKey(key), pebble.Sync)
+	return p.db.Delete(EncodeMVCCKey(key), pebble.Sync)
 }
 
 // SingleClearEngineKey implements the Engine interface.
@@ -1081,8 +1081,8 @@ func (p *Pebble) ClearMVCCRange(start, end MVCCKey) error {
 }
 
 func (p *Pebble) clearRange(start, end MVCCKey) error {
-	bufStart := EncodeKey(start)
-	bufEnd := EncodeKey(end)
+	bufStart := EncodeMVCCKey(start)
+	bufEnd := EncodeMVCCKey(end)
 	return p.db.DeleteRange(bufStart, bufEnd, pebble.Sync)
 }
 
@@ -1103,7 +1103,7 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	return p.db.Merge(EncodeKey(key), value, pebble.Sync)
+	return p.db.Merge(EncodeMVCCKey(key), value, pebble.Sync)
 }
 
 // PutMVCC implements the Engine interface.
@@ -1139,7 +1139,7 @@ func (p *Pebble) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	return p.db.Set(EncodeKey(key), value, pebble.Sync)
+	return p.db.Set(EncodeMVCCKey(key), value, pebble.Sync)
 }
 
 // LogData implements the Engine interface.
@@ -1435,13 +1435,13 @@ func (p *Pebble) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 
 // Compact implements the Engine interface.
 func (p *Pebble) Compact() error {
-	return p.db.Compact(nil, EncodeKey(MVCCKeyMax))
+	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax))
 }
 
 // CompactRange implements the Engine interface.
 func (p *Pebble) CompactRange(start, end roachpb.Key, forceBottommost bool) error {
-	bufStart := EncodeKey(MVCCKey{start, hlc.Timestamp{}})
-	bufEnd := EncodeKey(MVCCKey{end, hlc.Timestamp{}})
+	bufStart := EncodeMVCCKey(MVCCKey{start, hlc.Timestamp{}})
+	bufEnd := EncodeMVCCKey(MVCCKey{end, hlc.Timestamp{}})
 	return p.db.Compact(bufStart, bufEnd)
 }
 

@@ -52,7 +52,7 @@ func SprintEngineKey(key storage.EngineKey) string {
 
 // SprintMVCCKey pretty-prints the specified MVCCKey.
 func SprintMVCCKey(key storage.MVCCKey) string {
-	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeKey(key))
+	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
 }
 
 // SprintEngineKeyValue is like PrintEngineKeyValue, but returns a string.  In

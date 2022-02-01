@@ -743,7 +743,7 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// about to advance. If this proves to be a problem later, we can extend
 			// addAndAdvance to take an MVCCKey explicitly.
 			p.curUnsafeKey.Timestamp = metaTS
-			p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
+			p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], p.curUnsafeKey)
 			return p.addAndAdvance(ctx, p.curUnsafeKey.Key, p.keyBuf, value)
 		}
 		// 13. If no value in the intent history has a sequence number equal to
@@ -971,7 +971,7 @@ func (p *pebbleMVCCScanner) seekVersion(
 	ctx context.Context, seekTS hlc.Timestamp, uncertaintyCheck bool,
 ) bool {
 	seekKey := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
-	p.keyBuf = EncodeKeyToBuf(p.keyBuf[:0], seekKey)
+	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], seekKey)
 	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
 	// We will need seekKey below, if the next's don't suffice. Even though the
 	// MVCCIterator will be at a different version of the same key, it is free
