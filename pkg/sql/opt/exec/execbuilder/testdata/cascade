@@ -67,7 +67,7 @@ INSERT INTO c3 VALUES ('b2-pk1'), ('b2-pk2');
 statement ok
 SET tracing = on,kv,results; DELETE FROM a WHERE id = 'a-pk1'; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----

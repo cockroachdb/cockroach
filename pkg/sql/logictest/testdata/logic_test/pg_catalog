@@ -662,7 +662,7 @@ mv1_pkey           false        false           false           0             NU
 
 ## pg_catalog.pg_attribute
 
-query OTTOIIIII colnames
+query OTTOIIIII colnames,rowsort
 SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -731,7 +731,7 @@ attrelid    relname            attname                   atttypid  attstattarget
 121         mv1                rowid                     20        0              8       2       0         -1
 784389845   mv1_pkey           rowid                     20        0              8       2       0         -1
 
-query TTIBTTBBTT colnames
+query TTIBTTBBTT colnames,rowsort
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -800,7 +800,7 @@ mv1                ?column?                  -1         NULL      NULL        NU
 mv1                rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 mv1_pkey           rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 
-query TTBBITTT colnames
+query TTBBITTT colnames,rowsort
 SELECT c.relname, attname, attisdropped, attislocal, attinhcount, attacl, attoptions, attfdwoptions
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
@@ -948,7 +948,7 @@ oid         amname    amstrategies  amsupport  amcanorder  amcanorderbyop  amcan
 
 ## pg_catalog.pg_attrdef
 
-query OTOITTT colnames
+query OTOITTT colnames,rowsort
 SELECT ad.oid, c.relname, adrelid, adnum, adbin, adsrc, pg_get_expr(ad.adbin, ad.adrelid)
 FROM pg_catalog.pg_attrdef ad
 JOIN pg_catalog.pg_class c ON ad.adrelid = c.oid
@@ -1058,13 +1058,14 @@ SELECT c.relname, i.indkey, i.indexprs, i.indpred
 FROM pg_catalog.pg_index i
 JOIN pg_catalog.pg_class c ON i.indexrelid = c.oid
 WHERE c.relname LIKE 't6_%'
+ORDER BY 1
 ----
 relname            indkey  indexprs                    indpred
-t6_pkey            6       NULL                        NULL
-t6_expr_idx        0       (a + b)                     NULL
 t6_expr_expr1_idx  0 0     (lower(c)) (a + b)          NULL
-t6_expr_key        0       (lower(c))                  NULL
+t6_expr_idx        0       (a + b)                     NULL
 t6_expr_idx1       0       (m = 'foo'::public.mytype)  m = 'foo'::public.mytype
+t6_expr_key        0       (lower(c))                  NULL
+t6_pkey            6       NULL                        NULL
 
 statement ok
 SET DATABASE = system
@@ -1425,7 +1426,7 @@ classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
 # table to the pg_class system table. Other entries are links to pg_class when it is
 # a table-view dependency.
 
-query OOTT colnames
+query OOTT colnames,rowsort
 SELECT DISTINCT classid, refclassid, cla.relname AS tablename, refcla.relname AS reftablename
 FROM pg_catalog.pg_depend
 JOIN pg_class cla ON classid=cla.oid
@@ -4564,7 +4565,7 @@ statement ok
 PREPARE test_select_statement AS SELECT * FROM types
 
 query TTTB
-select name, statement, parameter_types, from_sql from pg_prepared_statements ORDER BY 1
+select name, statement, parameter_types, from_sql from pg_prepared_statements ORDER BY 1, 2
 ----
 test_insert_statement  PREPARE test_insert_statement (int, timestamptz) AS INSERT INTO types VALUES ($2, $1)  {bigint,"'timestamp with time zone'"}  true
 test_select_statement  PREPARE test_select_statement AS SELECT * FROM types                                   {}                                     true
