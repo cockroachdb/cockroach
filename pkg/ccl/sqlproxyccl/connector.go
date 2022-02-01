@@ -319,7 +319,11 @@ func (c *connector) lookupAddr(ctx context.Context) (string, error) {
 	if c.Directory != nil {
 		addr, err := c.Directory.EnsureTenantAddr(ctx, c.TenantID, c.ClusterName)
 		if err != nil {
-			if status.Code(err) != codes.NotFound {
+			if status.Code(err) == codes.FailedPrecondition {
+				if st, ok := status.FromError(err); ok {
+					return "", newErrorf(codeUnavailable, st.Message())
+				}
+			} else if status.Code(err) != codes.NotFound {
 				return "", markAsRetriableConnectorError(err)
 			}
 			// Fallback to old resolution rule.
