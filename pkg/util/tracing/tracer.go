@@ -1515,16 +1515,6 @@ var optsPool = sync.Pool{
 	},
 }
 
-// StartVerboseTrace takes in a context and returns a derived one with a
-// Span in it that is recording verbosely. The caller takes ownership of
-// this Span from the returned context and is in charge of Finish()ing it.
-//
-// TODO(tbg): remove this method. It adds very little over EnsureChildSpan.
-func StartVerboseTrace(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
-	ctx, sp := EnsureChildSpan(ctx, tr, opName, WithRecording(RecordingVerbose))
-	return ctx, sp
-}
-
 // ContextWithRecordingSpan returns a context with an embedded trace Span. The
 // Span is derived from the provided Tracer. The recording is collected and the
 // span is Finish()ed through the returned callback.

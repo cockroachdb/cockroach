@@ -739,7 +739,7 @@ func TestInvertedJoinerDrain(t *testing.T) {
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	tracer := s.TracerI().(*tracing.Tracer)
-	ctx, sp := tracing.StartVerboseTrace(context.Background(), tracer, "test flow ctx")
+	ctx, sp := tracer.StartSpanCtx(context.Background(), "test flow ctx", tracing.WithRecording(tracing.RecordingVerbose))
 	defer sp.Finish()
 	st := cluster.MakeTestingClusterSettings()
 	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)

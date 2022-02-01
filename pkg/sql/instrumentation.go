@@ -235,7 +235,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.collectExecStats = true
 	ih.traceMetadata = make(execNodeTraceMetadata)
 	ih.evalCtx = p.EvalContext()
-	newCtx, ih.sp = tracing.StartVerboseTrace(ctx, cfg.AmbientCtx.Tracer, "traced statement")
+	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracing.RecordingVerbose))
 	ih.shouldFinishSpan = true
 	return newCtx, true
 }

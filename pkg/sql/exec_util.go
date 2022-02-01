@@ -217,11 +217,11 @@ var traceTxnThreshold = settings.RegisterDurationSetting(
 		"within a transaction as well as client communication (e.g. retries).", 0,
 ).WithPublic()
 
-// traceStmtThreshold is identical to traceTxnThreshold except it applies to
+// TraceStmtThreshold is identical to traceTxnThreshold except it applies to
 // individual statements in a transaction. The motivation for this setting is
 // to be able to reduce the noise associated with a larger transaction (e.g.
 // round trips to client).
-var traceStmtThreshold = settings.RegisterDurationSetting(
+var TraceStmtThreshold = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"sql.trace.stmt.enable_threshold",
 	"duration beyond which all statements are traced (set to 0 to disable). "+
