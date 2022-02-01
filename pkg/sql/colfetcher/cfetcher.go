@@ -240,6 +240,8 @@ type cFetcher struct {
 	// table is the table that's configured for fetching.
 	table *cTableInfo
 
+	codec keys.SQLCodec
+
 	// maxKeysPerRow memoizes the maximum number of keys per row in the index
 	// we're fetching from. This is used to calculate the kvBatchFetcher's
 	// firstBatchLimit as well as by the ColIndexJoin when it is using the
@@ -380,6 +382,7 @@ func (cf *cFetcher) Init(
 	kvFetcherMemAcc *mon.BoundAccount,
 	tableArgs *cFetcherTableArgs,
 ) error {
+	cf.codec = codec
 	cf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()
@@ -1436,7 +1439,13 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
 func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(ctx, cf.table.desc, err)
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, cf.codec, cf.table.desc, cf.table.index, nil /* fetchColumnIDs */); err != nil {
+		// TODO(radu): this will go away when the cFetcher operates on a spec to
+		// begin with.
+		return errors.NewAssertionErrorWithWrappedErrf(err, "cannot initialize spec")
+	}
+	err = row.ConvertFetchError(&spec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }
