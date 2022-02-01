@@ -23,8 +23,8 @@ var NewDBAdapter = newDBAdapter
 // NewFactoryWithDB allows tests to construct a factory with an injected db.
 var NewFactoryWithDB = newFactory
 
-// KVDB forwards the definition of kvDB to tests.
-type KVDB = kvDB
+// KVDB forwards the definition of DB to tests.
+type KVDB = DB
 
 // ScanConfig forwards the definition of scanConfig to tests.
 type ScanConfig = scanConfig
