@@ -115,6 +115,8 @@
 
 /pkg/ccl/sqlproxyccl/        @cockroachdb/sqlproxy-prs @cockroachdb/server-prs
 
+/pkg/gen/                    @cockroachdb/dev-inf
+
 /pkg/acceptance/             @cockroachdb/sql-experience
 /pkg/base/                   @cockroachdb/server-prs
 /pkg/bench/                  @cockroachdb/sql-queries-noreview

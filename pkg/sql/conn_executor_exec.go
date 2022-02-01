@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention/txnidcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"go.opentelemetry.io/otel/attribute"
@@ -1895,8 +1897,65 @@ func payloadHasError(payload fsm.EventPayload) bool {
 	return hasErr
 }
 
+func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
+	if ex.extraTxnState.shouldExecuteOnTxnFinish {
+		ex.extraTxnState.shouldExecuteOnTxnFinish = false
+		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
+		implicit := ex.extraTxnState.txnFinishClosure.implicit
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
+		transactionFingerprintID :=
+			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
+		if !implicit {
+			ex.statsCollector.EndExplicitTransaction(
+				ctx,
+				transactionFingerprintID,
+			)
+		}
+		if ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded != nil {
+			ex.server.cfg.TestingKnobs.BeforeTxnStatsRecorded(
+				ex.sessionData(),
+				ev.txnID,
+				transactionFingerprintID,
+			)
+		}
+		err := ex.recordTransactionFinish(ctx, transactionFingerprintID, ev, implicit, txnStart)
+		if err != nil {
+			if log.V(1) {
+				log.Warningf(ctx, "failed to record transaction stats: %s", err)
+			}
+			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+		}
+	}
+}
+
+func (ex *connExecutor) onTxnRestart(ctx context.Context) {
+	if ex.extraTxnState.shouldExecuteOnTxnRestart {
+		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
+		ex.extraTxnState.transactionStatementFingerprintIDs = nil
+		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
+		ex.extraTxnState.numRows = 0
+		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
+		// unchanged.
+		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.rowsRead = 0
+		ex.extraTxnState.bytesRead = 0
+		ex.extraTxnState.rowsWritten = 0
+
+		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
+			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.extraTxnState.autoRetryReason)
+		}
+	}
+}
+
 // recordTransactionStart records the start of the transaction.
-func (ex *connExecutor) recordTransactionStart() {
+func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
+	// Transaction fingerprint ID will be available once transaction finishes
+	// execution.
+	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		TxnID:            txnID,
+		TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+	})
+
 	ex.state.mu.RLock()
 	txnStart := ex.state.mu.txnStart
 	ex.state.mu.RUnlock()
@@ -1935,50 +1994,7 @@ func (ex *connExecutor) recordTransactionStart() {
 	}
 }
 
-func (ex *connExecutor) onTxnFinish(ctx context.Context, ev txnEvent) {
-	if ex.extraTxnState.shouldExecuteOnTxnFinish {
-		ex.extraTxnState.shouldExecuteOnTxnFinish = false
-		txnStart := ex.extraTxnState.txnFinishClosure.txnStartTime
-		implicit := ex.extraTxnState.txnFinishClosure.implicit
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndExecTransaction, timeutil.Now())
-		transactionFingerprintID :=
-			roachpb.TransactionFingerprintID(ex.extraTxnState.transactionStatementsHash.Sum())
-		if !implicit {
-			ex.statsCollector.EndExplicitTransaction(
-				ctx,
-				transactionFingerprintID,
-			)
-		}
-		err := ex.recordTransaction(ctx, transactionFingerprintID, ev, implicit, txnStart)
-		if err != nil {
-			if log.V(1) {
-				log.Warningf(ctx, "failed to record transaction stats: %s", err)
-			}
-			ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
-		}
-	}
-}
-
-func (ex *connExecutor) onTxnRestart(ctx context.Context) {
-	if ex.extraTxnState.shouldExecuteOnTxnRestart {
-		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionMostRecentStartExecTransaction, timeutil.Now())
-		ex.extraTxnState.transactionStatementFingerprintIDs = nil
-		ex.extraTxnState.transactionStatementsHash = util.MakeFNV64()
-		ex.extraTxnState.numRows = 0
-		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
-		// unchanged.
-		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
-		ex.extraTxnState.rowsRead = 0
-		ex.extraTxnState.bytesRead = 0
-		ex.extraTxnState.rowsWritten = 0
-
-		if ex.server.cfg.TestingKnobs.BeforeRestart != nil {
-			ex.server.cfg.TestingKnobs.BeforeRestart(ctx, ex.extraTxnState.autoRetryReason)
-		}
-	}
-}
-
-func (ex *connExecutor) recordTransaction(
+func (ex *connExecutor) recordTransactionFinish(
 	ctx context.Context,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	ev txnEvent,
@@ -2006,13 +2022,18 @@ func (ex *connExecutor) recordTransaction(
 	ex.metrics.EngineMetrics.SQLTxnsOpen.Dec(1)
 	ex.metrics.EngineMetrics.SQLTxnLatency.RecordValue(txnTime.Nanoseconds())
 
+	ex.txnIDCacheWriter.Record(txnidcache.ResolvedTxnID{
+		TxnID:            ev.txnID,
+		TxnFingerprintID: transactionFingerprintID,
+	})
+
 	txnServiceLat := ex.phaseTimes.GetTransactionServiceLatency()
 	txnRetryLat := ex.phaseTimes.GetTransactionRetryLatency()
 	commitLat := ex.phaseTimes.GetCommitLatency()
 
 	recordedTxnStats := sqlstats.RecordedTxnStats{
 		TransactionTimeSec:      txnTime.Seconds(),
-		Committed:               ev == txnCommit,
+		Committed:               ev.eventType == txnCommit,
 		ImplicitTxn:             implicit,
 		RetryCount:              int64(ex.extraTxnState.autoRetryCounter),
 		StatementFingerprintIDs: ex.extraTxnState.transactionStatementFingerprintIDs,
