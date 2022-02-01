@@ -186,6 +186,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         <section className="section l-columns">
           <Loading
             loading={!events}
+            page={"events"}
             error={lastError}
             render={this.renderContent.bind(this)}
           />

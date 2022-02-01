@@ -443,6 +443,7 @@ export class StatementDetails extends React.Component<
         <section className={cx("section", "section--container")}>
           <Loading
             loading={_.isNil(this.props.statement)}
+            page={"statement details"}
             error={this.props.statementsError}
             render={this.renderContent}
             renderError={() =>

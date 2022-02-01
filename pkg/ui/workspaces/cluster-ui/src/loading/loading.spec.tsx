@@ -24,6 +24,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={null}
             render={() => <SomeComponent />}
           />,
@@ -37,6 +38,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={null}
             render={() => <SomeComponent />}
           />,
@@ -53,6 +55,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
           />,
@@ -68,6 +71,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
           />,
@@ -82,6 +86,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={true}
+            page={"Test"}
             error={Error("some error message")}
             render={() => <SomeComponent />}
             renderError={() => <SomeCustomErrorComponent />}
@@ -101,6 +106,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={errors}
             render={() => <SomeComponent />}
           />,
@@ -132,6 +138,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={errors}
             render={() => <SomeComponent />}
           />,
@@ -157,6 +164,7 @@ describe("<Loading>", () => {
         const wrapper = mount(
           <Loading
             loading={false}
+            page={"Test"}
             error={[null, null, null]}
             render={() => <SomeComponent />}
           />,
