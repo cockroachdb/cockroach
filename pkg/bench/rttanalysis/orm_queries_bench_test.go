@@ -162,6 +162,25 @@ WHERE
 		},
 
 		{
+			Name: "has_database_privilege",
+			// prevents database exists error
+			Setup: `DROP DATABASE IF EXISTS d; CREATE DATABASE d`,
+			Stmt:  `SELECT has_database_privilege('d', 'CREATE')`,
+		},
+
+		{
+			Name:  "has_schema_privilege",
+			Setup: `CREATE SCHEMA s`,
+			Stmt:  `SELECT has_schema_privilege('s', 'CREATE')`,
+		},
+
+		{
+			Name:  "has_sequence_privilege",
+			Setup: `CREATE SEQUENCE seq`,
+			Stmt:  `SELECT has_sequence_privilege('seq', 'SELECT')`,
+		},
+
+		{
 			Name:  "has_table_privilege real table",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
