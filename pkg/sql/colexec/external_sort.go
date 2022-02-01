@@ -406,6 +406,9 @@ func (s *externalSorter) Next() coldata.Batch {
 			for b := merger.Next(); ; b = merger.Next() {
 				partitionDone := s.enqueue(b)
 				if b.Length() == 0 || partitionDone {
+					if err := merger.Close(); err != nil {
+						colexecerror.InternalError(err)
+					}
 					break
 				}
 			}
@@ -600,17 +603,22 @@ func (s *externalSorter) Close() error {
 	}
 	ctx := s.EnsureCtx()
 	log.VEvent(ctx, 1, "external sorter is closed")
-	var err error
+	var lastErr error
 	if s.partitioner != nil {
-		err = s.partitioner.Close(ctx)
+		lastErr = s.partitioner.Close(ctx)
 		s.partitioner = nil
+	}
+	if c, ok := s.emitter.(colexecop.Closer); ok {
+		if err := c.Close(); err != nil {
+			lastErr = err
+		}
 	}
 	s.inMemSorterInput.close()
 	if !s.testingKnobs.delegateFDAcquisitions && s.fdState.fdSemaphore != nil && s.fdState.acquiredFDs > 0 {
 		s.fdState.fdSemaphore.Release(s.fdState.acquiredFDs)
 		s.fdState.acquiredFDs = 0
 	}
-	return err
+	return lastErr
 }
 
 // createPartitionerToOperators updates s.partitionerToOperators to correspond
@@ -636,7 +644,7 @@ func (s *externalSorter) createPartitionerToOperators(n int) {
 
 // createMergerForPartitions creates an ordered synchronizer that will merge
 // the last n current partitions.
-func (s *externalSorter) createMergerForPartitions(n int) colexecop.Operator {
+func (s *externalSorter) createMergerForPartitions(n int) *OrderedSynchronizer {
 	s.createPartitionerToOperators(n)
 	syncInputs := make([]colexecargs.OpWithMetaInfo, n)
 	for i := range syncInputs {
