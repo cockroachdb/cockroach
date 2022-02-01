@@ -40,7 +40,7 @@ export function* sessionsSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      [actions.invalidated, rootActions.resetState],
       refreshSessionsSaga,
     ),
     takeLatest(actions.request, requestSessionsSaga),

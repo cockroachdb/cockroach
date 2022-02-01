@@ -613,7 +613,7 @@ func (p *planner) canCreateOnSchema(
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{})
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -738,7 +738,7 @@ func (p *planner) HasOwnershipOnSchema(
 		return p.User().IsNodeUser(), nil
 	}
 	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{},
+		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
 		return false, err

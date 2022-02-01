@@ -40,7 +40,7 @@ export function* livenessSaga(
     throttleWithReset(
       cacheInvalidationPeriod,
       actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      [actions.invalidated, rootActions.resetState],
       refreshLivenessSaga,
     ),
     takeLatest(actions.request, requestLivenessSaga),

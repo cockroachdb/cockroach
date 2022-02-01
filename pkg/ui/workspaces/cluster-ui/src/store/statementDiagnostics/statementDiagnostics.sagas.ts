@@ -63,7 +63,7 @@ export function* statementsDiagnosticsSagas(
     throttleWithReset(
       delayMs,
       actions.refresh,
-      [actions.invalidated, actions.failed, rootActions.resetState],
+      [actions.invalidated, rootActions.resetState],
       refreshStatementsDiagnosticsSaga,
     ),
     takeLatest(actions.request, requestStatementsDiagnosticsSaga),
