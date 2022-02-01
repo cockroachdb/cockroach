@@ -45,7 +45,7 @@ test           root   NULL            {}       NULL           NULL
 statement ok
 CREATE SCHEMA a.s
 
-query TT colnames
+query TT colnames,rowsort
 SHOW SCHEMAS FROM a
 ----
 schema_name         owner
