@@ -1993,6 +1993,7 @@ func (s *statusServer) rangesHelper(
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				CircuitBreakerError:    len(state.CircuitBreakerError) > 0,
 			},
 			LeaseStatus:                 metrics.LeaseStatus,
 			Quiescent:                   metrics.Quiescent,
