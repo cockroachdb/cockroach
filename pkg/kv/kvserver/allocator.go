@@ -1483,6 +1483,17 @@ func (a *Allocator) TransferLeaseTarget(
 			)
 			return roachpb.ReplicaDescriptor{}
 		case shouldRebalance:
+			log.VEventf(
+				ctx,
+				5,
+				"r%d: should transfer lease (qps=%0.2f) from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
+				leaseRepl.GetRangeID(),
+				leaseReplQPS,
+				leaseRepl.StoreID(),
+				storeDescMap[leaseRepl.StoreID()].Capacity.QueriesPerSecond,
+				bestStore,
+				storeDescMap[bestStore].Capacity.QueriesPerSecond,
+			)
 		default:
 			log.Fatalf(ctx, "unknown declineReason: %v", noRebalanceReason)
 		}

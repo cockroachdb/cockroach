@@ -282,7 +282,7 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 		return false
 	}
 
-	_, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
+	bestStore, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
 	switch declineReason {
 	case noBetterCandidate:
 		log.VEventf(
@@ -305,6 +305,19 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	case missingStatsForExistingStore:
 		log.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
 	case shouldRebalance:
+		var bestStoreQPS float64
+		for _, store := range eqClass.candidateSL.stores {
+			if bestStore == store.StoreID {
+				bestStoreQPS = store.Capacity.QueriesPerSecond
+			}
+		}
+		log.VEventf(
+			ctx, 4,
+			"should rebalance replica with %0.2f qps from s%d (qps=%0.2f) to s%d (qps=%0.2f)",
+			o.qpsPerReplica, eqClass.existing.StoreID,
+			eqClass.existing.Capacity.QueriesPerSecond,
+			bestStore, bestStoreQPS,
+		)
 	default:
 		log.Fatalf(ctx, "unknown reason to decline rebalance: %v", declineReason)
 	}
