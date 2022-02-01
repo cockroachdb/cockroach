@@ -399,6 +399,7 @@ alter_ddl_stmt ::=
 	| alter_schema_stmt
 	| alter_type_stmt
 	| alter_default_privileges_stmt
+	| alter_backup_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1027,6 +1028,7 @@ unreserved_keyword ::=
 	| 'NAN'
 	| 'NEVER'
 	| 'NEW_DB_NAME'
+	| 'NEW_KMS'
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
@@ -1051,6 +1053,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
+	| 'OLD_KMS'
 	| 'OPERATOR'
 	| 'OPT'
 	| 'OPTION'
@@ -1384,6 +1387,10 @@ alter_default_privileges_stmt ::=
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_revoke_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_grant_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_revoke_stmt
+
+alter_backup_stmt ::=
+	'ALTER' 'BACKUP' list_of_string_or_placeholder_opt_list 'ADD' 'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
+	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list 'ADD' 'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
 role_or_group_or_user ::=
 	'ROLE'
