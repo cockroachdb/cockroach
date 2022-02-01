@@ -863,6 +863,8 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.hasAdminRoleCache = HasAdminRoleCache{}
 
+	ex.extraTxnState.atomicAutoRetryCounter = new(int32)
+
 	ex.initPlanner(ctx, &ex.planner)
 
 	return ex
@@ -1164,10 +1166,10 @@ type connExecutor struct {
 		// transaction and it is cleared after the transaction is committed.
 		schemaChangeJobRecords map[descpb.ID]*jobs.Record
 
-		// autoRetryCounter keeps track of the which iteration of a transaction
+		// atomicAutoRetryCounter keeps track of the which iteration of a transaction
 		// auto-retry we're currently in. It's 0 whenever the transaction state is not
 		// stateOpen.
-		autoRetryCounter int
+		atomicAutoRetryCounter *int32
 
 		// autoRetryReason records the error causing an auto-retryable error event if
 		// the current transaction is being automatically retried. This is used in
@@ -2660,7 +2662,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 	advInfo := ex.state.consumeAdvanceInfo()
 	if advInfo.code == rewind {
-		ex.extraTxnState.autoRetryCounter++
+		atomic.AddInt32(ex.extraTxnState.atomicAutoRetryCounter, 1)
 	}
 
 	// If we had an error from DDL statement execution due to the presence of
@@ -2689,7 +2691,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			}
 		}
 	case txnStart:
-		ex.extraTxnState.autoRetryCounter = 0
+		atomic.StoreInt32(ex.extraTxnState.atomicAutoRetryCounter, 0)
 		ex.extraTxnState.autoRetryReason = nil
 		ex.recordTransactionStart()
 		// Bump the txn counter for logging.
@@ -2859,7 +2861,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Start:                 ex.state.mu.txnStart,
 			NumStatementsExecuted: int32(ex.state.mu.stmtCount),
 			NumRetries:            int32(txn.Epoch()),
-			NumAutoRetries:        int32(ex.extraTxnState.autoRetryCounter),
+			NumAutoRetries:        atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter),
 			TxnDescription:        txn.String(),
 			Implicit:              ex.implicitTxn(),
 			AllocBytes:            ex.state.mon.AllocBytes(),

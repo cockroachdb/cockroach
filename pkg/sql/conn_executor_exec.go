@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"runtime/pprof"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1004,7 +1005,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			ex.extraTxnState.autoRetryCounter,
+			int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)),
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
 			res.Err(),
@@ -1080,7 +1081,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
 
-	ex.sessionTracing.TraceRetryInformation(ctx, ex.extraTxnState.autoRetryCounter, ex.extraTxnState.autoRetryReason)
+	ex.sessionTracing.TraceRetryInformation(ctx, int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)), ex.extraTxnState.autoRetryReason)
 	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
 		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
 	}
@@ -1113,7 +1114,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), stats,
+		int(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)), res.RowsAffected(), res.Err(), stats,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -2014,7 +2015,7 @@ func (ex *connExecutor) recordTransaction(
 		TransactionTimeSec:      txnTime.Seconds(),
 		Committed:               ev == txnCommit,
 		ImplicitTxn:             implicit,
-		RetryCount:              int64(ex.extraTxnState.autoRetryCounter),
+		RetryCount:              int64(atomic.LoadInt32(ex.extraTxnState.atomicAutoRetryCounter)),
 		StatementFingerprintIDs: ex.extraTxnState.transactionStatementFingerprintIDs,
 		ServiceLatency:          txnServiceLat,
 		RetryLatency:            txnRetryLat,
