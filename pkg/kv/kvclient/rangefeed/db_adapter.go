@@ -29,14 +29,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// dbAdapter is an implementation of the kvDB interface using a real *kv.DB.
+// dbAdapter is an implementation of the DB interface using a real *kv.DB.
 type dbAdapter struct {
 	db         *kv.DB
 	st         *cluster.Settings
 	distSender *kvcoord.DistSender
 }
 
-var _ kvDB = (*dbAdapter)(nil)
+var _ DB = (*dbAdapter)(nil)
 
 var maxScanParallelism = settings.RegisterIntSetting(
 	settings.TenantWritable,
@@ -45,7 +45,7 @@ var maxScanParallelism = settings.RegisterIntSetting(
 	64,
 )
 
-// newDBAdapter construct a kvDB using a *kv.DB.
+// newDBAdapter construct a DB using a *kv.DB.
 func newDBAdapter(db *kv.DB, st *cluster.Settings) (*dbAdapter, error) {
 	var distSender *kvcoord.DistSender
 	{
@@ -67,7 +67,7 @@ func newDBAdapter(db *kv.DB, st *cluster.Settings) (*dbAdapter, error) {
 	}, nil
 }
 
-// RangeFeed is part of the kvDB interface.
+// RangeFeed is part of the DB interface.
 func (dbc *dbAdapter) RangeFeed(
 	ctx context.Context,
 	spans []roachpb.Span,
@@ -96,7 +96,7 @@ func (ba *concurrentBoundAccount) Shrink(ctx context.Context, x int64) {
 	ba.BoundAccount.Shrink(ctx, x)
 }
 
-// Scan is part of the kvDB interface.
+// Scan is part of the DB interface.
 func (dbc *dbAdapter) Scan(
 	ctx context.Context,
 	spans []roachpb.Span,

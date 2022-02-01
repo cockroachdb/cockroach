@@ -801,7 +801,11 @@ GENERATED_TARGETS = \
   pkg/kv/kvclient/rangefeed/mocks_generated.go \
   pkg/roachprod/vm/aws/embedded.go \
   pkg/security/securitytest/embedded.go \
-  pkg/security/certmgr/mocks_generated.go
+  pkg/security/certmgr/mocks_generated.go \
+  pkg/kv/kvclient/kvcoord/mocks_generated.go \
+  pkg/kv/kvclient/rangecache/mocks_generated.go \
+  pkg/roachpb/mocks_generated.go \
+  pkg/util/log/mock_generated.go
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -971,6 +975,8 @@ BUILD_TAGGED_RELEASE =
 
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
+
+$(GENERATED_TARGETS): $(PROTOBUF_TARGETS) $(OPGEN_TARGETS) $(EXECGEN_TARGETS) $(SQLPARSER_TARGETS)
 
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(GENERATED_TARGETS) $(CLEANUP_TARGETS)
 $(go-targets): $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
@@ -1452,10 +1458,10 @@ ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules
 
-pkg/cmd/roachtest/prometheus/mock_generated.go: bin/.bootstrap pkg/cmd/roachtest/prometheus/prometheus.go
+pkg/cmd/roachtest/prometheus/mock_generated.go: bin/.bootstrap pkg/cmd/roachtest/prometheus/prometheus.go pkg/roachprod/vm/aws/embedded.go pkg/security/securitytest/embedded.go $(OPTGEN_TARGETS)
 	(cd pkg/cmd/roachtest/prometheus && $(GO) generate)
 
-pkg/cmd/roachtest/tests/drt_generated.go: bin/.bootstrap pkg/cmd/roachtest/tests/drt.go
+pkg/cmd/roachtest/tests/drt_generated.go: bin/.bootstrap pkg/cmd/roachtest/tests/drt.go pkg/roachprod/vm/aws/embedded.go $(OPTGEN_TARGETS) pkg/security/securitytest/embedded.go
 	(cd pkg/cmd/roachtest/tests && $(GO) generate)
 
 pkg/kv/kvclient/rangefeed/mocks_generated.go: bin/.bootstrap pkg/kv/kvclient/rangefeed/rangefeed.go

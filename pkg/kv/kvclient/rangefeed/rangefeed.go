@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-//go:generate mockgen -package=rangefeed -source rangefeed.go -destination=mocks_generated.go .
+//go:generate mockgen -destination=mocks_generated.go --package=rangefeed . DB
 
 // TODO(ajwerner): Expose hooks for metrics.
 // TODO(ajwerner): Expose access to checkpoints and the frontier.
@@ -42,8 +42,8 @@ import (
 // TODO(yevgeniy): Instead of rolling our own logic to parallelize scans, we should
 // use streamer API instead (https://github.com/cockroachdb/cockroach/pull/68430)
 
-// kvDB is an adapter to the underlying KV store.
-type kvDB interface {
+// DB is an adapter to the underlying KV store.
+type DB interface {
 
 	// RangeFeed runs a rangefeed on a given span with the given arguments.
 	// It encapsulates the RangeFeed method on roachpb.Internal.
@@ -71,7 +71,7 @@ type kvDB interface {
 // Factory is used to construct RangeFeeds.
 type Factory struct {
 	stopper *stop.Stopper
-	client  kvDB
+	client  DB
 	knobs   *TestingKnobs
 }
 
@@ -98,7 +98,7 @@ func NewFactory(
 	return newFactory(stopper, kvDB, knobs), nil
 }
 
-func newFactory(stopper *stop.Stopper, client kvDB, knobs *TestingKnobs) *Factory {
+func newFactory(stopper *stop.Stopper, client DB, knobs *TestingKnobs) *Factory {
 	return &Factory{
 		stopper: stopper,
 		client:  client,
@@ -154,7 +154,7 @@ type OnValue func(ctx context.Context, value *roachpb.RangeFeedValue)
 type RangeFeed struct {
 	config
 	name    string
-	client  kvDB
+	client  DB
 	stopper *stop.Stopper
 	knobs   *TestingKnobs
 
