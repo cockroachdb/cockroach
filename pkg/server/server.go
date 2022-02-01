@@ -629,7 +629,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
 	sHTTP := newHTTPServer(cfg)
 	sessionRegistry := sql.NewSessionRegistry()
-	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
 	sStatus := newStatusServer(
@@ -647,10 +646,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		node.stores,
 		stopper,
 		sessionRegistry,
-		contentionRegistry,
 		flowScheduler,
 		internalExecutor,
 	)
+
+	contentionRegistry := contention.NewRegistry()
 	// TODO(tbg): don't pass all of Server into this to avoid this hack.
 	sAuth := newAuthenticationServer(lateBoundServer)
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
