@@ -162,9 +162,54 @@ WHERE
 		},
 
 		{
-			Name:  "has_table_privilege real table",
+			Name:  "has_schema_privilege single",
+			Setup: `CREATE SCHEMA s`,
+			Stmt:  `SELECT has_schema_privilege('s', 'CREATE')`,
+		},
+
+		{
+			Name: "has_schema_privilege multiple",
+			Setup: `
+		CREATE SCHEMA s0;
+		CREATE SCHEMA s1;
+		CREATE SCHEMA s2;
+		CREATE SCHEMA s3;
+		`,
+			Stmt: `SELECT has_schema_privilege(nspname, 'CREATE') FROM pg_catalog.pg_namespace`,
+		},
+
+		{
+			Name:  "has_sequence_privilege single",
+			Setup: `CREATE SEQUENCE seq`,
+			Stmt:  `SELECT has_sequence_privilege('seq', 'SELECT')`,
+		},
+
+		{
+			Name: "has_sequence_privilege multiple",
+			Setup: `
+		CREATE SEQUENCE seq0;
+		CREATE SEQUENCE seq1;
+		CREATE SEQUENCE seq2;
+		CREATE SEQUENCE seq3;
+		`,
+			Stmt: `SELECT has_sequence_privilege(sequencename, 'SELECT') FROM pg_catalog.pg_sequences WHERE schemaname = 'public'`,
+		},
+
+		{
+			Name:  "has_table_privilege real table single",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
+		},
+
+		{
+			Name: "has_table_privilege real table multiple",
+			Setup: `
+		CREATE TABLE t0(a int primary key, b int);
+		CREATE TABLE t1(a int primary key, b int);
+		CREATE TABLE t2(a int primary key, b int);
+		CREATE TABLE t3(a int primary key, b int);
+		`,
+			Stmt: `SELECT has_table_privilege(tablename, 'SELECT') FROM pg_catalog.pg_tables WHERE schemaname = 'public'`,
 		},
 
 		{
