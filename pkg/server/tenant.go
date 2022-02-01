@@ -166,6 +166,8 @@ func StartTenant(
 		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
+	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx)
+
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
@@ -180,7 +182,10 @@ func StartTenant(
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
-	tenantStatusServer.RegisterService(grpcMain.Server)
+	// TODO(knz): add the authentication service here.
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer} {
+		gw.RegisterService(grpcMain.Server)
+	}
 	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
@@ -188,7 +193,7 @@ func StartTenant(
 		ctx,
 		background,
 		args.AmbientCtx,
-		tenantStatusServer.rpcCtx,
+		args.rpcContext,
 		s.stopper,
 		grpcMain,
 		pgLAddr,
@@ -196,8 +201,12 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
-	if err := tenantStatusServer.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-		return nil, "", "", err
+
+	// TODO(knz): add the authentication endpoint here.
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return nil, "", "", err
+		}
 	}
 
 	args.recorder.AddNode(
@@ -209,6 +218,7 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
+	// TODO(knz): use httpServer here instead.
 	mux := http.NewServeMux()
 	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
 	mux.Handle("/", debugServer)

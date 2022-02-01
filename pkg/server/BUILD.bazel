@@ -58,6 +58,7 @@ go_library(
         "sticky_engine.go",
         "tcp_keepalive_manager.go",
         "tenant.go",
+        "tenant_admin.go",
         "tenant_status.go",
         "testing_knobs.go",
         "testserver.go",
