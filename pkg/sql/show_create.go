@@ -179,7 +179,12 @@ func ShowCreateTable(
 
 	var storageParams []string
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
-		storageParams = append(storageParams, fmt.Sprintf(`ttl_expire_after = %s`, ttl.DurationExpr))
+		storageParams = append(
+			storageParams,
+			`ttl = 'on'`,
+			`ttl_automatic_column = 'on'`,
+			fmt.Sprintf(`ttl_expire_after = %s`, ttl.DurationExpr),
+		)
 	}
 	if len(storageParams) > 0 {
 		f.Buffer.WriteString(` WITH (`)
