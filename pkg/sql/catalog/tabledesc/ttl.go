@@ -12,7 +12,8 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // ValidateRowLevelTTL validates that the TTL options are valid.
@@ -21,7 +22,10 @@ func ValidateRowLevelTTL(ttl *descpb.TableDescriptor_RowLevelTTL) error {
 		return nil
 	}
 	if ttl.DurationExpr == "" {
-		return errors.AssertionFailedf("expected DurationExpr to be set on RowLevelTTL")
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"ttl_expire_after" must be set`,
+		)
 	}
 	return nil
 }
