@@ -218,11 +218,17 @@ export class SessionsPage extends React.Component<
   };
 
   render(): React.ReactElement {
-    const { cancelSession, cancelQuery } = this.props;
+    const { cancelSession, cancelQuery, sessionsError } = this.props;
+    const error = Array.isArray(sessionsError)
+      ? sessionsError.length > 0
+        ? sessionsError[0]
+        : null
+      : sessionsError;
     return (
       <div className={sessionsPageCx("sessions-page")}>
         <Loading
           loading={isNil(this.props.sessions)}
+          page={"sessions"}
           error={this.props.sessionsError}
           render={this.renderSessions}
           renderError={() =>
