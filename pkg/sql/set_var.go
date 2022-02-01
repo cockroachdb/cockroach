@@ -39,10 +39,16 @@ type setVarNode struct {
 	typedValues []tree.TypedExpr
 }
 
+// resetAllNode represents a RESET ALL statement.
+type resetAllNode struct{}
+
 // SetVar sets session variables.
 // Privileges: None.
 //   Notes: postgres/mysql do not require privileges for session variables (some exceptions).
 func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) {
+	if n.ResetAll {
+		return &resetAllNode{}, nil
+	}
 	if n.Name == "" {
 		// A client has sent the reserved internal syntax SET ROW ...,
 		// or the user entered `SET "" = foo`. Reject it.
@@ -181,6 +187,41 @@ func getSessionVarDefaultString(
 func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
 func (n *setVarNode) Values() tree.Datums            { return nil }
 func (n *setVarNode) Close(_ context.Context)        {}
+
+func (n *resetAllNode) startExec(params runParams) error {
+	for varName, v := range varGen {
+		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
+			continue
+		}
+		_, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+		)
+		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	for varName := range params.SessionData().CustomOptions {
+		_, v, err := getSessionVar(varName, false /* missingOK */)
+		if err != nil {
+			return err
+		}
+		_, defVal := getSessionVarDefaultString(
+			varName,
+			v,
+			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+		)
+		if err := params.p.SetSessionVar(params.ctx, varName, defVal, false /* isLocal */); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n *resetAllNode) Next(_ runParams) (bool, error) { return false, nil }
+func (n *resetAllNode) Values() tree.Datums            { return nil }
+func (n *resetAllNode) Close(_ context.Context)        {}
 
 func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (string, error) {
 	if len(values) != 1 {

@@ -1755,6 +1755,19 @@ func TestRoleDefaultSettings(t *testing.T) {
 			expectedSearchPath: "f",
 		},
 		{
+			// RESET after connecting should go back to the per-role default setting.
+			setupStmt:          "",
+			postConnectStmt:    "SET search_path = 'new'; RESET search_path;",
+			expectedSearchPath: "f",
+		},
+		{
+			// RESET should use the query param as the default if it was provided.
+			setupStmt:             "",
+			searchPathOptOverride: "g",
+			postConnectStmt:       "SET search_path = 'new'; RESET ALL;",
+			expectedSearchPath:    "g",
+		},
+		{
 			setupStmt:          "ALTER ROLE testuser IN DATABASE defaultdb SET search_path = DEFAULT",
 			expectedSearchPath: "c",
 		},
