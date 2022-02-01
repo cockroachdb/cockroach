@@ -386,6 +386,13 @@ func buildFileProtoModeForRepo(repoName string) string {
 	return "disable_global"
 }
 
+func dumpBuildDirectivesForRepo(repoName string) {
+	if repoName == "com_github_cockroachdb_pebble" {
+		fmt.Printf(`        build_directives = ["gazelle:build_tags invariants"],
+`)
+	}
+}
+
 func dumpBuildNamingConventionArgsForRepo(repoName string) {
 	if repoName == "com_github_envoyproxy_protoc_gen_validate" || repoName == "com_github_grpc_ecosystem_grpc_gateway" {
 		fmt.Printf("        build_naming_convention = \"go_default_library\",\n")
@@ -448,9 +455,10 @@ def go_deps():
 		}
 		fmt.Printf(`    go_repository(
         name = "%s",
-        build_file_proto_mode = "%s",
-`, repoName, buildFileProtoModeForRepo(repoName))
-
+`, repoName)
+		dumpBuildDirectivesForRepo(repoName)
+		fmt.Printf(`        build_file_proto_mode = "%s",
+`, buildFileProtoModeForRepo(repoName))
 		dumpBuildNamingConventionArgsForRepo(repoName)
 		expectedURL := formatURL(replaced.Path, replaced.Version)
 		fmt.Printf("        importpath = \"%s\",\n", mod.Path)
