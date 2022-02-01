@@ -868,6 +868,25 @@ func (s *adminServer) tableDetailsHelper(
 		resp.CreateTableStatement = createStmt
 	}
 
+	// Marshal SHOW STATISTICS result.
+	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
+		ctx, "admin-show-statistics", nil, /* txn */
+		sessiondata.InternalExecutorOverride{User: userName},
+		fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s]", escQualTable),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if row != nil {
+		scanner := makeResultScanner(cols)
+		const createdCol = "created"
+		var createdTs *time.Time
+		if err := scanner.Scan(row, createdCol, &createdTs); err != nil {
+			return nil, err
+		}
+		resp.StatsLastCreatedAt = createdTs
+	}
+
 	// Marshal SHOW ZONE CONFIGURATION result.
 	row, cols, err = s.server.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-show-zone-config", nil, /* txn */
