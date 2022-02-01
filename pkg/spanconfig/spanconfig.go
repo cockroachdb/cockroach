@@ -233,6 +233,83 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// Splitter returns the set of all possible split points for the given table
+// descriptor. It steps through every "unit" that we can apply configurations
+// over (table, indexes, partitions and sub-partitions) and figures out the
+// actual key boundaries that we may need to split over. For example:
+//
+//		CREATE TABLE db.parts(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+//			PARTITION one_and_five    VALUES IN (1, 5),
+//			PARTITION four_and_three  VALUES IN (4, 3),
+//			PARTITION everything_else VALUES IN (6, default)
+//		);
+//
+//  Assuming a table ID of 108, we'd generate:
+//
+//		/Table/108
+//		/Table/108/1
+//		/Table/108/1/1
+//		/Table/108/1/2
+//		/Table/108/1/3
+//		/Table/108/1/4
+//		/Table/108/1/5
+//		/Table/108/1/6
+//		/Table/108/1/7
+//		/Table/108/2
+//
+// TODO(irfansharif): We could alternatively return only the number of split
+// points implied. It's possible to compute it without having to decode any keys
+// whatsoever. Consider our table hierarchy again:
+//
+// 		table -> index -> partition -> partition
+//
+// Where each partition is either a PARTITION BY LIST kind (where it can then be
+// further partitioned), or a PARTITION BY RANGE kind (no further partitioning
+// possible). We can classify each parent-child link into two types:
+//
+// (a) Contiguous      {index, list partition} -> range partition
+// (b) Non-contiguous  table -> index, {index, list partition} -> list partition
+//
+// - Contiguous links are the sort where each child span is contiguous with
+//   another, and that the set of all child spans encompass the parent's span.
+//   For an index that's partitioned by range:
+//
+// 		CREATE TABLE db.range(i INT PRIMARY KEY, j INT) PARTITION BY RANGE (i) (
+//  		PARTITION less_than_five       VALUES FROM (minvalue) to (5),
+//			PARTITION between_five_and_ten VALUES FROM (5) to (10),
+//			PARTITION greater_than_ten     VALUES FROM (10) to (maxvalue)
+//		);
+//
+//   With table ID as 106, the parent index span is /Table/106/{1-2}. The child
+//   spans are /Table/106/1{-/5}, /Table/106/1/{5-10} and /Table/106/{1/10-2}.
+//   They're contiguous and put together, they wholly encompass the parent span.
+//
+// - Non-contiguous links by contrast are when child spans are neither
+//   contiguous with respect to one another, and nor do they start and end at
+//   the parent span's boundaries. For a table with a secondary index:
+//
+//		CREATE TABLE db.t(i INT PRIMARY KEY, j INT);
+//		CREATE INDEX idx ON db.t (j);
+//		DROP INDEX db.t@idx;
+//		CREATE INDEX idx ON db.t (j);
+//
+//   With table ID as 106, the parent table span is /Table/10{6-7}. The child
+//   spans are /Table/106/{1-2} and /Table/106/{3-4}. Compared to the parent
+//   span, we're missing /Table/106{-/1}, /Table/106/{2-3}, /Table/10{6/4-7}.
+//
+// For N children:
+// - For a contiguous link, the number of splits equals the number of child
+//   elements (i.e. N).
+// - For a non-contiguous link, the number of splits equals N + 1 + N. For N
+//   children, there are N - 1 gaps. There are also 2 gaps at the start and end
+//   of the parent span. Summing that with the N children span themselves, we
+//   get to the formula above. This assumes that the N child elements aren't
+//   further subdivided, if they are (we can compute it recursively), the
+//   formula becomes N + 1 + Σ(grand child spans).
+type Splitter interface {
+	Splits(ctx context.Context, desc catalog.TableDescriptor) ([]roachpb.Key, error)
+}
+
 // Record ties a target to its corresponding config.
 type Record struct {
 	// Target specifies the target (keyspan(s)) the config applies over.
