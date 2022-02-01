@@ -357,6 +357,15 @@ root  root  root  root
 statement ok
 SET ROLE testuser
 
+# Verify that RESET ALL does *not* affect role.
+statement ok
+RESET ALL
+
+query TTTT
+SELECT current_user(), current_user, session_user(), session_user
+----
+testuser  testuser  root  root
+
 query T
 SELECT user_name FROM crdb_internal.node_sessions
 WHERE active_queries LIKE 'SELECT user_name%'

@@ -743,6 +743,22 @@ SHOW tracing.custom
 ----
 ijk
 
+# Test that RESET ALL changes custom options to empty strings.
+statement ok
+RESET ALL
+
+query T
+
+query T
+SHOW tracing.custom
+----
+.
+
+query T
+SHOW custom_option.set_sql
+----
+.
+
 statement error unrecognized configuration parameter "custom_option.does_not_yet_exist"
 SHOW custom_option.does_not_yet_exist
 
