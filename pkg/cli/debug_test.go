@@ -343,7 +343,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 				}
 
 				if err := runDecommissionNodeImpl(
-					ctx, adminClient, nodeDecommissionWaitNone, deadNodes,
+					ctx, adminClient, nodeDecommissionWaitNone, deadNodes, tc.Server(0).NodeID(),
 				); err != nil {
 					t.Fatal(err)
 				}

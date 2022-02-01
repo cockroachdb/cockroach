@@ -87,6 +87,9 @@ var debugZipTablesPerCluster = []string{
 	"system.namespace",
 	"system.scheduled_jobs",
 	"system.settings", // get the raw settings to determine what's explicitly set.
+	"system.replication_stats",
+	"system.replication_critical_localities",
+	"system.replication_constraint_stats",
 
 	// The synthetic SQL CREATE statements for all tables.
 	// Note the "". to collect across all databases.

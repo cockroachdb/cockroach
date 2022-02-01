@@ -177,7 +177,8 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	adminClient := serverpb.NewAdminClient(grpcConn)
 
 	require.NoError(t, runDecommissionNodeImpl(
-		ctx, adminClient, nodeDecommissionWaitNone, []roachpb.NodeID{roachpb.NodeID(2), roachpb.NodeID(3)}),
+		ctx, adminClient, nodeDecommissionWaitNone,
+		[]roachpb.NodeID{roachpb.NodeID(2), roachpb.NodeID(3)}, tcAfter.Server(0).NodeID()),
 		"Failed to decommission removed nodes")
 
 	for i := 0; i < len(tcAfter.Servers); i++ {
