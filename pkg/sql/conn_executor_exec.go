@@ -1004,7 +1004,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(
 			ctx,
 			ex.executorType,
-			ex.extraTxnState.autoRetryCounter,
+			ex.loadAutoRetryCounter(),
 			ex.extraTxnState.txnCounter,
 			res.RowsAffected(),
 			res.Err(),
@@ -1080,7 +1080,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.curPlan.flags.Set(planFlagNotDistributed)
 	}
 
-	ex.sessionTracing.TraceRetryInformation(ctx, ex.extraTxnState.autoRetryCounter, ex.extraTxnState.autoRetryReason)
+	ex.sessionTracing.TraceRetryInformation(ctx, ex.loadAutoRetryCounter(), ex.extraTxnState.autoRetryReason)
 	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
 		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
 	}
@@ -1113,7 +1113,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// plan has not been closed earlier.
 	ex.recordStatementSummary(
 		ctx, planner,
-		ex.extraTxnState.autoRetryCounter, res.RowsAffected(), res.Err(), stats,
+		ex.loadAutoRetryCounter(), res.RowsAffected(), res.Err(), stats,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
@@ -2014,7 +2014,7 @@ func (ex *connExecutor) recordTransaction(
 		TransactionTimeSec:      txnTime.Seconds(),
 		Committed:               ev == txnCommit,
 		ImplicitTxn:             implicit,
-		RetryCount:              int64(ex.extraTxnState.autoRetryCounter),
+		RetryCount:              int64(ex.loadAutoRetryCounter()),
 		StatementFingerprintIDs: ex.extraTxnState.transactionStatementFingerprintIDs,
 		ServiceLatency:          txnServiceLat,
 		RetryLatency:            txnRetryLat,
