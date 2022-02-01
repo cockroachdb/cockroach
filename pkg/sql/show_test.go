@@ -170,7 +170,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (pk ASC),
 	FAMILY "primary" (pk, crdb_internal_expiration)
-) WITH (ttl_expire_after = '00:10:00':::INTERVAL)`,
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)`,
 		},
 		// Check that FK dependencies inside the current database
 		// have their db name omitted.
