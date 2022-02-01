@@ -18,12 +18,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -31,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -302,6 +306,291 @@ func TestClusterFlow(t *testing.T) {
 			for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
 				_, _ = clients[nodeIdx].CancelDeadFlows(ctx, req)
 				numQueued := tc.Server(nodeIdx).DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
+				if numQueued != 0 {
+					t.Fatalf("unexpectedly %d flows in queue (expected 0)", numQueued)
+				}
+			}
+		}
+	}
+}
+
+func TestTenantClusterFlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	const numNodes = 3
+	const numRows = 100
+
+	serverParams, _ := tests.CreateTestServerParams()
+	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual, ServerArgs: serverParams}
+	tci := serverutils.StartNewTestCluster(t, 3, args)
+	tc := tci.(*testcluster.TestCluster)
+	defer tc.Stopper().Stop(context.Background())
+
+	testingKnobs := base.TestingKnobs{
+		SQLStatsKnobs: &sqlstats.TestingKnobs{
+			AOSTClause: "AS OF SYSTEM TIME '-1us'",
+		},
+	}
+	var tenants []serverutils.TestTenantInterface
+	for i := 0; i < numNodes; i++ {
+		print("Start tenant ", i, "\n")
+		tenantID := roachpb.MakeTenantID(security.EmbeddedTenantIDs()[i])
+		tenant, err := tci.Server(i).StartTenant(ctx, base.TestTenantArgs{
+			TenantID:     tenantID,
+			TestingKnobs: testingKnobs,
+		})
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		tenants = append(tenants, tenant)
+	}
+
+	sumDigitsFn := func(row int) tree.Datum {
+		sum := 0
+		for row > 0 {
+			sum += row % 10
+			row /= 10
+		}
+		return tree.NewDInt(tree.DInt(sum))
+	}
+
+	sqlutils.CreateTable(t, tc.ServerConn(0), "t",
+		"num INT PRIMARY KEY, digitsum INT, numstr STRING, INDEX s (digitsum)",
+		numRows,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sumDigitsFn, sqlutils.RowEnglishFn))
+
+	kvDB := tc.Server(0).DB()
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	makeIndexSpan := func(start, end int) roachpb.Span {
+		var span roachpb.Span
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc.GetID(), desc.PublicNonPrimaryIndexes()[0].GetID()))
+		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
+		span.EndKey = append(span.EndKey, prefix...)
+		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
+		return span
+	}
+
+	// successful indicates whether the flow execution is successful.
+	for _, successful := range []bool{true, false} {
+		// Set up table readers on three hosts feeding data into a join reader on
+		// the third host. This is a basic test for the distributed flow
+		// infrastructure, including local and remote streams.
+		//
+		// Note that the ranges won't necessarily be local to the table readers, but
+		// that doesn't matter for the purposes of this test.
+
+		now := tc.Server(0).Clock().NowAsClockTimestamp()
+		txnProto := roachpb.MakeTransaction(
+			"cluster-test",
+			nil, // baseKey
+			roachpb.NormalUserPriority,
+			now.ToTimestamp(),
+			0, // maxOffsetNs
+			int32(tenants[0].SQLInstanceID()),
+		)
+		txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(tenants[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
+		leafInputState := txn.GetLeafTxnInputState(ctx)
+
+		tr1 := execinfrapb.TableReaderSpec{
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(0, 8)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
+		}
+
+		tr2 := execinfrapb.TableReaderSpec{
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(8, 12)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
+		}
+
+		tr3 := execinfrapb.TableReaderSpec{
+			Table:     *desc.TableDesc(),
+			IndexIdx:  1,
+			Spans:     []roachpb.Span{makeIndexSpan(12, 100)},
+			ColumnIDs: []descpb.ColumnID{1, 2},
+		}
+
+		fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
+
+		req1 := &execinfrapb.SetupFlowRequest{
+			Version:           execinfra.Version,
+			LeafTxnInputState: leafInputState,
+			Flow: execinfrapb.FlowSpec{
+				FlowID: fid,
+				Processors: []execinfrapb.ProcessorSpec{{
+					ProcessorID: 1,
+					Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr1},
+					Output: []execinfrapb.OutputRouterSpec{{
+						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []execinfrapb.StreamEndpointSpec{
+							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0, TargetNodeID: tenants[2].SQLInstanceID()},
+						},
+					}},
+					ResultTypes: types.TwoIntCols,
+				}},
+			},
+		}
+
+		req2 := &execinfrapb.SetupFlowRequest{
+			Version:           execinfra.Version,
+			LeafTxnInputState: leafInputState,
+			Flow: execinfrapb.FlowSpec{
+				FlowID: fid,
+				Processors: []execinfrapb.ProcessorSpec{{
+					ProcessorID: 2,
+					Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr2},
+					Output: []execinfrapb.OutputRouterSpec{{
+						Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+						Streams: []execinfrapb.StreamEndpointSpec{
+							{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1, TargetNodeID: tenants[2].SQLInstanceID()},
+						},
+					}},
+					ResultTypes: types.TwoIntCols,
+				}},
+			},
+		}
+
+		req3 := &execinfrapb.SetupFlowRequest{
+			Version:           execinfra.Version,
+			LeafTxnInputState: leafInputState,
+			Flow: execinfrapb.FlowSpec{
+				FlowID: fid,
+				Processors: []execinfrapb.ProcessorSpec{
+					{
+						ProcessorID: 3,
+						Core:        execinfrapb.ProcessorCoreUnion{TableReader: &tr3},
+						Output: []execinfrapb.OutputRouterSpec{{
+							Type: execinfrapb.OutputRouterSpec_PASS_THROUGH,
+							Streams: []execinfrapb.StreamEndpointSpec{
+								{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
+							},
+						}},
+						ResultTypes: types.TwoIntCols,
+					},
+					{
+						ProcessorID: 4,
+						Input: []execinfrapb.InputSyncSpec{{
+							Type: execinfrapb.InputSyncSpec_ORDERED,
+							Ordering: execinfrapb.Ordering{Columns: []execinfrapb.Ordering_Column{
+								{ColIdx: 1, Direction: execinfrapb.Ordering_Column_ASC}}},
+							Streams: []execinfrapb.StreamEndpointSpec{
+								{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 0},
+								{Type: execinfrapb.StreamEndpointSpec_REMOTE, StreamID: 1},
+								{Type: execinfrapb.StreamEndpointSpec_LOCAL, StreamID: 2},
+							},
+							ColumnTypes: types.TwoIntCols,
+						}},
+						Core: execinfrapb.ProcessorCoreUnion{JoinReader: &execinfrapb.JoinReaderSpec{Table: *desc.TableDesc(), MaintainOrdering: true}},
+						Post: execinfrapb.PostProcessSpec{
+							Projection:    true,
+							OutputColumns: []uint32{2},
+						},
+						Output: []execinfrapb.OutputRouterSpec{{
+							Type:    execinfrapb.OutputRouterSpec_PASS_THROUGH,
+							Streams: []execinfrapb.StreamEndpointSpec{{Type: execinfrapb.StreamEndpointSpec_SYNC_RESPONSE}},
+						}},
+						ResultTypes: []*types.T{types.String},
+					},
+				},
+			},
+		}
+
+		var clients []execinfrapb.DistSQLClient
+		for i := 0; i < numNodes; i++ {
+			tenant := tenants[i]
+			conn, err := tenant.RPCContext().GRPCDialNode(tenant.SQLAddr(), roachpb.NodeID(tenant.SQLInstanceID()), rpc.DefaultClass).Connect(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clients = append(clients, execinfrapb.NewDistSQLClient(conn))
+		}
+
+		setupRemoteFlow := func(nodeIdx int, req *execinfrapb.SetupFlowRequest) {
+			log.Infof(ctx, "Setting up flow on %d", nodeIdx)
+			if resp, err := clients[nodeIdx].SetupFlow(ctx, req); err != nil {
+				t.Fatal(err)
+			} else if resp.Error != nil {
+				t.Fatal(resp.Error)
+			}
+		}
+
+		if successful {
+			setupRemoteFlow(0 /* nodeIdx */, req1)
+			setupRemoteFlow(1 /* nodeIdx */, req2)
+
+			log.Infof(ctx, "Running local sync flow on 2")
+			rows, err := runLocalFlow(ctx, tc.Server(2), req3)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The result should be all the numbers in string form, ordered by the
+			// digit sum (and then by number).
+			var results []string
+			for sum := 1; sum <= 50; sum++ {
+				for i := 1; i <= numRows; i++ {
+					if int(tree.MustBeDInt(sumDigitsFn(i))) == sum {
+						results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
+					}
+				}
+			}
+			expected := strings.Join(results, " ")
+			expected = "[" + expected + "]"
+			if rowStr := rows.String([]*types.T{types.String}); rowStr != expected {
+				t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
+			}
+		} else {
+			// Simulate a scenario in which the query is canceled on the gateway
+			// which results in the cancellation of already scheduled flows.
+			//
+			// First, reduce the number of active remote flows to 0.
+			sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(2))
+			sqlRunner.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=0")
+			// Make sure that all nodes have the updated cluster setting value.
+			testutils.SucceedsSoon(t, func() error {
+				for i := 0; i < numNodes; i++ {
+					sqlRunner = sqlutils.MakeSQLRunner(tc.ServerConn(i))
+					rows := sqlRunner.Query(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows")
+					defer rows.Close()
+					rows.Next()
+					var maxRunningFlows int
+					if err := rows.Scan(&maxRunningFlows); err != nil {
+						t.Fatal(err)
+					}
+					if maxRunningFlows != 0 {
+						return errors.New("still old value")
+					}
+				}
+				return nil
+			})
+			const numScheduledPerNode = 4
+			// Now schedule some remote flows on all nodes.
+			for i := 0; i < numScheduledPerNode; i++ {
+				setupRemoteFlow(0 /* nodeIdx */, req1)
+				setupRemoteFlow(1 /* nodeIdx */, req2)
+				setupRemoteFlow(2 /* nodeIdx */, req3)
+			}
+			// Wait for all flows to be scheduled.
+			testutils.SucceedsSoon(t, func() error {
+				for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
+
+					numQueued := tenants[nodeIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
+					if numQueued != numScheduledPerNode {
+						return errors.New("not all flows are scheduled yet")
+					}
+				}
+				return nil
+			})
+			// Now, the meat of the test - cancel all queued up flows and make
+			// sure that the corresponding queues are empty.
+			req := &execinfrapb.CancelDeadFlowsRequest{
+				FlowIDs: []execinfrapb.FlowID{fid},
+			}
+			for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
+				_, _ = clients[nodeIdx].CancelDeadFlows(ctx, req)
+				numQueued := tenants[nodeIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
 				if numQueued != 0 {
 					t.Fatalf("unexpectedly %d flows in queue (expected 0)", numQueued)
 				}
