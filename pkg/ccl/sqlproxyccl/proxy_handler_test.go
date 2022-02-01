@@ -58,6 +58,10 @@ const backendError = "Backend error!"
 // the test directory server.
 const notFoundTenantID = 99
 
+// unavailableTenantID is used to trigger a FailedPrecondition error when it is requested in
+// the test directory server.
+const unavailableTenantID = 99
+
 func TestLongDBName(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -666,6 +670,13 @@ func TestDirectoryConnect(t *testing.T) {
 		require.Equal(t, 2, countReports)
 	})
 
+	t.Run("unavailable tenant", func(t *testing.T) {
+		url := fmt.Sprintf(
+			"postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-%d",
+			addr, unavailableTenantID)
+		te.TestConnectErr(ctx, t, url, codeUnavailable, "foo")
+	})
+
 	t.Run("successful connection", func(t *testing.T) {
 		url := fmt.Sprintf("postgres://root:admin@%s/?sslmode=disable&options=--cluster=tenant-cluster-28", addr)
 		te.TestConnect(ctx, t, url, func(conn *pgx.Conn) {
@@ -1156,6 +1167,9 @@ func newDirectoryServer(
 		// Recognize special tenant ID that triggers an error.
 		if tenantID == notFoundTenantID {
 			return nil, status.Error(codes.NotFound, "tenant not found")
+		}
+		if tenantID == unavailableTenantID {
+			return nil, status.Error(codes.FailedPrecondition, "tenant unavailable")
 		}
 
 		log.TestingClearServerIdentifiers()

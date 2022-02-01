@@ -292,8 +292,9 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		outgoingAddress, err = handler.outgoingAddress(ctx, clusterName, tenID)
 		if err != nil {
 			// Failure is assumed to be transient (and should be retried) except
-			// in case where the server was not found.
-			if status.Code(err) != codes.NotFound {
+			// in two cases. First, where the server was not found, and second,
+			// when the tenant cluster is intentionally unavailable (FailedPrecondition).
+			if status.Code(err) != codes.NotFound && status.Code(err) != codes.FailedPrecondition {
 				outgoingAddressErrs++
 				if outgoingAddressErr.ShouldLog() {
 					log.Ops.Errorf(ctx,
@@ -306,10 +307,19 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 				continue
 			}
 
-			// Remap error for external consumption.
 			log.Errorf(ctx, "could not retrieve outgoing address: %v", err.Error())
-			err = newErrorf(
-				codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
+			// Remap error for external consumption.
+			// Either not found.
+			if status.Code(err) == codes.NotFound {
+				err = newErrorf(
+					codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
+			} else {
+				// Or unavailable.
+				if st, ok := status.FromError(err); ok {
+					err = newErrorf(codeUnavailable, "%v", st.Message())
+				}
+				err = newErrorf(codeUnavailable, "unavailable")
+			}
 			break
 		}
 
