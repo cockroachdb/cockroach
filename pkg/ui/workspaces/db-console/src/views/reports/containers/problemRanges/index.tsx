@@ -203,6 +203,11 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           problems={problems}
           extract={problem => problem.quiescent_equals_ticking_range_ids}
         />
+        <ProblemRangeList 
+          name="Circuit breaker error"
+          problems={problems}
+          extract={problem => problem.circuit_breaker_error_range_ids}
+        />
       </div>
     );
   }
