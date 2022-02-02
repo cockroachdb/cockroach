@@ -400,17 +400,9 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// Determine the maximal set of key spans that the batch will operate on.
-	// This is used below to sequence the request in the concurrency manager.
-	latchSpans, lockSpans, requestEvalKind, err := r.collectSpans(ba)
-	if err != nil {
-		return nil, roachpb.NewError(err)
-	}
-
-	// Handle load-based splitting.
-	r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
-
 	// Try to execute command; exit retry loop on success.
+	var latchSpans, lockSpans *spanset.SpanSet
+	var requestEvalKind concurrency.RequestEvalKind
 	var g *concurrency.Guard
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
@@ -418,10 +410,29 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			r.concMgr.FinishReq(g)
 		}
 	}()
-	for {
+	for first := true; ; first = false {
 		// Exit loop if context has been canceled or timed out.
 		if err := ctx.Err(); err != nil {
 			return nil, roachpb.NewError(errors.Wrap(err, "aborted during Replica.Send"))
+		}
+
+		// Determine the maximal set of key spans that the batch will operate on.
+		// This is used below to sequence the request in the concurrency manager.
+		//
+		// Only do so if the latchSpans and lockSpans are not being preserved from a
+		// prior iteration, either directly or in a concurrency guard that we intend
+		// to re-use during sequencing.
+		if latchSpans == nil && g == nil {
+			var err error
+			latchSpans, lockSpans, requestEvalKind, err = r.collectSpans(ba)
+			if err != nil {
+				return nil, roachpb.NewError(err)
+			}
+		}
+
+		// Handle load-based splitting, if necessary.
+		if first {
+			r.recordBatchForLoadBasedSplitting(ctx, ba, latchSpans)
 		}
 
 		// Acquire latches to prevent overlapping requests from executing until
@@ -495,6 +506,25 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 			if pErr = r.handleIndeterminateCommitError(ctx, ba, pErr, t); pErr != nil {
 				return nil, pErr
 			}
+		case *roachpb.ReadWithinUncertaintyIntervalError:
+			// Drop latches and lock wait-queues.
+			r.concMgr.FinishReq(g)
+			g = nil
+			// If the batch is able to perform a server-side retry in order to avoid
+			// the uncertainty error, it will have a new timestamp. Force a refresh of
+			// the latch and lock spans.
+			latchSpans, lockSpans = nil, nil
+			// Attempt to adjust the batch's timestamp to avoid the uncertainty error
+			// and allow for a server-side retry. For transactional requests, there
+			// are strict conditions that must be met for this to be permitted. For
+			// non-transactional requests, this is always allowed. If successful, an
+			// updated BatchRequest will be returned. If unsuccessful, the provided
+			// read within uncertainty interval error will be returned so that we can
+			// propagate it.
+			ba, pErr = r.handleReadWithinUncertaintyIntervalError(ctx, ba, pErr, t)
+			if pErr != nil {
+				return nil, pErr
+			}
 		case *roachpb.InvalidLeaseError:
 			// Drop latches and lock wait-queues.
 			latchSpans, lockSpans = g.TakeSpanSets()
@@ -555,6 +585,34 @@ func isConcurrencyRetryError(pErr *roachpb.Error) bool {
 		// the pushee is aborted or committed, so the request must kick off the
 		// "transaction recovery procedure" to resolve this ambiguity before
 		// retrying.
+	case *roachpb.ReadWithinUncertaintyIntervalError:
+		// If a request hits a ReadWithinUncertaintyIntervalError, it was performing
+		// a non-locking read [1] and encountered a (committed or provisional) write
+		// within the uncertainty interval of the reader. Depending on the state of
+		// the request (see conditions in canDoServersideRetry), it may be able to
+		// adjust its timestamp and retry on the server.
+		//
+		// This is similar to other server-side retries that we allow below
+		// latching, like for WriteTooOld errors. However, because uncertainty
+		// errors are specific to non-locking reads, they can not [2] be retried
+		// without first dropping and re-acquiring their read latches at a higher
+		// timestamp. This is unfortunate for uncertainty errors, as it leads to
+		// some extra work.
+		//
+		// On the other hand, it is more important for other forms of retry errors
+		// to be handled without dropping latches because they could be starved by
+		// repeated conflicts. For instance, if WriteTooOld errors caused a write
+		// request to drop and re-acquire latches, it is possible that the request
+		// could return after each retry to find a new WriteTooOld conflict, never
+		// managing to complete. This is not the case for uncertainty errors, which
+		// can not occur indefinitely. A request (transactional or otherwise) has a
+		// fixed uncertainty window and, once exhausted, will never hit an
+		// uncertainty error again.
+		//
+		// [1] if a locking read observes a write at a later timestamp, it returns a
+		// WriteTooOld error. It's uncertainty interval does not matter.
+		// [2] in practice, this is enforced by tryBumpBatchTimestamp's call to
+		// (*concurrency.Guard).IsolatedAtLaterTimestamps.
 	case *roachpb.InvalidLeaseError:
 		// If a request hits an InvalidLeaseError, the replica it is being
 		// evaluated against does not have a valid lease under which it can
@@ -697,6 +755,36 @@ func (r *Replica) handleIndeterminateCommitError(
 	}
 	// We've recovered the transaction that blocked the request; retry.
 	return nil
+}
+
+func (r *Replica) handleReadWithinUncertaintyIntervalError(
+	ctx context.Context,
+	ba *roachpb.BatchRequest,
+	pErr *roachpb.Error,
+	t *roachpb.ReadWithinUncertaintyIntervalError,
+) (*roachpb.BatchRequest, *roachpb.Error) {
+	// Attempt a server-side retry of the request. Note that we pass nil for
+	// latchSpans, because we have already released our latches and plan to
+	// re-acquire them if the retry is allowed.
+	if !canDoServersideRetry(ctx, pErr, ba, nil /* br */, nil /* g */, nil /* deadline */) {
+		return nil, pErr
+	}
+	// TODO(nvanbenschoten): give non-txn requests uncertainty intervals. #73732.
+	//if ba.Txn == nil && ba.Timestamp.Synthetic {
+	//	// If the request is non-transactional and it was refreshed into the future
+	//	// after observing a value with a timestamp in the future, immediately sleep
+	//	// until its new read timestamp becomes present. We don't need to do this
+	//	// for transactional requests because they will do this during their
+	//	// commit-wait sleep after committing.
+	//	//
+	//	// See TxnCoordSender.maybeCommitWait for a discussion about why doing this
+	//	// is necessary to preserve real-time ordering for transactions that write
+	//	// into the future.
+	//	if err := r.Clock().SleepUntil(ctx, ba.Timestamp); err != nil {
+	//		return nil, roachpb.NewError(err)
+	//	}
+	//}
+	return ba, nil
 }
 
 func (r *Replica) handleInvalidLeaseError(
