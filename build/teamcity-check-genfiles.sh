@@ -3,7 +3,6 @@
 set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
-source "$(dirname "${0}")/teamcity-bazel-support.sh"  # For run_bazel
 
 function check_clean() {
   # The workspace is clean iff `git status --porcelain` produces no output. Any
@@ -22,14 +21,6 @@ tc_prepare
 
 tc_start_block "Ensure generated code is up-to-date"
 # Buffer noisy output and only print it on failure.
-if ! run run_bazel build/bazelutil/check.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false); then
-    # The command will output instructions on how to fix the error.
-    exit 1
-fi
-rm artifacts/buildshort.log
-run run_bazel build/bazelutil/bazel-generate.sh &> artifacts/buildshort.log || (cat artifacts/buildshort.log && false)
-rm artifacts/buildshort.log
-check_clean "Run \`./dev generate bazel\` to automatically regenerate these."
 run build/builder.sh make generate &> artifacts/generate.log || (cat artifacts/generate.log && false)
 rm artifacts/generate.log
 check_clean "Run \`make generate\` to automatically regenerate these."
