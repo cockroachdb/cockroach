@@ -253,7 +253,7 @@ ALTER TABLE regression_48233 RENAME TO reg_48233
 query IITI rowsort
 SELECT * FROM system.namespace WHERE name LIKE '%48233'
 ----
-50  69  reg_48233  82
+1001  1020  reg_48233  1033
 
 statement error pq: cannot change schema of table with RENAME
 ALTER TABLE reg_48233 RENAME TO public.reg_48233

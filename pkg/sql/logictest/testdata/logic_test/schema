@@ -51,9 +51,9 @@ SELECT
 FROM crdb_internal.tables
 WHERE database_name = 'test'
 ----
-test  54  myschema  57  tb  58
-test  54  myschema  57  v   61
-test  54  myschema  57  s   62
+test  1005  myschema  1008  tb  1009
+test  1005  myschema  1008  v   1012
+test  1005  myschema  1008  s   1013
 
 query I
 SELECT * FROM myschema.tb

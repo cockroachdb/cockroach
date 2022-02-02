@@ -71,26 +71,26 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/56/1/"a-pk1" - /Table/56/1/"a-pk1"/PrefixEnd
+DelRange /Table/1007/1/"a-pk1" - /Table/1007/1/"a-pk1"/PrefixEnd
 executing cascade for constraint b1_delete_cascade_fkey
-Del /Table/57/1/"b1-pk1"/0
-Del /Table/57/1/"b1-pk2"/0
+Del /Table/1008/1/"b1-pk1"/0
+Del /Table/1008/1/"b1-pk2"/0
 executing cascade for constraint b2_delete_cascade_fkey
-Del /Table/58/1/"b2-pk1"/0
-Del /Table/58/1/"b2-pk2"/0
+Del /Table/1009/1/"b2-pk1"/0
+Del /Table/1009/1/"b2-pk2"/0
 executing cascade for constraint c1_delete_cascade_fkey
-Del /Table/59/1/"c1-pk1-b1-pk1"/0
-Del /Table/59/1/"c1-pk2-b1-pk1"/0
-Del /Table/59/1/"c1-pk3-b1-pk2"/0
-Del /Table/59/1/"c1-pk4-b1-pk2"/0
+Del /Table/1010/1/"c1-pk1-b1-pk1"/0
+Del /Table/1010/1/"c1-pk2-b1-pk1"/0
+Del /Table/1010/1/"c1-pk3-b1-pk2"/0
+Del /Table/1010/1/"c1-pk4-b1-pk2"/0
 executing cascade for constraint c2_delete_cascade_fkey
-Del /Table/60/1/"c2-pk1-b1-pk1"/0
-Del /Table/60/1/"c2-pk2-b1-pk1"/0
-Del /Table/60/1/"c2-pk3-b1-pk2"/0
-Del /Table/60/1/"c2-pk4-b1-pk2"/0
+Del /Table/1011/1/"c2-pk1-b1-pk1"/0
+Del /Table/1011/1/"c2-pk2-b1-pk1"/0
+Del /Table/1011/1/"c2-pk3-b1-pk2"/0
+Del /Table/1011/1/"c2-pk4-b1-pk2"/0
 executing cascade for constraint c3_id_fkey
-Del /Table/61/1/"b2-pk1"/0
-Del /Table/61/1/"b2-pk2"/0
+Del /Table/1012/1/"b2-pk1"/0
+Del /Table/1012/1/"b2-pk2"/0
 
 # Clean up after the test.
 statement ok
@@ -171,19 +171,19 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-Del /Table/62/1/"updated"/0
-CPut /Table/62/1/"updated2"/0 -> /TUPLE/
+Del /Table/1013/1/"updated"/0
+CPut /Table/1013/1/"updated2"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
-Del /Table/63/2/"updated"/0
-CPut /Table/63/2/"updated2"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+Del /Table/1014/2/"updated"/0
+CPut /Table/1014/2/"updated2"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
 executing cascade for constraint b2_update_cascade_fkey
-Del /Table/64/2/"updated"/0
-CPut /Table/64/2/"updated2"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+Del /Table/1015/2/"updated"/0
+CPut /Table/1015/2/"updated2"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint c1_update_cascade_fkey
 executing cascade for constraint c2_update_cascade_fkey
 executing cascade for constraint c3_id_fkey
-Del /Table/67/1/"updated"/0
-CPut /Table/67/1/"updated2"/0 -> /TUPLE/
+Del /Table/1018/1/"updated"/0
+CPut /Table/1018/1/"updated2"/0 -> /TUPLE/
 
 # Clean up after the test.
 statement ok
@@ -237,7 +237,7 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-Del /Table/68/1/"delete_me"/0
+Del /Table/1019/1/"delete_me"/0
 executing cascade for constraint b1_delete_set_null_fkey
 executing cascade for constraint b2_delete_set_null_fkey
 executing cascade for constraint b3_delete_set_null_fkey
@@ -315,13 +315,13 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/73/1/"a-pk1" - /Table/73/1/"a-pk1"/PrefixEnd
+DelRange /Table/1024/1/"a-pk1" - /Table/1024/1/"a-pk1"/PrefixEnd
 executing cascade for constraint b1_delete_cascade_fkey
-Del /Table/74/1/"b1-pk1"/0
-Del /Table/74/1/"b1-pk2"/0
+Del /Table/1025/1/"b1-pk1"/0
+Del /Table/1025/1/"b1-pk2"/0
 executing cascade for constraint b2_delete_cascade_fkey
-Del /Table/75/1/"b2-pk1"/0
-Del /Table/75/1/"b2-pk2"/0
+Del /Table/1026/1/"b2-pk1"/0
+Del /Table/1026/1/"b2-pk2"/0
 executing cascade for constraint c1_delete_set_null_fkey
 executing cascade for constraint c2_delete_set_null_fkey
 executing cascade for constraint c3_delete_set_null_fkey
@@ -378,8 +378,8 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-Del /Table/79/1/"original"/0
-CPut /Table/79/1/"updated"/0 -> /TUPLE/
+Del /Table/1030/1/"original"/0
+CPut /Table/1030/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_set_null_fkey
 executing cascade for constraint b2_update_set_null_fkey
 executing cascade for constraint b3_update_set_null_fkey
@@ -459,14 +459,14 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-Del /Table/84/1/"original"/0
-CPut /Table/84/1/"updated"/0 -> /TUPLE/
+Del /Table/1035/1/"original"/0
+CPut /Table/1035/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
-Del /Table/85/2/"original"/0
-CPut /Table/85/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+Del /Table/1036/2/"original"/0
+CPut /Table/1036/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
 executing cascade for constraint b2_update_cascade_fkey
-Del /Table/86/2/"original"/0
-CPut /Table/86/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+Del /Table/1037/2/"original"/0
+CPut /Table/1037/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint c1_update_set_null_fkey
 executing cascade for constraint c2_update_set_null_fkey
 executing cascade for constraint c3_update_set_null_fkey
@@ -525,7 +525,7 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-Del /Table/90/1/"delete_me"/0
+Del /Table/1041/1/"delete_me"/0
 executing cascade for constraint b1_delete_set_default_fkey
 executing cascade for constraint b2_delete_set_default_fkey
 executing cascade for constraint b3_delete_set_default_fkey
@@ -603,13 +603,13 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%'
 ----
-DelRange /Table/95/1/"a-pk1" - /Table/95/1/"a-pk1"/PrefixEnd
+DelRange /Table/1046/1/"a-pk1" - /Table/1046/1/"a-pk1"/PrefixEnd
 executing cascade for constraint b1_delete_cascade_fkey
-Del /Table/96/1/"b1-pk1"/0
-Del /Table/96/1/"b1-pk2"/0
+Del /Table/1047/1/"b1-pk1"/0
+Del /Table/1047/1/"b1-pk2"/0
 executing cascade for constraint b2_delete_cascade_fkey
-Del /Table/97/1/"b2-pk1"/0
-Del /Table/97/1/"b2-pk2"/0
+Del /Table/1048/1/"b2-pk1"/0
+Del /Table/1048/1/"b2-pk2"/0
 executing cascade for constraint c1_delete_set_default_fkey
 executing cascade for constraint c2_delete_set_default_fkey
 executing cascade for constraint c3_delete_set_default_fkey
@@ -666,8 +666,8 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-Del /Table/101/1/"original"/0
-CPut /Table/101/1/"updated"/0 -> /TUPLE/
+Del /Table/1052/1/"original"/0
+CPut /Table/1052/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_set_null_fkey
 executing cascade for constraint b2_update_set_null_fkey
 executing cascade for constraint b3_update_set_null_fkey
@@ -747,14 +747,14 @@ query T
 SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%executing cascade %' OR message LIKE 'Del%' OR message LIKE 'CPut%'
 ----
-Del /Table/106/1/"original"/0
-CPut /Table/106/1/"updated"/0 -> /TUPLE/
+Del /Table/1057/1/"original"/0
+CPut /Table/1057/1/"updated"/0 -> /TUPLE/
 executing cascade for constraint b1_update_cascade_fkey
-Del /Table/107/2/"original"/0
-CPut /Table/107/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
+Del /Table/1058/2/"original"/0
+CPut /Table/1058/2/"updated"/0 -> /BYTES/0x1262312d706b310001 (expecting does not exist)
 executing cascade for constraint b2_update_cascade_fkey
-Del /Table/108/2/"original"/0
-CPut /Table/108/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
+Del /Table/1059/2/"original"/0
+CPut /Table/1059/2/"updated"/0 -> /BYTES/0x1262322d706b310001 (expecting does not exist)
 executing cascade for constraint c1_update_set_null_fkey
 executing cascade for constraint c2_update_set_null_fkey
 executing cascade for constraint c3_update_set_null_fkey
@@ -787,9 +787,9 @@ INSERT INTO child2 VALUES (1, 1), (2, 1)
 query T kvtrace(Del)
 DELETE FROM parent WHERE x = 1
 ----
-Del /Table/112/1/1/0
-Del /Table/113/1/1/0
-Del /Table/113/1/2/0
+Del /Table/1063/1/1/0
+Del /Table/1064/1/1/0
+Del /Table/1064/1/2/0
 
 subtest DelRange
 
@@ -844,15 +844,15 @@ vectorized: true
 query T kvtrace(DelRange)
 DELETE FROM delrng1 WHERE p = 1
 ----
-DelRange /Table/115/1/1 - /Table/115/1/2
-DelRange /Table/116/1/1 - /Table/116/1/2
-DelRange /Table/117/1/1 - /Table/117/1/2
-DelRange /Table/118/1/1 - /Table/118/1/2
+DelRange /Table/1066/1/1 - /Table/1066/1/2
+DelRange /Table/1067/1/1 - /Table/1067/1/2
+DelRange /Table/1068/1/1 - /Table/1068/1/2
+DelRange /Table/1069/1/1 - /Table/1069/1/2
 
 query T kvtrace(DelRange)
 DELETE FROM delrng1 WHERE p >= 10 AND p <= 20
 ----
-DelRange /Table/115/1/10 - /Table/115/1/21
-DelRange /Table/116/1/10 - /Table/116/1/21
-DelRange /Table/117/1/10 - /Table/117/1/21
-DelRange /Table/118/1/10 - /Table/118/1/21
+DelRange /Table/1066/1/10 - /Table/1066/1/21
+DelRange /Table/1067/1/10 - /Table/1067/1/21
+DelRange /Table/1068/1/10 - /Table/1068/1/21
+DelRange /Table/1069/1/10 - /Table/1069/1/21

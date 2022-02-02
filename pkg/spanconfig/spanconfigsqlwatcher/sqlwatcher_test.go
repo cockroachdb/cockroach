@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -41,33 +42,43 @@ import (
 func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	const idBase = 1004
+	id := func(n int) descpb.ID {
+		return descpb.ID(idBase + n)
+	}
+	ids := func(in ...int) (r descpb.IDs) {
+		for _, n := range in {
+			r = append(r, id(n))
+		}
+		return r
+	}
 	testCases := []struct {
 		stmt        string
 		expectedIDs descpb.IDs
 	}{
 		{
 			stmt:        "CREATE TABLE t()",
-			expectedIDs: descpb.IDs{54},
+			expectedIDs: ids(1),
 		},
 		{
 			stmt:        "CREATE TABLE t2(); ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
-			expectedIDs: descpb.IDs{55},
+			expectedIDs: ids(2),
 		},
 		{
 			stmt:        "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
-			expectedIDs: descpb.IDs{56, 57, 58, 59},
+			expectedIDs: ids(3, 4, 5, 6),
 		},
 		{
 			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
-			expectedIDs: descpb.IDs{56},
+			expectedIDs: ids(3),
 		},
 		{
 			stmt:        "CREATE TABLE t3(); CREATE TABLE t4()",
-			expectedIDs: descpb.IDs{60, 61},
+			expectedIDs: ids(7, 8),
 		},
 		{
 			stmt:        "ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5; CREATE TABLE t5(); DROP TABLE t4;",
-			expectedIDs: descpb.IDs{60, 61, 62},
+			expectedIDs: ids(7, 8, 9),
 		},
 		// Named zone tests.
 		{
@@ -94,12 +105,12 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		{
 			stmt: "CREATE DATABASE db; CREATE SCHEMA db.sc",
 			// One ID each for the parent database, the public schema and the schema.
-			expectedIDs: descpb.IDs{63, 64, 65},
+			expectedIDs: ids(10, 11, 12),
 		},
 		{
 			stmt: "CREATE TYPE typ AS ENUM()",
 			// One ID each for the enum and the array type.
-			expectedIDs: descpb.IDs{66, 67},
+			expectedIDs: ids(13, 14),
 		},
 	}
 
@@ -119,7 +130,8 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 
 	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
 	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
 
 	noopCheckpointDuration := 100 * time.Millisecond
 	sqlWatcher := spanconfigsqlwatcher.New(
@@ -134,10 +146,15 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 
 	var mu struct {
 		syncutil.Mutex
-		receivedIDs    map[descpb.ID]struct{}
+		receivedIDs    catalog.DescriptorIDSet
 		lastCheckpoint hlc.Timestamp
 	}
-	mu.receivedIDs = make(map[descpb.ID]struct{})
+	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
+	reset := func() {
+		locked(func() {
+			mu.receivedIDs = catalog.DescriptorIDSet{}
+		})
+	}
 
 	var wg sync.WaitGroup
 	watcherStartTS := ts.Clock().Now()
@@ -156,36 +173,38 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 				mu.lastCheckpoint = checkpointTS
 
 				for _, update := range updates {
-					mu.receivedIDs[update.ID] = struct{}{}
+					mu.receivedIDs.Add(update.ID)
 				}
 				return nil
 			})
 	}()
 
 	for _, tc := range testCases {
-		tdb.Exec(t, tc.stmt)
-		afterStmtTS := ts.Clock().Now()
+		t.Run(tc.stmt, func(t *testing.T) {
+			reset()
+			tdb.Exec(t, tc.stmt)
+			afterStmtTS := ts.Clock().Now()
 
-		testutils.SucceedsSoon(t, func() error {
-			mu.Lock()
-			defer mu.Unlock()
+			testutils.SucceedsSoon(t, func() error {
+				mu.Lock()
+				defer mu.Unlock()
 
-			if mu.lastCheckpoint.Less(afterStmtTS) {
-				return errors.New("checkpoint precedes statement timestamp")
-			}
-			return nil
+				if mu.lastCheckpoint.Less(afterStmtTS) {
+					return errors.New("checkpoint precedes statement timestamp")
+				}
+				return nil
+			})
+
+			// Rangefeed events aren't guaranteed to be in any particular order for
+			// different keys.
+			locked(func() {
+				require.ElementsMatch(t,
+					tc.expectedIDs,
+					descpb.IDs(mu.receivedIDs.Ordered()))
+				require.Equal(t, len(tc.expectedIDs), mu.receivedIDs.Len())
+			})
 		})
 
-		// Rangefeed events aren't guaranteed to be in any particular order for
-		// different keys.
-		mu.Lock()
-		require.Equal(t, len(tc.expectedIDs), len(mu.receivedIDs))
-		for _, id := range tc.expectedIDs {
-			_, seen := mu.receivedIDs[id]
-			require.True(t, seen)
-			delete(mu.receivedIDs, id)
-		}
-		mu.Unlock()
 	}
 
 	// Stop the watcher and wait for the goroutine to complete.

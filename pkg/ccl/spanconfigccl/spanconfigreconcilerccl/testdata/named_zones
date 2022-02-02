@@ -92,7 +92,7 @@ CREATE TABLE db.t1();
 
 mutations
 ----
-upsert /Table/5{6-7}                       range default
+upsert /Table/100{7-8}                     range default
 
 exec-sql
 ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 50;
@@ -108,8 +108,8 @@ delete /System{/tsd-tse}
 upsert /System{/tsd-tse}                   ttl_seconds=50
 delete /System{tse-/Max}
 upsert /System{tse-/Max}                   ttl_seconds=50
-delete /Table/5{6-7}
-upsert /Table/5{6-7}                       ttl_seconds=50
+delete /Table/100{7-8}
+upsert /Table/100{7-8}                     ttl_seconds=50
 
 state limit=5
 ----
@@ -124,7 +124,8 @@ state offset=46
 ----
 ...
 /Table/4{7-8}                              database system (host)
-/Table/5{6-7}                              ttl_seconds=50
+/Table/5{0-1}                              database system (host)
+/Table/100{7-8}                            ttl_seconds=50
 
 # Make sure future descendants observe the same.
 exec-sql
@@ -133,14 +134,15 @@ CREATE TABLE db.t2();
 
 mutations
 ----
-upsert /Table/5{7-8}                       ttl_seconds=50
+upsert /Table/100{8-9}                     ttl_seconds=50
 
 state offset=46
 ----
 ...
 /Table/4{7-8}                              database system (host)
-/Table/5{6-7}                              ttl_seconds=50
-/Table/5{7-8}                              ttl_seconds=50
+/Table/5{0-1}                              database system (host)
+/Table/100{7-8}                            ttl_seconds=50
+/Table/100{8-9}                            ttl_seconds=50
 
 exec-sql
 ALTER RANGE system CONFIGURE ZONE USING gc.ttlseconds = 100;

@@ -132,13 +132,13 @@ SELECT id FROM system.descriptor
 45
 46
 47
-48
 50
-51
-52
-53
-54
-55
+1001
+1002
+1003
+1004
+1005
+1006
 
 onlyif config 3node-tenant
 query I rowsort

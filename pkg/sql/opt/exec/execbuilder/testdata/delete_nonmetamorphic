@@ -43,9 +43,9 @@ INSERT INTO ti VALUES (1, 2, 100)
 query T kvtrace
 DELETE FROM ti WHERE a = 1
 ----
-Scan /Table/56/1/1/0
-Put (delete) /Table/56/2/2/100/1/0
-Del /Table/56/1/1/0
+Scan /Table/1007/1/1/0
+Put (delete) /Table/1007/2/2/100/1/0
+Del /Table/1007/1/1/0
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -91,16 +91,16 @@ INSERT INTO tpi VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 2, 'foo')
 query T kvtrace
 DELETE FROM tpi WHERE a = 1
 ----
-Scan /Table/57/1/1/0
-Del /Table/57/1/1/0
+Scan /Table/1008/1/1/0
+Del /Table/1008/1/1/0
 
 # Delete a row that matches the partial index.
 query T kvtrace
 DELETE FROM tpi WHERE a = 3
 ----
-Scan /Table/57/1/3/0
-Put (delete) /Table/57/2/"foo"/3/0
-Del /Table/57/1/3/0
+Scan /Table/1008/1/3/0
+Put (delete) /Table/1008/2/"foo"/3/0
+Del /Table/1008/1/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -150,10 +150,10 @@ INSERT INTO tei VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
 query T kvtrace
 DELETE FROM tei WHERE a + b = 102
 ----
-Scan /Table/58/2/10{2-3}
-Scan /Table/58/1/1/0
-Put (delete) /Table/58/2/102/1/0
-Del /Table/58/1/1/0
+Scan /Table/1009/2/10{2-3}
+Scan /Table/1009/1/1/0
+Put (delete) /Table/1009/2/102/1/0
+Del /Table/1009/1/1/0
 
 # ---------------------------------------------------------
 # Inverted Index With Delete Preserving Encoding
@@ -203,12 +203,12 @@ INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 query T kvtrace
 DELETE FROM tii WHERE a = 1
 ----
-Scan /Table/59/1/1/0
-Put (delete) /Table/59/2/NULL/1/0
-Put (delete) /Table/59/2/1/1/0
-Put (delete) /Table/59/2/2/1/0
-Put (delete) /Table/59/2/3/1/0
-Del /Table/59/1/1/0
+Scan /Table/1010/1/1/0
+Put (delete) /Table/1010/2/NULL/1/0
+Put (delete) /Table/1010/2/1/1/0
+Put (delete) /Table/1010/2/2/1/0
+Put (delete) /Table/1010/2/3/1/0
+Del /Table/1010/1/1/0
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -259,7 +259,7 @@ INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 query T kvtrace
 DELETE FROM tmi WHERE a = 1
 ----
-Scan /Table/60/1/1/0
-Put (delete) /Table/60/2/2/"a"/"foo"/1/0
-Put (delete) /Table/60/2/2/"b"/"bar"/1/0
-Del /Table/60/1/1/0
+Scan /Table/1011/1/1/0
+Put (delete) /Table/1011/2/2/"a"/"foo"/1/0
+Put (delete) /Table/1011/2/2/"b"/"bar"/1/0
+Del /Table/1011/1/1/0

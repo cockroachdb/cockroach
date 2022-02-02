@@ -2309,7 +2309,7 @@ var (
 		TenantSettingsTableSchema,
 		systemTable(
 			catconstants.TenantSettingsTableName,
-			keys.TenantSettingsTableID,
+			descpb.InvalidID,
 			[]descpb.ColumnDescriptor{
 				{Name: "tenant_id", ID: 1, Type: types.Int},
 				{Name: "name", ID: 2, Type: types.String},

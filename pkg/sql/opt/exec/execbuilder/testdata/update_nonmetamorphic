@@ -43,11 +43,11 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Scan /Table/56/{1-2}
+Scan /Table/1007/{1-2}
 fetched: /tu/tu_pkey/1 -> <undecoded>
 fetched: /tu/tu_pkey/1 -> <undecoded>
 fetched: /tu/tu_pkey/1/c/d -> /3/4
-Put /Table/56/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
+Put /Table/1007/1/1/2/1 -> /TUPLE/3:3:Int/4/1:4:Int/4
 fast path completed
 rows affected: 1
 
@@ -58,12 +58,12 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Scan /Table/56/{1-2}
+Scan /Table/1007/{1-2}
 fetched: /tu/tu_pkey/1 -> <undecoded>
 fetched: /tu/tu_pkey/1/b -> 2
 fetched: /tu/tu_pkey/1/c/d -> /4/4
-Del /Table/56/1/1/1/1
-Del /Table/56/1/1/2/1
+Del /Table/1007/1/1/1/1
+Del /Table/1007/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -141,10 +141,10 @@ INSERT INTO ti VALUES (1, 2, 100)
 query T kvtrace
 UPDATE ti SET b = b + 1, c = c + 1
 ----
-Scan /Table/57/{1-2}
-Put /Table/57/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
-Put (delete) /Table/57/2/2/100/1/0
-Put /Table/57/2/3/101/1/0 -> /BYTES/0x0a0103
+Scan /Table/1008/{1-2}
+Put /Table/1008/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
+Put (delete) /Table/1008/2/2/100/1/0
+Put /Table/1008/2/3/101/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -190,42 +190,42 @@ INSERT INTO tpi VALUES (3, 4, 'bar')
 query T kvtrace
 UPDATE tpi SET b = b + 1
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/5/1:3:Bytes/bar
+Scan /Table/1009/{1-2}
+Put /Table/1009/1/3/0 -> /TUPLE/2:2:Int/5/1:3:Bytes/bar
 
 # Update a row that didn't match the partial index before but matches after.
 query T kvtrace
 UPDATE tpi SET b = b - 3, c = 'foo'
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
-Put /Table/58/2/"foo"/3/0 -> /BYTES/0x0a0103
+Scan /Table/1009/{1-2}
+Put /Table/1009/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
+Put /Table/1009/2/"foo"/3/0 -> /BYTES/0x0a0103
 
 # Update a row that matches the partial index before and after, but the index
 # entry doesn't change.
 query T kvtrace
 UPDATE tpi SET b = b - 1
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
+Scan /Table/1009/{1-2}
+Put /Table/1009/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
 
 # Update a row that matches the partial index before and after, and the index
 # entry changes.
 query T kvtrace
 UPDATE tpi SET b = b + 1, c = 'foobar'
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
-Put (delete) /Table/58/2/"foo"/3/0
-Put /Table/58/2/"foobar"/3/0 -> /BYTES/0x0a0103
+Scan /Table/1009/{1-2}
+Put /Table/1009/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
+Put (delete) /Table/1009/2/"foo"/3/0
+Put /Table/1009/2/"foobar"/3/0 -> /BYTES/0x0a0103
 
 # Update a row that matches the partial index before but not after.
 query T kvtrace
 UPDATE tpi SET c = 'baz'
 ----
-Scan /Table/58/{1-2}
-Put /Table/58/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/baz
-Put (delete) /Table/58/2/"foobar"/3/0
+Scan /Table/1009/{1-2}
+Put /Table/1009/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/baz
+Put (delete) /Table/1009/2/"foobar"/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -276,17 +276,17 @@ INSERT INTO tei VALUES (1, 2, 100)
 query T kvtrace
 UPDATE tei SET a = a + 1, b = b + 100
 ----
-Scan /Table/59/{1-2}
-Put /Table/59/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
-Put (delete) /Table/59/2/102/1/0
-Put /Table/59/2/203/1/0 -> /BYTES/0x0a0103
+Scan /Table/1010/{1-2}
+Put /Table/1010/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
+Put (delete) /Table/1010/2/102/1/0
+Put /Table/1010/2/203/1/0 -> /BYTES/0x0a0103
 
 # Update a row with different values without changing the index entry.
 query T kvtrace
 UPDATE tei SET a = a + 1, b = b - 1
 ----
-Scan /Table/59/{1-2}
-Put /Table/59/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/199
+Scan /Table/1010/{1-2}
+Put /Table/1010/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/199
 
 # ---------------------------------------------------------
 # Inverted Index With Delete Preserving Encoding
@@ -337,10 +337,10 @@ INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 query T kvtrace
 UPDATE tii SET b = ARRAY[1, 2, 2, NULL, 4, 4]
 ----
-Scan /Table/60/{1-2}
-Put /Table/60/1/1/0 -> /TUPLE/
-Put (delete) /Table/60/2/3/1/0
-Put /Table/60/2/4/1/0 -> /BYTES/0x0a0103
+Scan /Table/1011/{1-2}
+Put /Table/1011/1/1/0 -> /TUPLE/
+Put (delete) /Table/1011/2/3/1/0
+Put /Table/1011/2/4/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -391,9 +391,9 @@ INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 query T kvtrace
 UPDATE tmi SET b = 3, c = '{"a": "foobar", "c": "baz"}'::json
 ----
-Scan /Table/61/{1-2}
-Put /Table/61/1/1/0 -> /TUPLE/2:2:Int/3/
-Put (delete) /Table/61/2/2/"a"/"foo"/1/0
-Put (delete) /Table/61/2/2/"b"/"bar"/1/0
-Put /Table/61/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
-Put /Table/61/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+Scan /Table/1012/{1-2}
+Put /Table/1012/1/1/0 -> /TUPLE/2:2:Int/3/
+Put (delete) /Table/1012/2/2/"a"/"foo"/1/0
+Put (delete) /Table/1012/2/2/"b"/"bar"/1/0
+Put /Table/1012/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
+Put /Table/1012/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103

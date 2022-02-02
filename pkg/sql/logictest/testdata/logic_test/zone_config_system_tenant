@@ -24,15 +24,15 @@ ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0   RANGE default
-1   DATABASE system
-16  RANGE meta
-17  RANGE system
-22  RANGE liveness
-25  TABLE system.public.replication_constraint_stats
-27  TABLE system.public.replication_stats
-45  TABLE system.public.tenant_usage
-56  TABLE test.public.t
+0     RANGE default
+1     DATABASE system
+16    RANGE meta
+17    RANGE system
+22    RANGE liveness
+25    TABLE system.public.replication_constraint_stats
+27    TABLE system.public.replication_stats
+45    TABLE system.public.tenant_usage
+1007  TABLE test.public.t
 
 # The tests below test semantics around named zone for the system tenant. The
 # system tenant is allowed to alter all named zones. All named zones bar

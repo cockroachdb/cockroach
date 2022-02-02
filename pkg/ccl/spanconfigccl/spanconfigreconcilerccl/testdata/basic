@@ -54,6 +54,7 @@ upsert /Table/4{4-5}                       database system (host)
 upsert /Table/4{5-6}                       ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 upsert /Table/4{6-7}                       database system (host)
 upsert /Table/4{7-8}                       database system (host)
+upsert /Table/5{0-1}                       database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -65,8 +66,8 @@ CREATE TYPE typ AS ENUM();
 
 mutations
 ----
-upsert /Table/5{6-7}                       range default
-upsert /Table/5{7-8}                       range default
+upsert /Table/100{7-8}                     range default
+upsert /Table/100{8-9}                     range default
 
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
@@ -75,17 +76,17 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
 
 mutations
 ----
-delete /Table/5{6-7}
-upsert /Table/5{6-7}                       num_replicas=7 num_voters=5
-delete /Table/5{7-8}
-upsert /Table/5{7-8}                       num_replicas=7
+delete /Table/100{7-8}
+upsert /Table/100{7-8}                     num_replicas=7 num_voters=5
+delete /Table/100{8-9}
+upsert /Table/100{8-9}                     num_replicas=7
 
 state offset=47
 ----
 ...
-/Table/4{8-9}                              range system
-/Table/5{6-7}                              num_replicas=7 num_voters=5
-/Table/5{7-8}                              num_replicas=7
+/Table/5{0-1}                              database system (host)
+/Table/100{7-8}                            num_replicas=7 num_voters=5
+/Table/100{8-9}                            num_replicas=7
 
 exec-sql
 ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 100;
@@ -171,6 +172,8 @@ delete /Table/4{6-7}
 upsert /Table/4{6-7}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/4{7-8}
 upsert /Table/4{7-8}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/5{0-1}
+upsert /Table/5{0-1}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 
 state offset=5 limit=42
 ----

@@ -398,7 +398,7 @@ var versionsSingleton = keyedVersions{
 	},
 	{
 		Key:     TenantSettingsTable,
-		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
 
 	// *************************************************

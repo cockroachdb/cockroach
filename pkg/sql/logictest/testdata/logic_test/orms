@@ -246,7 +246,7 @@ WHERE
     )
     AND attname = 'a';
 ----
-a  60  true  false  false
+a  1011  true  false  false
 
 # Hibernate query.
 
@@ -358,7 +358,7 @@ SELECT
   typdefaultbin
 FROM pg_type WHERE typname = 'regression_66576'
 ----
-regression_66576  2332901747  c  C  false  0  -1  0  -1  NULL
+regression_66576  764338313  c  C  false  0  -1  0  -1  NULL
 
 query T
 SELECT reltype FROM pg_class WHERE relname = 'regression_65576'

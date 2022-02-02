@@ -1331,7 +1331,6 @@ query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
 WHERE message LIKE 'Scan /Table/70/1%'
 ----
-Scan /Table/70/1/{1-2}
 
 query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,6 +40,7 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
+	ids           catalog.DescriptorIDSet
 }
 
 // MakeMetadataSchema constructs a new MetadataSchema value which constructs
@@ -55,8 +57,14 @@ func MakeMetadataSchema(
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
-	for _, d := range ms.descs {
-		if d.GetID() == desc.GetID() {
+	switch id := desc.GetID(); id {
+	case descpb.InvalidID:
+		raw := desc.DescriptorProto()
+		// TODO(ajwerner): Consider some randomization mechanism.
+		descpb.SetID(raw, ms.allocateID())
+		desc = descbuilder.NewBuilder(raw).BuildCreatedMutable().ImmutableCopy()
+	default:
+		if ms.ids.Contains(id) {
 			log.Fatalf(context.TODO(), "adding descriptor with duplicate ID: %v", desc)
 		}
 	}
@@ -206,13 +214,23 @@ func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
 // MaxSystemDescriptorID returns the largest system descriptor ID in this
 // schema.
 func (ms MetadataSchema) MaxSystemDescriptorID() (maxID descpb.ID) {
-	maxID = keys.MaxReservedDescID
+	maxID = 1000
 	for _, d := range ms.descs {
 		if d.GetID() > maxID {
 			maxID = d.GetID()
 		}
 	}
 	return maxID
+}
+
+func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
+	maxID := descpb.ID(keys.MaxReservedDescID)
+	for _, d := range ms.descs {
+		if d.GetID() > maxID {
+			maxID = d.GetID()
+		}
+	}
+	return maxID + 1
 }
 
 // addSystemDescriptorsToSchema populates the supplied MetadataSchema
@@ -287,8 +305,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptorForSystemTenant(systemschema.TenantSettingsTable)
 
 	// Adding a new system table? It should be added here to the metadata schema,
-	// and also created as a migration for older clusters. The includedInBootstrap
-	// field should be set on the migration.
+	// and also created as a migration for older clusters.
 }
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied

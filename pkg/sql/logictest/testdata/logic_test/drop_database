@@ -29,7 +29,7 @@ skipif config local-declarative-schema
 query TTT
 SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
-t  [56]  DROP
+t  [1007]  DROP
 
 query TTTTT
 SHOW DATABASES

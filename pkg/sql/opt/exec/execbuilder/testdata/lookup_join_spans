@@ -870,7 +870,6 @@ FROM
 WHERE
   ol_o_id BETWEEN 20 AND 100
 ----
-Scan /Table/59/2/6463/{20-101}
 
 query T
 EXPLAIN (VERBOSE)

@@ -16,13 +16,13 @@ CREATE INDEX idx ON db.t (j);
 
 mutations
 ----
-upsert /Table/5{6-7}                       range default
+upsert /Table/100{7-8}                     range default
 
 state offset=47
 ----
 ...
-/Table/4{8-9}                              range system
-/Table/5{6-7}                              range default
+/Table/5{0-1}                              database system (host)
+/Table/100{7-8}                            range default
 
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
@@ -35,18 +35,18 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
 # - any future indexes that may be added to this table (table's config)
 mutations
 ----
-delete /Table/5{6-7}
-upsert /Table/56{-/2}                      num_replicas=7
-upsert /Table/56/{2-3}                     num_replicas=7 num_voters=5
-upsert /Table/5{6/3-7}                     num_replicas=7
+delete /Table/100{7-8}
+upsert /Table/1007{-/2}                    num_replicas=7
+upsert /Table/1007/{2-3}                   num_replicas=7 num_voters=5
+upsert /Table/100{7/3-8}                   num_replicas=7
 
 state offset=47
 ----
 ...
-/Table/4{8-9}                              range system
-/Table/56{-/2}                             num_replicas=7
-/Table/56/{2-3}                            num_replicas=7 num_voters=5
-/Table/5{6/3-7}                            num_replicas=7
+/Table/5{0-1}                              database system (host)
+/Table/1007{-/2}                           num_replicas=7
+/Table/1007/{2-3}                          num_replicas=7 num_voters=5
+/Table/100{7/3-8}                          num_replicas=7
 
 # Configure GC ttl on the database and override it for the index. The table
 # continues to hold a placeholder zone config.
@@ -57,20 +57,20 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
 
 mutations
 ----
-delete /Table/56{-/2}
-upsert /Table/56{-/2}                      ttl_seconds=3600 num_replicas=7
-delete /Table/56/{2-3}
-upsert /Table/56/{2-3}                     ttl_seconds=25 num_replicas=7 num_voters=5
-delete /Table/5{6/3-7}
-upsert /Table/5{6/3-7}                     ttl_seconds=3600 num_replicas=7
+delete /Table/1007{-/2}
+upsert /Table/1007{-/2}                    ttl_seconds=3600 num_replicas=7
+delete /Table/1007/{2-3}
+upsert /Table/1007/{2-3}                   ttl_seconds=25 num_replicas=7 num_voters=5
+delete /Table/100{7/3-8}
+upsert /Table/100{7/3-8}                   ttl_seconds=3600 num_replicas=7
 
 state offset=47
 ----
 ...
-/Table/4{8-9}                              range system
-/Table/56{-/2}                             ttl_seconds=3600 num_replicas=7
-/Table/56/{2-3}                            ttl_seconds=25 num_replicas=7 num_voters=5
-/Table/5{6/3-7}                            ttl_seconds=3600 num_replicas=7
+/Table/5{0-1}                              database system (host)
+/Table/1007{-/2}                           ttl_seconds=3600 num_replicas=7
+/Table/1007/{2-3}                          ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/100{7/3-8}                          ttl_seconds=3600 num_replicas=7
 
 # Configure a zone config field on the table, so that it is no longer a
 # placeholder zone config.
@@ -81,19 +81,19 @@ ALTER TABLE db.t CONFIGURE ZONE USING num_replicas = 9
 state offset=47
 ----
 ...
-/Table/4{8-9}                              range system
-/Table/56{-/2}                             ttl_seconds=3600 num_replicas=9
-/Table/56/{2-3}                            ttl_seconds=25 num_replicas=9 num_voters=5
-/Table/5{6/3-7}                            ttl_seconds=3600 num_replicas=9
+/Table/5{0-1}                              database system (host)
+/Table/1007{-/2}                           ttl_seconds=3600 num_replicas=9
+/Table/1007/{2-3}                          ttl_seconds=25 num_replicas=9 num_voters=5
+/Table/100{7/3-8}                          ttl_seconds=3600 num_replicas=9
 
 mutations
 ----
-delete /Table/56{-/2}
-upsert /Table/56{-/2}                      ttl_seconds=3600 num_replicas=9
-delete /Table/56/{2-3}
-upsert /Table/56/{2-3}                     ttl_seconds=25 num_replicas=9 num_voters=5
-delete /Table/5{6/3-7}
-upsert /Table/5{6/3-7}                     ttl_seconds=3600 num_replicas=9
+delete /Table/1007{-/2}
+upsert /Table/1007{-/2}                    ttl_seconds=3600 num_replicas=9
+delete /Table/1007/{2-3}
+upsert /Table/1007/{2-3}                   ttl_seconds=25 num_replicas=9 num_voters=5
+delete /Table/100{7/3-8}
+upsert /Table/100{7/3-8}                   ttl_seconds=3600 num_replicas=9
 
 exec-sql
 DROP TABLE db.t;
@@ -101,12 +101,12 @@ DROP TABLE db.t;
 
 mutations
 ----
-delete /Table/56{-/2}
-delete /Table/56/{2-3}
-delete /Table/5{6/3-7}
+delete /Table/1007{-/2}
+delete /Table/1007/{2-3}
+delete /Table/100{7/3-8}
 
 state offset=46
 ----
 ...
-/Table/4{7-8}                              range system
-/Table/4{8-9}                              range system
+/Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)
