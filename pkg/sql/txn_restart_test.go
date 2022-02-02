@@ -1145,39 +1145,25 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	advancement := 2 * base.DefaultDescriptorLeaseDuration
-
-	var cmdFilters tests.CommandFilters
-	cmdFilters.AppendFilter(tests.CheckEndTxnTrigger, true)
-
-	testKey := []byte("test_key")
-	storeTestingKnobs := &kvserver.StoreTestingKnobs{
-		EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-			TestingEvalFilter: cmdFilters.RunFilters,
-		},
-		DisableMaxOffsetCheck: true,
-	}
-
 	const refreshAttempts = 3
 	clientTestingKnobs := &kvcoord.ClientTestingKnobs{
 		MaxTxnRefreshAttempts: refreshAttempts,
 	}
 
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.Store = storeTestingKnobs
-	params.Knobs.KVClient = clientTestingKnobs
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
+	testKey := []byte("test_key")
+	var s serverutils.TestServerInterface
 	var clockUpdate, restartDone int32
-	cleanupFilter := cmdFilters.AppendFilter(
-		func(args kvserverbase.FilterArgs) *roachpb.Error {
-			if req, ok := args.Req.(*roachpb.GetRequest); ok {
+	testingResponseFilter := func(
+		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+	) *roachpb.Error {
+		for _, ru := range ba.Requests {
+			if req := ru.GetGet(); req != nil {
 				if bytes.Contains(req.Key, testKey) && !kv.TestingIsRangeLookupRequest(req) {
 					if atomic.LoadInt32(&clockUpdate) == 0 {
 						atomic.AddInt32(&clockUpdate, 1)
 						// Hack to advance the transaction timestamp on a
 						// transaction restart.
+						const advancement = 2 * base.DefaultDescriptorLeaseDuration
 						now := s.Clock().NowAsClockTimestamp()
 						now.WallTime += advancement.Nanoseconds()
 						s.Clock().Update(now)
@@ -1189,7 +1175,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 						atomic.AddInt32(&restartDone, 1)
 						// Return ReadWithinUncertaintyIntervalError to update
 						// the transaction timestamp on retry.
-						txn := args.Hdr.Txn
+						txn := ba.Txn
 						txn.ResetObservedTimestamps()
 						now := s.Clock().NowAsClockTimestamp()
 						txn.UpdateObservedTimestamp(s.(*server.TestServer).Gossip().NodeID.Get(), now)
@@ -1197,9 +1183,22 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 					}
 				}
 			}
-			return nil
-		}, false)
-	defer cleanupFilter()
+		}
+		return nil
+	}
+	storeTestingKnobs := &kvserver.StoreTestingKnobs{
+		// We use a TestingResponseFilter to avoid server-side refreshes of the
+		// ReadWithinUncertaintyIntervalError that the filter returns.
+		TestingResponseFilter: testingResponseFilter,
+		DisableMaxOffsetCheck: true,
+	}
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Store = storeTestingKnobs
+	params.Knobs.KVClient = clientTestingKnobs
+	var sqlDB *gosql.DB
+	s, sqlDB, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
 	if _, err := sqlDB.Exec(`
