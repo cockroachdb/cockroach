@@ -24,12 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 // IndexBackfillerMergePlanner holds dependencies for the merge step of the
@@ -119,38 +119,43 @@ type MergeProgress struct {
 // IndexMergeTracker abstracts the infrastructure to read and write merge
 // progress to job state.
 type IndexMergeTracker struct {
+	job *jobs.Job
+
 	mu struct {
 		syncutil.Mutex
 		progress *MergeProgress
 	}
 }
 
+var _ scexec.BackfillProgressFlusher = (*IndexMergeTracker)(nil)
+
 // NewIndexMergeTracker creates a new IndexMergeTracker
-func NewIndexMergeTracker(progress *MergeProgress) *IndexMergeTracker {
+func NewIndexMergeTracker(progress *MergeProgress, job *jobs.Job) *IndexMergeTracker {
 	imt := IndexMergeTracker{}
 	imt.mu.progress = progress
+	imt.job = job
 	return &imt
 }
 
 // FlushCheckpoint writes out a checkpoint containing any data which has been
 // previously set via SetMergeProgress
-func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context, job *jobs.Job) error {
+func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 	progress := imt.GetMergeProgress()
 
 	if progress.TodoSpans == nil {
 		return nil
 	}
 
-	details, ok := job.Details().(jobspb.SchemaChangeDetails)
+	details, ok := imt.job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
+		return errors.Errorf("expected SchemaChangeDetails job type, got %T", imt.job.Details())
 	}
 
 	for idx := range progress.TodoSpans {
 		details.ResumeSpanList[progress.MutationIdx[idx]].ResumeSpans = progress.TodoSpans[idx]
 	}
 
-	return job.SetDetails(ctx, nil, details)
+	return imt.job.SetDetails(ctx, nil, details)
 }
 
 // FlushFractionCompleted writes out the fraction completed.
@@ -179,74 +184,15 @@ func (imt *IndexMergeTracker) GetMergeProgress() *MergeProgress {
 	return imt.mu.progress
 }
 
-// PeriodicMergeProgressFlusher is used to write the updates to merge progress
-// periodically.
-type PeriodicMergeProgressFlusher struct {
-	clock                                timeutil.TimeSource
-	checkpointInterval, fractionInterval func() time.Duration
-}
-
-// StartPeriodicUpdates starts the periodic updates for the progress flusher.
-func (p *PeriodicMergeProgressFlusher) StartPeriodicUpdates(
-	ctx context.Context, tracker *IndexMergeTracker, job *jobs.Job,
-) (stop func() error) {
-	stopCh := make(chan struct{})
-	runPeriodicWrite := func(
-		ctx context.Context,
-		write func(context.Context) error,
-		interval func() time.Duration,
-	) error {
-		timer := p.clock.NewTimer()
-		defer timer.Stop()
-		for {
-			timer.Reset(interval())
-			select {
-			case <-stopCh:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-timer.Ch():
-				timer.MarkRead()
-				if err := write(ctx); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	var g errgroup.Group
-	g.Go(func() error {
-		return runPeriodicWrite(
-			ctx, tracker.FlushFractionCompleted, p.fractionInterval)
-	})
-	g.Go(func() error {
-		return runPeriodicWrite(
-			ctx,
-			func(ctx context.Context) error {
-				return tracker.FlushCheckpoint(ctx, job)
-			},
-			p.checkpointInterval)
-	})
-	toClose := stopCh // make the returned function idempotent
-	return func() error {
-		if toClose != nil {
-			close(toClose)
-			toClose = nil
-		}
-		return g.Wait()
-	}
-}
-
-func newPeriodicProgressFlusher(settings *cluster.Settings) PeriodicMergeProgressFlusher {
-	clock := timeutil.DefaultTimeSource{}
-	getCheckpointInterval := func() time.Duration {
-		return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
-	}
-	// fractionInterval is copied from the logic in existing backfill code.
-	const fractionInterval = 10 * time.Second
-	getFractionInterval := func() time.Duration { return fractionInterval }
-	return PeriodicMergeProgressFlusher{
-		clock:              clock,
-		checkpointInterval: getCheckpointInterval,
-		fractionInterval:   getFractionInterval,
-	}
+func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgressFlusher {
+	return scdeps.NewPeriodicProgressFlusher(
+		func() time.Duration {
+			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
+		},
+		func() time.Duration {
+			// fractionInterval is copied from the logic in existing backfill code.
+			const fractionInterval = 10 * time.Second
+			return fractionInterval
+		},
+	)
 }
