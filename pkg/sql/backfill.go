@@ -2614,7 +2614,7 @@ func (sc *SchemaChanger) distIndexMerge(
 
 	// TODO(rui): these can be initialized along with other new schema changer dependencies.
 	planner := NewIndexBackfillerMergePlanner(sc.execCfg, sc.execCfg.InternalExecutorFactory)
-	tracker := NewIndexMergeTracker(progress)
+	tracker := NewIndexMergeTracker(progress, sc.job)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
@@ -2637,7 +2637,7 @@ func (sc *SchemaChanger) distIndexMerge(
 		return nil
 	}
 
-	stop := periodicFlusher.StartPeriodicUpdates(ctx, tracker, sc.job)
+	stop := periodicFlusher.StartPeriodicUpdates(ctx, tracker)
 	defer func() { _ = stop() }()
 
 	run, err := planner.plan(ctx, tableDesc, progress.TodoSpans, progress.AddedIndexes,
@@ -2654,7 +2654,7 @@ func (sc *SchemaChanger) distIndexMerge(
 		return err
 	}
 
-	if err := tracker.FlushCheckpoint(ctx, sc.job); err != nil {
+	if err := tracker.FlushCheckpoint(ctx); err != nil {
 		return err
 	}
 
