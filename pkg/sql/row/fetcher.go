@@ -62,10 +62,6 @@ type tableInfo struct {
 	// -- Fields initialized once --
 	spec descpb.IndexFetchSpec
 
-	// Used to determine whether a key retrieved belongs to the span we
-	// want to scan.
-	desc catalog.TableDescriptor
-
 	// The set of indexes into spec.FetchedColumns that are required for columns
 	// in the value part.
 	neededValueColsByIdx util.FastIntSet
@@ -138,9 +134,6 @@ type FetcherTableArgs struct {
 //      // Process res.row
 //   }
 type Fetcher struct {
-	// codec is used to encode and decode sql keys.
-	codec keys.SQLCodec
-
 	table tableInfo
 
 	// reverse denotes whether or not the spans should be read in reverse
@@ -234,7 +227,6 @@ func (rf *Fetcher) Init(
 	memMonitor *mon.BytesMonitor,
 	tableArgs FetcherTableArgs,
 ) error {
-	rf.codec = codec
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
 	rf.lockWaitPolicy = lockWaitPolicy
@@ -255,7 +247,6 @@ func (rf *Fetcher) Init(
 
 	table := &rf.table
 	*table = tableInfo{
-		desc:       tableArgs.Desc,
 		row:        make(rowenc.EncDatumRow, len(tableArgs.Columns)),
 		decodedRow: make(tree.Datums, len(tableArgs.Columns)),
 
@@ -563,7 +554,7 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, _ error) {
 	ok, kv, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
-		return false, ConvertFetchError(ctx, rf.table.desc, err)
+		return false, ConvertFetchError(&rf.table.spec, err)
 	}
 	rf.setNextKV(kv, finalReferenceToBatch)
 
@@ -1125,7 +1116,7 @@ func (rf *Fetcher) finalizeRow() error {
 					}
 				}
 				var indexColNames []string
-				for i := range table.spec.KeyAndSuffixColumns {
+				for i := range table.spec.KeyFullColumns() {
 					indexColNames = append(indexColNames, table.spec.KeyAndSuffixColumns[i].Name)
 				}
 				return errors.AssertionFailedf(

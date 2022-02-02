@@ -214,6 +214,7 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <h1 className="base-heading">Problem Ranges Report</h1>
         <Loading
           loading={isLoading(this.props.problemRanges)}
+          page={"problems range"}
           error={this.props.problemRanges && this.props.problemRanges.lastError}
           render={() => (
             <div>

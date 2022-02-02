@@ -112,7 +112,11 @@ class JobDetails extends React.Component<JobsTableProps, {}> {
           )}`}</h3>
         </div>
         <section className="section section--container">
-          <Loading loading={_.isNil(job)} render={this.renderContent} />
+          <Loading
+            loading={_.isNil(job)}
+            page={"job details"}
+            render={this.renderContent}
+          />
         </section>
       </div>
     );

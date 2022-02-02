@@ -418,6 +418,7 @@ export class TransactionsPage extends React.Component<
         </PageConfig>
         <Loading
           loading={!this.props?.data}
+          page={"transactions"}
           error={this.props?.error}
           render={() => {
             const { pagination } = this.state;

@@ -222,6 +222,7 @@ export class TransactionDetails extends React.Component<
         </section>
         <Loading
           error={error}
+          page={"transaction details"}
           loading={
             statementsForTransaction.length == 0 || transactionText.length == 0
           }
