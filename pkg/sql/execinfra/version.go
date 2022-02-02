@@ -39,17 +39,20 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 59
+const Version execinfrapb.DistSQLVersion = 60
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 58
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 60
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 60 (MinAcceptedVersion: 60):
+ - Deprecated ExportWriterSpec and ParquetWriterSpec and merged them into ExportSpec
 
 - Version: 59 (MinAcceptedVersion: 58)
   - final_regr_sxx, final_regr_sxy, and final_regr_syy aggregate functions were
