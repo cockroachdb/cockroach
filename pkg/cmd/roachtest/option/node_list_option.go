@@ -53,6 +53,9 @@ func (n NodeListOption) Merge(o NodeListOption) NodeListOption {
 	t := make(NodeListOption, 0, len(n)+len(o))
 	t = append(t, n...)
 	t = append(t, o...)
+	if len(t) == 0 {
+		return t
+	}
 	sort.Ints(t)
 	r := t[:1]
 	for i := 1; i < len(t); i++ {
