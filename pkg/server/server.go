@@ -1388,12 +1388,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
 	if err := s.http.setupRoutes(ctx,
-		s.authentication,                      /* authnServer */
-		s.adminAuthzCheck,                     /* adminAuthzCheck */
-		gwMux,                                 /* handleRequestsUnauthenticated */
-		http.HandlerFunc(s.status.handleVars), /* handleStatusVarsUnauthenticated */
-		s.debug,                               /* handleDebugUnauthenticated */
-		newAPIV2Server(ctx, s),                /* apiServer */
+		s.authentication,       /* authnServer */
+		s.adminAuthzCheck,      /* adminAuthzCheck */
+		s.recorder,             /* metricSource */
+		gwMux,                  /* handleRequestsUnauthenticated */
+		s.debug,                /* handleDebugUnauthenticated */
+		newAPIV2Server(ctx, s), /* apiServer */
 	); err != nil {
 		return err
 	}
