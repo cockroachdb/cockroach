@@ -15,6 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -23,6 +24,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
+
+const maxKWithBytesLikeType = 5000
+
+// ShouldUseTopK returns true if the top K sorter should be used; if false is
+// returned, the general sorter should be used instead. k is assumed to be
+// non-zero.
+func ShouldUseTopK(k uint64, inputTypes []*types.T) bool {
+	for _, t := range inputTypes {
+		if typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) == types.BytesFamily {
+			return k <= maxKWithBytesLikeType
+		}
+	}
+	return true
+}
 
 const (
 	topKVecIdx  = 0
@@ -40,6 +55,11 @@ func NewTopKSorter(
 	k uint64,
 	maxOutputBatchMemSize int64,
 ) colexecop.ResettableOperator {
+	if !ShouldUseTopK(k, inputTypes) {
+		colexecerror.InternalError(errors.AssertionFailedf(
+			"tried to create the top K sorter when the general sorter is beneficial",
+		))
+	}
 	return &topKSorter{
 		allocator:             allocator,
 		OneInputNode:          colexecop.NewOneInputNode(input),

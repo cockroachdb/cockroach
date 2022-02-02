@@ -386,7 +386,8 @@ func (r opResult) createDiskBackedSort(
 			colmem.NewAllocator(ctx, sortChunksMemAccount, factory), input, inputTypes,
 			ordering.Columns, int(matchLen), maxOutputBatchMemSize,
 		)
-	} else if post.Limit != 0 && post.Limit < math.MaxUint64-post.Offset {
+	} else if k := post.Limit + post.Offset; post.Limit != 0 &&
+		post.Limit < math.MaxUint64-post.Offset && colexec.ShouldUseTopK(k, inputTypes) {
 		// There is a limit specified, so we know exactly how many rows the
 		// sorter should output. The last part of the condition is making sure
 		// there is no overflow.
@@ -404,7 +405,7 @@ func (r opResult) createDiskBackedSort(
 				ctx, flowCtx, spoolMemLimit, opNamePrefix+"topk-sort", processorID,
 			)
 		}
-		topK = post.Limit + post.Offset
+		topK = k
 		inMemorySorter = colexec.NewTopKSorter(
 			colmem.NewAllocator(ctx, topKSorterMemAccount, factory), input,
 			inputTypes, ordering.Columns, topK, maxOutputBatchMemSize,
