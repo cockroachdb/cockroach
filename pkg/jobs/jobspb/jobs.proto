@@ -851,6 +851,7 @@ message RowLevelTTLDetails {
     (gogoproto.customname) = "TableID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
   ];
+  google.protobuf.Timestamp cutoff = 2 [(gogoproto.nullable)=false, (gogoproto.stdtime) = true];
 }
 
 message RowLevelTTLProgress {

@@ -11,6 +11,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -21,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttlpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
 )
@@ -40,7 +43,192 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	p := execCtx.(JobExecContext)
+	ie := p.ExecCfg().InternalExecutor
+	db := p.ExecCfg().DB
+	var knobs TTLTestingKnobs
+	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
+		knobs = *ttlKnobs
+	}
+
+	details := t.job.Details().(jobspb.RowLevelTTLDetails)
+
+	// TODO(#75428): feature flag check, ttl pause check.
+	// TODO(#75428): detect if the table has a schema change, in particular,
+	// a PK change, a DROP TTL or a DROP TABLE should early exit the job.
+	var pkColumns []string
+	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
+			ctx,
+			txn,
+			details.TableID,
+			tree.ObjectLookupFlagsWithRequired(),
+		)
+		if err != nil {
+			return err
+		}
+		pkColumns = desc.GetPrimaryIndex().IndexDesc().KeyColumnNames
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	selectClause := makeSelectClauseFromColumns(pkColumns)
+	// lastRowPK stores the last PRIMARY KEY that was seen.
+	var lastRowPK []interface{}
+
+	const (
+		selectBatchSize = 500
+		deleteBatchSize = 100
+	)
+
+	// TODO(#75428): break this apart by ranges to avoid multi-range operations.
+	// TODO(#75428): add concurrency.
+	for {
+		// Step 1. Fetch some rows we want to delete using a historical
+		// SELECT query.
+		var expiredRowsPKs []tree.Datums
+
+		var filterClause string
+		if len(lastRowPK) > 0 {
+			// Generate (pk_col_1, pk_col_2, ...) > ($2, $3, ...), reserving
+			// $1 for the now clause.
+			filterClause = fmt.Sprintf("AND (%s) > (", selectClause)
+			for i := range pkColumns {
+				if i > 0 {
+					filterClause += ", "
+				}
+				filterClause += fmt.Sprintf("$%d", i+2)
+			}
+			filterClause += ")"
+		}
+
+		aostClause := "AS OF SYSTEM TIME '-30s'"
+		if knobs.DisableAOSTClause {
+			aostClause = ""
+		}
+		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// TODO(#75428): configure select_batch_size
+			q := fmt.Sprintf(
+				`SELECT %[1]s FROM [%[2]d AS tbl_name]
+					%[3]s
+					WHERE crdb_internal_expiration <= $1 %[4]s
+					ORDER BY %[1]s
+					LIMIT %[5]d
+				`,
+				selectClause,
+				details.TableID,
+				aostClause,
+				filterClause,
+				selectBatchSize,
+			)
+			args := append(
+				[]interface{}{details.Cutoff},
+				lastRowPK...,
+			)
+			var err error
+			expiredRowsPKs, err = ie.QueryBuffered(
+				ctx,
+				"ttl",
+				txn,
+				q,
+				args...,
+			)
+			return err
+		}); err != nil {
+			return errors.Wrapf(err, "error selecting rows to delete")
+		}
+
+		// Step 2. Delete the rows which have expired.
+
+		// TODO(#75428): configure delete_batch_size
+		for startRowIdx := 0; startRowIdx < len(expiredRowsPKs); startRowIdx += deleteBatchSize {
+			until := startRowIdx + deleteBatchSize
+			if until > len(expiredRowsPKs) {
+				until = len(expiredRowsPKs)
+			}
+			deleteBatch := expiredRowsPKs[startRowIdx:until]
+
+			// Flatten the datums in deleteBatch and generate the placeholder string.
+			// The result is (for a 2 column PK) something like:
+			//   placeholderStr: ($2, $3), ($4, $5), ...
+			//   args: {cutoff, row1col1, row1col2, row2col1, row2col2, ...}
+			// where we save $1 for crdb_internal_expiration < $1
+			args := make([]interface{}, len(pkColumns)*len(deleteBatch)+1)
+			args[0] = details.Cutoff
+			placeholderStr := ""
+			for i, row := range deleteBatch {
+				if i > 0 {
+					placeholderStr += ", "
+				}
+				placeholderStr += "("
+				for j := 0; j < len(pkColumns); j++ {
+					if j > 0 {
+						placeholderStr += ", "
+					}
+					placeholderStr += fmt.Sprintf("$%d", 2+i*len(pkColumns)+j)
+					args[i*len(pkColumns)+j+1] = row[j]
+				}
+				placeholderStr += ")"
+			}
+
+			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				// TODO(#75428): configure admission priority
+
+				q := fmt.Sprintf(
+					`DELETE FROM [%d AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (%s) IN (%s)`,
+					details.TableID,
+					selectClause,
+					placeholderStr,
+				)
+
+				_, err := ie.Exec(
+					ctx,
+					"ttl_delete",
+					txn,
+					q,
+					args...,
+				)
+				return err
+			}); err != nil {
+				return errors.Wrapf(err, "error during row deletion")
+			}
+		}
+
+		// Step 3. Early exit if necessary. Otherwise, populate the lastRowPK so we
+		// can start from this point in the next select batch.
+
+		// If we selected less than the select batch size, we have selected every
+		// row.
+		if len(expiredRowsPKs) < selectBatchSize {
+			break
+		}
+
+		if lastRowPK == nil {
+			lastRowPK = make([]interface{}, len(pkColumns))
+		}
+		lastRowIdx := len(expiredRowsPKs) - 1
+		for i := 0; i < len(pkColumns); i++ {
+			lastRowPK[i] = expiredRowsPKs[lastRowIdx][i]
+		}
+	}
+
 	return nil
+}
+
+// makeSelectClauseFromColumns converts primary key columns into an escape string
+// for an order by clause, e.g.:
+//   {"a", "b"} => a, b
+//   {"escape-me", "b"} => "escape-me", b
+func makeSelectClauseFromColumns(pkColumns []string) string {
+	var b bytes.Buffer
+	for i, pkColumn := range pkColumns {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		lexbase.EncodeRestrictedSQLIdent(&b, pkColumn, lexbase.EncNoFlags)
+	}
+	return b.String()
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
@@ -213,6 +401,7 @@ func createRowLevelTTLJob(
 		Username:    security.NodeUserName(),
 		Details: jobspb.RowLevelTTLDetails{
 			TableID: ttlDetails.TableID,
+			Cutoff:  timeutil.Now(),
 		},
 		Progress:  jobspb.RowLevelTTLProgress{},
 		CreatedBy: createdByInfo,
