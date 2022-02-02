@@ -11,8 +11,6 @@
 package descs
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -21,69 +19,57 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// systemDatabaseNamespaceCache is used to cache the IDs of system descriptors.
+// We get to assume that for a given name, it will never change for the life of
+// the process. This is helpful because unlike other descriptors, we can't
+// always leverage the lease manager to cache all system table IDs.
 type systemDatabaseNamespaceCache struct {
 	syncutil.RWMutex
 	ns map[descpb.NameInfo]descpb.ID
 }
 
-func (nc *systemDatabaseNamespaceCache) optimisticLookup(
-	parentSchemaID descpb.ID, name string,
-) (wasOptimismWarranted bool, id descpb.ID) {
-	nc.RLock()
-	defer nc.RUnlock()
-	if nc.ns == nil {
-		return false, descpb.InvalidID
-	}
-	return true, nc.ns[descpb.NameInfo{
-		ParentID:       keys.SystemDatabaseID,
-		ParentSchemaID: parentSchemaID,
-		Name:           name,
-	}]
-}
-
-func (nc *systemDatabaseNamespaceCache) populateAll(
-	ctx context.Context, codec keys.SQLCodec,
-) error {
-	nc.Lock()
-	defer nc.Unlock()
-	m := make(map[descpb.NameInfo]descpb.ID)
+func newSystemDatabaseNamespaceCache(codec keys.SQLCodec) *systemDatabaseNamespaceCache {
+	nc := &systemDatabaseNamespaceCache{}
+	nc.ns = make(map[descpb.NameInfo]descpb.ID)
 	ms := bootstrap.MakeMetadataSchema(
 		codec,
 		zonepb.DefaultZoneConfigRef(),
 		zonepb.DefaultSystemZoneConfigRef(),
 	)
 	_ = ms.ForEachCatalogDescriptor(func(desc catalog.Descriptor) error {
-		m[descpb.NameInfo{
-			ParentID:       desc.GetParentID(),
-			ParentSchemaID: desc.GetParentSchemaID(),
-			Name:           desc.GetName(),
-		}] = desc.GetID()
+		if desc.GetID() < keys.MaxReservedDescID {
+			nc.ns[descpb.NameInfo{
+				ParentID:       desc.GetParentID(),
+				ParentSchemaID: desc.GetParentSchemaID(),
+				Name:           desc.GetName(),
+			}] = desc.GetID()
+		}
 		return nil
 	})
-	nc.ns = m
-	return nil
+	return nc
 }
-
-var systemNamespace, tenantNamespace systemDatabaseNamespaceCache
 
 // lookupSystemDatabaseNamespaceCache looks for the corresponding namespace
 // entry in the cache. If the cache is empty, it creates a bootstrap schema
 // and populates the cache with the descriptors in it.
-func lookupSystemDatabaseNamespaceCache(
-	ctx context.Context, codec keys.SQLCodec, parentSchemaID descpb.ID, name string,
-) (descpb.ID, error) {
-	nc := &tenantNamespace
-	if codec.ForSystemTenant() {
-		nc = &systemNamespace
+func (s *systemDatabaseNamespaceCache) lookup(schemaID descpb.ID, name string) descpb.ID {
+	if s == nil {
+		return descpb.InvalidID
 	}
-	wasOptimismWarranted, id := nc.optimisticLookup(parentSchemaID, name)
-	if wasOptimismWarranted {
-		return id, nil
+	s.RLock()
+	defer s.RUnlock()
+	return s.ns[descpb.NameInfo{
+		ParentID:       keys.SystemDatabaseID,
+		ParentSchemaID: schemaID,
+		Name:           name,
+	}]
+}
+
+func (s *systemDatabaseNamespaceCache) add(info descpb.NameInfo, id descpb.ID) {
+	if s == nil {
+		return
 	}
-	err := nc.populateAll(ctx, codec)
-	if err != nil {
-		return descpb.InvalidID, err
-	}
-	_, id = nc.optimisticLookup(parentSchemaID, name)
-	return id, nil
+	s.Lock()
+	defer s.Unlock()
+	s.ns[info] = id
 }

@@ -249,9 +249,6 @@ statement ok
 SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms'
 
 statement ok
-SET CLUSTER SETTING jobs.registry.interval.cancel = '50ms';
-
-statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints = 'indexbackfill.before_flow';
 
 statement ok
@@ -265,20 +262,50 @@ CREATE INDEX pauseidx ON tbl(j);
 
 # clear the pause point now that the job is paused.
 statement ok
-RESET CLUSTER SETTING jobs.debug.pausepoints 
+RESET CLUSTER SETTING jobs.debug.pausepoints
+
+let $tab_id
+SELECT 'tbl'::regclass::int
+
+# Construct some resume spans where half of the span has the wrong
+# tenant prefix. The variable will hold the json text for the resume
+# spans we want. We'll verify them below.
+let $spans
+SELECT
+    json_build_array(
+        json_build_object(
+            'key',
+            encode(
+                b'\xfe\xef' || decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'),
+                'base64'
+            ),
+            'endKey',
+            encode(b'\xfe\xef' || crdb_internal.encode_key($tab_id, 1, (100,)), 'base64')
+        ),
+        json_build_object(
+            'key',
+            encode(crdb_internal.encode_key($tab_id, 1, (100,)), 'base64'),
+            'endKey',
+            j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'endKey'
+        )
+    )
+FROM
+    (SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) AS j FROM system.jobs)
+WHERE
+    j->>'description' LIKE 'CREATE INDEX pauseidx%';
 
 # while the backfill is paused, go in and replace the resume spans with some new
 # spans that both the wrong tenant ID or no tenant ID before resuming it to make
 # sure that on resume it re-keys the spans correctly. We pretty_key these below
 # to confirm/show what is in them.
 statement ok 
-UPDATE system.jobs 
+UPDATE system.jobs
   SET payload = crdb_internal.json_to_pb(
     'cockroach.sql.jobs.jobspb.Payload',
       json_set(
-        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload), 
-        ARRAY['schemaChange', 'resumeSpanList', '0'], 
-        '{"resumeSpans": [{"key": "/u/IiQ==", "endKey": "/u/Iiew="}, {"key": "yIns", "endKey" : "yIo="}]}'::jsonb
+        crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload),
+        ARRAY['schemaChange', 'resumeSpanList', '0'],
+        '{"resumeSpans": $spans}'::jsonb
       )
     )
 WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'description' LIKE 'CREATE INDEX pauseidx%';
@@ -286,16 +313,16 @@ WHERE crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload)->>'
 # confirm we see these bogus start and end keys in the job, both for the wrong
 # tenant and for no tenant.
 query TTTT
-SELECT 
+SELECT
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->0->>'endKey', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'key', 'base64'), 0),
   crdb_internal.pretty_key(decode(j->'schemaChange'->'resumeSpanList'->0->'resumeSpans'->1->>'endKey', 'base64'), 0)
 FROM (
-  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs 
+  SELECT crdb_internal.pb_to_json('cockroach.sql.jobs.jobspb.Payload', payload) j FROM system.jobs
 ) WHERE j->>'description' LIKE 'CREATE INDEX pauseidx%';
 ----
-/103/Table/64/1   /103/Table/64/1/100   /64/1/100   /64/2
+/103/Table/114/1  /103/Table/114/1/100  /114/1/100  /114/2
 
 # resume the job and ensure it completes, which includes validation.
 statement ok 
