@@ -80,14 +80,14 @@ func (so *DummySequenceOperators) IsTypeVisible(
 	return false, false, errors.WithStack(errEvalPlanner)
 }
 
-// HasPrivilege is part of the tree.EvalDatabase interface.
-func (so *DummySequenceOperators) HasPrivilege(
+// HasAnyPrivilege is part of the tree.EvalDatabase interface.
+func (so *DummySequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	priv privilege.Privilege,
-) (bool, error) {
-	return false, errors.WithStack(errEvalPlanner)
+	privs []privilege.Privilege,
+) (tree.HasAnyPrivilegeResult, error) {
+	return tree.HasNoPrivilege, errors.WithStack(errEvalPlanner)
 }
 
 // IncrementSequenceByID is part of the tree.SequenceOperators interface.
@@ -336,14 +336,14 @@ func (ep *DummyEvalPlanner) IsTypeVisible(
 	return false, false, errors.WithStack(errEvalPlanner)
 }
 
-// HasPrivilege is part of the tree.EvalDatabase interface.
-func (ep *DummyEvalPlanner) HasPrivilege(
+// HasAnyPrivilege is part of the tree.EvalDatabase interface.
+func (ep *DummyEvalPlanner) HasAnyPrivilege(
 	ctx context.Context,
 	specifier tree.HasPrivilegeSpecifier,
 	user security.SQLUsername,
-	priv privilege.Privilege,
-) (bool, error) {
-	return false, errors.WithStack(errEvalPlanner)
+	privs []privilege.Privilege,
+) (tree.HasAnyPrivilegeResult, error) {
+	return tree.HasNoPrivilege, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveTableName is part of the tree.EvalDatabase interface.

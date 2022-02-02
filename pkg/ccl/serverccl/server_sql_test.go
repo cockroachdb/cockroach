@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -249,4 +250,9 @@ func TestNoInflightTracesVirtualTableOnTenant(t *testing.T) {
 		"select * from crdb_internal.cluster_inflight_traces WHERE trace_id = 4;")
 	require.Error(t, err, "cluster_inflight_traces should be unsupported")
 	require.Contains(t, err.Error(), "table crdb_internal.cluster_inflight_traces is not implemented on tenants")
+}
+
+func TestSystemConfigWatcherCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	systemconfigwatchertest.TestSystemConfigWatcher(t, false /* skipSecondary */)
 }

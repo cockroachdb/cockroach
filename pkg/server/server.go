@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -554,8 +555,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			fallbackConf.GCPolicy.IgnoreStrictEnforcement = true
 
 			spanConfig.subscriber = spanconfigkvsubscriber.New(
-				stopper,
-				db,
 				clock,
 				rangeFeedFactory,
 				keys.SpanConfigurationsTableID,
@@ -620,8 +619,13 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
+
+	systemConfigWatcher := systemconfigwatcher.New(
+		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
+	)
 	replicationReporter := reports.NewReporter(
-		db, node.stores, storePool, st, nodeLiveness, internalExecutor)
+		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
+	)
 
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
@@ -676,6 +680,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
+	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -696,7 +701,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
 		nodeDescs:                g,
-		systemConfigProvider:     g,
+		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       spanConfig.kvAccessor,
 		nodeDialer:               nodeDialer,
 		distSender:               distSender,
@@ -715,6 +720,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		regionsServer:            sStatus,
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
+		settingsStorage:          settingsWriter,
 	})
 	if err != nil {
 		return nil, err
@@ -1142,7 +1148,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Apply any cached initial settings (and start the gossip listener) as early
 	// as possible, to avoid spending time with stale settings.
-	if err := s.refreshSettings(state.initialSettingsKVs); err != nil {
+	if err := initializeCachedSettings(
+		ctx, keys.SystemSQLCodec, s.st.MakeUpdater(), state.initialSettingsKVs,
+	); err != nil {
 		return errors.Wrap(err, "during initializing settings updater")
 	}
 
@@ -1371,7 +1379,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 
 	if !s.cfg.SpanConfigsDisabled && s.spanConfigSubscriber != nil {
-		if err := s.spanConfigSubscriber.Start(ctx); err != nil {
+		if err := s.spanConfigSubscriber.Start(ctx, s.stopper); err != nil {
 			return err
 		}
 	}

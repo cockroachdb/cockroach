@@ -252,7 +252,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		[]roachpb.Span{descriptorTableSpan},
 		startTS,
 		handleEvent,
-		rangefeed.WithDiff(),
+		rangefeed.WithDiff(true),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, descriptorsRangefeed, resolvedTS)
 		}),

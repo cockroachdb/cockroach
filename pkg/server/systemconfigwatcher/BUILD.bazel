@@ -1,0 +1,38 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "systemconfigwatcher",
+    srcs = ["cache.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/keys",
+        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
+        "//pkg/kv/kvclient/rangefeed/rangefeedcache",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/hlc",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "systemconfigwatcher_test",
+    srcs = [
+        "cache_test.go",
+        "main_test.go",
+    ],
+    embed = [":systemconfigwatcher"],
+    deps = [
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/server/systemconfigwatcher/systemconfigwatchertest",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+    ],
+)
