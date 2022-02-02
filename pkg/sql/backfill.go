@@ -1056,7 +1056,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if updatedTodoSpans == nil {
 			return nil
 		}
-		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
+		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, updatedTodoSpans)
 		if err != nil {
 			return err
 		}
