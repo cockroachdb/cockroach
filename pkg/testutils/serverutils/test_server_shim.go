@@ -20,7 +20,6 @@ package serverutils
 import (
 	"context"
 	gosql "database/sql"
-	"net/http"
 	"net/url"
 	"testing"
 
@@ -128,19 +127,6 @@ type TestServerInterface interface {
 	// It is the caller's responsibility to make sure no queries are being run
 	// with DistSQL at the same time.
 	SetDistSQLSpanResolver(spanResolver interface{})
-
-	// AdminURL returns the URL for the admin UI.
-	AdminURL() string
-	// GetHTTPClient returns an http client configured with the client TLS
-	// config required by the TestServer's configuration.
-	GetHTTPClient() (http.Client, error)
-	// GetAdminAuthenticatedHTTPClient returns an http client which has been
-	// authenticated to access Admin API methods (via a cookie).
-	// The user has admin privileges.
-	GetAdminAuthenticatedHTTPClient() (http.Client, error)
-	// GetAuthenticatedHTTPClient returns an http client which has been
-	// authenticated to access Admin API methods (via a cookie).
-	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
 
 	// MustGetSQLCounter returns the value of a counter metric from the server's
 	// SQL Executor. Runs in O(# of metrics) time, which is fine for test code.
