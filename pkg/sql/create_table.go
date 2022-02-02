@@ -21,7 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -54,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -2327,7 +2332,55 @@ func newTableDesc(
 		}
 	}
 
+	// Row level TTL tables require a scheduled job to be created as well.
+	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
+	// This involves plumbing InternalExecutor in there,
+	if ret.RowLevelTTL != nil {
+		env := JobSchedulerEnv(params.p.ExecCfg())
+		j, err := newRowLevelTTLScheduledJob(
+			env,
+			params.p.User(),
+			ret.GetID(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if err := j.Create(params.ctx, params.p.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+			return nil, err
+		}
+	}
 	return ret, nil
+}
+
+// newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
+// for a given table.
+func newRowLevelTTLScheduledJob(
+	env scheduledjobs.JobSchedulerEnv, owner security.SQLUsername, tblID descpb.ID,
+) (*jobs.ScheduledJob, error) {
+	sj := jobs.NewScheduledJob(env)
+	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%d", tblID))
+	sj.SetOwner(owner)
+	sj.SetScheduleDetails(jobspb.ScheduleDetails{
+		Wait: jobspb.ScheduleDetails_WAIT,
+		// If a job fails, try again at the allocated cron time.
+		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
+	})
+	// TODO(#75189): allow user to configure schedule.
+	if err := sj.SetSchedule("@hourly"); err != nil {
+		return nil, err
+	}
+	args := &catpb.ScheduledRowLevelTTLArgs{
+		TableID: tblID,
+	}
+	any, err := pbtypes.MarshalAny(args)
+	if err != nil {
+		return nil, err
+	}
+	sj.SetExecutionDetails(
+		tree.ScheduledRowLevelTTLExecutor.InternalName(),
+		jobspb.ExecutionArguments{Args: any},
+	)
+	return sj, nil
 }
 
 // replaceLikeTableOps processes the TableDefs in the input CreateTableNode,
