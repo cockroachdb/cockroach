@@ -2591,16 +2591,16 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-public   other_db       crdb_internal       USAGE           NULL
-public   other_db       information_schema  USAGE           NULL
-admin    other_db       other_schema        ALL             NULL
-root     other_db       other_schema        ALL             NULL
-public   other_db       pg_catalog          USAGE           NULL
-public   other_db       pg_extension        USAGE           NULL
-admin    other_db       public              ALL             NULL
-public   other_db       public              CREATE          NULL
-public   other_db       public              USAGE           NULL
-root     other_db       public              ALL             NULL
+public   other_db       crdb_internal       USAGE           NO
+public   other_db       information_schema  USAGE           NO
+admin    other_db       other_schema        ALL             YES
+root     other_db       other_schema        ALL             YES
+public   other_db       pg_catalog          USAGE           NO
+public   other_db       pg_extension        USAGE           NO
+admin    other_db       public              ALL             YES
+public   other_db       public              CREATE          NO
+public   other_db       public              USAGE           NO
+root     other_db       public              ALL             YES
 
 statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser
@@ -2609,16 +2609,16 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee  table_catalog  table_schema        privilege_type  is_grantable
-public   other_db       crdb_internal       USAGE           NULL
-public   other_db       information_schema  USAGE           NULL
-admin    other_db       other_schema        ALL             NULL
-root     other_db       other_schema        ALL             NULL
-public   other_db       pg_catalog          USAGE           NULL
-public   other_db       pg_extension        USAGE           NULL
-admin    other_db       public              ALL             NULL
-public   other_db       public              CREATE          NULL
-public   other_db       public              USAGE           NULL
-root     other_db       public              ALL             NULL
+public   other_db       crdb_internal       USAGE           NO
+public   other_db       information_schema  USAGE           NO
+admin    other_db       other_schema        ALL             YES
+root     other_db       other_schema        ALL             YES
+public   other_db       pg_catalog          USAGE           NO
+public   other_db       pg_extension        USAGE           NO
+admin    other_db       public              ALL             YES
+public   other_db       public              CREATE          NO
+public   other_db       public              USAGE           NO
+root     other_db       public              ALL             YES
 
 statement ok
 GRANT CREATE ON SCHEMA other_schema TO testuser
@@ -2627,17 +2627,17 @@ query TTTTT colnames
 SELECT * FROM information_schema.schema_privileges
 ----
 grantee   table_catalog  table_schema        privilege_type  is_grantable
-public    other_db       crdb_internal       USAGE           NULL
-public    other_db       information_schema  USAGE           NULL
-admin     other_db       other_schema        ALL             NULL
-root      other_db       other_schema        ALL             NULL
-testuser  other_db       other_schema        CREATE          NULL
-public    other_db       pg_catalog          USAGE           NULL
-public    other_db       pg_extension        USAGE           NULL
-admin     other_db       public              ALL             NULL
-public    other_db       public              CREATE          NULL
-public    other_db       public              USAGE           NULL
-root      other_db       public              ALL             NULL
+public    other_db       crdb_internal       USAGE           NO
+public    other_db       information_schema  USAGE           NO
+admin     other_db       other_schema        ALL             YES
+root      other_db       other_schema        ALL             YES
+testuser  other_db       other_schema        CREATE          NO
+public    other_db       pg_catalog          USAGE           NO
+public    other_db       pg_extension        USAGE           NO
+admin     other_db       public              ALL             YES
+public    other_db       public              CREATE          NO
+public    other_db       public              USAGE           NO
+root      other_db       public              ALL             YES
 
 ## information_schema.table_privileges and information_schema.role_table_grants
 
