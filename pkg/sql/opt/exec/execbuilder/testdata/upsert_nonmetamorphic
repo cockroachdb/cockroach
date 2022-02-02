@@ -18,9 +18,9 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-Put /Table/56/1/1/0 -> /TUPLE/
-Del /Table/56/1/1/1/1
-Del /Table/56/1/1/2/1
+Put /Table/106/1/1/0 -> /TUPLE/
+Del /Table/106/1/1/1/1
+Del /Table/106/1/1/2/1
 fast path completed
 rows affected: 1
 
@@ -38,9 +38,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/59/1/2/0
-batch flow coordinator  CPut /Table/59/1/2/0 -> /TUPLE/2:2:Int/3
-batch flow coordinator  InitPut /Table/59/2/3/0 -> /BYTES/0x8a
+colbatchscan            Scan /Table/109/1/2/0
+batch flow coordinator  CPut /Table/109/1/2/0 -> /TUPLE/2:2:Int/3
+batch flow coordinator  InitPut /Table/109/2/3/0 -> /BYTES/0x8a
 batch flow coordinator  fast path completed
 sql query               rows affected: 1
 
@@ -51,9 +51,9 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/59/1/1/0
-batch flow coordinator  CPut /Table/59/1/1/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  InitPut /Table/59/2/2/0 -> /BYTES/0x89
+colbatchscan            Scan /Table/109/1/1/0
+batch flow coordinator  CPut /Table/109/1/1/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  InitPut /Table/109/2/2/0 -> /BYTES/0x89
 batch flow coordinator  fast path completed
 sql query               rows affected: 1
 
@@ -65,11 +65,11 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
 ----
-colbatchscan            Scan /Table/59/1/2/0
+colbatchscan            Scan /Table/109/1/2/0
 colbatchscan            fetched: /kv/kv_pkey/2/v -> /3
-batch flow coordinator  Put /Table/59/1/2/0 -> /TUPLE/2:2:Int/2
-batch flow coordinator  Del /Table/59/2/3/0
-batch flow coordinator  CPut /Table/59/2/2/0 -> /BYTES/0x8a (expecting does not exist)
+batch flow coordinator  Put /Table/109/1/2/0 -> /TUPLE/2:2:Int/2
+batch flow coordinator  Del /Table/109/2/3/0
+batch flow coordinator  CPut /Table/109/2/2/0 -> /BYTES/0x8a (expecting does not exist)
 sql query               execution failed after 0 rows: duplicate key value violates unique constraint "woo"
 
 # ---------------------------------------------------------
@@ -115,10 +115,10 @@ INSERT INTO ti VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
 query T kvtrace
 UPSERT INTO ti VALUES (1, 3, 101)
 ----
-Scan /Table/60/1/1/0
-Put /Table/60/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
-Put (delete) /Table/60/2/2/100/1/0
-Put /Table/60/2/3/101/1/0 -> /BYTES/0x0a0103
+Scan /Table/110/1/1/0
+Put /Table/110/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/101
+Put (delete) /Table/110/2/2/100/1/0
+Put /Table/110/2/3/101/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Partial Index With Delete Preserving Encoding
@@ -164,42 +164,42 @@ INSERT INTO tpi VALUES (1, 2, 'bar'), (2, 3, 'bar'), (3, 4, 'foo')
 query T kvtrace
 UPSERT INTO tpi VALUES (1, 3, 'bar')
 ----
-Scan /Table/61/1/1/0
-Put /Table/61/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
+Scan /Table/111/1/1/0
+Put /Table/111/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Bytes/bar
 
 # Upsert a row that didn't match the partial index before but matches after.
 query T kvtrace
 UPSERT INTO tpi VALUES (3, 2, 'foo')
 ----
-Scan /Table/61/1/3/0
-Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
-Put /Table/61/2/"foo"/3/0 -> /BYTES/0x0a0103
+Scan /Table/111/1/3/0
+Put /Table/111/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foo
+Put /Table/111/2/"foo"/3/0 -> /BYTES/0x0a0103
 
 # Upsert a row that matches the partial index before and after, but the index
 # entry doesn't change.
 query T kvtrace
 UPSERT INTO tpi VALUES (3, 1, 'foo')
 ----
-Scan /Table/61/1/3/0
-Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
+Scan /Table/111/1/3/0
+Put /Table/111/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/foo
 
 # Upsert a row that matches the partial index before and after, and the index
 # entry changes.
 query T kvtrace
 UPSERT INTO tpi VALUES (3, 2, 'foobar')
 ----
-Scan /Table/61/1/3/0
-Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
-Put (delete) /Table/61/2/"foo"/3/0
-Put /Table/61/2/"foobar"/3/0 -> /BYTES/0x0a0103
+Scan /Table/111/1/3/0
+Put /Table/111/1/3/0 -> /TUPLE/2:2:Int/2/1:3:Bytes/foobar
+Put (delete) /Table/111/2/"foo"/3/0
+Put /Table/111/2/"foobar"/3/0 -> /BYTES/0x0a0103
 
 # Upsert a row that matches the partial index before but not after.
 query T kvtrace
 UPSERT INTO tpi VALUES (3, 1, 'baz')
 ----
-Scan /Table/61/1/3/0
-Put /Table/61/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/baz
-Put (delete) /Table/61/2/"foobar"/3/0
+Scan /Table/111/1/3/0
+Put /Table/111/1/3/0 -> /TUPLE/2:2:Int/1/1:3:Bytes/baz
+Put (delete) /Table/111/2/"foobar"/3/0
 
 # ---------------------------------------------------------
 # Expression Index With Delete Preserving Encoding
@@ -250,26 +250,26 @@ INSERT INTO tei VALUES (1, 2, 100), (2, 3, 200), (3, 4, 300)
 query T kvtrace
 UPSERT INTO tei VALUES (1, 3, 500)
 ----
-Scan /Table/62/1/1/0
-Put /Table/62/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/500
-Put (delete) /Table/62/2/102/1/0
-Put /Table/62/2/503/1/0 -> /BYTES/0x0a0103
+Scan /Table/112/1/1/0
+Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/500
+Put (delete) /Table/112/2/102/1/0
+Put /Table/112/2/503/1/0 -> /BYTES/0x0a0103
 
 # Upsert a row with different values without changing the index entry.
 query T kvtrace
 UPSERT INTO tei VALUES (1, 4, 499)
 ----
-Scan /Table/62/1/1/0
-Put /Table/62/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/499
+Scan /Table/112/1/1/0
+Put /Table/112/1/1/0 -> /TUPLE/2:2:Int/4/1:3:Int/499
 
 # Upsert a row with a different primary key with the same index entry.
 query T kvtrace
 UPSERT INTO tei VALUES (2, 4, 499)
 ----
-Scan /Table/62/1/2/0
-Put /Table/62/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/499
-Put (delete) /Table/62/2/203/2/0
-Put /Table/62/2/503/2/0 -> /BYTES/0x0a0103
+Scan /Table/112/1/2/0
+Put /Table/112/1/2/0 -> /TUPLE/2:2:Int/4/1:3:Int/499
+Put (delete) /Table/112/2/203/2/0
+Put /Table/112/2/503/2/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Inverted Index With Delete Preserving Encoding
@@ -320,10 +320,10 @@ INSERT INTO tii VALUES (1, ARRAY[1, 2, 3, 2, 2, NULL, 3])
 query T kvtrace
 UPSERT INTO tii VALUES (1, ARRAY[1, 2, 2, NULL, 4, 4])
 ----
-Scan /Table/63/1/1/0
-Put /Table/63/1/1/0 -> /TUPLE/
-Put (delete) /Table/63/2/3/1/0
-Put /Table/63/2/4/1/0 -> /BYTES/0x0a0103
+Scan /Table/113/1/1/0
+Put /Table/113/1/1/0 -> /TUPLE/
+Put (delete) /Table/113/2/3/1/0
+Put /Table/113/2/4/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Multicolumn Inverted Index With Delete Preserving Encoding
@@ -374,12 +374,12 @@ INSERT INTO tmi VALUES (1, 2, '{"a": "foo", "b": "bar"}'::json)
 query T kvtrace
 UPSERT INTO tmi VALUES (1, 3, '{"a": "foobar", "c": "baz"}'::json)
 ----
-Scan /Table/64/1/1/0
-Put /Table/64/1/1/0 -> /TUPLE/2:2:Int/3/
-Put (delete) /Table/64/2/2/"a"/"foo"/1/0
-Put (delete) /Table/64/2/2/"b"/"bar"/1/0
-Put /Table/64/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
-Put /Table/64/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
+Scan /Table/114/1/1/0
+Put /Table/114/1/1/0 -> /TUPLE/2:2:Int/3/
+Put (delete) /Table/114/2/2/"a"/"foo"/1/0
+Put (delete) /Table/114/2/2/"b"/"bar"/1/0
+Put /Table/114/2/3/"a"/"foobar"/1/0 -> /BYTES/0x0a0103
+Put /Table/114/2/3/"c"/"baz"/1/0 -> /BYTES/0x0a0103
 
 # ---------------------------------------------------------
 # Unique Index With Delete Preserving Encoding
@@ -427,7 +427,7 @@ DELETE FROM tui WHERE a = 2
 query T kvtrace
 UPSERT INTO tui VALUES (1, 3, 200)
 ----
-Scan /Table/65/1/1/0
-Put /Table/65/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
-Put (delete) /Table/65/2/2/100/0
-Put /Table/65/2/3/200/0 -> /BYTES/0x0a020389
+Scan /Table/115/1/1/0
+Put /Table/115/1/1/0 -> /TUPLE/2:2:Int/3/1:3:Int/200
+Put (delete) /Table/115/2/2/100/0
+Put /Table/115/2/3/200/0 -> /BYTES/0x0a020389

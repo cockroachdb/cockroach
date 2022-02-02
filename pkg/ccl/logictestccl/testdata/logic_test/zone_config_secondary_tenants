@@ -19,8 +19,8 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 5;
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0   RANGE default
-56  TABLE test.public.t
+0    RANGE default
+106  TABLE test.public.t
 
 # The tests below test semantics around named zone for tenants. Tenants aren't
 # allowed to alter any named zones other than RANGE DEFAULT. RANGE DEFAULT

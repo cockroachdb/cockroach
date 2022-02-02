@@ -109,6 +109,23 @@ func GetDescriptorState(desc *Descriptor) DescriptorState {
 	return state
 }
 
+// SetID sets the ID of the descriptor to the provided value. It is a low-level
+// operation not generally performed.
+func SetID(desc *Descriptor, id ID) {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		t.Table.ID = id
+	case *Descriptor_Database:
+		t.Database.ID = id
+	case *Descriptor_Type:
+		t.Type.ID = id
+	case *Descriptor_Schema:
+		t.Schema.ID = id
+	default:
+		panic(errors.AssertionFailedf("SetID: unknown Descriptor type %T", t))
+	}
+}
+
 // setDescriptorModificationTime sets the ModificationTime of the descriptor.
 func setDescriptorModificationTime(desc *Descriptor, ts hlc.Timestamp) {
 	switch t := desc.Union.(type) {
