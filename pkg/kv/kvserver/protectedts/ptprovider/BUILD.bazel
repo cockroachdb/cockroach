@@ -12,7 +12,6 @@ go_library(
         "//pkg/kv/kvserver/protectedts/ptcache",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/kv/kvserver/protectedts/ptstorage",
-        "//pkg/kv/kvserver/protectedts/ptverifier",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
         "//pkg/util/metric",
