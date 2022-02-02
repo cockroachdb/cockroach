@@ -98,13 +98,13 @@ func makeTestBaseConfig(st *cluster.Settings) BaseConfig {
 	baseCfg.HTTPAddr = util.TestAddr.String()
 	// Set standard user for intra-cluster traffic.
 	baseCfg.User = security.NodeUserName()
+	// Enable web session authentication.
+	baseCfg.EnableWebSessionAuthentication = true
 	return baseCfg
 }
 
 func makeTestKVConfig() KVConfig {
 	kvCfg := MakeKVConfig(base.DefaultTestStoreSpec)
-	// Enable web session authentication.
-	kvCfg.EnableWebSessionAuthentication = true
 	return kvCfg
 }
 
