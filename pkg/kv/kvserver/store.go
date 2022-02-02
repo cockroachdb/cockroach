@@ -3265,7 +3265,8 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracing.Rec
 	defer collectAndFinish()
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return true }
 	_, err := s.replicateQueue.processOneChange(
-		ctx, repl, canTransferLease, true /* dryRun */)
+		ctx, repl, canTransferLease, false /* scatter */, true, /* dryRun */
+	)
 	if err != nil {
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}
