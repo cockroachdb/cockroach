@@ -184,10 +184,11 @@ func StartTenant(
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetSQLInstanceInfo(roachpb.NodeDescriptor{NodeID: 0})
 
+	authServer := newAuthenticationServer(baseCfg.Config, s)
+
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
-	// TODO(knz): add the authentication service here.
-	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer} {
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		gw.RegisterService(grpcMain.Server)
 	}
 	startRPCServer(background)
@@ -206,8 +207,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	// TODO(knz): add the authentication endpoint here.
-	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer} {
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return nil, "", "", err
 		}
