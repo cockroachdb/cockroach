@@ -28,7 +28,7 @@ fi
 
 # TODO(ricky): Also provide a way to stamp the following variables:
 # - github.com/cockroachdb/cockroach/pkg/build.channel
-# - github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv
+# - github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv
 
 # Prefix with STABLE_ so that these values are saved to stable-status.txt
 # instead of volatile-status.txt.
