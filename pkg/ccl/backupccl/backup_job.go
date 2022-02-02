@@ -398,20 +398,6 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 	}
 
-	ptsID := details.ProtectedTimestampRecord
-	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
-		resumerSpan.RecordStructured(&types.StringValue{Value: "verifying protected timestamp"})
-		if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, *ptsID); err != nil {
-			if errors.Is(err, protectedts.ErrNotExists) {
-				// No reason to return an error which might cause problems if it doesn't
-				// seem to exist.
-				log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
-			} else {
-				return err
-			}
-		}
-	}
-
 	storageByLocalityKV := make(map[string]*roachpb.ExternalStorage)
 	for kv, uri := range details.URIsByLocalityKV {
 		conf, err := cloud.ExternalStorageConfFromURI(uri, p.User())
@@ -505,7 +491,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		return err
 	}
 
-	if ptsID != nil && !b.testingKnobs.ignoreProtectedTimestamps {
+	if details.ProtectedTimestampRecord != nil && !b.testingKnobs.ignoreProtectedTimestamps {
 		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			details := b.job.Details().(jobspb.BackupDetails)
 			return releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider,
