@@ -85,7 +85,7 @@ module.exports = (env, argv) => {
   }
 
   // Exclude DLLPlugin when build with Bazel because bazel handles caching on its own
-  if (!isBazelBuild) {
+  if (!isBazelBuild && !env.WEBPACK_WATCH && !env.WEBPACK_SERVE) {
     plugins = plugins.concat([
       // See "DLLs for speedy builds" in the README for details.
       new webpack.DllReferencePlugin({
