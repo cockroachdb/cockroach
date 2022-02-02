@@ -309,4 +309,7 @@ type TestTenantArgs struct {
 
 	// TracingDefault controls whether the tracing will be on or off by default.
 	TracingDefault tracing.TracingMode
+
+	// RPCHeartbeatInterval controls how often the tenant sends Ping requests.
+	RPCHeartbeatInterval time.Duration
 }

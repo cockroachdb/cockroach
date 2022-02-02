@@ -4600,6 +4600,10 @@ reset_session_stmt:
   {
     $$.val = &tree.SetVar{Name: $3, Values:tree.Exprs{tree.DefaultVal{}}, Reset: true}
   }
+| RESET_ALL ALL
+  {
+    $$.val = &tree.SetVar{ResetAll: true, Reset: true}
+  }
 | RESET error // SHOW HELP: RESET
 
 // %Help: RESET CLUSTER SETTING - reset a cluster setting to its default value
