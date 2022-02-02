@@ -81,7 +81,12 @@ func getResultColumns(
 
 	case lookupJoinOp:
 		a := args.(*lookupJoinArgs)
-		return joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols)), nil
+		cols := joinColumns(a.JoinType, inputs[0], tableColumns(a.Table, a.LookupCols))
+		// The following matches the behavior of execFactory.ConstructLookupJoin.
+		if a.IsFirstJoinInPairedJoiner {
+			cols = append(cols, colinfo.ResultColumn{Name: "cont", Typ: types.Bool})
+		}
+		return cols, nil
 
 	case ordinalityOp:
 		return appendColumns(inputs[0], colinfo.ResultColumn{

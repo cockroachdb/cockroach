@@ -2324,19 +2324,24 @@ inner-join (lookup abcd)
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
-# In this case, we can't yet convert to a lookup join (see
-# the GenerateLookupJoins custom func).
-opt expect-not=GenerateLookupJoins
+# In this case, we can generate lookup joins as paired-joins.
+opt expect=GenerateLookupJoins
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n
 ----
-right-join (hash)
+left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── scan abcd
- │    └── columns: a:6 b:7 c:8
- ├── scan small
- │    └── columns: m:1 n:2
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:12
+ │    ├── fd: (9)-->(6,7,12)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 
@@ -2583,19 +2588,25 @@ semi-join (lookup abcd@abcd_a_b_idx)
  │    └── columns: m:1 n:2
  └── filters (true)
 
-# We should not generate a lookup semi-join when the index doesn't contain all
-# columns in the join condition.
-opt expect-not=GenerateLookupJoins
+# We can generate a lookup semi-join when the index doesn't contain all
+# columns in the join condition, using paired-joins.
+opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
-semi-join (hash)
+semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── scan abcd
- │    └── columns: a:6 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1!null n:2 a:6!null abcd.rowid:9!null continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,13), (1)==(6), (6)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # Lookup anti-join with index that contains all columns in the join condition.
@@ -2609,19 +2620,25 @@ anti-join (lookup abcd@abcd_a_b_idx)
  │    └── columns: m:1 n:2
  └── filters (true)
 
-# We should not generate a lookup anti-join when the index doesn't contain all
-# columns in the join condition.
-opt expect-not=GenerateLookupJoins
+# We can generate a lookup anti-join when the index doesn't contain all
+# columns in the join condition, using paired-joins.
+opt expect=GenerateLookupJoins
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c)
 ----
-anti-join (hash)
+anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── scan abcd
- │    └── columns: a:6 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 abcd.rowid:9 continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,13)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # Regression test for #59615. Ensure that invalid lookup joins are not created
@@ -2829,6 +2846,10 @@ left-join (lookup lookup_expr [as=t])
  │    │    └── (3, NULL)
  │    └── filters (true)
  └── filters (true)
+
+exec-ddl
+DROP INDEX idx_vrw
+----
 
 # The OR filter gets converted to an IN expression in the lookup expression
 # filters.
@@ -3066,23 +3087,27 @@ inner-join (lookup abcd)
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
-# In this case, we can't yet convert to a lookup join (see
-# the GenerateLookupJoins custom func).
-opt expect-not=GenerateLookupJoinsWithFilter
+# In this case, we can generate lookup joins as paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT * FROM small LEFT JOIN abcd ON a=m AND c>n AND b>1
 ----
-right-join (hash)
+left-join (lookup abcd)
  ├── columns: m:1 n:2 a:6 b:7 c:8
- ├── select
- │    ├── columns: a:6 b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
- │    └── filters
- │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
- ├── scan small
- │    └── columns: m:1 n:2
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:12
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │         └── b:7 > 1 [outer=(7), constraints=(/7: [/2 - ]; tight)]
+ │    ├── first join in paired joiner; continuation column: continuation:12
+ │    ├── fd: (9)-->(6,7,12)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
+ │    └── filters (true)
  └── filters
-      ├── a:6 = m:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── c:8 > n:2 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
 # Constant columns are projected and used by lookup joiner.
@@ -3604,22 +3629,26 @@ semi-join (lookup abcd@abcd_a_b_idx)
  └── filters
       └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
 
-# We should not generate a lookup semi-join when the index is non-covering.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index is non-covering using
+# paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND a > b)
 ----
-semi-join (hash)
+semi-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── select
- │    ├── columns: a:6!null b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── inner-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1!null n:2 a:6!null b:7!null abcd.rowid:9!null continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,7,13), (1)==(6), (6)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
  │    └── filters
  │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # Lookup anti-join with covering index.
@@ -3634,22 +3663,26 @@ anti-join (lookup abcd@abcd_a_b_idx)
  └── filters
       └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
 
-# We should not generate a lookup semi-join when the index is non-covering.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index is non-covering using
+# paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m, n FROM small WHERE NOT EXISTS(SELECT 1 FROM abcd WHERE m = a AND n = c AND a > b)
 ----
-anti-join (hash)
+anti-join (lookup abcd)
  ├── columns: m:1 n:2
- ├── scan small
- │    └── columns: m:1 n:2
- ├── select
- │    ├── columns: a:6!null b:7!null c:8
- │    ├── scan abcd
- │    │    └── columns: a:6 b:7 c:8
+ ├── key columns: [9] = [9]
+ ├── lookup columns are key
+ ├── second join in paired joiner
+ ├── left-join (lookup abcd@abcd_a_b_idx)
+ │    ├── columns: m:1 n:2 a:6 b:7 abcd.rowid:9 continuation:13
+ │    ├── key columns: [1] = [6]
+ │    ├── first join in paired joiner; continuation column: continuation:13
+ │    ├── fd: (9)-->(6,7,13)
+ │    ├── scan small
+ │    │    └── columns: m:1 n:2
  │    └── filters
  │         └── a:6 > b:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
  └── filters
-      ├── m:1 = a:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── n:2 = c:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
 
 # --------------------------------------------------
@@ -3838,30 +3871,28 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
-# We should not generate a lookup semi-join when the index does not cover "s"
-# which is referenced in the remaining filter.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup semi-join when the index does not cover "s",
+# which is referenced in the remaining filter, by using paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
  ├── columns: m:1
- └── semi-join (hash)
+ └── semi-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── scan small
-      │    └── columns: m:1 n:2
-      ├── select
-      │    ├── columns: i:7 s:8!null
-      │    ├── fd: ()-->(8)
-      │    ├── index-join partial_tab
-      │    │    ├── columns: i:7 s:8
-      │    │    └── scan partial_tab@partial_idx,partial
-      │    │         ├── columns: k:6!null i:7
-      │    │         ├── key: (6)
-      │    │         └── fd: (6)-->(7)
-      │    └── filters
-      │         └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── inner-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2!null k:6!null i:7!null continuation:12
+      │    ├── key columns: [2] = [7]
+      │    ├── first join in paired joiner; continuation column: continuation:12
+      │    ├── fd: (6)-->(7,12), (2)==(7), (7)==(2)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
       └── filters
-           └── n:2 = i:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 
 # Generate a lookup anti-join when the index does not cover "s", but the
 # reference to "s" no longer exists in the filters.
@@ -3877,30 +3908,28 @@ project
       │    └── columns: m:1 n:2
       └── filters (true)
 
-# We should not generate a lookup anti-join when the index does not cover "s"
-# which is referenced in the remaining filter.
-opt expect-not=GenerateLookupJoinsWithFilter
+# We can generate a lookup anti-join when the index does not cover "s",
+# which is referenced in the remaining filter, by using paired-joins.
+opt expect=GenerateLookupJoinsWithFilter
 SELECT m FROM small WHERE NOT EXISTS (SELECT 1 FROM partial_tab WHERE s = 'foo' AND n = i)
 ----
 project
  ├── columns: m:1
- └── anti-join (hash)
+ └── anti-join (lookup partial_tab)
       ├── columns: m:1 n:2
-      ├── scan small
-      │    └── columns: m:1 n:2
-      ├── select
-      │    ├── columns: i:7 s:8!null
-      │    ├── fd: ()-->(8)
-      │    ├── index-join partial_tab
-      │    │    ├── columns: i:7 s:8
-      │    │    └── scan partial_tab@partial_idx,partial
-      │    │         ├── columns: k:6!null i:7
-      │    │         ├── key: (6)
-      │    │         └── fd: (6)-->(7)
-      │    └── filters
-      │         └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── second join in paired joiner
+      ├── left-join (lookup partial_tab@partial_idx,partial)
+      │    ├── columns: m:1 n:2 k:6 i:7 continuation:12
+      │    ├── key columns: [2] = [7]
+      │    ├── first join in paired joiner; continuation column: continuation:12
+      │    ├── fd: (6)-->(7,12)
+      │    ├── scan small
+      │    │    └── columns: m:1 n:2
+      │    └── filters (true)
       └── filters
-           └── n:2 = i:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+           └── s:8 = 'foo' [outer=(8), constraints=(/8: [/'foo' - /'foo']; tight), fd=()-->(8)]
 
 # A lookup semi-join on a partial index should have the same cost as a lookup
 # semi-join on a non-partial index.
@@ -5346,7 +5375,7 @@ WHERE n.name = 'Upper West Side'
 OR n.name = 'Upper East Side'
 GROUP BY n.name, n.geom
 ----
-memo (optimized, ~33KB, required=[presentation: name:16,popn_per_sqkm:22])
+memo (optimized, ~34KB, required=[presentation: name:16,popn_per_sqkm:22])
  ├── G1: (project G2 G3 name)
  │    └── [presentation: name:16,popn_per_sqkm:22]
  │         ├── best: (project G2 G3 name)

@@ -234,15 +234,33 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 		if !t.Cols.SubsetOf(requiredCols) {
 			panic(errors.AssertionFailedf("lookup join with columns that are not required"))
 		}
-		if t.IsSecondJoinInPairedJoiner {
-			ij, ok := t.Input.(*InvertedJoinExpr)
-			if !ok {
+		if t.IsFirstJoinInPairedJoiner {
+			switch t.JoinType {
+			case opt.InnerJoinOp, opt.LeftJoinOp:
+			default:
 				panic(errors.AssertionFailedf(
-					"lookup paired-join is paired with %T instead of inverted join", t.Input))
+					"first join in paired joiner must be an inner or left join. found %s",
+					t.JoinType.String(),
+				))
 			}
-			if !ij.IsFirstJoinInPairedJoiner {
-				panic(errors.AssertionFailedf(
-					"lookup paired-join is paired with inverted join that thinks it is unpaired"))
+			if t.ContinuationCol == 0 {
+				panic(errors.AssertionFailedf("first join in paired joiner must have a continuation column"))
+			}
+		}
+		if t.IsSecondJoinInPairedJoiner {
+			switch firstJoin := t.Input.(type) {
+			case *InvertedJoinExpr:
+				if !firstJoin.IsFirstJoinInPairedJoiner {
+					panic(errors.AssertionFailedf(
+						"lookup paired-join is paired with inverted join that thinks it is unpaired"))
+				}
+			case *LookupJoinExpr:
+				if !firstJoin.IsFirstJoinInPairedJoiner {
+					panic(errors.AssertionFailedf(
+						"lookup paired-join is paired with lookup join that thinks it is unpaired"))
+				}
+			default:
+				panic(errors.AssertionFailedf("lookup paired-join is paired with %T", t.Input))
 			}
 		}
 

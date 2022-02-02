@@ -54,7 +54,7 @@ type HeartbeatService struct {
 	clusterName                    string
 	disableClusterNameVerification bool
 
-	onHandlePing func(*PingRequest) error // see ContextOptions.OnIncomingPing
+	onHandlePing func(context.Context, *PingRequest) error // see ContextOptions.OnIncomingPing
 
 	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
 	// disables errors in case a heartbeat requests a specific node ID but
@@ -169,7 +169,7 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	}
 
 	if fn := hs.onHandlePing; fn != nil {
-		if err := fn(args); err != nil {
+		if err := fn(ctx, args); err != nil {
 			return nil, err
 		}
 	}
