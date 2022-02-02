@@ -149,7 +149,6 @@ ALL_TESTS = [
     "//pkg/kv/kvserver/protectedts/ptcache:ptcache_test",
     "//pkg/kv/kvserver/protectedts/ptreconcile:ptreconcile_test",
     "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_test",
-    "//pkg/kv/kvserver/protectedts/ptverifier:ptverifier_test",
     "//pkg/kv/kvserver/protectedts:protectedts_test",
     "//pkg/kv/kvserver/raftentry:raftentry_test",
     "//pkg/kv/kvserver/rangefeed:rangefeed_test",
