@@ -518,8 +518,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:FZ79NLDCJdNIuqgpGZQwXYrzzIstjY7rpVox7Oprw0k=",
-        version = "v0.0.0-20210930163017-ff9a5bb54278",
+        sum = "h1:b1msm91DRTQfdLhqRr3uoP+rldjczpIPXutJtXkWmA8=",
+        version = "v0.0.0-20220202153938-74c112a0ac85",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
