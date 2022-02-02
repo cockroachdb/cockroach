@@ -883,7 +883,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 // to differentiate `RESET var` from `RESET ALL`. ROLE_ALL and USER_ALL are
 // used in ALTER ROLE statements that affect all roles.
 %token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS GENERATED_BY_DEFAULT RESET_ALL ROLE_ALL
-%token USER_ALL ON_LA
+%token USER_ALL ON_LA WITH_BUCKET_COUNT_LA
 
 %union {
   id    int32
@@ -6995,7 +6995,7 @@ col_qualification_elem:
     ShardBuckets: tree.DefaultVal{},
   }
 }
-| PRIMARY KEY USING HASH WITH_LA BUCKET_COUNT '=' a_expr
+| PRIMARY KEY USING HASH WITH_BUCKET_COUNT_LA BUCKET_COUNT '=' a_expr
 {
   $$.val = tree.ShardedPrimaryKeyConstraint{
     Sharded: true,
@@ -7323,7 +7323,7 @@ opt_storing:
   }
 
 opt_hash_sharded:
-  USING HASH WITH_LA BUCKET_COUNT '=' a_expr
+  USING HASH WITH_BUCKET_COUNT_LA BUCKET_COUNT '=' a_expr
   {
     $$.val = &tree.ShardedIndexDef{
       ShardBuckets: $6.expr(),

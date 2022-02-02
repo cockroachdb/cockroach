@@ -1978,7 +1978,7 @@ index_params ::=
 	( index_elem ) ( ( ',' index_elem ) )*
 
 opt_hash_sharded ::=
-	'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
+	'USING' 'HASH' 'WITH_BUCKET_COUNT' 'BUCKET_COUNT' '=' a_expr
 	| 'USING' 'HASH'
 	| 
 
@@ -3317,7 +3317,7 @@ col_qualification_elem ::=
 	| 'UNIQUE'
 	| 'PRIMARY' 'KEY'
 	| 'PRIMARY' 'KEY' 'USING' 'HASH'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH_BUCKET_COUNT' 'BUCKET_COUNT' '=' a_expr
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'ON' 'UPDATE' b_expr
