@@ -1465,7 +1465,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		var rangeUsageInfo RangeUsageInfo
-		options := qpsScorerOptions{
+		options := &qpsScorerOptions{
 			qpsPerReplica:         100,
 			qpsRebalanceThreshold: 0.2,
 		}
@@ -1574,7 +1574,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
-		options := qpsScorerOptions{
+		options := &qpsScorerOptions{
 			qpsRebalanceThreshold: 0.1,
 		}
 		remove, _, err := a.RemoveVoter(
@@ -7632,7 +7632,7 @@ func qpsBasedRebalanceFn(
 ) {
 	avgQPS := candidate.Capacity.QueriesPerSecond / float64(candidate.Capacity.RangeCount)
 	jitteredQPS := avgQPS * (1 + alloc.randGen.Float64())
-	opts := qpsScorerOptions{
+	opts := &qpsScorerOptions{
 		qpsPerReplica:         jitteredQPS,
 		qpsRebalanceThreshold: 0.2,
 	}
