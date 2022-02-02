@@ -62,6 +62,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"          // register jobs declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlschedule"     // register schedules declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
