@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type distSQLTenantPlanner interface {
@@ -36,6 +37,7 @@ type multiTenantPlanner struct {
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
+	log.Info(ctx, "SetupAllNodesPlanning\n")
 	return dsp.distSQLTenantPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
 }
 
@@ -44,6 +46,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 func (dsp *singleTenantPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
+	log.Info(ctx, "SetupAllNodesPlanning -- SingleTenant\n")
 	distribute := evalCtx.Codec.ForSystemTenant()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
 
@@ -82,6 +85,7 @@ func (dsp *singleTenantPlanner) SetupAllNodesPlanning(
 func (dsp *multiTenantPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
+	log.Info(ctx, "SetupAllNodesPlanning -- MultiTenant\n")
 	distribute := evalCtx.Codec.ForSystemTenant()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
 

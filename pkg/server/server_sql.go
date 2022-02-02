@@ -585,6 +585,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 	}
 
+	log.Info(ctx, "registering distsql server \n")
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.flowScheduler)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
