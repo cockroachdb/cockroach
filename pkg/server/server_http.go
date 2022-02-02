@@ -48,8 +48,8 @@ func (s *httpServer) setupRoutes(
 	ctx context.Context,
 	authnServer *authenticationServer,
 	adminAuthzCheck *adminPrivilegeChecker,
+	metricSource metricMarshaler,
 	handleRequestsUnauthenticated http.Handler,
-	handleStatusVarsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	apiServer *apiV2Server,
 ) error {
@@ -113,7 +113,7 @@ func (s *httpServer) setupRoutes(
 	// (This simply mirrors /health and exists for backward compatibility.)
 	s.mux.Handle(adminHealth, handleRequestsUnauthenticated)
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(statusVars, handleStatusVarsUnauthenticated)
+	s.mux.Handle(statusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
 
 	// The new "v2" HTTP API tree.
 	s.mux.Handle(apiV2Path, apiServer)
