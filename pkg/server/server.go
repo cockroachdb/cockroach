@@ -636,7 +636,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
-	sHTTP := newHTTPServer(cfg)
+	sHTTP := newHTTPServer(cfg.BaseConfig)
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
