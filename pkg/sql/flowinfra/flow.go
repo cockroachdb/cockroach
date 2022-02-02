@@ -195,6 +195,10 @@ type FlowBase struct {
 	ctxCancel context.CancelFunc
 	ctxDone   <-chan struct{}
 
+	// sp is the span that this Flow runs in. Can be nil if no span was created
+	// for the flow. Flow.Cleanup() finishes it.
+	sp *tracing.Span
+
 	// spec is the request that produced this flow. Only used for debugging.
 	spec *execinfrapb.FlowSpec
 
@@ -246,8 +250,12 @@ func (f *FlowBase) Started() bool {
 var _ Flow = &FlowBase{}
 
 // NewFlowBase creates a new FlowBase.
+//
+// sp, if not nil, is the Span corresponding to the flow. The flow takes
+// ownership; Cleanup() will finish it.
 func NewFlowBase(
 	flowCtx execinfra.FlowCtx,
+	sp *tracing.Span,
 	flowReg *FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
@@ -270,6 +278,7 @@ func NewFlowBase(
 	}
 	return &FlowBase{
 		FlowCtx:               flowCtx,
+		sp:                    sp,
 		flowRegistry:          flowReg,
 		rowSyncFlowConsumer:   rowSyncFlowConsumer,
 		batchSyncFlowConsumer: batchSyncFlowConsumer,
@@ -497,15 +506,14 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		f.Descriptors.ReleaseAll(ctx)
 	}
 
-	sp := tracing.SpanFromContext(ctx)
-	if sp != nil {
-		defer sp.Finish()
+	if f.sp != nil {
+		defer f.sp.Finish()
 		if f.Gateway && f.CollectStats {
 			// If this is the gateway node and we're collecting execution stats,
 			// output the maximum memory usage to the flow span. Note that
 			// non-gateway nodes use the last outbox to send this information
 			// over.
-			sp.RecordStructured(&execinfrapb.ComponentStats{
+			f.sp.RecordStructured(&execinfrapb.ComponentStats{
 				Component: execinfrapb.FlowComponentID(f.NodeID.SQLInstanceID(), f.FlowCtx.ID),
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(f.FlowCtx.EvalCtx.Mon.MaximumBytes())),
