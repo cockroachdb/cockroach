@@ -87,10 +87,16 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
-// CockroachDB's has two heuristics that trigger replica rebalancing: range
-// count convergence and QPS convergence. scorerOptions defines the interface
-// that both of these heuristics must implement.
+// CockroachDB has two heuristics that trigger replica rebalancing: range count
+// convergence and QPS convergence. scorerOptions defines the interface that
+// both of these heuristics must implement.
 type scorerOptions interface {
+	// maybeJitterStoreStats returns a `StoreList` that's identical to the
+	// parameter `sl`, but may have jittered stats on the stores.
+	//
+	// This is to ensure that, when scattering via `AdminScatterRequest`, we will
+	// be more likely to find a rebalance opportunity.
+	maybeJitterStoreStats(sl StoreList, allocRand allocatorRand) StoreList
 	// deterministic is set by tests to have the allocator methods sort their
 	// results by constraints score as well as by store IDs, as opposed to just
 	// the score.
@@ -134,6 +140,38 @@ type scorerOptions interface {
 	removalMaximallyConvergesScore(removalCandStoreList StoreList, existing roachpb.StoreDescriptor) int
 }
 
+func jittered(val float64, jitter float64, rand allocatorRand) float64 {
+	result := val * jitter * (rand.Float64())
+	if rand.Int31()%2 == 0 {
+		result *= -1
+	}
+	return result
+}
+
+// scatterScorerOptions is used by the replicateQueue when called via the
+// `AdminScatterRequest`. It is like `rangeCountScorerOptions` but with the
+// rangeRebalanceThreshold set to zero (i.e. with all padding disabled). It also
+// perturbs the stats on existing stores to add a bit of random jitter.
+type scatterScorerOptions struct {
+	rangeCountScorerOptions
+	// jitter specifies the degree to which we will perturb existing store stats.
+	jitter float64
+}
+
+func (o *scatterScorerOptions) maybeJitterStoreStats(
+	sl StoreList, allocRand allocatorRand,
+) (perturbedSL StoreList) {
+	perturbedStoreDescs := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
+	for _, store := range sl.stores {
+		store.Capacity.RangeCount += int32(jittered(
+			float64(store.Capacity.RangeCount), o.jitter, allocRand,
+		))
+		perturbedStoreDescs = append(perturbedStoreDescs, store)
+	}
+
+	return makeStoreList(perturbedStoreDescs)
+}
+
 // rangeCountScorerOptions is used by the replicateQueue to tell the Allocator's
 // rebalancing machinery to base its balance/convergence scores on range counts.
 // This means that the resulting rebalancing decisions will further the goal of
@@ -141,6 +179,12 @@ type scorerOptions interface {
 type rangeCountScorerOptions struct {
 	deterministic           bool
 	rangeRebalanceThreshold float64
+}
+
+func (o *rangeCountScorerOptions) maybeJitterStoreStats(
+	sl StoreList, _ allocatorRand,
+) (perturbedSL StoreList) {
+	return sl
 }
 
 func (o *rangeCountScorerOptions) deterministicForTesting() bool {
@@ -265,6 +309,10 @@ type qpsScorerOptions struct {
 	// qpsPerReplica states the level of traffic being served by each replica in a
 	// range.
 	qpsPerReplica float64
+}
+
+func (o *qpsScorerOptions) maybeJitterStoreStats(sl StoreList, _ allocatorRand) StoreList {
+	return sl
 }
 
 func (o *qpsScorerOptions) deterministicForTesting() bool {
