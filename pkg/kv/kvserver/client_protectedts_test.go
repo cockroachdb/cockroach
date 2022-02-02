@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -211,11 +210,11 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.Truef(t, thresh.Less(ptsRec.Timestamp), "threshold: %v, protected %v %q", thresh, ptsRec.Timestamp, trace)
 
 	// Verify that the record indeed did apply as far as the replica is concerned.
-	ptv := ptverifier.New(s0.DB(), pts)
-	require.NoError(t, ptv.Verify(ctx, ptsRec.ID.GetUUID()))
-	ptsRecVerified, err := ptsWithDB.GetRecord(ctx, nil /* txn */, ptsRec.ID.GetUUID())
-	require.NoError(t, err)
-	require.True(t, ptsRecVerified.Verified)
+	//ptv := ptverifier.New(s0.DB(), pts)
+	//require.NoError(t, ptv.Verify(ctx, ptsRec.ID.GetUUID()))
+	//ptsRecVerified, err := ptsWithDB.GetRecord(ctx, nil /* txn */, ptsRec.ID.GetUUID())
+	//require.NoError(t, err)
+	//require.True(t, ptsRecVerified.Verified)
 
 	// Make a new record that is doomed to fail.
 	failedRec := ptsRec
@@ -227,8 +226,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify that it indeed did fail.
-	verifyErr := ptv.Verify(ctx, failedRec.ID.GetUUID())
-	require.Regexp(t, "failed to verify protection", verifyErr)
+	//verifyErr := ptv.Verify(ctx, failedRec.ID.GetUUID())
+	//require.Regexp(t, "failed to verify protection", verifyErr)
 
 	// Add a new record that is after the old record.
 	laterRec := ptsRec
@@ -236,7 +235,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
-	require.NoError(t, ptv.Verify(ctx, laterRec.ID.GetUUID()))
+	//require.NoError(t, ptv.Verify(ctx, laterRec.ID.GetUUID()))
 
 	// Release the record that had succeeded and ensure that GC eventually
 	// happens up to the protected timestamp of the new record.
