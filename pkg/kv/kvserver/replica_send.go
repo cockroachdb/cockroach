@@ -897,7 +897,16 @@ func (r *Replica) executeAdminBatch(
 		}
 
 	case *roachpb.AdminRelocateRangeRequest:
-		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets)
+		// Transferring the lease to the first voting replica in the target slice is
+		// pre-22.1 behavior.
+		// We revert to that behavior if the request is coming
+		// from a 21.2 node that doesn't yet know about this change in contract.
+		transferLeaseToFirstVoter := !tArgs.TransferLeaseToFirstVoterAccurate
+		// We also revert to that behavior if the caller specifically asked for it.
+		transferLeaseToFirstVoter = transferLeaseToFirstVoter || tArgs.TransferLeaseToFirstVoter
+		err := r.store.AdminRelocateRange(
+			ctx, *r.Desc(), tArgs.VoterTargets, tArgs.NonVoterTargets, transferLeaseToFirstVoter,
+		)
 		pErr = roachpb.NewError(err)
 		resp = &roachpb.AdminRelocateRangeResponse{}
 

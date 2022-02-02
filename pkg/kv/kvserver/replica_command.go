@@ -334,8 +334,8 @@ func (r *Replica) adminSplitWithDescriptor(
 			// range's bounds, return an error for the client to try again on the
 			// correct range.
 			if !kvserverbase.ContainsKey(desc, args.Key) {
-				l, _ := r.GetLease()
-				return reply, roachpb.NewRangeKeyMismatchError(ctx, args.Key, args.Key, desc, &l)
+				ri := r.GetRangeInfo(ctx)
+				return reply, roachpb.NewRangeKeyMismatchErrorWithCTPolicy(ctx, args.Key, args.Key, desc, &ri.Lease, ri.ClosedTimestampPolicy)
 			}
 			foundSplitKey = args.SplitKey
 		}
@@ -2657,6 +2657,7 @@ func (s *Store) AdminRelocateRange(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) error {
 	if containsDuplicates(voterTargets) {
 		return errors.AssertionFailedf(
@@ -2686,7 +2687,9 @@ func (s *Store) AdminRelocateRange(
 	}
 	rangeDesc = *newDesc
 
-	rangeDesc, err = s.relocateReplicas(ctx, rangeDesc, voterTargets, nonVoterTargets)
+	rangeDesc, err = s.relocateReplicas(
+		ctx, rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+	)
 	if err != nil {
 		return err
 	}
@@ -2718,6 +2721,7 @@ func (s *Store) relocateReplicas(
 	ctx context.Context,
 	rangeDesc roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) (roachpb.RangeDescriptor, error) {
 	startKey := rangeDesc.StartKey.AsRawKey()
 	transferLease := func(target roachpb.ReplicationTarget) error {
@@ -2744,10 +2748,13 @@ func (s *Store) relocateReplicas(
 				return rangeDesc, err
 			}
 
-			ops, leaseTarget, err := s.relocateOne(ctx, &rangeDesc, voterTargets, nonVoterTargets)
+			ops, leaseTarget, err := s.relocateOne(
+				ctx, &rangeDesc, voterTargets, nonVoterTargets, transferLeaseToFirstVoter,
+			)
 			if err != nil {
 				return rangeDesc, err
 			}
+
 			if leaseTarget != nil {
 				// NB: we may need to transfer even if there are no ops, to make
 				// sure the attempt is made to make the first target the final
@@ -2756,6 +2763,7 @@ func (s *Store) relocateReplicas(
 					return rangeDesc, err
 				}
 			}
+
 			if len(ops) == 0 {
 				// Done.
 				return rangeDesc, ctx.Err()
@@ -2833,6 +2841,7 @@ func (s *Store) relocateOne(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) ([]roachpb.ReplicationChange, *roachpb.ReplicationTarget, error) {
 	if repls := desc.Replicas(); len(repls.VoterFullAndNonVoterDescriptors()) != len(repls.Descriptors()) {
 		// The caller removed all the learners and left the joint config, so there
@@ -3065,9 +3074,9 @@ func (s *Store) relocateOne(
 		}
 	}
 
-	if len(ops) == 0 {
-		// Make sure that the first target is the final leaseholder, as
-		// AdminRelocateRange specifies.
+	if len(ops) == 0 && transferLeaseToFirstVoter {
+		// Make sure that the first target is the final leaseholder, if the caller
+		// asked for it.
 		transferTarget = &voterTargets[0]
 	}
 	return ops, transferTarget, nil

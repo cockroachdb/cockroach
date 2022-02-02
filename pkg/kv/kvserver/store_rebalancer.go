@@ -369,7 +369,13 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 		timeout := sr.rq.processTimeoutFunc(sr.st, replWithStats.repl)
 		if err := contextutil.RunWithTimeout(ctx, "relocate range", timeout, func(ctx context.Context) error {
-			return sr.rq.store.AdminRelocateRange(ctx, *descBeforeRebalance, voterTargets, nonVoterTargets)
+			return sr.rq.store.DB().AdminRelocateRange(
+				ctx,
+				descBeforeRebalance.StartKey.AsRawKey(),
+				voterTargets,
+				nonVoterTargets,
+				true, /* transferLeaseToFirstVoter */
+			)
 		}); err != nil {
 			log.Errorf(ctx, "unable to relocate range to %v: %+v", voterTargets, err)
 			continue

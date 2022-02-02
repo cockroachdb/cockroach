@@ -870,6 +870,21 @@ message AdminRelocateRangeRequest {
   repeated ReplicationTarget voter_targets = 2 [(gogoproto.nullable) = false];
   repeated ReplicationTarget non_voter_targets = 3 [(gogoproto.nullable) = false];
   // TODO(a-robinson): Add "reason"/"details" string fields?
+
+  // As of 22.1 (specifically #74077), leaseholder replicas can remove
+  // themselves from the range. This means that now, in a joint state, the
+  // leaseholder that is removing itself chooses the best target replica to
+  // transfer the lease to, all inside of AdminChangeReplicas.
+  //
+  // This means that the pre-22.1 contract of `AdminRelocateRange` to transfer
+  // the lease to the first voter replica isn't required anymore. Only callers
+  // that rely on this contract should set this attribute.
+  bool transfer_lease_to_first_voter = 4;
+  // TODO(aayush): Migration path:
+  // 22.1: Send and consult the attribute.
+  // 22.2: Send but don't consult the attribute.
+  // 23.1: Stop sending or consulting the attribute. Remove this field.
+  bool transfer_lease_to_first_voter_accurate = 5;
 }
 
 message AdminRelocateRangeResponse {
