@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -1372,16 +1373,22 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix.PrefixEnd()),
 			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
 		}
-		ids := schema.DescriptorIDs()
-		maxID := uint32(ids[len(ids)-1])
-		if maxPseudo := keys.MaxPseudoTableID; maxID < maxPseudo {
-			maxID = maxPseudo
+		ids := catalog.MakeDescriptorIDSet(schema.DescriptorIDs()...)
+
+		for i := 0; i < keys.MaxSystemConfigDescID; i++ {
+			ids.Remove(descpb.ID(i))
 		}
-		for i := uint32(keys.MaxSystemConfigDescID + 1); i <= maxID; i++ {
+		// We sadly do split on pseudo table ID.
+		for _, id := range keys.PseudoTableIDs {
+			ids.Add(descpb.ID(id))
+		}
+		ids.ForEach(func(id descpb.ID) {
 			expKeys = append(expKeys,
-				testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),
+				testutils.MakeKey(
+					keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(uint32(id)),
+				),
 			)
-		}
+		})
 		for i := bootstrap.TestingUserDescID(0); i <= userTableMax; i++ {
 			if _, ok := exceptions[int(i)]; !ok {
 				expKeys = append(expKeys,

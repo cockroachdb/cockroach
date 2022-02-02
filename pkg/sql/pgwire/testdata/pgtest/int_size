@@ -52,7 +52,7 @@ Query {"String": "SELECT * FROM t1"}
 until crdb_only
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":54,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":54,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":104,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":104,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":104,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -116,6 +116,6 @@ Query {"String": "SELECT * FROM t1"}
 until crdb_only
 ReadyForQuery
 ----
-{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":54,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":54,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":54,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
+{"Type":"RowDescription","Fields":[{"Name":"a","TableOID":104,"TableAttributeNumber":1,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0},{"Name":"b","TableOID":104,"TableAttributeNumber":2,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"c","TableOID":104,"TableAttributeNumber":3,"DataTypeOID":20,"DataTypeSize":8,"TypeModifier":-1,"Format":0}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 0"}
 {"Type":"ReadyForQuery","TxStatus":"I"}

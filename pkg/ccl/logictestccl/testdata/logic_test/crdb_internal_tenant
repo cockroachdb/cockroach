@@ -550,8 +550,8 @@ CREATE TYPE enum2 AS ENUM ()
 query ITTITTT
 SELECT * FROM crdb_internal.create_type_statements
 ----
-54  test  public  63  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
-54  test  public  65  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
+104  test  public  113  enum1  CREATE TYPE public.enum1 AS ENUM ('hello', 'hi')  {hello,hi}
+104  test  public  115  enum2  CREATE TYPE public.enum2 AS ENUM ()               {}
 
 # Test the virtual index as well.
 

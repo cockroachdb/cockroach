@@ -1329,9 +1329,9 @@ output row: [1 2 3 4]
 # interleaved tables.
 query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message LIKE 'Scan /Table/70/1%'
+WHERE message LIKE 'Scan /Table/120/1%'
 ----
-Scan /Table/70/1/{1-2}
+Scan /Table/120/1/{1-2}
 
 query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6

@@ -1026,7 +1026,7 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// has to be restarted because the spans read were modified by the backfill.
 	if err := txReadWrite.Commit(); !testutils.IsError(err,
 		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE - failed preemptive refresh "+
-			"due to a conflict: committed value on key /Table/56/1/\"a\"/0\\)") {
+			"due to a conflict: committed value on key /Table/\\d+/1/\"a\"/0\\)") {
 		t.Fatalf("err = %v", err)
 	}
 

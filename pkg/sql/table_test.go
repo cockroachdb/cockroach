@@ -12,6 +12,8 @@ package sql
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
@@ -468,46 +470,46 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		// Test a simple UDT as the default value.
 		{
 			"x greeting DEFAULT ('hello')",
-			`x'80':::@100056`,
+			`x'80':::@$OID`,
 			getDefault,
 		},
 		{
 			"x greeting DEFAULT ('hello':::greeting)",
-			`x'80':::@100056`,
+			`x'80':::@$OID`,
 			getDefault,
 		},
 		// Test when a UDT is used in a default value, but isn't the
 		// final type of the column.
 		{
 			"x INT DEFAULT (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END)",
-			`CASE WHEN x'80':::@100056 = x'80':::@100056 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@$OID = x'80':::@$OID THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getDefault,
 		},
 		{
 			"x BOOL DEFAULT ('hello'::greeting IS OF (greeting, greeting))",
-			`x'80':::@100056 IS OF (@100056, @100056)`,
+			`x'80':::@$OID IS OF (@$OID, @$OID)`,
 			getDefault,
 		},
 		// Test check constraints.
 		{
 			"x greeting, CHECK (x = 'hello')",
-			`x = x'80':::@100056`,
+			`x = x'80':::@$OID`,
 			getCheck,
 		},
 		{
 			"x greeting, y STRING, CHECK (y::greeting = x)",
-			`y::@100056 = x`,
+			`y::@$OID = x`,
 			getCheck,
 		},
 		// Test a computed column in the same cases as above.
 		{
 			"x greeting AS ('hello') STORED",
-			`x'80':::@100056`,
+			`x'80':::@$OID`,
 			getComputed,
 		},
 		{
 			"x INT AS (CASE WHEN 'hello'::greeting = 'hello'::greeting THEN 0 ELSE 1 END) STORED",
-			`CASE WHEN x'80':::@100056 = x'80':::@100056 THEN 0:::INT8 ELSE 1:::INT8 END`,
+			`CASE WHEN x'80':::@$OID = x'80':::@$OID THEN 0:::INT8 ELSE 1:::INT8 END`,
 			getComputed,
 		},
 	}
@@ -522,6 +524,10 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 `); err != nil {
 		t.Fatal(err)
 	}
+	typDesc := desctestutils.TestingGetTypeDescriptor(
+		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
+	)
+	oid := fmt.Sprintf("%d", typedesc.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
 		create := "CREATE TABLE t (" + tc.colSQL + ")"
 		if _, err := sqlDB.Exec(create); err != nil {
@@ -529,8 +535,9 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		}
 		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 		found := tc.getExpr(desc)
-		if tc.expectedExpr != found {
-			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, tc.expectedExpr)
+		expected := os.Expand(tc.expectedExpr, expander{"OID": oid}.mapping)
+		if expected != found {
+			t.Errorf("for column %s, found %s, expected %s", tc.colSQL, found, expected)
 		}
 		if _, err := sqlDB.Exec("DROP TABLE t"); err != nil {
 			t.Fatal(err)
@@ -555,22 +562,22 @@ func TestSerializedUDTsInView(t *testing.T) {
 		// Test simple UDT in the view query.
 		{
 			"SELECT 'hello':::greeting",
-			`(SELECT b'\x80':::@100056)`,
+			`(SELECT b'\x80':::@$OID)`,
 		},
 		// Test when a UDT is used in a view query, but isn't the
 		// final type of the column.
 		{
 			"SELECT 'hello'::greeting < 'hello'::greeting",
-			`(SELECT b'\x80':::@100056 < b'\x80':::@100056)`,
+			`(SELECT b'\x80':::@$OID < b'\x80':::@$OID)`,
 		},
 		// Test when a UDT is used in various parts of a view (subquery, CTE, etc.).
 		{
 			"SELECT k FROM (SELECT 'hello'::greeting AS k)",
-			`(SELECT k FROM (SELECT b'\x80':::@100056 AS k))`,
+			`(SELECT k FROM (SELECT b'\x80':::@$OID AS k))`,
 		},
 		{
 			"WITH w AS (SELECT 'hello':::greeting AS k) SELECT k FROM w",
-			`(WITH w AS (SELECT b'\x80':::@100056 AS k) SELECT k FROM w)`,
+			`(WITH w AS (SELECT b'\x80':::@$OID AS k) SELECT k FROM w)`,
 		},
 	}
 
@@ -584,6 +591,10 @@ func TestSerializedUDTsInView(t *testing.T) {
 `); err != nil {
 		t.Fatal(err)
 	}
+	typDesc := desctestutils.TestingGetTypeDescriptor(
+		kvDB, keys.SystemSQLCodec, "test", "public", "greeting",
+	)
+	oid := fmt.Sprintf("%d", typedesc.TypeIDToOID(typDesc.GetID()))
 	for _, tc := range testdata {
 		create := "CREATE VIEW v AS (" + tc.viewQuery + ")"
 		if _, err := sqlDB.Exec(create); err != nil {
@@ -591,13 +602,24 @@ func TestSerializedUDTsInView(t *testing.T) {
 		}
 		desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "v")
 		foundViewQuery := desc.GetViewQuery()
-		if tc.expectedExpr != foundViewQuery {
-			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, tc.expectedExpr)
+		expected := os.Expand(tc.expectedExpr, expander{"OID": oid}.mapping)
+		if expected != foundViewQuery {
+			t.Errorf("for view %s, found %s, expected %s", tc.viewQuery, foundViewQuery, expected)
 		}
 		if _, err := sqlDB.Exec("DROP VIEW v"); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
+
+// expander is useful for expanding strings using os.Expand
+type expander map[string]string
+
+func (e expander) mapping(from string) (to string) {
+	if to, ok := e[from]; ok {
+		return to
+	}
+	return ""
 }
 
 // TestJobsCache verifies that a job for a given table gets cached and reused
