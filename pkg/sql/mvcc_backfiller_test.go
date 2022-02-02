@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // Test schema changes are retried and complete properly when there's an error
@@ -123,9 +124,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// TODO(rui): use testing hook instead of cluster setting once this value for
 	// the backfill merge is hooked up to testing hooks.
-	if _, err := sqlDB.Exec(fmt.Sprintf(`
-SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;
-SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '%s'`, maxValue/5, "0.001ms")); err != nil {
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d;`, maxValue/5)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -145,7 +144,13 @@ SET CLUSTER SETTING bulkio.index_backfill.checkpoint_interval = '%s'`, maxValue/
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, func() {
+		if _, err := sqlDB.Exec("SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS])"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	require.True(t, mergeChunk > 3, fmt.Sprintf("mergeChunk: %d", mergeChunk))
+
 }
 
 // Test index backfill merges are not affected by various operations that run
