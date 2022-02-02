@@ -66,6 +66,7 @@ go_library(
         "libpq_blocklist.go",
         "liquibase.go",
         "liquibase_blocklist.go",
+        "loss_of_quorum_recovery.go",
         "many_splits.go",
         "mixed_version_decommission.go",
         "mixed_version_jobs.go",
