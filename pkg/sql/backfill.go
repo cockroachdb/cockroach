@@ -1077,9 +1077,16 @@ func (sc *SchemaChanger) distIndexBackfill(
 		})
 	}
 
+	// updateJobMu ensures only one goroutine is calling
+	// updateJobDetails at a time to avoid a data race in
+	// SetResumeSpansInJob. This mutex should be uncontended when
+	// sc.testingKnobs.AlwaysUpdateIndexBackfillDetails is false.
+	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			updateJobMu.Lock()
+			defer updateJobMu.Unlock()
 			// No processor has returned completed spans yet.
 			if updatedTodoSpans == nil {
 				return nil
