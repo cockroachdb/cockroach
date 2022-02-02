@@ -175,9 +175,11 @@ func NewDistSQLPlanner(
 	}
 
 	if codec.ForSystemTenant() {
-		dsp.distSQLTenantPlanner = &multiTenantPlanner{dsp}
-	} else {
+		log.Infof(ctx, "SingleTenant %s\n", sqlInstanceID.String())
 		dsp.distSQLTenantPlanner = &singleTenantPlanner{dsp}
+	} else {
+		log.Infof(ctx, "MultiTenant %s\n", sqlInstanceID.String())
+		dsp.distSQLTenantPlanner = &multiTenantPlanner{dsp}
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
