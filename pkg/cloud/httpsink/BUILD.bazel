@@ -29,6 +29,7 @@ go_test(
         "//pkg/cloud/cloudtestutils",
         "//pkg/roachpb:with-mocks",
         "//pkg/security",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/ctxgroup",

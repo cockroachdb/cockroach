@@ -45,6 +45,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/utilccl/licenseccl",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/envutil",

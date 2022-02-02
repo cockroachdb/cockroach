@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
+import "settings/encoding.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -2707,13 +2708,9 @@ message TenantSettingsEvent {
 }
 
 // TenantSetting contains the name and value of a tenant setting.
-//
-// The value representation is the same as that used by the system.settings
-// table (value and valueType columns).
 message TenantSetting {
   string name = 1;
-  string raw_value = 2;
-  string value_type = 3;
+  settings.EncodedValue value = 2 [(gogoproto.nullable) = false];
 }
 
 // TenantConsumption contains information about resource utilization by a
