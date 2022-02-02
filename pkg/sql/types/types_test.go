@@ -1006,6 +1006,8 @@ func TestWithoutTypeModifiers(t *testing.T) {
 		{MakeArray(MakeDecimal(5, 1)), DecimalArray},
 		{MakeTuple([]*T{MakeString(2), Time, MakeDecimal(5, 1)}),
 			MakeTuple([]*T{String, Time, Decimal})},
+		{MakeGeography(geopb.ShapeType_Point, 3857), Geography},
+		{MakeGeometry(geopb.ShapeType_PointZ, 4326), Geometry},
 
 		// Types without modifiers.
 		{Bool, Bool},
@@ -1026,8 +1028,10 @@ func TestWithoutTypeModifiers(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		if actual := tc.t.WithoutTypeModifiers(); !actual.Identical(tc.expected) {
-			t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), actual.DebugString())
-		}
+		t.Run(tc.t.SQLString(), func(t *testing.T) {
+			if actual := tc.t.WithoutTypeModifiers(); !actual.Identical(tc.expected) {
+				t.Errorf("expected <%v>, got <%v>", tc.expected.DebugString(), actual.DebugString())
+			}
+		})
 	}
 }
