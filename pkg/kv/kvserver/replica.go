@@ -1502,9 +1502,8 @@ func (r *Replica) checkSpanInRangeRLocked(ctx context.Context, rspan roachpb.RSp
 	if desc.ContainsKeyRange(rspan.Key, rspan.EndKey) {
 		return nil
 	}
-	return roachpb.NewRangeKeyMismatchError(
-		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease,
-	)
+	return roachpb.NewRangeKeyMismatchErrorWithCTPolicy(
+		ctx, rspan.Key.AsRawKey(), rspan.EndKey.AsRawKey(), desc, r.mu.state.Lease, r.closedTimestampPolicyRLocked())
 }
 
 // checkTSAboveGCThresholdRLocked returns an error if a request (identified by

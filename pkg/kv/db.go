@@ -655,10 +655,13 @@ func (db *DB) AdminChangeReplicas(
 // AdminRelocateRange relocates the replicas for a range onto the specified
 // list of stores.
 func (db *DB) AdminRelocateRange(
-	ctx context.Context, key interface{}, voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	ctx context.Context,
+	key interface{},
+	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
+	transferLeaseToFirstVoter bool,
 ) error {
 	b := &Batch{}
-	b.adminRelocateRange(key, voterTargets, nonVoterTargets)
+	b.adminRelocateRange(key, voterTargets, nonVoterTargets, transferLeaseToFirstVoter)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

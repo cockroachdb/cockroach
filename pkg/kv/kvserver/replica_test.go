@@ -854,7 +854,17 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	}
 }
 
-func TestReplicaRangeBoundsChecking(t *testing.T) {
+// TestReplicaRangeMismatchRedirect tests two behaviors that should occur.
+// - Following a Range split, the client may send BatchRequests based on stale
+//   cache data targeting the wrong range. Internally this triggers a
+//   RangeKeyMismatchError, but in the cases where the RHS of the range is still
+//   present on the local store, we opportunistically retry server-side by
+//   re-routing the request to the right range. No error is bubbled up to the
+//   client.
+// - This test also ensures that after a successful server-side retry attempt we
+//   bubble up the most up-to-date RangeInfos for the client to update its range
+//   cache.
+func TestReplicaRangeMismatchRedirect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	tc := testContext{}
@@ -871,22 +881,28 @@ func TestReplicaRangeBoundsChecking(t *testing.T) {
 	}
 
 	gArgs := getArgs(roachpb.Key("b"))
-	_, pErr := kv.SendWrappedWith(context.Background(), tc.store, roachpb.Header{
+	ba := roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{
 		RangeID: 1,
-	}, &gArgs)
+	}
+	ba.Add(&gArgs)
 
-	if mismatchErr, ok := pErr.GetDetail().(*roachpb.RangeKeyMismatchError); !ok {
-		t.Errorf("expected range key mismatch error: %s", pErr)
-	} else {
-		require.Len(t, mismatchErr.Ranges, 2)
-		mismatchedDesc := mismatchErr.Ranges[0].Desc
-		suggestedDesc := mismatchErr.Ranges[1].Desc
-		if mismatchedDesc.RangeID != firstRepl.RangeID {
-			t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
-		}
-		if suggestedDesc.RangeID != newRepl.RangeID {
-			t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
-		}
+	br, pErr := tc.store.Send(context.Background(), ba)
+
+	require.Nil(t, pErr)
+	rangeInfos := br.RangeInfos
+
+	// Here we expect 2 ranges, where [A1, A2] is returned
+	// where A represents the RangeInfos aggregated by send(),
+	// before redirecting the query to the correct range.
+	require.Len(t, rangeInfos, 2)
+	mismatchedDesc := rangeInfos[0].Desc
+	suggestedDesc := rangeInfos[1].Desc
+	if mismatchedDesc.RangeID != firstRepl.RangeID {
+		t.Errorf("expected mismatched range to be %d, found %v", firstRepl.RangeID, mismatchedDesc)
+	}
+	if suggestedDesc.RangeID != newRepl.RangeID {
+		t.Errorf("expected suggested range to be %d, found %v", newRepl.RangeID, suggestedDesc)
 	}
 }
 
