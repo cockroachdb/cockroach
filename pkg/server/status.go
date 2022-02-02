@@ -1771,10 +1771,6 @@ func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	telemetry.Inc(telemetryPrometheusVars)
 }
 
-func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
-	varsHandler{s.metricSource, s.st}.handleVars(w, r)
-}
-
 // Ranges returns range info for the specified node.
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
