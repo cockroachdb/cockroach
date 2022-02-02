@@ -376,7 +376,7 @@ func (ds *ServerImpl) setupFlow(
 	// to restore the original value which can have data races under stress.
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
-		flowCtx, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
 		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL,
 	)
 	opt := flowinfra.FuseNormally
@@ -493,6 +493,7 @@ func (ds *ServerImpl) newFlowContext(
 
 func newFlow(
 	flowCtx execinfra.FlowCtx,
+	sp *tracing.Span,
 	flowReg *flowinfra.FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
@@ -501,7 +502,7 @@ func newFlow(
 	onFlowCleanup func(),
 	statementSQL string,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
+	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
