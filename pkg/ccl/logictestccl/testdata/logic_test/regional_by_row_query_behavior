@@ -1,5 +1,5 @@
 # LogicTest: multiregion-9node-3region-3azs
-# TODO(#69265): enable multiregion-9node-3region-3azs-tenant and/or revert
+# TODO(#75864): enable multiregion-9node-3region-3azs-tenant and/or revert
 # the commit that split these changes out.
 
 # Set the closed timestamp interval to be short to shorten the amount of time
