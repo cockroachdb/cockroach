@@ -1347,16 +1347,6 @@ func lookupCast(src, tgt *types.T, intervalStyleEnabled, dateStyleEnabled bool) 
 				maxContext: CastContextImplicit,
 				volatility: VolatilityImmutable,
 			}, true
-		case types.BytesFamily:
-			// Casts from byte types to enums are immutable and allowed in
-			// explicit contexts.
-			// TODO(mgartner): We may not want to support the cast from BYTES to
-			// ENUM because Postgres does not support it, and it's been the
-			// source of at least one minor bug (see #74316).
-			return cast{
-				maxContext: CastContextExplicit,
-				volatility: VolatilityImmutable,
-			}, true
 		}
 	}
 

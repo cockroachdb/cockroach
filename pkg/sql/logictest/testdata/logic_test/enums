@@ -1617,3 +1617,17 @@ query T
 SELECT _enum FROM t58889 WHERE _enum::greeting58889 IN (NULL, 'hi':::greeting58889);
 ----
 hi
+
+subtest cast_from_enum_to_bytes
+
+statement ok
+CREATE TYPE myenum AS ENUM ('foo', 'bar');
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::bytes;
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::bytea;
+
+statement error invalid cast: myenum -> bytes
+SELECT 'foo'::myenum::blob;

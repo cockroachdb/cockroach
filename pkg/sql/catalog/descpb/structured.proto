@@ -696,6 +696,20 @@ message DescriptorMutation {
     // TODO(ssd): This is currently unused and is being added to
     // facilitate the new temporary-index-based backfilling process.
     BACKFILLING = 3;
+
+    // Operations can use this invisible descriptor to implicitly
+    // write and delete entries. This is used by the MVCC-compatible
+    // index backfiller to ensure that unique indexes do not produce
+    // erroneous conflicts.
+    //
+    // Columns: Columns do not use this state. A column descriptor in
+    // this state is a programming error.
+    //
+    // Index: INSERT, UPDATE and DELETE treat this index like a
+    // DELETE_AND_WRITE_ONLY index, but use Put in instead of CPut or
+    // InitPut, effectively ignoring unique constraints.
+    MERGING = 4;
+
   }
   optional State state = 3 [(gogoproto.nullable) = false];
 
