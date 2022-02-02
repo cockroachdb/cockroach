@@ -1959,6 +1959,11 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		og.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 
+	// Generated columns cannot have default values.
+	if columnForDefault.generated {
+		og.expectedExecErrors.add(pgcode.InvalidTableDefinition)
+	}
+
 	return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`, tableName, columnForDefault.name, tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)), nil
 }
 
@@ -2329,7 +2334,11 @@ func (og *operationGenerator) randColumnWithMeta(
 		}, nil
 	}
 	q := fmt.Sprintf(`
- SELECT column_name, data_type, is_nullable
+ SELECT 
+column_name, 
+data_type, 
+is_nullable, 
+generation_expression != '' AS is_generated
    FROM [SHOW COLUMNS FROM %s]
   WHERE column_name != 'rowid'
 ORDER BY random()
@@ -2337,7 +2346,7 @@ ORDER BY random()
 `, tableName.String())
 	var col column
 	var typ string
-	if err := tx.QueryRow(ctx, q).Scan(&col.name, &typ, &col.nullable); err != nil {
+	if err := tx.QueryRow(ctx, q).Scan(&col.name, &typ, &col.nullable, &col.generated); err != nil {
 		return column{}, errors.Wrapf(err, "randColumnWithMeta: %q", q)
 	}
 
