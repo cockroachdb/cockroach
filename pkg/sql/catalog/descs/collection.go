@@ -43,6 +43,7 @@ func makeCollection(
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
 	hydratedTables *hydratedtables.Cache,
+	systemNamespace *systemDatabaseNamespaceCache,
 	virtualSchemas catalog.VirtualSchemas,
 	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
@@ -51,7 +52,7 @@ func makeCollection(
 		hydratedTables: hydratedTables,
 		virtual:        makeVirtualDescriptors(virtualSchemas),
 		leased:         makeLeasedDescriptors(leaseMgr),
-		kv:             makeKVDescriptors(codec),
+		kv:             makeKVDescriptors(codec, systemNamespace),
 		temporary:      makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
 		direct:         makeDirect(codec, settings),
 	}

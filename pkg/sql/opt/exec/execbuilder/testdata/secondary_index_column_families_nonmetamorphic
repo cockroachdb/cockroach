@@ -18,14 +18,14 @@ CREATE TABLE t1 (
 query T kvtrace(InitPut)
 INSERT INTO t1 VALUES (1, 1, 1, 1, 1)
 ----
-InitPut /Table/56/2/1/1/0 -> /BYTES/
-InitPut /Table/56/3/1/0 -> /BYTES/0x89
-InitPut /Table/56/4/1/1/0 -> /BYTES/
-InitPut /Table/56/4/1/1/2/1 -> /TUPLE/3:3:Int/1
-InitPut /Table/56/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
-InitPut /Table/56/5/1/0 -> /BYTES/0x89
-InitPut /Table/56/5/1/2/1 -> /TUPLE/3:3:Int/1
-InitPut /Table/56/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+InitPut /Table/106/2/1/1/0 -> /BYTES/
+InitPut /Table/106/3/1/0 -> /BYTES/0x89
+InitPut /Table/106/4/1/1/0 -> /BYTES/
+InitPut /Table/106/4/1/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/106/4/1/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
+InitPut /Table/106/5/1/0 -> /BYTES/0x89
+InitPut /Table/106/5/1/2/1 -> /TUPLE/3:3:Int/1
+InitPut /Table/106/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
 
 
 # Deletes on nonuniqueidx or uniqueidx should result in a deletion
@@ -34,14 +34,6 @@ InitPut /Table/56/5/1/3/1 -> /TUPLE/4:4:Int/1/1:5:Int/1
 query T kvtrace(Del,prefix=/Table/56/2/,prefix=/Table/56/3/,prefix=/Table/56/4/,prefix=/Table/56/5/)
 DELETE FROM t1 WHERE x = 1
 ----
-Del /Table/56/2/1/1/0
-Del /Table/56/3/1/0
-Del /Table/56/4/1/1/0
-Del /Table/56/4/1/1/2/1
-Del /Table/56/4/1/1/3/1
-Del /Table/56/5/1/0
-Del /Table/56/5/1/2/1
-Del /Table/56/5/1/3/1
 
 # Put some data back into the table.
 statement ok
@@ -152,10 +144,6 @@ message LIKE 'Del /Table/56/3/%' OR
 message LIKE 'InitPut /Table/56/3/%'
 ORDER BY message
 ----
-Del /Table/56/2/1/1/0
-Del /Table/56/3/1/0
-InitPut /Table/56/2/2/2/0 -> /BYTES/
-InitPut /Table/56/3/2/0 -> /BYTES/0x8a
 
 # Updates on nonuniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -164,12 +152,6 @@ message LIKE 'Del /Table/56/4/%' OR
 message LIKE 'InitPut /Table/56/4/%'
 ORDER BY message
 ----
-Del /Table/56/4/1/1/0
-Del /Table/56/4/1/1/2/1
-Del /Table/56/4/1/1/3/1
-InitPut /Table/56/4/2/2/0 -> /BYTES/
-InitPut /Table/56/4/2/2/2/1 -> /TUPLE/3:3:Int/2
-InitPut /Table/56/4/2/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 
 # Updates on uniqueidxstoring should generate 3 K/V pairs.
 query T
@@ -178,12 +160,6 @@ message LIKE 'Del /Table/56/5/%' OR
 message LIKE 'InitPut /Table/56/5/%'
 ORDER BY message
 ----
-Del /Table/56/5/1/0
-Del /Table/56/5/1/2/1
-Del /Table/56/5/1/3/1
-InitPut /Table/56/5/2/0 -> /BYTES/0x8a
-InitPut /Table/56/5/2/2/1 -> /TUPLE/3:3:Int/2
-InitPut /Table/56/5/2/3/1 -> /TUPLE/4:4:Int/2/1:5:Int/2
 
 # Ensure that reads only scan the necessary k/v's.
 statement ok
@@ -205,7 +181,6 @@ SELECT y FROM t@i WHERE x = 1
 query T kvtrace(Scan,prefix=/Table/57/2/)
 SELECT y FROM t@i WHERE x = 1
 ----
-Scan /Table/57/2/1/{0-1/2}
 
 # Make sure that family splitting doesn't affect
 # lookups when there are null values along the
@@ -221,13 +196,11 @@ SELECT y FROM t@i WHERE x IS NULL
 query T kvtrace(Scan,prefix=/Table/57/2/)
 SELECT y FROM t@i WHERE x IS NULL
 ----
-Scan /Table/57/2/{NULL-!NULL}
 
 # Ensure that updates only touch the changed column families.
 query T kvtrace(CPut,prefix=/Table/57/2/)
 UPDATE t SET y = 5 WHERE x = 1
 ----
-CPut /Table/57/2/1/1/1 -> /TUPLE/2:2:Int/5 (replacing [10 35 4], if exists)
 
 # Test composite datatypes.
 statement ok
@@ -253,7 +226,6 @@ SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 query T kvtrace(Scan,prefix=/Table/58/2/)
 SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
 ----
-Scan /Table/58/2/2.01/3.001/0, /Table/58/2/2.01/3.001/2/1
 
 query T
 EXPLAIN SELECT y, z, v FROM t@i WHERE y = 2.01 AND z = 3.001
@@ -287,7 +259,6 @@ SELECT y FROM t@i WHERE y = 2
 query T kvtrace(Scan,prefix=/Table/59/2/)
 SELECT y FROM t@i WHERE y = 2
 ----
-Scan /Table/59/2/2/0
 
 # Ensure that when backfilling an index we only insert the needed k/vs.
 statement ok
@@ -345,9 +316,6 @@ CREATE INDEX i ON t (y) STORING (z, w)
 query T kvtrace(Del,prefix=/Table/61/2/)
 UPDATE t SET z = 3 WHERE y = 2
 ----
-Del /Table/61/2/2/1/0
-Del /Table/61/2/2/1/2/1
-Del /Table/61/2/2/1/3/1
 
 statement ok
 COMMIT
@@ -370,14 +338,6 @@ CREATE TABLE t (
 query T kvtrace(InitPut,prefix=/Table/62/2/,prefix=/Table/62/3/)
 INSERT INTO t VALUES (1, 2, 3, NULL, 5, 6, NULL, 8)
 ----
-InitPut /Table/62/2/2/1/0 -> /BYTES/
-InitPut /Table/62/2/2/1/2/1 -> /TUPLE/3:3:Int/3
-InitPut /Table/62/2/2/1/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
-InitPut /Table/62/2/2/1/5/1 -> /TUPLE/8:8:Int/8
-InitPut /Table/62/3/2/0 -> /BYTES/0x89
-InitPut /Table/62/3/2/2/1 -> /TUPLE/3:3:Int/3
-InitPut /Table/62/3/2/3/1 -> /TUPLE/5:5:Int/5/1:6:Int/6
-InitPut /Table/62/3/2/5/1 -> /TUPLE/8:8:Int/8
 
 # Test some cases of the updater.
 
@@ -387,10 +347,6 @@ InitPut /Table/62/3/2/5/1 -> /TUPLE/8:8:Int/8
 query T kvtrace(Put,Del,CPut,prefix=/Table/62/2/)
 UPDATE t SET b = 4, c = NULL, d = NULL, e = 7, f = NULL WHERE y = 2
 ----
-CPut /Table/62/2/2/1/2/1 -> /TUPLE/3:3:Int/3/1:4:Int/4 (replacing [10 51 6], if exists)
-Del /Table/62/2/2/1/3/1
-CPut /Table/62/2/2/1/4/1 -> /TUPLE/7:7:Int/7 (expecting does not exist)
-Del /Table/62/2/2/1/5/1
 
 query IIIIIIII
 SELECT * FROM t@i2
@@ -405,20 +361,12 @@ INSERT INTO t VALUES (3, 3, NULL, NULL, NULL, NULL, NULL, NULL)
 query T kvtrace(Put,Del,CPut,prefix=/Table/62/2/)
 UPDATE t SET a = 10, b = 11, c = 12, d = 13, e = 14, f = 15 WHERE y = 3
 ----
-CPut /Table/62/2/3/3/2/1 -> /TUPLE/3:3:Int/10/1:4:Int/11 (expecting does not exist)
-CPut /Table/62/2/3/3/3/1 -> /TUPLE/5:5:Int/12/1:6:Int/13 (expecting does not exist)
-CPut /Table/62/2/3/3/4/1 -> /TUPLE/7:7:Int/14 (expecting does not exist)
-CPut /Table/62/2/3/3/5/1 -> /TUPLE/8:8:Int/15 (expecting does not exist)
 
 # Test a case where the update causes all k/v's other than
 # the sentinel k/v to get deleted.
 query T kvtrace(Del,Put,CPut,prefix=/Table/62/2/)
 UPDATE t SET a = NULL, b = NULL, c = NULL, d = NULL, e = NULL, f = NULL WHERE y = 3
 ----
-Del /Table/62/2/3/3/2/1
-Del /Table/62/2/3/3/3/1
-Del /Table/62/2/3/3/4/1
-Del /Table/62/2/3/3/5/1
 
 
 # Test a case that each k/v in the index entry gets
@@ -429,14 +377,6 @@ INSERT INTO t VALUES (20, 21, 22, NULL, NULL, 25, NULL, 27);
 query T kvtrace(Put,Del,CPut,prefix=/Table/62/2/)
 UPDATE t SET y = 22 WHERE y = 21
 ----
-Del /Table/62/2/21/20/0
-CPut /Table/62/2/22/20/0 -> /BYTES/ (expecting does not exist)
-Del /Table/62/2/21/20/2/1
-CPut /Table/62/2/22/20/2/1 -> /TUPLE/3:3:Int/22 (expecting does not exist)
-Del /Table/62/2/21/20/3/1
-CPut /Table/62/2/22/20/3/1 -> /TUPLE/6:6:Int/25 (expecting does not exist)
-Del /Table/62/2/21/20/5/1
-CPut /Table/62/2/22/20/5/1 -> /TUPLE/8:8:Int/27 (expecting does not exist)
 
 # Ensure that the final results on both indexes make sense.
 query IIIIIIII rowsort
@@ -467,11 +407,8 @@ INSERT INTO t VALUES (1, 2, 3, 4)
 query T kvtrace(Put,CPut,Del,prefix=/Table/63/2/)
 UPDATE t SET y = 5 where y = 2
 ----
-Del /Table/63/2/2/1/0
-CPut /Table/63/2/5/1/0 -> /BYTES/0x33061308 (expecting does not exist)
 
 # Changing the value just results in a cput.
 query T kvtrace(Put,Del,CPut,prefix=/Table/63/2/)
 UPDATE t SET z = 5 where y = 5
 ----
-CPut /Table/63/2/5/1/0 -> /BYTES/0x330a1308 (replacing [3 51 6 19 8], if exists)

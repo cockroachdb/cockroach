@@ -6534,7 +6534,7 @@ DROP VIEW IF EXISTS v`,
 				create: "CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s text, b bytea) LOCALITY REGIONAL BY ROW",
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER DATABASE multi_region ADD REGION "us-east2"`,
-				errString: `type descriptor "crdb_internal_region" \(57\) has been ` +
+				errString: `type descriptor "crdb_internal_region" \(\d+\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},
@@ -6550,7 +6550,7 @@ CREATE TABLE mr_regional_by_row (i INT8 PRIMARY KEY, s typ, b bytea) LOCALITY RE
 `,
 				sql:    "IMPORT INTO mr_regional_by_row (i, s, b, crdb_region) CSV DATA ($1)",
 				during: `ALTER TYPE typ ADD VALUE 'b'`,
-				errString: `type descriptor "typ" \(70\) has been ` +
+				errString: `type descriptor "typ" \(\d+\) has been ` +
 					`modified, potentially incompatibly, since import planning; ` +
 					`aborting to avoid possible corruption`,
 				args: []interface{}{srv.URL},

@@ -304,7 +304,7 @@ RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE
 query T
 SELECT status FROM [SHOW JOB WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'CREATE INDEX pauseidx%')];
 ----
-succeeded
+failed
 
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;

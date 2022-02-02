@@ -464,6 +464,9 @@ const (
 // there's no table descriptor). They're grouped here because the cluster
 // bootstrap process needs to create splits for them; splits for the tables
 // happen separately.
+//
+// TODO(ajwerner): There is no reason at all for these to have their own
+// splits.
 var PseudoTableIDs = []uint32{
 	MetaRangesID,
 	SystemRangesID,

@@ -29,8 +29,9 @@ import (
 )
 
 var (
-	HasColumn = hasColumn
-	HasIndex  = hasIndex
+	HasColumn         = hasColumn
+	HasIndex          = hasIndex
+	CreateSystemTable = createSystemTable
 )
 
 type Schema struct {

@@ -333,7 +333,9 @@ func TestErrorOnRollback(t *testing.T) {
 	// CREATE DATABASE test;
 	// CREATE TABLE test.t();
 	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const targetKeyString string = "/Table/56/1/1/0"
+	const targetKeyStringFmt string = "/Table/%d/1/1/0"
+	var targetKeyString atomic.Value
+	targetKeyString.Store("")
 	var injectedErr int64
 
 	// We're going to inject an error into our EndTxn.
@@ -353,7 +355,7 @@ func TestErrorOnRollback(t *testing.T) {
 					// triggered by the fact that, on the server side, the
 					// transaction's context gets canceled at the SQL layer.
 					if ok &&
-						etReq.Header().Key.String() == targetKeyString &&
+						etReq.Header().Key.String() == targetKeyString.Load().(string) &&
 						atomic.LoadInt64(&injectedErr) == 0 {
 
 						atomic.StoreInt64(&injectedErr, 1)
@@ -368,12 +370,13 @@ func TestErrorOnRollback(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec(`
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+	tableID := sqlutils.QueryTableID(t, sqlDB, "t", "public", "test")
+	targetKeyString.Store(fmt.Sprintf(targetKeyStringFmt, tableID))
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
@@ -535,13 +538,14 @@ func TestQueryProgress(t *testing.T) {
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
 
-	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	tableKey := keys.SystemSQLCodec.TablePrefix(56)
-	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	// We'll populate the key for the knob after we create the table.
+	var tableKey atomic.Value
+	tableKey.Store(roachpb.Key(""))
+	getTableKey := func() roachpb.Key { return tableKey.Load().(roachpb.Key) }
+	spanFromKey := func(k roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+	}
+	getTableSpan := func() roachpb.Span { return spanFromKey(getTableKey()) }
 
 	// Install a store filter which, if queryRunningAtomic is 1, will count scan
 	// requests issued to the test table and then, on the `stallAfterScans` one,
@@ -561,7 +565,7 @@ func TestQueryProgress(t *testing.T) {
 				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
 					if req.IsSingleRequest() {
 						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
-						if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+						if ok && getTableSpan().ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
 							i := atomic.AddInt64(&scannedBatchesAtomic, 1)
 							if i == stallAfterScans {
 								close(stalled)
@@ -596,7 +600,9 @@ func TestQueryProgress(t *testing.T) {
 	var tableID descpb.ID
 	ctx := context.Background()
 	require.NoError(t, rawDB.QueryRow(`SELECT id FROM system.namespace WHERE name = 'test'`).Scan(&tableID))
-	s.ExecutorConfig().(sql.ExecutorConfig).TableStatsCache.InvalidateTableStats(ctx, tableID)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	execCfg.TableStatsCache.InvalidateTableStats(ctx, tableID)
+	tableKey.Store(execCfg.Codec.TablePrefix(uint32(tableID)))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

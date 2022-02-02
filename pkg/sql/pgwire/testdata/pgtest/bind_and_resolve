@@ -68,7 +68,7 @@ until crdb_only
 ReadyForQuery
 ----
 {"Type":"BindComplete"}
-{"Type":"DataRow","Values":[{"text":"54"}]}
+{"Type":"DataRow","Values":[{"text":"104"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 

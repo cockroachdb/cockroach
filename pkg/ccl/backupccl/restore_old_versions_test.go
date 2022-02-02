@@ -529,11 +529,8 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		})
 		// In the backup, Public schemas for non-system databases have ID 29.
 		// These should all be updated to explicit public schemas.
-		sqlDB.CheckQueryResults(t, "SELECT * FROM system.namespace WHERE name='public'", [][]string{
+		sqlDB.CheckQueryResults(t, "SELECT * FROM system.namespace WHERE name='public' AND id = 29", [][]string{
 			{"1", "0", "public", "29"},
-			{"50", "0", "public", "64"},
-			{"51", "0", "public", "65"},
-			{"52", "0", "public", "66"},
 		})
 		sqlDB.CheckQueryResults(t, "SELECT * FROM data.bank", [][]string{{"1"}})
 	}
