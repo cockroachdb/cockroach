@@ -1989,9 +1989,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				continue
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
-				continue
+				// CombinedStatementStats should filter out internal queries.
+				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
