@@ -119,8 +119,10 @@ func (s *httpServer) setupRoutes(
 	// Same for /_status/load.
 	s.mux.Handle(loadStatusVars, http.HandlerFunc(makeStatusLoadHandler(ctx, runtimeStatSampler)))
 
-	// The new "v2" HTTP API tree.
-	s.mux.Handle(apiV2Path, apiServer)
+	if apiServer != nil {
+		// The new "v2" HTTP API tree.
+		s.mux.Handle(apiV2Path, apiServer)
+	}
 
 	// Register debugging endpoints.
 	handleDebugAuthenticated := handleDebugUnauthenticated

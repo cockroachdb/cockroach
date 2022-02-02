@@ -305,6 +305,17 @@ type TestServer struct {
 	params base.TestServerArgs
 	// server is the embedded Cockroach server struct.
 	*Server
+	// httpTestServer provides the HTTP APIs of TestTenantInterface.
+	*httpTestServer
+}
+
+type httpTestServer struct {
+	t struct {
+		// We need a sub-struct to avoid ambiguous overlap with the fields
+		// of *Server, which are also embedded in TestServer.
+		authentication *authenticationServer
+		sqlServer      *SQLServer
+	}
 	// authClient is an http.Client that has been authenticated to access the
 	// Admin UI.
 	authClient [2]struct {
@@ -524,6 +535,7 @@ type TestTenant struct {
 	Cfg      *BaseConfig
 	sqlAddr  string
 	httpAddr string
+	*httpTestServer
 }
 
 var _ serverutils.TestTenantInterface = &TestTenant{}
@@ -718,14 +730,25 @@ func (ts *TestServer) StartTenant(
 	if params.RPCHeartbeatInterval != 0 {
 		baseCfg.RPCHeartbeatInterval = params.RPCHeartbeatInterval
 	}
-	sqlServer, addr, httpAddr, err := StartTenant(
+	sqlServer, authServer, addr, httpAddr, err := startTenantInternal(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)
-	return &TestTenant{SQLServer: sqlServer, Cfg: &baseCfg, sqlAddr: addr, httpAddr: httpAddr}, err
+
+	hts := &httpTestServer{}
+	hts.t.authentication = authServer
+	hts.t.sqlServer = sqlServer
+
+	return &TestTenant{
+		SQLServer:      sqlServer,
+		Cfg:            &baseCfg,
+		sqlAddr:        addr,
+		httpAddr:       httpAddr,
+		httpTestServer: hts,
+	}, err
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -816,13 +839,13 @@ func (ts *TestServer) WriteSummaries() error {
 }
 
 // AdminURL implements TestServerInterface.
-func (ts *TestServer) AdminURL() string {
-	return ts.Cfg.AdminURL().String()
+func (ts *httpTestServer) AdminURL() string {
+	return ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String()
 }
 
 // GetHTTPClient implements TestServerInterface.
-func (ts *TestServer) GetHTTPClient() (http.Client, error) {
-	return ts.Server.rpcContext.GetHTTPClient()
+func (ts *httpTestServer) GetHTTPClient() (http.Client, error) {
+	return ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
 }
 
 // UpdateChecker implements TestServerInterface.
@@ -848,13 +871,13 @@ func authenticatedUserNameNoAdmin() security.SQLUsername {
 }
 
 // GetAdminAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *TestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
+func (ts *httpTestServer) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
 	httpClient, _, err := ts.getAuthenticatedHTTPClientAndCookie(authenticatedUserName(), true)
 	return httpClient, err
 }
 
 // GetAuthenticatedHTTPClient implements the TestServerInterface.
-func (ts *TestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
+func (ts *httpTestServer) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
 	authUser := authenticatedUserName()
 	if !isAdmin {
 		authUser = authenticatedUserNameNoAdmin()
@@ -874,7 +897,7 @@ func (v *v2AuthDecorator) RoundTrip(r *http.Request) (*http.Response, error) {
 	return v.RoundTripper.RoundTrip(r)
 }
 
-func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
+func (ts *httpTestServer) getAuthenticatedHTTPClientAndCookie(
 	authUser security.SQLUsername, isAdmin bool,
 ) (http.Client, *serverpb.SessionCookie, error) {
 	authIdx := 0
@@ -890,7 +913,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 				return err
 			}
 
-			id, secret, err := ts.authentication.newAuthSession(context.TODO(), authUser)
+			id, secret, err := ts.t.authentication.newAuthSession(context.TODO(), authUser)
 			if err != nil {
 				return err
 			}
@@ -907,13 +930,13 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 			if err != nil {
 				return err
 			}
-			url, err := url.Parse(ts.AdminURL())
+			url, err := url.Parse(ts.t.sqlServer.execCfg.RPCContext.Config.AdminURL().String())
 			if err != nil {
 				return err
 			}
 			cookieJar.SetCookies(url, []*http.Cookie{cookie})
 			// Create an httpClient and attach the cookie jar to the client.
-			authClient.httpClient, err = ts.rpcContext.GetHTTPClient()
+			authClient.httpClient, err = ts.t.sqlServer.execCfg.RPCContext.GetHTTPClient()
 			if err != nil {
 				return err
 			}
@@ -934,8 +957,8 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie(
 	return authClient.httpClient, authClient.cookie, authClient.err
 }
 
-func (ts *TestServer) createAuthUser(userName security.SQLUsername, isAdmin bool) error {
-	if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
+func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin bool) error {
+	if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 		"create-auth-user", nil,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf("CREATE USER %s", userName.Normalized()),
@@ -945,7 +968,7 @@ func (ts *TestServer) createAuthUser(userName security.SQLUsername, isAdmin bool
 	if isAdmin {
 		// We can't use the GRANT statement here because we don't want
 		// to rely on CCL code.
-		if _, err := ts.Server.sqlServer.internalExecutor.ExecEx(context.TODO(),
+		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName.Normalized(),
@@ -1467,6 +1490,12 @@ func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error
 
 	// Our context must be shared with our server.
 	ts.Cfg = &ts.Server.cfg
+
+	// The HTTP APIs on TestTenantInterface are implemented by
+	// httpTestServer.
+	ts.httpTestServer = &httpTestServer{}
+	ts.httpTestServer.t.authentication = ts.Server.authentication
+	ts.httpTestServer.t.sqlServer = ts.Server.sqlServer
 
 	return ts, nil
 }
