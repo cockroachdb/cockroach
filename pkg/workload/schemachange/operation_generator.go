@@ -453,7 +453,11 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 	if err != nil {
 		return "", err
 	}
-	if hasSchemaChange || databaseHasRegionChange {
+	databaseHasMultiRegion, err := databaseIsMultiRegion(ctx, tx)
+	if err != nil {
+		return "", err
+	}
+	if hasSchemaChange || databaseHasRegionChange || !databaseHasMultiRegion {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return `ALTER TABLE invalid_table SET LOCALITY REGIONAL BY ROW`, nil
 	}

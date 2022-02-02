@@ -952,6 +952,16 @@ SELECT
 	)
 }
 
+// databaseHasMultiRegion determines whether the database is multi-region
+// enabled.
+func databaseIsMultiRegion(ctx context.Context, tx pgx.Tx) (bool, error) {
+	return scanBool(
+		ctx,
+		tx,
+		`SELECT EXISTS (SELECT * FROM [SHOW REGIONS FROM DATABASE])`,
+	)
+}
+
 // databaseHasRegionChange determines whether the database is currently undergoing
 // a region change.
 func databaseHasRegionChange(ctx context.Context, tx pgx.Tx) (bool, error) {
