@@ -17,6 +17,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli"
@@ -1082,14 +1083,15 @@ func runDecommissionDrains(ctx context.Context, t test.Test, c cluster.Cluster) 
 		}
 
 		// Check to see if the node has been drained.
-		// If not, send a query and verify that the query does not fail.
-		if decommNodeDB.Ping() != nil { // not drained
-			err = run(decommNodeDB, `SHOW DATABASES`)
-			require.NoError(t, err)
-			return errors.New("not drained")
+		// If not, queries should not fail.
+		if err = run(decommNodeDB, `SHOW DATABASES`); err != nil {
+			if strings.Contains(err.Error(), "not accepting clients") { // drained
+				return nil
+			}
+			t.Fatal(err)
 		}
 
-		return nil
+		return errors.New("not drained")
 	})
 	require.NoError(t, e)
 
