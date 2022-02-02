@@ -2209,7 +2209,8 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions())
+			a.scorerOptions(),
+		)
 		var resultID roachpb.StoreID
 		if ok {
 			resultID = result.StoreID
@@ -4075,7 +4076,8 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
-			add, remove, _, ok := a.RebalanceNonVoter(ctx,
+			add, remove, _, ok := a.RebalanceNonVoter(
+				ctx,
 				test.conf,
 				nil,
 				test.existingVoters,
@@ -7204,6 +7206,79 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAllocatorRebalanceWithScatter tests that when `scatter` is set to true,
+// the allocator will produce rebalance opportunities even when it normally
+// wouldn't.
+func TestAllocatorRebalanceWithScatter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, _, a, _ := createTestAllocator(ctx, 10 /* numNodes */, true /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+	}
+
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	var rangeUsageInfo RangeUsageInfo
+
+	// Ensure that we wouldn't normally rebalance when all stores have the same
+	// replica count.
+	_, _, _, ok := a.RebalanceVoter(
+		ctx,
+		emptySpanConfig(),
+		nil,
+		replicas(1),
+		nil,
+		rangeUsageInfo,
+		storeFilterThrottled,
+		a.scorerOptions(),
+	)
+	require.False(t, ok)
+
+	// Ensure that we would produce a rebalance target when running with scatter.
+	_, _, _, ok = a.RebalanceVoter(
+		ctx,
+		emptySpanConfig(),
+		nil,
+		replicas(1),
+		nil,
+		rangeUsageInfo,
+		storeFilterThrottled,
+		a.scorerOptionsForScatter(),
+	)
+	require.True(t, ok)
 }
 
 // TestAllocatorRebalanceAway verifies that when a replica is on a node with a
