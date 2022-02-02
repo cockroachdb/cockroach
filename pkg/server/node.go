@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
@@ -1379,7 +1380,26 @@ func (n *Node) GossipSubscription(
 func (n *Node) TenantSettings(
 	args *roachpb.TenantSettingsRequest, stream roachpb.Internal_TenantSettingsServer,
 ) error {
-	return errors.AssertionFailedf("not implemented")
+	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
+	ctxDone := ctx.Done()
+
+	// TODO(radu): implement this. For now we just respond with an initial event
+	// so the tenant can initialize.
+	e := &roachpb.TenantSettingsEvent{
+		Precedence:  roachpb.SpecificTenantOverrides,
+		Incremental: false,
+		Overrides:   nil,
+		Error:       errorspb.EncodedError{},
+	}
+	if err := stream.Send(e); err != nil {
+		return err
+	}
+	select {
+	case <-ctxDone:
+		return ctx.Err()
+	case <-n.stopper.ShouldQuiesce():
+		return stop.ErrUnavailable
+	}
 }
 
 // Join implements the roachpb.InternalServer service. This is the

@@ -15,6 +15,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/server/serverpb",
+        "//pkg/server/settingswatcher",
         "//pkg/spanconfig",
         "//pkg/util/log",
         "//pkg/util/retry",

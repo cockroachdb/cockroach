@@ -382,6 +382,7 @@ func makeTenantSQLServerArgs(
 	rpcRetryOptions := base.DefaultRetryOptions()
 
 	tcCfg := kvtenant.ConnectorConfig{
+		TenantID:          sqlCfg.TenantID,
 		AmbientCtx:        baseCfg.AmbientCtx,
 		RPCContext:        rpcContext,
 		RPCRetryOptions:   rpcRetryOptions,

@@ -39,10 +39,9 @@ go_test(
         "main_test.go",
         "row_decoder_external_test.go",
         "settings_watcher_external_test.go",
-        "settings_watcher_test.go",
     ],
-    embed = [":settingswatcher"],
     deps = [
+        ":settingswatcher",
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
