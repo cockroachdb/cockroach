@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -84,7 +85,7 @@ func (c *csvExporter) Len() int {
 	return c.buf.Len()
 }
 
-func (c *csvExporter) FileName(spec execinfrapb.CSVWriterSpec, part string) string {
+func (c *csvExporter) FileName(spec execinfrapb.ExportSpec, part string) string {
 	pattern := exportFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
@@ -98,11 +99,11 @@ func (c *csvExporter) FileName(spec execinfrapb.CSVWriterSpec, part string) stri
 	return fileName
 }
 
-func newCSVExporter(sp execinfrapb.CSVWriterSpec) *csvExporter {
+func newCSVExporter(sp execinfrapb.ExportSpec) *csvExporter {
 	buf := bytes.NewBuffer([]byte{})
 	var exporter *csvExporter
-	switch sp.CompressionCodec {
-	case execinfrapb.FileCompression_Gzip:
+	switch sp.Format.Compression {
+	case roachpb.IOFileFormat_Gzip:
 		{
 			writer := gzip.NewWriter(buf)
 			exporter = &csvExporter{
@@ -119,8 +120,8 @@ func newCSVExporter(sp execinfrapb.CSVWriterSpec) *csvExporter {
 			}
 		}
 	}
-	if sp.Options.Comma != 0 {
-		exporter.csvWriter.Comma = sp.Options.Comma
+	if sp.Format.Csv.Comma != 0 {
+		exporter.csvWriter.Comma = sp.Format.Csv.Comma
 	}
 	return exporter
 }
@@ -128,7 +129,7 @@ func newCSVExporter(sp execinfrapb.CSVWriterSpec) *csvExporter {
 func newCSVWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec execinfrapb.CSVWriterSpec,
+	spec execinfrapb.ExportSpec,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -149,7 +150,7 @@ func newCSVWriterProcessor(
 type csvWriter struct {
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
-	spec        execinfrapb.CSVWriterSpec
+	spec        execinfrapb.ExportSpec
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
@@ -186,8 +187,8 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		writer := newCSVExporter(sp.spec)
 
 		var nullsAs string
-		if sp.spec.Options.NullEncoding != nil {
-			nullsAs = *sp.spec.Options.NullEncoding
+		if sp.spec.Format.Csv.NullEncoding != nil {
+			nullsAs = *sp.spec.Format.Csv.NullEncoding
 		}
 		f := tree.NewFmtCtx(tree.FmtExport)
 		defer f.Close()
@@ -220,7 +221,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 				for i, ed := range row {
 					if ed.IsNull() {
-						if sp.spec.Options.NullEncoding != nil {
+						if sp.spec.Format.Csv.NullEncoding != nil {
 							csvRow[i] = nullsAs
 							continue
 						} else {

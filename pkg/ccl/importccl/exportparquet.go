@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -40,6 +41,7 @@ type parquetExporter struct {
 	parquetWriter  *goparquet.FileWriter
 	schema         *parquetschema.SchemaDefinition
 	parquetColumns []parquetColumn
+	compression    roachpb.IOFileFormat_Compression
 }
 
 // Write appends a record to a parquet file.
@@ -65,7 +67,7 @@ func (c *parquetExporter) Bytes() []byte {
 
 func (c *parquetExporter) ResetBuffer() {
 	c.buf.Reset()
-	c.parquetWriter = buildFileWriter(c.buf, c.schema)
+	c.parquetWriter = c.buildFileWriter()
 }
 
 // Len returns length of the buffer with content.
@@ -73,22 +75,44 @@ func (c *parquetExporter) Len() int {
 	return c.buf.Len()
 }
 
-func (c *parquetExporter) FileName(spec execinfrapb.ParquetWriterSpec, part string) string {
+func (c *parquetExporter) FileName(spec execinfrapb.ExportSpec, part string) string {
 	pattern := exportParquetFilePatternDefault
 	if spec.NamePattern != "" {
 		pattern = spec.NamePattern
 	}
 
 	fileName := strings.Replace(pattern, exportFilePatternPart, part, -1)
-
+	suffix := ""
+	switch spec.Format.Compression {
+	case roachpb.IOFileFormat_Gzip:
+		suffix = ".gz"
+	case roachpb.IOFileFormat_Snappy:
+		suffix = ".snappy"
+	}
+	fileName += suffix
 	return fileName
+}
+
+func (c *parquetExporter) buildFileWriter() *goparquet.FileWriter {
+	var parquetCompression parquet.CompressionCodec
+	switch c.compression {
+	case roachpb.IOFileFormat_Gzip:
+		parquetCompression = parquet.CompressionCodec_GZIP
+	case roachpb.IOFileFormat_Snappy:
+		parquetCompression = parquet.CompressionCodec_SNAPPY
+	default:
+		parquetCompression = parquet.CompressionCodec_UNCOMPRESSED
+	}
+	pw := goparquet.NewFileWriter(c.buf,
+		goparquet.WithCompressionCodec(parquetCompression),
+		goparquet.WithSchemaDefinition(c.schema),
+	)
+	return pw
 }
 
 // newParquetExporter creates a new parquet file writer, defines the parquet
 // file schema, and initializes a new parquetExporter.
-func newParquetExporter(
-	sp execinfrapb.ParquetWriterSpec, typs []*types.T,
-) (*parquetExporter, error) {
+func newParquetExporter(sp execinfrapb.ExportSpec, typs []*types.T) (*parquetExporter, error) {
 
 	var exporter *parquetExporter
 
@@ -103,6 +127,7 @@ func newParquetExporter(
 		buf:            buf,
 		schema:         schema,
 		parquetColumns: parquetColumns,
+		compression:    sp.Format.Compression,
 	}
 	return exporter, nil
 }
@@ -120,10 +145,10 @@ type parquetColumn struct {
 }
 
 // newParquetColumns creates a list of parquet columns, given the input relation's column types.
-func newParquetColumns(typs []*types.T, sp execinfrapb.ParquetWriterSpec) ([]parquetColumn, error) {
+func newParquetColumns(typs []*types.T, sp execinfrapb.ExportSpec) ([]parquetColumn, error) {
 	parquetColumns := make([]parquetColumn, len(typs))
 	for i := 0; i < len(typs); i++ {
-		parquetCol, err := newParquetColumn(typs[i], sp.ColNames[i], sp.ColNullability[i])
+		parquetCol, err := newParquetColumn(typs[i], sp.ColNames[i], sp.Format.Parquet.ColNullability[i])
 		if err != nil {
 			return nil, err
 		}
@@ -289,21 +314,10 @@ func newParquetSchema(parquetFields []parquetColumn) *parquetschema.SchemaDefini
 	return schemaDefinition
 }
 
-func buildFileWriter(
-	buf *bytes.Buffer, schema *parquetschema.SchemaDefinition,
-) *goparquet.FileWriter {
-	pw := goparquet.NewFileWriter(buf,
-		// TODO(MB): allow for user defined compression
-		goparquet.WithCompressionCodec(parquet.CompressionCodec_SNAPPY),
-		goparquet.WithSchemaDefinition(schema),
-	)
-	return pw
-}
-
 func newParquetWriterProcessor(
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
-	spec execinfrapb.ParquetWriterSpec,
+	spec execinfrapb.ExportSpec,
 	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
@@ -324,7 +338,7 @@ func newParquetWriterProcessor(
 type parquetWriterProcessor struct {
 	flowCtx     *execinfra.FlowCtx
 	processorID int32
-	spec        execinfrapb.ParquetWriterSpec
+	spec        execinfrapb.ExportSpec
 	input       execinfra.RowSource
 	out         execinfra.ProcOutputHelper
 	output      execinfra.RowReceiver
