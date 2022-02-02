@@ -397,8 +397,8 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, nil, err
 	}
 	if !f.IsLocal() {
-		flowCtx.AddLogTag("f", f.GetFlowCtx().ID.Short())
-		flowCtx.AnnotateCtx(ctx)
+		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
+		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
 	if f.IsVectorized() {
@@ -669,7 +669,7 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
+	return streamStrategy.Run(f.AmbientContext.AnnotateCtx(ctx), stream, msg, f)
 }
 
 // FlowStream is part of the execinfrapb.DistSQLServer interface.
