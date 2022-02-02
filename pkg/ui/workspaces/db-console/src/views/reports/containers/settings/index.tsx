@@ -96,6 +96,7 @@ export class Settings extends React.Component<SettingsProps> {
         <h1 className="base-heading">Cluster Settings</h1>
         <Loading
           loading={!this.props.settings.data}
+          page={"container settings"}
           error={this.props.settings.lastError}
           render={() => (
             <div>

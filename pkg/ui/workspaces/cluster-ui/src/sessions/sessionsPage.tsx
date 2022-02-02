@@ -229,6 +229,7 @@ export class SessionsPage extends React.Component<
       <div className={sessionsPageCx("sessions-page")}>
         <Loading
           loading={isNil(this.props.sessions)}
+          page={"sessions"}
           error={this.props.sessionsError}
           render={this.renderSessions}
           renderError={() =>

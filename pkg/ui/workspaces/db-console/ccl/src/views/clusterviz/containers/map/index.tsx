@@ -88,6 +88,7 @@ export class ClusterVisualization extends React.Component<
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
+          page={"containers"}
           error={this.props.clusterDataError}
           render={() => <NodeCanvasContent tiers={tiers} />}
         />
