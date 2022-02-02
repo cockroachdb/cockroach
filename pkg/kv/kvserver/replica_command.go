@@ -2976,7 +2976,7 @@ func (s *Store) relocateOne(
 		targetStore, _, err := s.allocator.removeTarget(
 			ctx,
 			conf,
-			args.targetsToRemove(),
+			s.allocator.storeListForCandidates(args.targetsToRemove()),
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
@@ -3191,7 +3191,9 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	canTransferLease := func(ctx context.Context, repl *Replica) bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, canTransferLease, false /* dryRun */)
+		requeue, err := rq.processOneChange(
+			ctx, r, canTransferLease, true /* scatter */, false, /* dryRun */
+		)
 		if err != nil {
 			// TODO(tbg): can this use IsRetriableReplicationError?
 			if isSnapshotError(err) {
