@@ -14,12 +14,12 @@ postgres   root  NULL  {}  NULL
 system     node  NULL  {}  NULL
 test       root  NULL  {}  NULL
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE test
 ----
-test  admin   ALL
-test  public  CONNECT
-test  root    ALL
+test  admin   ALL      true
+test  public  CONNECT  false
+test  root    ALL      true
 
 statement ok
 CREATE TABLE kv (
@@ -63,12 +63,12 @@ system     node  NULL  {}  NULL
 u          root  NULL  {}  NULL
 
 # check the name in descriptor is also changed
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE u
 ----
-u  admin   ALL
-u  public  CONNECT
-u  root    ALL
+u  admin   ALL      true
+u  public  CONNECT  false
+u  root    ALL      true
 
 statement ok
 SET DATABASE = u

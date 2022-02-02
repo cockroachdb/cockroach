@@ -9,14 +9,14 @@ CREATE USER readwrite
 statement ok
 GRANT ALL ON DATABASE a TO readwrite
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE a
 ----
-database_name  grantee    privilege_type
-a              admin      ALL
-a              public     CONNECT
-a              readwrite  ALL
-a              root       ALL
+database_name  grantee    privilege_type  is_grantable
+a              admin      ALL             true
+a              public     CONNECT         false
+a              readwrite  ALL             true
+a              root       ALL             true
 
 # Show that by default GRANT is restricted to the current database
 query TTTTT colnames
@@ -1855,14 +1855,14 @@ SHOW GRANTS FOR readwrite, "test-user"
 a  NULL  NULL  readwrite  ALL
 
 # Verify that the DB privileges have not changed.
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE a
 ----
-database_name  grantee    privilege_type
-a              admin      ALL
-a              public     CONNECT
-a              readwrite  ALL
-a              root       ALL
+database_name  grantee    privilege_type  is_grantable
+a              admin      ALL             true
+a              public     CONNECT         false
+a              readwrite  ALL             true
+a              root       ALL             true
 
 
 # Errors due to invalid targets.
