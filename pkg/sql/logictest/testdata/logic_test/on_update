@@ -405,3 +405,48 @@ ALTER TYPE test_enum DROP VALUE 'x'
 
 statement error pq: could not remove enum value "y" as it is being used in an ON UPDATE expression of "test_array_enum"
 ALTER TYPE test_enum DROP VALUE 'y'
+
+# Tests adding/dropping new columns will not trigger the ON UPDATE clause.
+subtest test_on_update_backfill
+
+statement ok
+CREATE TABLE test_backfill (x INT, y INT DEFAULT 100 ON UPDATE 50)
+
+statement ok
+INSERT INTO test_backfill VALUES (1), (2), (3)
+
+query II
+SELECT * FROM test_backfill ORDER BY x
+----
+1  100
+2  100
+3  100
+
+statement ok
+ALTER TABLE test_backfill ADD COLUMN z INT DEFAULT 20
+
+query III
+SELECT * FROM test_backfill ORDER BY x
+----
+1  100  20
+2  100  20
+3  100  20
+
+statement ok
+SET sql_safe_updates = false
+
+statement ok
+ALTER TABLE test_backfill DROP COLUMN z
+
+query II
+SELECT * FROM test_backfill ORDER BY x
+----
+1  100
+2  100
+3  100
+
+statement ok
+SET sql_safe_updates = true
+
+statement ok
+DROP TABLE test_backfill
