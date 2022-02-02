@@ -301,14 +301,17 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 
 func (o *OrderedSynchronizer) Close() error {
 	o.accountingHelper.Release()
+	var lastErr error
 	for _, input := range o.inputs {
-		input.ToClose.CloseAndLogOnErr(o.EnsureCtx(), "ordered synchronizer")
+		if err := input.ToClose.Close(); err != nil {
+			lastErr = err
+		}
 	}
 	if o.span != nil {
 		o.span.Finish()
 	}
 	*o = OrderedSynchronizer{}
-	return nil
+	return lastErr
 }
 
 func (o *OrderedSynchronizer) compareRow(batchIdx1 int, batchIdx2 int) int {

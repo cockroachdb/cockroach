@@ -217,8 +217,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		t.Fatal(err)
 	}
 	cfg.SpanConfigSubscriber = spanconfigkvsubscriber.New(
-		ltc.stopper,
-		ltc.DB,
 		clock,
 		rangeFeedFactory,
 		keys.SpanConfigurationsTableID,

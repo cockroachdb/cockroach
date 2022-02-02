@@ -73,6 +73,7 @@ type Reporter struct {
 	settings  *cluster.Settings
 	storePool *kvserver.StorePool
 	executor  sqlutil.InternalExecutor
+	cfgs      config.SystemConfigProvider
 
 	frequencyMu struct {
 		syncutil.Mutex
@@ -89,6 +90,7 @@ func NewReporter(
 	st *cluster.Settings,
 	liveness *liveness.NodeLiveness,
 	executor sqlutil.InternalExecutor,
+	provider config.SystemConfigProvider,
 ) *Reporter {
 	r := Reporter{
 		db:          db,
@@ -97,6 +99,7 @@ func NewReporter(
 		settings:    st,
 		liveness:    liveness,
 		executor:    executor,
+		cfgs:        provider,
 	}
 	r.frequencyMu.changeCh = make(chan struct{})
 	return &r
@@ -279,7 +282,7 @@ func (stats *Reporter) meta1LeaseHolderStore(ctx context.Context) *kvserver.Stor
 }
 
 func (stats *Reporter) updateLatestConfig() {
-	stats.latestConfig = stats.meta1LeaseHolder.Gossip().GetSystemConfig()
+	stats.latestConfig = stats.cfgs.GetSystemConfig()
 }
 
 // nodeChecker checks whether a node is to be considered alive or not.

@@ -10,3 +10,4 @@
 
 export * from "./cockroachLabsLockupIcon";
 export * from "./backIcon";
+export * from "./circleFilled";

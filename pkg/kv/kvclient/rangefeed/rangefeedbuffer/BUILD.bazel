@@ -2,10 +2,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "rangefeedbuffer",
-    srcs = ["buffer.go"],
+    srcs = [
+        "buffer.go",
+        "kvs.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb:with-mocks",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/syncutil",
@@ -15,9 +19,15 @@ go_library(
 
 go_test(
     name = "rangefeedbuffer_test",
-    srcs = ["buffer_test.go"],
+    srcs = [
+        "buffer_test.go",
+        "kvs_test.go",
+    ],
+    embed = [":rangefeedbuffer"],
     deps = [
-        ":rangefeedbuffer",
+        "//pkg/keys",
+        "//pkg/roachpb:with-mocks",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "@com_github_stretchr_testify//require",

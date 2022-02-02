@@ -124,7 +124,8 @@ func TestShowRangesMultipleStores(t *testing.T) {
 		"SHOW RANGE FROM INDEX system.jobs@jobs_status_created_idx FOR ROW ('running', now(), 0)",
 	} {
 		t.Run(q, func(t *testing.T) {
-			sqlDB.CheckQueryResults(t,
+			// Retry because if there's not a leaseholder, you can NULL.
+			sqlDB.CheckQueryResultsRetry(t,
 				fmt.Sprintf(`
 SELECT DISTINCT
 		(

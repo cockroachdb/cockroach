@@ -1230,7 +1230,7 @@ SELECT sign(-2.0), sign(-0.0), sign(0.0), sign(2.0)
 query RR
 SELECT sqrt(4.0::float), sqrt(9.0::decimal)
 ----
-2 3
+2  3.0000000000000000000
 
 query error cannot take square root of a negative number
 SELECT sqrt(-1.0::float)

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -443,6 +445,10 @@ func makeTenantSQLServerArgs(
 		return sqlServerArgs{}, err
 	}
 
+	systemConfigWatcher := systemconfigwatcher.New(
+		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
+	)
+
 	circularInternalExecutor := &sql.InternalExecutor{}
 	circularJobRegistry := &jobs.Registry{}
 
@@ -521,7 +527,7 @@ func makeTenantSQLServerArgs(
 		runtime:                  runtime,
 		rpcContext:               rpcContext,
 		nodeDescs:                tenantConnect,
-		systemConfigProvider:     tenantConnect,
+		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
 		nodeDialer:               nodeDialer,
 		distSender:               ds,

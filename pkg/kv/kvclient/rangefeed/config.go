@@ -26,11 +26,17 @@ type Option interface {
 
 type config struct {
 	scanConfig
-	retryOptions         retry.Options
-	onInitialScanDone    OnInitialScanDone
-	withInitialScan      bool
+	retryOptions       retry.Options
+	onInitialScanDone  OnInitialScanDone
+	withInitialScan    bool
+	onInitialScanError OnInitialScanError
+	// useRowTimestampInInitialScan indicates that when rows are scanned in an
+	// initial scan, they should report their timestamp as it exists in KV as
+	// opposed to the timestamp at which the scan occurred. Both behaviors can
+	// be sane depending on your use case.
+	useRowTimestampInInitialScan bool
+
 	withDiff             bool
-	onInitialScanError   OnInitialScanError
 	onUnrecoverableError OnUnrecoverableError
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
@@ -101,6 +107,17 @@ func WithOnInitialScanError(f OnInitialScanError) Option {
 	})
 }
 
+// WithRowTimestampInInitialScan indicates whether the timestamp of rows
+// reported during an initial scan should correspond to the timestamp of that
+// row as it exists in KV or should correspond to the timestamp of the initial
+// scan. The default is false, indicating that the timestamp should correspond
+// to the timestamp of the initial scan.
+func WithRowTimestampInInitialScan(shouldUse bool) Option {
+	return optionFunc(func(c *config) {
+		c.useRowTimestampInInitialScan = shouldUse
+	})
+}
+
 // WithOnInternalError sets up a callback to report unrecoverable errors during
 // operation.
 func WithOnInternalError(f OnUnrecoverableError) Option {
@@ -109,11 +126,12 @@ func WithOnInternalError(f OnUnrecoverableError) Option {
 	})
 }
 
-// WithDiff makes an option to enable an initial scan which defaults to
-// false.
-func WithDiff() Option {
+// WithDiff makes an option to set whether rangefeed events carry the previous
+// value in addition to the new value. The option defaults to false. If set,
+// initial scan events will carry the same value for both Value and PrevValue.
+func WithDiff(withDiff bool) Option {
 	return optionFunc(func(c *config) {
-		c.withDiff = true
+		c.withDiff = withDiff
 	})
 }
 
