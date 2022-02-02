@@ -1404,6 +1404,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.authentication,       /* authnServer */
 		s.adminAuthzCheck,      /* adminAuthzCheck */
 		s.recorder,             /* metricSource */
+		s.runtime,              /* runtimeStatsSampler */
 		gwMux,                  /* handleRequestsUnauthenticated */
 		s.debug,                /* handleDebugUnauthenticated */
 		newAPIV2Server(ctx, s), /* apiServer */

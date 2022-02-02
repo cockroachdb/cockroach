@@ -235,7 +235,7 @@ func StartTenant(
 	})
 	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
 	mux.Handle(statusVars, http.HandlerFunc(f))
-	ff := loadVarsHandler(ctx, args.runtime)
+	ff := makeStatusLoadHandler(ctx, args.runtime)
 	mux.Handle(loadStatusVars, http.HandlerFunc(ff))
 
 	connManager := netutil.MakeServer(
@@ -307,43 +307,6 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
-}
-
-// Construct a handler responsible for serving the instant values of selected
-// load metrics. These include user and system CPU time currently.
-func loadVarsHandler(
-	ctx context.Context, rsr *status.RuntimeStatSampler,
-) func(http.ResponseWriter, *http.Request) {
-	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
-	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
-	cpuNowNanos := metric.NewGauge(rsr.CPUNowNS.GetMetadata())
-	registry := metric.NewRegistry()
-	registry.AddMetric(cpuUserNanos)
-	registry.AddMetric(cpuSysNanos)
-	registry.AddMetric(cpuNowNanos)
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
-		if err != nil {
-			// Just log but don't return an error to match the _status/vars metrics handler.
-			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
-		}
-
-		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-		utime := userTimeMillis * 1e6
-		stime := sysTimeMillis * 1e6
-		cpuUserNanos.Update(utime)
-		cpuSysNanos.Update(stime)
-		cpuNowNanos.Update(timeutil.Now().UnixNano())
-
-		exporter := metric.MakePrometheusExporter()
-		exporter.ScrapeRegistry(registry, true)
-		if err := exporter.PrintAsText(w); err != nil {
-			log.Errorf(r.Context(), "%v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
 }
 
 func makeTenantSQLServerArgs(
