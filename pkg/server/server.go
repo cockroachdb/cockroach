@@ -651,14 +651,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		flowScheduler,
 		internalExecutor,
 	)
-	// TODO(tbg): don't pass all of Server into this to avoid this hack.
-	sAuth := newAuthenticationServer(lateBoundServer)
-	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
-		if reflect.ValueOf(gw).IsNil() {
-			return nil, errors.Errorf("%d: nil", i)
-		}
-		gw.RegisterService(grpcServer.Server)
-	}
 
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -719,6 +711,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	sAuth := newAuthenticationServer(cfg.Config, sqlServer)
+	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
+		if reflect.ValueOf(gw).IsNil() {
+			return nil, errors.Errorf("%d: nil", i)
+		}
+		gw.RegisterService(grpcServer.Server)
+	}
+
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
