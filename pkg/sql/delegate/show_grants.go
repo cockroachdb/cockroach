@@ -34,7 +34,8 @@ func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, erro
 	const dbPrivQuery = `
 SELECT database_name,
        grantee,
-       privilege_type
+       privilege_type,
+			 is_grantable::boolean
   FROM "".crdb_internal.cluster_database_privileges`
 	const schemaPrivQuery = `
 SELECT table_catalog AS database_name,
