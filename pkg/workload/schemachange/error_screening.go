@@ -807,15 +807,21 @@ func tableHasOngoingSchemaChanges(
 		ctx,
 		tx,
 		`
-		SELECT json_array_length(
-        crdb_internal.pb_to_json(
-            'cockroach.sql.sqlbase.Descriptor',
-            descriptor
-        )->'table'->'mutations'
-       )
-       > 0
-		FROM system.descriptor
-	  WHERE id = $1::REGCLASS
+SELECT
+	json_array_length(
+		COALESCE(
+			crdb_internal.pb_to_json(
+				'cockroach.sql.sqlbase.Descriptor',
+				descriptor
+			)->'table'->'mutations',
+			'[]'
+		)
+	)
+	> 0
+FROM
+	system.descriptor
+WHERE
+	id = $1::REGCLASS;
 		`,
 		tableName.String(),
 	)
