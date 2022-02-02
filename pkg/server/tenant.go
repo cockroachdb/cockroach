@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"time"
 
@@ -134,26 +133,7 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
-	httpL, err := ListenAndUpdateAddrs(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
-	if err != nil {
-		return nil, "", "", err
-	}
-	if serverTLSConfig != nil {
-		httpL = tls.NewListener(httpL, serverTLSConfig)
-	}
 
-	{
-		waitQuiesce := func(ctx context.Context) {
-			<-args.stopper.ShouldQuiesce()
-			_ = httpL.Close()
-		}
-		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-http", waitQuiesce); err != nil {
-			waitQuiesce(background)
-			return nil, "", "", err
-		}
-	}
-	pgLAddr := pgL.Addr().String()
-	httpLAddr := httpL.Addr().String()
 	args.advertiseAddr = baseCfg.AdvertiseAddr
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
@@ -166,7 +146,6 @@ func StartTenant(
 		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
-	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx)
 
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
@@ -175,6 +154,8 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+
+	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
@@ -197,7 +178,7 @@ func StartTenant(
 		args.rpcContext,
 		s.stopper,
 		grpcMain,
-		pgLAddr,
+		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
 		return nil, "", "", err
@@ -209,42 +190,43 @@ func StartTenant(
 		}
 	}
 
+	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
+
+	httpServer := newHTTPServer(baseCfg)
+
+	httpServer.handleHealth(gwMux)
+
+	// TODO(knz): Add support for the APIv2 tree here.
+	if err := httpServer.setupRoutes(ctx,
+		authServer,      /* authnServer */
+		adminAuthzCheck, /* adminAuthzCheck */
+		args.recorder,   /* metricSource */
+		args.runtime,    /* runtimeStatSampler */
+		gwMux,           /* handleRequestsUnauthenticated */
+		debugServer,     /* handleDebugUnauthenticated */
+		nil,             /* apiServer */
+	); err != nil {
+		return nil, "", "", err
+	}
+
+	connManager := netutil.MakeServer(
+		args.stopper,
+		serverTLSConfig,                          // tlsConfig
+		http.HandlerFunc(httpServer.baseHandler), // handler
+	)
+	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
+		return nil, "", "", err
+	}
+
 	args.recorder.AddNode(
 		args.registry,
 		roachpb.NodeDescriptor{},
 		timeutil.Now().UnixNano(),
-		pgLAddr,   // advertised addr
-		httpLAddr, // http addr
-		pgLAddr,   // sql addr
+		baseCfg.AdvertiseAddr,     // advertised addr
+		baseCfg.HTTPAdvertiseAddr, // http addr
+		baseCfg.SQLAdvertiseAddr,  // sql addr
 	)
-
-	// TODO(knz): use httpServer here instead.
-	mux := http.NewServeMux()
-	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-	mux.Handle("/", debugServer)
-	mux.Handle("/_status/", gwMux)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-		// Return Bad Request if called with arguments.
-		if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-	})
-	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
-	mux.Handle(statusVars, http.HandlerFunc(f))
-	ff := makeStatusLoadHandler(ctx, args.runtime)
-	mux.Handle(loadStatusVars, http.HandlerFunc(ff))
-
-	connManager := netutil.MakeServer(
-		args.stopper,
-		serverTLSConfig, // tlsConfig
-		mux,             // handler
-	)
-	if err := args.stopper.RunAsyncTask(background, "serve-http", func(ctx context.Context) {
-		netutil.FatalIfUnexpected(connManager.Serve(httpL))
-	}); err != nil {
-		return nil, "", "", err
-	}
 
 	const (
 		socketFile = "" // no unix socket
@@ -303,7 +285,7 @@ func StartTenant(
 		return nil, "", "", err
 	}
 
-	return s, pgLAddr, httpLAddr, nil
+	return s, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
 }
 
 func makeTenantSQLServerArgs(
