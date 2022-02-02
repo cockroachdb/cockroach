@@ -17,6 +17,7 @@ go_library(
         "main.go",
         "merge_test_xmls.go",
         "test.go",
+        "ui.go",
         "util.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev",
