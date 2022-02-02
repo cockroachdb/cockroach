@@ -81,6 +81,23 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root
+
+let $schedule_id
+SELECT id FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+
+query T
+SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
+----
+ALTER TABLE [62 as T] WITH (expire_after = ...)
 
 statement ok
 CREATE TABLE no_ttl_table ();
