@@ -12887,7 +12887,13 @@ func TestReplicateQueueProcessOne(t *testing.T) {
 	tc.repl.mu.destroyStatus.Set(errBoom, destroyReasonMergePending)
 	tc.repl.mu.Unlock()
 
-	requeue, err := tc.store.replicateQueue.processOneChange(ctx, tc.repl, func(ctx context.Context, repl *Replica) bool { return false }, true /* dryRun */)
+	requeue, err := tc.store.replicateQueue.processOneChange(
+		ctx,
+		tc.repl,
+		func(ctx context.Context, repl *Replica) bool { return false },
+		false, /* scatter */
+		true,  /* dryRun */
+	)
 	require.Equal(t, errBoom, err)
 	require.False(t, requeue)
 }

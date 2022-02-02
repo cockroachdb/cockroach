@@ -863,15 +863,21 @@ func (a Allocator) simulateRemoveTarget(
 	candidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
+	sl StoreList,
 	rangeUsageInfo RangeUsageInfo,
 	targetType targetReplicaType,
 	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
+	candidateStores := make([]roachpb.StoreDescriptor, 0, len(candidates))
+	for _, cand := range candidates {
+		for _, store := range sl.stores {
+			if cand.StoreID == store.StoreID {
+				candidateStores = append(candidateStores, store)
+			}
+		}
+	}
+
 	// Update statistics first
-	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
-	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
-	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
-	// Try to make this interfere less with other callers.
 	switch t := targetType; t {
 	case voterTarget:
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
@@ -882,7 +888,11 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveVoter(ctx, conf, candidates, existingVoters, existingNonVoters, options)
+
+		return a.removeTarget(
+			ctx, conf, makeStoreList(candidateStores),
+			existingVoters, existingNonVoters, voterTarget, options,
+		)
 	case nonVoterTarget:
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
 		defer a.storePool.updateLocalStoreAfterRebalance(
@@ -892,33 +902,43 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveNonVoter(ctx, conf, candidates, existingVoters, existingNonVoters, options)
+		return a.removeTarget(
+			ctx, conf, makeStoreList(candidateStores),
+			existingVoters, existingNonVoters, nonVoterTarget, options,
+		)
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
 	}
 }
 
+func (a Allocator) storeListForCandidates(candidates []roachpb.ReplicationTarget) StoreList {
+	result := make([]roachpb.StoreDescriptor, 0, len(candidates))
+	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	for _, cand := range candidates {
+		for _, store := range sl.stores {
+			if cand.StoreID == store.StoreID {
+				result = append(result, store)
+			}
+		}
+	}
+	return makeStoreList(result)
+}
+
 func (a Allocator) removeTarget(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
-	candidates []roachpb.ReplicationTarget,
+	candidateStoreList StoreList,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	targetType targetReplicaType,
 	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
-	if len(candidates) == 0 {
+	if len(candidateStoreList.stores) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one" +
 			" candidate replica to allocator.removeTarget()")
 	}
 
 	existingReplicas := append(existingVoters, existingNonVoters...)
-	// Retrieve store descriptors for the provided candidates from the StorePool.
-	candidateStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
-	for i, exist := range candidates {
-		candidateStoreIDs[i] = exist.StoreID
-	}
-	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
 		existingReplicas, conf.NumReplicas, conf.Constraints)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
@@ -978,10 +998,17 @@ func (a Allocator) RemoveVoter(
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(voterCandidates))
+	for i, exist := range voterCandidates {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
+
 	return a.removeTarget(
 		ctx,
 		conf,
-		roachpb.MakeReplicaSet(voterCandidates).ReplicationTargets(),
+		candidateStoreList,
 		existingVoters,
 		existingNonVoters,
 		voterTarget,
@@ -1002,10 +1029,17 @@ func (a Allocator) RemoveNonVoter(
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
 ) (roachpb.ReplicaDescriptor, string, error) {
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(nonVoterCandidates))
+	for i, exist := range nonVoterCandidates {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
+
 	return a.removeTarget(
 		ctx,
 		conf,
-		roachpb.MakeReplicaSet(nonVoterCandidates).ReplicationTargets(),
+		candidateStoreList,
 		existingVoters,
 		existingNonVoters,
 		nonVoterTarget,
@@ -1022,8 +1056,23 @@ func (a Allocator) rebalanceTarget(
 	filter storeFilter,
 	targetType targetReplicaType,
 	options scorerOptions,
+	scatter bool,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	sl, _, _ := a.storePool.getStoreList(filter)
+
+	if scatter {
+		// If we're considering a rebalance due to an `AdminScatterRequest`, we'd like
+		// to ensure that we're returning a random rebalance target to a new store
+		// that's a reasonable fit for an existing replica.
+		//
+		// So we:
+		// 1.Remove the padding provided by `kv.allocator.range_rebalance_threshold`.
+		// 2.Perturb the existing replica counts of the stores inside `sl` by adding
+		// some jitter (equivalent to the `kv.allocator.range_rebalance_threshold`)
+		log.VEventf(ctx, 2, "oversensitizing range-count scorer to scatter aggressively")
+		sl = options.oversensitizeForScatter(sl, a.randGen)
+	}
+
 	existingReplicas := append(existingVoters, existingNonVoters...)
 
 	zero := roachpb.ReplicationTarget{}
@@ -1125,6 +1174,7 @@ func (a Allocator) rebalanceTarget(
 			replicaCandidates,
 			existingPlusOneNew,
 			otherReplicaSet,
+			sl,
 			rangeUsageInfo,
 			targetType,
 			options,
@@ -1198,6 +1248,7 @@ func (a Allocator) RebalanceVoter(
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
 	options scorerOptions,
+	scatter bool,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.rebalanceTarget(
 		ctx,
@@ -1209,6 +1260,7 @@ func (a Allocator) RebalanceVoter(
 		filter,
 		voterTarget,
 		options,
+		scatter,
 	)
 }
 
@@ -1232,6 +1284,7 @@ func (a Allocator) RebalanceNonVoter(
 	rangeUsageInfo RangeUsageInfo,
 	filter storeFilter,
 	options scorerOptions,
+	scatter bool,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	return a.rebalanceTarget(
 		ctx,
@@ -1243,6 +1296,7 @@ func (a Allocator) RebalanceNonVoter(
 		filter,
 		nonVoterTarget,
 		options,
+		scatter,
 	)
 }
 

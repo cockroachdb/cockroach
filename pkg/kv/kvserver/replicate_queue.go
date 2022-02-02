@@ -254,6 +254,7 @@ func (rq *replicateQueue) shouldQueue(
 			rangeUsageInfo,
 			storeFilterThrottled,
 			rq.allocator.scorerOptions(),
+			false, /* scatter */
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for voter, enqueuing")
@@ -268,6 +269,7 @@ func (rq *replicateQueue) shouldQueue(
 			rangeUsageInfo,
 			storeFilterThrottled,
 			rq.allocator.scorerOptions(),
+			false, /* scatter */
 		)
 		if ok {
 			log.VEventf(ctx, 2, "rebalance target found for non-voter, enqueuing")
@@ -304,7 +306,9 @@ func (rq *replicateQueue) process(
 	// selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
-			requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLeaseFrom, false /* dryRun */)
+			requeue, err := rq.processOneChange(
+				ctx, repl, rq.canTransferLeaseFrom, false /* scatter */, false, /* dryRun */
+			)
 			if isSnapshotError(err) {
 				// If ChangeReplicas failed because the snapshot failed, we log the
 				// error but then return success indicating we should retry the
@@ -341,7 +345,7 @@ func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
 	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
-	dryRun bool,
+	scatter, dryRun bool,
 ) (requeue bool, _ error) {
 	// Check lease and destroy status here. The queue does this higher up already, but
 	// adminScatter (and potential other future callers) also call this method and don't
@@ -482,7 +486,15 @@ func (rq *replicateQueue) processOneChange(
 	case AllocatorRemoveLearner:
 		return rq.removeLearner(ctx, repl, dryRun)
 	case AllocatorConsiderRebalance:
-		return rq.considerRebalance(ctx, repl, voterReplicas, nonVoterReplicas, canTransferLeaseFrom, dryRun)
+		return rq.considerRebalance(
+			ctx,
+			repl,
+			voterReplicas,
+			nonVoterReplicas,
+			canTransferLeaseFrom,
+			scatter,
+			dryRun,
+		)
 	case AllocatorFinalizeAtomicReplicationChange:
 		_, err := maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, repl.store, repl.Desc())
 		// Requeue because either we failed to transition out of a joint state
@@ -1072,7 +1084,7 @@ func (rq *replicateQueue) considerRebalance(
 	repl *Replica,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
-	dryRun bool,
+	scatter, dryRun bool,
 ) (requeue bool, _ error) {
 	desc, conf := repl.DescAndSpanConfig()
 	rebalanceTargetType := voterTarget
@@ -1087,6 +1099,7 @@ func (rq *replicateQueue) considerRebalance(
 			rangeUsageInfo,
 			storeFilterThrottled,
 			rq.allocator.scorerOptions(),
+			scatter,
 		)
 		if !ok {
 			// If there was nothing to do for the set of voting replicas on this
@@ -1101,6 +1114,7 @@ func (rq *replicateQueue) considerRebalance(
 				rangeUsageInfo,
 				storeFilterThrottled,
 				rq.allocator.scorerOptions(),
+				scatter,
 			)
 			rebalanceTargetType = nonVoterTarget
 		}

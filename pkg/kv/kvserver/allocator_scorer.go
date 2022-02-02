@@ -87,10 +87,17 @@ var rangeRebalanceThreshold = func() *settings.FloatSetting {
 	return s
 }()
 
-// CockroachDB's has two heuristics that trigger replica rebalancing: range
-// count convergence and QPS convergence. scorerOptions defines the interface
-// that both of these heuristics must implement.
+// CockroachDB has two heuristics that trigger replica rebalancing: range count
+// convergence and QPS convergence. scorerOptions defines the interface that
+// both of these heuristics must implement.
 type scorerOptions interface {
+	// oversensitizeForScatter modifies the `scorerOptions` to remove any padding
+	// that prevents rebalances. It also returns a `StoreList` that's identical to
+	// the parameter `sl`, but with jittered stats on the stores.
+	//
+	// This is to ensure that, when scattering via `AdminScatterRequest`, we will
+	// be more likely to find a rebalance opportunity.
+	oversensitizeForScatter(sl StoreList, allocRand allocatorRand) StoreList
 	// deterministic is set by tests to have the allocator methods sort their
 	// results by constraints score as well as by store IDs, as opposed to just
 	// the score.
@@ -141,6 +148,22 @@ type scorerOptions interface {
 type rangeCountScorerOptions struct {
 	deterministic           bool
 	rangeRebalanceThreshold float64
+}
+
+func (o *rangeCountScorerOptions) oversensitizeForScatter(
+	sl StoreList, allocRand allocatorRand,
+) (perturbedSL StoreList) {
+	perturbedStoreDescs := make([]roachpb.StoreDescriptor, 0, len(sl.stores))
+	for _, store := range sl.stores {
+		jitter := float64(store.Capacity.RangeCount) * o.rangeRebalanceThreshold * (0.25 + allocRand.Float64())
+		if allocRand.Int()%2 == 0 {
+			jitter *= -1
+		}
+		store.Capacity.RangeCount += int32(jitter)
+		perturbedStoreDescs = append(perturbedStoreDescs, store)
+	}
+	o.rangeRebalanceThreshold = 0
+	return makeStoreList(perturbedStoreDescs)
 }
 
 func (o *rangeCountScorerOptions) deterministicForTesting() bool {
@@ -265,6 +288,10 @@ type qpsScorerOptions struct {
 	// qpsPerReplica states the level of traffic being served by each replica in a
 	// range.
 	qpsPerReplica float64
+}
+
+func (o *qpsScorerOptions) oversensitizeForScatter(_ StoreList, _ allocatorRand) StoreList {
+	panic(`unsupported`)
 }
 
 func (o *qpsScorerOptions) deterministicForTesting() bool {

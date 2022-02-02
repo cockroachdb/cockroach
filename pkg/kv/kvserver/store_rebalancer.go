@@ -698,11 +698,13 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			ctx,
 			rbCtx.conf,
 			rbCtx.replWithStats.repl.RaftStatus(),
-			finalVoterTargets, finalNonVoterTargets,
+			finalVoterTargets,
+			finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
 			storeFilterSuspect,
 			voterTarget,
 			options,
+			false, /* scatter */
 		)
 		if !shouldRebalance {
 			log.VEventf(
@@ -761,11 +763,13 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 			ctx,
 			rbCtx.conf,
 			rbCtx.replWithStats.repl.RaftStatus(),
-			finalVoterTargets, finalNonVoterTargets,
+			finalVoterTargets,
+			finalNonVoterTargets,
 			rangeUsageInfoForRepl(rbCtx.replWithStats.repl),
 			storeFilterSuspect,
 			nonVoterTarget,
 			options,
+			false, /* scatter */
 		)
 		if !shouldRebalance {
 			log.VEventf(

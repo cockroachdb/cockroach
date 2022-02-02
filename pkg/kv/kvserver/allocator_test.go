@@ -730,6 +730,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 				a.scorerOptions(),
+				false,
 			)
 			if e, a := tc.expectTargetRebalance, ok; e != a {
 				t.Errorf(
@@ -804,6 +805,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if ok {
 			// Update the descriptor.
@@ -845,6 +847,7 @@ func TestAllocatorMultipleStoresPerNodeLopsided(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		require.False(t, ok)
 	}
@@ -917,6 +920,7 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if !ok {
 			i-- // loop until we find 10 candidates
@@ -1075,6 +1079,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", result.StoreID, details)
@@ -1100,6 +1105,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if ok {
 			t.Fatalf("expected no rebalance, but got target s%d; details: %s", target.StoreID, details)
@@ -1119,6 +1125,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		expTo := stores[1].StoreID
 		expFrom := stores[0].StoreID
@@ -1198,6 +1205,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 				a.scorerOptions(),
+				false,
 			)
 			if c.expected > 0 {
 				if !ok {
@@ -1478,6 +1486,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			options,
+			false,
 		)
 		if subtest.expectRebalance {
 			require.True(t, ok)
@@ -1639,6 +1648,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if ok && result.StoreID != 4 {
 			t.Errorf("expected store 4; got %d", result.StoreID)
@@ -2209,7 +2219,9 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions())
+			a.scorerOptions(),
+			false,
+		)
 		var resultID roachpb.StoreID
 		if ok {
 			resultID = result.StoreID
@@ -2281,6 +2293,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		var gotExpected bool
 		if !ok {
@@ -3121,6 +3134,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			a.scorerOptions(),
+			false,
 		)
 		if !ok {
 			t.Fatalf("%d: RebalanceVoter(%v) returned no target store; details: %s", i, c.existing, details)
@@ -4075,7 +4089,8 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
-			add, remove, _, ok := a.RebalanceNonVoter(ctx,
+			add, remove, _, ok := a.RebalanceNonVoter(
+				ctx,
 				test.conf,
 				nil,
 				test.existingVoters,
@@ -4083,6 +4098,7 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 				a.scorerOptions(),
+				false,
 			)
 			if test.expectNoAction {
 				require.True(t, !ok)
@@ -4140,6 +4156,7 @@ func TestVotersCanRebalanceToNonVoterStores(t *testing.T) {
 		rangeUsageInfo,
 		storeFilterThrottled,
 		a.scorerOptions(),
+		false,
 	)
 
 	require.Truef(t, ok, "no action taken")
@@ -4199,6 +4216,7 @@ func TestNonVotersCannotRebalanceToVoterStores(t *testing.T) {
 		rangeUsageInfo,
 		storeFilterThrottled,
 		a.scorerOptions(),
+		false,
 	)
 
 	require.Falsef(
@@ -5033,6 +5051,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 				a.scorerOptions(),
+				false,
 			)
 			var found bool
 			if !ok && len(tc.validTargets) == 0 {
@@ -7206,6 +7225,68 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 	}
 }
 
+// TestAllocatorRebalanceWithScatter tests that when `scatter` is set to true,
+// the allocator will produce rebalance opportunities even when it normally
+// wouldn't.
+func TestAllocatorRebalanceWithScatter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, _, a, _ := createTestAllocator(ctx, 10 /* numNodes */, true /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1020,
+			},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 990,
+			},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 985,
+			},
+		},
+	}
+
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	var rangeUsageInfo RangeUsageInfo
+	_, _, _, ok := a.RebalanceVoter(
+		ctx,
+		emptySpanConfig(),
+		nil, /* raftStatus */
+		// NB: Note that the only existing replica is on a store that shouldn't
+		// normally shed a replica.
+		replicas(3),
+		nil, /* existingNonVoters */
+		rangeUsageInfo,
+		storeFilterThrottled,
+		&rangeCountScorerOptions{
+			rangeRebalanceThreshold: 0.05,
+		},
+		true, /* scatter */
+	)
+	require.True(t, ok)
+}
+
 // TestAllocatorRebalanceAway verifies that when a replica is on a node with a
 // bad span config, the replica will be rebalanced off of it.
 func TestAllocatorRebalanceAway(t *testing.T) {
@@ -7316,6 +7397,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 				rangeUsageInfo,
 				storeFilterThrottled,
 				a.scorerOptions(),
+				false,
 			)
 
 			if tc.expected == nil && ok {
@@ -7494,6 +7576,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 						rangeUsageInfo,
 						storeFilterThrottled,
 						alloc.scorerOptions(),
+						false,
 					)
 					if ok {
 						if log.V(1) {
@@ -7540,6 +7623,7 @@ func Example_rangeCountRebalancing() {
 			rangeUsageInfo,
 			storeFilterThrottled,
 			alloc.scorerOptions(),
+			false,
 		)
 		if ok {
 			log.Infof(ctx, "rebalancing to %v; details: %s", target, details)
@@ -7646,6 +7730,7 @@ func qpsBasedRebalanceFn(
 		rangeUsageInfo,
 		storeFilterThrottled,
 		opts,
+		false,
 	)
 	if ok {
 		log.Infof(ctx, "rebalancing from %v to %v; details: %s", remove, add, details)
