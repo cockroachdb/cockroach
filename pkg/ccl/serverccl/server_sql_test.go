@@ -152,11 +152,10 @@ func TestTenantHTTP(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	httpClient, err := tenant.RPCContext().GetHTTPClient()
-	require.NoError(t, err)
-
 	t.Run("prometheus", func(t *testing.T) {
-		resp, err := httpClient.Get("https://" + tenant.HTTPAddr() + "/_status/vars")
+		httpClient, err := tenant.GetHTTPClient()
+		require.NoError(t, err)
+		resp, err := httpClient.Get(tenant.AdminURL() + "/_status/vars")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -165,7 +164,9 @@ func TestTenantHTTP(t *testing.T) {
 		require.Contains(t, string(body), "sql_ddl_started_count_internal")
 	})
 	t.Run("pprof", func(t *testing.T) {
-		resp, err := httpClient.Get("https://" + tenant.HTTPAddr() + "/debug/pprof/goroutine?debug=2")
+		httpClient, err := tenant.GetAdminAuthenticatedHTTPClient()
+		require.NoError(t, err)
+		resp, err := httpClient.Get(tenant.AdminURL() + "/debug/pprof/goroutine?debug=2")
 		defer http.DefaultClient.CloseIdleConnections()
 		require.NoError(t, err)
 		defer resp.Body.Close()
