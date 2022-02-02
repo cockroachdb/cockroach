@@ -51,9 +51,9 @@ INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 #               the same as the table's config.
 translate database=db table=t
 ----
-/Table/56{-/2}                             num_replicas=7
-/Table/56/{2-3}                            num_replicas=7 num_voters=5
-/Table/5{6/3-7}                            num_replicas=7
+/Table/106{-/2}                            num_replicas=7
+/Table/106/{2-3}                           num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           num_replicas=7
 
 # Configure GC ttl on the database and override it for the index. The table
 # continues to hold a placeholder zone config.
@@ -64,9 +64,9 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING gc.ttlseconds = 25
 
 translate database=db table=t
 ----
-/Table/56{-/2}                             ttl_seconds=3600 num_replicas=7
-/Table/56/{2-3}                            ttl_seconds=25 num_replicas=7 num_voters=5
-/Table/5{6/3-7}                            ttl_seconds=3600 num_replicas=7
+/Table/106{-/2}                            ttl_seconds=3600 num_replicas=7
+/Table/106/{2-3}                           ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=7
 
 # Configure a zone config field on the table, so that it is no longer a
 # placeholder zone config.
@@ -89,6 +89,6 @@ INDEX db.public.t@idx ALTER INDEX db.public.t@idx CONFIGURE ZONE USING
 
 translate database=db table=t
 ----
-/Table/56{-/2}                             range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
-/Table/56/{2-3}                            range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
-/Table/5{6/3-7}                            range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Table/106{-/2}                            range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7
+/Table/106/{2-3}                           range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=25 num_replicas=7 num_voters=5
+/Table/10{6/3-7}                           range_max_bytes=100000 range_min_bytes=1000 ttl_seconds=3600 num_replicas=7

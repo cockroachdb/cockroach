@@ -153,14 +153,16 @@ func (c collectionBackedDereferencer) fastNamespaceLookup(
 	// TODO(postamar): namespace lookups should go through Collection
 	switch req.ParentID {
 	case descpb.InvalidID:
-		if req.ParentSchemaID == descpb.InvalidID && req.Name == catconstants.SystemDatabaseName {
+		if req.ParentID == descpb.InvalidID &&
+			req.ParentSchemaID == descpb.InvalidID &&
+			req.Name == catconstants.SystemDatabaseName {
 			// Looking up system database ID, which is hard-coded.
 			return true, keys.SystemDatabaseID, nil
 		}
 	case keys.SystemDatabaseID:
 		// Looking up system database objects, which are cached.
-		id, err = lookupSystemDatabaseNamespaceCache(ctx, c.tc.codec(), req.ParentSchemaID, req.Name)
-		return id != descpb.InvalidID, id, err
+		id = c.tc.kv.systemNamespace.lookup(req.ParentSchemaID, req.Name)
+		return id != descpb.InvalidID, id, nil
 	}
 	return false, descpb.InvalidID, nil
 }

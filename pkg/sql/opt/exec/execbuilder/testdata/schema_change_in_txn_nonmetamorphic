@@ -27,38 +27,16 @@ ALTER TABLE t ADD COLUMN g INT NOT NULL DEFAULT(15)
 query T kvtrace(prefix=/Table/56/)
 INSERT INTO t SELECT a + 1 FROM t
 ----
-Scan /Table/56/{1-2}
-CPut /Table/56/1/101/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-CPut /Table/56/1/101/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1101.2
 
 # Expect default values for b, c, zero value for d, and NULL value for e.
 query T kvtrace(prefix=/Table/56/)
 UPSERT INTO t SELECT a + 1 FROM t
 ----
-Scan /Table/56/{1-2}
-Scan /Table/56/{1-2}
-Put /Table/56/1/101/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-Put /Table/56/1/101/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1101.2
-CPut /Table/56/1/102/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-CPut /Table/56/1/102/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1102.2
 
 # Expect default values for b, c, zero value for d, and NULL value for e.
 query T kvtrace(prefix=/Table/56/)
 UPDATE t SET a = a + 100
 ----
-Scan /Table/56/{1-2}
-Del /Table/56/1/100/0
-Del /Table/56/1/100/1/1
-CPut /Table/56/1/200/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-CPut /Table/56/1/200/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1200.2
-Del /Table/56/1/101/0
-Del /Table/56/1/101/1/1
-CPut /Table/56/1/201/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-CPut /Table/56/1/201/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1201.2
-Del /Table/56/1/102/0
-Del /Table/56/1/102/1/1
-CPut /Table/56/1/202/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
-CPut /Table/56/1/202/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1202.2
 
 statement ok
 DELETE FROM t WHERE a=201
