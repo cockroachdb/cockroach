@@ -76,7 +76,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
-	// Find the PK columns; we have to force these to be non-nullable.
+	// Find the PK columns.
 	pkCols := make(map[tree.Name]struct{})
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
@@ -100,7 +100,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		case *tree.ColumnTableDef:
 			if !isMutationColumn(def) {
 				if _, isPKCol := pkCols[def.Name]; isPKCol {
+					// Force PK columns to be non-nullable and non-virtual.
 					def.Nullable.Nullability = tree.NotNull
+					if def.Computed.Computed {
+						def.Computed.Virtual = false
+					}
 				}
 				tab.addColumn(def)
 			}
@@ -714,7 +718,8 @@ func (tt *Table) addIndexWithVersion(
 		tt.deleteOnlyIdxCount++
 	}
 
-	// Add explicit columns and mark primary key columns as not null.
+	// Add explicit columns. Primary key columns definitions have already been
+	// updated to be non-nullable and non-virtual.
 	// Add the geoConfig if applicable.
 	idx.ExplicitColCount = len(def.Columns)
 	notNullIndex := true

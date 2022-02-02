@@ -365,3 +365,24 @@ TABLE generated_as_identity_seq_opt
  ├── tableoid oid [hidden] [system]
  └── PRIMARY INDEX generated_as_identity_seq_opt_pkey
       └── rowid int not null default (unique_rowid()) [hidden]
+
+# Virtual column in primary key is treated as a stored column in the optimizer.
+exec-ddl
+CREATE TABLE virtpk (
+    a INT,
+    v INT AS (a + 10) VIRTUAL,
+    PRIMARY KEY (v, a)
+)
+----
+
+exec-ddl
+SHOW CREATE virtpk
+----
+TABLE virtpk
+ ├── a int not null
+ ├── v int not null as (a + 10) stored
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ └── PRIMARY INDEX virtpk_pkey
+      ├── v int not null as (a + 10) stored
+      └── a int not null
