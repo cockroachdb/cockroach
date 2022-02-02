@@ -292,6 +292,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 		//
 		var partitionFilters, inBetweenFilters memo.FiltersExpr
 
+		ps, _ := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx)
 		indexColumns := tabMeta.IndexKeyColumns(index.Ordinal())
 		firstIndexCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
@@ -325,7 +326,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 			// Even though the partitioned constraints and the inBetween constraints
 			// were consolidated, we must make sure their Union is as well.
-			constraint.ConsolidateSpans(c.e.evalCtx, index)
+			constraint.ConsolidateSpans(c.e.evalCtx, ps)
 
 			// Add all remaining filters that need to be present in the
 			// inBetween spans. Some of the remaining filters are common

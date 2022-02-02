@@ -868,15 +868,6 @@ type Index struct {
 
 	// version is the index descriptor version of the index.
 	version descpb.IndexDescriptorVersion
-
-	// A structure for matching spans to partitions to help determine if a span
-	// can be accessed wholly in the local region.
-	ps *cat.PrefixSorter
-
-	// Keep a record of the EvalContext in use when PrefixSorter was built.
-	// When the PrefixSorter is needed, check if EvalContext has changed, and
-	// if so, rebuild ps (above).
-	evalCtx *tree.EvalContext
 }
 
 // ID is part of the cat.Index interface.
@@ -990,25 +981,6 @@ func (ti *Index) PartitionCount() int {
 // Partition is part of the cat.Index interface.
 func (ti *Index) Partition(i int) cat.Partition {
 	return &ti.partitions[i]
-}
-
-// PrefixSorter returns a struct of the same name which helps distinguish
-// local spans from remote spans.
-func (ti *Index) PrefixSorter(evalCtx *tree.EvalContext) (*cat.PrefixSorter, bool) {
-	if ti.evalCtx == evalCtx {
-		return ti.ps, ti.ps != nil
-	}
-	ti.evalCtx = evalCtx
-	if localPartitions, ok :=
-		cat.HasMixOfLocalAndRemotePartitions(evalCtx, ti); ok {
-		ti.ps = cat.GetSortedPrefixes(ti, *localPartitions, evalCtx)
-	}
-	return ti.ps, ti.ps != nil
-}
-
-// SetPrefixSorter overrides the PrefixSorter in ti with a manually-created one.
-func (ti *Index) SetPrefixSorter(ps *cat.PrefixSorter) {
-	ti.ps = ps
 }
 
 // SetPartitions manually sets the partitions.

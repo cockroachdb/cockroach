@@ -8,6 +8,7 @@ go_library(
         "data_source.go",
         "family.go",
         "index.go",
+        "locality.go",
         "object.go",
         "schema.go",
         "sequence.go",

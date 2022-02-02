@@ -15,10 +15,10 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1053,7 +1053,7 @@ func (ic *Instance) Init(
 	consolidate bool,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
-	index cat.Index,
+	ps *partition.PrefixSorter,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -1069,7 +1069,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, evalCtx, factory, index)
+	ic.indexConstraintCtx.init(columns, notNullCols, computedCols, evalCtx, factory)
 	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 
 	// Note: If consolidate is true, we only consolidate spans at the
@@ -1091,7 +1091,7 @@ func (ic *Instance) Init(
 	// we have [/1/1 - /1/2].
 	if consolidate {
 		ic.consolidatedConstraint = ic.constraint
-		ic.consolidatedConstraint.ConsolidateSpans(evalCtx, index)
+		ic.consolidatedConstraint.ConsolidateSpans(evalCtx, ps)
 		ic.consolidated = true
 	}
 	ic.initialized = true
@@ -1158,9 +1158,6 @@ type indexConstraintCtx struct {
 	keyCtx []constraint.KeyContext
 
 	factory *norm.Factory
-
-	// Metadata for the index of this index constraint.
-	index cat.Index
 }
 
 func (c *indexConstraintCtx) init(
@@ -1169,7 +1166,6 @@ func (c *indexConstraintCtx) init(
 	computedCols map[opt.ColumnID]opt.ScalarExpr,
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
-	index cat.Index,
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -1181,7 +1177,6 @@ func (c *indexConstraintCtx) init(
 		evalCtx:      evalCtx,
 		factory:      factory,
 		keyCtx:       make([]constraint.KeyContext, len(columns)),
-		index:        index,
 	}
 	for i := range columns {
 		c.keyCtx[i].EvalCtx = evalCtx

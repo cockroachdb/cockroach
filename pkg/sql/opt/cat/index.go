@@ -192,12 +192,6 @@ type Index interface {
 	// Partition returns the ith PARTITION BY LIST partition within the index
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
-
-	// PrefixSorter returns a struct of the same name which helps distinguish
-	// local spans from remote spans. If the index is not partitioned, or does
-	// not have at least one local partition and one remote partition, then the
-	// result is nil, false.
-	PrefixSorter(evalCtx *tree.EvalContext) (*PrefixSorter, bool)
 }
 
 // IndexColumn describes a single column that is part of an index definition.

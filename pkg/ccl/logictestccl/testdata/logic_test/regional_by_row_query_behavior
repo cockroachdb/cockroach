@@ -3,37 +3,26 @@
 # the commit that split these changes out.
 
 statement ok
-CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS = "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
-SET database = multi_region_test_db
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
+USE multi_region_test_db
 
 statement ok
 CREATE TABLE regional_by_row_table (
-    pk
-        INT8 PRIMARY KEY,
-    pk2
-        INT8 NOT NULL,
-    a
-        INT8 NOT NULL,
-    b
-        INT8 NOT NULL,
-    j
-        JSONB,
-    INDEX (a),
-    UNIQUE (b),
-    INVERTED INDEX (j),
-    FAMILY (pk, pk2, a, b)
-)
-    LOCALITY REGIONAL BY ROW
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  a int NOT NULL,
+  b int NOT NULL,
+  j JSON,
+  INDEX (a),
+  UNIQUE (b),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, a, b)
+) LOCALITY REGIONAL BY ROW
 
 # Do a REGEXP replace of the enums as these may not be static.
 query T
-SELECT
-    regexp_replace(info, e'@\\d+', '@<enum_val>', 'g')
-FROM
-    [
-        EXPLAIN (OPT, CATALOG)
-            SELECT * FROM regional_by_row_table
-    ]
+SELECT regexp_replace(info, '@\d+', '@<enum_val>', 'g') FROM
+[EXPLAIN (OPT, CATALOG) SELECT * FROM regional_by_row_table]
 ----
 TABLE regional_by_row_table
  ├── pk int not null
@@ -222,85 +211,51 @@ scan regional_by_row_table
 
 
 statement ok
-INSERT
-INTO
-    regional_by_row_table (pk, pk2, a, b, j)
-VALUES
-    (1, 1, 2, 3, '{"a": "b"}'), (4, 4, 5, 6, '{"c": "d"}');
-INSERT
-INTO
-    multi_region_test_db.regional_by_row_table
-        (crdb_region, pk, pk2, a, b)
-VALUES
-    ('ca-central-1', 6, 6, 5, -5)
+INSERT INTO regional_by_row_table (pk, pk2, a, b, j) VALUES
+  (1, 1, 2, 3, '{"a": "b"}'),
+  (4, 4, 5, 6, '{"c": "d"}');
+INSERT INTO multi_region_test_db.regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+  ('ca-central-1', 6, 6, 5, -5)
 
 statement ok
-CREATE UNIQUE INDEX uniq_idx
-    ON regional_by_row_table (a) WHERE b > 0
+CREATE UNIQUE INDEX uniq_idx ON regional_by_row_table(a) WHERE b > 0
 
 query TI
-INSERT
-INTO
-    regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES
-    ('ca-central-1', 7, 7, 8, 9)
-RETURNING
-    crdb_region, pk
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+('ca-central-1', 7, 7, 8, 9)
+RETURNING crdb_region, pk
 ----
 ca-central-1  7
 
 query TI nodeidx=3
-SET database = multi_region_test_db;
-INSERT
-INTO
-    regional_by_row_table (pk, pk2, a, b)
-VALUES
-    (10, 10, 11, 12)
-RETURNING
-    crdb_region, pk
+USE multi_region_test_db; INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+(10, 10, 11, 12)
+RETURNING crdb_region, pk
 ----
 ca-central-1  10
 
 query TI nodeidx=6
-SET database = multi_region_test_db;
-INSERT
-INTO
-    regional_by_row_table (pk, pk2, a, b)
-VALUES
-    (20, 20, 21, 22)
-RETURNING
-    crdb_region, pk
+USE multi_region_test_db; INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES
+(20, 20, 21, 22)
+RETURNING crdb_region, pk
 ----
 us-east-1  20
 
 query TI
-INSERT
-INTO
-    regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES
-    (gateway_region()::crdb_internal_region, 23, 23, 24, 25)
-RETURNING
-    crdb_region, pk
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES
+(gateway_region()::crdb_internal_region, 23, 23, 24, 25)
+RETURNING crdb_region, pk
 ----
 ap-southeast-2  23
 
 query TT
-SELECT
-    start_key, end_key
-FROM
-    [
-        SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)
-    ]
+SELECT start_key, end_key FROM [SHOW RANGE FROM TABLE regional_by_row_table FOR ROW ('ap-southeast-2', 1)]
 ----
 NULL  NULL
 
 query TIIII
-SELECT
-    crdb_region, pk, pk2, a, b
-FROM
-    regional_by_row_table
-ORDER BY
-    pk
+SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
+ORDER BY pk
 ----
 ap-southeast-2  1   1   2   3
 ap-southeast-2  4   4   5   6
@@ -325,22 +280,8 @@ pk  pk2  a   b   j
 
 # Test that a limited, ordered scan is efficient.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (VERBOSE)
-            SELECT
-                *
-            FROM
-                regional_by_row_table
-            ORDER BY
-                pk
-            LIMIT
-                5
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT * FROM regional_by_row_table
+ORDER BY pk LIMIT 5] OFFSET 2
 ----
 ·
 • limit
@@ -388,13 +329,10 @@ OFFSET
 # according to the crdb_region column.
 statement ok
 ALTER TABLE regional_by_row_table SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
-ALTER TABLE regional_by_row_table RELOCATE VOTERS VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0)
+ALTER TABLE regional_by_row_table EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT
-    start_key, end_key, replicas, lease_holder
-FROM
-    [SHOW RANGES FROM TABLE regional_by_row_table]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE regional_by_row_table]
 ----
 start_key  end_key    replicas  lease_holder
 NULL       /"\x80"/0  {1}       1
@@ -406,15 +344,7 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Query with locality optimized search disabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT * FROM regional_by_row_table WHERE pk = 1
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
 ·
 • scan
@@ -425,11 +355,10 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kN2q2kAQgO_7FMNctWVLfuxFCRQsNtKAVZsEWjBB1uwgqTG73d1QRfLuJcmF9SCHcxQv5-eb-WZOaP5UGGASzsJJCu9hGi--wyr8tZx9iebw9muUpMmP2Tu4bNC0LWXNq_XmuNby79ryTUXw81sYh6B28Bm8HBbTaRKm4CPDWgqa8z0ZDFboYc5QaVmQMVJ3qVPfEIkDBi7DslaN7dI5w0JqwuCEtrQVYYBptycmLkg7LjIUZHlZ9WOvKo2VLvdcH5HhRFbNvjYBqB0DtfMZcAYbBr-RYaJ4V3EyHGfoeI6LectQNvZsYizfEgZey26z9R5hm2WHT-6jjP0HGRe3G59Fm1pqQZrEhWTeXrlpLj9I5YyeNF5f7b_mWTEZJWtDL5rsdmoktjTcYWSjC1pqWfRrhnDRc31CkLFDdTQEUd2X-t_8D3v3wP498OhZ-OMF7LZ5--ZfAAAA___eJXDk
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-EXPLAIN (VEC)
-    SELECT * FROM regional_by_row_table WHERE pk = 1
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
 ----
 │
 └ Node 1
@@ -442,22 +371,14 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT * FROM regional_by_row_table WHERE pk = 1;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
 
 # All rows are scanned at once without the optimization.
 query T rowsort
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"\xc0"/1/0
 Scan /Table/60/1/"@"/1/0
@@ -472,18 +393,10 @@ SET locality_optimized_partitioned_index_scan = true
 
 # First check the plan with the vectorized engine.
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT * FROM regional_by_row_table WHERE pk = 1
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
 ·
 • union all
@@ -502,8 +415,7 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kt-L00AQx9_9K4Z5UlnJj1aQgHByplio7dkEFC6hbLNDWZtk190N3lHyv0uShzNSe3c9-rgz8-l85tsc0P4qMcIkXsTXKbyF2Xr1FW7jHzeLT_MlvP48T9Lk2-INjAcM7aSqebnZ3m-M-r1xfFsSfP8Sr2PQe_gIQQ6r2SyJUwiRYa0ELXlFFqNbDDBnqI0qyFplutKhH5iLO4x8hrLWjevKOcNCGcLogE66kjDCtNuzJi7IeD4yFOS4LPufPap0pY2suLlHhteqbKraRqD3DPQ-ZMAZbBn8RIaJ5l3HyzDL7j74GXqB52PeMlSNe7Cxju8Io6Bl5xkHFzIuzjd-EG1qZQQZEiPJvD1y01K9U9oL_xk8vjo8N6zJJcK6eiSoyROCsmQkL-HZeU3HBy1kJR0E_1XxnxPcmqxWtaUn_SV-50hiR8NdVjWmoBujin7N8Fz1XF8QZN3QDYfHvO5b_Uf1Nxy8BA5PwtPT8OQl8PQk_H4E-23evvoTAAD__82-s3M=
 
 query T
-EXPLAIN (VEC)
-    SELECT * FROM regional_by_row_table WHERE pk = 1
+EXPLAIN (VEC) SELECT * FROM regional_by_row_table WHERE pk = 1
 ----
 │
 └ Node 1
@@ -516,19 +428,10 @@ EXPLAIN (VEC)
 
 # Now check the physical plan for the row-by-row engine.
 statement ok
-SET vectorize = off
+SET vectorize=off
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT * FROM regional_by_row_table WHERE pk = 1
-    ]
-        AS temp (a)
-WHERE
-    a LIKE '%Diagram%'
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM regional_by_row_table WHERE pk = 1] AS temp(a) WHERE a LIKE '%Diagram%'
 ----
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0keFr1EAQxb_7VwwDpa2sJBu_SEBoaSMG47VeDhR64di7Hc71kt11d4MtR_53SSLUSCOo-HHemzf5vewR_dcaUyyzIrtawXN4s7x5D3fZp9viMl_A2XVersoPxTlMFxztldGi3mwfNs582wSxrQk-vs2WGdgDvAZewWUJgRoLZ-L8hyOgyN9lcHpyrcTeiebkFBlqI2khGvKY3iHHiqF1ZkfeG9dLx2Ehl_eYxgyVtm3o5YrhzjjC9IhBhZowxVXPsCQhyUUxMpQUhKqHs0_iXlinGuEekOGVqdtG-xTsgYE9JAwEgy2DL8iwtKJ3ojWu1_ev4jVGPIpBaAkcTPhMDquOoWnDI5kPYk-Y8o79HT3_H_QXI_ksbTJL-wjpySlRQ6uNk-RITjir7olaC_PC2CiZFipUowLwWZT4T37ckrw12tMvLHOXK4Yk9zT28qZ1O7p1Zjd8ZhxvhtwgSPJhdJNxyPVgDS_7c5j_Szj5bfjlJBx3VffsewAAAP__tYozcQ==
 
@@ -536,50 +439,33 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT * FROM regional_by_row_table WHERE pk = 1;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 1; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/1/0
 fetched: /regional_by_row_table/regional_by_row_table_pkey/?/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
 output row: [1 1 2 3 '{"a": "b"}']
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT * FROM regional_by_row_table WHERE pk = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched
 # in parallel. Note that if the row is quickly found in one remote region, the
 # other remote region might not be read from at all.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-        AND message NOT LIKE e'Scan%"\\\\xc0"%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%' AND message NOT LIKE 'Scan%"\\xc0"%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/10/0
 Scan /Table/60/1/"\x80"/10/0
@@ -587,26 +473,18 @@ fetched: /regional_by_row_table/regional_by_row_table_pkey/?/10/pk2/a/b -> /10/1
 output row: [10 10 11 12 NULL]
 
 statement ok
-SET vectorize = off
+SET vectorize=off
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT * FROM regional_by_row_table WHERE pk = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk = 10; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched
 # in parallel.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/10/0
 Scan /Table/60/1/"\x80"/10/0, /Table/60/1/"\xc0"/10/0
@@ -619,17 +497,8 @@ RESET vectorize
 # The local region for this query is ca-central-1, so that span should be
 # scanned in the first child of the limited union all.
 query T nodeidx=3
-SET database = multi_region_test_db;
-SET locality_optimized_partitioned_index_scan = true;
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT * FROM regional_by_row_table WHERE pk = 1
-    ]
-OFFSET
-    2
+USE multi_region_test_db; SET locality_optimized_partitioned_index_scan = true;
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk = 1] OFFSET 2
 ----
 ·
 • union all
@@ -648,20 +517,7 @@ OFFSET
 
 # Query with more than one key.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                regional_by_row_table
-            WHERE
-                pk IN (1, 4)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table WHERE pk IN (1, 4)] OFFSET 2
 ----
 ·
 • union all
@@ -678,22 +534,14 @@ OFFSET
       spans: [/'ca-central-1'/1 - /'ca-central-1'/1] [/'ca-central-1'/4 - /'ca-central-1'/4] [/'us-east-1'/1 - /'us-east-1'/1] [/'us-east-1'/4 - /'us-east-1'/4]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT * FROM regional_by_row_table WHERE pk IN (1, 4);
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM regional_by_row_table WHERE pk IN (1, 4); SET tracing = off
 
 # Both rows are found in the local region, so the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/60/1/"@"/1/0, /Table/60/1/"@"/4/0
 fetched: /regional_by_row_table/regional_by_row_table_pkey/?/1/pk2/a/b/j -> /1/2/3/'{"a": "b"}'
@@ -704,49 +552,35 @@ output row: [4 4 5 6 '{"c": "d"}']
 # Tests using locality optimized search for lookup joins (including foreign
 # key checks).
 statement ok
-CREATE TABLE parent (p_id INT8 PRIMARY KEY, FAMILY (p_id))
-    LOCALITY REGIONAL BY ROW
+CREATE TABLE parent (
+  p_id INT PRIMARY KEY,
+  FAMILY (p_id)
+) LOCALITY REGIONAL BY ROW;
 
 statement ok
 CREATE TABLE child (
-    c_id
-        INT8 PRIMARY KEY,
-    c_p_id
-        INT8 REFERENCES parent (p_id),
-    INDEX (c_p_id),
-    FAMILY (c_id, c_p_id)
-)
-    LOCALITY REGIONAL BY ROW
+  c_id INT PRIMARY KEY,
+  c_p_id INT REFERENCES parent (p_id),
+  INDEX (c_p_id),
+  FAMILY (c_id, c_p_id)
+) LOCALITY REGIONAL BY ROW;
 
 statement ok
-INSERT
-INTO
-    parent (crdb_region, p_id)
-VALUES
-    ('ap-southeast-2', 10),
-    ('ca-central-1', 20),
-    ('us-east-1', 30)
+INSERT INTO parent (crdb_region, p_id)
+VALUES ('ap-southeast-2', 10), ('ca-central-1', 20), ('us-east-1', 30)
 
 statement ok
-INSERT
-INTO
-    child (crdb_region, c_id, c_p_id)
-VALUES
-    ('ap-southeast-2', 10, 10),
-    ('ca-central-1', 20, 20),
-    ('us-east-1', 30, 30)
+INSERT INTO child (crdb_region, c_id, c_p_id)
+VALUES ('ap-southeast-2', 10, 10), ('ca-central-1', 20, 20), ('us-east-1', 30, 30)
 
 # Split the child table into 3 regions and change the leaseholders to be "local"
 # according to the crdb_region column.
 statement ok
 ALTER TABLE child SPLIT AT VALUES ('ca-central-1', 0), ('us-east-1', 0);
-ALTER TABLE child RELOCATE VOTERS VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0)
+ALTER TABLE child EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'ap-southeast-2', 0), (ARRAY[4], 'ca-central-1', 0), (ARRAY[7], 'us-east-1', 0);
 
 query TTTI colnames,rowsort
-SELECT
-    start_key, end_key, replicas, lease_holder
-FROM
-    [SHOW RANGES FROM TABLE child]
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE child]
 ----
 start_key  end_key    replicas  lease_holder
 NULL       /"\x80"/0  {1}       1
@@ -758,29 +592,7 @@ SET locality_optimized_partitioned_index_scan = false
 
 # Anti join with locality optimized search disabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                child
-            WHERE
-                NOT
-                    EXISTS(
-                        SELECT
-                            *
-                        FROM
-                            parent
-                        WHERE
-                            p_id = c_p_id
-                    )
-                AND c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (anti)
@@ -794,28 +606,14 @@ OFFSET
       spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    NOT EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -824,23 +622,7 @@ fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 # Semi join with locality optimized search disabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                child
-            WHERE
-                EXISTS(
-                    SELECT * FROM parent WHERE p_id = c_p_id
-                )
-                AND c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (semi)
@@ -854,28 +636,14 @@ OFFSET
       spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -885,20 +653,7 @@ output row: [10 10]
 
 # Inner join with locality optimized search disabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                child INNER JOIN parent ON p_id = c_p_id
-            WHERE
-                c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
 • lookup join
@@ -912,27 +667,14 @@ OFFSET
       spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child INNER JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -942,20 +684,7 @@ output row: [10 10 10]
 
 # Left join with locality optimized search disabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                child LEFT JOIN parent ON p_id = c_p_id
-            WHERE
-                c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (left outer)
@@ -969,27 +698,14 @@ OFFSET
       spans: [/'ap-southeast-2'/10 - /'ap-southeast-2'/10] [/'ca-central-1'/10 - /'ca-central-1'/10] [/'us-east-1'/10 - /'us-east-1'/10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child LEFT JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # All regions are scanned without the optimization.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0, /Table/62/1/"\x80"/10/0, /Table/62/1/"\xc0"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -1002,29 +718,7 @@ SET locality_optimized_partitioned_index_scan = true
 
 # Anti join with locality optimized search enabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT
-                *
-            FROM
-                child
-            WHERE
-                NOT
-                    EXISTS(
-                        SELECT
-                            *
-                        FROM
-                            parent
-                        WHERE
-                            p_id = c_p_id
-                    )
-                AND c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (anti)
@@ -1053,17 +747,10 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0k_Frm0AUx3_fX_F4vyQZN3Iay8pBwNAaZnHaJcIKjRSnj9bNeO48ISXkfx9qoDEsYW3Zb96779f7fN-922L1O0eBS8dzrkL4CPNF8BXunbtbb-b6MLx2l-HymzeCviB5yvIUvn9xFg4M_SAE564RwrAvK2NFhd7ryocshSkkD83HaAQz_xqGSVc0-CiCYD5fOiGYyLCQKfnxmioU92hgxLBUMqGqkqopbVuBm25QcIZZUda6KUcME6kIxRZ1pnNCgWH8I6cFxSmpMUeGKek4y9vfthnsUmXrWD0jwyuZ1-uiEtAwsT0nMlyWcVMdr3C12lzyFY4NPuYQFykYIPUTKYx2DGWtXzAqHT8SCmPH3oZqvBfV3mOeRDNPor0QVaSyOIe6kColRWkPKtr9JYMvP8lybPbpvWydaTBOovDXdOlGZsW-SZP-MeFzSQI8Zx7CzA9duAlcHxl2M3jQPE_KX3UJP2VWgCwEDO0JTME29xNpWzCFzcDiAyGEbXDOLz6PkGFQawG2wWzzZJDJG4NY_ytI84I3g8vDKAw2g6SX7R_DWa8Jt6CqlEVFRxNz6v4jhpQ-Ujd9laxVQrdKJu0x3TJofW0hpUp3u2a3cIt2q31sh2bjPWbzrHnSM_Nj8-Ss2Tpvts6aL47M0e7DnwAAAP__BdnO9w==
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-EXPLAIN (VEC)
-    SELECT
-        *
-    FROM
-        child
-    WHERE
-        NOT EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-        AND c_id = 10
+EXPLAIN (VEC) SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
 ----
 │
 └ Node 1
@@ -1078,28 +765,14 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    NOT EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -1107,29 +780,15 @@ Scan /Table/61/1/"@"/10/0
 fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    NOT EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 20;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE NOT EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
@@ -1140,23 +799,7 @@ fetched: /parent/parent_pkey/?/? -> <undecoded>
 
 # Semi join with locality optimized search enabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT
-                *
-            FROM
-                child
-            WHERE
-                EXISTS(
-                    SELECT * FROM parent WHERE p_id = c_p_id
-                )
-                AND c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (semi)
@@ -1181,17 +824,10 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk9Fr2zAQxt_3Vxz3kmRoRHY6VgQBl9ZhLm7SxYYVGlM8-2i9OZInyZAS8r8P24HGYeno-madvu_086fTFs3vEgVGfuhfxvARZsvFDdz7d7fhRTCH4VUQxdG3cAR9QfZUlDl8_-ovffDvGg0M-4oq1STtXlI9FDlMIXtoPkZwMb-CYdbVHD5KYDGbRX4MLjKUKqd5uiaD4h4dTBhWWmVkjNJNadsKgnyDgjMsZFXbppwwzJQmFFu0hS0JBcbpj5KWlOakxxwZ5mTTomzbtvRepYt1qp-R4aUq67U0AhomtsdEhlGVNtXxClerzTlf4djhYw6pzMEBZZ9IY7JjqGr7gmFs-kgonB37P1TnvajeHvMkmnsS7YXIkC7SEmqpdE6a8h5UsvvLP8zVJ1WN3T59WKwLC85JFP6WlK5VIfchTfrHxM8VCQj9WQyRfxPA9SKYI8NuBA_CC5X6VVfwUxUSlBQw9CYwBc_dT6R3BlPYDM74QAjhOZzzz19GyHBJa2UJyn-6mwezGZwf-hlsBlmvYdNxUVsBnsM892Q0k7dEsyRTKWno6JpOhZ4wpPyRuis3qtYZ3WqVtcd0y0Xraws5Gdvtut0ikO1WO-GHZuc9ZvdV86Rn5sfmyavmsyNzsvvwJwAA__8mqI1i
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-EXPLAIN (VEC)
-    SELECT
-        *
-    FROM
-        child
-    WHERE
-        EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-        AND c_id = 10
+EXPLAIN (VEC) SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10
 ----
 │
 └ Node 1
@@ -1205,28 +841,14 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -1235,29 +857,15 @@ fetched: /parent/parent_pkey/?/? -> <undecoded>
 output row: [10 10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child
-WHERE
-    EXISTS(SELECT * FROM parent WHERE p_id = c_p_id)
-    AND c_id = 20;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child WHERE EXISTS (SELECT * FROM parent WHERE p_id = c_p_id) AND c_id = 20; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
@@ -1269,20 +877,7 @@ output row: [20 20]
 
 # Inner join with locality optimized search enabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT
-                *
-            FROM
-                child INNER JOIN parent ON p_id = c_p_id
-            WHERE
-                c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
 • lookup join
@@ -1307,16 +902,10 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk1Fr2zAQx9_3KY57STI0ItsZK4KAS-swl8zunMAGjSmefbTeHMmTZMgI-e4jdqBxWDravlkn_U4__yVt0fyuUOAimAdXS3gPsyT-AnfB99v5ZRjB8DpcLBdf5yPoL8gfy6qAMIqCBG7iMII60yQtxBHU92UBU8jv249vn4MkgLyrOTyFeDZbBEtwkaFUBUXZmgyKO3QwZVhrlZMxSu9L23ZBWGxQcIalrBu7L6cMc6UJxRZtaStCgcvsR0UJZQXpMUeGBdmsrNq2rahf63Kd6T_I8EpVzVoa0SqxgyUyXNTZvjpe4Wq1ueArHDt8zCGTBTig7CNpTHcMVWOfNIzNHgiFs2OvU3XequofNM-quWfVnowM6TKroJFKF6Sp6Emlu3_8Q6Q-qHrs9u3n5bq04JxV4S9J6UaV8hCS19-mu2dHKc2V-tXU8FOVEpQUMPQ9mILvjuAyuoahP4EpbAYTPhBC-A7n_OOnETJMaK0sQfVfev8INoOLY57BZpD3Gu47xo0V4DvMd5nvnY3Be0kMCZlaSUMnR3Iu4JQhFQ_UHa9Rjc7pVqu83aYbxi3XFgoytpt1u0Eo26n2Nh_Dzltg91nY68H8FPaehScncLp79zcAAP__MAGCxw==
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-EXPLAIN (VEC)
-    SELECT
-        *
-    FROM
-        child INNER JOIN parent ON p_id = c_p_id
-    WHERE
-        c_id = 10
+EXPLAIN (VEC) SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10
 ----
 │
 └ Node 1
@@ -1330,27 +919,14 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child INNER JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -1359,28 +935,15 @@ fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child INNER JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 20;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child INNER JOIN parent ON p_id = c_p_id WHERE c_id = 20; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
@@ -1392,20 +955,7 @@ output row: [20 20 20]
 
 # Left join with locality optimized search enabled.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (DISTSQL)
-            SELECT
-                *
-            FROM
-                child LEFT JOIN parent ON p_id = c_p_id
-            WHERE
-                c_id = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (DISTSQL) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10] OFFSET 2
 ----
 ·
 • lookup join (left outer)
@@ -1430,16 +980,10 @@ OFFSET
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykk2Fr2zwQx98_n-K4N2kfNCLbGSuCgEvrsBTP7hyPDRpTPPtovTmWJ8mQEvLdR-RA47B0dH0XnfQ7_fLXeYP6V40CF0EYXKXwP8yS-BPcBd9uw8t5BGfX80W6-Byew_BA8VjVJYTBLIWbeB5BmytqDMQRtPdVCVMo7u2Prx-DJICirzk8g3g2WwQpuMiwkSVF-Yo0ijt0MGPYKlmQ1lLtSht7YF6uUXCGVdN2ZlfOGBZSEYoNmsrUhALT_HtNCeUlqTFHhiWZvKptW-vpt6pa5eoJGV7Juls1WlgltrdEhos231XHS1wu1xd8iWOHjznkTQkOSPNICrMtQ9mZZw1t8gdC4WzZv6k6b1X195on1dyTas9GmlSV19A1UpWkqBxIZds__IdIvpPt2B3ah9WqMuCcVOGvSelGVs0-JG94TfrUkujnLv6SBomdPmTYz99BeqGUP7sWfsiqAdkIOPM9mILvnsNldA1n_gSmsB5N-EgI4Tuc8_cfzpFhQitpCOq_0rtvYz26OOQZrEfFoOGuY9wZAb7DfJf53sl4vNfEk5BuZaPp6KlOBZ8xpPKB-mfXslMF3SpZ2Gv6ZWw5WyhJm37X7Rfzxm7ZKT-EnbfA7ouwN4D5Mey9CE-O4Gz73-8AAAD__1ZPiQw=
 
 statement ok
-SET vectorize = "on"
+SET vectorize=on
 
 query T
-EXPLAIN (VEC)
-    SELECT
-        *
-    FROM
-        child LEFT JOIN parent ON p_id = c_p_id
-    WHERE
-        c_id = 10
+EXPLAIN (VEC) SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10
 ----
 │
 └ Node 1
@@ -1453,27 +997,14 @@ statement ok
 RESET vectorize
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child LEFT JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 10;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 10; SET tracing = off
 
 # If the row is found in the local region, the other regions are not searched.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/10/0
 fetched: /child/child_pkey/?/10/c_p_id -> /10
@@ -1482,28 +1013,15 @@ fetched: /parent/parent_pkey/'ap-southeast-2'/10 -> <undecoded>
 output row: [10 10 10]
 
 statement ok
-SET TRACING = "on", kv, results;
-SELECT
-    *
-FROM
-    child LEFT JOIN parent ON p_id = c_p_id
-WHERE
-    c_id = 20;
-SET TRACING = off
+SET tracing = on,kv,results; SELECT * FROM child LEFT JOIN parent ON p_id = c_p_id WHERE c_id = 20; SET tracing = off
 
 # If the row is not found in the local region, the other regions are searched in
 # parallel.
 query T
-SELECT
-    message
-FROM
-    [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
-WHERE
-    message LIKE 'fetched:%'
-    OR message LIKE 'output row%'
-    OR message LIKE 'Scan%'
-ORDER BY
-    "ordinality" ASC
+SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+ OR message LIKE 'Scan%'
+ ORDER BY ordinality ASC
 ----
 Scan /Table/62/1/"@"/20/0
 Scan /Table/62/1/"\x80"/20/0, /Table/62/1/"\xc0"/20/0
@@ -1514,12 +1032,7 @@ fetched: /parent/parent_pkey/'ca-central-1'/20 -> <undecoded>
 output row: [20 20 20]
 
 query T
-SELECT
-    *
-FROM
-    [EXPLAIN INSERT INTO child VALUES (1, 1)]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN INSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -1563,12 +1076,7 @@ OFFSET
                       label: buffer 1
 
 query T
-SELECT
-    *
-FROM
-    [EXPLAIN UPSERT INTO child VALUES (1, 1)]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN UPSERT INTO child VALUES (1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -1618,12 +1126,7 @@ OFFSET
                       label: buffer 1
 
 query T
-SELECT
-    *
-FROM
-    [EXPLAIN DELETE FROM parent WHERE p_id = 1]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN DELETE FROM parent WHERE p_id = 1] OFFSET 2
 ----
 ·
 • root
@@ -1661,38 +1164,42 @@ OFFSET
 
 # Tests creating a index and a unique constraint on a REGIONAL BY ROW table.
 statement ok
-CREATE INDEX new_idx ON regional_by_row_table (a, b)
+CREATE INDEX new_idx ON regional_by_row_table(a, b)
 
 # The validation query to create the unique constraint should be efficient (see
 # #56201).
 statement ok
-CREATE TABLE t56201 (a INT8, b STRING, c STRING NOT NULL)
-    LOCALITY REGIONAL BY ROW;
-ALTER TABLE t56201
-    INJECT STATISTICS e'[\n  {\n    "columns": ["a"],\n    "distinct_count": 3,\n    "row_count": 1000000,\n    "created_at": "2018-01-01 1:00:00.00000+00:00"\n  },\n  {\n    "columns": ["b"],\n    "distinct_count": 999900,\n    "null_count": 5,\n    "row_count": 1000000,\n    "created_at": "2018-01-01 1:00:00.00000+00:00"\n  },\n  {\n    "columns": ["c"],\n    "distinct_count": 999999,\n    "row_count": 1000000,\n    "created_at": "2018-01-01 1:00:00.00000+00:00"\n  }\n]';
-ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b)
+CREATE TABLE t56201 (a INT, b STRING, c STRING NOT NULL) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t56201 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "distinct_count": 3,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["b"],
+    "distinct_count": 999900,
+    "null_count": 5,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c"],
+    "distinct_count": 999999,
+    "row_count": 1000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  }
+]';
+ALTER TABLE t56201 ADD CONSTRAINT key_a_b UNIQUE (a, b);
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (VERBOSE)
-            SELECT
-                a, b
-            FROM
-                t56201
-            WHERE
-                a IS NOT NULL AND b IS NOT NULL
-            GROUP BY
-                a, b
-            HAVING
-                count(*) > 1
-            LIMIT
-                1
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT a, b
+FROM t56201
+WHERE a IS NOT NULL AND b IS NOT NULL
+GROUP BY a, b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
 ----
 ·
 • project
@@ -1766,29 +1273,15 @@ OFFSET
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
 statement ok
-CREATE UNIQUE INDEX key_b_partial ON t56201 (b) WHERE a > 0
+CREATE UNIQUE INDEX key_b_partial ON t56201 (b) WHERE a > 0;
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (VERBOSE)
-            SELECT
-                b
-            FROM
-                t56201@key_b_partial
-            WHERE
-                b IS NOT NULL AND a > 0
-            GROUP BY
-                b
-            HAVING
-                count(*) > 1
-            LIMIT
-                1
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT b
+FROM t56201@key_b_partial
+WHERE b IS NOT NULL AND a > 0
+GROUP BY b
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
 ----
 ·
 • project
@@ -1848,29 +1341,15 @@ OFFSET
                           spans: /"\xc0"/!NULL-/"\xc0"/PrefixEnd
 
 statement ok
-CREATE UNIQUE INDEX key_c_partial ON t56201 (c) WHERE a = 1
+CREATE UNIQUE INDEX key_c_partial ON t56201 (c) WHERE a = 1;
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN (VERBOSE)
-            SELECT
-                c
-            FROM
-                t56201
-            WHERE
-                c IS NOT NULL AND a = 1
-            GROUP BY
-                c
-            HAVING
-                count(*) > 1
-            LIMIT
-                1
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN (VERBOSE) SELECT c
+FROM t56201
+WHERE c IS NOT NULL AND a = 1
+GROUP BY c
+HAVING count(*) > 1
+LIMIT 1] OFFSET 2
 ----
 ·
 • project
@@ -1926,8 +1405,7 @@ OFFSET
                       spans: /"\xc0"-/"\xc0"/PrefixEnd
 
 statement ok
-ALTER TABLE regional_by_row_table
-    ADD CONSTRAINT unique_b_a UNIQUE (b, a)
+ALTER TABLE regional_by_row_table ADD CONSTRAINT unique_b_a UNIQUE(b, a)
 
 # We should plan uniqueness checks for all unique indexes in
 # REGIONAL BY ROW tables.
@@ -1935,19 +1413,7 @@ ALTER TABLE regional_by_row_table
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            INSERT
-            INTO
-                regional_by_row_table (pk, pk2, a, b)
-            VALUES
-                (1, 1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table (pk, pk2, a, b) VALUES (1, 1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2014,11 +1480,7 @@ OFFSET
                   label: buffer 1
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_b_key"\nDETAIL: Key \(b\)=\(3\) already exists\.
-INSERT
-INTO
-    regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES
-    ('us-east-1', 2, 3, 2, 3)
+INSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)
 
 # The conflict columns in an upsert should only include the primary key,
 # not the region column.
@@ -2026,20 +1488,7 @@ VALUES
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            UPSERT
-            INTO
-                regional_by_row_table
-                    (crdb_region, pk, pk2, a, b)
-            VALUES
-                ('us-east-1', 2, 3, 2, 3)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b) VALUES ('us-east-1', 2, 3, 2, 3)] OFFSET 2
 ----
 ·
 • root
@@ -2114,21 +1563,8 @@ OFFSET
 # to stats issues w/ empty stats, partial indexes and multicol stats its not.
 # Hopefully fixing #67583 (and possibly #67479) will resolve this.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            UPSERT
-            INTO
-                regional_by_row_table
-                    (crdb_region, pk, pk2, a, b)
-            VALUES
-                ('us-east-1', 23, 24, 25, 26),
-                ('ca-central-1', 30, 30, 31, 32)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)] OFFSET 2
 ----
 ·
 • root
@@ -2195,16 +1631,8 @@ OFFSET
                   label: buffer 1
 
 query TIIIIIIIIT colnames
-SELECT
-    *
-FROM
-    (
-        VALUES
-            ('us-east-1', 23, 24, 25, 26),
-            ('ca-central-1', 30, 30, 31, 32)
-    )
-        AS v (crdb_region, pk, pk2, a, b)
-    LEFT JOIN regional_by_row_table AS t ON v.pk = t.pk
+SELECT * FROM (VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)) AS v(crdb_region, pk, pk2, a, b)
+LEFT JOIN regional_by_row_table t ON v.pk = t.pk;
 ----
 crdb_region   pk  pk2  a   b   pk    pk2   a     b     j
 us-east-1     23  24   25  26  23    23    24    25    NULL
@@ -2212,20 +1640,12 @@ ca-central-1  30  30   31  32  NULL  NULL  NULL  NULL  NULL
 
 # One row already exists, one row is new.
 statement ok
-UPSERT
-INTO
-    regional_by_row_table (crdb_region, pk, pk2, a, b)
-VALUES
-    ('us-east-1', 23, 24, 25, 26),
-    ('ca-central-1', 30, 30, 31, 32)
+UPSERT INTO regional_by_row_table (crdb_region, pk, pk2, a, b)
+VALUES ('us-east-1', 23, 24, 25, 26), ('ca-central-1', 30, 30, 31, 32)
 
 query TIIII colnames
-SELECT
-    crdb_region, pk, pk2, a, b
-FROM
-    regional_by_row_table
-ORDER BY
-    pk
+SELECT crdb_region, pk, pk2, a, b FROM regional_by_row_table
+ORDER BY pk
 ----
 crdb_region     pk  pk2  a   b
 ap-southeast-2  1   1    2   3
@@ -2238,10 +1658,7 @@ us-east-1       23  24   25  26
 ca-central-1    30  30   31  32
 
 query T
-SELECT
-    create_statement
-FROM
-    [SHOW CREATE regional_by_row_table]
+SELECT create_statement FROM [SHOW CREATE TABLE regional_by_row_table]
 ----
 CREATE TABLE public.regional_by_row_table (
                             pk INT8 NOT NULL,
@@ -2261,15 +1678,9 @@ CREATE TABLE public.regional_by_row_table (
 ) LOCALITY REGIONAL BY ROW
 
 query TTB colnames
-SELECT
-    index_name, column_name, implicit
-FROM
-    crdb_internal.index_columns
-WHERE
-    descriptor_name = 'regional_by_row_table'
-    AND column_type = 'key'
-ORDER BY
-    1, 2
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 'regional_by_row_table' AND column_type = 'key'
+ORDER BY 1, 2
 ----
 index_name                   column_name  implicit
 new_idx                      a            false
@@ -2293,34 +1704,23 @@ unique_b_a                   crdb_region  true
 
 statement ok
 CREATE TABLE regional_by_row_table_as (
-    pk
-        INT8 PRIMARY KEY,
-    a
-        INT8,
-    b
-        INT8,
-    crdb_region_col
-        crdb_internal_region
-        AS (
-            CASE
-            WHEN pk <= 10 THEN 'us-east-1'
-            ELSE 'ap-southeast-2'
-            END
-        ) STORED,
-    INDEX (a),
-    UNIQUE (b),
-    FAMILY (pk, a, b)
-)
-    LOCALITY REGIONAL BY ROW AS crdb_region_col
+  pk int PRIMARY KEY,
+  a int,
+  b int,
+  crdb_region_col crdb_internal_region AS (
+    CASE
+      WHEN pk <= 10 THEN 'us-east-1'
+      ELSE 'ap-southeast-2'
+    END
+  ) STORED,
+  INDEX (a),
+  UNIQUE (b),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW AS crdb_region_col
 
 query TI
-INSERT
-INTO
-    regional_by_row_table_as (pk)
-VALUES
-    (1), (10), (20)
-RETURNING
-    crdb_region_col, pk
+INSERT INTO regional_by_row_table_as (pk) VALUES (1), (10), (20)
+RETURNING crdb_region_col, pk
 ----
 us-east-1       1
 us-east-1       10
@@ -2338,19 +1738,7 @@ pk  a     b     crdb_region_col
 # We do not need uniqueness checks on pk since uniqueness can be inferred
 # through the functional dependency between pk and the computed region column.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            INSERT
-            INTO
-                regional_by_row_table_as (pk, a, b)
-            VALUES
-                (1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2377,42 +1765,17 @@ OFFSET
                   label: buffer 1
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_pkey"\nDETAIL: Key \(pk\)=\(1\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_as (pk, a, b)
-VALUES
-    (1, 1, 1)
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (1, 1, 1)
 
 statement ok
-INSERT
-INTO
-    regional_by_row_table_as (pk, a, b)
-VALUES
-    (30, 1, 1)
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (30, 1, 1)
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_as_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_as (pk, a, b)
-VALUES
-    (2, 1, 1)
+INSERT INTO regional_by_row_table_as (pk, a, b) VALUES (2, 1, 1)
 
 # Verify that we plan single-region scans for REGIONAL BY ROW tables with a computed region.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT
-                *
-            FROM
-                regional_by_row_table_as
-            WHERE
-                pk = 10
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM regional_by_row_table_as WHERE pk = 10] OFFSET 2
 ----
 ·
 • scan
@@ -2424,35 +1787,18 @@ subtest virtual_columns
 
 statement ok
 CREATE TABLE regional_by_row_table_virt (
-    pk
-        INT8 PRIMARY KEY,
-    a
-        INT8 NOT NULL,
-    b
-        INT8 NOT NULL,
-    v
-        INT8 AS (a + b) VIRTUAL,
-    UNIQUE (v),
-    UNIQUE ((a + 10)),
-    FAMILY (pk, a, b)
-)
-    LOCALITY REGIONAL BY ROW
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE (v),
+  UNIQUE INDEX ((a + 10)),
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
 
 # Uniqueness checks for virtual columns should be efficient.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            INSERT
-            INTO
-                regional_by_row_table_virt (pk, a, b)
-            VALUES
-                (1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2523,19 +1869,7 @@ OFFSET
                           label: buffer 1
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            UPSERT
-            INTO
-                regional_by_row_table_virt (pk, a, b)
-            VALUES
-                (1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2614,74 +1948,35 @@ OFFSET
                           label: buffer 1
 
 statement ok
-INSERT
-INTO
-    regional_by_row_table_virt (pk, a, b)
-VALUES
-    (1, 1, 1)
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (1, 1, 1)
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_virt (pk, a, b)
-VALUES
-    (2, 2, 0)
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_v_key"\nDETAIL: Key \(v\)=\(2\) already exists\.
-UPSERT
-INTO
-    regional_by_row_table_virt (pk, a, b)
-VALUES
-    (2, 2, 0)
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 2, 0)
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_expr_key"\nDETAIL: Key \(a \+ 10:::INT8\)=\(11\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_virt (pk, a, b)
-VALUES
-    (2, 1, 3)
+INSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
 
 statement error pq: duplicate key value violates unique constraint "regional_by_row_table_virt_expr_key"\nDETAIL: Key \(a \+ 10:::INT8\)=\(11\) already exists\.
-UPSERT
-INTO
-    regional_by_row_table_virt (pk, a, b)
-VALUES
-    (2, 1, 3)
+UPSERT INTO regional_by_row_table_virt (pk, a, b) VALUES (2, 1, 3)
 
 statement ok
 CREATE TABLE regional_by_row_table_virt_partial (
-    pk
-        INT8 PRIMARY KEY,
-    a
-        INT8 NOT NULL,
-    b
-        INT8 NOT NULL,
-    v
-        INT8 AS (a + b) VIRTUAL,
-    CONSTRAINT v_a_gt_0 UNIQUE (v) WHERE a > 0,
-    CONSTRAINT v_v_gt_0 UNIQUE (v) WHERE v > 0,
-    CONSTRAINT a_plus_10_v_gt_0
-        UNIQUE ((a + 10)) WHERE v > 0,
-    FAMILY (pk, a, b)
-)
-    LOCALITY REGIONAL BY ROW
+  pk int PRIMARY KEY,
+  a int NOT NULL,
+  b int NOT NULL,
+  v INT AS (a + b) VIRTUAL,
+  UNIQUE INDEX v_a_gt_0 (v) WHERE a > 0,
+  UNIQUE INDEX v_v_gt_0 (v) WHERE v > 0,
+  UNIQUE INDEX a_plus_10_v_gt_0 ((a + 10)) WHERE v > 0,
+  FAMILY (pk, a, b)
+) LOCALITY REGIONAL BY ROW
 
 # Uniqueness checks for virtual columns should be efficient.
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            INSERT
-            INTO
-                regional_by_row_table_virt_partial
-                    (pk, a, b)
-            VALUES
-                (1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2783,20 +2078,7 @@ OFFSET
                               label: buffer 1
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            UPSERT
-            INTO
-                regional_by_row_table_virt_partial
-                    (pk, a, b)
-            VALUES
-                (1, 1, 1)
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN UPSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)] OFFSET 2
 ----
 ·
 • root
@@ -2902,40 +2184,20 @@ OFFSET
                               label: buffer 1
 
 statement ok
-INSERT
-INTO
-    regional_by_row_table_virt_partial (pk, a, b)
-VALUES
-    (1, 1, 1)
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (1, 1, 1)
 
 statement error pq: duplicate key value violates unique constraint "v_a_gt_0"\nDETAIL: Key \(v\)=\(2\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_virt_partial (pk, a, b)
-VALUES
-    (2, 3, -1)
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (2, 3, -1)
 
 statement error pq: duplicate key value violates unique constraint "v_v_gt_0"\nDETAIL: Key \(v\)=\(2\) already exists\.
-INSERT
-INTO
-    regional_by_row_table_virt_partial (pk, a, b)
-VALUES
-    (2, -1, 3)
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (2, -1, 3)
 
 statement ok
-INSERT
-INTO
-    regional_by_row_table_virt_partial (pk, a, b)
-VALUES
-    (3, -2, -2)
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (3, -2, -2)
 
 # No conflict because a <= 0 and v <= 0.
 statement ok
-INSERT
-INTO
-    regional_by_row_table_virt_partial (pk, a, b)
-VALUES
-    (4, -3, -1)
+INSERT INTO regional_by_row_table_virt_partial (pk, a, b) VALUES (4, -3, -1)
 
 subtest regressions
 
@@ -2943,38 +2205,31 @@ subtest regressions
 # ERROR: missing "crdb_region" primary key column.
 statement ok
 CREATE DATABASE single_region_test_db PRIMARY REGION "ap-southeast-2";
-SET database = single_region_test_db;
-CREATE TABLE t63109 (a INT8, b STRING);
+USE single_region_test_db;
+CREATE TABLE t63109 (a INT, b STRING);
 ALTER TABLE t63109 SET LOCALITY REGIONAL BY ROW;
 INSERT INTO t63109 VALUES (1, 'one');
 UPSERT INTO t63109 VALUES (1, 'two');
-UPSERT
-INTO
-    t63109 (crdb_region, a, b)
-VALUES
-    ('ap-southeast-2', 1, 'three');
-UPSERT INTO t63109 (a, b) VALUES (1, 'four')
+UPSERT INTO t63109 (crdb_region, a, b) VALUES ('ap-southeast-2', 1, 'three');
+UPSERT INTO t63109 (a, b) VALUES (1, 'four');
 
 # Regression test for #65064. We should always choose locality optimized scan
 # even if the stats show zero rows.
 statement ok
-CREATE DATABASE db PRIMARY REGION "ca-central-1" REGIONS = "ap-southeast-2", "us-east-1";
-SET database = db;
-CREATE TABLE t65064 (username STRING NOT NULL UNIQUE)
-    LOCALITY REGIONAL BY ROW;
-ALTER TABLE t65064
-    INJECT STATISTICS e'[\n  {\n    "columns": ["username"],\n    "created_at": "2018-01-01 1:00:00.00000+00:00",\n    "row_count": 0,\n    "distinct_count": 0\n  }\n]'
+CREATE DATABASE db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
+USE db;
+CREATE TABLE t65064 (username STRING NOT NULL UNIQUE) LOCALITY REGIONAL BY ROW;
+ALTER TABLE t65064 INJECT STATISTICS '[
+  {
+    "columns": ["username"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 0,
+    "distinct_count": 0
+  }
+]';
 
 query T
-SELECT
-    *
-FROM
-    [
-        EXPLAIN
-            SELECT * FROM t65064 WHERE username = 'kharris'
-    ]
-OFFSET
-    2
+SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
 ----
 ·
 • union all
@@ -2994,16 +2249,11 @@ OFFSET
 # Regression test for #73024. Ensure that uniqueness checks actually check all
 # regions.
 statement ok
-CREATE TABLE t73024 (p INT8 PRIMARY KEY)
-    LOCALITY REGIONAL BY ROW;
-INSERT
-INTO
-    t73024 (crdb_region, p)
-VALUES
-    ('us-east-1', 100)
+CREATE TABLE t73024 (p INT PRIMARY KEY) LOCALITY REGIONAL BY ROW;
+INSERT INTO t73024 (crdb_region, p) VALUES ('us-east-1', 100);
 
 query error duplicate key value violates unique constraint
-INSERT INTO t73024 VALUES (100)
+INSERT INTO t73024 VALUES (100);
 
 query I
 SELECT * FROM t73024
@@ -3242,34 +2492,8 @@ FROM
                         regional_by_row_table_as4@a_idx
                     WHERE
                         a
-                        IN (
-                                1,
-                                2,
-                                4,
-                                5,
-                                6,
-                                8,
-                                10,
-                                11,
-                                12,
-                                14,
-                                15,
-                                16,
-                                17,
-                                18,
-                                18,
-                                19,
-                                22,
-                                23,
-                                24,
-                                25,
-                                28,
-                                30,
-                                33,
-                                34,
-                                39,
-                                40
-                            )
+                        IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                            18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
                     LIMIT
                         5
                 )
@@ -3330,34 +2554,8 @@ FROM
             regional_by_row_table_as4@a_idx
         WHERE
             a
-            IN (
-                    1,
-                    2,
-                    4,
-                    5,
-                    6,
-                    8,
-                    10,
-                    11,
-                    12,
-                    14,
-                    15,
-                    16,
-                    17,
-                    18,
-                    18,
-                    19,
-                    22,
-                    23,
-                    24,
-                    25,
-                    28,
-                    30,
-                    33,
-                    34,
-                    39,
-                    40
-                )
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
         LIMIT
             5
     );
@@ -3399,34 +2597,8 @@ FROM
             regional_by_row_table_as4@a_idx
         WHERE
             a
-            IN (
-                    1,
-                    2,
-                    4,
-                    5,
-                    6,
-                    8,
-                    10,
-                    11,
-                    12,
-                    14,
-                    15,
-                    16,
-                    17,
-                    18,
-                    18,
-                    19,
-                    22,
-                    23,
-                    24,
-                    25,
-                    28,
-                    30,
-                    33,
-                    34,
-                    39,
-                    40
-                )
+            IN (1, 2, 4, 5, 6, 8, 10, 11, 12, 14, 15, 16, 17, 18, 
+                18, 19, 22, 23, 24, 25, 28, 30, 33, 34, 39, 40)
         LIMIT
             5
     );
@@ -3595,3 +2767,4 @@ output row: [9]
 
 statement ok
 SET vectorize = "on"
+

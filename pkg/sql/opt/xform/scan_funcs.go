@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -139,7 +140,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 	// are remote, or the index is not partitioned.
 	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	index := tabMeta.Table.Index(scanPrivate.Index)
-	if _, ok := index.PrefixSorter(c.e.evalCtx); !ok {
+	if _, ok := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
 		return false
 	}
 	return true
@@ -173,9 +174,9 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	// until we find a match, so ordering them with longer prefixes first ensures
 	// that the correct match is found. The PrefixSorter is only non-nil when this
 	// index has at least one local and one remote partition.
-	var ps *cat.PrefixSorter
+	var ps *partition.PrefixSorter
 	var ok bool
-	if ps, ok = index.PrefixSorter(c.e.evalCtx); !ok {
+	if ps, ok = tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
 		return
 	}
 
@@ -187,7 +188,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	// equivalent to a nil Constraint.
 	idxConstraint := scanPrivate.Constraint
 	if idxConstraint == nil {
-		if idxConstraint, ok = c.buildAllPartitionsConstraint(tabMeta, index, scanPrivate); !ok {
+		if idxConstraint, ok = c.buildAllPartitionsConstraint(tabMeta, index, ps, scanPrivate); !ok {
 			return
 		}
 	}
@@ -231,13 +232,13 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 
 // buildAllPartitionsConstraint retrieves the partition filters and in between
 // filters for the "index" belonging to the table described by "tabMeta", and
-// builds the full set spans covering both defined partitions and rows belonging
-// to no defined partition (or partitions defined as DEFAULT). Partition spans
-// that are 100% local will not be merged with other spans.
-// Note that if the partitioning columns have no CHECK CONSTRAINT defined,
-// suboptimal spans may be produced which don't maximize the number of rows
-// accessed as a 100% local operation.
-//For example:
+// builds the full set of spans covering both defined partitions and rows
+// belonging to no defined partition (or partitions defined as DEFAULT).
+// Partition spans that are 100% local will not be merged with other spans. Note
+// that if the partitioning columns have no CHECK CONSTRAINT defined, suboptimal
+// spans may be produced which don't maximize the number of rows accessed as a
+// 100% local operation.
+// For example:
 //    CREATE TABLE abc_part (
 //       r STRING NOT NULL ,
 //       t INT NOT NULL,
@@ -291,18 +292,27 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 // [/'east' - /'east'/3] [/'east'/5 - /'east']. Adding in the following check
 // constraint achieves this: CHECK (r IN ('east', 'west', 'central'))
 func (c *CustomFuncs) buildAllPartitionsConstraint(
-	tabMeta *opt.TableMeta, index cat.Index, sp *memo.ScanPrivate,
+	tabMeta *opt.TableMeta, index cat.Index, ps *partition.PrefixSorter, sp *memo.ScanPrivate,
 ) (*constraint.Constraint, bool) {
 
-	checkConstraints := c.checkConstraintFilters(sp.Table)
-	partitionFilters, inBetweenFilters := c.partitionValuesFilters(sp.Table, index)
+	optionalFilters := c.checkConstraintFilters(sp.Table)
+	computedColFilters := c.computedColFilters(sp, memo.FiltersExpr{}, optionalFilters)
+	optionalFilters = append(optionalFilters, computedColFilters...)
+
+	filterColumns := c.FilterOuterCols(optionalFilters)
+	indexColumns := tabMeta.IndexKeyColumns(index.Ordinal())
+	firstIndexCol := sp.Table.IndexColumnID(index, 0)
+	var partitionFilters, inBetweenFilters memo.FiltersExpr
+	if !filterColumns.Contains(firstIndexCol) && indexColumns.Intersects(filterColumns) {
+		partitionFilters, inBetweenFilters = c.partitionValuesFilters(sp.Table, index)
+	}
 
 	var partsConstraint *constraint.Constraint
 	var remainingFilters memo.FiltersExpr
 	var ok bool
 	if partsConstraint, remainingFilters, ok = c.tryConstrainIndex(
 		partitionFilters,
-		checkConstraints,
+		optionalFilters,
 		tabMeta.MetaID,
 		index.Ordinal(),
 	); !ok {
@@ -318,9 +328,9 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 	var inBetweenConstraint *constraint.Constraint
 	if inBetweenConstraint, remainingFilters, ok = c.tryConstrainIndex(
 		inBetweenFilters,
-		checkConstraints,
+		optionalFilters,
 		tabMeta.MetaID,
-		index.Ordinal(),
+		sp.Index,
 	); !ok {
 		return nil, false
 	}
@@ -332,7 +342,7 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 
 	// Even though the partitioned constraints and the inBetween constraints
 	// were consolidated, we must make sure their Union is as well.
-	partsConstraint.ConsolidateSpans(c.e.evalCtx, index)
+	partsConstraint.ConsolidateSpans(c.e.evalCtx, ps)
 
 	return partsConstraint, true
 }
@@ -340,7 +350,7 @@ func (c *CustomFuncs) buildAllPartitionsConstraint(
 // getLocalSpans returns the indexes of the spans from the given constraint that
 // target local partitions.
 func (c *CustomFuncs) getLocalSpans(
-	scanConstraint *constraint.Constraint, ps *cat.PrefixSorter,
+	scanConstraint *constraint.Constraint, ps *partition.PrefixSorter,
 ) util.FastIntSet {
 	// Iterate through the spans and determine whether each one matches
 	// with a prefix from a local partition.

@@ -11,9 +11,8 @@
 package opt
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -48,15 +47,11 @@ func (t TableID) IndexColumnID(index cat.Index, i int) ColumnID {
 	return t.ColumnID(index.Column(i).Ordinal())
 }
 
-// IdxColumnID returns the "i"th ColumnID of the index with ordinal number
+// IndexColumnID returns the "i"th ColumnID of the index with ordinal number
 // "index" of the table described by tm. Both index and i are zero-based.
-func (tm *TableMeta) IdxColumnID(index cat.IndexOrdinal, i int) ColumnID {
+func (tm *TableMeta) IndexColumnID(index cat.IndexOrdinal, i int) ColumnID {
 	idx := tm.Table.Index(index)
 	tm.Table.Name()
-	if i < 0 || i >= idx.ColumnCount() {
-		panic(fmt.Sprintf("Attempt to lookup column %d in index %d of table %s. But it only has %d columns.",
-			i, index, tm.Table.Name(), idx.ColumnCount()))
-	}
 	return tm.MetaID.IndexColumnID(idx, i)
 }
 
@@ -178,6 +173,12 @@ type TableMeta struct {
 	// the map.
 	partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
+	// indexPartitionLocalities is a map from an index ordinal on the table to a
+	// *PrefixSorter representing the PARTITION BY LIST values of the index. If an
+	// index is partitioned BY LIST, and has both local and remote partitions, it
+	// will have an entry in the map.
+	indexPartitionLocalities map[cat.IndexOrdinal]*partition.PrefixSorter
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
@@ -216,6 +217,10 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 			tm.partialIndexPredicates[idx] = copyScalarFn(e).(ScalarExpr)
 		}
 	}
+
+	// This map has no ColumnID or TableID specific information in it, so it can
+	// be shared.
+	tm.indexPartitionLocalities = from.indexPartitionLocalities
 }
 
 // IndexColumns returns the set of table columns in the given index.
@@ -298,6 +303,30 @@ func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarE
 		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
 	}
 	tm.partialIndexPredicates[ord] = pred
+}
+
+// AddIndexPartitionLocality adds a PrefixSorter to the table's metadata for the
+// index with IndexOrdinal ord.
+func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps *partition.PrefixSorter) {
+	if tm.indexPartitionLocalities == nil {
+		tm.indexPartitionLocalities = make(map[cat.IndexOrdinal]*partition.PrefixSorter)
+	}
+	tm.indexPartitionLocalities[ord] = ps
+}
+
+// IndexPartitionLocality returns the given index's PrefixSorter.
+func (tm *TableMeta) IndexPartitionLocality(
+	ord cat.IndexOrdinal, index cat.Index, evalCtx *tree.EvalContext,
+) (ps *partition.PrefixSorter, ok bool) {
+	ps, ok = tm.indexPartitionLocalities[ord]
+	if !ok {
+		if localPartitions, ok :=
+			cat.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
+			ps = partition.GetSortedPrefixes(index, *localPartitions, evalCtx)
+		}
+		tm.AddIndexPartitionLocality(ord, ps)
+	}
+	return ps, ps != nil
 }
 
 // PartialIndexPredicate returns the given index's predicate scalar expression,

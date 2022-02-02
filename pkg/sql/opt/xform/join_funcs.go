@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/invertedidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1466,8 +1467,8 @@ func (c *CustomFuncs) GetLocalityOptimizedLookupJoinExprs(
 	// until we find a match, so ordering them with longer prefixes first ensures
 	// that the correct match is found. The PrefixSorter is only non-nil when this
 	// index has at least one local and one remote partition.
-	var ps *cat.PrefixSorter
-	if ps, ok = index.PrefixSorter(c.e.evalCtx); !ok {
+	var ps *partition.PrefixSorter
+	if ps, ok = tabMeta.IndexPartitionLocality(private.Index, index, c.e.evalCtx); !ok {
 		return nil, nil, false
 	}
 
@@ -1536,7 +1537,9 @@ func (c CustomFuncs) getConstPrefixFilter(
 
 // getLocalValues returns the indexes of the values in the given Datums slice
 // that target local partitions.
-func (c *CustomFuncs) getLocalValues(values tree.Datums, ps *cat.PrefixSorter) util.FastIntSet {
+func (c *CustomFuncs) getLocalValues(
+	values tree.Datums, ps *partition.PrefixSorter,
+) util.FastIntSet {
 	// The PrefixSorter has collected all the prefixes from all the different
 	// partitions (remembering which ones came from local partitions), and has
 	// sorted them so that longer prefixes come before shorter prefixes. For each
