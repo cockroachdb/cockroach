@@ -1063,7 +1063,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if updatedTodoSpans == nil {
 			return nil
 		}
-		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, mu.updatedTodoSpans)
+		nRanges, err := numRangesInSpans(ctx, sc.db, sc.distSQLPlanner, updatedTodoSpans)
 		if err != nil {
 			return err
 		}
@@ -2624,22 +2624,23 @@ func (sc *SchemaChanger) distIndexMerge(
 	tracker := NewIndexMergeTracker(progress, sc.job)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
-
 			idxCompletedSpans := make(map[int32][]roachpb.Span)
-
 			for i, sp := range meta.BulkProcessorProgress.CompletedSpans {
 				spanIdx := meta.BulkProcessorProgress.CompletedSpanIdx[i]
 				idxCompletedSpans[spanIdx] = append(idxCompletedSpans[spanIdx], sp)
 			}
-			currentProgress := tracker.GetMergeProgress()
-
-			for idx, completedSpans := range idxCompletedSpans {
-				currentProgress.TodoSpans[idx] = roachpb.SubtractSpans(currentProgress.TodoSpans[idx], completedSpans)
+			tracker.UpdateMergeProgress(ctx, func(_ context.Context, currentProgress *MergeProgress) {
+				for idx, completedSpans := range idxCompletedSpans {
+					currentProgress.TodoSpans[idx] = roachpb.SubtractSpans(currentProgress.TodoSpans[idx], completedSpans)
+				}
+			})
+			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
+				if err := tracker.FlushCheckpoint(ctx); err != nil {
+					return err
+				}
 			}
-
-			tracker.SetMergeProgress(ctx, currentProgress)
 		}
 		return nil
 	}

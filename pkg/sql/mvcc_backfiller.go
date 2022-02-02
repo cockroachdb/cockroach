@@ -116,6 +116,24 @@ type MergeProgress struct {
 	AddedIndexes, TemporaryIndexes []descpb.IndexID
 }
 
+func (mp *MergeProgress) Copy() *MergeProgress {
+	newp := &MergeProgress{
+		TodoSpans:        make([][]roachpb.Span, len(mp.TodoSpans)),
+		MutationIdx:      make([]int, len(mp.MutationIdx)),
+		AddedIndexes:     make([]descpb.IndexID, len(mp.AddedIndexes)),
+		TemporaryIndexes: make([]descpb.IndexID, len(mp.TemporaryIndexes)),
+	}
+	copy(newp.MutationIdx, mp.MutationIdx)
+	copy(newp.AddedIndexes, mp.AddedIndexes)
+	copy(newp.TemporaryIndexes, mp.TemporaryIndexes)
+	for i, spanSlice := range mp.TodoSpans {
+		newSpanSlice := make([]roachpb.Span, len(spanSlice))
+		copy(newSpanSlice, spanSlice)
+		newp.TodoSpans[i] = newSpanSlice
+	}
+	return newp
+}
+
 // IndexMergeTracker abstracts the infrastructure to read and write merge
 // progress to job state.
 type IndexMergeTracker struct {
@@ -132,19 +150,21 @@ var _ scexec.BackfillProgressFlusher = (*IndexMergeTracker)(nil)
 // NewIndexMergeTracker creates a new IndexMergeTracker
 func NewIndexMergeTracker(progress *MergeProgress, job *jobs.Job) *IndexMergeTracker {
 	imt := IndexMergeTracker{}
-	imt.mu.progress = progress
+	imt.mu.progress = progress.Copy()
 	imt.job = job
 	return &imt
 }
 
-// FlushCheckpoint writes out a checkpoint containing any data which has been
-// previously set via SetMergeProgress
+// FlushCheckpoint writes out a checkpoint containing any data which
+// has been previously updated via UpdateMergeProgress.
 func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
-	progress := imt.GetMergeProgress()
-
-	if progress.TodoSpans == nil {
+	imt.mu.Lock()
+	if imt.mu.progress.TodoSpans == nil {
+		imt.mu.Unlock()
 		return nil
 	}
+	progress := imt.mu.progress.Copy()
+	imt.mu.Unlock()
 
 	details, ok := imt.job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
@@ -168,20 +188,13 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 	return nil
 }
 
-// SetMergeProgress sets the progress for all index merges. Setting the progress
-// does not make that progress durable as the tracker may invoke FlushCheckpoint
-// later.
-func (imt *IndexMergeTracker) SetMergeProgress(ctx context.Context, progress *MergeProgress) {
-	imt.mu.Lock()
-	imt.mu.progress = progress
-	imt.mu.Unlock()
-}
-
-// GetMergeProgress reads the current merge progress.
-func (imt *IndexMergeTracker) GetMergeProgress() *MergeProgress {
+// UpdateMergeProgress allow the caller to modify the current progress with updateFn.
+func (imt *IndexMergeTracker) UpdateMergeProgress(
+	ctx context.Context, updateFn func(ctx context.Context, progress *MergeProgress),
+) {
 	imt.mu.Lock()
 	defer imt.mu.Unlock()
-	return imt.mu.progress
+	updateFn(ctx, imt.mu.progress)
 }
 
 func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgressFlusher {
