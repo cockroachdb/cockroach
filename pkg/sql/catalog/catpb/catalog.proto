@@ -123,3 +123,13 @@ message ShardedDescriptor {
   // values.
   repeated string column_names = 4;
 }
+
+// ScheduledRowLevelTTLArgs represents the arguments for a row-level TTL
+// scheduled job.
+message ScheduledRowLevelTTLArgs {
+  optional uint32 table_id = 1 [
+    (gogoproto.customname) = "TableID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID",
+    (gogoproto.nullable) = false
+  ];
+}
