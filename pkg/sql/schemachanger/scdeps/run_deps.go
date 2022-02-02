@@ -117,7 +117,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 					d.codec, pl.GetNewSchemaChange().BackfillProgress,
 				),
 			),
-			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
+			periodicProgressFlusher: newPeriodicProgressFlusherForIndexBackfill(d.settings),
 			statements:              d.statements,
 			partitioner:             d.partitioner,
 			user:                    pl.UsernameProto.Decode(),
