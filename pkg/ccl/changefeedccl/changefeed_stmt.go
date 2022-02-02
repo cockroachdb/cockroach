@@ -185,11 +185,9 @@ func changefeedPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
 			var ptr *ptpb.Record
-			var protectedTimestampID uuid.UUID
 			codec := p.ExecCfg().Codec
 			if shouldProtectTimestamps(codec) {
 				ptr = createProtectedTimestampRecord(ctx, codec, jobID, AllTargets(details), details.StatementTime, progress.GetChangefeed())
-				protectedTimestampID = ptr.ID.GetUUID()
 			}
 
 			jr.Progress = *progress.GetChangefeed()
@@ -209,19 +207,6 @@ func changefeedPlanHook(
 					}
 				}
 				return err
-			}
-			// If we created a protected timestamp for an initial scan, verify it.
-			// Doing this synchronously here rather than asynchronously later provides
-			// a nice UX win in the case that the data isn't actually available.
-			if protectedTimestampID != uuid.Nil {
-				if err := p.ExecCfg().ProtectedTimestampProvider.Verify(ctx, protectedTimestampID); err != nil {
-					if cancelErr := sj.Cancel(ctx); cancelErr != nil {
-						if ctx.Err() == nil {
-							log.Warningf(ctx, "failed to cancel job: %v", cancelErr)
-						}
-					}
-					return err
-				}
 			}
 		}
 
