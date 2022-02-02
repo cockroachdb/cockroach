@@ -1198,7 +1198,7 @@ func TestRaftDebug(t *testing.T) {
 }
 
 // TestStatusVars verifies that prometheus metrics are available via the
-// /_status/vars endpoint.
+// /_status/vars and /_status/load endpoints.
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1209,6 +1209,11 @@ func TestStatusVars(t *testing.T) {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
+	}
+	if body, err := getText(s, s.AdminURL()+statusPrefix+"load"); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
+		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
 	}
 }
 
