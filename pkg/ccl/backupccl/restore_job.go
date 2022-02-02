@@ -833,9 +833,11 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings     *cluster.Settings
-	execCfg      *sql.ExecutorConfig
+	settings      *cluster.Settings
+	nonDryExecCfg *sql.ExecutorConfig
+	dryRun        bool
 	restoreStats RowCount
+
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -1058,7 +1060,7 @@ func shouldPreRestore(table *tabledesc.Mutable) bool {
 // fetches the information from the old tables that we need for the restore.
 func createImportingDescriptors(
 	ctx context.Context,
-	p sql.JobExecContext,
+	e restoreExec,
 	backupCodec keys.SQLCodec,
 	sqlDescs []catalog.Descriptor,
 	r *restoreResumer,
@@ -1112,7 +1114,7 @@ func createImportingDescriptors(
 
 	tempSystemDBID := descpb.InvalidID
 	if details.DescriptorCoverage == tree.AllDescriptors {
-		tempSystemDBID = getTempSystemDBID(details, p.ExecCfg().SystemIDChecker)
+		tempSystemDBID = getTempSystemDBID(details, e.NonDryExecCfg().SystemIDChecker)
 		tempSystemDB := dbdesc.NewInitial(tempSystemDBID, restoreTempSystemDB,
 			security.AdminRoleName(), dbdesc.WithPublicSchemaID(keys.SystemPublicSchemaID))
 		databases = append(databases, tempSystemDB)
@@ -1153,7 +1155,8 @@ func createImportingDescriptors(
 		return nil, nil, err
 	}
 
-	if err := remapPublicSchemas(ctx, p, mutableDatabases, &schemasToWrite, &writtenSchemas, &details); err != nil {
+	if err := remapPublicSchemas(ctx, e.NonDryJobExecCtx(), mutableDatabases, &schemasToWrite,
+		&writtenSchemas, &details); err != nil {
 		return nil, nil, err
 	}
 
@@ -1238,12 +1241,10 @@ func createImportingDescriptors(
 		dbsByID[databases[i].GetID()] = databases[i]
 	}
 
-	if !details.PrepareCompleted && !details.DryRun {
+	if !details.PrepareCompleted {
 
 		// Create new descriptors for the data we're restoring.
-		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		) error {
+		err := e.SafeDescTxn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ) error {
 			// A couple of pieces of cleanup are required for multi-region databases.
 			// First, we need to find all of the MULTIREGION_ENUMs types and remap the
 			// IDs stored in the corresponding database descriptors to match the type's
@@ -1294,7 +1295,7 @@ func createImportingDescriptors(
 								desc.GetID(),
 								regionConfig,
 								txn,
-								p.ExecCfg(),
+								e.SafeExecCfg(),
 							); err != nil {
 								return err
 							}
@@ -1305,7 +1306,10 @@ func createImportingDescriptors(
 
 			// Write the new descriptors which are set in the OFFLINE state.
 			if err := WriteDescriptors(
-				ctx, p.ExecCfg().Codec, txn, p.User(), descsCol, databases, writtenSchemas, tables, writtenTypes,
+				ctx, e.SafeExecCfg().Codec, txn, e.NonDryJobExecCtx().User(), descsCol, databases,
+				writtenSchemas,
+				tables,
+				writtenTypes,
 				details.DescriptorCoverage, nil, /* extra */
 			); err != nil {
 				return errors.Wrapf(err, "restoring %d TableDescriptors from %d databases", len(tables), len(databases))
@@ -1433,7 +1437,7 @@ func createImportingDescriptors(
 						if err := sql.ApplyZoneConfigForMultiRegionTable(
 							ctx,
 							txn,
-							p.ExecCfg(),
+							e.SafeExecCfg(),
 							regionConfig,
 							mutTable,
 							sql.ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
@@ -1447,7 +1451,7 @@ func createImportingDescriptors(
 			for _, tenant := range details.Tenants {
 				// Mark the tenant info as adding.
 				tenant.State = descpb.TenantInfo_ADD
-				if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant); err != nil {
+				if err := sql.CreateTenantRecord(ctx, e.SafeExecCfg(), txn, &tenant); err != nil {
 					return err
 				}
 			}
@@ -1468,7 +1472,7 @@ func createImportingDescriptors(
 			err := r.job.SetDetails(ctx, txn, details)
 
 			// Emit to the event log now that the job has finished preparing descs.
-			emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
+			emitRestoreJobEvent(ctx, e.NonDryJobExecCtx(), jobs.StatusRunning, r.job)
 
 			return err
 		})
@@ -1598,6 +1602,74 @@ func remapPublicSchemas(
 	return nil
 }
 
+// restoreExec provides a wrapper around objects that manipulate data stored on the cluster.
+// Methods prefixed with 'Safe' guarantee a dry run restore will not use the returned
+// object to write to disk. The caller should only use methods prefixed with 'NonDry' if they are
+// confident the object will not manipulate on disk data in a dry run setting.
+type restoreExec interface{
+	NonDryJobExecCtx() sql.JobExecContext
+	NonDryExecCfg() *sql.ExecutorConfig
+	SafeExecCfg() *sql.ExecutorConfig
+	SafeDBHandler() safeDB
+	SafeDescTxn(context.Context, func(ctx context.Context, txn *kv.Txn,
+		descsCol *descs.Collection) error) error
+}
+
+type restoreExecWrapper struct{
+	jobExecCtx    sql.JobExecContext
+	dryRun        bool
+	dryDbHandler  safeDB
+}
+
+func (e *restoreExecWrapper) NonDryJobExecCtx() sql.JobExecContext{return e.jobExecCtx}
+
+func (e *restoreExecWrapper) NonDryExecCfg() *sql.ExecutorConfig {return e.jobExecCtx.ExecCfg()}
+
+func (e *restoreExecWrapper) SafeExecCfg() *sql.ExecutorConfig{
+	if e.dryRun{
+		return nil
+	}
+	return e.jobExecCtx.ExecCfg()
+}
+
+func MakeRestoreExec(jobExecCtx sql.JobExecContext, dryRun bool) restoreExec{
+	e := restoreExecWrapper{jobExecCtx: jobExecCtx,  dryRun: dryRun}
+	if dryRun{
+		e.dryDbHandler = new(dryDB)
+	}
+	return &e
+}
+func (e *restoreExecWrapper) SafeDBHandler() safeDB{
+	if e.dryRun{
+		return e.dryDbHandler
+	}
+	return e.jobExecCtx.ExecCfg().DB
+}
+
+func (e *restoreExecWrapper) SafeDescTxn(ctx context.Context,
+	f func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error) error{
+	if e.dryRun{
+		// TODO(MB): instead of nooping the whole sql.DescTxn(), I wonder if i could
+		// run the function f with a dummy txn and a dummy collection...
+		return nil
+	}
+	return sql.DescsTxn(ctx, e.jobExecCtx.ExecCfg(), f)
+}
+
+// safeDB specifies the methods a dryDB must noop that a kv.DB uses in a regular restore
+type safeDB interface{
+	Txn(ctx context.Context, retryable func(context.Context, *kv.Txn) error) error
+}
+
+// dryDB noops all methods called with a kv.DB in a regular restore
+type dryDB struct{
+}
+
+func (*dryDB) Txn(ctx context.Context, retryable func(context.Context, *kv.Txn) error) error{
+	// TODO(MB) figure out a way to run the `retryable` function without actually sending stuff to kv
+	return nil
+}
+
 // Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
@@ -1617,7 +1689,6 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 		if err != nil {
 			return err
 		}
-		emitRestoreJobEvent(ctx, execCtx.(sql.JobExecContext), jobs.StatusSucceeded, r.job)
 	}
 
 	return nil
@@ -1625,11 +1696,11 @@ func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error 
 
 func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
-	p := execCtx.(sql.JobExecContext)
-	r.execCfg = p.ExecCfg()
+	e := MakeRestoreExec(execCtx.(sql.JobExecContext),details.DryRun)
+	r.nonDryExecCfg = e.NonDryExecCfg()
 
 	backupManifests, latestBackupManifest, sqlDescs, err := loadBackupSQLDescs(
-		ctx, p, details, details.Encryption,
+		ctx, e.NonDryJobExecCtx(), details, details.Encryption,
 	)
 	if err != nil {
 		return err
@@ -1648,13 +1719,13 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			backupCodec = keys.MakeSQLCodec(backupTenantID)
 			// Disallow cluster restores, unless the tenant IDs match.
 			if details.DescriptorCoverage == tree.AllDescriptors {
-				if !backupCodec.TenantPrefix().Equal(p.ExecCfg().Codec.TenantPrefix()) {
+				if !backupCodec.TenantPrefix().Equal(e.NonDryExecCfg().Codec.TenantPrefix()) {
 					return unimplemented.NewWithIssuef(62277,
 						"cannot cluster RESTORE backups taken from different tenant: %s",
 						backupTenantID.String())
 				}
 			}
-			if backupTenantID != roachpb.SystemTenantID && p.ExecCfg().Codec.ForSystemTenant() {
+			if backupTenantID != roachpb.SystemTenantID && e.NonDryExecCfg().Codec.ForSystemTenant() {
 				// TODO(pbardea): This is unsupported for now because the key-rewriter
 				// cannot distinguish between RESTORE TENANT and table restore from a
 				// backup taken in a tenant, into the system tenant.
@@ -1667,16 +1738,17 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if err != nil {
 		return err
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex], p.User())
+	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URIs[lastBackupIndex],
+		e.NonDryJobExecCtx().User())
 	if err != nil {
 		return errors.Wrapf(err, "creating external store configuration")
 	}
-	defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
+	defaultStore, err := e.NonDryExecCfg().DistSQLSrv.ExternalStorage(ctx, defaultConf)
 	if err != nil {
 		return err
 	}
 
-	preData, mainData, err := createImportingDescriptors(ctx, p, backupCodec, sqlDescs, r)
+	preData, mainData, err := createImportingDescriptors(ctx, e, backupCodec, sqlDescs, r)
 	if err != nil {
 		return err
 	}
@@ -1712,23 +1784,20 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
 
-		if details.DryRun {
-			return nil
-		}
 		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) (err error) {
 			return r.publishDescriptors(ctx, txn, descsCol, details, nil)
 		}
-		if err := sql.DescsTxn(ctx, r.execCfg, publishDescriptors); err != nil {
+		if err := e.SafeDescTxn(ctx, publishDescriptors); err != nil {
 			return err
 		}
 
-		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
+		e.NonDryExecCfg().JobRegistry.NotifyToAdoptJobs()
 		if fn := r.testingKnobs.afterPublishingDescriptors; fn != nil {
 			if err := fn(); err != nil {
 				return err
 			}
 		}
-		emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+		emitRestoreJobEvent(ctx, e.NonDryJobExecCtx(), jobs.StatusSucceeded, r.job)
 		return nil
 	}
 
@@ -1736,9 +1805,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		mainData.addTenant(roachpb.MakeTenantID(tenant.ID))
 	}
 
-	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
+	numNodes, err := clusterNodeCount(e.NonDryExecCfg().Gossip)
 	if err != nil {
-		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
+		if !build.IsRelease() && e.NonDryExecCfg().Codec.ForSystemTenant() {
 			return err
 		}
 		log.Warningf(ctx, "unable to determine cluster node count: %v", err)
@@ -1749,7 +1818,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
-			p,
+			e.NonDryJobExecCtx(),
 			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
@@ -1762,14 +1831,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 
-		if details.DryRun {
-			return nil
-		}
-
 		resTotal.add(res)
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
-			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, preData.systemTables); err != nil {
+			if err := r.restoreSystemTables(ctx, e.SafeDBHandler(), details, preData.systemTables); err != nil {
 				return err
 			}
 			// Reload the details as we may have updated the job.
@@ -1781,6 +1846,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 				return err
 			}
 		}
+
 	}
 
 	{
@@ -1788,7 +1854,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// later.
 		res, err := restoreWithRetry(
 			ctx,
-			p,
+			e.NonDryJobExecCtx(),
 			numNodes,
 			backupManifests,
 			details.BackupLocalityInfo,
@@ -1801,14 +1867,14 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 
-		if details.DryRun {
-			return nil
-		}
-
 		resTotal.add(res)
 	}
+	if details.DryRun {
+		emitRestoreJobEvent(ctx, e.NonDryJobExecCtx(), jobs.StatusSucceeded, r.job)
+		return nil
+	}
 
-	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
+	if err := insertStats(ctx, r.job, e.SafeExecCfg(), remappedStats); err != nil {
 		return errors.Wrap(err, "inserting table statistics")
 	}
 
@@ -1819,7 +1885,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
 		}
-		bad, err := revalidateIndexes(ctx, p.ExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
+		bad, err := revalidateIndexes(ctx, e.SafeExecCfg(), r.job, details.TableDescs, details.RevalidateIndexes)
 		if err != nil {
 			return err
 		}
@@ -1830,19 +1896,19 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		err = r.publishDescriptors(ctx, txn, descsCol, details, devalidateIndexes)
 		return err
 	}
-	if err := sql.DescsTxn(ctx, p.ExecCfg(), publishDescriptors); err != nil {
+	if err := e.SafeDescTxn(ctx, publishDescriptors); err != nil {
 		return err
 	}
 	// Reload the details as we may have updated the job.
 	details = r.job.Details().(jobspb.RestoreDetails)
-	p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
+	e.SafeExecCfg().JobRegistry.NotifyToAdoptJobs()
 
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// We restore the system tables from the main data bundle so late because it
 		// includes the jobs that are being restored. As soon as we restore these
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, details, mainData.systemTables); err != nil {
+		if err := r.restoreSystemTables(ctx, e.SafeDBHandler(), details, mainData.systemTables); err != nil {
 			return err
 		}
 		// Reload the details as we may have updated the job.
@@ -1864,7 +1930,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	r.restoreStats = resTotal
 
 	// Emit an event now that the restore job has completed.
-	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
+	emitRestoreJobEvent(ctx, e.NonDryJobExecCtx(), jobs.StatusSucceeded, r.job)
 
 	// Collect telemetry.
 	{
@@ -1996,7 +2062,7 @@ func (r *restoreResumer) notifyStatsRefresherOfNewTables() {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	for i := range details.TableDescs {
 		desc := tabledesc.NewBuilder(details.TableDescs[i]).BuildImmutableTable()
-		r.execCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
+		r.nonDryExecCfg.StatsRefresher.NotifyMutation(desc, math.MaxInt32 /* rowsAffected */)
 	}
 }
 
@@ -2104,7 +2170,7 @@ func (r *restoreResumer) publishDescriptors(
 			// Convert any mutations that were in progress on the table descriptor
 			// when the backup was taken, and convert them to schema change jobs.
 			if err := createSchemaChangeJobsFromMutations(ctx,
-				r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
+				r.nonDryExecCfg.JobRegistry, r.nonDryExecCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), mutTable,
 			); err != nil {
 				return err
 			}
@@ -2124,7 +2190,7 @@ func (r *restoreResumer) publishDescriptors(
 		newTypes = append(newTypes, typ.TypeDesc())
 		if typ.HasPendingSchemaChanges() && details.DescriptorCoverage != tree.AllDescriptors {
 			if err := createTypeChangeJobFromDesc(
-				ctx, r.execCfg.JobRegistry, r.execCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ,
+				ctx, r.nonDryExecCfg.JobRegistry, r.nonDryExecCfg.Codec, txn, r.job.Payload().UsernameProto.Decode(), typ,
 			); err != nil {
 				return err
 			}
@@ -2178,7 +2244,7 @@ func (r *restoreResumer) publishDescriptors(
 	}
 
 	for _, tenant := range details.Tenants {
-		if err := sql.ActivateTenant(ctx, r.execCfg, txn, tenant.ID); err != nil {
+		if err := sql.ActivateTenant(ctx, r.nonDryExecCfg, txn, tenant.ID); err != nil {
 			return err
 		}
 	}
@@ -2710,11 +2776,11 @@ type systemTableNameWithConfig struct {
 // with the data from the restored system tables.
 func (r *restoreResumer) restoreSystemTables(
 	ctx context.Context,
-	db *kv.DB,
+	db safeDB,
 	restoreDetails jobspb.RestoreDetails,
 	tables []catalog.TableDescriptor,
 ) error {
-	tempSystemDBID := getTempSystemDBID(restoreDetails, r.execCfg.SystemIDChecker)
+	tempSystemDBID := getTempSystemDBID(restoreDetails, r.nonDryExecCfg.SystemIDChecker)
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
 		details.SystemTablesMigrated = make(map[string]bool)
@@ -2757,7 +2823,7 @@ func (r *restoreResumer) restoreSystemTables(
 			}
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
+				if err := systemTable.config.migrationFunc(ctx, r.nonDryExecCfg, txn,
 					systemTable.stagingTableName); err != nil {
 					return err
 				}
@@ -2782,7 +2848,7 @@ func (r *restoreResumer) restoreSystemTables(
 			}
 
 			log.Eventf(ctx, "restoring system table %s", systemTable.systemTableName)
-			err := restoreFunc(ctx, r.execCfg, txn, systemTable.systemTableName, systemTable.stagingTableName)
+			err := restoreFunc(ctx, r.nonDryExecCfg, txn, systemTable.systemTableName, systemTable.stagingTableName)
 			if err != nil {
 				return errors.Wrapf(err, "restoring system table %s", systemTable.systemTableName)
 			}
@@ -2802,7 +2868,7 @@ func (r *restoreResumer) restoreSystemTables(
 }
 
 func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context, txn *kv.Txn) error {
-	executor := r.execCfg.InternalExecutor
+	executor := r.nonDryExecCfg.InternalExecutor
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
 	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
