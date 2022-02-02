@@ -30,11 +30,11 @@ import (
 )
 
 type httpServer struct {
-	cfg Config
+	cfg BaseConfig
 	mux http.ServeMux
 }
 
-func newHTTPServer(cfg Config) *httpServer {
+func newHTTPServer(cfg BaseConfig) *httpServer {
 	return &httpServer{cfg: cfg}
 }
 
