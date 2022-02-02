@@ -65,8 +65,8 @@ CREATE TYPE typ AS ENUM();
 
 mutations
 ----
-upsert /Table/5{6-7}                       range default
-upsert /Table/5{7-8}                       range default
+upsert /Table/10{6-7}                      range default
+upsert /Table/10{7-8}                      range default
 
 exec-sql
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7;
@@ -75,16 +75,16 @@ ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters = 5;
 
 mutations
 ----
-delete /Table/5{6-7}
-upsert /Table/5{6-7}                       num_replicas=7 num_voters=5
-delete /Table/5{7-8}
-upsert /Table/5{7-8}                       num_replicas=7
+delete /Table/10{6-7}
+upsert /Table/10{6-7}                      num_replicas=7 num_voters=5
+delete /Table/10{7-8}
+upsert /Table/10{7-8}                      num_replicas=7
 
 state offset=47
 ----
 ...
-/Table/5{6-7}                              num_replicas=7 num_voters=5
-/Table/5{7-8}                              num_replicas=7
+/Table/10{6-7}                             num_replicas=7 num_voters=5
+/Table/10{7-8}                             num_replicas=7
 
 exec-sql
 ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = 100;

@@ -68,10 +68,8 @@ SELECT crdb_internal.get_namespace_id(0, 'does_not_exist')
 ----
 NULL
 
-query I
+let $root_test_id
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
-----
-56
 
 query I
 SELECT crdb_internal.get_namespace_id(crdb_internal.get_namespace_id(0, 'root_test'), 't')
@@ -110,7 +108,7 @@ SELECT crdb_internal.get_zone_config(-1)::string
 NULL
 
 query error insufficient privilege
-SELECT crdb_internal.get_zone_config(56)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
+SELECT crdb_internal.get_zone_config($root_test_id)::string -- based on root query. having no permissions blocks us from this test rapidly changing though.
 
 # give testuser permissions on everything and retest
 user root
@@ -123,10 +121,10 @@ GRANT ALL ON root_test.t TO testuser
 
 user testuser
 
-query I
-SELECT crdb_internal.get_namespace_id(0, 'root_test')
+query B
+SELECT crdb_internal.get_namespace_id(0, 'root_test') = $root_test_id
 ----
-56
+true
 
 let $root_test_id
 SELECT crdb_internal.get_namespace_id(0, 'root_test')
@@ -134,10 +132,8 @@ SELECT crdb_internal.get_namespace_id(0, 'root_test')
 let $root_test_public_schema_id
 SELECT crdb_internal.get_namespace_id($root_test_id, 'public')
 
-query I
+let $t_id
 SELECT crdb_internal.get_namespace_id($root_test_id, $root_test_public_schema_id, 't')
-----
-58
 
 query T
 SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_test'))::string
@@ -145,9 +141,9 @@ SELECT crdb_internal.get_zone_config(crdb_internal.get_namespace_id(0, 'root_tes
 \x2805500158017800
 
 query T
-SELECT crdb_internal.get_namespace_id($root_test_id, $root_test_public_schema_id, 't')::string
+SELECT ($t_id)::regclass
 ----
-58
+108
 
 # reset state to default
 user root

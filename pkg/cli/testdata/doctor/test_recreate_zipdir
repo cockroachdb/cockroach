@@ -3,9 +3,9 @@ debug doctor recreate zipdir testdata/doctor/debugzip
 debug doctor recreate zipdir testdata/doctor/debugzip
 WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
 BEGIN;
-SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= 54;
-SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= 50;
-SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE id >= 50;
+SELECT 1/(1-sign(count(*))) FROM system.descriptor WHERE id >= 104;
+SELECT crdb_internal.unsafe_delete_descriptor(id, true) FROM system.descriptor WHERE id >= 100;
+SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", "parentSchemaID", name, id) FROM system.namespace WHERE id >= 100;
 COMMIT;
 BEGIN;
 SELECT crdb_internal.unsafe_upsert_descriptor(50, decode('12380a0964656661756c74646210321a210a0b0a0561646d696e100218000a0a0a04726f6f74100218001204726f6f7418012200280140004a00', 'hex'), true);

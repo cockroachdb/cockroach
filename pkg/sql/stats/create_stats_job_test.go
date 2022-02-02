@@ -13,6 +13,7 @@ package stats_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -57,10 +57,11 @@ func TestCreateStatsControlJob(t *testing.T) {
 	var allowRequest chan struct{}
 
 	var serverArgs base.TestServerArgs
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: filter,
 	}
 
 	ctx := context.Background()
@@ -69,12 +70,15 @@ func TestCreateStatsControlJob(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
 
 	t.Run("cancel", func(t *testing.T) {
 		// Test that CREATE STATISTICS can be canceled.
 		query := `CREATE STATISTICS s1 FROM d.t`
 
+		setTableID(tID)
 		if _, err := jobutils.RunJob(
 			t, sqlDB, &allowRequest, []string{"cancel"}, query,
 		); err == nil {
@@ -125,10 +129,11 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	var allowRequest chan struct{}
 
 	var serverArgs base.TestServerArgs
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: filter,
 	}
 
 	ctx := context.Background()
@@ -141,6 +146,9 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
 
 	// Start a CREATE STATISTICS run and wait until it's done one scan.
 	allowRequest = make(chan struct{})
@@ -295,9 +303,10 @@ func TestCreateStatsProgress(t *testing.T) {
 
 	var allowRequest chan struct{}
 	var serverArgs base.TestServerArgs
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+		TestingRequestFilter: filter,
 	}
 	params.ServerArgs.Knobs.DistSQL = &execinfra.TestingKnobs{
 		// Force the stats job to iterate through the input rows instead of reading
@@ -316,6 +325,9 @@ func TestCreateStatsProgress(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (i INT8 PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	var tID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int`).Scan(&tID)
+	setTableID(tID)
 
 	getFractionCompleted := func(jobID jobspb.JobID) float32 {
 		var progress *jobspb.Progress
@@ -470,14 +482,16 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 // Create a blocking request filter for the actions related
 // to CREATE STATISTICS, i.e. Scanning a user table. See discussion
 // on jobutils.RunJob for where this might be useful.
-func createStatsRequestFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaRequestFilter {
-	return func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+func createStatsRequestFilter(
+	allowProgressIota *chan struct{},
+) (kvserverbase.ReplicaRequestFilter, func(descpb.ID)) {
+	var tableToBlock atomic.Value
+	tableToBlock.Store(descpb.InvalidID)
+	return func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 		if req, ok := ba.GetArg(roachpb.Scan); ok {
 			_, tableID, _ := encoding.DecodeUvarintAscending(req.(*roachpb.ScanRequest).Key)
-			// Ensure that the tableID is within the expected range for a table,
-			// but is not a system table.
-
-			if tableID > 0 && tableID < 100 && bootstrap.TestingMinUserDescID() <= uint32(tableID) {
+			// Ensure that the tableID is what we expect it to be.
+			if tableID > 0 && descpb.ID(tableID) == tableToBlock.Load().(descpb.ID) {
 				// Read from the channel twice to allow jobutils.RunJob to complete
 				// even though there is only one ScanRequest.
 				<-*allowProgressIota
@@ -485,5 +499,5 @@ func createStatsRequestFilter(allowProgressIota *chan struct{}) kvserverbase.Rep
 			}
 		}
 		return nil
-	}
+	}, func(id descpb.ID) { tableToBlock.Store(id) }
 }

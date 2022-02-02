@@ -2302,6 +2302,11 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 	_, sqlDBRestore, cleanupRestore := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication,
 		base.TestClusterArgs{})
 	defer cleanupRestore()
+	var defaultDBID int
+	sqlDBRestore.QueryRow(
+		t, "SELECT id FROM system.namespace WHERE name = 'defaultdb'",
+	).Scan(&defaultDBID)
+
 	// We should get an error when restoring the table.
 	sqlDBRestore.ExpectErr(t, "sst: no such file", `RESTORE FROM $1`, LocalFoo)
 
@@ -2309,12 +2314,13 @@ INSERT INTO d.tb VALUES ('hello'), ('hello');
 	row := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT * FROM [SHOW DATABASES] WHERE database_name = '%s'`, restoreTempSystemDB))
 	require.Equal(t, 0, len(row))
 
-	// Make sure defaultdb and postgres are recreated.
+	// Make sure defaultdb and postgres are recreated with new IDs.
 	sqlDBRestore.CheckQueryResults(t,
-		`SELECT * FROM system.namespace WHERE name = 'defaultdb' OR name ='postgres'`, [][]string{
-			{"0", "0", "defaultdb", "74"},
-			{"0", "0", "postgres", "76"},
-		})
+		fmt.Sprintf(`
+SELECT name 
+  FROM system.namespace
+ WHERE "parentID" = 0 AND id > %d`, defaultDBID,
+		), [][]string{{"defaultdb"}, {"postgres"}})
 }
 
 func TestBackupRestoreUserDefinedSchemas(t *testing.T) {
@@ -5621,7 +5627,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `USE data`)
 
 		newDB.ExpectErr(
-			t, "pq: cannot restore table \"t\" without referenced sequence 57 \\(or \"skip_missing_sequences\" option\\)",
+			t, "pq: cannot restore table \"t\" without referenced sequence \\d+ \\(or \"skip_missing_sequences\" option\\)",
 			`RESTORE TABLE t FROM $1`, LocalFoo,
 		)
 
@@ -6780,17 +6786,17 @@ func TestProtectedTimestampsFailDueToLimits(t *testing.T) {
 	require.EqualError(t, err, "pq: protectedts: limit exceeded: 0+2 > 1 spans")
 }
 
-type exportResumePoint struct {
-	key, endKey roachpb.Key
-	timestamp   hlc.Timestamp
-}
-
-var withTS = hlc.Timestamp{WallTime: 1}
-var withoutTS = hlc.Timestamp{}
-
 func TestPaginatedBackupTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	type exportResumePoint struct {
+		roachpb.Span
+		timestamp hlc.Timestamp
+	}
+
+	var withTS = hlc.Timestamp{WallTime: 1}
+	var withoutTS = hlc.Timestamp{}
 
 	const numAccounts = 1
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
@@ -6873,16 +6879,28 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
-	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
+	tenant10.Exec(t, `
+CREATE DATABASE foo;
+CREATE TABLE foo.bar(i int primary key);
+INSERT INTO foo.bar VALUES (110), (210), (310), (410), (510)`)
+	var id1 int
+	tenant10.QueryRow(t, "SELECT 'foo.bar'::regclass::int").Scan(&id1)
 
 	// The total size in bytes of the data to be backed up is 63b.
 
 	// Single ExportRequest with no resume span.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='63b'`)
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.max_allowed_overage='0b'`)
+	idRE := regexp.MustCompile(":id")
+	mkKey := func(id int, k string) roachpb.Key {
+		return roachpb.Key(idRE.ReplaceAllString(k, fmt.Sprint(id)))
+	}
+	mkSpan := func(id int, start, end string) roachpb.Span {
+		return roachpb.Span{Key: mkKey(id, start), EndKey: mkKey(id, end)}
+	}
 
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test'`)
-	startingSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"), EndKey: []byte("/Tenant/10/Table/56/2")}
+	startingSpan := mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
 	mu.Lock()
 	require.Equal(t, []string{startingSpan.String()}, mu.exportRequestSpans)
 	mu.Unlock()
@@ -6891,10 +6909,8 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	// Two ExportRequests with one resume span.
 	systemDB.Exec(t, `SET CLUSTER SETTING kv.bulk_sst.target_size='50b'`)
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test2'`)
-	startingSpan = roachpb.Span{Key: []byte("/Tenant/10/Table/56/1"),
-		EndKey: []byte("/Tenant/10/Table/56/2")}
-	resumeSpan := roachpb.Span{Key: []byte("/Tenant/10/Table/56/1/510/0"),
-		EndKey: []byte("/Tenant/10/Table/56/2")}
+	startingSpan = mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2")
+	resumeSpan := mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2")
 	mu.Lock()
 	require.Equal(t, []string{startingSpan.String(), resumeSpan.String()}, mu.exportRequestSpans)
 	mu.Unlock()
@@ -6905,20 +6921,25 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	tenant10.Exec(t, `BACKUP DATABASE foo TO 'userfile://defaultdb.myfililes/test3'`)
 	var expected []string
 	for _, resume := range []exportResumePoint{
-		{[]byte("/Tenant/10/Table/56/1"), []byte("/Tenant/10/Table/56/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/56/1/210/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/56/1/310/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/56/1/410/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/56/1/510/0"), []byte("/Tenant/10/Table/56/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id1, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
 	} {
-		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
+		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
 	}
 	mu.Lock()
 	require.Equal(t, expected, mu.exportRequestSpans)
 	mu.Unlock()
 	resetStateVars()
 
-	tenant10.Exec(t, `CREATE DATABASE baz; CREATE TABLE baz.bar(i int primary key, v string); INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
+	tenant10.Exec(t, `
+CREATE DATABASE baz; 
+CREATE TABLE baz.bar(i int primary key, v string); 
+INSERT INTO baz.bar VALUES (110, 'a'), (210, 'b'), (310, 'c'), (410, 'd'), (510, 'e')`)
+	var id2 int
+	tenant10.QueryRow(t, "SELECT 'baz.bar'::regclass::int").Scan(&id2)
 	// The total size in bytes of the data to be backed up is 63b.
 
 	// Single ExportRequest with no resume span.
@@ -6931,16 +6952,16 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	tenant10.Exec(t, `BACKUP DATABASE baz TO 'userfile://defaultdb.myfililes/test4' with revision_history`)
 	expected = nil
 	for _, resume := range []exportResumePoint{
-		{[]byte("/Tenant/10/Table/3"), []byte("/Tenant/10/Table/4"), withoutTS},
-		{[]byte("/Tenant/10/Table/61/1"), []byte("/Tenant/10/Table/61/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/3", "/Tenant/10/Table/4"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withoutTS},
 		// We have two entries for 210 because of history and super small table size
-		{[]byte("/Tenant/10/Table/61/1/210/0"), []byte("/Tenant/10/Table/61/2"), withTS},
-		{[]byte("/Tenant/10/Table/61/1/310/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/61/1/410/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
-		{[]byte("/Tenant/10/Table/61/1/510/0"), []byte("/Tenant/10/Table/61/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/210/0", "/Tenant/10/Table/:id/2"), withTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/310/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/410/0", "/Tenant/10/Table/:id/2"), withoutTS},
+		{mkSpan(id2, "/Tenant/10/Table/:id/1/510/0", "/Tenant/10/Table/:id/2"), withoutTS},
 	} {
-		expected = append(expected, requestSpanStr(roachpb.Span{Key: resume.key, EndKey: resume.endKey}, resume.timestamp))
+		expected = append(expected, requestSpanStr(resume.Span, resume.timestamp))
 	}
 	mu.Lock()
 	require.Equal(t, expected, mu.exportRequestSpans)
@@ -7513,7 +7534,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.True(t, testutils.IsError(err,
-		"timeout: operation \"ExportRequest for span /Table/56/.*\" timed out after 3s"))
+		`timeout: operation "ExportRequest for span /Table/\d+/.*\" timed out after 3s`))
 }
 
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
@@ -8475,7 +8496,9 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 
 	ctx := context.Background()
-	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
 	defer cleanupFn()
 	kvDB := tc.Server(0).DB()
 
@@ -8496,10 +8519,13 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// First take a full backup.
 	fullBackup := LocalFoo + "/full"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)
+	var dataBankTableID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'data.bank'::regclass::int`).
+		Scan(&dataBankTableID)
 
 	fullBackupSpans := getSpansFromManifest(ctx, t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
-	require.Equal(t, "/Table/56/{1-2}", fullBackupSpans[0].String())
+	require.Equal(t, fmt.Sprintf("/Table/%d/{1-2}", dataBankTableID), fullBackupSpans[0].String())
 
 	// Now we're going to add an index. We should only see the index
 	// appear in the backup once it is PUBLIC.
@@ -8554,7 +8580,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Equal(t, "/Table/56/{2-3}", inc3Spans[0].String())
+	require.Equal(t, fmt.Sprintf("/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)

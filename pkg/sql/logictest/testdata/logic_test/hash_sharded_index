@@ -651,8 +651,8 @@ query ITITTBBB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = 'poor_t'
 ----
 descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded
-80             poor_t           1         poor_t_pkey  primary     true       false        false
-80             poor_t           2         t_idx_b      secondary   false      false        true
+130            poor_t           1         poor_t_pkey  primary     true       false        false
+130            poor_t           2         t_idx_b      secondary   false      false        true
 
 statement ok
 DROP TABLE poor_t
@@ -871,16 +871,16 @@ WHERE t.name = 't_hash_pre_split'
 AND t.state = 'PUBLIC'
 AND r.split_enforced_until IS NOT NULL;
 ----
-name              table_id  index_name              start_pretty   end_pretty
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2    /Table/92/2/0
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/0  /Table/92/2/1
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/1  /Table/92/2/2
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/2  /Table/92/2/3
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/3  /Table/92/2/4
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/4  /Table/92/2/5
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/5  /Table/92/2/6
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/6  /Table/92/2/7
-t_hash_pre_split  92        t_hash_pre_split_idx_b  /Table/92/2/7  /Max
+name              table_id  index_name              start_pretty    end_pretty
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2    /Table/142/2/0
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/0  /Table/142/2/1
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/1  /Table/142/2/2
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/2  /Table/142/2/3
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/3  /Table/142/2/4
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/4  /Table/142/2/5
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/5  /Table/142/2/6
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/6  /Table/142/2/7
+t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/7  /Max
 
 subtest test_default_bucket_count
 

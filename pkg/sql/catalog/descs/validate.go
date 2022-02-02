@@ -159,8 +159,8 @@ func (c collectionBackedDereferencer) fastNamespaceLookup(
 		}
 	case keys.SystemDatabaseID:
 		// Looking up system database objects, which are cached.
-		id, err = lookupSystemDatabaseNamespaceCache(ctx, c.tc.codec(), req.ParentSchemaID, req.Name)
-		return id != descpb.InvalidID, id, err
+		id = c.tc.kv.systemNamespace.lookup(req.ParentSchemaID, req.Name)
+		return id != descpb.InvalidID, id, nil
 	}
 	return false, descpb.InvalidID, nil
 }

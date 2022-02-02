@@ -20,8 +20,8 @@ SELECT database_id, role_name, settings FROM system.database_role_settings ORDER
 database_id  role_name      settings
 0            ·              {application_name=d}
 0            test_set_role  {application_name=a,custom_option.setting=e}
-56           ·              {application_name=c}
-56           test_set_role  {application_name=b}
+106          ·              {application_name=c}
+106          test_set_role  {application_name=b}
 
 # Defaults should be in pg_catalog too.
 query OOTTT colnames
@@ -34,8 +34,8 @@ ORDER BY 1, 2
 setdatabase  setrole    datname      rolname        setconfig
 0            0          NULL         NULL           {application_name=d}
 0            265380634  NULL         test_set_role  {application_name=a,custom_option.setting=e}
-56           0          test_set_db  NULL           {application_name=c}
-56           265380634  test_set_db  test_set_role  {application_name=b}
+106          0          test_set_db  NULL           {application_name=c}
+106          265380634  test_set_db  test_set_role  {application_name=b}
 
 statement ok
 ALTER ROLE test_set_role SET backslash_quote = 'safe_encoding'
@@ -189,8 +189,8 @@ SELECT database_id, role_name, settings FROM system.database_role_settings ORDER
 ----
 database_id  role_name      settings
 0            test_set_role  {custom_option.setting=e,backslash_quote=safe_encoding,serial_normalization=sql_sequence}
-56           ·              {application_name=c}
-56           test_set_role  {application_name=b}
+106          ·              {application_name=c}
+106          test_set_role  {application_name=b}
 
 statement ok
 DROP DATABASE test_set_db

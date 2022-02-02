@@ -862,7 +862,7 @@ CREATE INDEX ol_io ON order_line (ol_i_id, ol_o_id);
 CREATE TABLE stock (s_i_id INT8);
 INSERT INTO stock (s_i_id) VALUES (6463)
 
-query T kvtrace(Scan,prefix=/Table/59/2/6463/{)
+query T kvtrace(Scan,prefix=/Table/109/2/6463/{)
 SELECT
   s_i_id, ol_o_id
 FROM
@@ -870,7 +870,7 @@ FROM
 WHERE
   ol_o_id BETWEEN 20 AND 100
 ----
-Scan /Table/59/2/6463/{20-101}
+Scan /Table/109/2/6463/{20-101}
 
 query T
 EXPLAIN (VERBOSE)

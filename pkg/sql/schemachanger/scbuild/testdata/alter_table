@@ -5,33 +5,33 @@ CREATE TABLE defaultdb.foo (i INT PRIMARY KEY)
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT
 ----
-- [[Column:{DescID: 54, ColumnID: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
-    tableId: 54
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -40,9 +40,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     - 1
     shardedDescriptor: {}
     sourceIndexId: 1
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -53,40 +53,40 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
     sourceIndexId: 1
     storingColumnIds:
     - 2
-    tableId: 54
+    tableId: 104
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 ----
-- [[Column:{DescID: 54, ColumnID: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     defaultExpr: 123:::INT8
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
-    tableId: 54
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -95,9 +95,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     - 1
     shardedDescriptor: {}
     sourceIndexId: 1
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -108,58 +108,58 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
     sourceIndexId: 1
     storingColumnIds:
     - 2
-    tableId: 54
+    tableId: 104
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
 ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 ----
-- [[Column:{DescID: 54, ColumnID: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     defaultExpr: 123:::INT8
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[Column:{DescID: 54, ColumnID: 3}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     defaultExpr: 456:::INT8
     familyName: primary
     nullable: true
     pgAttributeNum: 3
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[ColumnName:{DescID: 54, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
-    tableId: 54
-- [[ColumnName:{DescID: 54, ColumnID: 3, Name: k}, PUBLIC], ABSENT]
+    tableId: 104
+- [[ColumnName:{DescID: 104, ColumnID: 3, Name: k}, PUBLIC], ABSENT]
   details:
     columnId: 3
     name: k
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
-    tableId: 54
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -168,9 +168,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     - 1
     shardedDescriptor: {}
     sourceIndexId: 1
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -182,40 +182,40 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
     storingColumnIds:
     - 2
     - 3
-    tableId: 54
+    tableId: 104
     unique: true
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 ----
-- [[Column:{DescID: 54, ColumnID: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     computerExpr: i + 1:::INT8
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[ColumnName:{DescID: 54, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: a
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
-    tableId: 54
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 104
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -224,9 +224,9 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     - 1
     shardedDescriptor: {}
     sourceIndexId: 1
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -237,7 +237,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
     sourceIndexId: 1
     storingColumnIds:
     - 2
-    tableId: 54
+    tableId: 104
     unique: true
 
 create-table
@@ -248,59 +248,59 @@ build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT;
 ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 ----
-- [[Column:{DescID: 54, ColumnID: 2}, PUBLIC], ABSENT]
+- [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     familyName: primary
     nullable: true
     pgAttributeNum: 2
-    tableId: 54
+    tableId: 104
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[Column:{DescID: 55, ColumnID: 3}, PUBLIC], ABSENT]
+- [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     familyName: primary
     nullable: true
     pgAttributeNum: 3
-    tableId: 55
+    tableId: 105
     type:
       family: IntFamily
       oid: 20
       width: 64
-- [[ColumnName:{DescID: 54, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: a
-    tableId: 54
-- [[ColumnName:{DescID: 55, ColumnID: 3, Name: b}, PUBLIC], ABSENT]
+    tableId: 104
+- [[ColumnName:{DescID: 105, ColumnID: 3, Name: b}, PUBLIC], ABSENT]
   details:
     columnId: 3
     name: b
-    tableId: 55
-- [[IndexName:{DescID: 54, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+    tableId: 105
+- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+    tableId: 104
+- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
-    tableId: 54
-- [[IndexName:{DescID: 55, IndexID: 1, Name: bar_pkey}, ABSENT], PUBLIC]
+    tableId: 104
+- [[IndexName:{DescID: 105, IndexID: 1, Name: bar_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: bar_pkey
-    tableId: 55
-- [[IndexName:{DescID: 55, IndexID: 2, Name: bar_pkey}, PUBLIC], ABSENT]
+    tableId: 105
+- [[IndexName:{DescID: 105, IndexID: 2, Name: bar_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: bar_pkey
-    tableId: 55
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 105
+- [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -309,9 +309,9 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     - 1
     shardedDescriptor: {}
     sourceIndexId: 1
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -322,9 +322,9 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     sourceIndexId: 1
     storingColumnIds:
     - 2
-    tableId: 54
+    tableId: 104
     unique: true
-- [[PrimaryIndex:{DescID: 55, IndexID: 1}, ABSENT], PUBLIC]
+- [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -335,9 +335,9 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     sourceIndexId: 1
     storingColumnIds:
     - 1
-    tableId: 55
+    tableId: 105
     unique: true
-- [[PrimaryIndex:{DescID: 55, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -349,5 +349,5 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
     storingColumnIds:
     - 1
     - 3
-    tableId: 55
+    tableId: 105
     unique: true
