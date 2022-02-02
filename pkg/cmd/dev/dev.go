@@ -120,7 +120,9 @@ Typical usage:
 		makeTestLogicCmd(ret.testlogic),
 		makeLintCmd(ret.lint),
 		makeTestCmd(ret.test),
+		makeUICmd(&ret),
 	)
+
 	// Add all the shared flags.
 	var debugVar bool
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
