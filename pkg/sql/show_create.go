@@ -13,6 +13,8 @@ package sql
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
@@ -175,9 +177,17 @@ func ShowCreateTable(
 		return "", err
 	}
 
+	var storageParams []string
 	if ttl := desc.GetRowLevelTTL(); ttl != nil {
-		f.Buffer.WriteString(` WITH (ttl_expire_after = `)
-		f.Buffer.WriteString(ttl.DurationExpr)
+		storageParams = append(storageParams, fmt.Sprintf(`ttl_expire_after = %s`, ttl.DurationExpr))
+	}
+	if exclude := desc.GetExcludeDataFromBackup(); exclude {
+		storageParams = append(storageParams, `exclude_data_from_backup = true`)
+	}
+
+	if len(storageParams) > 0 {
+		f.Buffer.WriteString(` WITH (`)
+		f.Buffer.WriteString(strings.Join(storageParams, ", "))
 		f.Buffer.WriteString(`)`)
 	}
 

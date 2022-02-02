@@ -1130,6 +1130,22 @@ ALTER TABLE t RESET (fillfactor, autovacuum_enabled) -- fully parenthesized
 ALTER TABLE t RESET (fillfactor, autovacuum_enabled) -- literals removed
 ALTER TABLE _ RESET (_, _) -- identifiers removed
 
+parse
+ALTER TABLE t SET (exclude_data_from_backup = true)
+----
+ALTER TABLE t SET (exclude_data_from_backup = true)
+ALTER TABLE t SET (exclude_data_from_backup = (true)) -- fully parenthesized
+ALTER TABLE t SET (exclude_data_from_backup = _) -- literals removed
+ALTER TABLE _ SET (_ = true) -- identifiers removed
+
+parse
+ALTER TABLE t RESET (exclude_data_from_backup)
+----
+ALTER TABLE t RESET (exclude_data_from_backup)
+ALTER TABLE t RESET (exclude_data_from_backup) -- fully parenthesized
+ALTER TABLE t RESET (exclude_data_from_backup) -- literals removed
+ALTER TABLE _ RESET (_) -- identifiers removed
+
 error
 ALTER PARTITION p OF TABLE tbl@idx CONFIGURE ZONE USING num_replicas = 1
 ----

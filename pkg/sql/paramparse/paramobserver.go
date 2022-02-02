@@ -113,6 +113,17 @@ func (po *TableStorageParamObserver) runPostChecks() error {
 	return nil
 }
 
+func boolFromDatum(evalCtx *tree.EvalContext, key string, datum tree.Datum) (bool, error) {
+	if stringVal, err := DatumAsString(evalCtx, key, datum); err == nil {
+		return ParseBoolVar(key, stringVal)
+	}
+	s, err := GetSingleBool(key, datum)
+	if err != nil {
+		return false, err
+	}
+	return bool(*s), nil
+}
+
 type tableParam struct {
 	onSet   func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error
 	onReset func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error
@@ -192,6 +203,40 @@ var tableParams = map[string]tableParam{
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
 			po.tableDesc.RowLevelTTL = nil
+			return nil
+		},
+	},
+	`exclude_data_from_backup`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
+			evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.Temporary {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"cannot set data in a temporary table to be excluded from backup")
+			}
+
+			// Check that the table does not have any incoming FK references. During a
+			// backup, the rows of a table with ephemeral data will not be backed up, and
+			// could result in a violation of FK constraints on restore. To prevent this,
+			// we only allow a table with no incoming FK references to be marked as
+			// ephemeral.
+			if len(po.tableDesc.InboundFKs) != 0 {
+				return errors.New("cannot set data in a table with inbound foreign key constraints to be excluded from backup")
+			}
+
+			excludeDataFromBackup, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			// If the table descriptor being changed has the same value for the
+			// `ExcludeDataFromBackup` flag, no-op.
+			if po.tableDesc.ExcludeDataFromBackup == excludeDataFromBackup {
+				return nil
+			}
+			po.tableDesc.ExcludeDataFromBackup = excludeDataFromBackup
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			po.tableDesc.ExcludeDataFromBackup = false
 			return nil
 		},
 	},
