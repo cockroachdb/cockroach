@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -49,6 +50,7 @@ func (s *httpServer) setupRoutes(
 	authnServer *authenticationServer,
 	adminAuthzCheck *adminPrivilegeChecker,
 	metricSource metricMarshaler,
+	runtimeStatSampler *status.RuntimeStatSampler,
 	handleRequestsUnauthenticated http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	apiServer *apiV2Server,
@@ -114,6 +116,8 @@ func (s *httpServer) setupRoutes(
 	s.mux.Handle(adminHealth, handleRequestsUnauthenticated)
 	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
 	s.mux.Handle(statusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
+	// Same for /_status/load.
+	s.mux.Handle(loadStatusVars, http.HandlerFunc(makeStatusLoadHandler(ctx, runtimeStatSampler)))
 
 	// The new "v2" HTTP API tree.
 	s.mux.Handle(apiV2Path, apiServer)
