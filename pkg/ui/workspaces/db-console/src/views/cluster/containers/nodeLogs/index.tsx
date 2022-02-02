@@ -104,6 +104,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         <section className="section">
           <Loading
             loading={!this.props.logs.data}
+            page={"node logs"}
             error={this.props.logs.lastError}
             render={this.renderContent}
           />

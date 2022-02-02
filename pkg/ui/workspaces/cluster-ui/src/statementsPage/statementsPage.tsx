@@ -653,6 +653,7 @@ export class StatementsPage extends React.Component<
         </PageConfig>
         <Loading
           loading={isNil(this.props.statements)}
+          page={"statements"}
           error={this.props.statementsError}
           render={() => this.renderStatements(regions)}
           renderError={() =>
