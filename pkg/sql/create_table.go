@@ -2238,6 +2238,9 @@ func newTableDesc(
 			n.Persistence,
 		)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// We need to ensure sequence ownerships so that column owned sequences are
 	// correctly dropped when a column/table is dropped.
@@ -2250,7 +2253,7 @@ func newTableDesc(
 		}
 	}
 
-	return ret, err
+	return ret, nil
 }
 
 // replaceLikeTableOps processes the TableDefs in the input CreateTableNode,
