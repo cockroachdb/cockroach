@@ -97,6 +97,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		grantOptionMigration,
 	),
+	migration.NewTenantMigration(
+		"delete comments that belong to dropped indexes",
+		toCV(clusterversion.DeleteCommentsWithDroppedIndexes),
+		NoPrecondition,
+		ensureCommentsHaveNonDroppedIndexes,
+	),
 }
 
 func init() {
