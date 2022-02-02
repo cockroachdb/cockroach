@@ -174,6 +174,16 @@ func bytesPrefixEnd(b []byte) []byte {
 	return b
 }
 
+// Clone returns a copy of the key.
+func (k Key) Clone() Key {
+	if k == nil {
+		return nil
+	}
+	c := make(Key, len(k))
+	copy(c, k)
+	return c
+}
+
 // Next returns the next key in lexicographic sort order. The method may only
 // take a shallow copy of the Key, so both the receiver and the return
 // value should be treated as immutable after.

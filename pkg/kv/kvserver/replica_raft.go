@@ -42,6 +42,27 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
+var (
+	// raftLogTruncationClearRangeThreshold is the number of entries at which Raft
+	// log truncation uses a Pebble range tombstone rather than point deletes. It
+	// is set high enough to avoid writing too many range tombstones to Pebble,
+	// but low enough that we don't do too many point deletes either (in
+	// particular, we don't want to overflow the Pebble write batch).
+	//
+	// In the steady state, Raft log truncation occurs when RaftLogQueueStaleSize
+	// (64 KB) or RaftLogQueueStaleThreshold (100 entries) is exceeded, so
+	// truncations are generally small. If followers are lagging, we let the log
+	// grow to RaftLogTruncationThreshold (16 MB) before truncating.
+	//
+	// 100k was chosen because it is unlikely to be hit in most common cases,
+	// keeping the number of range tombstones low, but will trigger when Raft logs
+	// have grown abnormally large. RaftLogTruncationThreshold will typically not
+	// trigger it, unless the average log entry is <= 160 bytes. The key size is
+	// ~16 bytes, so Pebble point deletion batches will be bounded at ~1.6MB.
+	raftLogTruncationClearRangeThreshold = uint64(util.ConstantWithMetamorphicTestRange(
+		"raft-log-truncation-clearrange-threshold", 100000 /* default */, 1 /* min */, 1e6 /* max */))
+)
+
 func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, raftCommandIDLen)
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
@@ -1909,33 +1930,36 @@ func handleTruncatedStateBelowRaftPreApply(
 	loader stateloader.StateLoader,
 	readWriter storage.ReadWriter,
 ) (_apply bool, _ error) {
-	// Truncate the Raft log from the entry after the previous
-	// truncation index to the new truncation index. This is performed
-	// atomically with the raft command application so that the
-	// TruncatedState index is always consistent with the state of the
-	// Raft log itself. We can use the distinct writer because we know
-	// all writes will be to distinct keys.
-	//
-	// Intentionally don't use range deletion tombstones (ClearRange())
-	// due to performance concerns connected to having many range
-	// deletion tombstones. There is a chance that ClearRange will
-	// perform well here because the tombstones could be "collapsed",
-	// but it is hardly worth the risk at this point.
-	prefixBuf := &loader.RangeIDPrefixBuf
-	for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
-		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
-		// avoid allocating when constructing Raft log keys (16 bytes).
-		unsafeKey := prefixBuf.RaftLogKey(idx)
-		if err := readWriter.ClearUnversioned(unsafeKey); err != nil {
-			return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
-				suggestedTruncatedState, idx)
-		}
-	}
-
 	if suggestedTruncatedState.Index <= currentTruncatedState.Index {
 		// The suggested truncated state moves us backwards; instruct the
 		// caller to not update the in-memory state.
 		return false, nil
+	}
+
+	// Truncate the Raft log from the entry after the previous
+	// truncation index to the new truncation index. This is performed
+	// atomically with the raft command application so that the
+	// TruncatedState index is always consistent with the state of the
+	// Raft log itself.
+	prefixBuf := &loader.RangeIDPrefixBuf
+	numTruncatedEntries := suggestedTruncatedState.Index - currentTruncatedState.Index
+	if numTruncatedEntries >= raftLogTruncationClearRangeThreshold {
+		start := prefixBuf.RaftLogKey(currentTruncatedState.Index + 1).Clone()
+		end := prefixBuf.RaftLogKey(suggestedTruncatedState.Index + 1).Clone() // end is exclusive
+		if err := readWriter.ClearRawRange(start, end); err != nil {
+			return false, errors.Wrapf(err,
+				"unable to clear truncated Raft entries for %+v between indexes %d-%d",
+				suggestedTruncatedState, currentTruncatedState.Index+1, suggestedTruncatedState.Index+1)
+		}
+	} else {
+		// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
+		// avoid allocating when constructing Raft log keys (16 bytes).
+		for idx := currentTruncatedState.Index + 1; idx <= suggestedTruncatedState.Index; idx++ {
+			if err := readWriter.ClearUnversioned(prefixBuf.RaftLogKey(idx)); err != nil {
+				return false, errors.Wrapf(err, "unable to clear truncated Raft entries for %+v at index %d",
+					suggestedTruncatedState, idx)
+			}
+		}
 	}
 
 	// The suggested truncated state moves us forward; apply it and tell
