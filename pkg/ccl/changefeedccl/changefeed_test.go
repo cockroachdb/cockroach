@@ -54,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -4264,67 +4263,6 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 		t.Run(`pubsub`, pubsubTest(testFn(shouldPause), feedTestNoTenants))
 	})
 
-}
-
-// This test ensures that the changefeed attempts to verify its initial protected
-// timestamp record and that when that verification fails, the job is canceled
-// and the record removed.
-func TestChangefeedProtectedTimestampsVerificationFails(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	verifyRequestCh := make(chan *roachpb.AdminVerifyProtectedTimestampRequest, 1)
-	requestFilter := kvserverbase.ReplicaRequestFilter(func(
-		ctx context.Context, ba roachpb.BatchRequest,
-	) *roachpb.Error {
-		if r, ok := ba.GetArg(roachpb.AdminVerifyProtectedTimestamp); ok {
-			req := r.(*roachpb.AdminVerifyProtectedTimestampRequest)
-			verifyRequestCh <- req
-			return roachpb.NewError(errors.Errorf("failed to verify protection %v on %v", req.RecordID, ba.RangeID))
-		}
-		return nil
-	})
-
-	setStoreKnobs := func(args *base.TestServerArgs) {
-		storeKnobs := &kvserver.StoreTestingKnobs{}
-		storeKnobs.TestingRequestFilter = requestFilter
-		args.Knobs.Store = storeKnobs
-	}
-
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
-		ctx := context.Background()
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-		_, err := f.Feed(`CREATE CHANGEFEED FOR foo WITH resolved`)
-		// Make sure we got the injected error.
-		require.Regexp(t, "failed to verify", err)
-		// Make sure we tried to verify the request.
-		r := <-verifyRequestCh
-		cfg := f.Server().ExecutorConfig().(sql.ExecutorConfig)
-		kvDB := cfg.DB
-		pts := cfg.ProtectedTimestampProvider
-		// Make sure that the canceled job gets moved through its OnFailOrCancel
-		// phase and removes its protected timestamp.
-		testutils.SucceedsSoon(t, func() error {
-			err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := pts.GetRecord(ctx, txn, r.RecordID)
-				return err
-			})
-			if err == nil {
-				return errors.Errorf("expected record to be removed")
-			}
-			if errors.Is(err, protectedts.ErrNotExists) {
-				return nil
-			}
-			return err
-		})
-	}
-	opts := []feedTestOption{withArgsFn(setStoreKnobs), feedTestNoTenants}
-	t.Run(`enterprise`, enterpriseTest(testFn, opts...))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn, opts...))
-	t.Run(`kafka`, kafkaTest(testFn, opts...))
-	t.Run(`webhook`, webhookTest(testFn, opts...))
-	t.Run(`pubsub`, pubsubTest(testFn, opts...))
 }
 
 func TestManyChangefeedsOneTable(t *testing.T) {
