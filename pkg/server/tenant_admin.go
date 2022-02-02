@@ -19,14 +19,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type tenantAdminServer struct {
 	log.AmbientContext
 	serverpb.UnimplementedAdminServer
+	sqlServer *SQLServer
 }
 
 // We require that `tenantAdminServer` implement
@@ -47,8 +51,37 @@ func (t *tenantAdminServer) RegisterGateway(
 
 var _ grpcGatewayServer = &tenantAdminServer{}
 
-func newTenantAdminServer(ambientCtx log.AmbientContext) *tenantAdminServer {
-	return &tenantAdminServer{AmbientContext: ambientCtx}
+func newTenantAdminServer(ambientCtx log.AmbientContext, sqlServer *SQLServer) *tenantAdminServer {
+	return &tenantAdminServer{
+		AmbientContext: ambientCtx,
+		sqlServer:      sqlServer,
+	}
+}
+
+// Health returns liveness for the node target of the request.
+//
+// See the docstring for HealthRequest for more details about
+// what this function precisely reports.
+//
+// Note: Health is non-privileged and non-authenticated and thus
+// must not report privileged information.
+func (t *tenantAdminServer) Health(
+	ctx context.Context, req *serverpb.HealthRequest,
+) (*serverpb.HealthResponse, error) {
+	telemetry.Inc(telemetryHealthCheck)
+
+	resp := &serverpb.HealthResponse{}
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !req.Ready {
+		return resp, nil
+	}
+
+	if !t.sqlServer.acceptingClients.Get() {
+		return nil, status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
+	}
+
+	return resp, nil
 }
 
 // TODO(knz): add Drain implementation here.
