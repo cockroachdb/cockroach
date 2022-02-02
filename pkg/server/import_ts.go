@@ -124,7 +124,12 @@ func maybeImportTS(ctx context.Context, s *Server) error {
 
 	if knobs.ImportTimeseriesMappingFile == "" {
 		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
-			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
+			"a YAML file that maps StoreID to NodeID. To generate from the source cluster, run the following command:\n \n" +
+			"cockroach sql --url \"<(unix/sql) url>\" --format tsv -e \\\n  \"select concat(store_id::string, ': ', node_id::string)" +
+			"from crdb_internal.kv_store_status\" | \\\n  grep -E '[0-9]+: [0-9]+' | tee tsdump.gob.yaml\n \n" +
+			"To create from a debug.zip file, run the following command:\n \n" +
+			"tail -n +2 debug/crdb_internal.kv_store_status.txt | awk '{print $2 \": \" $1}' > tsdump.gob.yaml\n \n" +
+			"Then export the created file: export COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE=tsdump.gob.yaml\n \n")
 	}
 	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
 	if err != nil {

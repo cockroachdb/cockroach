@@ -86,7 +86,7 @@ import (
 //
 // See #64329 for details.
 var debugTSImportFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_FILE", "")
-var debugTSImportMappingFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE", debugTSImportFile+".yaml")
+var debugTSImportMappingFile = envutil.EnvOrDefaultString("COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE", "")
 
 // startCmd starts a node by initializing the stores and joining
 // the cluster.
