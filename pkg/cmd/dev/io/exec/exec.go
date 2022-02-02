@@ -30,12 +30,15 @@ type Exec struct {
 	dir            string
 	logger         *log.Logger
 	stdout, stderr io.Writer
+	blocking       bool
 	*recording.Recording
 }
 
 // New returns a new Exec with the given options.
 func New(opts ...Option) *Exec {
-	e := &Exec{}
+	e := &Exec{
+		blocking: true,
+	}
 
 	// Apply the default options.
 	defaults := []func(executor *Exec){
@@ -80,8 +83,16 @@ func WithRecording(r *recording.Recording) func(e *Exec) {
 	}
 }
 
+// AsNonBlocking creates a copy of Exec that doesn't block while commands run
+// (except when called via CommandContextSilent and CommandContextWithInput).
+func (e *Exec) AsNonBlocking() *Exec {
+	out := *e
+	out.blocking = false
+	return &out
+}
+
 // CommandContextSilent is like CommandContext, but does not take over
-// stdout/stderr. It's to be used for "internal" operations.
+// stdout/stderr. It's to be used for "internal" operations, and always blocks.
 func (e *Exec) CommandContextSilent(
 	ctx context.Context, name string, args ...string,
 ) ([]byte, error) {
@@ -89,7 +100,7 @@ func (e *Exec) CommandContextSilent(
 }
 
 // CommandContextWithInput is like CommandContext, but stdin is piped from an
-// in-memory string.
+// in-memory string, and always blocks.
 func (e *Exec) CommandContextWithInput(
 	ctx context.Context, stdin, name string, args ...string,
 ) ([]byte, error) {
@@ -136,8 +147,10 @@ func (e *Exec) commandContextInheritingStdStreamsImpl(
 		if err := cmd.Start(); err != nil {
 			return err
 		}
-		if err := cmd.Wait(); err != nil {
-			return err
+		if e.blocking {
+			if err := cmd.Wait(); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
