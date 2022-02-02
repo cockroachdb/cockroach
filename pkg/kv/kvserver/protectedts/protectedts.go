@@ -38,7 +38,6 @@ var ErrExists = errors.New("protected timestamp record already exists")
 type Provider interface {
 	Storage
 	Cache
-	Verifier
 	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
@@ -130,16 +129,6 @@ type Cache interface {
 
 	// Refresh forces the cache to update to at least asOf.
 	Refresh(_ context.Context, asOf hlc.Timestamp) error
-}
-
-// Verifier provides a mechanism to verify that a created Record will certainly
-// apply.
-type Verifier interface {
-
-	// Verify returns an error if the record of the provided ID cannot be
-	// verified. If nil is returned then the record has been proven to apply
-	// until it is removed.
-	Verify(context.Context, uuid.UUID) error
 }
 
 // Reconciler provides a mechanism to reconcile protected timestamp records with

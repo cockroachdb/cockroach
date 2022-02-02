@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptverifier"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -41,7 +40,6 @@ type Config struct {
 
 type provider struct {
 	protectedts.Storage
-	protectedts.Verifier
 	protectedts.Cache
 	protectedts.Reconciler
 	metric.Struct
@@ -53,7 +51,6 @@ func New(cfg Config) (protectedts.Provider, error) {
 		return nil, err
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
-	verifier := ptverifier.New(cfg.DB, storage)
 	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
 	return &provider{
 		Storage: storage,
@@ -62,7 +59,6 @@ func New(cfg Config) (protectedts.Provider, error) {
 			Storage:  storage,
 			Settings: cfg.Settings,
 		}),
-		Verifier:   verifier,
 		Reconciler: reconciler,
 		Struct:     reconciler.Metrics(),
 	}, nil
