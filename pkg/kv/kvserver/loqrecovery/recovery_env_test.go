@@ -55,8 +55,6 @@ type testReplicaInfo struct {
 	RangeAppliedIndex         uint64 `yaml:"RangeAppliedIndex"`
 	RaftCommittedIndex        uint64 `yaml:"RaftCommittedIndex"`
 	HasUncommittedDescriptors bool   `yaml:"HasUncommittedDescriptors"`
-
-	// TODO(oleg): Add ability to have descriptor intents in the store for testing purposes
 }
 
 type storeView struct {

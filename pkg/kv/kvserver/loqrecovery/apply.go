@@ -60,11 +60,6 @@ type PrepareReplicaReport struct {
 
 	// RemovedReplicas is a set of replicas that were removed from range descriptor.
 	RemovedReplicas roachpb.ReplicaSet
-
-	// Fields indicating if descriptor change intent was found and removed as a
-	// part or recovery preparation.
-	AbortedTransaction   bool
-	AbortedTransactionID uuid.UUID
 }
 
 // RangeID of underlying range.
@@ -177,7 +172,7 @@ func applyReplicaUpdate(
 	// there will be keys not represented by any ranges or vice
 	// versa).
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
-	value, intent, err := storage.MVCCGet(
+	value, _, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
 	if value == nil {
 		return PrepareReplicaReport{}, errors.Errorf(
@@ -209,64 +204,6 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")
 	}
 
-	if intent != nil {
-		// We rely on the property that transactions involving the range
-		// descriptor always start on the range-local descriptor's key. When there
-		// is an intent, this means that it is likely that the transaction did not
-		// commit, so we abort the intent.
-		//
-		// However, this is not guaranteed. For one, applying a command is not
-		// synced to disk, so in theory whichever store becomes the designated
-		// survivor may temporarily have "forgotten" that the transaction
-		// committed in its applied state (it would still have the committed log
-		// entry, as this is durable state, so it would come back once the node
-		// was running, but we don't see that materialized state in
-		// unsafe-remove-dead-replicas). This is unlikely to be a problem in
-		// practice, since we assume that the store was shut down gracefully and
-		// besides, the write likely had plenty of time to make it to durable
-		// storage. More troubling is the fact that the designated survivor may
-		// simply not yet have learned that the transaction committed; it may not
-		// have been in the quorum and could've been slow to catch up on the log.
-		// It may not even have the intent; in theory the remaining replica could
-		// have missed any number of transactions on the range descriptor (even if
-		// they are in the log, they may not yet be applied, and the replica may
-		// not yet have learned that they are committed). This is particularly
-		// troubling when we miss a split, as the right-hand side of the split
-		// will exist in the meta ranges and could even be able to make progress.
-		// For yet another thing to worry about, note that the determinism (across
-		// different nodes) assumed in this tool can easily break down in similar
-		// ways (not all stores are going to have the same view of what the
-		// descriptors are), and so multiple replicas of a range may declare
-		// themselves the designated survivor. Long story short, use of this tool
-		// with or without the presence of an intent can - in theory - really
-		// tear the cluster apart.
-		//
-		// A solution to this would require a global view, where in a first step
-		// we collect from each store in the cluster the replicas present and
-		// compute from that a "recovery plan", i.e. set of replicas that will
-		// form the recovered keyspace. We may then find that no such recovery
-		// plan is trivially achievable, due to any of the above problems. But
-		// in the common case, we do expect one to exist.
-		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
-
-		// A crude form of the intent resolution process: abort the
-		// transaction by deleting its record.
-		txnKey := keys.TransactionKey(intent.Txn.Key, intent.Txn.ID)
-		if err := storage.MVCCDelete(ctx, readWriter, &ms, txnKey, hlc.Timestamp{}, nil); err != nil {
-			return PrepareReplicaReport{}, err
-		}
-		update := roachpb.LockUpdate{
-			Span:   roachpb.Span{Key: intent.Key},
-			Txn:    intent.Txn,
-			Status: roachpb.ABORTED,
-		}
-		if _, err := storage.MVCCResolveWriteIntent(ctx, readWriter, &ms, update); err != nil {
-			return PrepareReplicaReport{}, err
-		}
-		report.AbortedTransaction = true
-		report.AbortedTransactionID = intent.Txn.ID
-	}
 	newDesc := localDesc
 	replicas := []roachpb.ReplicaDescriptor{
 		{
