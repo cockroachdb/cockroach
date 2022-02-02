@@ -56,12 +56,12 @@ testdb user1 ALL
 query-sql
 SHOW GRANTS ON SCHEMA public FOR user1;
 ----
-testdb public user1 ALL
+testdb public user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA sc FOR user1;
 ----
-testdb sc user1 USAGE
+testdb sc user1 USAGE false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
@@ -81,7 +81,7 @@ testdb testuser ALL
 query-sql
 SHOW GRANTS ON SCHEMA public FOR testuser;
 ----
-testdb public testuser ALL
+testdb public testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA sc FOR testuser;
@@ -163,19 +163,19 @@ testuser_db testuser CREATE
 query-sql
 SHOW GRANTS ON SCHEMA public;
 ----
-testdb public admin ALL
-testdb public public CREATE
-testdb public public USAGE
-testdb public root ALL
-testdb public testuser ALL
-testdb public user1 ALL
+testdb public admin ALL true
+testdb public public CREATE false
+testdb public public USAGE false
+testdb public root ALL true
+testdb public testuser ALL true
+testdb public user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA sc;
 ----
-testdb sc admin ALL
-testdb sc root ALL
-testdb sc user1 USAGE
+testdb sc admin ALL true
+testdb sc root ALL true
+testdb sc user1 USAGE false
 
 query-sql
 SHOW GRANTS ON testuser_db.sc.othertable
@@ -301,12 +301,12 @@ testdb admin ALL
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
-testdb public admin ALL
+testdb public admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
 ----
-testdb sc admin ALL
+testdb sc admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
@@ -392,12 +392,12 @@ testdb admin ALL
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
-testdb public admin ALL
+testdb public admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
 ----
-testdb sc admin ALL
+testdb sc admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;
@@ -438,12 +438,12 @@ testdb user1 ALL
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR user1;
 ----
-testdb public user1 ALL
+testdb public user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc FOR user1;
 ----
-testdb sc user1 USAGE
+testdb sc user1 USAGE false
 
 query-sql
 SHOW GRANTS ON TABLE testdb.sc.othertable FOR user1;
@@ -463,7 +463,7 @@ testdb testuser ALL
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR testuser;
 ----
-testdb public testuser ALL
+testdb public testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc FOR testuser;
@@ -501,12 +501,12 @@ testdb admin ALL
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;
 ----
-testdb public admin ALL
+testdb public admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.sc FOR admin;
 ----
-testdb sc admin ALL
+testdb sc admin ALL true
 
 query-sql
 SHOW GRANTS ON TABLE testdb.testtable_simple FOR admin;

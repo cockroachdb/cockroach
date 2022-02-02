@@ -127,14 +127,14 @@ ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT ALL ON TYPES TO testuser, testuser2
 statement ok
 CREATE SCHEMA s
 
-query TTTT colnames
+query TTTTB colnames
 SHOW GRANTS ON SCHEMA s
 ----
-database_name  schema_name  grantee    privilege_type
-test           s            admin      ALL
-test           s            root       ALL
-test           s            testuser   ALL
-test           s            testuser2  ALL
+database_name  schema_name  grantee    privilege_type  is_grantable
+test           s            admin      ALL             true
+test           s            root       ALL             true
+test           s            testuser   ALL             true
+test           s            testuser2  ALL             true
 
 statement ok
 CREATE SEQUENCE seq
