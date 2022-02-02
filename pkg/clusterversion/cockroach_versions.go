@@ -251,7 +251,9 @@ const (
 	// EnableProtectedTimestampsForTenant enables the use of protected timestamps
 	// in secondary tenants.
 	EnableProtectedTimestampsForTenant
-
+	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
+	// to dropped indexes.
+	DeleteCommentsWithDroppedIndexes
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -387,7 +389,10 @@ var versionsSingleton = keyedVersions{
 		Key:     EnableProtectedTimestampsForTenant,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 50},
 	},
-
+	{
+		Key:     DeleteCommentsWithDroppedIndexes,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
