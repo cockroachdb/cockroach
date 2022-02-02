@@ -66,10 +66,15 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 	oldMinValue := desc.SequenceOpts.MinValue
 	oldMaxValue := desc.SequenceOpts.MaxValue
 
-	err := assignSequenceOptions(
-		desc.SequenceOpts, n.n.Options, false /* setDefaults */, &params, desc.GetID(), desc.ParentID,
-	)
-	if err != nil {
+	if err := assignSequenceOptions(
+		params.ctx,
+		params.p,
+		desc.SequenceOpts,
+		n.n.Options,
+		false, /* setDefaults */
+		desc.GetID(),
+		desc.ParentID,
+	); err != nil {
 		return err
 	}
 	opts := desc.SequenceOpts
