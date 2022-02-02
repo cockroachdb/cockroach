@@ -1938,6 +1938,37 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Row-Level TTL"}},
+		Charts: []chartDescription{
+			{
+				Title: "Jobs Running",
+				Metrics: []string{
+					"jobs.row_level_ttl.currently_running",
+					"jobs.row_level_ttl.currently_idle",
+				},
+			},
+			{
+				Title: "Jobs Statistics",
+				Metrics: []string{
+					"jobs.row_level_ttl.fail_or_cancel_completed",
+					"jobs.row_level_ttl.fail_or_cancel_failed",
+					"jobs.row_level_ttl.fail_or_cancel_retry_error",
+					"jobs.row_level_ttl.resume_completed",
+					"jobs.row_level_ttl.resume_failed",
+					"jobs.row_level_ttl.resume_retry_error",
+				},
+			},
+			{
+				Title: "Scheduled Jobs Statistics",
+				Metrics: []string{
+					"schedules.scheduled-row-level-ttl-executor.succeeded",
+					"schedules.scheduled-row-level-ttl-executor.started",
+					"schedules.scheduled-row-level-ttl-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
 		Charts: []chartDescription{
 			{
