@@ -268,7 +268,7 @@ func NewExternalSorter(
 	}
 	inputPartitioner := newInputPartitioningOperator(sortUnlimitedAllocator, input, inputTypes, inMemSortPartitionLimit)
 	var inMemSorter colexecop.ResettableOperator
-	if topK > 0 {
+	if topK > 0 && ShouldUseTopK(topK, inputTypes) {
 		inMemSorter = NewTopKSorter(sortUnlimitedAllocator, inputPartitioner, inputTypes, ordering.Columns, topK, inMemSortOutputLimit)
 	} else {
 		var err error
