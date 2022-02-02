@@ -25,6 +25,14 @@ set -euo pipefail
 echoerr() { printf "%s\n" "$*" >&2; }
 pushd() { builtin pushd "$@" > /dev/null; }
 popd() { builtin popd "$@" > /dev/null; }
+generate() {
+  if [ "$BRANCH" == "master" ]; then
+    ./dev generate bazel --mirror
+  else
+    # TODO(travers): remove this once dev is available on all release branches.
+    make bazel-generate
+  fi
+}
 
 BRANCH=${1}
 PEBBLE_BRANCH=${BRANCH}
@@ -92,6 +100,9 @@ COCKROACH_BRANCH="$USER/pebble-${BRANCH}-${NEW_SHA:0:12}"
 # Pull in the Pebble module at the desired SHA and rebuild the vendor
 # directory.
 pushd "$COCKROACH_DIR"
+# `go mod tidy` is known to fail when the generated code is not present.
+# Generate code a first time here, before the mod file is updated.
+generate
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
 make -k vendor_rebuild
@@ -112,7 +123,9 @@ popd
 
 # Create the branch and commit on the CockroachDB repository.
 pushd "$COCKROACH_DIR"
-./dev generate bazel --mirror
+# Generate code again here to take into account the new Pebble code. This also
+# takes care of updating the various files the build system references.
+generate
 git add go.mod go.sum DEPS.bzl
 git add vendor
 git branch -D "$COCKROACH_BRANCH" || true
