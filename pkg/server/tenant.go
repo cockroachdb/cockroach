@@ -174,10 +174,14 @@ func StartTenant(
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
 	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
+	authServer := newAuthenticationServer(baseCfg.Config, s)
+
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
-	tenantStatusServer.RegisterService(grpcMain.Server)
-	startRPCServer(workersCtx)
+	for _, gw := range []grpcGatewayServer{tenantStatusServer, authServer} {
+		gw.RegisterService(grpcMain.Server)
+	}
+	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
 	gwMux, gwCtx, conn, err := ConfigureGRPCGateway(
@@ -192,8 +196,11 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
-	if err := tenantStatusServer.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-		return nil, "", "", err
+
+	for _, gw := range []grpcGatewayServer{tenantStatusServer, authServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return nil, "", "", err
+		}
 	}
 
 	args.recorder.AddNode(
