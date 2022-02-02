@@ -123,14 +123,10 @@ Typical usage:
 	)
 	// Add all the shared flags.
 	var debugVar bool
-	for _, subCmd := range ret.cli.Commands() {
-		subCmd.Flags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
-	}
-	for _, subCmd := range ret.cli.Commands() {
-		subCmd.PreRun = func(cmd *cobra.Command, args []string) {
-			if debugVar {
-				ret.log.SetOutput(stdos.Stderr)
-			}
+	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
+	ret.cli.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		if debugVar {
+			ret.log.SetOutput(stdos.Stderr)
 		}
 	}
 
