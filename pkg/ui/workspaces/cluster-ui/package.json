@@ -12,7 +12,7 @@
     "build": "npm-run-all -p build:typescript build:bundle",
     "build:bundle": "NODE_ENV=production webpack --display-error-details --mode=production",
     "build:typescript": "tsc",
-    "build:watch": "webpack --watch --mode=development",
+    "build:watch": "webpack --watch --mode=development --env.WEBPACK_WATCH",
     "tsc:watch": "tsc --watch",
     "ci": "jest --ci -i",
     "clean": "rm -rf  ./dist/*",
