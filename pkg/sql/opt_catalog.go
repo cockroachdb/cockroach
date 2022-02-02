@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -660,7 +659,10 @@ func newOptTable(
 		zone:     tblZone,
 	}
 
-	// First, determine how many columns we will potentially need.
+	// Determine the primary key columns.
+	pkCols := desc.GetPrimaryIndex().CollectKeyColumnIDs()
+
+	// Determine how many columns we will potentially need.
 	cols := ot.desc.DeletableColumns()
 	numCols := len(ot.desc.AllColumns())
 	// Add one for each inverted index column.
@@ -690,7 +692,10 @@ func newOptTable(
 			kind = cat.DeleteOnly
 			visibility = cat.Inaccessible
 		}
-		if !col.IsVirtual() {
+		// Primary key columns that are virtual in the descriptor are considered
+		// "stored" from the perspective of the optimizer because they are
+		// written to the primary index and all secondary indexes.
+		if !col.IsVirtual() || pkCols.Contains(col.GetID()) {
 			ot.columns[col.Ordinal()].Init(
 				col.Ordinal(),
 				cat.StableID(col.GetID()),
@@ -1237,15 +1242,11 @@ func (oi *optIndex) init(
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
 		oi.storedCols = make([]descpb.ColumnID, 0, tab.ColumnCount()-idx.NumKeyColumns())
-		var pkCols util.FastIntSet
-		for i := 0; i < idx.NumKeyColumns(); i++ {
-			id := idx.GetKeyColumnID(i)
-			pkCols.Add(int(id))
-		}
+		pkCols := idx.CollectKeyColumnIDs()
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			if col := tab.Column(i); col.Kind() != cat.Inverted && !col.IsVirtualComputed() {
-				if id := col.ColID(); !pkCols.Contains(int(id)) {
-					oi.storedCols = append(oi.storedCols, descpb.ColumnID(id))
+				if id := descpb.ColumnID(col.ColID()); !pkCols.Contains(id) {
+					oi.storedCols = append(oi.storedCols, id)
 				}
 			}
 		}
