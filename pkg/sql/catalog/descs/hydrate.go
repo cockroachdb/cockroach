@@ -49,7 +49,7 @@ func (tc *Collection) hydrateTypesInTableDesc(
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}
-			dbDesc, err := tc.GetMutableDescriptorByID(ctx, desc.ParentID, txn)
+			dbDesc, err := tc.GetMutableDescriptorByID(ctx, txn, desc.ParentID)
 			if err != nil {
 				return tree.TypeName{}, nil, err
 			}

@@ -169,7 +169,7 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	dbDesc catalog.DatabaseDescriptor, params runParams,
 ) error {
-	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, dbDesc.GetID(), params.p.txn)
+	mutableDbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, dbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -193,8 +193,7 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 func (n *reassignOwnedByNode) reassignSchemaOwner(
 	schemaDesc catalog.SchemaDescriptor, dbDesc *dbdesc.Mutable, params runParams,
 ) error {
-	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, schemaDesc.GetID(), params.p.txn)
+	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, schemaDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -218,8 +217,7 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 func (n *reassignOwnedByNode) reassignTableOwner(
 	tbDesc catalog.TableDescriptor, params runParams,
 ) error {
-	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, tbDesc.GetID(), params.p.txn)
+	mutableTbDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, tbDesc.GetID())
 	if err != nil {
 		return err
 	}
@@ -248,8 +246,7 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 func (n *reassignOwnedByNode) reassignTypeOwner(
 	typDesc catalog.TypeDescriptor, params runParams,
 ) error {
-	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByID(
-		params.ctx, typDesc.GetID(), params.p.txn)
+	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, typDesc.GetID())
 	if err != nil {
 		return err
 	}
