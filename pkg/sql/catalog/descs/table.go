@@ -63,7 +63,7 @@ func (tc *Collection) getTableByName(
 func (tc *Collection) GetLeasedImmutableTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	desc, _, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), tableID, false /* setTxnDeadline */)
+	desc, _, err := tc.leased.getByID(ctx, tc.deadlineHolder(txn), tableID)
 	if err != nil || desc == nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func (tc *Collection) GetImmutableTableByID(
 func (tc *Collection) getTableByID(
 	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.TableDescriptor, error) {
-	desc, err := tc.getDescriptorByID(ctx, txn, tableID, flags.CommonLookupFlags)
+	descs, err := tc.getDescriptorsByID(ctx, txn, []descpb.ID{tableID}, flags.CommonLookupFlags)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, sqlerrors.NewUndefinedRelationError(
@@ -153,7 +153,7 @@ func (tc *Collection) getTableByID(
 		}
 		return nil, err
 	}
-	table, ok := desc.(catalog.TableDescriptor)
+	table, ok := descs[0].(catalog.TableDescriptor)
 	if !ok {
 		return nil, sqlerrors.NewUndefinedRelationError(
 			&tree.TableRef{TableID: int64(tableID)})

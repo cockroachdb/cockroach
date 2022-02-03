@@ -69,14 +69,12 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	flags := tree.CommonLookupFlags{
 		Required: true,
 	}
-	desc, err := dt.descriptors.getDescriptorByIDMaybeSetTxnDeadline(
-		ctx, dt.txn, id, flags, false, /* setTxnDeadline */
-	)
+	descs, err := dt.descriptors.getDescriptorsByID(ctx, dt.txn, []descpb.ID{id}, flags)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	var typeDesc catalog.TypeDescriptor
-	switch t := desc.(type) {
+	switch t := descs[0].(type) {
 	case catalog.TypeDescriptor:
 		// User-defined type.
 		typeDesc = t
@@ -95,9 +93,9 @@ func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 		}
 	default:
 		return tree.TypeName{}, nil, pgerror.Newf(pgcode.WrongObjectType,
-			"descriptor %d is a %s not a %s", id, desc.DescriptorType(), catalog.Type)
+			"descriptor %d is a %s not a %s", id, t.DescriptorType(), catalog.Type)
 	}
-	name := tree.MakeUnqualifiedTypeName(desc.GetName())
+	name := tree.MakeUnqualifiedTypeName(typeDesc.GetName())
 	return name, typeDesc, nil
 }
 
