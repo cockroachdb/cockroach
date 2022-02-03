@@ -89,7 +89,7 @@ func fixDescriptors(
 		for _, idAndVersion := range descriptorIDAndVersions {
 			// GetMutableDescriptorByID calls RunPostDeserializationChanges which
 			// fixes the descriptor.
-			desc, err := descriptors.GetMutableDescriptorByID(ctx, idAndVersion.id, txn)
+			desc, err := descriptors.GetMutableDescriptorByID(ctx, txn, idAndVersion.id)
 			if err != nil {
 				return err
 			}

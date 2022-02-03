@@ -434,7 +434,7 @@ func drainNamesForDescriptor(
 		}
 
 		// Free up the old name(s) for reuse.
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, descID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, descID)
 		if err != nil {
 			return err
 		}
@@ -453,7 +453,7 @@ func drainNamesForDescriptor(
 		// If the descriptor to drain is a schema, then we need to delete the
 		// draining names from the parent database's schema mapping.
 		if _, isSchema := mutDesc.(catalog.SchemaDescriptor); isSchema {
-			mutDB, err := descsCol.GetMutableDescriptorByID(ctx, mutDesc.GetParentID(), txn)
+			mutDB, err := descsCol.GetMutableDescriptorByID(ctx, txn, mutDesc.GetParentID())
 			if err != nil {
 				return err
 			}
