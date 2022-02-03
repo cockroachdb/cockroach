@@ -1363,3 +1363,17 @@ SELECT * FROM t@t_b_k_key
 a  b  k
 1  2  3
 3  4  7
+
+subtest test_storage_params_validation
+
+statement ok
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY,
+  b INT NOT NULL
+);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+ALTER TABLE t_bad_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (s2_max_level=20);
+
+statement error pq: invalid storage param "s2_max_level" on primary key
+ALTER TABLE t_bad_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (s2_max_level=20);
