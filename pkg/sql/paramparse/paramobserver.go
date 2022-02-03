@@ -95,7 +95,8 @@ type StorageParamObserver interface {
 
 // TableStorageParamObserver observes storage parameters for tables.
 type TableStorageParamObserver struct {
-	tableDesc *tabledesc.Mutable
+	tableDesc          *tabledesc.Mutable
+	setAutomaticColumn bool
 }
 
 // NewTableStorageParamObserver returns a new TableStorageParamObserver.
@@ -107,7 +108,14 @@ var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
 // runPostChecks implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) runPostChecks() error {
-	if err := tabledesc.ValidateRowLevelTTL(po.tableDesc.GetRowLevelTTL()); err != nil {
+	ttl := po.tableDesc.GetRowLevelTTL()
+	if po.setAutomaticColumn && (ttl == nil || ttl.DurationExpr == "") {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"ttl_expire_after" must be set if "ttl_automatic_column" is set`,
+		)
+	}
+	if err := tabledesc.ValidateRowLevelTTL(ttl); err != nil {
 		return err
 	}
 	return nil
@@ -167,6 +175,44 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			setTrue, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if setTrue && po.tableDesc.RowLevelTTL == nil {
+				// Set the base struct, but do not populate it.
+				// An error from runPostChecks will appear if the requisite fields are not set.
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			if !setTrue && po.tableDesc.RowLevelTTL != nil {
+				return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+			}
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+		},
+	},
+	`ttl_automatic_column`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			setTrue, err := boolFromDatum(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if setTrue {
+				po.setAutomaticColumn = true
+			}
+			if !setTrue && po.tableDesc.RowLevelTTL != nil {
+				return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+			}
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			return unimplemented.NewWithIssue(75428, "unsetting TTL automatic column not yet implemented")
+		},
+	},
 	`ttl_expire_after`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			var d *tree.DInterval
@@ -202,8 +248,13 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			po.tableDesc.RowLevelTTL = nil
-			return nil
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`resetting "ttl_expire_after" is not permitted`,
+				),
+				"use `RESET (ttl_automatic_column)` to remove the automatic column or use `RESET (ttl)` to remove TTL from the table",
+			)
 		},
 	},
 	`exclude_data_from_backup`: {

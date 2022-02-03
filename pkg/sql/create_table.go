@@ -1411,6 +1411,54 @@ func NewTableDesc(
 		primaryIndexColumnSet[string(regionalByRowCol)] = struct{}{}
 	}
 
+	// Create the TTL column if one does not already exist.
+	if ttl := desc.GetRowLevelTTL(); ttl != nil {
+		hasRowLevelTTLColumn := false
+		for _, def := range n.Defs {
+			switch def := def.(type) {
+			case *tree.ColumnTableDef:
+				if def.Name == colinfo.TTLDefaultExpirationColumnName {
+					// If we find the column, make sure it has the expected type.
+					if def.Type.SQLString() != types.TimestampTZ.SQLString() {
+						return nil, pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							`table %s has TTL defined, but column %s is not a %s`,
+							def.Name,
+							colinfo.TTLDefaultExpirationColumnName,
+							types.TimestampTZ.SQLString(),
+						)
+					}
+					// TODO(#75428): decide whether we need DefaultExpr/UpdateExpr to match.
+					hasRowLevelTTLColumn = true
+					break
+				}
+			}
+		}
+		if !hasRowLevelTTLColumn {
+			def := &tree.ColumnTableDef{
+				Name:   colinfo.TTLDefaultExpirationColumnName,
+				Type:   types.TimestampTZ,
+				Hidden: true,
+			}
+			intervalExpr, err := parser.ParseExpr(ttl.DurationExpr)
+			if err != nil {
+				return nil, errors.Wrapf(err, "unexpected expression for TTL duration")
+			}
+			def.DefaultExpr.Expr = &tree.BinaryExpr{
+				Operator: tree.MakeBinaryOperator(tree.Plus),
+				Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
+				Right:    intervalExpr,
+			}
+			def.OnUpdateExpr.Expr = &tree.BinaryExpr{
+				Operator: tree.MakeBinaryOperator(tree.Plus),
+				Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
+				Right:    intervalExpr,
+			}
+			n.Defs = append(n.Defs, def)
+			cdd = append(cdd, nil)
+		}
+	}
+
 	if n.PartitionByTable.ContainsPartitioningClause() {
 		// Table PARTITION BY columns are always part of the primary index
 		// column set.

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,7 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 
 	db := tc.ServerConn(0)
 	defer db.Close()
+	tdb := sqlutils.MakeSQLRunner(db)
 
 	// We bootstrap the cluster on the older version where databases are
 	// created without public schemas. The namespace before upgrading looks like:
@@ -65,19 +67,13 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 		50 29 typ 53
 		50 29 _typ 54
 	*/
-	_, err := db.Exec(`CREATE TABLE defaultdb.public.t(x INT)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO defaultdb.public.t VALUES (1), (2), (3)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`CREATE TYPE defaultdb.public.typ AS ENUM()`)
-	require.NoError(t, err)
+	tdb.Exec(t, `CREATE TABLE defaultdb.public.t(x INT)`)
+	tdb.Exec(t, `INSERT INTO defaultdb.public.t VALUES (1), (2), (3)`)
+	tdb.Exec(t, `CREATE TYPE defaultdb.public.typ AS ENUM()`)
 	// Ensure the migration works if we have UDS in the database.
-	_, err = db.Exec(`CREATE SCHEMA defaultdb.s`)
-	require.NoError(t, err)
-	_, err = db.Exec(`CREATE TABLE defaultdb.s.table_in_uds(x INT)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`INSERT INTO defaultdb.s.table_in_uds VALUES (1), (2), (3)`)
-	require.NoError(t, err)
+	tdb.Exec(t, `CREATE SCHEMA defaultdb.s`)
+	tdb.Exec(t, `CREATE TABLE defaultdb.s.table_in_uds(x INT)`)
+	tdb.Exec(t, `INSERT INTO defaultdb.s.table_in_uds VALUES (1), (2), (3)`)
 
 	// Create large descriptors to ensure we're batching descriptors.
 	// The name of the table is approx 1000 bytes.
@@ -86,132 +82,97 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 	// The batch size in the migration is 512 KiB so this ensures we have at
 	// least two batches.
 	for i := 0; i < numTables; i++ {
-		_, err = db.Exec(fmt.Sprintf(`CREATE TABLE defaultdb.t%s%d()`, strings.Repeat("x", 10000), i))
+		tdb.Exec(t, fmt.Sprintf(`CREATE TABLE defaultdb.t%s%d()`, strings.Repeat("x", 10000), i))
+	}
+
+	{
+		_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
+			clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors).String())
 		require.NoError(t, err)
 	}
 
-	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors).String())
-	require.NoError(t, err)
-
 	// Verify that defaultdb and postgres have public schemas with IDs that
 	// are not 29.
-	row := db.QueryRow(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=50`)
-	require.NotNil(t, row)
+	const selectDatabaseByName = `
+SELECT id FROM system.namespace WHERE name = $1 and "parentID" = 0`
+	const selectDatabasePublicSchemaID = `SELECT id
+  FROM system.namespace
+ WHERE name = 'public'
+       AND "parentID" IN (` + selectDatabaseByName + `)`
 	var defaultDBPublicSchemaID int
-	err = row.Scan(&defaultDBPublicSchemaID)
-	require.NoError(t, err)
-
+	tdb.QueryRow(t, selectDatabasePublicSchemaID, "defaultdb").
+		Scan(&defaultDBPublicSchemaID)
 	require.NotEqual(t, defaultDBPublicSchemaID, keys.PublicSchemaID)
 
-	row = db.QueryRow(`SELECT id FROM system.namespace WHERE name='public' AND "parentID"=51`)
-	require.NotNil(t, row)
 	var postgresPublicSchemaID int
-	err = row.Scan(&postgresPublicSchemaID)
-	require.NoError(t, err)
-
+	tdb.QueryRow(t, selectDatabasePublicSchemaID, "postgres").
+		Scan(&postgresPublicSchemaID)
 	require.NotEqual(t, postgresPublicSchemaID, keys.PublicSchemaID)
 
 	// Verify that table "t" and type "typ" and "_typ" are have parent schema id
 	// defaultDBPublicSchemaID.
 	var tParentSchemaID, typParentSchemaID, typArrParentSchemaID int
-	row = db.QueryRow(`SELECT "parentSchemaID" FROM system.namespace WHERE name='t' AND "parentID"=50`)
-	err = row.Scan(&tParentSchemaID)
-	require.NoError(t, err)
-
+	const selectPublicSchemaIDWithNameAndParent = `
+SELECT "parentSchemaID"
+  FROM system.namespace
+ WHERE "parentID" IN (` + selectDatabaseByName + `) AND name = $2`
+	tdb.QueryRow(t, selectPublicSchemaIDWithNameAndParent, "defaultdb", "t").
+		Scan(&tParentSchemaID)
 	require.Equal(t, tParentSchemaID, defaultDBPublicSchemaID)
-
-	row = db.QueryRow(`SELECT "parentSchemaID" FROM system.namespace WHERE name='typ' AND "parentID"=50`)
-	err = row.Scan(&typParentSchemaID)
-	require.NoError(t, err)
-
+	tdb.QueryRow(t, selectPublicSchemaIDWithNameAndParent, "defaultdb", "typ").
+		Scan(&typParentSchemaID)
 	require.Equal(t, typParentSchemaID, defaultDBPublicSchemaID)
-
-	row = db.QueryRow(`SELECT "parentSchemaID" FROM system.namespace WHERE name='_typ' AND "parentID"=50`)
-	err = row.Scan(&typArrParentSchemaID)
-	require.NoError(t, err)
-
+	tdb.QueryRow(t, selectPublicSchemaIDWithNameAndParent, "defaultdb", "_typ").
+		Scan(&typArrParentSchemaID)
 	require.Equal(t, typArrParentSchemaID, defaultDBPublicSchemaID)
 
 	// Verify that the public role has the correct permissions on the public schema.
 	for _, expectedPrivType := range []string{"CREATE", "USAGE"} {
 		var privType string
-		err = db.QueryRow(`
+		tdb.QueryRow(t, `
 SELECT privilege_type FROM [SHOW GRANTS ON SCHEMA defaultdb.public]
 WHERE grantee = 'public' AND privilege_type = $1`,
 			expectedPrivType).
 			Scan(&privType)
-		require.NoError(t, err)
 		require.Equal(t, expectedPrivType, privType)
-		err = db.QueryRow(`
+		tdb.QueryRow(t, `
 SELECT privilege_type FROM [SHOW GRANTS ON SCHEMA postgres.public]
 WHERE grantee = 'public' AND privilege_type = $1`,
 			expectedPrivType).
 			Scan(&privType)
-		require.NoError(t, err)
 		require.Equal(t, expectedPrivType, privType)
 	}
 
-	_, err = db.Exec(`INSERT INTO t VALUES (4)`)
-	require.NoError(t, err)
+	tdb.Exec(t, `INSERT INTO t VALUES (4)`)
 
-	rows, err := db.Query(`SELECT * FROM defaultdb.t ORDER BY x`)
-	require.NoError(t, err)
-	defer rows.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify that we can query table t.
-	var x int
-	for i := 1; i < 5; i++ {
-		rows.Next()
-		require.NoError(t, err)
-		err = rows.Scan(&x)
-		require.NoError(t, err)
-		require.Equal(t, x, i)
-	}
+	tdb.CheckQueryResults(t, `SELECT * FROM defaultdb.t ORDER BY x`,
+		[][]string{{"1"}, {"2"}, {"3"}, {"4"}})
 
 	// Verify that we can use type "typ".
-	_, err = db.Exec(`CREATE TABLE t2(x typ)`)
-	require.NoError(t, err)
+	tdb.Exec(t, `CREATE TABLE t2(x typ)`)
 
 	// Verify that we can use the typ / enum.
-	_, err = db.Exec(`ALTER TYPE typ ADD VALUE 'hello'`)
-	require.NoError(t, err)
+	tdb.Exec(t, `ALTER TYPE typ ADD VALUE 'hello'`)
 
-	_, err = db.Exec(`INSERT INTO t2 VALUES ('hello')`)
-	require.NoError(t, err)
-
-	row = db.QueryRow(`SELECT * FROM t2`)
-	require.NotNil(t, row)
+	tdb.Exec(t, `INSERT INTO t2 VALUES ('hello')`)
 
 	var helloStr string
-	err = row.Scan(&helloStr)
-	require.NoError(t, err)
-
+	tdb.QueryRow(t, `SELECT * FROM t2`).Scan(&helloStr)
 	require.Equal(t, "hello", helloStr)
 
-	rows, err = db.Query(`SELECT * FROM defaultdb.s.table_in_uds ORDER BY x`)
-	require.NoError(t, err)
-
 	// Verify that we can query table defaultdb.s.table_in_uds (table in a UDS).
-	for i := 1; i < 4; i++ {
-		rows.Next()
-		require.NoError(t, err)
-		err = rows.Scan(&x)
-		require.NoError(t, err)
-		require.Equal(t, x, i)
-	}
+	tdb.CheckQueryResults(t, `SELECT * FROM defaultdb.s.table_in_uds ORDER BY x`,
+		[][]string{{"1"}, {"2"}, {"3"}})
 
 	// Verify that the tables with large descriptor sizes have parentSchemaIDs
 	// that are not 29.
 	const oldPublicSchemaID = 29
 	var parentSchemaID int
 	for i := 0; i < numTables; i++ {
-		row = db.QueryRow(fmt.Sprintf(`SELECT "parentSchemaID" FROM system.namespace WHERE name = 't%s%d'`, strings.Repeat("x", 10000), i))
-		err = row.Scan(&parentSchemaID)
-		require.NoError(t, err)
+		tdb.QueryRow(t, fmt.Sprintf(`
+SELECT "parentSchemaID" FROM system.namespace WHERE name = 't%s%d'
+`, strings.Repeat("x", 10000), i)).
+			Scan(&parentSchemaID)
 		require.NotEqual(t, parentSchemaID, descpb.InvalidID)
 		require.NotEqual(t, oldPublicSchemaID, parentSchemaID)
 	}
