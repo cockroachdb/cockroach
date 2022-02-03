@@ -305,6 +305,18 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 	w.hists.Get(bin.String()).Record(elapsed)
 }
 
+func (w *schemaChangeWorker) getErrorState() string {
+	return fmt.Sprintf("Dumping state before death:\n"+
+		"Expected errors: %s"+
+		"==========================="+
+		"Executed queries for generating errors: %s"+
+		"==========================="+
+		"Previous statements %s",
+		w.opGen.expectedExecErrors.String(),
+		w.opGen.GetOpGenLog(),
+		w.opGen.stmtsInTxt)
+}
+
 func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 	w.logger.startLog()
 	w.logger.writeLog("BEGIN")
@@ -328,7 +340,9 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
-				errors.Wrap(err, "***UNEXPECTED ERROR; Failed to generate a random operation"),
+				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s",
+					w.opGen.GetOpGenLog(),
+				),
 				errRunInTxnFatalSentinel,
 			)
 		}
@@ -343,7 +357,8 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 				pgErr := new(pgconn.PgError)
 				if !errors.As(err, &pgErr) {
 					return errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error"),
+						errors.Wrapf(err, "***UNEXPECTED ERROR; Received a non pg error. %s",
+							w.getErrorState()),
 						errRunInTxnFatalSentinel,
 					)
 				}
@@ -361,7 +376,8 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 				// Screen for any unexpected errors.
 				if !w.opGen.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 					return errors.Mark(
-						errors.Wrap(err, "***UNEXPECTED ERROR; Received an unexpected execution error"),
+						errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error. %s",
+							w.getErrorState()),
 						errRunInTxnFatalSentinel,
 					)
 				}
@@ -369,12 +385,17 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 				// Rollback because the error was anticipated.
 				w.recordInHist(timeutil.Since(start), txnRollback)
 				return errors.Mark(
-					errors.Wrap(err, "ROLLBACK; Successfully got expected execution error"),
+					errors.Wrapf(err, "ROLLBACK; Successfully got expected execution error. %s",
+						w.getErrorState()),
 					errRunInTxnRbkSentinel,
 				)
 			}
 			if !w.opGen.expectedExecErrors.empty() {
-				return errors.Mark(errors.New("***FAIL; Failed to receive an execution error when errors were expected"), errRunInTxnFatalSentinel)
+				return errors.Mark(
+					errors.Newf("***FAIL; Failed to receive an execution error when errors were expected. %s",
+						w.getErrorState()),
+					errRunInTxnFatalSentinel,
+				)
 			}
 
 			w.recordInHist(timeutil.Since(start), operationOk)

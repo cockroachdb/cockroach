@@ -61,6 +61,31 @@ type operationGenerator struct {
 	// opsInTxn is a list of previous ops in the current transaction to check
 	// for DDLs after writes.
 	opsInTxn []opType
+
+	// stmtsInTxn is a list of statements in the current transaction.
+	stmtsInTxt []string
+
+	opGenLog strings.Builder
+}
+
+func (og *operationGenerator) LogQueryResults(queryName string, result string) {
+	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] :", queryName))
+	og.opGenLog.WriteString(result)
+	og.opGenLog.WriteString("\n")
+}
+
+func (og *operationGenerator) LogQueryResultArray(queryName string, results []string) {
+	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] : ", queryName))
+	for _, result := range results {
+		og.opGenLog.WriteString(result)
+		og.opGenLog.WriteString(",")
+	}
+
+	og.opGenLog.WriteString("\n")
+}
+
+func (og *operationGenerator) GetOpGenLog() string {
+	return og.opGenLog.String()
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -76,12 +101,14 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 func (og *operationGenerator) resetOpState() {
 	og.expectedExecErrors.reset()
 	og.candidateExpectedCommitErrors.reset()
+	og.opGenLog = strings.Builder{}
 }
 
 // Reset internal state used per transaction
 func (og *operationGenerator) resetTxnState() {
 	og.expectedCommitErrors.reset()
 	og.opsInTxn = nil
+	og.stmtsInTxt = nil
 }
 
 //go:generate stringer -type=opType
@@ -244,6 +271,7 @@ func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt strin
 		}
 		// Screen for schema change after write in the same transaction.
 		og.checkIfOpViolatesDDLAfterWrite(op)
+		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
 
 		// Add candidateExpectedCommitErrors to expectedCommitErrors
 		og.expectedCommitErrors.merge(og.candidateExpectedCommitErrors)
@@ -279,7 +307,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (string,
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -304,11 +332,11 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (string,
 	}
 	def.Nullable.Nullability = tree.Nullability(og.randIntn(1 + int(tree.SilentNull)))
 
-	databaseHasRegionChange, err := databaseHasRegionChange(ctx, tx)
+	databaseHasRegionChange, err := og.databaseHasRegionChange(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	tableIsRegionalByRow, err := tableIsRegionalByRow(ctx, tx, tableName)
+	tableIsRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -317,19 +345,19 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (string,
 		def.Unique.IsUnique = true
 	}
 
-	columnExistsOnTable, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExistsOnTable, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
 	var hasRows bool
 	if tableExists {
-		hasRows, err = tableHasRows(ctx, tx, tableName)
+		hasRows, err = og.tableHasRows(ctx, tx, tableName)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -360,7 +388,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -376,33 +404,33 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 
 	constaintName := fmt.Sprintf("%s_%s_unique", tableName.Object(), columnForConstraint.name)
 
-	columnExistsOnTable, err := columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
+	columnExistsOnTable, err := og.columnExistsOnTable(ctx, tx, tableName, columnForConstraint.name)
 	if err != nil {
 		return "", err
 	}
-	constraintExists, err := constraintExists(ctx, tx, constaintName)
+	constraintExists, err := og.constraintExists(ctx, tx, constaintName)
 	if err != nil {
 		return "", err
 	}
 
 	canApplyConstraint := true
 	if columnExistsOnTable {
-		canApplyConstraint, err = canApplyUniqueConstraint(ctx, tx, tableName, []string{columnForConstraint.name})
+		canApplyConstraint, err = og.canApplyUniqueConstraint(ctx, tx, tableName, []string{columnForConstraint.name})
 		if err != nil {
 			return "", err
 		}
 	}
 
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
 
-	databaseHasRegionChange, err := databaseHasRegionChange(ctx, tx)
+	databaseHasRegionChange, err := og.databaseHasRegionChange(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	tableIsRegionalByRow, err := tableIsRegionalByRow(ctx, tx, tableName)
+	tableIsRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -427,7 +455,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -436,7 +464,7 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
 	}
 
-	databaseRegionNames, err := getDatabaseRegionNames(ctx, tx)
+	databaseRegionNames, err := og.getDatabaseRegionNames(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -445,15 +473,15 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
 	}
 
-	hasSchemaChange, err := tableHasOngoingSchemaChanges(ctx, tx, tableName)
+	hasSchemaChange, err := og.tableHasOngoingSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
-	databaseHasRegionChange, err := databaseHasRegionChange(ctx, tx)
+	databaseHasRegionChange, err := og.databaseHasRegionChange(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	databaseHasMultiRegion, err := databaseIsMultiRegion(ctx, tx)
+	databaseHasMultiRegion, err := og.databaseIsMultiRegion(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -516,17 +544,22 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 	return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY %s`, tableName, toLocality), nil
 }
 
-func getClusterRegionNames(ctx context.Context, tx pgx.Tx) (catpb.RegionNames, error) {
-	return scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
+func (og *operationGenerator) getClusterRegionNames(
+	ctx context.Context, tx pgx.Tx,
+) (catpb.RegionNames, error) {
+	return og.scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM CLUSTER]")
 }
 
-func getDatabaseRegionNames(ctx context.Context, tx pgx.Tx) (catpb.RegionNames, error) {
-	return scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
+func (og *operationGenerator) getDatabaseRegionNames(
+	ctx context.Context, tx pgx.Tx,
+) (catpb.RegionNames, error) {
+	return og.scanRegionNames(ctx, tx, "SELECT region FROM [SHOW REGIONS FROM DATABASE]")
 }
 
-func getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
+func (og *operationGenerator) getDatabase(ctx context.Context, tx pgx.Tx) (string, error) {
 	var database string
 	err := tx.QueryRow(ctx, "SHOW DATABASE").Scan(&database)
+	og.LogQueryResults("SHOW DATABASE", database)
 	return database, err
 }
 
@@ -537,8 +570,8 @@ type getRegionsResult struct {
 	regionNamesNotInDatabase catpb.RegionNames
 }
 
-func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
-	regionNamesInCluster, err := getClusterRegionNames(ctx, tx)
+func (og *operationGenerator) getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
+	regionNamesInCluster, err := og.getClusterRegionNames(ctx, tx)
 	if err != nil {
 		return getRegionsResult{}, err
 	}
@@ -546,7 +579,7 @@ func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
 	for _, clusterRegionName := range regionNamesInCluster {
 		regionNamesNotInDatabaseSet[clusterRegionName] = struct{}{}
 	}
-	regionNamesInDatabase, err := getDatabaseRegionNames(ctx, tx)
+	regionNamesInDatabase, err := og.getDatabaseRegionNames(ctx, tx)
 	if err != nil {
 		return getRegionsResult{}, err
 	}
@@ -565,8 +598,11 @@ func getRegions(ctx context.Context, tx pgx.Tx) (getRegionsResult, error) {
 	}, nil
 }
 
-func scanRegionNames(ctx context.Context, tx pgx.Tx, query string) (catpb.RegionNames, error) {
+func (og *operationGenerator) scanRegionNames(
+	ctx context.Context, tx pgx.Tx, query string,
+) (catpb.RegionNames, error) {
 	var regionNames catpb.RegionNames
+	var regionNamesForLog []string
 	rows, err := tx.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -579,20 +615,21 @@ func scanRegionNames(ctx context.Context, tx pgx.Tx, query string) (catpb.Region
 			return nil, err
 		}
 		regionNames = append(regionNames, regionName)
+		regionNamesForLog = append(regionNamesForLog, regionName.String())
 	}
 	if rows.Err() != nil {
 		return nil, errors.Wrapf(rows.Err(), "failed to get regions: %s", query)
 	}
-
+	og.LogQueryResultArray(query, regionNamesForLog)
 	return regionNames, nil
 }
 
 func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (string, error) {
-	regionResult, err := getRegions(ctx, tx)
+	regionResult, err := og.getRegions(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	database, err := getDatabase(ctx, tx)
+	database, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -614,7 +651,7 @@ func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (string,
 	// If the database is undergoing a regional by row related change on the
 	// database, error out.
 	if len(regionResult.regionNamesInDatabase) > 0 {
-		databaseHasRegionalByRowChange, err := databaseHasRegionalByRowChange(ctx, tx)
+		databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
 		if err != nil {
 			return "", err
 		}
@@ -643,7 +680,7 @@ func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (string,
 	// Double check this first.
 	idx := og.params.rng.Intn(len(regionResult.regionNamesNotInDatabase))
 	region := regionResult.regionNamesNotInDatabase[idx]
-	valuePresent, err := enumMemberPresent(ctx, tx, tree.RegionEnum, string(region))
+	valuePresent, err := og.enumMemberPresent(ctx, tx, tree.RegionEnum, string(region))
 	if err != nil {
 		return "", err
 	}
@@ -658,11 +695,11 @@ func (og *operationGenerator) addRegion(ctx context.Context, tx pgx.Tx) (string,
 }
 
 func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (string, error) {
-	regionResult, err := getRegions(ctx, tx)
+	regionResult, err := og.getRegions(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	database, err := getDatabase(ctx, tx)
+	database, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -740,19 +777,19 @@ func (og *operationGenerator) addForeignKeyConstraint(
 		},
 	}
 
-	parentColumnHasUniqueConstraint, err := columnHasSingleUniqueConstraint(ctx, tx, parentTable, parentColumn.name)
+	parentColumnHasUniqueConstraint, err := og.columnHasSingleUniqueConstraint(ctx, tx, parentTable, parentColumn.name)
 	if err != nil {
 		return "", err
 	}
-	childColumnIsComputed, err := columnIsComputed(ctx, tx, parentTable, parentColumn.name)
+	childColumnIsComputed, err := og.columnIsComputed(ctx, tx, parentTable, parentColumn.name)
 	if err != nil {
 		return "", err
 	}
-	constraintExists, err := constraintExists(ctx, tx, string(constraintName))
+	constraintExists, err := og.constraintExists(ctx, tx, string(constraintName))
 	if err != nil {
 		return "", err
 	}
-	rowsSatisfyConstraint, err := rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
+	rowsSatisfyConstraint, err := og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
 	if err != nil {
 		return "", err
 	}
@@ -777,7 +814,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -803,7 +840,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 		return "", err
 	}
 
-	indexExists, err := indexExists(ctx, tx, tableName, indexName)
+	indexExists, err := og.indexExists(ctx, tx, tableName, indexName)
 	if err != nil {
 		return "", err
 	}
@@ -817,12 +854,12 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 	}
 
 	regionColumn := ""
-	tableIsRegionalByRow, err := tableIsRegionalByRow(ctx, tx, tableName)
+	tableIsRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
 	if tableIsRegionalByRow {
-		regionColumn, err = getRegionColumn(ctx, tx, tableName)
+		regionColumn, err = og.getRegionColumn(ctx, tx, tableName)
 		if err != nil {
 			return "", err
 		}
@@ -858,7 +895,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 			}
 		}
 
-		colUsedInPrimaryIdx, err := colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+		colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
 		if err != nil {
 			return "", err
 		}
@@ -885,7 +922,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 
 			// Virtual computed columns are not allowed to be indexed
 			if columnNames[i].generated && !virtualComputedStored {
-				isStored, err := columnIsStoredComputed(ctx, tx, tableName, columnNames[i].name)
+				isStored, err := og.columnIsStoredComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return "", err
 				}
@@ -897,7 +934,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 			// If the column is already used in the primary key, then attempting to store
 			// it using an index will produce a pgcode.DuplicateColumn error.
 			if !duplicateStore {
-				colUsedInPrimaryIdx, err := colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+				colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return "", err
 				}
@@ -915,18 +952,18 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 		for _, col := range def.Columns {
 			columns = append(columns, string(col.Column))
 		}
-		uniqueViolationWillNotOccur, err = canApplyUniqueConstraint(ctx, tx, tableName, columns)
+		uniqueViolationWillNotOccur, err = og.canApplyUniqueConstraint(ctx, tx, tableName, columns)
 		if err != nil {
 			return "", err
 		}
 	}
 
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
 
-	databaseHasRegionChange, err := databaseHasRegionChange(ctx, tx)
+	databaseHasRegionChange, err := og.databaseHasRegionChange(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -967,11 +1004,11 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (st
 		return "", err
 	}
 
-	schemaExists, err := schemaExists(ctx, tx, seqName.Schema())
+	schemaExists, err := og.schemaExists(ctx, tx, seqName.Schema())
 	if err != nil {
 		return "", err
 	}
-	sequenceExists, err := sequenceExists(ctx, tx, seqName)
+	sequenceExists, err := og.sequenceExists(ctx, tx, seqName)
 	if err != nil {
 		return "", err
 	}
@@ -997,7 +1034,7 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (st
 		if err != nil {
 			return "", err
 		}
-		tableExists, err := tableExists(ctx, tx, table)
+		tableExists, err := og.tableExists(ctx, tx, table)
 		if err != nil {
 			return "", err
 		}
@@ -1017,7 +1054,7 @@ func (og *operationGenerator) createSequence(ctx context.Context, tx pgx.Tx) (st
 			if err != nil {
 				return "", err
 			}
-			columnExists, err := columnExistsOnTable(ctx, tx, table, column)
+			columnExists, err := og.columnExistsOnTable(ctx, tx, table, column)
 			if err != nil {
 				return "", err
 			}
@@ -1060,11 +1097,11 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (strin
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
-	schemaExists, err := schemaExists(ctx, tx, tableName.Schema())
+	schemaExists, err := og.schemaExists(ctx, tx, tableName.Schema())
 	if err != nil {
 		return "", err
 	}
@@ -1081,7 +1118,7 @@ func (og *operationGenerator) createEnum(ctx context.Context, tx pgx.Tx) (string
 	if err != nil {
 		return "", err
 	}
-	schemaExists, err := schemaExists(ctx, tx, typName.Schema())
+	schemaExists, err := og.schemaExists(ctx, tx, typName.Schema())
 	if err != nil {
 		return "", err
 	}
@@ -1119,7 +1156,7 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (str
 			if err != nil {
 				return "", err
 			}
-			sourceTableExists, err = tableExists(ctx, tx, tableName)
+			sourceTableExists, err = og.tableExists(ctx, tx, tableName)
 			if err != nil {
 				return "", err
 			}
@@ -1129,7 +1166,7 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (str
 			if err != nil {
 				return "", err
 			}
-			sourceTableExists, err = viewExists(ctx, tx, tableName)
+			sourceTableExists, err = og.viewExists(ctx, tx, tableName)
 			if err != nil {
 				return "", err
 			}
@@ -1192,11 +1229,11 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (str
 	if err != nil {
 		return "", err
 	}
-	schemaExists, err := schemaExists(ctx, tx, destTableName.Schema())
+	schemaExists, err := og.schemaExists(ctx, tx, destTableName.Schema())
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, destTableName)
+	tableExists, err := og.tableExists(ctx, tx, destTableName)
 	if err != nil {
 		return "", err
 	}
@@ -1239,7 +1276,7 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (string
 			if err != nil {
 				return "", err
 			}
-			sourceTableExists, err = tableExists(ctx, tx, tableName)
+			sourceTableExists, err = og.tableExists(ctx, tx, tableName)
 			if err != nil {
 				return "", err
 			}
@@ -1249,7 +1286,7 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (string
 			if err != nil {
 				return "", err
 			}
-			sourceTableExists, err = viewExists(ctx, tx, tableName)
+			sourceTableExists, err = og.viewExists(ctx, tx, tableName)
 			if err != nil {
 				return "", err
 			}
@@ -1312,11 +1349,11 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (string
 	if err != nil {
 		return "", err
 	}
-	schemaExists, err := schemaExists(ctx, tx, destViewName.Schema())
+	schemaExists, err := og.schemaExists(ctx, tx, destViewName.Schema())
 	if err != nil {
 		return "", err
 	}
-	viewExists, err := viewExists(ctx, tx, destViewName)
+	viewExists, err := og.viewExists(ctx, tx, destViewName)
 	if err != nil {
 		return "", err
 	}
@@ -1339,7 +1376,7 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (string
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1352,23 +1389,23 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (string
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	colIsPrimaryKey, err := colIsPrimaryKey(ctx, tx, tableName, columnName)
+	colIsPrimaryKey, err := og.colIsPrimaryKey(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	columnIsDependedOn, err := columnIsDependedOn(ctx, tx, tableName, columnName)
+	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	columnIsInDroppingIndex, err := columnIsInDroppingIndex(ctx, tx, tableName, columnName)
+	columnIsInDroppingIndex, err := og.columnIsInDroppingIndex(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1389,7 +1426,7 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1401,7 +1438,7 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
@@ -1416,7 +1453,7 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1428,16 +1465,16 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	colIsPrimaryKey, err := colIsPrimaryKey(ctx, tx, tableName, columnName)
+	colIsPrimaryKey, err := og.colIsPrimaryKey(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
 
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1460,7 +1497,7 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1473,12 +1510,12 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
 
-	columnIsStored, err := columnIsStoredComputed(ctx, tx, tableName, columnName)
+	columnIsStored, err := og.columnIsStoredComputed(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
@@ -1497,7 +1534,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (st
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1515,7 +1552,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (st
 	// subsequently in the transaction is not supported. Since addConstraint is not implemented,
 	// a replacement primary key will not be created in the same transaction. Thus,
 	// dropping a primary key will always produce an error.
-	constraintIsPrimary, err := constraintIsPrimary(ctx, tx, tableName, constraintName)
+	constraintIsPrimary, err := og.constraintIsPrimary(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return "", err
 	}
@@ -1525,7 +1562,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (st
 
 	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
 	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is unsupported.
-	constraintIsUnique, err := constraintIsUnique(ctx, tx, tableName, constraintName)
+	constraintIsUnique, err := og.constraintIsUnique(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return "", err
 	}
@@ -1533,7 +1570,7 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (st
 		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	constraintBeingDropped, err := constraintInDroppingState(ctx, tx, tableName, constraintName)
+	constraintBeingDropped, err := og.constraintInDroppingState(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return "", err
 	}
@@ -1549,7 +1586,7 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (string,
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1563,7 +1600,7 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (string,
 		return "", err
 	}
 
-	indexExists, err := indexExists(ctx, tx, tableName, indexName)
+	indexExists, err := og.indexExists(ctx, tx, tableName, indexName)
 	if err != nil {
 		return "", err
 	}
@@ -1571,7 +1608,7 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (string,
 		og.expectedExecErrors.add(pgcode.UndefinedObject)
 	}
 
-	hasAlterPKSchemaChange, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1579,11 +1616,11 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (string,
 		og.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
-	databaseHasRegionChange, err := databaseHasRegionChange(ctx, tx)
+	databaseHasRegionChange, err := og.databaseHasRegionChange(ctx, tx)
 	if err != nil {
 		return "", err
 	}
-	tableIsRegionalByRow, err := tableIsRegionalByRow(ctx, tx, tableName)
+	tableIsRegionalByRow, err := og.tableIsRegionalByRow(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1605,7 +1642,7 @@ func (og *operationGenerator) dropSequence(ctx context.Context, tx pgx.Tx) (stri
 		IfExists: ifExists,
 	}
 
-	sequenceExists, err := sequenceExists(ctx, tx, sequenceName)
+	sequenceExists, err := og.sequenceExists(ctx, tx, sequenceName)
 	if err != nil {
 		return "", err
 	}
@@ -1620,11 +1657,11 @@ func (og *operationGenerator) dropTable(ctx context.Context, tx pgx.Tx) (string,
 	if err != nil {
 		return "", err
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
-	tableHasDependencies, err := tableHasDependencies(ctx, tx, tableName)
+	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1651,11 +1688,11 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (string, 
 	if err != nil {
 		return "", err
 	}
-	viewExists, err := tableExists(ctx, tx, viewName)
+	viewExists, err := og.tableExists(ctx, tx, viewName)
 	if err != nil {
 		return "", err
 	}
-	viewHasDependencies, err := tableHasDependencies(ctx, tx, viewName)
+	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName)
 	if err != nil {
 		return "", err
 	}
@@ -1682,7 +1719,7 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (stri
 		return "", err
 	}
 
-	srcTableExists, err := tableExists(ctx, tx, tableName)
+	srcTableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1702,15 +1739,15 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (stri
 		return "", err
 	}
 
-	srcColumnExists, err := columnExistsOnTable(ctx, tx, tableName, srcColumnName)
+	srcColumnExists, err := og.columnExistsOnTable(ctx, tx, tableName, srcColumnName)
 	if err != nil {
 		return "", err
 	}
-	destColumnExists, err := columnExistsOnTable(ctx, tx, tableName, destColumnName)
+	destColumnExists, err := og.columnExistsOnTable(ctx, tx, tableName, destColumnName)
 	if err != nil {
 		return "", err
 	}
-	columnIsDependedOn, err := columnIsDependedOn(ctx, tx, tableName, srcColumnName)
+	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, srcColumnName)
 	if err != nil {
 		return "", err
 	}
@@ -1731,7 +1768,7 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (strin
 		return "", err
 	}
 
-	srcTableExists, err := tableExists(ctx, tx, tableName)
+	srcTableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1751,11 +1788,11 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (strin
 		return "", err
 	}
 
-	srcIndexExists, err := indexExists(ctx, tx, tableName, srcIndexName)
+	srcIndexExists, err := og.indexExists(ctx, tx, tableName, srcIndexName)
 	if err != nil {
 		return "", err
 	}
-	destIndexExists, err := indexExists(ctx, tx, tableName, destIndexName)
+	destIndexExists, err := og.indexExists(ctx, tx, tableName, destIndexName)
 	if err != nil {
 		return "", err
 	}
@@ -1786,17 +1823,17 @@ func (og *operationGenerator) renameSequence(ctx context.Context, tx pgx.Tx) (st
 		return "", err
 	}
 
-	srcSequenceExists, err := sequenceExists(ctx, tx, srcSequenceName)
+	srcSequenceExists, err := og.sequenceExists(ctx, tx, srcSequenceName)
 	if err != nil {
 		return "", err
 	}
 
-	destSchemaExists, err := schemaExists(ctx, tx, destSequenceName.Schema())
+	destSchemaExists, err := og.schemaExists(ctx, tx, destSequenceName.Schema())
 	if err != nil {
 		return "", err
 	}
 
-	destSequenceExists, err := sequenceExists(ctx, tx, destSequenceName)
+	destSequenceExists, err := og.sequenceExists(ctx, tx, destSequenceName)
 	if err != nil {
 		return "", err
 	}
@@ -1828,22 +1865,22 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (strin
 		return "", err
 	}
 
-	srcTableExists, err := tableExists(ctx, tx, srcTableName)
+	srcTableExists, err := og.tableExists(ctx, tx, srcTableName)
 	if err != nil {
 		return "", err
 	}
 
-	destSchemaExists, err := schemaExists(ctx, tx, destTableName.Schema())
+	destSchemaExists, err := og.schemaExists(ctx, tx, destTableName.Schema())
 	if err != nil {
 		return "", err
 	}
 
-	destTableExists, err := tableExists(ctx, tx, destTableName)
+	destTableExists, err := og.tableExists(ctx, tx, destTableName)
 	if err != nil {
 		return "", err
 	}
 
-	srcTableHasDependencies, err := tableHasDependencies(ctx, tx, srcTableName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName)
 	if err != nil {
 		return "", err
 	}
@@ -1876,22 +1913,22 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (string
 		return "", err
 	}
 
-	srcViewExists, err := viewExists(ctx, tx, srcViewName)
+	srcViewExists, err := og.viewExists(ctx, tx, srcViewName)
 	if err != nil {
 		return "", err
 	}
 
-	destSchemaExists, err := schemaExists(ctx, tx, destViewName.Schema())
+	destSchemaExists, err := og.schemaExists(ctx, tx, destViewName.Schema())
 	if err != nil {
 		return "", err
 	}
 
-	destViewExists, err := viewExists(ctx, tx, destViewName)
+	destViewExists, err := og.viewExists(ctx, tx, destViewName)
 	if err != nil {
 		return "", err
 	}
 
-	srcTableHasDependencies, err := tableHasDependencies(ctx, tx, srcViewName)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName)
 	if err != nil {
 		return "", err
 	}
@@ -1915,7 +1952,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1929,7 +1966,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnForDefault.name)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnForDefault.name)
 	if err != nil {
 		return "", err
 	}
@@ -1973,7 +2010,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		return "", err
 	}
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -1986,11 +2023,11 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 	if err != nil {
 		return "", err
 	}
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnName)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
-	constraintBeingAdded, err := columnNotNullConstraintInMutation(ctx, tx, tableName, columnName)
+	constraintBeingAdded, err := og.columnNotNullConstraintInMutation(ctx, tx, tableName, columnName)
 	if err != nil {
 		return "", err
 	}
@@ -2002,7 +2039,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		og.expectedExecErrors.add(pgcode.UndefinedColumn)
 	} else {
 		// If the column has null values, then a check violation will occur upon committing.
-		colContainsNull, err := columnContainsNull(ctx, tx, tableName, columnName)
+		colContainsNull, err := og.columnContainsNull(ctx, tx, tableName, columnName)
 		if err != nil {
 			return "", err
 		}
@@ -2011,7 +2048,7 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 	}
 
-	hasPKSchemaChanges, err := tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
+	hasPKSchemaChanges, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -2032,7 +2069,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (str
 
 	const setSessionVariableString = `SET enable_experimental_alter_column_type_general = true;`
 
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -2046,7 +2083,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (str
 		return "", err
 	}
 
-	columnExists, err := columnExistsOnTable(ctx, tx, tableName, columnForTypeChange.name)
+	columnExists, err := og.columnExistsOnTable(ctx, tx, tableName, columnForTypeChange.name)
 	if err != nil {
 		return "", err
 	}
@@ -2061,7 +2098,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (str
 		return "", err
 	}
 
-	columnHasDependencies, err := columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
+	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
 	if err != nil {
 		return "", err
 	}
@@ -2086,7 +2123,7 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (str
 }
 
 func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (string, error) {
-	dbRegions, err := getDatabaseRegionNames(ctx, tx)
+	dbRegions, err := og.getDatabaseRegionNames(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -2112,7 +2149,7 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (string, e
 		},
 	}.add(og.expectedExecErrors)
 
-	dbName, err := getDatabase(ctx, tx)
+	dbName, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return "", err
 	}
@@ -2124,7 +2161,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (string,
 	if err != nil {
 		return "", errors.Wrapf(err, "error getting random table name")
 	}
-	tableExists, err := tableExists(ctx, tx, tableName)
+	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return "", err
 	}
@@ -2168,14 +2205,14 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (string,
 
 	// Verify if the new row will violate unique constraints by checking the constraints and
 	// existing rows in the database.
-	uniqueConstraintViolation, err := violatesUniqueConstraints(ctx, tx, tableName, colNames, rows)
+	uniqueConstraintViolation, err := og.violatesUniqueConstraints(ctx, tx, tableName, colNames, rows)
 	if err != nil {
 		return "", err
 	}
 
 	// Verify if the new row will violate fk constraints by checking the constraints and rows
 	// in the database.
-	foreignKeyViolation, err := violatesFkConstraints(ctx, tx, tableName, colNames, rows)
+	foreignKeyViolation, err := og.violatesFkConstraints(ctx, tx, tableName, colNames, rows)
 	if err != nil {
 		return "", err
 	}
@@ -2822,7 +2859,7 @@ func (og *operationGenerator) createSchema(ctx context.Context, tx pgx.Tx) (stri
 	}
 	ifNotExists := og.randIntn(2) == 0
 
-	schemaExists, err := schemaExists(ctx, tx, schemaName)
+	schemaExists, err := og.schemaExists(ctx, tx, schemaName)
 	if err != nil {
 		return "", err
 	}
@@ -2863,11 +2900,11 @@ func (og *operationGenerator) dropSchema(ctx context.Context, tx pgx.Tx) (string
 		return "", err
 	}
 
-	schemaExists, err := schemaExists(ctx, tx, schemaName)
+	schemaExists, err := og.schemaExists(ctx, tx, schemaName)
 	if err != nil {
 		return "", err
 	}
-	crossReferences, err := schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
+	crossReferences, err := og.schemaContainsTypesWithCrossSchemaReferences(ctx, tx, schemaName)
 	if err != nil {
 		return "", err
 	}
