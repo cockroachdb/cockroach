@@ -60,11 +60,14 @@ func TestServer(t *testing.T) {
 	td := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
 
 	ts := execinfrapb.TableReaderSpec{
-		Table:     *td.TableDesc(),
-		IndexIdx:  0,
-		Reverse:   false,
-		Spans:     []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
-		ColumnIDs: []descpb.ColumnID{1, 2}, // a b
+		Reverse: false,
+		Spans:   []roachpb.Span{td.PrimaryIndexSpan(keys.SystemSQLCodec)},
+	}
+	if err := rowenc.InitIndexFetchSpec(
+		&ts.FetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		[]descpb.ColumnID{1, 2}, // a b
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, s.NodeID())

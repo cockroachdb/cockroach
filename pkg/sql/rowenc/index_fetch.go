@@ -38,13 +38,15 @@ func InitIndexFetchSpec(
 	oldFetchedCols := s.FetchedColumns
 	oldFamilies := s.FamilyDefaultColumns
 	*s = descpb.IndexFetchSpec{
-		TableName:           table.GetName(),
-		TableID:             table.GetID(),
-		IndexName:           index.GetName(),
-		IsSecondaryIndex:    !index.Primary(),
-		IsUniqueIndex:       index.IsUnique(),
-		EncodingType:        index.GetEncodingType(),
-		NumKeySuffixColumns: uint32(index.NumKeySuffixColumns()),
+		Version:               descpb.IndexFetchSpecVersionInitial,
+		TableName:             table.GetName(),
+		TableID:               table.GetID(),
+		TableModificationTime: table.GetModificationTime(),
+		IndexName:             index.GetName(),
+		IsSecondaryIndex:      !index.Primary(),
+		IsUniqueIndex:         index.IsUnique(),
+		EncodingType:          index.GetEncodingType(),
+		NumKeySuffixColumns:   uint32(index.NumKeySuffixColumns()),
 	}
 
 	indexID := index.GetID()
