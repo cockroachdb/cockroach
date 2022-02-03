@@ -262,10 +262,11 @@ func (s *crdbSpan) finish() bool {
 			s.mu.finishing = false
 		}
 
-		// If the span is not part of the registry now, it never will be. So, we'll
-		// need to remove it from the registry only if it currently does not have a
-		// parent. We'll also need to manipulate the registry if there are open
-		// children (they'll need to be added to the registry).
+		// If the span was not part of the registry the first time the lock was
+		// acquired, above, it never will be (because we marked it as finished). So,
+		// we'll need to remove it from the registry only if it currently does not
+		// have a parent. We'll also need to manipulate the registry if there are
+		// open children (they'll need to be added to the registry).
 		needRegistryChange = !hasParent || len(s.mu.openChildren) > 0
 
 		// Deal with the orphaned children - make them roots. We call into the
