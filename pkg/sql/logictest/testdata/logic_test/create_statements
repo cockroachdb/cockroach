@@ -212,11 +212,13 @@ CREATE TABLE crdb_internal.cluster_contention_events (
 CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,

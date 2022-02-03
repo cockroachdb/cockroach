@@ -491,14 +491,14 @@ CREATE DATABASE d
 statement ok
 GRANT ALL PRIVILEGES ON DATABASE d TO testuser WITH GRANT OPTION
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE d
 ----
-database_name   grantee    privilege_type
-d               admin      ALL
-d               public     CONNECT
-d               root       ALL
-d               testuser   ALL
+database_name  grantee   privilege_type  is_grantable
+d              admin     ALL             true
+d              public    CONNECT         false
+d              root      ALL             true
+d              testuser  ALL             true
 
 #
 # Make testuser2 a member of testuser; it should inherit grant options
@@ -512,15 +512,15 @@ user testuser2
 statement ok
 GRANT CONNECT ON DATABASE d TO TARGET
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE d
 ----
-database_name  grantee   privilege_type
-d              admin     ALL
-d              public    CONNECT
-d              root      ALL
-d              target    CONNECT
-d              testuser  ALL
+database_name  grantee   privilege_type  is_grantable
+d              admin     ALL             true
+d              public    CONNECT         false
+d              root      ALL             true
+d              target    CONNECT         false
+d              testuser  ALL             true
 
 user root
 
@@ -546,30 +546,30 @@ GRANT CREATE ON DATABASE d TO target WITH GRANT OPTION
 
 user root
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE d
 ----
-database_name   grantee    privilege_type
-d               admin      ALL
-d               public     CONNECT
-d               root       ALL
-d               target     CONNECT
-d               testuser   ALL
-d               testuser2  CONNECT
-d               testuser2  CREATE
+database_name  grantee    privilege_type  is_grantable
+d              admin      ALL             true
+d              public     CONNECT         false
+d              root       ALL             true
+d              target     CONNECT         true
+d              testuser   ALL             true
+d              testuser2  CONNECT         true
+d              testuser2  CREATE          false
 
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE d FROM testuser2
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE d
 ----
-database_name   grantee    privilege_type
-d               admin      ALL
-d               public     CONNECT
-d               root       ALL
-d               target     CONNECT
-d               testuser   ALL
+database_name  grantee   privilege_type  is_grantable
+d              admin     ALL             true
+d              public    CONNECT         false
+d              root      ALL             true
+d              target    CONNECT         true
+d              testuser  ALL             true
 
 user testuser2
 

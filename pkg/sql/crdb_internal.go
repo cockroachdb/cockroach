@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -4569,7 +4570,8 @@ var crdbInternalClusterDatabasePrivilegesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.cluster_database_privileges (
 	database_name   STRING NOT NULL,
 	grantee         STRING NOT NULL,
-	privilege_type  STRING NOT NULL
+	privilege_type  STRING NOT NULL,
+	is_grantable 		STRING
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
@@ -4578,13 +4580,21 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				dbNameStr := tree.NewDString(db.GetName())
 				// TODO(knz): This should filter for the current user, see
 				// https://github.com/cockroachdb/cockroach/issues/35572
+				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
 				for _, u := range privs {
 					userNameStr := tree.NewDString(u.User.Normalized())
 					for _, priv := range u.Privileges {
+						var isGrantable tree.Datum
+						if populateGrantOption {
+							isGrantable = yesOrNoDatum(priv.GrantOption)
+						} else {
+							isGrantable = tree.DNull
+						}
 						if err := addRow(
 							dbNameStr,                           // database_name
 							userNameStr,                         // grantee
 							tree.NewDString(priv.Kind.String()), // privilege_type
+							isGrantable,                         // is_grantable
 						); err != nil {
 							return err
 						}
