@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -33,19 +33,21 @@ func TestTenantWithDecommissionedID(t *testing.T) {
 	// the system.sql_instances table. The sql process sets rpcContext.NodeID =
 	// InstanceID and PingRequest.NodeID = rpcContext.NodeID.
 	//
-	// When a KV node recieves a ping, it checks the NodeID against a
+	// When a KV node receives a ping, it checks the NodeID against a
 	// decommissioned node tombstone list. Until PR #75766, this caused the KV
 	// node to reject pings from sql servers. The rejected pings would manifest
 	// as sql connection timeouts.
 
-	skip.UnderStress(t, "decommissioning times out under stress")
-
 	ctx := context.Background()
-	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{})
+	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 
 	server := tc.Server(0)
-	decommissionID := tc.Server(3).NodeID()
+	hostID := server.NodeID()
+	decommissionID := roachpb.NodeID(int(hostID) + 1)
+
+	liveness := server.NodeLiveness().(*liveness.NodeLiveness)
+	require.NoError(t, liveness.CreateLivenessRecord(ctx, decommissionID))
 	require.NoError(t, server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONING, []roachpb.NodeID{decommissionID}))
 	require.NoError(t, server.Decommission(ctx, livenesspb.MembershipStatus_DECOMMISSIONED, []roachpb.NodeID{decommissionID}))
 
