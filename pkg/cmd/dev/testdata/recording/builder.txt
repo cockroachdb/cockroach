@@ -2,10 +2,6 @@ id
 ----
 1001:1002
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 ----
 BAZEL_IMAGE=mock_bazel_image:1234
@@ -22,10 +18,6 @@ docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --work
 id
 ----
 1001:1002
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 ----

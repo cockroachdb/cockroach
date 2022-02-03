@@ -1,13 +1,5 @@
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 go/src/github.com/cockroachdb/cockroach/build/bazelutil/bazel-generate.sh
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 cat go/src/github.com/cockroachdb/cockroach/docs/generated/bazel_targets.txt
 ----
@@ -104,10 +96,6 @@ echo MOCK_REDACT_SAFE_OUTPUT > go/src/github.com/cockroachdb/cockroach/docs/gene
 
 bazel build //:go_path --show_result=0
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 bazel info bazel-bin --color=no
 ----

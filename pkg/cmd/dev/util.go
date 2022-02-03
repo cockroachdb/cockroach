@@ -112,8 +112,25 @@ func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 
 }
 
+var workspace string
+
 func (d *dev) getWorkspace(ctx context.Context) (string, error) {
-	return d.getBazelInfo(ctx, "workspace")
+	if workspace == "" {
+		if _, err := os.Stat("WORKSPACE"); err == nil {
+			w, err := os.Getwd()
+			if err != nil {
+				return "", err
+			}
+			workspace = w
+		} else {
+			w, err := d.getBazelInfo(ctx, "workspace")
+			if err != nil {
+				return "", err
+			}
+			workspace = w
+		}
+	}
+	return workspace, nil
 }
 
 func (d *dev) getBazelBin(ctx context.Context) (string, error) {
