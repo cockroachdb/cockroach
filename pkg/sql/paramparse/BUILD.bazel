@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "paramobserver.go",
         "paramparse.go",
+        "validation.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/paramparse",
     visibility = ["//visibility:public"],

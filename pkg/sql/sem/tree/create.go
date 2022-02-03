@@ -421,9 +421,10 @@ type ColumnTableDef struct {
 		ConstraintName Name
 	}
 	PrimaryKey struct {
-		IsPrimaryKey bool
-		Sharded      bool
-		ShardBuckets Expr
+		IsPrimaryKey  bool
+		Sharded       bool
+		ShardBuckets  Expr
+		StorageParams StorageParams
 	}
 	Unique struct {
 		IsUnique       bool
@@ -600,12 +601,14 @@ func NewColumnTableDef(
 			d.Nullable.ConstraintName = c.Name
 		case PrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
+			d.PrimaryKey.StorageParams = c.Qualification.(PrimaryKeyConstraint).StorageParams
 			d.Unique.ConstraintName = c.Name
 		case ShardedPrimaryKeyConstraint:
 			d.PrimaryKey.IsPrimaryKey = true
 			constraint := c.Qualification.(ShardedPrimaryKeyConstraint)
 			d.PrimaryKey.Sharded = true
 			d.PrimaryKey.ShardBuckets = constraint.ShardBuckets
+			d.PrimaryKey.StorageParams = constraint.StorageParams
 			d.Unique.ConstraintName = c.Name
 		case UniqueConstraint:
 			d.Unique.IsUnique = true
@@ -884,13 +887,16 @@ type NullConstraint struct{}
 type HiddenConstraint struct{}
 
 // PrimaryKeyConstraint represents PRIMARY KEY on a column.
-type PrimaryKeyConstraint struct{}
+type PrimaryKeyConstraint struct {
+	StorageParams StorageParams
+}
 
 // ShardedPrimaryKeyConstraint represents `PRIMARY KEY .. USING HASH..`
 // on a column.
 type ShardedPrimaryKeyConstraint struct {
-	Sharded      bool
-	ShardBuckets Expr
+	Sharded       bool
+	ShardBuckets  Expr
+	StorageParams StorageParams
 }
 
 // UniqueConstraint represents UNIQUE on a column.
