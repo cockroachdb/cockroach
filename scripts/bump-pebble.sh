@@ -39,39 +39,16 @@ VENDORED_DIR="$COCKROACH_DIR/vendor"
 # `upstream` remote must point to github.com/cockroachdb/cockroach.
 pushd "$COCKROACH_DIR"
 git submodule update --init --recursive
-set +e
-COCKROACH_UPSTREAM_URL="$(git config --get remote.upstream.url)"
-set -e
-if [ "$COCKROACH_UPSTREAM_URL" != "git@github.com:cockroachdb/cockroach.git" ]; then
-    echoerr "Error: Expected the upstream remote to be the primary cockroachdb repository"
-    echoerr "at git@github.com:cockroachdb/cockroach.git. Found:"
-    echoerr ""
-    echoerr "  $COCKROACH_UPSTREAM_URL"
-    echoerr ""
-    exit 1
-fi
 popd
 
-# Make sure that the cockroachdb remotes match what we expect. The
-# `upstream` remote must point to github.com/cockroachdb/pebble.
-pushd "$PEBBLE_DIR"
-set +e
-PEBBLE_UPSTREAM_URL="$(git config --get remote.upstream.url)"
-set -e
-if [ "$PEBBLE_UPSTREAM_URL" != "git@github.com:cockroachdb/pebble.git" ]; then
-    echoerr "Error: Expected the upstream remote to be the cockroachdb/pebble repository"
-    echoerr "at git@github.com:cockroachdb/pebble.git. Found:"
-    echoerr ""
-    echoerr "  $PEBBLE_UPSTREAM_URL"
-    echoerr ""
-    exit 1
-fi
-popd
+COCKROACH_UPSTREAM_URL="https://github.com/cockroachdb/cockroach.git"
+PEBBLE_UPSTREAM_URL="https://github.com/cockroachdb/pebble.git"
+VENDORED_UPSTREAM_URL="git@github.com:cockroachdb/vendored.git"
 
 # Ensure the local CockroachDB release branch is up-to-date with
 # upstream and grab the current Pebble SHA.
 pushd "$COCKROACH_DIR"
-git fetch upstream "$BRANCH"
+git fetch "$COCKROACH_UPSTREAM_URL" "$BRANCH"
 git checkout "$BRANCH"
 git rebase "upstream/$BRANCH"
 OLD_SHA=$(grep 'github.com/cockroachdb/pebble' go.mod | grep -o -E '[a-f0-9]{12}$')
@@ -80,7 +57,7 @@ popd
 # Ensure the local Pebble release branch is up-to-date with upstream,
 # and grab the desired Pebble SHA.
 pushd "$PEBBLE_DIR"
-git fetch upstream "$PEBBLE_BRANCH"
+git fetch "$PEBBLE_UPSTREAM_URL" "$PEBBLE_BRANCH"
 NEW_SHA=$(git rev-parse "upstream/$PEBBLE_BRANCH")
 COMMITS=$(git log --pretty='format:%h %s' "$OLD_SHA..$NEW_SHA" | grep -v 'Merge pull request')
 echo "$COMMITS"
@@ -107,7 +84,7 @@ git add --all
 git commit -m "bump Pebble to ${NEW_SHA:0:12}
 
 $COMMITS"
-git push -u --force origin "$VENDORED_BRANCH"
+git push -u --force "$VENDORED_UPSTREAM_URL" "$VENDORED_BRANCH"
 popd
 
 # Create the branch and commit on the CockroachDB repository.
