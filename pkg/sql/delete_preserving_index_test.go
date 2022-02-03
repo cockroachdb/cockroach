@@ -618,32 +618,40 @@ func TestMergeProcess(t *testing.T) {
 		// Here want to have different entries for the two indices, so we manipulate
 		// the index to DELETE_ONLY when we don't want to write to it, and
 		// DELETE_AND_WRITE_ONLY when we write to it.
-		mTest := makeMutationTest(t, kvDB, tdb, tableDesc)
+		setUseDeletePreservingEncoding := func(b bool) func(*descpb.IndexDescriptor) error {
+			return func(idx *descpb.IndexDescriptor) error {
+				idx.UseDeletePreservingEncoding = b
+				return nil
+			}
+		}
 
-		mTest.writeIndexMutation(ctx, test.dstIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
-		mTest.updateIndexMutation(ctx, test.srcIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_ONLY}, true)
+		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		require.NoError(t, err)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY)
+		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.dstDataSQL); err != nil {
 			t.Fatal(err)
 		}
 
-		mTest.makeMutationsActive(ctx)
-		mTest.writeIndexMutation(ctx, test.dstIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_ONLY})
-		mTest.writeIndexMutation(ctx, test.srcIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
+		require.NoError(t, err)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.srcDataSQL); err != nil {
 			t.Fatal(err)
 		}
 
-		mTest.makeMutationsActive(ctx)
-		mTest.writeIndexMutation(ctx, test.dstIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY})
-		mTest.writeIndexMutation(ctx, test.srcIndex, descpb.DescriptorMutation{State: descpb.DescriptorMutation_DELETE_ONLY})
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY)
+		require.NoError(t, err)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
+		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.dstDataSQL2); err != nil {
 			t.Fatal(err)
 		}
 
-		mTest.makeMutationsActive(ctx)
 		tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 
 		dstIndex, err := tableDesc.FindIndexWithName(test.dstIndex)
