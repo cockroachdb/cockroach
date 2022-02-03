@@ -8,12 +8,16 @@
 
 package kvfeed
 
-import "github.com/cockroachdb/cockroach/pkg/kv"
+import (
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // TestingKnobs are the testing knobs for kvfeed.
 type TestingKnobs struct {
 	// BeforeScanRequest is a callback invoked before issuing Scan request.
 	BeforeScanRequest func(b *kv.Batch)
+	OnRangeFeedValue  func(kv roachpb.KeyValue) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

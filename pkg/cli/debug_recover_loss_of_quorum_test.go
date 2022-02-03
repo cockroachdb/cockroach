@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -111,6 +113,18 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 	s := sqlutils.MakeSQLRunner(tcBefore.Conns[0])
 	s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
 	defer tcBefore.Stopper().Stop(ctx)
+
+	// We use scratch range to test special case for pending update on the
+	// descriptor which has to be cleaned up before recovery could proceed.
+	// For that we'll ensure it is not empty and then put an intent. After
+	// recovery, we'll check that the range is still accessible for writes as
+	// normal.
+	sk := tcBefore.ScratchRange(t)
+	require.NoError(t,
+		tcBefore.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value"),
+		"failed to write value to scratch range")
+
+	createIntentOnRangeDescriptor(ctx, t, tcBefore, sk)
 
 	node1ID := tcBefore.Servers[0].NodeID()
 	// Now that stores are prepared and replicated we can shut down cluster
@@ -215,4 +229,39 @@ func TestLossOfQuorumRecovery(t *testing.T) {
 		}
 		return nil
 	})
+
+	// We were using scratch range to test cleanup of pending transaction on
+	// rangedescriptor key. We want to verify that after recovery, range is still
+	// writable e.g. recovery succeeded.
+	require.NoError(t,
+		tcAfter.Server(0).DB().Put(ctx, testutils.MakeKey(sk, []byte{1}), "value2"),
+		"failed to write value to scratch range after recovery")
+}
+
+func createIntentOnRangeDescriptor(
+	ctx context.Context, t *testing.T, tcBefore *testcluster.TestCluster, sk roachpb.Key,
+) {
+	txn := kv.NewTxn(ctx, tcBefore.Servers[0].DB(), 1)
+	var desc roachpb.RangeDescriptor
+	// Pick one of the predefined split points.
+	rdKey := keys.RangeDescriptorKey(roachpb.RKey(sk))
+	if err := txn.GetProto(ctx, rdKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+	desc.NextReplicaID++
+	if err := txn.Put(ctx, rdKey, &desc); err != nil {
+		t.Fatal(err)
+	}
+
+	// At this point the intent has been written to Pebble but this
+	// write was not synced (only the raft log append was synced). We
+	// need to force another sync, but we're far from the storage
+	// layer here so the easiest thing to do is simply perform a
+	// second write. This will force the first write to be persisted
+	// to disk (the second write may or may not make it to disk due to
+	// timing).
+	desc.NextReplicaID++
+	if err := txn.Put(ctx, rdKey, &desc); err != nil {
+		t.Fatal(err)
+	}
 }

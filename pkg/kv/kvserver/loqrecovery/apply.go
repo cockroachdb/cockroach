@@ -209,6 +209,10 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")
 	}
 
+	// We need to abort the transaction and clean intent here because otherwise
+	// we won't be able to do MVCCPut later during recovery for the new
+	// descriptor. It should have no effect on the recovery process itself as
+	// transaction would be rolled back anyways.
 	if intent != nil {
 		// We rely on the property that transactions involving the range
 		// descriptor always start on the range-local descriptor's key. When there
