@@ -15,10 +15,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -58,10 +60,12 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*execinfrapb.FlowSpec)
 
-	tr := execinfrapb.TableReaderSpec{
-		Table:     *desc.TableDesc(),
-		IndexIdx:  0,
-		ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+	var tr execinfrapb.TableReaderSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&tr.FetchSpec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(),
+		[]descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	flows[1] = &execinfrapb.FlowSpec{
