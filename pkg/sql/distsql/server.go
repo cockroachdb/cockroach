@@ -376,7 +376,7 @@ func (ds *ServerImpl) setupFlow(
 	// to restore the original value which can have data races under stress.
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
-		flowCtx, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
 		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL,
 	)
 	opt := flowinfra.FuseNormally
@@ -397,8 +397,8 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, nil, err
 	}
 	if !f.IsLocal() {
-		flowCtx.AddLogTag("f", f.GetFlowCtx().ID.Short())
-		flowCtx.AnnotateCtx(ctx)
+		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
+		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
 	if f.IsVectorized() {
@@ -493,6 +493,7 @@ func (ds *ServerImpl) newFlowContext(
 
 func newFlow(
 	flowCtx execinfra.FlowCtx,
+	sp *tracing.Span,
 	flowReg *flowinfra.FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
@@ -501,7 +502,7 @@ func newFlow(
 	onFlowCleanup func(),
 	statementSQL string,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
+	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
@@ -669,7 +670,7 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return streamStrategy.Run(f.AnnotateCtx(ctx), stream, msg, f)
+	return streamStrategy.Run(f.AmbientContext.AnnotateCtx(ctx), stream, msg, f)
 }
 
 // FlowStream is part of the execinfrapb.DistSQLServer interface.

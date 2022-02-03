@@ -439,9 +439,9 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, err)
 		sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
 		testDBGrants := [][]string{
-			{"test", "admin", "ALL"},
-			{"test", "root", "ALL"},
-			{"test", "testuser", "ZONECONFIG"},
+			{"test", "admin", "ALL", "true"},
+			{"test", "root", "ALL", "true"},
+			{"test", "testuser", "ZONECONFIG", "false"},
 		}
 		sqlDB.CheckQueryResults(t, `show grants on database test`, testDBGrants)
 

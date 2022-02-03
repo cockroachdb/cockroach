@@ -51,7 +51,7 @@ CREATE TABLE testdb.testtable_greeting_owner (a testdb.greeting_owner);
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR user1;
 ----
-testdb user1 ALL
+testdb user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA public FOR user1;
@@ -76,7 +76,7 @@ SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR testuser;
 ----
-testdb testuser ALL
+testdb testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA public FOR testuser;
@@ -155,10 +155,10 @@ RESTORE testdb.sc.othertable, testdb.testtable_greeting_usage FROM 'nodelocal://
 query-sql
 SHOW GRANTS ON DATABASE testuser_db;
 ----
-testuser_db admin ALL
-testuser_db public CONNECT
-testuser_db root ALL
-testuser_db testuser CREATE
+testuser_db admin ALL true
+testuser_db public CONNECT false
+testuser_db root ALL true
+testuser_db testuser CREATE false
 
 query-sql
 SHOW GRANTS ON SCHEMA public;
@@ -296,7 +296,7 @@ SHOW GRANTS ON testdb.sc.othertable FOR testuser;
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR admin;
 ----
-testdb admin ALL
+testdb admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;
@@ -387,7 +387,7 @@ SHOW GRANTS ON testdb.sc.othertable FOR testuser;
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR admin;
 ----
-testdb admin ALL
+testdb admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;
@@ -433,7 +433,7 @@ RESTORE FROM 'nodelocal://0/test/';
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR user1;
 ----
-testdb user1 ALL
+testdb user1 ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR user1;
@@ -458,7 +458,7 @@ SHOW GRANTS ON TABLE testdb.testtable_simple FOR user1;
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR testuser;
 ----
-testdb testuser ALL
+testdb testuser ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR testuser;
@@ -496,7 +496,7 @@ ALTER TYPE testdb.greeting_owner ADD VALUE 'new' BEFORE 'howdy';
 query-sql
 SHOW GRANTS ON DATABASE testdb FOR admin;
 ----
-testdb admin ALL
+testdb admin ALL true
 
 query-sql
 SHOW GRANTS ON SCHEMA testdb.public FOR admin;

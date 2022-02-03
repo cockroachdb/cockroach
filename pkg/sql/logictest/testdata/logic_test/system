@@ -289,11 +289,11 @@ isAdmin  BOOL    false  NULL  ·  {primary}                                     
 
 
 # Verify default privileges on system tables.
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE system
 ----
-system  admin  GRANT
-system  root   GRANT
+system  admin  GRANT  true
+system  root   GRANT  true
 
 # The test expectations are different on tenants because of
 # descriptor_id_sq, tenant, tenant_usage, and span_configurations.

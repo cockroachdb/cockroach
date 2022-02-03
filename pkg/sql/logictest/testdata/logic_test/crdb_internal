@@ -951,27 +951,27 @@ subtest cluster_database_privileges
 statement ok
 CREATE DATABASE other_db; SET DATABASE = other_db
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
-database_name  grantee  privilege_type
-other_db       admin    ALL
-other_db       public   CONNECT
-other_db       root     ALL
+database_name  grantee  privilege_type  is_grantable
+other_db       admin    ALL             YES
+other_db       public   CONNECT         NO
+other_db       root     ALL             YES
 
 statement ok
 GRANT CONNECT ON DATABASE other_db TO testuser;
 GRANT DROP ON DATABASE other_db TO testuser
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM crdb_internal.cluster_database_privileges
 ----
-database_name  grantee   privilege_type
-other_db       admin     ALL
-other_db       public    CONNECT
-other_db       root      ALL
-other_db       testuser  CONNECT
-other_db       testuser  DROP
+database_name  grantee   privilege_type  is_grantable
+other_db       admin     ALL             YES
+other_db       public    CONNECT         NO
+other_db       root      ALL             YES
+other_db       testuser  CONNECT         NO
+other_db       testuser  DROP            NO
 
 statement ok
 SET DATABASE = test
@@ -980,56 +980,56 @@ SET DATABASE = test
 # It should show information across all databases.
 subtest anonymous_database
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM "".crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 ----
-database_name  grantee   privilege_type
-defaultdb      admin     ALL
-defaultdb      public    CONNECT
-defaultdb      root      ALL
-other_db       admin     ALL
-other_db       public    CONNECT
-other_db       root      ALL
-other_db       testuser  CONNECT
-other_db       testuser  DROP
-postgres       admin     ALL
-postgres       public    CONNECT
-postgres       root      ALL
-system         admin     GRANT
-system         root      GRANT
-test           admin     ALL
-test           public    CONNECT
-test           root      ALL
-testdb         admin     ALL
-testdb         public    CONNECT
-testdb         root      ALL
+database_name  grantee   privilege_type  is_grantable
+defaultdb      admin     ALL             YES
+defaultdb      public    CONNECT         NO
+defaultdb      root      ALL             YES
+other_db       admin     ALL             YES
+other_db       public    CONNECT         NO
+other_db       root      ALL             YES
+other_db       testuser  CONNECT         NO
+other_db       testuser  DROP            NO
+postgres       admin     ALL             YES
+postgres       public    CONNECT         NO
+postgres       root      ALL             YES
+system         admin     GRANT           YES
+system         root      GRANT           YES
+test           admin     ALL             YES
+test           public    CONNECT         NO
+test           root      ALL             YES
+testdb         admin     ALL             YES
+testdb         public    CONNECT         NO
+testdb         root      ALL             YES
 
 statement ok
 SET DATABASE = "";
 
-query TTT colnames
+query TTTT colnames
 SELECT * FROM crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 ----
-database_name  grantee   privilege_type
-defaultdb      admin     ALL
-defaultdb      public    CONNECT
-defaultdb      root      ALL
-other_db       admin     ALL
-other_db       public    CONNECT
-other_db       root      ALL
-other_db       testuser  CONNECT
-other_db       testuser  DROP
-postgres       admin     ALL
-postgres       public    CONNECT
-postgres       root      ALL
-system         admin     GRANT
-system         root      GRANT
-test           admin     ALL
-test           public    CONNECT
-test           root      ALL
-testdb         admin     ALL
-testdb         public    CONNECT
-testdb         root      ALL
+database_name  grantee   privilege_type  is_grantable
+defaultdb      admin     ALL             YES
+defaultdb      public    CONNECT         NO
+defaultdb      root      ALL             YES
+other_db       admin     ALL             YES
+other_db       public    CONNECT         NO
+other_db       root      ALL             YES
+other_db       testuser  CONNECT         NO
+other_db       testuser  DROP            NO
+postgres       admin     ALL             YES
+postgres       public    CONNECT         NO
+postgres       root      ALL             YES
+system         admin     GRANT           YES
+system         root      GRANT           YES
+test           admin     ALL             YES
+test           public    CONNECT         NO
+test           root      ALL             YES
+testdb         admin     ALL             YES
+testdb         public    CONNECT         NO
+testdb         root      ALL             YES
 
 statement ok
 SET DATABASE = test

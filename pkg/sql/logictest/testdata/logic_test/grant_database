@@ -1,13 +1,13 @@
 statement ok
 CREATE DATABASE a
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE a
 ----
-database_name  grantee  privilege_type
-a              admin    ALL
-a              public   CONNECT
-a              root     ALL
+database_name  grantee  privilege_type  is_grantable
+a              admin    ALL             true
+a              public   CONNECT         false
+a              root     ALL             true
 
 statement error user root must have exactly ALL privileges on database "a"
 REVOKE CONNECT ON DATABASE a FROM root
@@ -33,14 +33,14 @@ GRANT SELECT,ALL ON DATABASE a TO readwrite
 statement error syntax error
 REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a
 ----
-a  admin      ALL
-a  public     CONNECT
-a  readwrite  ALL
-a  root       ALL
-a  test-user  ALL
+a  admin      ALL      true
+a  public     CONNECT  false
+a  readwrite  ALL      true
+a  root       ALL      true
+a  test-user  ALL      true
 
 # Create table to inherit DB permissions.
 statement ok
@@ -55,81 +55,81 @@ a              public       t           readwrite  ALL             true
 a              public       t           root       ALL             true
 a              public       t           test-user  ALL             true
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  ALL
-a  test-user  ALL
+a  readwrite  ALL  true
+a  test-user  ALL  true
 
 statement ok
 REVOKE CONNECT ON DATABASE a FROM "test-user",readwrite
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a
 ----
-a  admin      ALL
-a  public     CONNECT
-a  readwrite  CREATE
-a  readwrite  DROP
-a  readwrite  GRANT
-a  readwrite  ZONECONFIG
-a  root       ALL
-a  test-user  CREATE
-a  test-user  DROP
-a  test-user  GRANT
-a  test-user  ZONECONFIG
+a  admin      ALL         true
+a  public     CONNECT     false
+a  readwrite  CREATE      true
+a  readwrite  DROP        true
+a  readwrite  GRANT       true
+a  readwrite  ZONECONFIG  true
+a  root       ALL         true
+a  test-user  CREATE      true
+a  test-user  DROP        true
+a  test-user  GRANT       true
+a  test-user  ZONECONFIG  true
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  CREATE
-a  readwrite  DROP
-a  readwrite  GRANT
-a  readwrite  ZONECONFIG
-a  test-user  CREATE
-a  test-user  DROP
-a  test-user  GRANT
-a  test-user  ZONECONFIG
+a  readwrite  CREATE      true
+a  readwrite  DROP        true
+a  readwrite  GRANT       true
+a  readwrite  ZONECONFIG  true
+a  test-user  CREATE      true
+a  test-user  DROP        true
+a  test-user  GRANT       true
+a  test-user  ZONECONFIG  true
 
 statement ok
 REVOKE CREATE ON DATABASE a FROM "test-user"
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a
 ----
-a  admin      ALL
-a  public     CONNECT
-a  readwrite  CREATE
-a  readwrite  DROP
-a  readwrite  GRANT
-a  readwrite  ZONECONFIG
-a  root       ALL
-a  test-user  DROP
-a  test-user  GRANT
-a  test-user  ZONECONFIG
+a  admin      ALL         true
+a  public     CONNECT     false
+a  readwrite  CREATE      true
+a  readwrite  DROP        true
+a  readwrite  GRANT       true
+a  readwrite  ZONECONFIG  true
+a  root       ALL         true
+a  test-user  DROP        true
+a  test-user  GRANT       true
+a  test-user  ZONECONFIG  true
 
 statement ok
 REVOKE ALL PRIVILEGES ON DATABASE a FROM "test-user"
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  readwrite  CREATE
-a  readwrite  DROP
-a  readwrite  GRANT
-a  readwrite  ZONECONFIG
+a  readwrite  CREATE      true
+a  readwrite  DROP        true
+a  readwrite  GRANT       true
+a  readwrite  ZONECONFIG  true
 
 statement ok
 REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a
 ----
-a  admin   ALL
-a  public  CONNECT
-a  root    ALL
+a  admin   ALL      true
+a  public  CONNECT  false
+a  root    ALL      true
 
-query TTT
+query TTTB
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 

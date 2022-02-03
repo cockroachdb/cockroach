@@ -699,14 +699,14 @@ GRANT ALL ON DATABASE db2 TO newgroup
 
 user testuser
 
-query TTT colnames
+query TTTB colnames
 SHOW GRANTS ON DATABASE db2
 ----
-database_name  grantee   privilege_type
-db2            admin     ALL
-db2            newgroup  ALL
-db2            public    CONNECT
-db2            root      ALL
+database_name  grantee   privilege_type  is_grantable
+db2            admin     ALL             true
+db2            newgroup  ALL             true
+db2            public    CONNECT         false
+db2            root      ALL             true
 
 statement ok
 INSERT INTO db2.foo VALUES (1),(2),(3);
