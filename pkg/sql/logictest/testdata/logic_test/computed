@@ -1067,3 +1067,16 @@ query II
 SELECT length(c), length(v) FROM t69665
 ----
 0  0
+
+# Regression test for #75907. During a backfill, expressions of the form
+# j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
+statement ok
+CREATE TABLE t75907 (j JSONB);
+INSERT INTO t75907 VALUES ('{"a": 1}');
+ALTER TABLE t75907 ADD COLUMN c BOOL AS (j->'b' = '1') STORED
+
+query TBB colnames
+SELECT j, c, j->'b' = '1' AS expected_c FROM t75907
+----
+j         c     expected_c
+{"a": 1}  NULL  NULL

@@ -13,7 +13,6 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -420,56 +419,6 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					// variable.
 					continue
 				}
-
-			case expr.Operator.Symbol == EQ && left.Operator.Symbol == JSONFetchVal && v.isConst(left.Right) &&
-				v.isConst(expr.Right):
-				// This is a JSONB inverted index normalization, changing things of the form
-				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
-				// lookups.
-
-				if left.TypedRight().ResolvedType().Family() != types.StringFamily {
-					break
-				}
-
-				str, err := left.TypedRight().Eval(v.ctx)
-				if err != nil {
-					break
-				}
-				// Check that we still have a string after evaluation.
-				if _, ok := str.(*DString); !ok {
-					break
-				}
-
-				rhs, err := expr.TypedRight().Eval(v.ctx)
-				if err != nil {
-					break
-				}
-
-				rjson := rhs.(*DJSON).JSON
-				t := rjson.Type()
-				if t == json.ObjectJSONType || t == json.ArrayJSONType {
-					// We can't make this transformation in cases like
-					//
-					//   a->'b' = '["c"]',
-					//
-					// because containment is not equivalent to equality for non-scalar types.
-					break
-				}
-
-				j := json.NewObjectBuilder(1)
-				j.Add(string(*str.(*DString)), rjson)
-
-				dj, err := MakeDJSON(j.Build())
-				if err != nil {
-					break
-				}
-
-				typedJ, err := dj.TypeCheck(v.ctx.Context, nil, types.Jsonb)
-				if err != nil {
-					break
-				}
-
-				return NewTypedComparisonExpr(MakeComparisonOperator(Contains), left.TypedLeft(), typedJ)
 			}
 
 			// We've run out of work to do.

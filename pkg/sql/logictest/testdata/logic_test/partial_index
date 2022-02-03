@@ -1832,3 +1832,15 @@ query ITTT
 SELECT * FROM t74385@b_idx
 WHERE b = 'b' AND c IS NULL;
 ----
+
+# Regression test for #75907. During a backfill, expressions of the form
+# j->'a' = '1' should not be normalized to j @> '{"a": 1}'.
+statement ok
+CREATE TABLE t75907 (k INT PRIMARY KEY, j JSONB);
+INSERT INTO t75907 VALUES (1, '{"a": 1}');
+CREATE INDEX t75907_partial_idx ON t75907 (k) WHERE (j->'b' = '1') IS NULL
+
+query IB
+SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = '1') IS NULL
+----
+1  true
