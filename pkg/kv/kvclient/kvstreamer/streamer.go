@@ -215,10 +215,6 @@ type Streamer struct {
 
 	enqueueKeys []int
 
-	// waitForResults is used to block GetResults() call until some results are
-	// available.
-	waitForResults chan struct{}
-
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first.
@@ -260,6 +256,10 @@ type Streamer struct {
 		// those that are currently in 'results' in addition to those returned
 		// by GetResults() to the caller which the caller hasn't processed yet.
 		numUnreleasedResults int
+
+		// hasResults is used by the client's goroutine to block until there are
+		// some results to be picked up.
+		hasResults *sync.Cond
 
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
@@ -321,6 +321,7 @@ func NewStreamer(
 		budget:     newBudget(acc, limitBytes),
 	}
 	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
+	s.mu.hasResults = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -362,7 +363,6 @@ func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
 	}
 	s.hints = hints
 	s.maxKeysPerRow = int32(maxKeysPerRow)
-	s.waitForResults = make(chan struct{}, 1)
 }
 
 // Enqueue dispatches multiple requests for execution. Results are delivered
@@ -583,45 +583,23 @@ func (s *Streamer) enqueueMemoryAccountingLocked(
 // result slice is returned once all enqueued requests have been responded to.
 func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 	s.mu.Lock()
-	results := s.mu.results
-	err := s.mu.err
-	s.mu.results = nil
-	allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
-	// Non-blockingly clear the waitForResults channel in case we've just picked
-	// up some results. We do so while holding the mutex so that new results
-	// aren't appended.
-	select {
-	case <-s.waitForResults:
-	default:
-	}
-	s.mu.Unlock()
-
-	if len(results) > 0 || allComplete || err != nil {
-		return results, err
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.waitForResults:
-		s.mu.Lock()
-		results = s.mu.results
-		err = s.mu.err
+	defer s.mu.Unlock()
+	for {
+		results := s.mu.results
 		s.mu.results = nil
-		s.mu.Unlock()
-		return results, err
-	}
-}
-
-// notifyGetResultsLocked non-blockingly sends a message on waitForResults
-// channel. This method should be called only while holding the lock of s.mu so
-// that other results couldn't be appended which would cause us to miss the
-// notification about that.
-func (s *Streamer) notifyGetResultsLocked() {
-	s.mu.AssertHeld()
-	select {
-	case s.waitForResults <- struct{}{}:
-	default:
+		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
+		if len(results) > 0 || allComplete || s.mu.err != nil {
+			return results, s.mu.err
+		}
+		s.mu.hasResults.Wait()
+		// Check whether the Streamer has been canceled or closed while we were
+		// waiting for the results.
+		if err := ctx.Err(); err != nil {
+			// No need to use setErrorLocked here because the current goroutine
+			// is the only one blocking on hasResults condition variable.
+			s.mu.err = err
+			return nil, err
+		}
 	}
 }
 
@@ -642,7 +620,7 @@ func (s *Streamer) setErrorLocked(err error) {
 	if s.mu.err == nil {
 		s.mu.err = err
 	}
-	s.notifyGetResultsLocked()
+	s.mu.hasResults.Signal()
 }
 
 // Close cancels all in-flight operations and releases all of the resources of
@@ -655,6 +633,11 @@ func (s *Streamer) Close() {
 		s.mu.done = true
 		// Unblock the coordinator in case it is waiting for more work.
 		s.mu.hasWork.Signal()
+		// Note that only the client's goroutine can be blocked waiting for the
+		// results, and Close() is called only by the same goroutine, so
+		// signaling hasResult condition variable isn't necessary. However, we
+		// choose to be safe and do it anyway.
+		s.mu.hasResults.Signal()
 		s.mu.Unlock()
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
@@ -1265,17 +1248,22 @@ func (w *workerCoordinator) processSingleRangeResults(
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
-				result := Result{
-					GetResp: get,
-					// This currently only works because all requests
-					// are unique.
-					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             req.positions[i],
+				if get.Value != nil {
+					// Create a Result only for non-empty Get responses.
+					result := Result{
+						GetResp: get,
+						// This currently only works because all requests
+						// are unique.
+						EnqueueKeysSatisfied: []int{enqueueKey},
+						position:             req.positions[i],
+					}
+					result.memoryTok.streamer = w.s
+					result.memoryTok.toRelease = getResponseSize(get)
+					memoryTokensBytes += result.memoryTok.toRelease
+					results = append(results, result)
 				}
-				result.memoryTok.streamer = w.s
-				result.memoryTok.toRelease = getResponseSize(get)
-				memoryTokensBytes += result.memoryTok.toRelease
-				results = append(results, result)
+				// Note that we count this Get response as complete regardless
+				// of the fact whether it is empty or not.
 				numCompleteGetResponses++
 			}
 
@@ -1329,13 +1317,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 		}
 	}
 
-	// If we have any results, finalize them.
-	if len(results) > 0 {
-		w.finalizeSingleRangeResults(
-			results, memoryFootprintBytes, hasNonEmptyScanResponse,
-			numCompleteGetResponses,
-		)
-	}
+	w.finalizeSingleRangeResults(
+		results, memoryFootprintBytes, hasNonEmptyScanResponse, numCompleteGetResponses,
+	)
 
 	// If we have any incomplete requests, add them back into the work
 	// pool.
@@ -1348,8 +1332,6 @@ func (w *workerCoordinator) processSingleRangeResults(
 // singleRangeBatch. By "finalization" we mean setting Complete field of
 // ScanResp to correct value for all scan responses, updating the estimate of an
 // average response size, and telling the Streamer about these results.
-//
-// This method assumes that results has length greater than zero.
 func (w *workerCoordinator) finalizeSingleRangeResults(
 	results []Result,
 	actualMemoryReservation int64,
@@ -1397,9 +1379,15 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
 	w.s.mu.numUnreleasedResults += len(results)
-	// Store the results and non-blockingly notify the Streamer about them.
 	w.s.mu.results = append(w.s.mu.results, results...)
-	w.s.notifyGetResultsLocked()
+	if len(results) > 0 || numCompleteResponses > 0 {
+		// We want to signal the condition variable when either we have some
+		// results to return to the client or we received some empty responses.
+		// The latter is needed so that the client doesn't block forever
+		// thinking there are more requests in flight when, in fact, all
+		// responses have already come back empty.
+		w.s.mu.hasResults.Signal()
+	}
 }
 
 var zeroIntSlice []int
