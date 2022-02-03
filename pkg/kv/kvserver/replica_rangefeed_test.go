@@ -898,6 +898,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 
 		rightRangeID := store.LookupReplica(roachpb.RKey(startKey)).RangeID
 
+		log.Infof(ctx, "split range %v %v", rightRangeID, startKey)
 		// Establish a rangefeed.
 		stream := newTestStream()
 		streamErrC := make(chan *roachpb.Error, 1)
