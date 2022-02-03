@@ -151,12 +151,12 @@ test           public       seq         testuser2  ALL             true
 statement ok
 CREATE TYPE typ AS ENUM()
 
-query TTTTT colnames
+query TTTTTB colnames
 SHOW GRANTS ON TYPE typ
 ----
-database_name  schema_name  type_name  grantee    privilege_type
-test           public       typ        admin      ALL
-test           public       typ        public     USAGE
-test           public       typ        root       ALL
-test           public       typ        testuser   ALL
-test           public       typ        testuser2  ALL
+database_name  schema_name  type_name  grantee    privilege_type  is_grantable
+test           public       typ        admin      ALL             true
+test           public       typ        public     USAGE           false
+test           public       typ        root       ALL             true
+test           public       typ        testuser   ALL             true
+test           public       typ        testuser2  ALL             true

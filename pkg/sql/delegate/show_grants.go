@@ -57,7 +57,8 @@ SELECT type_catalog AS database_name,
        type_schema AS schema_name,
        type_name,
        grantee,
-       privilege_type
+       privilege_type,
+       is_grantable::boolean
 FROM "".information_schema.type_privileges`
 
 	var source bytes.Buffer
