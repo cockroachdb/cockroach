@@ -532,129 +532,132 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 		for _, state := range []descpb.DescriptorMutation_State{
 			descpb.DescriptorMutation_DELETE_ONLY,
 			descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY,
+			descpb.DescriptorMutation_MERGING,
 			descpb.DescriptorMutation_BACKFILLING,
 		} {
-			// Init table with some entries.
-			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := sqlDB.Exec(`
+			t.Run(fmt.Sprintf("upsert=%t/state=%v", useUpsert, state), func(t *testing.T) {
+				// Init table with some entries.
+				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := sqlDB.Exec(`
 DROP TABLE t.test;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 `); err != nil {
-				t.Fatal(err)
-			}
-			// read table descriptor
-			mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
-				kvDB, keys.SystemSQLCodec, "t", "test")
-
-			initRows := [][]string{{"a", "z"}, {"b", "y"}}
-			for _, row := range initRows {
-				if useUpsert {
-					mTest.Exec(t, `UPSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
-				} else {
-					mTest.Exec(t, `INSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
+					t.Fatal(err)
 				}
-			}
-			mTest.CheckQueryResults(t, starQuery, initRows)
-			// Index foo is visible.
-			mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				// read table descriptor
+				mTest.tableDesc = desctestutils.TestingGetMutableExistingTableDescriptor(
+					kvDB, keys.SystemSQLCodec, "t", "test")
 
-			// Index foo is invisible once it's a mutation.
-			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
-			if _, err := sqlDB.Query(indexQuery); !testutils.IsError(err, `index "foo" not found`) {
-				t.Fatal(err)
-			}
-
-			// Insert a new entry.
-			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
-			} else {
-				mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
-			}
-			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
-
-			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive(ctx)
-			switch state {
-			case descpb.DescriptorMutation_DELETE_ONLY, descpb.DescriptorMutation_BACKFILLING:
-				// "x" didn't get added to the index.
+				initRows := [][]string{{"a", "z"}, {"b", "y"}}
+				for _, row := range initRows {
+					if useUpsert {
+						mTest.Exec(t, `UPSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
+					} else {
+						mTest.Exec(t, `INSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
+					}
+				}
+				mTest.CheckQueryResults(t, starQuery, initRows)
+				// Index foo is visible.
 				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
-			default:
-				// "x" got added to the index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"x"}, {"y"}, {"z"}})
 
-			}
+				// Index foo is invisible once it's a mutation.
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
+				if _, err := sqlDB.Query(indexQuery); !testutils.IsError(err, `index "foo" not found`) {
+					t.Fatal(err)
+				}
 
-			// Make "foo" a mutation.
-			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
-			// Update.
-			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'w')`)
-				// Update "v" to its current value "z" in row "a".
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'z')`)
-			} else {
-				mTest.Exec(t, `UPDATE t.test SET v = 'w' WHERE k = 'c'`)
-				// Update "v" to its current value "z" in row "a".
-				mTest.Exec(t, `UPDATE t.test SET v = 'z' WHERE k = 'a'`)
-			}
-			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
+				// Insert a new entry.
+				if useUpsert {
+					mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
+				} else {
+					mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
+				}
+				mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 
-			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive(ctx)
-			switch state {
-			case descpb.DescriptorMutation_BACKFILLING:
-				// Update results in no modifications to index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
-			case descpb.DescriptorMutation_DELETE_ONLY:
-				// updating "x" -> "w" will result in "x" being deleted from the index.
-				// updating "z" -> "z" results in "z" being deleted from the index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}})
-			default:
-				// updating "x" -> "w" results in the index updating from "x" -> "w",
-				// updating "z" -> "z" is a noop on the index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
-			}
+				// Make index "foo" live so that we can read it.
+				mTest.makeMutationsActive(ctx)
+				switch state {
+				case descpb.DescriptorMutation_DELETE_ONLY, descpb.DescriptorMutation_BACKFILLING:
+					// "x" didn't get added to the index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				default:
+					// "x" got added to the index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"x"}, {"y"}, {"z"}})
 
-			// Make "foo" a mutation.
-			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
-			// Update the primary key of row "a".
-			mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'z'`)
-			mTest.CheckQueryResults(t, starQuery, [][]string{{"b", "y"}, {"c", "w"}, {"d", "z"}})
+				}
 
-			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive(ctx)
-			// Updating the primary key for a row when we're in delete-only won't
-			// create a new index entry, and will delete the old one. Otherwise it'll
-			// create a new entry and delete the old one.
-			switch state {
-			case descpb.DescriptorMutation_BACKFILLING:
-				// Update results in no modifications to index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
-			case descpb.DescriptorMutation_DELETE_ONLY:
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}})
-			default:
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
-			}
+				// Make "foo" a mutation.
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
+				// Update.
+				if useUpsert {
+					mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'w')`)
+					// Update "v" to its current value "z" in row "a".
+					mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'z')`)
+				} else {
+					mTest.Exec(t, `UPDATE t.test SET v = 'w' WHERE k = 'c'`)
+					// Update "v" to its current value "z" in row "a".
+					mTest.Exec(t, `UPDATE t.test SET v = 'z' WHERE k = 'a'`)
+				}
+				mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 
-			// Make "foo" a mutation.
-			mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
-			// Delete row "b".
-			mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
-			mTest.CheckQueryResults(t, starQuery, [][]string{{"c", "w"}, {"d", "z"}})
+				// Make index "foo" live so that we can read it.
+				mTest.makeMutationsActive(ctx)
+				switch state {
+				case descpb.DescriptorMutation_BACKFILLING:
+					// Update results in no modifications to index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				case descpb.DescriptorMutation_DELETE_ONLY:
+					// updating "x" -> "w" will result in "x" being deleted from the index.
+					// updating "z" -> "z" results in "z" being deleted from the index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}})
+				default:
+					// updating "x" -> "w" results in the index updating from "x" -> "w",
+					// updating "z" -> "z" is a noop on the index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
+				}
 
-			// Make index "foo" live so that we can read it.
-			mTest.makeMutationsActive(ctx)
-			// Deleting row "b" deletes "y" from the index.
-			switch state {
-			case descpb.DescriptorMutation_BACKFILLING:
-				// Update results in no modifications to index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
-			case descpb.DescriptorMutation_DELETE_ONLY:
-				mTest.CheckQueryResults(t, indexQuery, [][]string{})
-			default:
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"z"}})
-			}
+				// Make "foo" a mutation.
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
+				// Update the primary key of row "a".
+				mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'z'`)
+				mTest.CheckQueryResults(t, starQuery, [][]string{{"b", "y"}, {"c", "w"}, {"d", "z"}})
+
+				// Make index "foo" live so that we can read it.
+				mTest.makeMutationsActive(ctx)
+				// Updating the primary key for a row when we're in delete-only won't
+				// create a new index entry, and will delete the old one. Otherwise it'll
+				// create a new entry and delete the old one.
+				switch state {
+				case descpb.DescriptorMutation_BACKFILLING:
+					// Update results in no modifications to index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				case descpb.DescriptorMutation_DELETE_ONLY:
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}})
+				default:
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"y"}, {"z"}})
+				}
+
+				// Make "foo" a mutation.
+				mTest.writeIndexMutation(ctx, "foo", descpb.DescriptorMutation{State: state})
+				// Delete row "b".
+				mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
+				mTest.CheckQueryResults(t, starQuery, [][]string{{"c", "w"}, {"d", "z"}})
+
+				// Make index "foo" live so that we can read it.
+				mTest.makeMutationsActive(ctx)
+				// Deleting row "b" deletes "y" from the index.
+				switch state {
+				case descpb.DescriptorMutation_BACKFILLING:
+					// Update results in no modifications to index.
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				case descpb.DescriptorMutation_DELETE_ONLY:
+					mTest.CheckQueryResults(t, indexQuery, [][]string{})
+				default:
+					mTest.CheckQueryResults(t, indexQuery, [][]string{{"w"}, {"z"}})
+				}
+			})
 		}
 	}
 
