@@ -524,15 +524,14 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 	var queryRunningAtomic, stallAtomic int64
 	unblock := make(chan struct{})
 
-	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const tableID = 56
-
-	tableKey := keys.SystemSQLCodec.TablePrefix(tableID)
-	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+	// We'll populate the key for the knob after we create the table.
+	var tableKey atomic.Value
+	tableKey.Store(roachpb.Key(""))
+	getTableKey := func() roachpb.Key { return tableKey.Load().(roachpb.Key) }
+	spanFromKey := func(k roachpb.Key) roachpb.Span {
+		return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
+	}
+	getTableSpan := func() roachpb.Span { return spanFromKey(getTableKey()) }
 
 	// Install a store filter which, if both queryRunningAtomic and stallAtomic
 	// are 1, will block the scan requests until 'unblock' channel is closed.
@@ -546,7 +545,7 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 					if atomic.LoadInt64(&stallAtomic) == 1 {
 						if req.IsSingleRequest() {
 							scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
-							if ok && tableSpan.ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
+							if ok && getTableSpan().ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
 								t.Logf("stalling on scan at %s and waiting for test to unblock...", scan.Key)
 								<-unblock
 							}
@@ -583,6 +582,11 @@ func TestDistSQLFlowsVirtualTables(t *testing.T) {
 			tc.Server(2).GetFirstStoreID(),
 		),
 	)
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	var tableID int
+	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
+	tableKey.Store(execCfg.Codec.TablePrefix(uint32(tableID)))
 
 	const query = "SELECT * FROM test.foo"
 
