@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -72,14 +73,20 @@ func TestColBatchScanMeta(t *testing.T) {
 		Local:  true,
 		NodeID: evalCtx.NodeID,
 	}
+	var fetchSpec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&fetchSpec, keys.SystemSQLCodec, td, td.GetPrimaryIndex(),
+		[]descpb.ColumnID{td.PublicColumns()[0].GetID()},
+	); err != nil {
+		t.Fatal(err)
+	}
 	spec := execinfrapb.ProcessorSpec{
 		Core: execinfrapb.ProcessorCoreUnion{
 			TableReader: &execinfrapb.TableReaderSpec{
+				FetchSpec: fetchSpec,
 				Spans: []roachpb.Span{
 					td.PrimaryIndexSpan(keys.SystemSQLCodec),
 				},
-				Table:     *td.TableDesc(),
-				ColumnIDs: []descpb.ColumnID{td.PublicColumns()[0].GetID()},
 			}},
 		ResultTypes: types.OneIntCol,
 	}
@@ -130,15 +137,18 @@ func BenchmarkColBatchScan(b *testing.B) {
 		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", tableName)
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			span := tableDesc.PrimaryIndexSpan(keys.SystemSQLCodec)
+			var fetchSpec descpb.IndexFetchSpec
+			if err := rowenc.InitIndexFetchSpec(
+				&fetchSpec, keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndex(),
+				[]descpb.ColumnID{tableDesc.PublicColumns()[0].GetID(), tableDesc.PublicColumns()[1].GetID()},
+			); err != nil {
+				b.Fatal(err)
+			}
 			spec := execinfrapb.ProcessorSpec{
 				Core: execinfrapb.ProcessorCoreUnion{
 					TableReader: &execinfrapb.TableReaderSpec{
-						Table: *tableDesc.TableDesc(),
+						FetchSpec: fetchSpec,
 						// Spans will be set below.
-						ColumnIDs: []descpb.ColumnID{
-							tableDesc.PublicColumns()[0].GetID(),
-							tableDesc.PublicColumns()[1].GetID(),
-						},
 					}},
 				ResultTypes: types.TwoIntCols,
 			}

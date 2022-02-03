@@ -23,6 +23,7 @@ import "roachpb/data.proto";
 import "sql/catalog/descpb/structured.proto";
 import "sql/catalog/descpb/join_type.proto";
 import "sql/catalog/descpb/locking.proto";
+import "sql/catalog/descpb/index_fetch.proto";
 import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
@@ -50,21 +51,11 @@ message ValuesCoreSpec {
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) correspond to the
-// specified column IDs.
+// FetchSpec.FetchedColumns.
 message TableReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
-  // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
-  // i.e. table.indexes[index_idx-1]
-  optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
+  optional sqlbase.IndexFetchSpec fetch_spec = 20 [(gogoproto.nullable) = false];
   optional bool reverse = 3 [(gogoproto.nullable) = false];
-  reserved 4;
   repeated roachpb.Span spans = 18 [(gogoproto.nullable) = false];
-
-  // Columns identifies the columns that we are decoding; the table reader
-  // produces these columns in this order. When empty, the table reader produces
-  // empty rows.
-  repeated uint32 column_ids = 19 [(gogoproto.customname) = "ColumnIDs",
-                                   (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ColumnID"];
 
   // A hint for how many rows the consumer of the table reader output might
   // need. This is used to size the initial KV batches to try to avoid reading
@@ -73,18 +64,6 @@ message TableReaderSpec {
   // Not used if there is a limit set in the PostProcessSpec of this processor
   // (that value will be used for sizing batches instead).
   optional int64 limit_hint = 5 [(gogoproto.nullable) = false];
-
-  // This field used to indicate whether the TableReader is being run as an
-  // exhaustive check (no longer implemented).
-  reserved 6;
-
-  // This field used to be a visibility level of the columns that should be
-  // produced. We now always produce all columns (public and not public).
-  reserved 7;
-
-  // This field used to be an upper bound for the number of rows we will read;
-  // replaced by the parallelize field.
-  reserved 8;
 
   // If set, the TableReader can read all the spans in parallel, without any
   // batch limits. This should only be the case when there is a known upper
@@ -134,19 +113,7 @@ message TableReaderSpec {
   // to BLOCK when locking_stength is FOR_NONE.
   optional sqlbase.ScanLockingWaitPolicy locking_wait_policy = 11 [(gogoproto.nullable) = false];
 
-  reserved 13;
-
-  // This field used to indicate whether or not this TableReader is expected to
-  // produce any system columns in its output.
-  reserved 14;
-
-  reserved 15;
-
-  // Indicates an inverted column which may have a different type than the
-  // column stored in the table descriptor. For example, the inverted column in
-  // an inverted index has a different type than the column it indexes in the
-  // base table.
-  optional sqlbase.ColumnDescriptor inverted_column = 16;
+  reserved 1, 2, 4, 6, 7, 8, 13, 14, 15, 16, 19;
 }
 
 // FiltererSpec is the specification for a processor that filters input rows
