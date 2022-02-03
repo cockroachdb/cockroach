@@ -42,16 +42,18 @@ go_test(
     name = "dev_test",
     srcs = [
         "datadriven_test.go",
-        "dev_test.go",
+        "recorderdriven_test.go",
     ],
     data = glob(["testdata/**"]),
     embed = [":dev_lib"],
     deps = [
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
-        "//pkg/cmd/dev/recording",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
+        "@com_github_alessio_shellescape//:shellescape",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_irfansharif_recorder//:recorder",
         "@com_github_stretchr_testify//require",
     ],
 )
