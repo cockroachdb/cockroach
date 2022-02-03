@@ -6,7 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/cmd/dev/recording",
         "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_irfansharif_recorder//:recorder",
     ],
 )

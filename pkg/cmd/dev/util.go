@@ -36,9 +36,6 @@ var (
 	// Shared flags.
 	remoteCacheAddr string
 	numCPUs         int
-
-	// To be turned on for tests. Turns off some deeper checks for reproducibility.
-	isTesting bool
 )
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
@@ -112,29 +109,24 @@ func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 
 }
 
-var workspace string
-
 func (d *dev) getWorkspace(ctx context.Context) (string, error) {
-	if workspace == "" {
-		if _, err := os.Stat("WORKSPACE"); err == nil {
-			w, err := os.Getwd()
-			if err != nil {
-				return "", err
-			}
-			workspace = w
-		} else {
-			w, err := d.getBazelInfo(ctx, "workspace")
-			if err != nil {
-				return "", err
-			}
-			workspace = w
-		}
+	if _, err := os.Stat("WORKSPACE"); err == nil {
+		return os.Getwd()
 	}
-	return workspace, nil
+
+	return d.getBazelInfo(ctx, "workspace")
 }
 
 func (d *dev) getBazelBin(ctx context.Context) (string, error) {
 	return d.getBazelInfo(ctx, "bazel-bin")
+}
+
+// getDevBin returns the path to the running dev executable.
+func (d *dev) getDevBin() string {
+	if d.knobs.devBinOverride != "" {
+		return d.knobs.devBinOverride
+	}
+	return os.Args[0]
 }
 
 func addCommonBuildFlags(cmd *cobra.Command) {
@@ -154,10 +146,8 @@ func addCommonTestFlags(cmd *cobra.Command) {
 }
 
 func (d *dev) ensureBinaryInPath(bin string) error {
-	if !isTesting {
-		if _, err := d.exec.LookPath(bin); err != nil {
-			return fmt.Errorf("could not find %s in PATH", bin)
-		}
+	if _, err := d.exec.LookPath(bin); err != nil {
+		return fmt.Errorf("could not find %s in PATH", bin)
 	}
 	return nil
 }
@@ -238,66 +228,9 @@ func splitArgsAtDash(cmd *cobra.Command, args []string) (before, after []string)
 	return
 }
 
-// parsePkg decomposes and validates a "pkg/.*" argument passed to the test or
-// the bench commands.
-func (d *dev) parsePkg(pkg string) (dir string, isRecursive bool, tag string, _ error) {
-	dir = pkg
-
-	// Trim left.
-	dir = strings.TrimPrefix(dir, "//")
-	dir = strings.TrimPrefix(dir, "./")
-	if !strings.HasPrefix(dir, "pkg/") {
-		return "", false, "", fmt.Errorf(
-			"malformed package %q, expecting %q", pkg, "pkg/{...}")
-	}
-
-	// Trim right.
-	dir = strings.TrimRight(dir, "/")
-	{
-		parts := strings.Split(dir, ":")
-		switch len(parts) {
-		case 0:
-			return "", false, "", fmt.Errorf(
-				"malformed package %q, expecting %q", pkg, "pkg/{...}")
-		case 1:
-			break
-		case 2:
-			dir = parts[0]
-			tag = parts[1]
-		default:
-			return "", false, "", fmt.Errorf(
-				"malformed package %q, expected at most one ':'", pkg)
-		}
-	}
-	const recursiveSuffix = "/..."
-	isRecursive = strings.HasSuffix(dir, recursiveSuffix)
-	if isRecursive {
-		dir = dir[:len(dir)-len(recursiveSuffix)]
-		if tag != "" {
-			return "", false, "", fmt.Errorf(
-				"malformed package %q, cannot end in %q and be followed by a tag", pkg, recursiveSuffix)
-		}
-	}
-
-	// Check directory existence.
-	if ok, err := d.os.IsDir(dir); err != nil || !ok {
-		return "", false, "", fmt.Errorf(
-			"malformed package %q, %q is not an existing directory", pkg, dir)
-	}
-	return dir, isRecursive, tag, nil
-}
-
 func logCommand(cmd string, args ...string) {
 	var fullArgs []string
 	fullArgs = append(fullArgs, cmd)
 	fullArgs = append(fullArgs, args...)
 	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
-}
-
-// getDevBin returns the path to the running dev executable.
-func getDevBin() string {
-	if isTesting {
-		return "dev"
-	}
-	return os.Args[0]
 }
