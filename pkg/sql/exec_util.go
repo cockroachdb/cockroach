@@ -1175,6 +1175,7 @@ type ExecutorConfig struct {
 	DistSQLRunTestingKnobs               *execinfra.TestingKnobs
 	EvalContextTestingKnobs              tree.EvalContextTestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
+	TTLTestingKnobs                      *TTLTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
 	SQLStatsTestingKnobs                 *sqlstats.TestingKnobs
@@ -1459,6 +1460,16 @@ var _ base.ModuleTestingKnobs = &TenantTestingKnobs{}
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TenantTestingKnobs) ModuleTestingKnobs() {}
+
+// TTLTestingKnobs contains testing knobs for TTL deletion.
+type TTLTestingKnobs struct {
+	// DisableAOSTClause disables the AS OF SYSTEM TIME clause for the select
+	// portion of the TTL job.
+	DisableAOSTClause bool
+}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*TTLTestingKnobs) ModuleTestingKnobs() {}
 
 // BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
 type BackupRestoreTestingKnobs struct {
