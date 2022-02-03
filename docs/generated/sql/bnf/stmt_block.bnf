@@ -1979,8 +1979,7 @@ index_params ::=
 	( index_elem ) ( ( ',' index_elem ) )*
 
 opt_hash_sharded ::=
-	'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
-	| 'USING' 'HASH'
+	'USING' 'HASH' opt_hash_sharded_bucket_count
 	| 
 
 opt_storing ::=
@@ -2483,6 +2482,10 @@ index_elem ::=
 	| '(' a_expr ')' index_elem_options
 	| name index_elem_options
 
+opt_hash_sharded_bucket_count ::=
+	'WITH' 'BUCKET_COUNT' '=' a_expr
+	| 
+
 storing ::=
 	'COVERING'
 	| 'STORING'
@@ -2683,7 +2686,7 @@ alter_table_cmd ::=
 	| 'ALTER' opt_column column_name opt_set_data 'TYPE' typename opt_collate opt_alter_column_using
 	| 'ADD' table_constraint opt_validate_behavior
 	| 'ADD' 'CONSTRAINT' 'IF' 'NOT' 'EXISTS' constraint_name constraint_elem opt_validate_behavior
-	| 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' opt_hash_sharded
+	| 'ALTER' 'PRIMARY' 'KEY' 'USING' 'COLUMNS' '(' index_params ')' opt_hash_sharded opt_with_storage_parameter_list
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
@@ -2977,7 +2980,7 @@ opt_validate_behavior ::=
 constraint_elem ::=
 	'CHECK' '(' a_expr ')'
 	| 'UNIQUE' '(' index_params ')' opt_storing opt_partition_by_index opt_where_clause
-	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded
+	| 'PRIMARY' 'KEY' '(' index_params ')' opt_hash_sharded opt_with_storage_parameter_list
 	| 'FOREIGN' 'KEY' '(' name_list ')' 'REFERENCES' table_name opt_column_list key_match reference_actions
 
 audit_mode ::=
@@ -3094,7 +3097,7 @@ opt_family_name ::=
 	opt_name
 
 create_as_constraint_elem ::=
-	'PRIMARY' 'KEY' '(' create_as_params ')'
+	'PRIMARY' 'KEY' '(' create_as_params ')' opt_with_storage_parameter_list
 
 group_by_item ::=
 	a_expr
@@ -3237,7 +3240,7 @@ like_table_option ::=
 	| 'ALL'
 
 create_as_col_qualification_elem ::=
-	'PRIMARY' 'KEY'
+	'PRIMARY' 'KEY' opt_with_storage_parameter_list
 
 family_name ::=
 	name
@@ -3316,9 +3319,8 @@ col_qualification_elem ::=
 	| 'NULL'
 	| 'NOT' 'VISIBLE'
 	| 'UNIQUE'
-	| 'PRIMARY' 'KEY'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH'
-	| 'PRIMARY' 'KEY' 'USING' 'HASH' 'WITH' 'BUCKET_COUNT' '=' a_expr
+	| 'PRIMARY' 'KEY' opt_with_storage_parameter_list
+	| 'PRIMARY' 'KEY' 'USING' 'HASH' opt_hash_sharded_bucket_count opt_with_storage_parameter_list
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'ON' 'UPDATE' b_expr
