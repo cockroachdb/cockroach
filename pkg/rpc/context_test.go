@@ -181,13 +181,13 @@ func TestPingInterceptors(t *testing.T) {
 		Clock:      hlc.NewClock(hlc.UnixNano, 500*time.Millisecond),
 		Stopper:    stop.NewStopper(),
 		Settings:   cluster.MakeTestingClusterSettings(),
-		OnOutgoingPing: func(req *PingRequest) error {
+		OnOutgoingPing: func(ctx context.Context, req *PingRequest) error {
 			if req.TargetNodeID == blockedTargetNodeID {
 				return errBoomSend
 			}
 			return nil
 		},
-		OnIncomingPing: func(req *PingRequest) error {
+		OnIncomingPing: func(ctx context.Context, req *PingRequest) error {
 			if req.OriginNodeID == blockedOriginNodeID {
 				return errBoomRecv
 			}

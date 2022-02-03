@@ -378,10 +378,10 @@ type ContextOptions struct {
 	// preliminary checks but before recording clock offset information.
 	//
 	// It can inject an error.
-	OnIncomingPing func(*PingRequest) error
+	OnIncomingPing func(context.Context, *PingRequest) error
 	// OnOutgoingPing intercepts outgoing PingRequests. It may inject an
 	// error.
-	OnOutgoingPing func(*PingRequest) error
+	OnOutgoingPing func(context.Context, *PingRequest) error
 	Knobs          ContextTestingKnobs
 }
 
@@ -1246,7 +1246,7 @@ func (ctx *Context) runHeartbeat(
 				ServerVersion:        ctx.Settings.Version.BinaryVersion(),
 			}
 
-			interceptor := func(*PingRequest) error { return nil }
+			interceptor := func(context.Context, *PingRequest) error { return nil }
 			if fn := ctx.OnOutgoingPing; fn != nil {
 				interceptor = fn
 			}
@@ -1256,7 +1256,7 @@ func (ctx *Context) runHeartbeat(
 			ping := func(goCtx context.Context) error {
 				// NB: We want the request to fail-fast (the default), otherwise we won't
 				// be notified of transport failures.
-				if err := interceptor(request); err != nil {
+				if err := interceptor(goCtx, request); err != nil {
 					returnErr = true
 					return err
 				}
