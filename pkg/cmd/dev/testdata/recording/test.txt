@@ -245,10 +245,6 @@ bazel query 'kind(go_test, //pkg/testutils:all)'
 ----
 //pkg/testutils:testutils_test
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 bazel test //pkg/testutils:testutils_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
 ----
 
@@ -267,10 +263,6 @@ pkg/other/test
 bazel query 'kind(go_test, //pkg/other/test:all)'
 ----
 //pkg/other/test:test_test
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors
 ----
