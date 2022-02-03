@@ -547,7 +547,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	replica.mu.Unlock()
 	rs := newReplicaStats(clock, nil)
 	for _, store := range stores {
-		rs.record(store.Node.NodeID)
+		rs.recordCount(1, store.Node.NodeID)
 	}
 	manual.Increment(int64(MinStatsDuration + time.Second))
 	replica.leaseholderStats = rs

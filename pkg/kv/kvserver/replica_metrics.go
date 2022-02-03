@@ -250,7 +250,9 @@ func calcBehindCount(
 // leaseholder with a gateway node set in the header (i.e. excluding requests
 // that weren't sent through a DistSender, which in practice should be
 // practically none). Also return the amount of time over which the stat was
-// accumulated.
+// accumulated. AddSSTableRequests can be treated differently, in which case
+// the "QPS" count will include the size of any AddSSTableRequest, divided by
+// some factor.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
 	return r.leaseholderStats.avgQPS()
 }
