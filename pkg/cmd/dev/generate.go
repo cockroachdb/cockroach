@@ -90,10 +90,14 @@ func (d *dev) generateBazel(cmd *cobra.Command) error {
 	executable := filepath.Join(workspace, "build", "bazelutil", "bazel-generate.sh")
 	env := os.Environ()
 	if mirror {
-		env = append(env, "COCKROACH_BAZEL_CAN_MIRROR=1")
+		envvar := "COCKROACH_BAZEL_CAN_MIRROR=1"
+		d.log.Printf("export %s", envvar)
+		env = append(env, envvar)
 	}
 	if force {
-		env = append(env, "COCKROACH_BAZEL_FORCE_GENERATE=1")
+		envvar := "COCKROACH_BAZEL_FORCE_GENERATE=1"
+		d.log.Printf("export %s", envvar)
+		env = append(env, envvar)
 	}
 	return d.exec.CommandContextWithEnv(ctx, env, executable)
 }

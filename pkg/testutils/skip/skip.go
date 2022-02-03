@@ -89,6 +89,14 @@ func UnderRaceWithIssue(t SkippableTest, githubIssueID int, args ...interface{})
 	}
 }
 
+// UnderBazel skips this test if run under bazel.
+func UnderBazel(t SkippableTest, args ...interface{}) {
+	t.Helper()
+	if bazel.BuiltWithBazel() {
+		t.Skip(append([]interface{}{"disabled under bazel"}, args...))
+	}
+}
+
 // UnderBazelWithIssue skips this test if we are building inside bazel,
 // logging the given issue ID as the reason.
 func UnderBazelWithIssue(t SkippableTest, githubIssueID int, args ...interface{}) {

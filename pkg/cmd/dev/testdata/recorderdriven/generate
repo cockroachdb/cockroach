@@ -1,0 +1,15 @@
+# TODO(irfansharif): This test case is skipped -- it's too verbose given it
+# scans through the sandbox for each generated file and copies them over
+# one-by-one manually. 
+#
+# dev gen docs
+# ----
+
+# TODO(irfansharif): This test case is skipped -- it's too verbose given it
+# scans through the sandbox for each generated file and copies them over
+# one-by-one manually. Probably for this and above, we want to push the logic
+# down into bazel itself the same way we do now for protobufs. Alternatively,
+# stop checking in these generated doc files.
+#
+# dev gen go
+# ----

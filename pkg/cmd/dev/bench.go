@@ -12,8 +12,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,6 +40,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	benchCmd.Flags().BoolP(vFlag, "v", false, "show benchmark process output")
 	benchCmd.Flags().BoolP(showLogsFlag, "", false, "show crdb logs in-line")
 	benchCmd.Flags().Int(countFlag, 1, "run benchmark n times")
+	benchCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached benchmark runs")
 	// We use a string flag for benchtime instead of a duration; the go test
 	// runner accepts input of the form "Nx" to run the benchmark N times (see
 	// `go help testflag`).
@@ -55,14 +54,15 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
-		filter    = mustGetFlagString(cmd, filterFlag)
-		timeout   = mustGetFlagDuration(cmd, timeoutFlag)
-		short     = mustGetFlagBool(cmd, shortFlag)
-		showLogs  = mustGetFlagBool(cmd, showLogsFlag)
-		verbose   = mustGetFlagBool(cmd, vFlag)
-		count     = mustGetFlagInt(cmd, countFlag)
-		benchTime = mustGetFlagString(cmd, benchTimeFlag)
-		benchMem  = mustGetFlagBool(cmd, benchMemFlag)
+		filter      = mustGetFlagString(cmd, filterFlag)
+		ignoreCache = mustGetFlagBool(cmd, ignoreCacheFlag)
+		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
+		short       = mustGetFlagBool(cmd, shortFlag)
+		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
+		verbose     = mustGetFlagBool(cmd, vFlag)
+		count       = mustGetFlagInt(cmd, countFlag)
+		benchTime   = mustGetFlagString(cmd, benchTimeFlag)
+		benchMem    = mustGetFlagBool(cmd, benchMemFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -70,86 +70,76 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		// Empty `dev bench` does the same thing as `dev bench pkg/...`
 		pkgs = append(pkgs, "pkg/...")
 	}
-	benchesMap := make(map[string]bool)
-	for _, pkg := range pkgs {
-		dir, isRecursive, tag, err := d.parsePkg(pkg)
-		if err != nil {
-			return err
-		}
-		if isRecursive {
-			// Use `git grep` to find all Go files that contain benchmark tests.
-			out, err := d.exec.CommandContextSilent(ctx, "git", "grep", "-l", "^func Benchmark", "--", dir+"/*_test.go")
-			if err != nil {
-				return err
-			}
-			files := strings.Split(strings.TrimSpace(string(out)), "\n")
-			for _, file := range files {
-				dir, _ = filepath.Split(file)
-				dir = strings.TrimSuffix(dir, "/")
-				benchesMap[dir] = true
-			}
-		} else if tag != "" {
-			return fmt.Errorf("malformed package %q, tags not supported in 'bench' command", pkg)
-		} else {
-			benchesMap[dir] = true
-		}
-	}
-	// De-duplicate and sort the list of benches to run.
-	var benches []string
-	for pkg := range benchesMap {
-		benches = append(benches, pkg)
-	}
-	sort.Slice(benches, func(i, j int) bool { return benches[i] < benches[j] })
 
-	var argsBase []string
-	// NOTE the --config=test here. It's very important we compile the test binary with the
-	// appropriate stuff (gotags, etc.)
-	argsBase = append(argsBase, "run", "--config=test", "--test_sharding_strategy=disabled")
-	argsBase = append(argsBase, mustGetRemoteCacheArgs(remoteCacheAddr)...)
+	var args []string
+	args = append(args, "test")
+	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
-		argsBase = append(argsBase, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	}
+	if timeout > 0 {
+		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
+	}
+
+	var testTargets []string
+	for _, pkg := range pkgs {
+		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimPrefix(pkg, "./")
+		pkg = strings.TrimRight(pkg, "/")
+
+		if !strings.HasPrefix(pkg, "pkg/") {
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+		}
+
+		var target string
+		if strings.Contains(pkg, ":") {
+			// For parity with bazel, we allow specifying named build targets.
+			target = pkg
+		} else {
+			target = fmt.Sprintf("%s:all", pkg)
+		}
+		testTargets = append(testTargets, target)
+	}
+
+	args = append(args, testTargets...)
+	if ignoreCache {
+		args = append(args, "--nocache_test_results")
+	}
+
+	if filter == "" {
+		args = append(args, "--test_arg", "-test.bench=.")
+	} else {
+		args = append(args, "--test_arg", fmt.Sprintf("-test.bench=%s", filter))
+	}
+	if short {
+		args = append(args, "--test_arg", "-test.short")
 	}
 	if verbose {
-		argsBase = append(argsBase, "--test_arg", "-test.v")
+		args = append(args, "--test_arg", "-test.v")
 	}
 	if showLogs {
-		argsBase = append(argsBase, "--test_arg", "-show-logs")
+		args = append(args, "--test_arg", "-show-logs")
 	}
 	if count != 1 {
-		argsBase = append(argsBase, "--test_arg", fmt.Sprintf("-test.count=%d", count))
+		args = append(args, "--test_arg", fmt.Sprintf("-test.count=%d", count))
 	}
 	if benchTime != "" {
-		argsBase = append(argsBase, "--test_arg", fmt.Sprintf("-test.benchtime=%s", benchTime))
+		args = append(args, "--test_arg", fmt.Sprintf("-test.benchtime=%s", benchTime))
 	}
 	if benchMem {
-		argsBase = append(argsBase, "--test_arg", "-test.benchmem")
+		args = append(args, "--test_arg", "-test.benchmem")
 	}
 
-	for _, bench := range benches {
-		args := make([]string, len(argsBase))
-		copy(args, argsBase)
-		base := filepath.Base(bench)
-		target := "//" + bench + ":" + base + "_test"
-		args = append(args, target)
-		args = append(args, additionalBazelArgs...)
-		args = append(args, "--", "-test.run=-")
-		if filter == "" {
-			args = append(args, "-test.bench=.")
-		} else {
-			args = append(args, "-test.bench="+filter)
+	{ // Handle test output flags.
+		testOutputArgs := []string{"--test_output", "errors"}
+		if verbose || showLogs {
+			testOutputArgs = []string{"--test_output", "all"}
 		}
-		if timeout > 0 {
-			args = append(args, fmt.Sprintf("-test.timeout=%s", timeout.String()))
-		}
-		if short {
-			args = append(args, "-test.short", "-test.benchtime=1ns")
-		}
-		logCommand("bazel", args...)
-		err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
-		if err != nil {
-			return err
-		}
+		args = append(args, testOutputArgs...)
 	}
 
-	return nil
+	args = append(args, additionalBazelArgs...)
+
+	logCommand("bazel", args...)
+	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
