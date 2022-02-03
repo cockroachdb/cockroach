@@ -165,9 +165,10 @@ func StartTenant(
 	// the SQL server object.
 	tenantStatusServer := newTenantStatusServer(
 		baseCfg.AmbientCtx, &adminPrivilegeChecker{ie: args.circularInternalExecutor},
-		args.sessionRegistry, args.contentionRegistry, args.flowScheduler, baseCfg.Settings, nil,
+		args.sessionRegistry, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
+	args.contentionRegistry = contention.NewRegistry()
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
@@ -499,7 +500,6 @@ func makeTenantSQLServerArgs(
 	// writing): the blob service and DistSQL.
 	dummyRPCServer := rpc.NewServer(rpcContext)
 	sessionRegistry := sql.NewSessionRegistry()
-	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -535,7 +535,6 @@ func makeTenantSQLServerArgs(
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
-		contentionRegistry:       contentionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: circularInternalExecutor,
 		circularJobRegistry:      circularJobRegistry,
