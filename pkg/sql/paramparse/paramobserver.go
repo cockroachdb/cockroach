@@ -230,7 +230,8 @@ var tableParams = map[string]tableParam{
 				if !ok || d == nil {
 					return pgerror.Newf(
 						pgcode.InvalidParameterValue,
-						`value of "ttl_expire_after" must be an interval`,
+						`value of "%s" must be an interval`,
+						key,
 					)
 				}
 			}
@@ -238,7 +239,8 @@ var tableParams = map[string]tableParam{
 			if d.Duration.Compare(duration.MakeDuration(0, 0, 0)) < 0 {
 				return pgerror.Newf(
 					pgcode.InvalidParameterValue,
-					`value of "ttl_expire_after" must be at least zero`,
+					`value of "%s" must be at least zero`,
+					key,
 				)
 			}
 			if po.tableDesc.RowLevelTTL == nil {
@@ -255,6 +257,58 @@ var tableParams = map[string]tableParam{
 				),
 				"use `RESET (ttl_automatic_column)` to remove the automatic column or use `RESET (ttl)` to remove TTL from the table",
 			)
+		},
+	},
+	`ttl_select_batch_size`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if val <= 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`"%s" must be at least 1`,
+					key,
+				)
+			}
+			po.tableDesc.RowLevelTTL.SelectBatchSize = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.SelectBatchSize = 0
+			}
+			return nil
+		},
+	},
+	`ttl_delete_batch_size`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if val <= 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					`"%s" must be at least 1`,
+					key,
+				)
+			}
+			po.tableDesc.RowLevelTTL.DeleteBatchSize = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
+			}
+			return nil
 		},
 	},
 	`exclude_data_from_backup`: {
