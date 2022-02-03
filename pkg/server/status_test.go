@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -84,6 +85,15 @@ func getStatusJSONProtoWithAdminOption(
 	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
 ) error {
 	return serverutils.GetJSONProtoWithAdminOption(ts, statusPrefix+path, response, isAdmin)
+}
+
+func postStatusJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface,
+	path string,
+	request, response protoutil.Message,
+	isAdmin bool,
+) error {
+	return serverutils.PostJSONProtoWithAdminOption(ts, statusPrefix+path, request, response, isAdmin)
 }
 
 // TestStatusLocalStacks verifies that goroutine stack traces are available
@@ -2168,4 +2178,28 @@ func TestStatusServer_nodeStatusToResp(t *testing.T) {
 	require.NotEmpty(t, resp.Desc.Attrs.Attrs)
 	require.NotEmpty(t, resp.Desc.LocalityAddress)
 	require.NotEmpty(t, resp.Desc.SQLAddress)
+}
+
+func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(ctx)
+
+	// Start a SQL session as admin on node 1.
+	sql0 := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+	results := sql0.QueryStr(t, "SELECT session_id FROM [SHOW SESSIONS] LIMIT 1")
+	sessionID, err := hex.DecodeString(results[0][0])
+	require.NoError(t, err)
+
+	// Attempt to cancel that SQL session as non-admin over HTTP on node 2.
+	req := &serverpb.CancelSessionRequest{
+		SessionID: sessionID,
+	}
+	resp := &serverpb.CancelSessionResponse{}
+	err = postStatusJSONProtoWithAdminOption(testCluster.Server(1), "cancel_session/1", req, resp, false)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "status: 403 Forbidden")
 }
