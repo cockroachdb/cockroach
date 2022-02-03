@@ -694,7 +694,7 @@ func (p *planner) UnsafeDeleteDescriptor(ctx context.Context, descID int64, forc
 func unsafeReadDescriptor(
 	ctx context.Context, p *planner, id descpb.ID, force bool,
 ) (mut catalog.MutableDescriptor, notice error, err error) {
-	mut, err = p.Descriptors().GetMutableDescriptorByID(ctx, id, p.txn)
+	mut, err = p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, id)
 	if mut != nil {
 		return mut, nil, nil
 	}

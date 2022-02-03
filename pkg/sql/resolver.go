@@ -610,7 +610,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 					return nil, err
 				}
 				for i := range objectIDs {
-					descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
+					descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, objectIDs[i])
 					if err != nil {
 						return nil, err
 					}
@@ -675,7 +675,7 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		}
 
 		for i := range objectIDs {
-			descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
+			descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, objectIDs[i])
 			if err != nil {
 				return nil, err
 			}

@@ -28,25 +28,16 @@ import (
 
 // GetMutableDescriptorByID returns a mutable implementation of the descriptor
 // with the requested id. An error is returned if no descriptor exists.
-// Deprecated in favor of GetMutableDescriptorByIDWithFlags.
 func (tc *Collection) GetMutableDescriptorByID(
-	ctx context.Context, id descpb.ID, txn *kv.Txn,
-) (catalog.MutableDescriptor, error) {
-	return tc.GetMutableDescriptorByIDWithFlags(ctx, txn, id, tree.CommonLookupFlags{
-		IncludeOffline: true,
-		IncludeDropped: true,
-	})
-}
-
-// GetMutableDescriptorByIDWithFlags returns a mutable implementation of the
-// descriptor with the requested id. An error is returned if no descriptor exists.
-// TODO (lucy): This is meant to replace GetMutableDescriptorByID. Once it does,
-// rename this function.
-func (tc *Collection) GetMutableDescriptorByIDWithFlags(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
+	ctx context.Context, txn *kv.Txn, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable descriptor for id %d", id)
-	flags.RequireMutable = true
+	flags := tree.CommonLookupFlags{
+		Required:       true,
+		RequireMutable: true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+	}
 	desc, err := tc.getDescriptorByID(ctx, txn, id, flags)
 	if err != nil {
 		return nil, err

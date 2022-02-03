@@ -201,7 +201,7 @@ func (d *txnDeps) RemoveSyntheticDescriptor(id descpb.ID) {
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	return d.descsCollection.GetMutableDescriptorByID(ctx, id, d.txn)
+	return d.descsCollection.GetMutableDescriptorByID(ctx, d.txn, id)
 }
 
 // NewCatalogChangeBatcher implements the scexec.Catalog interface.
