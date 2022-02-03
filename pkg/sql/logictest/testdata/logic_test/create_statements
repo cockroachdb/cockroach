@@ -3379,13 +3379,15 @@ CREATE TABLE information_schema.type_privileges (
    type_catalog STRING NOT NULL,
    type_schema STRING NOT NULL,
    type_name STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  CREATE TABLE information_schema.type_privileges (
    grantee STRING NOT NULL,
    type_catalog STRING NOT NULL,
    type_schema STRING NOT NULL,
    type_name STRING NOT NULL,
-   privilege_type STRING NOT NULL
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL
 )  {}  {}
 CREATE TABLE information_schema.udt_privileges (
    grantor STRING NULL,

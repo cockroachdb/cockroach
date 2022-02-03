@@ -396,7 +396,8 @@ CREATE TABLE information_schema.type_privileges (
 	TYPE_CATALOG    STRING NOT NULL,
 	TYPE_SCHEMA     STRING NOT NULL,
 	TYPE_NAME       STRING NOT NULL,
-	PRIVILEGE_TYPE  STRING NOT NULL
+	PRIVILEGE_TYPE  STRING NOT NULL,
+	IS_GRANTABLE    STRING
 )`
 
 // InformationSchemaSchemaPrivileges describes the schema of the
@@ -487,7 +488,7 @@ CREATE TABLE information_schema.table_privileges (
 )`
 
 // InformationSchemaViews describes the schema of the
-//// information_schema.views table.
+// information_schema.views table.
 const InformationSchemaViews = `
 CREATE TABLE information_schema.views (
     TABLE_CATALOG              STRING NOT NULL,
@@ -509,7 +510,7 @@ CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 )`
 
-//InformationSchemaForeignDataWrapperOptions is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignDataWrapperOptions is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignDataWrapperOptions = `
 CREATE TABLE information_schema.foreign_data_wrapper_options (
 	foreign_data_wrapper_catalog STRING,
@@ -518,7 +519,7 @@ CREATE TABLE information_schema.foreign_data_wrapper_options (
 	option_value STRING
 )`
 
-//InformationSchemaTransforms is an empty table in the information_schema that is not implemented yet
+// InformationSchemaTransforms is an empty table in the information_schema that is not implemented yet
 const InformationSchemaTransforms = `
 CREATE TABLE information_schema.transforms (
 	udt_catalog STRING,
@@ -531,7 +532,7 @@ CREATE TABLE information_schema.transforms (
 	transform_type STRING
 )`
 
-//InformationSchemaViewColumnUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaViewColumnUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaViewColumnUsage = `
 CREATE TABLE information_schema.view_column_usage (
 	view_catalog STRING,
@@ -543,7 +544,7 @@ CREATE TABLE information_schema.view_column_usage (
 	column_name STRING
 )`
 
-//InformationSchemaRoutinePrivileges is an empty table in the information_schema that is not implemented yet
+// InformationSchemaRoutinePrivileges is an empty table in the information_schema that is not implemented yet
 const InformationSchemaRoutinePrivileges = `
 CREATE TABLE information_schema.routine_privileges (
 	grantor STRING,
@@ -558,7 +559,7 @@ CREATE TABLE information_schema.routine_privileges (
 	is_grantable STRING
 )`
 
-//InformationSchemaRoleRoutineGrants is an empty table in the information_schema that is not implemented yet
+// InformationSchemaRoleRoutineGrants is an empty table in the information_schema that is not implemented yet
 const InformationSchemaRoleRoutineGrants = `
 CREATE TABLE information_schema.role_routine_grants (
 	grantor STRING,
@@ -573,7 +574,7 @@ CREATE TABLE information_schema.role_routine_grants (
 	is_grantable STRING
 )`
 
-//InformationSchemaElementTypes is an empty table in the information_schema that is not implemented yet
+// InformationSchemaElementTypes is an empty table in the information_schema that is not implemented yet
 const InformationSchemaElementTypes = `
 CREATE TABLE information_schema.element_types (
 	object_catalog STRING,
@@ -607,7 +608,7 @@ CREATE TABLE information_schema.element_types (
 	dtd_identifier STRING
 )`
 
-//InformationSchemaRoleUdtGrants is an empty table in the information_schema that is not implemented yet
+// InformationSchemaRoleUdtGrants is an empty table in the information_schema that is not implemented yet
 const InformationSchemaRoleUdtGrants = `
 CREATE TABLE information_schema.role_udt_grants (
 	grantor STRING,
@@ -619,7 +620,7 @@ CREATE TABLE information_schema.role_udt_grants (
 	is_grantable STRING
 )`
 
-//InformationSchemaColumnOptions is an empty table in the information_schema that is not implemented yet
+// InformationSchemaColumnOptions is an empty table in the information_schema that is not implemented yet
 const InformationSchemaColumnOptions = `
 CREATE TABLE information_schema.column_options (
 	table_catalog STRING,
@@ -630,7 +631,7 @@ CREATE TABLE information_schema.column_options (
 	option_value STRING
 )`
 
-//InformationSchemaForeignTables is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignTables is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignTables = `
 CREATE TABLE information_schema.foreign_tables (
 	foreign_table_catalog STRING,
@@ -640,13 +641,13 @@ CREATE TABLE information_schema.foreign_tables (
 	foreign_server_name STRING
 )`
 
-//InformationSchemaInformationSchemaCatalogName is an empty table in the information_schema that is not implemented yet
+// InformationSchemaInformationSchemaCatalogName is an empty table in the information_schema that is not implemented yet
 const InformationSchemaInformationSchemaCatalogName = `
 CREATE TABLE information_schema.information_schema_catalog_name (
 	catalog_name STRING
 )`
 
-//InformationSchemaCheckConstraintRoutineUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaCheckConstraintRoutineUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaCheckConstraintRoutineUsage = `
 CREATE TABLE information_schema.check_constraint_routine_usage (
 	constraint_catalog STRING,
@@ -657,7 +658,7 @@ CREATE TABLE information_schema.check_constraint_routine_usage (
 	specific_name STRING
 )`
 
-//InformationSchemaColumnDomainUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaColumnDomainUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaColumnDomainUsage = `
 CREATE TABLE information_schema.column_domain_usage (
 	domain_catalog STRING,
@@ -669,7 +670,7 @@ CREATE TABLE information_schema.column_domain_usage (
 	column_name STRING
 )`
 
-//InformationSchemaForeignDataWrappers is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignDataWrappers is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignDataWrappers = `
 CREATE TABLE information_schema.foreign_data_wrappers (
 	foreign_data_wrapper_catalog STRING,
@@ -679,7 +680,7 @@ CREATE TABLE information_schema.foreign_data_wrappers (
 	foreign_data_wrapper_language STRING
 )`
 
-//InformationSchemaViewRoutineUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaViewRoutineUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaViewRoutineUsage = `
 CREATE TABLE information_schema.view_routine_usage (
 	table_catalog STRING,
@@ -690,7 +691,7 @@ CREATE TABLE information_schema.view_routine_usage (
 	specific_name STRING
 )`
 
-//InformationSchemaRoleColumnGrants is an empty table in the information_schema that is not implemented yet
+// InformationSchemaRoleColumnGrants is an empty table in the information_schema that is not implemented yet
 const InformationSchemaRoleColumnGrants = `
 CREATE TABLE information_schema.role_column_grants (
 	grantor STRING,
@@ -703,7 +704,7 @@ CREATE TABLE information_schema.role_column_grants (
 	is_grantable STRING
 )`
 
-//InformationSchemaAttributes is an empty table in the information_schema that is not implemented yet
+// InformationSchemaAttributes is an empty table in the information_schema that is not implemented yet
 const InformationSchemaAttributes = `
 CREATE TABLE information_schema.attributes (
 	udt_catalog STRING,
@@ -739,7 +740,7 @@ CREATE TABLE information_schema.attributes (
 	is_derived_reference_attribute STRING
 )`
 
-//InformationSchemaDomainConstraints is an empty table in the information_schema that is not implemented yet
+// InformationSchemaDomainConstraints is an empty table in the information_schema that is not implemented yet
 const InformationSchemaDomainConstraints = `
 CREATE TABLE information_schema.domain_constraints (
 	constraint_catalog STRING,
@@ -752,7 +753,7 @@ CREATE TABLE information_schema.domain_constraints (
 	initially_deferred STRING
 )`
 
-//InformationSchemaUserMappings is an empty table in the information_schema that is not implemented yet
+// InformationSchemaUserMappings is an empty table in the information_schema that is not implemented yet
 const InformationSchemaUserMappings = `
 CREATE TABLE information_schema.user_mappings (
 	authorization_identifier STRING,
@@ -760,7 +761,7 @@ CREATE TABLE information_schema.user_mappings (
 	foreign_server_name STRING
 )`
 
-//InformationSchemaSQLSizing is an empty table in the information_schema that is not implemented yet
+// InformationSchemaSQLSizing is an empty table in the information_schema that is not implemented yet
 const InformationSchemaSQLSizing = `
 CREATE TABLE information_schema.sql_sizing (
 	sizing_id INT,
@@ -769,7 +770,7 @@ CREATE TABLE information_schema.sql_sizing (
 	comments STRING
 )`
 
-//InformationSchemaColumnColumnUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaColumnColumnUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaColumnColumnUsage = `
 CREATE TABLE information_schema.column_column_usage (
 	table_catalog STRING,
@@ -779,7 +780,7 @@ CREATE TABLE information_schema.column_column_usage (
 	dependent_column STRING
 )`
 
-//InformationSchemaUdtPrivileges is an empty table in the information_schema that is not implemented yet
+// InformationSchemaUdtPrivileges is an empty table in the information_schema that is not implemented yet
 const InformationSchemaUdtPrivileges = `
 CREATE TABLE information_schema.udt_privileges (
 	grantor STRING,
@@ -791,7 +792,7 @@ CREATE TABLE information_schema.udt_privileges (
 	is_grantable STRING
 )`
 
-//InformationSchemaForeignServerOptions is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignServerOptions is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignServerOptions = `
 CREATE TABLE information_schema.foreign_server_options (
 	foreign_server_catalog STRING,
@@ -800,7 +801,7 @@ CREATE TABLE information_schema.foreign_server_options (
 	option_value STRING
 )`
 
-//InformationSchemaConstraintTableUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaConstraintTableUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaConstraintTableUsage = `
 CREATE TABLE information_schema.constraint_table_usage (
 	table_catalog STRING,
@@ -811,7 +812,7 @@ CREATE TABLE information_schema.constraint_table_usage (
 	constraint_name STRING
 )`
 
-//InformationSchemaUsagePrivileges is an empty table in the information_schema that is not implemented yet
+// InformationSchemaUsagePrivileges is an empty table in the information_schema that is not implemented yet
 const InformationSchemaUsagePrivileges = `
 CREATE TABLE information_schema.usage_privileges (
 	grantor STRING,
@@ -824,7 +825,7 @@ CREATE TABLE information_schema.usage_privileges (
 	is_grantable STRING
 )`
 
-//InformationSchemaDomains is an empty table in the information_schema that is not implemented yet
+// InformationSchemaDomains is an empty table in the information_schema that is not implemented yet
 const InformationSchemaDomains = `
 CREATE TABLE information_schema.domains (
 	domain_catalog STRING,
@@ -856,7 +857,7 @@ CREATE TABLE information_schema.domains (
 	dtd_identifier STRING
 )`
 
-//InformationSchemaSQLImplementationInfo is an empty table in the information_schema that is not implemented yet
+// InformationSchemaSQLImplementationInfo is an empty table in the information_schema that is not implemented yet
 const InformationSchemaSQLImplementationInfo = `
 CREATE TABLE information_schema.sql_implementation_info (
 	implementation_info_id STRING,
@@ -866,7 +867,7 @@ CREATE TABLE information_schema.sql_implementation_info (
 	comments STRING
 )`
 
-//InformationSchemaForeignTableOptions is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignTableOptions is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignTableOptions = `
 CREATE TABLE information_schema.foreign_table_options (
 	foreign_table_catalog STRING,
@@ -876,7 +877,7 @@ CREATE TABLE information_schema.foreign_table_options (
 	option_value STRING
 )`
 
-//InformationSchemaDomainUdtUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaDomainUdtUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaDomainUdtUsage = `
 CREATE TABLE information_schema.domain_udt_usage (
 	udt_catalog STRING,
@@ -887,7 +888,7 @@ CREATE TABLE information_schema.domain_udt_usage (
 	domain_name STRING
 )`
 
-//InformationSchemaUserMappingOptions is an empty table in the information_schema that is not implemented yet
+// InformationSchemaUserMappingOptions is an empty table in the information_schema that is not implemented yet
 const InformationSchemaUserMappingOptions = `
 CREATE TABLE information_schema.user_mapping_options (
 	authorization_identifier STRING,
@@ -897,7 +898,7 @@ CREATE TABLE information_schema.user_mapping_options (
 	option_value STRING
 )`
 
-//InformationSchemaDataTypePrivileges is an empty table in the information_schema that is not implemented yet
+// InformationSchemaDataTypePrivileges is an empty table in the information_schema that is not implemented yet
 const InformationSchemaDataTypePrivileges = `
 CREATE TABLE information_schema.data_type_privileges (
 	object_catalog STRING,
@@ -907,7 +908,7 @@ CREATE TABLE information_schema.data_type_privileges (
 	dtd_identifier STRING
 )`
 
-//InformationSchemaRoleUsageGrants is an empty table in the information_schema that is not implemented yet
+// InformationSchemaRoleUsageGrants is an empty table in the information_schema that is not implemented yet
 const InformationSchemaRoleUsageGrants = `
 CREATE TABLE information_schema.role_usage_grants (
 	grantor STRING,
@@ -920,7 +921,7 @@ CREATE TABLE information_schema.role_usage_grants (
 	is_grantable STRING
 )`
 
-//InformationSchemaSQLFeatures is an empty table in the information_schema that is not implemented yet
+// InformationSchemaSQLFeatures is an empty table in the information_schema that is not implemented yet
 const InformationSchemaSQLFeatures = `
 CREATE TABLE information_schema.sql_features (
 	feature_id STRING,
@@ -932,7 +933,7 @@ CREATE TABLE information_schema.sql_features (
 	comments STRING
 )`
 
-//InformationSchemaSQLParts is an empty table in the information_schema that is not implemented yet
+// InformationSchemaSQLParts is an empty table in the information_schema that is not implemented yet
 const InformationSchemaSQLParts = `
 CREATE TABLE information_schema.sql_parts (
 	feature_id STRING,
@@ -942,7 +943,7 @@ CREATE TABLE information_schema.sql_parts (
 	comments STRING
 )`
 
-//InformationSchemaTablespaces is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaTablespaces is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaTablespaces = `
 CREATE TABLE information_schema.tablespaces (
 	extent_size INT,
@@ -956,7 +957,7 @@ CREATE TABLE information_schema.tablespaces (
 	tablespace_name STRING
 )`
 
-//InformationSchemaStSpatialReferenceSystems is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaStSpatialReferenceSystems is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaStSpatialReferenceSystems = `
 CREATE TABLE information_schema.st_spatial_reference_systems (
 	srs_id INT,
@@ -967,7 +968,7 @@ CREATE TABLE information_schema.st_spatial_reference_systems (
 	organization_coordsys_id INT
 )`
 
-//InformationSchemaProcesslist is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaProcesslist is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaProcesslist = `
 CREATE TABLE information_schema.processlist (
 	host STRING,
@@ -980,7 +981,7 @@ CREATE TABLE information_schema.processlist (
 	db STRING
 )`
 
-//InformationSchemaUserDefinedTypes is an empty table in the information_schema that is not implemented yet
+// InformationSchemaUserDefinedTypes is an empty table in the information_schema that is not implemented yet
 const InformationSchemaUserDefinedTypes = `
 CREATE TABLE information_schema.user_defined_types (
 	user_defined_type_catalog STRING,
@@ -1014,7 +1015,7 @@ CREATE TABLE information_schema.user_defined_types (
 	ref_dtd_identifier STRING
 )`
 
-//InformationSchemaTriggeredUpdateColumns is an empty table in the information_schema that is not implemented yet
+// InformationSchemaTriggeredUpdateColumns is an empty table in the information_schema that is not implemented yet
 const InformationSchemaTriggeredUpdateColumns = `
 CREATE TABLE information_schema.triggered_update_columns (
 	trigger_catalog STRING,
@@ -1026,7 +1027,7 @@ CREATE TABLE information_schema.triggered_update_columns (
 	event_object_column STRING
 )`
 
-//InformationSchemaTriggers is an empty table in the information_schema that is not implemented yet
+// InformationSchemaTriggers is an empty table in the information_schema that is not implemented yet
 const InformationSchemaTriggers = `
 CREATE TABLE information_schema.triggers (
 	trigger_catalog STRING,
@@ -1048,7 +1049,7 @@ CREATE TABLE information_schema.triggers (
 	created TIMESTAMPTZ
 )`
 
-//InformationSchemaTablesExtensions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaTablesExtensions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaTablesExtensions = `
 CREATE TABLE information_schema.tables_extensions (
 	engine_attribute STRING,
@@ -1058,7 +1059,7 @@ CREATE TABLE information_schema.tables_extensions (
 	table_schema STRING
 )`
 
-//InformationSchemaViewTableUsage is an empty table in the information_schema that is not implemented yet
+// InformationSchemaViewTableUsage is an empty table in the information_schema that is not implemented yet
 const InformationSchemaViewTableUsage = `
 CREATE TABLE information_schema.view_table_usage (
 	view_catalog STRING,
@@ -1069,7 +1070,7 @@ CREATE TABLE information_schema.view_table_usage (
 	table_name STRING
 )`
 
-//InformationSchemaProfiling is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaProfiling is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaProfiling = `
 CREATE TABLE information_schema.profiling (
 	cpu_system DECIMAL,
@@ -1092,7 +1093,7 @@ CREATE TABLE information_schema.profiling (
 	source_line INT
 )`
 
-//InformationSchemaColumnStatistics is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaColumnStatistics is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaColumnStatistics = `
 CREATE TABLE information_schema.column_statistics (
 	column_name STRING,
@@ -1101,7 +1102,7 @@ CREATE TABLE information_schema.column_statistics (
 	table_name STRING
 )`
 
-//InformationSchemaResourceGroups is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaResourceGroups is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaResourceGroups = `
 CREATE TABLE information_schema.resource_groups (
 	resource_group_enabled INT2,
@@ -1111,7 +1112,7 @@ CREATE TABLE information_schema.resource_groups (
 	vcpu_ids BYTES
 )`
 
-//InformationSchemaPartitions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaPartitions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaPartitions = `
 CREATE TABLE information_schema.partitions (
 	data_free INT,
@@ -1141,14 +1142,14 @@ CREATE TABLE information_schema.partitions (
 	table_catalog STRING
 )`
 
-//InformationSchemaTablespacesExtensions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaTablespacesExtensions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaTablespacesExtensions = `
 CREATE TABLE information_schema.tablespaces_extensions (
 	engine_attribute STRING,
 	tablespace_name STRING
 )`
 
-//InformationSchemaSchemataExtensions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaSchemataExtensions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaSchemataExtensions = `
 CREATE TABLE information_schema.schemata_extensions (
 	catalog_name STRING,
@@ -1156,7 +1157,7 @@ CREATE TABLE information_schema.schemata_extensions (
 	schema_name STRING
 )`
 
-//InformationSchemaStUnitsOfMeasure is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaStUnitsOfMeasure is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaStUnitsOfMeasure = `
 CREATE TABLE information_schema.st_units_of_measure (
 	conversion_factor FLOAT,
@@ -1165,7 +1166,7 @@ CREATE TABLE information_schema.st_units_of_measure (
 	unit_type STRING
 )`
 
-//InformationSchemaFiles is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaFiles is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaFiles = `
 CREATE TABLE information_schema.files (
 	last_update_time BYTES,
@@ -1208,7 +1209,7 @@ CREATE TABLE information_schema.files (
 	deleted_rows BYTES
 )`
 
-//InformationSchemaEngines is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaEngines is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaEngines = `
 CREATE TABLE information_schema.engines (
 	support STRING,
@@ -1219,7 +1220,7 @@ CREATE TABLE information_schema.engines (
 	savepoints STRING
 )`
 
-//InformationSchemaColumnsExtensions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaColumnsExtensions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaColumnsExtensions = `
 CREATE TABLE information_schema.columns_extensions (
 	engine_attribute STRING,
@@ -1230,7 +1231,7 @@ CREATE TABLE information_schema.columns_extensions (
 	column_name STRING
 )`
 
-//InformationSchemaStGeometryColumns is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaStGeometryColumns is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaStGeometryColumns = `
 CREATE TABLE information_schema.st_geometry_columns (
 	srs_id INT,
@@ -1242,7 +1243,7 @@ CREATE TABLE information_schema.st_geometry_columns (
 	geometry_type_name STRING
 )`
 
-//InformationSchemaPlugins is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaPlugins is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaPlugins = `
 CREATE TABLE information_schema.plugins (
 	plugin_version STRING,
@@ -1258,7 +1259,7 @@ CREATE TABLE information_schema.plugins (
 	plugin_name STRING
 )`
 
-//InformationSchemaEvents is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaEvents is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaEvents = `
 CREATE TABLE information_schema.events (
 	definer STRING,
@@ -1287,7 +1288,7 @@ CREATE TABLE information_schema.events (
 	created TIMESTAMPTZ
 )`
 
-//InformationSchemaUserAttributes is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaUserAttributes is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaUserAttributes = `
 CREATE TABLE information_schema.user_attributes (
 	attribute STRING,
@@ -1295,14 +1296,14 @@ CREATE TABLE information_schema.user_attributes (
 	"user" STRING
 )`
 
-//InformationSchemaKeywords is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaKeywords is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaKeywords = `
 CREATE TABLE information_schema.keywords (
 	word STRING,
 	reserved INT
 )`
 
-//InformationSchemaOptimizerTrace is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaOptimizerTrace is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaOptimizerTrace = `
 CREATE TABLE information_schema.optimizer_trace (
 	insufficient_privileges INT2,
@@ -1311,7 +1312,7 @@ CREATE TABLE information_schema.optimizer_trace (
 	trace STRING
 )`
 
-//InformationSchemaForeignServers is an empty table in the information_schema that is not implemented yet
+// InformationSchemaForeignServers is an empty table in the information_schema that is not implemented yet
 const InformationSchemaForeignServers = `
 CREATE TABLE information_schema.foreign_servers (
 	foreign_server_catalog STRING,
@@ -1323,7 +1324,7 @@ CREATE TABLE information_schema.foreign_servers (
 	authorization_identifier STRING
 )`
 
-//InformationSchemaTableConstraintsExtensions is an empty table in the pg_catalog that is not implemented yet
+// InformationSchemaTableConstraintsExtensions is an empty table in the pg_catalog that is not implemented yet
 const InformationSchemaTableConstraintsExtensions = `
 CREATE TABLE information_schema.table_constraints_extensions (
 	constraint_catalog STRING,
