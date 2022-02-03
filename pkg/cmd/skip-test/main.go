@@ -41,6 +41,8 @@ var (
 
 const description = `The skip-test utility creates a pull request to skip a test.
 
+Ensure "dev" is in your PATH.
+
 Example usage:
 
     ./bin/skip-test -issue_num 1234 pkg/to/test:TestToSkip
@@ -145,7 +147,7 @@ func main() {
 	replaceFile(fileName, testName, issueNum)
 
 	// Update the package's BUILD.bazel.
-	if err := spawn("make", "bazel-generate"); err != nil {
+	if err := spawn("dev", "generate", "bazel"); err != nil {
 		log.Fatal(errors.Wrap(err, "failed to run bazel"))
 	}
 
