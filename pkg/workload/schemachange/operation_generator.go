@@ -869,7 +869,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 	duplicateRegionColumn := false
 	nonIndexableType := false
 	def.Columns = make(tree.IndexElemList, 1+og.randIntn(len(columnNames)))
-	implicitlyIndex := false
 	for i := range def.Columns {
 		def.Columns[i].Column = tree.Name(columnNames[i].name)
 		def.Columns[i].Direction = tree.Direction(og.randIntn(1 + int(tree.Descending)))
@@ -893,14 +892,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 			if !colinfo.ColumnTypeIsIndexable(columnNames[i].typ) {
 				nonIndexableType = true
 			}
-		}
-
-		colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
-		if err != nil {
-			return "", err
-		}
-		if colUsedInPrimaryIdx {
-			implicitlyIndex = true
 		}
 	}
 
@@ -991,7 +982,6 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.Uncategorized, condition: virtualComputedStored},
 			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
-			{code: pgcode.DuplicateColumn, condition: implicitlyIndex},
 		}.add(og.expectedExecErrors)
 	}
 
