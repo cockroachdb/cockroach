@@ -901,7 +901,7 @@ var charts = []sectionDescription{
 			},
 			{
 				Title:       "Replicas with tripped circuit breakers",
-				Downsampler: DescribeAggregator_MAX,
+				Downsampler: DescribeAggregator_SUM,
 				Metrics:     []string{"kv.replica_circuit_breaker.num_tripped_replicas"},
 			},
 			{

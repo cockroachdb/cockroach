@@ -13,9 +13,9 @@ import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import {
-  Metric,
   Axis,
   AxisUnits,
+  Metric,
 } from "src/views/shared/components/metricQuery";
 
 import {
@@ -23,7 +23,13 @@ import {
   nodeDisplayName,
   storeIDsForNode,
 } from "./dashboardUtils";
-import { LogicalBytesGraphTooltip } from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import {
+  CircuitBreakerTrippedEventsTooltip,
+  CircuitBreakerTrippedReplicasTooltip,
+  LogicalBytesGraphTooltip,
+} from "src/views/cluster/containers/nodeGraphs/dashboards/graphTooltips";
+import { cockroach } from "src/js/protos";
+import TimeSeriesQueryAggregator = cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 export default function(props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, storeSources } = props;
@@ -170,6 +176,39 @@ export default function(props: GraphDashboardProps) {
           title="Reserved"
           nonNegativeRate
         />
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Circuit Breaker Tripped Replicas"
+      tooltip={CircuitBreakerTrippedReplicasTooltip}
+    >
+      <Axis label="replicas">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.kv.replica_circuit_breaker.num_tripped_replicas"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            downsampler={TimeSeriesQueryAggregator.SUM}
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+    <LineGraph
+      title="Circuit Breaker Tripped Events"
+      sources={storeSources}
+      tooltip={CircuitBreakerTrippedEventsTooltip}
+    >
+      <Axis label="events">
+        {_.map(nodeIDs, nid => (
+          <Metric
+            key={nid}
+            name="cr.store.kv.replica_circuit_breaker.num_tripped_events"
+            title={nodeDisplayName(nodesSummary, nid)}
+            sources={storeIDsForNode(nodesSummary, nid)}
+            downsampler={TimeSeriesQueryAggregator.MAX}
+          />
+        ))}
       </Axis>
     </LineGraph>,
   ];
