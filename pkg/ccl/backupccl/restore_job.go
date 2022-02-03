@@ -59,6 +59,10 @@ import (
 	"github.com/gogo/protobuf/types"
 )
 
+// restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
+// tables we process in a single txn when restoring their table statistics.
+var restoreStatsInsertBatchSize = 10
+
 func processTableForMultiRegion(
 	ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, table catalog.TableDescriptor,
 ) error {
@@ -1690,24 +1694,40 @@ func insertStats(
 		return nil
 	}
 
-	if latestStats == nil {
-		return nil
-	}
+	// We could be restoring hundreds of tables, so insert the new stats in
+	// batches instead of all in a single, long-running txn. This prevents intent
+	// buildup in the face of txn retries.
+	for {
+		if len(latestStats) == 0 {
+			return nil
+		}
 
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn, latestStats); err != nil {
-			return errors.Wrapf(err, "inserting stats from backup")
+		if len(latestStats) < restoreStatsInsertBatchSize {
+			restoreStatsInsertBatchSize = len(latestStats)
 		}
-		details.StatsInserted = true
-		if err := job.SetDetails(ctx, txn, details); err != nil {
-			return errors.Wrapf(err, "updating job marking stats insertion complete")
+
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := stats.InsertNewStats(ctx, execCfg.InternalExecutor, txn,
+				latestStats[:restoreStatsInsertBatchSize]); err != nil {
+				return errors.Wrapf(err, "inserting stats from backup")
+			}
+
+			// If this is the last batch, mark the stats insertion complete.
+			if restoreStatsInsertBatchSize == len(latestStats) {
+				details.StatsInserted = true
+				if err := job.SetDetails(ctx, txn, details); err != nil {
+					return errors.Wrapf(err, "updating job marking stats insertion complete")
+				}
+			}
+
+			return nil
+		}); err != nil {
+			return err
 		}
-		return nil
-	})
-	if err != nil {
-		return err
+
+		// Truncate the stats that we have inserted in the txn above.
+		latestStats = latestStats[restoreStatsInsertBatchSize:]
 	}
-	return nil
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
