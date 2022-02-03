@@ -69,7 +69,7 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, txn)
 }
 
-// GetSpanConfigEntriesFor is part of the spanconfig.KVAccessor interface.
+// GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
 	ctx context.Context, spans []roachpb.Span,
 ) (resp []roachpb.SpanConfigEntry, retErr error) {
@@ -138,7 +138,7 @@ func (k *KVAccessor) getConfigEntries(
 	return resp, nil
 }
 
-// UpdateSpanConfigEntries is part of the spanconfig.KVAccessor interface.
+// UpdateSpanConfigEntries is part of the KVAccessor interface.
 func (k *KVAccessor) UpdateSpanConfigEntries(
 	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
 ) error {

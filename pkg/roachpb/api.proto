@@ -2870,12 +2870,6 @@ service Internal {
   // keyspans.
   rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
 
-  //  GetSystemSpanConfigs is used to fetch system span configurations.
-  rpc GetSystemSpanConfigs(GetSystemSpanConfigsRequest) returns (GetSystemSpanConfigsResponse) { }
-
-  // UpdateSystemSpanConfigs is used to update system span configurations.
-  rpc UpdateSystemSpanConfigs (UpdateSystemSpanConfigsRequest) returns (UpdateSystemSpanConfigsResponse) {}
-
   // TenantSettings is used by tenants to obtain and stay up to date with tenant
   // setting overrides.
   rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }
