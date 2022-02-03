@@ -23,14 +23,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "t_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
   "encoding_type": 1,
   "num_key_suffix_columns": 0,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -77,14 +77,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "t_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
   "encoding_type": 1,
   "num_key_suffix_columns": 0,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -119,14 +119,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "b1",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -178,14 +178,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "b2",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -239,14 +239,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "cb1",
   "is_secondary_index": true,
   "is_unique_index": true,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -310,14 +310,14 @@ columns:
 ----
 {
   "table_name": "t",
-  "table_id": 56,
+  "table_id": 1006,
   "index_name": "cb2",
   "is_secondary_index": true,
   "is_unique_index": true,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -408,14 +408,14 @@ columns:
 ----
 {
   "table_name": "fam",
-  "table_id": 57,
+  "table_id": 1007,
   "index_name": "fam_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
   "encoding_type": 1,
   "num_key_suffix_columns": 0,
   "max_keys_per_row": 3,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 2,
   "family_default_columns": [
     {
@@ -459,14 +459,14 @@ columns:
 ----
 {
   "table_name": "fam",
-  "table_id": 57,
+  "table_id": 1007,
   "index_name": "b",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 2,
   "family_default_columns": [
     {
@@ -521,14 +521,14 @@ columns:
 ----
 {
   "table_name": "fam",
-  "table_id": 57,
+  "table_id": 1007,
   "index_name": "b2",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 2,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 2,
   "family_default_columns": [
     {
@@ -583,14 +583,14 @@ columns:
 ----
 {
   "table_name": "fam",
-  "table_id": 57,
+  "table_id": 1007,
   "index_name": "c",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 2,
   "family_default_columns": [
     {
@@ -645,14 +645,14 @@ columns:
 ----
 {
   "table_name": "fam",
-  "table_id": 57,
+  "table_id": 1007,
   "index_name": "c2",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 2,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 2,
   "family_default_columns": [
     {
@@ -718,14 +718,14 @@ columns:
 ----
 {
   "table_name": "inv",
-  "table_id": 58,
+  "table_id": 1008,
   "index_name": "inv",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [
@@ -778,14 +778,14 @@ columns:
 ----
 {
   "table_name": "inv",
-  "table_id": 58,
+  "table_id": 1008,
   "index_name": "inv2",
   "is_secondary_index": true,
   "is_unique_index": false,
   "encoding_type": 0,
   "num_key_suffix_columns": 1,
   "max_keys_per_row": 1,
-  "key_prefix_length": 2,
+  "key_prefix_length": 4,
   "max_family_id": 0,
   "family_default_columns": null,
   "key_and_suffix_columns": [

@@ -39,7 +39,7 @@ initial-keys tenant=system
  /Table/3/1/45/2/1
  /Table/3/1/46/2/1
  /Table/3/1/47/2/1
- /Table/3/1/48/2/1
+ /Table/3/1/50/2/1
  /Table/5/1/0/2/1
  /Table/5/1/1/2/1
  /Table/5/1/16/2/1
@@ -125,7 +125,7 @@ initial-keys tenant=system
  /Table/45
  /Table/46
  /Table/47
- /Table/48
+ /Table/50
 
 initial-keys tenant=5
 ----

@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -49,11 +51,8 @@ func TestExportCmd(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 
 	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const tableID = 56
+	var tableID atomic.Value
+	tableID.Store(descpb.ID(0))
 
 	export := func(
 		t *testing.T, start hlc.Timestamp, mvccFilter roachpb.MVCCFilter, maxResponseSSTBytes int64,
@@ -173,6 +172,14 @@ func TestExportCmd(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE mvcclatest`)
 	sqlDB.Exec(t, `CREATE TABLE mvcclatest.export (id INT PRIMARY KEY, value INT)`)
+	{
+		var id descpb.ID
+		sqlDB.QueryRow(
+			t, "SELECT 'mvcclatest.export'::regclass::int",
+		).Scan(&id)
+		tableID.Store(id)
+	}
+
 	const (
 		targetSizeSetting = "kv.bulk_sst.target_size"
 		maxOverageSetting = "kv.bulk_sst.max_allowed_overage"
@@ -284,7 +291,7 @@ INTO
 		// the max overage being exceeded.
 		defer resetMaxOverage(t)
 		setMaxOverage(t, "'1b'")
-		const expectedError = `export size \(11 bytes\) exceeds max size \(2 bytes\)`
+		const expectedError = `export size \(13 bytes\) exceeds max size \(2 bytes\)`
 		_, pErr := export(t, res5.end, roachpb.MVCCFilter_Latest, noTargetBytes)
 		require.Regexp(t, expectedError, pErr)
 		hints := errors.GetAllHints(pErr.GoError())
@@ -304,7 +311,7 @@ INTO
 	var res7 ExportAndSlurpResult
 	t.Run("ts7", func(t *testing.T) {
 		var maxResponseSSTBytes int64
-		kvByteSize := int64(11)
+		kvByteSize := int64(13)
 		// Because of the above split, there are going to be two ExportRequests by
 		// the DistSender. One for the first KV and the next one for the remaining
 		// KVs.
@@ -335,7 +342,7 @@ INTO
 		expect(t, res7, 1, 1, 1, 1)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -343,7 +350,7 @@ INTO
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/2", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -359,7 +366,7 @@ INTO
 		expect(t, res7, 2, 2, 2, 2)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -367,7 +374,7 @@ INTO
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/3/0", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -382,7 +389,7 @@ INTO
 		expect(t, res7, 99, 99, 99, 99)
 		latestRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
@@ -390,7 +397,7 @@ INTO
 		}
 		allRespHeader = roachpb.ResponseHeader{
 			ResumeSpan: &roachpb.Span{
-				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID)),
+				Key:    []byte(fmt.Sprintf("/Table/%d/1/100/0", tableID.Load())),
 				EndKey: []byte("/Max"),
 			},
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,

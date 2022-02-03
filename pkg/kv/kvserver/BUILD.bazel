@@ -355,6 +355,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",
+        "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/dbdesc",

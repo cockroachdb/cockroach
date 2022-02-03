@@ -55,6 +55,15 @@ func MakeMetadataSchema(
 	return ms
 }
 
+// firstNonSystemDescriptorID is the initial value of the descriptor ID generator
+// and thus is the value at which we generate the first non-system descriptor
+// ID. In clusters which have been upgraded, there may be non-system
+// descriptors with IDs smaller that this. This is unexported very
+// intentionally; we may change this value and it should not be relied upon.
+// Note that this is in the bootstrap package because it's the value at
+// bootstrap time only.
+const firstNonSystemDescriptorID = 1000
+
 // AddDescriptor adds a new non-config descriptor to the system schema.
 func (ms *MetadataSchema) AddDescriptor(desc catalog.Descriptor) {
 	switch id := desc.GetID(); id {
@@ -134,7 +143,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// objects.
 	{
 		value := roachpb.Value{}
-		value.SetInt(int64(ms.MaxSystemDescriptorID() + 1))
+		value.SetInt(int64(ms.FirstNonSystemDescriptorID()))
 		add(ms.codec.DescIDSequenceKey(), value)
 	}
 
@@ -211,16 +220,16 @@ func (ms MetadataSchema) DescriptorIDs() descpb.IDs {
 	return descriptorIDs
 }
 
-// MaxSystemDescriptorID returns the largest system descriptor ID in this
+// FirstNonSystemDescriptorID returns the largest system descriptor ID in this
 // schema.
-func (ms MetadataSchema) MaxSystemDescriptorID() (maxID descpb.ID) {
-	maxID = 1000
+func (ms MetadataSchema) FirstNonSystemDescriptorID() descpb.ID {
+	maxID := descpb.ID(firstNonSystemDescriptorID - 1)
 	for _, d := range ms.descs {
 		if d.GetID() > maxID {
 			maxID = d.GetID()
 		}
 	}
-	return maxID
+	return maxID + 1
 }
 
 func (ms MetadataSchema) allocateID() (nextID descpb.ID) {
@@ -413,7 +422,7 @@ func addSystemDatabaseToSchema(
 // bootstrapped cluster.
 func TestingMinUserDescID() uint32 {
 	ms := MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
-	return uint32(ms.MaxSystemDescriptorID() + 1)
+	return uint32(ms.FirstNonSystemDescriptorID())
 }
 
 // TestingMinNonDefaultUserDescID returns the smallest user-creatable descriptor

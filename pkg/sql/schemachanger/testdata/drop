@@ -3,9 +3,9 @@ CREATE DATABASE db;
 CREATE SCHEMA db.sc;
 ----
 ...
-+database {0 0 db} -> 54
-+schema {54 0 public} -> 55
-+schema {54 0 sc} -> 56
++database {0 0 db} -> 1004
++schema {1004 0 public} -> 1005
++schema {1004 0 sc} -> 1006
 
 test
 DROP SCHEMA db.sc;
@@ -14,21 +14,21 @@ checking for feature: DROP SCHEMA
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 2 MutationType ops
-delete comment for descriptor #56 of type SchemaCommentType
+delete comment for descriptor #1006 of type SchemaCommentType
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 5 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [54 56]
-upsert descriptor #54
+  descriptor IDs: [1004 1006]
+upsert descriptor #1004
   ...
        public:
-         id: 55
+         id: 1005
   -    sc:
-  -      id: 56
+  -      id: 1006
   -  version: "2"
   +  version: "3"
-upsert descriptor #56
+upsert descriptor #1006
   ...
          withGrantOption: 2
        version: 2
@@ -40,11 +40,11 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 6 MutationType ops
-write *eventpb.DropSchema to event log for descriptor #56: DROP SCHEMA ‹db›.‹sc›
+write *eventpb.DropSchema to event log for descriptor #1006: DROP SCHEMA ‹db›.‹sc›
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete schema namespace entry {54 0 sc} -> 56
-delete descriptor #56
+delete schema namespace entry {1004 0 sc} -> 1006
+delete descriptor #1006
 commit transaction #2
 # end PostCommitPhase
 
@@ -54,10 +54,10 @@ CREATE TABLE db.sc.t (k INT, v STRING);
 CREATE TYPE db.sc.e AS ENUM('a', 'b', 'c');
 ----
 ...
-+schema {54 0 sc} -> 57
-+object {54 57 t} -> 58
-+object {54 57 e} -> 59
-+object {54 57 _e} -> 60
++schema {1004 0 sc} -> 1007
++object {1004 1007 t} -> 1008
++object {1004 1007 e} -> 1009
++object {1004 1007 _e} -> 1010
 
 test
 DROP TABLE db.sc.t;
@@ -66,18 +66,18 @@ checking for feature: DROP TABLE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 6 MutationType ops
-delete comment for descriptor #58 of type TableCommentType
-delete comment for descriptor #58 of type ColumnCommentType
-delete comment for descriptor #58 of type ColumnCommentType
-delete comment for descriptor #58 of type IndexCommentType
-delete comment for constraint on #58, name: t_pkey, type: PrimaryKey
+delete comment for descriptor #1008 of type TableCommentType
+delete comment for descriptor #1008 of type ColumnCommentType
+delete comment for descriptor #1008 of type ColumnCommentType
+delete comment for descriptor #1008 of type IndexCommentType
+delete comment for constraint on #1008, name: t_pkey, type: PrimaryKey
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 4 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [58]
-delete object namespace entry {54 57 t} -> 58
-upsert descriptor #58
+  descriptor IDs: [1008]
+delete object namespace entry {1004 1007 t} -> 1008
+upsert descriptor #1008
   ...
      modificationTime: {}
      name: t
@@ -88,7 +88,7 @@ upsert descriptor #58
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 57
+     unexposedParentSchemaId: 1007
   -  version: "1"
   +  version: "2"
 # end PreCommitPhase
@@ -96,12 +96,12 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
-create job #2: "GC for dropping descriptor 58"
-  descriptor IDs: [58]
-write *eventpb.DropTable to event log for descriptor #58: DROP TABLE ‹db›.‹sc›.‹t›
+create job #2: "GC for dropping descriptor 1008"
+  descriptor IDs: [1008]
+write *eventpb.DropTable to event log for descriptor #1008: DROP TABLE ‹db›.‹sc›.‹t›
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-upsert descriptor #58
+upsert descriptor #1008
   ...
      modificationTime: {}
      name: t
@@ -110,7 +110,7 @@ upsert descriptor #58
      nextFamilyId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 57
+     unexposedParentSchemaId: 1007
   -  version: "2"
   +  version: "3"
 commit transaction #2
@@ -123,37 +123,37 @@ checking for feature: DROP SCHEMA
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 4 MutationType ops
-delete comment for descriptor #57 of type SchemaCommentType
+delete comment for descriptor #1007 of type SchemaCommentType
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 11 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [54 57 59 60]
-delete object namespace entry {54 57 e} -> 59
-delete object namespace entry {54 57 _e} -> 60
-upsert descriptor #54
+  descriptor IDs: [1004 1007 1009 1010]
+delete object namespace entry {1004 1007 e} -> 1009
+delete object namespace entry {1004 1007 _e} -> 1010
+upsert descriptor #1004
   ...
        public:
-         id: 55
+         id: 1005
   -    sc:
-  -      id: 57
+  -      id: 1007
   -  version: "4"
   +  version: "5"
-upsert descriptor #57
+upsert descriptor #1007
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
-upsert descriptor #59
+upsert descriptor #1009
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
-upsert descriptor #60
+upsert descriptor #1010
   ...
          withGrantOption: 2
        version: 2
@@ -165,14 +165,14 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
-write *eventpb.DropSchema to event log for descriptor #57: DROP SCHEMA ‹db›.‹sc› CASCADE
-write *eventpb.DropType to event log for descriptor #60: DROP SCHEMA ‹db›.‹sc› CASCADE
+write *eventpb.DropSchema to event log for descriptor #1007: DROP SCHEMA ‹db›.‹sc› CASCADE
+write *eventpb.DropType to event log for descriptor #1010: DROP SCHEMA ‹db›.‹sc› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete schema namespace entry {54 0 sc} -> 57
-delete descriptor #57
-delete descriptor #59
-delete descriptor #60
+delete schema namespace entry {1004 0 sc} -> 1007
+delete descriptor #1007
+delete descriptor #1009
+delete descriptor #1010
 commit transaction #2
 # end PostCommitPhase
 
@@ -183,26 +183,26 @@ checking for feature: DROP DATABASE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 5 MutationType ops
-delete comment for descriptor #55 of type SchemaCommentType
-delete comment for descriptor #54 of type DatabaseCommentType
-delete role settings for database on #54
+delete comment for descriptor #1005 of type SchemaCommentType
+delete comment for descriptor #1004 of type DatabaseCommentType
+delete role settings for database on #1004
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 6 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [54 55]
-upsert descriptor #54
+  descriptor IDs: [1004 1005]
+upsert descriptor #1004
   ...
          withGrantOption: 2
        version: 2
   -  schemas:
   -    public:
-  -      id: 55
+  -      id: 1005
   -  version: "5"
   +  schemas: {}
   +  state: DROP
   +  version: "6"
-upsert descriptor #55
+upsert descriptor #1005
   ...
          withGrantOption: 2
        version: 2
@@ -214,20 +214,20 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
-create job #2: "GC for dropping descriptors and parent database 54"
+create job #2: "GC for dropping descriptors and parent database 1004"
   descriptor IDs: []
-write *eventpb.DropDatabase to event log for descriptor #54: DROP DATABASE ‹db› CASCADE
+write *eventpb.DropDatabase to event log for descriptor #1004: DROP DATABASE ‹db› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete database namespace entry {0 0 db} -> 54
-delete schema namespace entry {54 0 public} -> 55
-upsert descriptor #54
+delete database namespace entry {0 0 db} -> 1004
+delete schema namespace entry {1004 0 public} -> 1005
+upsert descriptor #1004
   ...
        version: 2
      state: DROP
   -  version: "6"
   +  version: "7"
-delete descriptor #55
+delete descriptor #1005
 commit transaction #2
 # end PostCommitPhase
 
@@ -246,20 +246,20 @@ CREATE TYPE db1.sc1.typ AS ENUM('a');
 CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1.sc1.v4);
 ----
 ...
-+database {0 0 db1} -> 61
-+schema {61 0 public} -> 62
-+schema {61 0 sc1} -> 63
-+object {61 62 sq1} -> 64
-+object {61 63 sq1} -> 65
-+object {61 63 t1} -> 66
-+object {61 62 t1} -> 67
-+object {61 63 v1} -> 68
-+object {61 63 v2} -> 69
-+object {61 63 v3} -> 70
-+object {61 63 v4} -> 71
-+object {61 63 typ} -> 72
-+object {61 63 _typ} -> 73
-+object {61 63 v5} -> 74
++database {0 0 db1} -> 1011
++schema {1011 0 public} -> 1012
++schema {1011 0 sc1} -> 1013
++object {1011 1012 sq1} -> 1014
++object {1011 1013 sq1} -> 1015
++object {1011 1013 t1} -> 1016
++object {1011 1012 t1} -> 1017
++object {1011 1013 v1} -> 1018
++object {1011 1013 v2} -> 1019
++object {1011 1013 v3} -> 1020
++object {1011 1013 v4} -> 1021
++object {1011 1013 typ} -> 1022
++object {1011 1013 _typ} -> 1023
++object {1011 1013 v5} -> 1024
 
 test
 DROP DATABASE db1 CASCADE
@@ -268,73 +268,73 @@ checking for feature: DROP DATABASE
 begin transaction #1
 # begin StatementPhase
 ## StatementPhase stage 1 of 1 with 37 MutationType ops
-delete comment for descriptor #64 of type TableCommentType
-delete comment for descriptor #67 of type TableCommentType
-delete comment for descriptor #67 of type ColumnCommentType
-delete comment for descriptor #67 of type ColumnCommentType
-delete comment for descriptor #67 of type ColumnCommentType
-delete comment for descriptor #67 of type IndexCommentType
-delete comment for descriptor #62 of type SchemaCommentType
-delete comment for descriptor #65 of type TableCommentType
-delete comment for descriptor #66 of type TableCommentType
-delete comment for descriptor #66 of type ColumnCommentType
-delete comment for descriptor #66 of type ColumnCommentType
-delete comment for descriptor #66 of type ColumnCommentType
-delete comment for descriptor #66 of type IndexCommentType
-delete comment for descriptor #68 of type TableCommentType
-delete comment for descriptor #69 of type TableCommentType
-delete comment for descriptor #70 of type TableCommentType
-delete comment for descriptor #71 of type TableCommentType
-delete comment for descriptor #74 of type TableCommentType
-delete comment for descriptor #63 of type SchemaCommentType
-delete comment for descriptor #61 of type DatabaseCommentType
-delete comment for constraint on #67, name: t1_pkey, type: PrimaryKey
-delete comment for constraint on #66, name: t1_pkey, type: PrimaryKey
-delete role settings for database on #61
+delete comment for descriptor #1014 of type TableCommentType
+delete comment for descriptor #1017 of type TableCommentType
+delete comment for descriptor #1017 of type ColumnCommentType
+delete comment for descriptor #1017 of type ColumnCommentType
+delete comment for descriptor #1017 of type ColumnCommentType
+delete comment for descriptor #1017 of type IndexCommentType
+delete comment for descriptor #1012 of type SchemaCommentType
+delete comment for descriptor #1015 of type TableCommentType
+delete comment for descriptor #1016 of type TableCommentType
+delete comment for descriptor #1016 of type ColumnCommentType
+delete comment for descriptor #1016 of type ColumnCommentType
+delete comment for descriptor #1016 of type ColumnCommentType
+delete comment for descriptor #1016 of type IndexCommentType
+delete comment for descriptor #1018 of type TableCommentType
+delete comment for descriptor #1019 of type TableCommentType
+delete comment for descriptor #1020 of type TableCommentType
+delete comment for descriptor #1021 of type TableCommentType
+delete comment for descriptor #1024 of type TableCommentType
+delete comment for descriptor #1013 of type SchemaCommentType
+delete comment for descriptor #1011 of type DatabaseCommentType
+delete comment for constraint on #1017, name: t1_pkey, type: PrimaryKey
+delete comment for constraint on #1016, name: t1_pkey, type: PrimaryKey
+delete role settings for database on #1011
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 56 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [61 62 63 64 65 66 67 68 69 70 71 72 73 74]
-delete object namespace entry {61 62 sq1} -> 64
-delete object namespace entry {61 63 sq1} -> 65
-delete object namespace entry {61 63 t1} -> 66
-delete object namespace entry {61 62 t1} -> 67
-delete object namespace entry {61 63 v1} -> 68
-delete object namespace entry {61 63 v2} -> 69
-delete object namespace entry {61 63 v3} -> 70
-delete object namespace entry {61 63 v4} -> 71
-delete object namespace entry {61 63 typ} -> 72
-delete object namespace entry {61 63 _typ} -> 73
-delete object namespace entry {61 63 v5} -> 74
-upsert descriptor #61
+  descriptor IDs: [1011 1012 1013 1014 1015 1016 1017 1018 1019 1020 1021 1022 1023 1024]
+delete object namespace entry {1011 1012 sq1} -> 1014
+delete object namespace entry {1011 1013 sq1} -> 1015
+delete object namespace entry {1011 1013 t1} -> 1016
+delete object namespace entry {1011 1012 t1} -> 1017
+delete object namespace entry {1011 1013 v1} -> 1018
+delete object namespace entry {1011 1013 v2} -> 1019
+delete object namespace entry {1011 1013 v3} -> 1020
+delete object namespace entry {1011 1013 v4} -> 1021
+delete object namespace entry {1011 1013 typ} -> 1022
+delete object namespace entry {1011 1013 _typ} -> 1023
+delete object namespace entry {1011 1013 v5} -> 1024
+upsert descriptor #1011
   ...
          withGrantOption: 2
        version: 2
   -  schemas:
   -    public:
-  -      id: 62
+  -      id: 1012
   -    sc1:
-  -      id: 63
+  -      id: 1013
   -  version: "2"
   +  schemas: {}
   +  state: DROP
   +  version: "3"
-upsert descriptor #62
+upsert descriptor #1012
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
-upsert descriptor #63
+upsert descriptor #1013
   ...
          withGrantOption: 2
        version: 2
   -  version: "1"
   +  state: DROP
   +  version: "2"
-upsert descriptor #64
+upsert descriptor #1014
   ...
      createAsOfTime:
        wallTime: "1"
@@ -342,23 +342,23 @@ upsert descriptor #64
   -  - byId: true
   -    columnIds:
   -    - 3
-  -    id: 67
+  -    id: 1017
      families:
      - columnIds:
   ...
      modificationTime: {}
      name: sq1
   +  newSchemaChangeJobId: "1"
-     parentId: 61
+     parentId: 1011
      primaryIndex:
   ...
        sequenceOwner: {}
        start: "1"
   +  state: DROP
-     unexposedParentSchemaId: 62
+     unexposedParentSchemaId: 1012
   -  version: "2"
   +  version: "3"
-upsert descriptor #65
+upsert descriptor #1015
   ...
      createAsOfTime:
        wallTime: "1"
@@ -366,27 +366,27 @@ upsert descriptor #65
   -  - byId: true
   -    columnIds:
   -    - 3
-  -    id: 66
+  -    id: 1016
      families:
      - columnIds:
   ...
      modificationTime: {}
      name: sq1
   +  newSchemaChangeJobId: "1"
-     parentId: 61
+     parentId: 1011
      primaryIndex:
   ...
        sequenceOwner: {}
        start: "1"
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "2"
   +  version: "3"
-upsert descriptor #66
+upsert descriptor #1016
   ...
          visibleType: 7
          width: 256
-  -  - defaultExpr: nextval(65:::REGCLASS)
+  -  - defaultExpr: nextval(1015:::REGCLASS)
   -    id: 3
   +  - id: 3
        name: val
@@ -395,13 +395,13 @@ upsert descriptor #66
          oid: 20
          width: 64
   -    usesSequenceIds:
-  -    - 65
+  -    - 1015
      createAsOfTime:
        wallTime: "1"
      dependedOnBy:
   -  - columnIds:
   -    - 2
-  -    id: 68
+  -    id: 1018
   +  - {}
      families:
      - columnIds:
@@ -415,14 +415,14 @@ upsert descriptor #66
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "2"
   +  version: "3"
-upsert descriptor #67
+upsert descriptor #1017
   ...
          visibleType: 7
          width: 256
-  -  - defaultExpr: nextval(64:::REGCLASS)
+  -  - defaultExpr: nextval(1014:::REGCLASS)
   -    id: 3
   +  - id: 3
        name: val
@@ -431,7 +431,7 @@ upsert descriptor #67
          oid: 20
          width: 64
   -    usesSequenceIds:
-  -    - 64
+  -    - 1014
      createAsOfTime:
        wallTime: "1"
   +  dependedOnBy: []
@@ -447,24 +447,24 @@ upsert descriptor #67
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 62
+     unexposedParentSchemaId: 1012
   -  version: "1"
   +  version: "2"
-upsert descriptor #68
+upsert descriptor #1018
   ...
      createAsOfTime:
        wallTime: "1"
   -  dependedOnBy:
   -  - columnIds:
   -    - 1
-  -    id: 69
+  -    id: 1019
   -  - columnIds:
   -    - 1
-  -    id: 70
+  -    id: 1020
   -  dependsOn:
-  -  - 66
+  -  - 1016
      formatVersion: 3
-     id: 68
+     id: 1018
      modificationTime: {}
      name: v1
   +  newSchemaChangeJobId: "1"
@@ -474,11 +474,11 @@ upsert descriptor #68
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT name FROM db1.sc1.t1)
-upsert descriptor #69
+upsert descriptor #1019
   ...
      createAsOfTime:
        wallTime: "1"
@@ -486,15 +486,15 @@ upsert descriptor #69
   -  - columnIds:
   -    - 1
   -    - 2
-  -    id: 70
+  -    id: 1020
   -  - columnIds:
   -    - 1
   -    - 2
-  -    id: 71
+  -    id: 1021
   -  dependsOn:
-  -  - 68
+  -  - 1018
      formatVersion: 3
-     id: 69
+     id: 1019
      modificationTime: {}
      name: v2
   +  newSchemaChangeJobId: "1"
@@ -504,19 +504,19 @@ upsert descriptor #69
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-upsert descriptor #70
+upsert descriptor #1020
   ...
      createAsOfTime:
        wallTime: "1"
   -  dependsOn:
-  -  - 68
-  -  - 69
+  -  - 1018
+  -  - 1019
      formatVersion: 3
-     id: 70
+     id: 1020
      modificationTime: {}
      name: v3
   +  newSchemaChangeJobId: "1"
@@ -526,11 +526,11 @@ upsert descriptor #70
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
-upsert descriptor #71
+upsert descriptor #1021
   ...
      createAsOfTime:
        wallTime: "1"
@@ -538,11 +538,11 @@ upsert descriptor #71
   -  - columnIds:
   -    - 1
   -    - 2
-  -    id: 74
+  -    id: 1024
   -  dependsOn:
-  -  - 69
+  -  - 1019
      formatVersion: 3
-     id: 71
+     id: 1021
      modificationTime: {}
      name: v4
   +  newSchemaChangeJobId: "1"
@@ -552,38 +552,38 @@ upsert descriptor #71
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
-upsert descriptor #72
+upsert descriptor #1022
   ...
          withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
-  -  - 74
+  -  - 1024
   -  version: "2"
   +  referencingDescriptorIds: []
   +  state: DROP
   +  version: "3"
-upsert descriptor #73
+upsert descriptor #1023
   ...
          withGrantOption: 2
        version: 2
   -  referencingDescriptorIds:
-  -  - 74
+  -  - 1024
   -  version: "2"
   +  referencingDescriptorIds: []
   +  state: DROP
   +  version: "3"
-upsert descriptor #74
+upsert descriptor #1024
   ...
      createAsOfTime:
        wallTime: "1"
   -  dependsOn:
-  -  - 71
+  -  - 1021
      dependsOnTypes:
-     - 72
+     - 1022
   ...
      modificationTime: {}
      name: v5
@@ -594,7 +594,7 @@ upsert descriptor #74
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "1"
   +  version: "2"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
@@ -603,46 +603,46 @@ commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
-create job #2: "GC for dropping descriptors 64 67 65 66 68 69 70 71 74 and parent database 61"
-  descriptor IDs: [64 67 65 66 68 69 70 71 74]
-write *eventpb.DropDatabase to event log for descriptor #61: DROP DATABASE ‹db1› CASCADE
-write *eventpb.DropType to event log for descriptor #73: DROP DATABASE ‹db1› CASCADE
+create job #2: "GC for dropping descriptors 1014 1017 1015 1016 1018 1019 1020 1021 1024 and parent database 1011"
+  descriptor IDs: [1014 1017 1015 1016 1018 1019 1020 1021 1024]
+write *eventpb.DropDatabase to event log for descriptor #1011: DROP DATABASE ‹db1› CASCADE
+write *eventpb.DropType to event log for descriptor #1023: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-delete database namespace entry {0 0 db1} -> 61
-delete schema namespace entry {61 0 public} -> 62
-delete schema namespace entry {61 0 sc1} -> 63
-upsert descriptor #61
+delete database namespace entry {0 0 db1} -> 1011
+delete schema namespace entry {1011 0 public} -> 1012
+delete schema namespace entry {1011 0 sc1} -> 1013
+upsert descriptor #1011
   ...
        version: 2
      state: DROP
   -  version: "3"
   +  version: "4"
-upsert descriptor #64
+upsert descriptor #1014
   ...
      modificationTime: {}
      name: sq1
   -  newSchemaChangeJobId: "1"
-     parentId: 61
+     parentId: 1011
      primaryIndex:
   ...
      state: DROP
-     unexposedParentSchemaId: 62
+     unexposedParentSchemaId: 1012
   -  version: "3"
   +  version: "4"
-upsert descriptor #65
+upsert descriptor #1015
   ...
      modificationTime: {}
      name: sq1
   -  newSchemaChangeJobId: "1"
-     parentId: 61
+     parentId: 1011
      primaryIndex:
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "3"
   +  version: "4"
-upsert descriptor #66
+upsert descriptor #1016
   ...
      modificationTime: {}
      name: t1
@@ -651,10 +651,10 @@ upsert descriptor #66
      nextFamilyId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "3"
   +  version: "4"
-upsert descriptor #67
+upsert descriptor #1017
   ...
      modificationTime: {}
      name: t1
@@ -663,10 +663,10 @@ upsert descriptor #67
      nextFamilyId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 62
+     unexposedParentSchemaId: 1012
   -  version: "2"
   +  version: "3"
-upsert descriptor #68
+upsert descriptor #1018
   ...
      modificationTime: {}
      name: v1
@@ -675,11 +675,11 @@ upsert descriptor #68
      nextMutationId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "4"
   +  version: "5"
      viewQuery: (SELECT name FROM db1.sc1.t1)
-upsert descriptor #69
+upsert descriptor #1019
   ...
      modificationTime: {}
      name: v2
@@ -688,11 +688,11 @@ upsert descriptor #69
      nextMutationId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "4"
   +  version: "5"
      viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
-upsert descriptor #70
+upsert descriptor #1020
   ...
      modificationTime: {}
      name: v3
@@ -701,11 +701,11 @@ upsert descriptor #70
      nextMutationId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
-upsert descriptor #71
+upsert descriptor #1021
   ...
      modificationTime: {}
      name: v4
@@ -714,11 +714,11 @@ upsert descriptor #71
      nextMutationId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
-upsert descriptor #74
+upsert descriptor #1024
   ...
      modificationTime: {}
      name: v5
@@ -727,13 +727,13 @@ upsert descriptor #74
      nextMutationId: 1
   ...
      state: DROP
-     unexposedParentSchemaId: 63
+     unexposedParentSchemaId: 1013
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
-delete descriptor #62
-delete descriptor #63
-delete descriptor #72
-delete descriptor #73
+delete descriptor #1012
+delete descriptor #1013
+delete descriptor #1022
+delete descriptor #1023
 commit transaction #2
 # end PostCommitPhase

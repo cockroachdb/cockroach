@@ -5621,7 +5621,7 @@ func TestBackupRestoreSequence(t *testing.T) {
 		newDB.Exec(t, `USE data`)
 
 		newDB.ExpectErr(
-			t, "pq: cannot restore table \"t\" without referenced sequence 57 \\(or \"skip_missing_sequences\" option\\)",
+			t, "pq: cannot restore table \"t\" without referenced sequence \\d+ \\(or \"skip_missing_sequences\" option\\)",
 			`RESTORE TABLE t FROM $1`, LocalFoo,
 		)
 
@@ -7513,7 +7513,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.True(t, testutils.IsError(err,
-		"timeout: operation \"ExportRequest for span /Table/56/.*\" timed out after 3s"))
+		`timeout: operation "ExportRequest for span /Table/\d+/.*\" timed out after 3s`))
 }
 
 func TestBackupDoesNotHangOnIntent(t *testing.T) {
@@ -8475,7 +8475,9 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 
 	ctx := context.Background()
-	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	tc, sqlDB, rawDir, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, params,
+	)
 	defer cleanupFn()
 	kvDB := tc.Server(0).DB()
 
@@ -8496,10 +8498,13 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	// First take a full backup.
 	fullBackup := LocalFoo + "/full"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)
+	var dataBankTableID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'data.bank'::regclass::int`).
+		Scan(&dataBankTableID)
 
 	fullBackupSpans := getSpansFromManifest(ctx, t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
-	require.Equal(t, "/Table/56/{1-2}", fullBackupSpans[0].String())
+	require.Equal(t, fmt.Sprintf("/Table/%d/{1-2}", dataBankTableID), fullBackupSpans[0].String())
 
 	// Now we're going to add an index. We should only see the index
 	// appear in the backup once it is PUBLIC.
@@ -8554,7 +8559,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Equal(t, "/Table/56/{2-3}", inc3Spans[0].String())
+	require.Equal(t, fmt.Sprintf("/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)

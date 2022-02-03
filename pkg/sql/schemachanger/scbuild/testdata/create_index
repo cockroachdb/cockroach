@@ -5,12 +5,12 @@ CREATE TABLE defaultdb.t1 (id INT8 PRIMARY KEY, name VARCHAR(256), money INT8)
 build
 CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 ----
-- [[IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 1005, IndexID: 2, Name: id1}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id1
-    tableId: 54
-- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[SecondaryIndex:{DescID: 1005, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -22,18 +22,18 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
     sourceIndexId: 1
     storingColumnIds:
     - 3
-    tableId: 54
+    tableId: 1005
 
 build
 CREATE INVERTED INDEX CONCURRENTLY id2
 	ON defaultdb.t1 (id, name) STORING (money)
 ----
-- [[IndexName:{DescID: 54, IndexID: 2, Name: id2}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 1005, IndexID: 2, Name: id2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id2
-    tableId: 54
-- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[SecondaryIndex:{DescID: 1005, IndexID: 2}, PUBLIC], ABSENT]
   details:
     concurrently: true
     indexId: 2
@@ -47,7 +47,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
     sourceIndexId: 1
     storingColumnIds:
     - 3
-    tableId: 54
+    tableId: 1005
 
 build
 CREATE INDEX id3
@@ -55,12 +55,12 @@ CREATE INDEX id3
 	STORING (money)
 	PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-- [[IndexName:{DescID: 54, IndexID: 2, Name: id3}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 1005, IndexID: 2, Name: id3}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: id3
-    tableId: 54
-- [[Partitioning:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[Partitioning:{DescID: 1005, IndexID: 2}, PUBLIC], ABSENT]
   details:
     fields:
     - id
@@ -70,8 +70,8 @@ CREATE INDEX id3
       - "1"
       name: p1
     rangePartitions: []
-    tableId: 54
-- [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[SecondaryIndex:{DescID: 1005, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -83,40 +83,40 @@ CREATE INDEX id3
     sourceIndexId: 1
     storingColumnIds:
     - 3
-    tableId: 54
+    tableId: 1005
 
 build
 CREATE INDEX id4
 	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
 ----
-- [[Column:{DescID: 54, ColumnID: 4}, PUBLIC], ABSENT]
+- [[Column:{DescID: 1005, ColumnID: 4}, PUBLIC], ABSENT]
   details:
     columnId: 4
     computerExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
     familyName: primary
     hidden: true
     pgAttributeNum: 4
-    tableId: 54
+    tableId: 1005
     type:
       family: IntFamily
       oid: 23
       width: 32
-- [[IndexName:{DescID: 54, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[IndexName:{DescID: 1005, IndexID: 1, Name: t1_pkey}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: t1_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 2, Name: t1_pkey}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[IndexName:{DescID: 1005, IndexID: 2, Name: t1_pkey}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: t1_pkey
-    tableId: 54
-- [[IndexName:{DescID: 54, IndexID: 3, Name: id4}, PUBLIC], ABSENT]
+    tableId: 1005
+- [[IndexName:{DescID: 1005, IndexID: 3, Name: id4}, PUBLIC], ABSENT]
   details:
     indexId: 3
     name: id4
-    tableId: 54
-- [[PrimaryIndex:{DescID: 54, IndexID: 1}, ABSENT], PUBLIC]
+    tableId: 1005
+- [[PrimaryIndex:{DescID: 1005, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     keyColumnDirection:
@@ -128,9 +128,9 @@ CREATE INDEX id4
     storingColumnIds:
     - 2
     - 3
-    tableId: 54
+    tableId: 1005
     unique: true
-- [[PrimaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT]
+- [[PrimaryIndex:{DescID: 1005, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     keyColumnDirection:
@@ -143,9 +143,9 @@ CREATE INDEX id4
     - 2
     - 3
     - 4
-    tableId: 54
+    tableId: 1005
     unique: true
-- [[SecondaryIndex:{DescID: 54, IndexID: 3}, PUBLIC], ABSENT]
+- [[SecondaryIndex:{DescID: 1005, IndexID: 3}, PUBLIC], ABSENT]
   details:
     indexId: 3
     keyColumnDirection:
@@ -164,4 +164,4 @@ CREATE INDEX id4
     sourceIndexId: 1
     storingColumnIds:
     - 3
-    tableId: 54
+    tableId: 1005

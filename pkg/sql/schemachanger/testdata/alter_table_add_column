@@ -3,9 +3,9 @@ CREATE DATABASE db;
 CREATE TABLE db.public.tbl (i INT PRIMARY KEY)
 ----
 ...
-+database {0 0 db} -> 54
-+schema {54 0 public} -> 55
-+object {54 55 tbl} -> 56
++database {0 0 db} -> 1004
++schema {1004 0 public} -> 1005
++object {1004 1005 tbl} -> 1006
 
 test
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
@@ -17,9 +17,9 @@ begin transaction #1
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 5 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [56]
-write *eventpb.AlterTable to event log for descriptor #56: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
-upsert descriptor #56
+  descriptor IDs: [1006]
+write *eventpb.AlterTable to event log for descriptor #1006: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
+upsert descriptor #1006
   ...
      - columnIds:
        - 1
@@ -29,7 +29,7 @@ upsert descriptor #56
   +    - crdb_internal_column_2_name_placeholder
        name: primary
      formatVersion: 3
-     id: 56
+     id: 1006
      modificationTime: {}
   +  mutations:
   +  - column:
@@ -77,10 +77,10 @@ upsert descriptor #56
   -  nextIndexId: 2
   +  nextIndexId: 3
      nextMutationId: 1
-     parentId: 54
+     parentId: 1004
   ...
        time: {}
-     unexposedParentSchemaId: 55
+     unexposedParentSchemaId: 1005
   -  version: "1"
   +  version: "2"
 # end PreCommitPhase
@@ -89,7 +89,7 @@ commit transaction #1
 begin transaction #2
 ## PostCommitPhase stage 1 of 4 with 3 MutationType ops
 update progress of schema change job #1
-upsert descriptor #56
+upsert descriptor #1006
   ...
        direction: ADD
        mutationId: 1
@@ -106,22 +106,22 @@ upsert descriptor #56
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 55
+     unexposedParentSchemaId: 1005
   -  version: "2"
   +  version: "3"
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
-backfill indexes [2] from index #1 in table #56
+backfill indexes [2] from index #1 in table #1006
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-validate forward indexes [2] in table #56
+validate forward indexes [2] in table #1006
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 4 of 4 with 7 MutationType ops
 update progress of schema change job #1
-upsert descriptor #56
+upsert descriptor #1006
   ...
          oid: 20
          width: 64
@@ -182,7 +182,7 @@ upsert descriptor #56
          unique: true
          version: 4
   ...
-     parentId: 54
+     parentId: 1004
      primaryIndex:
   +    createdExplicitly: true
        encodingType: 1
@@ -203,7 +203,7 @@ upsert descriptor #56
        version: 4
   ...
        time: {}
-     unexposedParentSchemaId: 55
+     unexposedParentSchemaId: 1005
   -  version: "3"
   +  version: "4"
 commit transaction #5
@@ -211,7 +211,7 @@ begin transaction #6
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-upsert descriptor #56
+upsert descriptor #1006
   ...
          version: 4
        mutationId: 1
@@ -221,18 +221,18 @@ upsert descriptor #56
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 55
+     unexposedParentSchemaId: 1005
   -  version: "4"
   +  version: "5"
 commit transaction #6
 begin transaction #7
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
-create job #2: "GC for dropping table 56 index 1"
-  descriptor IDs: [56]
+create job #2: "GC for dropping table 1006 index 1"
+  descriptor IDs: [1006]
 update progress of schema change job #1
-upsert descriptor #56
+upsert descriptor #1006
   ...
-     id: 56
+     id: 1006
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
@@ -262,7 +262,7 @@ upsert descriptor #56
      nextFamilyId: 1
   ...
        time: {}
-     unexposedParentSchemaId: 55
+     unexposedParentSchemaId: 1005
   -  version: "5"
   +  version: "6"
 commit transaction #7
