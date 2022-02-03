@@ -31,7 +31,7 @@ const mysqlDescribeSchema = `
 		data_type 
 	FROM information_schema.columns
 	WHERE table_schema = ?
-	ORDER BY table_name, column_name
+	ORDER BY table_name
 `
 
 var mysqlExclusions = []*excludePattern{
