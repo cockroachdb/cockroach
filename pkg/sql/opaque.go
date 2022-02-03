@@ -228,6 +228,7 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 
 func init() {
 	for _, stmt := range []tree.Statement{
+		&tree.AlterChangefeed{},
 		&tree.AlterDatabaseAddRegion{},
 		&tree.AlterDatabaseDropRegion{},
 		&tree.AlterDatabaseOwner{},

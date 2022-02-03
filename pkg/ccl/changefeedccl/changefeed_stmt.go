@@ -122,28 +122,8 @@ func changefeedPlanHook(
 		ctx, span := tracing.ChildSpan(ctx, stmt.StatementTag())
 		defer span.Finish()
 
-		if err := featureflag.CheckEnabled(
-			ctx,
-			p.ExecCfg(),
-			featureChangefeedEnabled,
-			"CHANGEFEED",
-		); err != nil {
+		if err := validateSettings(ctx, p); err != nil {
 			return err
-		}
-
-		// Changefeeds are based on the Rangefeed abstraction, which
-		// requires the `kv.rangefeed.enabled` setting to be true.
-		if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
-			return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
-				docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
-		}
-
-		ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create changefeed")
 		}
 
 		sinkURI, err := sinkURIFn()
@@ -196,63 +176,15 @@ func changefeedPlanHook(
 			statementTime = initialHighWater
 		}
 
-		// For now, disallow targeting a database or wildcard table selection.
-		// Getting it right as tables enter and leave the set over time is
-		// tricky.
-		if len(changefeedStmt.Targets.Databases) > 0 {
-			return errors.Errorf(`CHANGEFEED cannot target %s`,
-				tree.AsString(&changefeedStmt.Targets))
-		}
-		for _, t := range changefeedStmt.Targets.Tables {
-			p, err := t.NormalizeTablePattern()
-			if err != nil {
-				return err
-			}
-			if _, ok := p.(*tree.TableName); !ok {
-				return errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
-			}
-		}
-
 		// This grabs table descriptors once to get their ids.
-		targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
-			ctx, p, statementTime, &changefeedStmt.Targets)
+		targetDescs, err := getTableDescriptors(ctx, p, &changefeedStmt.Targets, statementTime, initialHighWater)
 		if err != nil {
-			var m *backupresolver.MissingTableErr
-			if errors.As(err, &m) {
-				tableName := m.GetTableName()
-				err = errors.Errorf("table %q does not exist", tableName)
-			}
-			err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
-			if !initialHighWater.IsEmpty() {
-				// We specified cursor -- it is possible the targets do not exist at that time.
-				// Give a bit more context in the error message.
-				err = errors.WithHintf(err,
-					"do the targets exist at the specified cursor time %s?", initialHighWater)
-			}
 			return err
 		}
 
-		targets := make(jobspb.ChangefeedTargets, len(targetDescs))
-		for _, desc := range targetDescs {
-			if table, isTable := desc.(catalog.TableDescriptor); isTable {
-				if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
-					return err
-				}
-				_, qualified := opts[changefeedbase.OptFullTableName]
-				name, err := getChangefeedTargetName(ctx, table, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
-				if err != nil {
-					return err
-				}
-				targets[table.GetID()] = jobspb.ChangefeedTarget{
-					StatementTimeName: name,
-				}
-				if err := changefeedbase.ValidateTable(targets, table); err != nil {
-					return err
-				}
-				for _, warning := range changefeedbase.WarningsForTable(targets, table, opts) {
-					p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
-				}
-			}
+		targets, err := getTargets(ctx, p, targetDescs, opts)
+		if err != nil {
+			return err
 		}
 
 		details := jobspb.ChangefeedDetails{
@@ -491,6 +423,109 @@ func changefeedPlanHook(
 
 	}
 	return fn, header, nil, avoidBuffering, nil
+}
+
+func validateSettings(ctx context.Context, p sql.PlanHookState) error {
+	if err := featureflag.CheckEnabled(
+		ctx,
+		p.ExecCfg(),
+		featureChangefeedEnabled,
+		"CHANGEFEED",
+	); err != nil {
+		return err
+	}
+
+	// Changefeeds are based on the Rangefeed abstraction, which
+	// requires the `kv.rangefeed.enabled` setting to be true.
+	if !kvserver.RangefeedEnabled.Get(&p.ExecCfg().Settings.SV) {
+		return errors.Errorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
+			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
+	}
+
+	ok, err := p.HasRoleOption(ctx, roleoption.CONTROLCHANGEFEED)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create changefeed")
+	}
+
+	return nil
+}
+
+func getTableDescriptors(
+	ctx context.Context,
+	p sql.PlanHookState,
+	targets *tree.TargetList,
+	statementTime hlc.Timestamp,
+	initialHighWater hlc.Timestamp,
+) ([]catalog.Descriptor, error) {
+	// For now, disallow targeting a database or wildcard table selection.
+	// Getting it right as tables enter and leave the set over time is
+	// tricky.
+	if len(targets.Databases) > 0 {
+		return nil, errors.Errorf(`CHANGEFEED cannot target %s`,
+			tree.AsString(targets))
+	}
+	for _, t := range targets.Tables {
+		p, err := t.NormalizeTablePattern()
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := p.(*tree.TableName); !ok {
+			return nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
+		}
+	}
+
+	// This grabs table descriptors once to get their ids.
+	targetDescs, _, err := backupresolver.ResolveTargetsToDescriptors(
+		ctx, p, statementTime, targets)
+	if err != nil {
+		var m *backupresolver.MissingTableErr
+		if errors.As(err, &m) {
+			tableName := m.GetTableName()
+			err = errors.Errorf("table %q does not exist", tableName)
+		}
+		err = errors.Wrap(err, "failed to resolve targets in the CHANGEFEED stmt")
+		if !initialHighWater.IsEmpty() {
+			// We specified cursor -- it is possible the targets do not exist at that time.
+			// Give a bit more context in the error message.
+			err = errors.WithHintf(err,
+				"do the targets exist at the specified cursor time %s?", initialHighWater)
+		}
+	}
+	return targetDescs, err
+}
+
+func getTargets(
+	ctx context.Context,
+	p sql.PlanHookState,
+	targetDescs []catalog.Descriptor,
+	opts map[string]string,
+) (jobspb.ChangefeedTargets, error) {
+	targets := make(jobspb.ChangefeedTargets, len(targetDescs))
+	for _, desc := range targetDescs {
+		if table, isTable := desc.(catalog.TableDescriptor); isTable {
+			if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+				return nil, err
+			}
+			_, qualified := opts[changefeedbase.OptFullTableName]
+			name, err := getChangefeedTargetName(ctx, table, p.ExecCfg(), p.ExtendedEvalContext().Txn, qualified)
+			if err != nil {
+				return nil, err
+			}
+			targets[table.GetID()] = jobspb.ChangefeedTarget{
+				StatementTimeName: name,
+			}
+			if err := changefeedbase.ValidateTable(targets, table); err != nil {
+				return nil, err
+			}
+			for _, warning := range changefeedbase.WarningsForTable(targets, table, opts) {
+				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
+			}
+		}
+	}
+	return targets, nil
 }
 
 func changefeedJobDescription(

@@ -399,6 +399,7 @@ alter_ddl_stmt ::=
 	| alter_schema_stmt
 	| alter_type_stmt
 	| alter_default_privileges_stmt
+	| alter_changefeed_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1171,6 +1172,7 @@ unreserved_keyword ::=
 	| 'SYSTEM'
 	| 'TABLES'
 	| 'TABLESPACE'
+	| 'TARGET'
 	| 'TEMP'
 	| 'TEMPLATE'
 	| 'TEMPORARY'
@@ -1383,6 +1385,9 @@ alter_default_privileges_stmt ::=
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_revoke_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_grant_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_revoke_stmt
+
+alter_changefeed_stmt ::=
+	'ALTER' 'CHANGEFEED' a_expr alter_changefeed_cmds
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -1878,6 +1883,9 @@ abbreviated_revoke_stmt ::=
 	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 
+alter_changefeed_cmds ::=
+	( alter_changefeed_cmd ) ( ( alter_changefeed_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2357,6 +2365,10 @@ alter_default_privileges_target_object ::=
 	| 'SEQUENCES'
 	| 'TYPES'
 	| 'SCHEMAS'
+
+alter_changefeed_cmd ::=
+	'ADD' 'TARGET' single_table_pattern_list
+	| 'DROP' 'TARGET' single_table_pattern_list
 
 role_option ::=
 	'CREATEROLE'

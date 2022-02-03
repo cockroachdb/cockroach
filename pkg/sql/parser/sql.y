@@ -543,6 +543,12 @@ func (u *sqlSymUnion) dir() tree.Direction {
 func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
     return u.val.(tree.NullsOrder)
 }
+func (u *sqlSymUnion) alterChangefeedCmd() tree.AlterChangefeedCmd {
+    return u.val.(tree.AlterChangefeedCmd)
+}
+func (u *sqlSymUnion) alterChangefeedCmds() tree.AlterChangefeedCmds {
+    return u.val.(tree.AlterChangefeedCmds)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -852,7 +858,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TARGET TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -897,6 +903,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 
 %type <tree.Statement> alter_stmt
+%type <tree.Statement> alter_changefeed_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -1142,6 +1149,9 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
+
+%type <tree.AlterChangefeedCmd> alter_changefeed_cmd
+%type <tree.AlterChangefeedCmds> alter_changefeed_cmds
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1540,6 +1550,7 @@ alter_ddl_stmt:
 | alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
+| alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -4291,6 +4302,49 @@ explain_option_list:
 | explain_option_list ',' explain_option_name
   {
     $$.val = append($1.strs(), $3)
+  }
+
+// %Help: ALTER CHANGEFEED - alter an existing changefeed
+// %Category: CCL
+// %Text:
+// ALTER CHANGEFEED <job_id> {{ADD|DROP} <targets...>}...
+alter_changefeed_stmt:
+  ALTER CHANGEFEED a_expr alter_changefeed_cmds
+  {
+    jobID, err := $3.numVal().AsInt64()
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = &tree.AlterChangefeed{
+      JobID: jobID,
+      Cmds: $4.alterChangefeedCmds(),
+    }
+  }
+
+alter_changefeed_cmds:
+  alter_changefeed_cmd
+  {
+    $$.val = tree.AlterChangefeedCmds{$1.alterChangefeedCmd()}
+  }
+| alter_changefeed_cmds alter_changefeed_cmd
+  {
+    $$.val = append($1.alterChangefeedCmds(), $2.alterChangefeedCmd())
+  }
+
+alter_changefeed_cmd:
+  // ALTER CHANGEFEED <job_id> ADD TARGET ...
+  ADD TARGET single_table_pattern_list
+  {
+    $$.val = &tree.AlterChangefeedAddTarget{
+      Targets: tree.TargetList{Tables: $3.tablePatterns()},
+    }
+  }
+  // ALTER CHANGEFEED <job_id> DROP TARGET ...
+| DROP TARGET single_table_pattern_list
+  {
+    $$.val = &tree.AlterChangefeedDropTarget{
+      Targets: tree.TargetList{Tables: $3.tablePatterns()},
+    }
   }
 
 // %Help: PREPARE - prepare a statement for later execution
@@ -13678,6 +13732,7 @@ unreserved_keyword:
 | SYSTEM
 | TABLES
 | TABLESPACE
+| TARGET
 | TEMP
 | TEMPLATE
 | TEMPORARY
