@@ -335,17 +335,6 @@ func (mq *mergeQueue) process(
 		voterTargets := lhsDesc.Replicas().Voters().ReplicationTargets()
 		nonVoterTargets := lhsDesc.Replicas().NonVoters().ReplicationTargets()
 
-		// AdminRelocateRange moves the lease to the first target in the list, so
-		// sort the existing leaseholder there to leave it unchanged.
-		lease, _ := lhsRepl.GetLease()
-		for i := range voterTargets {
-			if t := voterTargets[i]; t.NodeID == lease.Replica.NodeID && t.StoreID == lease.Replica.StoreID {
-				if i > 0 {
-					voterTargets[0], voterTargets[i] = voterTargets[i], voterTargets[0]
-				}
-				break
-			}
-		}
 		// The merge queue will only merge ranges that have the same zone config
 		// (see check inside mergeQueue.shouldQueue).
 		if err := mq.store.DB().AdminRelocateRange(
@@ -353,7 +342,7 @@ func (mq *mergeQueue) process(
 			rhsDesc.StartKey,
 			voterTargets,
 			nonVoterTargets,
-			true, /* transferLeaseToFirstVoter */
+			false, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
 		}
