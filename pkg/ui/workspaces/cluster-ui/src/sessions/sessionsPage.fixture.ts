@@ -15,6 +15,7 @@ import Long from "long";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 const Phase = cockroach.server.serverpb.ActiveQuery.Phase;
 import { util } from "protobufjs";
+import { defaultFilters, Filters } from "../queryFilter";
 import {
   CancelQueryRequestMessage,
   CancelSessionRequestMessage,
@@ -142,7 +143,16 @@ const sessionsList: SessionInfo[] = [
   activeSession,
 ];
 
+export const filters: Filters = {
+  app: "",
+  timeNumber: "0",
+  timeUnit: "seconds",
+  regions: "",
+  nodes: "",
+};
+
 export const sessionsPagePropsFixture: SessionsPageProps = {
+  filters: defaultFilters,
   history,
   location: {
     pathname: "/sessions",
@@ -162,6 +172,7 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
     ascending: false,
     columnTitle: "statementAge",
   },
+  columns: null,
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
@@ -169,6 +180,7 @@ export const sessionsPagePropsFixture: SessionsPageProps = {
 };
 
 export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
+  filters: defaultFilters,
   history,
   location: {
     pathname: "/sessions",
@@ -188,6 +200,7 @@ export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
     ascending: false,
     columnTitle: "statementAge",
   },
+  columns: null,
   refreshSessions: () => {},
   cancelSession: (req: CancelSessionRequestMessage) => {},
   cancelQuery: (req: CancelQueryRequestMessage) => {},
