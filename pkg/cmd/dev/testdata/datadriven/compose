@@ -1,0 +1,7 @@
+dev compose
+----
+bazel run //pkg/compose:compose_test --config=test
+
+dev compose --cpus 12 --short --timeout 1m -f TestComposeCompare
+----
+bazel run //pkg/compose:compose_test --config=test --local_cpu_resources=12 --test_filter=TestComposeCompare --test_arg -test.short --test_timeout=60
