@@ -135,14 +135,13 @@ type baseStatusServer struct {
 	serverpb.UnimplementedStatusServer
 
 	log.AmbientContext
-	privilegeChecker   *adminPrivilegeChecker
-	sessionRegistry    *sql.SessionRegistry
-	contentionRegistry *contention.Registry
-	flowScheduler      *flowinfra.FlowScheduler
-	st                 *cluster.Settings
-	sqlServer          *SQLServer
-	rpcCtx             *rpc.Context
-	stopper            *stop.Stopper
+	privilegeChecker *adminPrivilegeChecker
+	sessionRegistry  *sql.SessionRegistry
+	flowScheduler    *flowinfra.FlowScheduler
+	st               *cluster.Settings
+	sqlServer        *SQLServer
+	rpcCtx           *rpc.Context
+	stopper          *stop.Stopper
 }
 
 // getLocalSessions returns a list of local sessions on this node. Note that the
@@ -307,7 +306,7 @@ func (b *baseStatusServer) ListLocalContentionEvents(
 	}
 
 	return &serverpb.ListContentionEventsResponse{
-		Events: b.contentionRegistry.Serialize(),
+		Events: b.sqlServer.execCfg.ContentionRegistry.Serialize(),
 	}, nil
 }
 
@@ -415,21 +414,19 @@ func newStatusServer(
 	stores *kvserver.Stores,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
-	contentionRegistry *contention.Registry,
 	flowScheduler *flowinfra.FlowScheduler,
 	internalExecutor *sql.InternalExecutor,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
-			AmbientContext:     ambient,
-			privilegeChecker:   adminAuthzCheck,
-			sessionRegistry:    sessionRegistry,
-			contentionRegistry: contentionRegistry,
-			flowScheduler:      flowScheduler,
-			st:                 st,
-			rpcCtx:             rpcCtx,
-			stopper:            stopper,
+			AmbientContext:   ambient,
+			privilegeChecker: adminAuthzCheck,
+			sessionRegistry:  sessionRegistry,
+			flowScheduler:    flowScheduler,
+			st:               st,
+			rpcCtx:           rpcCtx,
+			stopper:          stopper,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
