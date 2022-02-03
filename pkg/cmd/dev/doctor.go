@@ -26,12 +26,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const doctorStatusFile = "bin/.dev-status"
+const (
+	doctorStatusFile = "bin/.dev-status"
 
-// doctorStatusVersion is the current "version" of the status checks performed
-// by `dev doctor``. Increasing it will force doctor to be re-run before other
-// dev commands can be run.
-const doctorStatusVersion = 1
+	// doctorStatusVersion is the current "version" of the status checks performed
+	// by `dev doctor``. Increasing it will force doctor to be re-run before other
+	// dev commands can be run.
+	doctorStatusVersion = 2
+
+	noCacheFlag = "no-cache"
+)
 
 func (d *dev) checkDoctorStatus(ctx context.Context) error {
 	dir, err := d.getWorkspace(ctx)
@@ -82,7 +86,7 @@ func printStdoutAndErr(stdoutStr string, err error) {
 
 // makeDoctorCmd constructs the subcommand used to build the specified binaries.
 func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "doctor",
 		Aliases: []string{"setup"},
 		Short:   "Check whether your machine is ready to build",
@@ -91,11 +95,18 @@ func makeDoctorCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Co
 		Args:    cobra.ExactArgs(0),
 		RunE:    runE,
 	}
+	cmd.Flags().Bool(noCacheFlag, false, "do not set up remote cache as part of doctor")
+	return cmd
 }
 
 func (d *dev) doctor(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	success := true
+	noCache := mustGetFlagBool(cmd, noCacheFlag)
+	noCacheEnv := d.os.Getenv("DEV_NO_REMOTE_CACHE")
+	if noCacheEnv != "" {
+		noCache = true
+	}
 
 	// If we're running on macOS, we need to check whether XCode is installed.
 	d.log.Println("doctor: running xcode check")
@@ -198,6 +209,23 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 			log.Printf("The former will use your host toolchain, while the latter will use the cross-compiler that we use in CI.")
 		} else {
 			log.Printf("    build --config=dev")
+		}
+	}
+
+	if !noCache {
+		d.log.Println("doctor: setting up cache")
+		err = d.setUpCache(ctx)
+		if err != nil {
+			return err
+		}
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		bazelRcContents, err := d.os.ReadFile(filepath.Join(homeDir, ".bazelrc"))
+		if err != nil || !strings.Contains(bazelRcContents, "--remote_cache=") {
+			log.Printf("Did you remember to add the --remote_cache=... line to your ~/.bazelrc?")
+			success = false
 		}
 	}
 
