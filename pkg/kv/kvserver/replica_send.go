@@ -122,8 +122,9 @@ func (r *Replica) sendWithoutRangeID(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) (_ *roachpb.BatchResponse, rErr *roachpb.Error) {
 	var br *roachpb.BatchResponse
+
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
-		r.leaseholderStats.record(ba.Header.GatewayNodeID)
+		r.leaseholderStats.recordCount(r.getBatchRequestQPS(ctx, ba), ba.Header.GatewayNodeID)
 	}
 
 	// Add the range log tag.
@@ -964,6 +965,36 @@ func (r *Replica) executeAdminBatch(
 	br.Add(resp)
 	br.Txn = resp.Header().Txn
 	return br, nil
+}
+
+// getBatchRequestQPS calculates the cost estimation of a BatchRequest. The
+// estimate returns Queries Per Second (QPS), representing the abstract
+// resource cost associated with this request. BatchRequests are calculated as
+// 1 QPS, unless an AddSSTableRequest exists, in which case the sum of all
+// AddSSTableRequest's data size is divided by a factor and added to QPS. This
+// specific treatment of QPS is a special case to account for the mismatch
+// between AddSSTableRequest and other requests in terms of resource use.
+func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchRequest) float64 {
+	var count float64 = 1
+
+	// For divisors less than 1, use the default treatment of QPS.
+	requestFact := r.AddSSTableRequestSizeFactor()
+	if requestFact < 1 {
+		return count
+	}
+
+	var addSSTSize float64 = 0
+	for _, req := range ba.Requests {
+		switch t := req.GetInner().(type) {
+		case *roachpb.AddSSTableRequest:
+			addSSTSize += float64(len(t.Data))
+		default:
+			continue
+		}
+	}
+
+	count += addSSTSize / float64(requestFact)
+	return count
 }
 
 // checkBatchRequest verifies BatchRequest validity requirements. In particular,
