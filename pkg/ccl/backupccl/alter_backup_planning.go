@@ -3,7 +3,9 @@ package backupccl
 import (
 	"context"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -135,6 +137,66 @@ func doAlterBackupPlan(
 	newKms []string,
 	oldKms []string,
 ) error {
-	// TODO(darrylwong): implement this function
-	return errors.AssertionFailedf("ALTER BACKUP not yet implemented")
+	if len(backup) < 1 || len(backup[0]) < 1 {
+		return errors.New("invalid base backup specified")
+	}
+
+	baseStores := make([]cloud.ExternalStorage, len(backup[0]))
+	for i := range backup[0] {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, backup[0][i], p.User())
+		if err != nil {
+			return errors.Wrapf(err, "failed to open backup storage location")
+		}
+		defer store.Close()
+		baseStores[i] = store
+	}
+
+	opts, err := readEncryptionOptions(ctx, baseStores[0])
+	if err != nil {
+		return err
+	}
+	ioConf := baseStores[0].ExternalIOConf()
+	defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(oldKms,
+		newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
+			baseStores[0].Settings(),
+			&ioConf,
+		})
+	if err != nil {
+		return err
+	}
+	encryption := &jobspb.BackupEncryptionOptions{
+		Mode:    jobspb.EncryptionMode_KMS,
+		KMSInfo: defaultKMSInfo}
+
+	var plaintextDataKey []byte
+	plaintextDataKey, err = getEncryptionKey(ctx, encryption, baseStores[0].Settings(),
+		baseStores[0].ExternalIOConf())
+
+	kmsEnv := &backupKMSEnv{settings: p.ExecCfg().Settings, conf: &p.ExecCfg().ExternalIODirConfig}
+
+	encryptedDataKeyByKMSMasterKeyID := newEncryptedDataKeyMap()
+
+	for _, kmsURI := range newKms {
+		masterKeyID, encryptedDataKey, err := getEncryptedDataKeyFromURI(ctx,
+			plaintextDataKey, kmsURI, kmsEnv)
+		if err != nil {
+			return err
+		}
+
+		encryptedDataKeyByKMSMasterKeyID.addEncryptedDataKey(plaintextMasterKeyID(masterKeyID),
+			encryptedDataKey)
+
+		encryptedDataKeyMapForProto := make(map[string][]byte)
+		encryptedDataKeyByKMSMasterKeyID.rangeOverMap(
+			func(masterKeyID hashedMasterKeyID, dataKey []byte) {
+				encryptedDataKeyMapForProto[string(masterKeyID)] = dataKey
+			})
+
+		encryptionInfo := &jobspb.EncryptionInfo{EncryptedDataKeyByKMSMasterKeyID: encryptedDataKeyMapForProto}
+
+		// TODO: Currently will always exist, figure out how to add another encryption info
+		writeEncryptionInfoIfNotExists(ctx, encryptionInfo, baseStores[0])
+	}
+
+	return nil
 }
