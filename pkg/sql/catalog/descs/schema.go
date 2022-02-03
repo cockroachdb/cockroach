@@ -147,7 +147,7 @@ func (tc *Collection) getSchemaByID(
 	}
 
 	// Otherwise, fall back to looking up the descriptor with the desired ID.
-	desc, err := tc.getDescriptorByID(ctx, txn, schemaID, flags)
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, schemaID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			if flags.Required {
@@ -157,7 +157,7 @@ func (tc *Collection) getSchemaByID(
 		}
 		return nil, err
 	}
-	schemaDesc, ok := desc.(catalog.SchemaDescriptor)
+	schemaDesc, ok := descs[0].(catalog.SchemaDescriptor)
 	if !ok {
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", schemaID))
 	}
