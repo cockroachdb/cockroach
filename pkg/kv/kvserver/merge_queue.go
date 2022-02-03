@@ -337,6 +337,10 @@ func (mq *mergeQueue) process(
 
 		// AdminRelocateRange moves the lease to the first target in the list, so
 		// sort the existing leaseholder there to leave it unchanged.
+		//
+		// TODO(aayush): Remove this logic to move lease to the front for 22.2,
+		// since 22.1 nodes support the new `transferLeaseToFirstVoter` parameter
+		// for `AdminRelocateRange`.
 		lease, _ := lhsRepl.GetLease()
 		for i := range voterTargets {
 			if t := voterTargets[i]; t.NodeID == lease.Replica.NodeID && t.StoreID == lease.Replica.StoreID {
@@ -353,7 +357,7 @@ func (mq *mergeQueue) process(
 			rhsDesc.StartKey,
 			voterTargets,
 			nonVoterTargets,
-			true, /* transferLeaseToFirstVoter */
+			false, /* transferLeaseToFirstVoter */
 		); err != nil {
 			return false, err
 		}
