@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/datadriven"
 	"gopkg.in/yaml.v2"
@@ -76,6 +77,8 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
 				}
+				// Reset the modification time.
+				spec.TableModificationTime = hlc.Timestamp{}
 				res, err := json.MarshalIndent(&spec, "", "  ")
 				if err != nil {
 					d.Fatalf(t, "%+v", err)

@@ -62,48 +62,6 @@ type rowFetcher interface {
 	Close(ctx context.Context)
 }
 
-// makeRowFetcher creates and initializes a fetcher.
-func makeRowFetcher(
-	flowCtx *execinfra.FlowCtx,
-	desc catalog.TableDescriptor,
-	indexIdx int,
-	columns []catalog.Column,
-	reverseScan bool,
-	mon *mon.BytesMonitor,
-	alloc *tree.DatumAlloc,
-	lockStrength descpb.ScanLockingStrength,
-	lockWaitPolicy descpb.ScanLockingWaitPolicy,
-) (*row.Fetcher, error) {
-	fetcher := &row.Fetcher{}
-	if indexIdx >= len(desc.ActiveIndexes()) {
-		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
-	}
-	index := desc.ActiveIndexes()[indexIdx]
-
-	colIDs := make([]descpb.ColumnID, len(columns))
-	for i := range colIDs {
-		colIDs[i] = columns[i].GetID()
-	}
-	var spec descpb.IndexFetchSpec
-	if err := rowenc.InitIndexFetchSpec(&spec, flowCtx.Codec(), desc, index, colIDs); err != nil {
-		return nil, err
-	}
-
-	if err := fetcher.Init(
-		flowCtx.EvalCtx.Context,
-		reverseScan,
-		lockStrength,
-		lockWaitPolicy,
-		flowCtx.EvalCtx.SessionData().LockTimeout,
-		alloc,
-		mon,
-		&spec,
-	); err != nil {
-		return nil, err
-	}
-	return fetcher, nil
-}
-
 // makeRowFetcherLegacy is a legacy version of the row fetcher which uses
 // the valNeededForCol ordinal set to determine the fetcher columns.
 func makeRowFetcherLegacy(
@@ -117,34 +75,44 @@ func makeRowFetcherLegacy(
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	withSystemColumns bool,
-	invertedColumn catalog.Column,
 ) (*row.Fetcher, error) {
-	cols := make([]catalog.Column, 0, len(desc.AllColumns()))
+	colIDs := make([]descpb.ColumnID, 0, len(desc.AllColumns()))
 	for i, col := range desc.ReadableColumns() {
 		if valNeededForCol.Contains(i) {
-			if invertedColumn != nil && col.GetID() == invertedColumn.GetID() {
-				col = invertedColumn
-			}
-			cols = append(cols, col)
+			colIDs = append(colIDs, col.GetID())
 		}
 	}
 	if withSystemColumns {
 		start := len(desc.ReadableColumns())
 		for i, col := range desc.SystemColumns() {
 			if valNeededForCol.Contains(start + i) {
-				cols = append(cols, col)
+				colIDs = append(colIDs, col.GetID())
 			}
 		}
 	}
-	return makeRowFetcher(
-		flowCtx,
-		desc,
-		indexIdx,
-		cols,
+
+	if indexIdx >= len(desc.ActiveIndexes()) {
+		return nil, errors.Errorf("invalid indexIdx %d", indexIdx)
+	}
+	index := desc.ActiveIndexes()[indexIdx]
+
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, flowCtx.Codec(), desc, index, colIDs); err != nil {
+		return nil, err
+	}
+
+	fetcher := &row.Fetcher{}
+	if err := fetcher.Init(
+		flowCtx.EvalCtx.Context,
 		reverseScan,
-		mon,
-		alloc,
 		lockStrength,
 		lockWaitPolicy,
-	)
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		alloc,
+		mon,
+		&spec,
+	); err != nil {
+		return nil, err
+	}
+	return fetcher, nil
 }
