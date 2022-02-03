@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -368,28 +369,31 @@ INSERT INTO foo VALUES (1), (10), (100);
 		require.NoError(t, err)
 		spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, indexID)}
 		const reverse = false
-		var fetcherCols []catalog.Column
+		var fetcherCols []descpb.ColumnID
 		for _, col := range table.PublicColumns() {
 			if colIDsNeeded.Contains(col.GetID()) {
-				fetcherCols = append(fetcherCols, col)
+				fetcherCols = append(fetcherCols, col.GetID())
 			}
 		}
 		var alloc tree.DatumAlloc
+		var spec descpb.IndexFetchSpec
+		require.NoError(t, rowenc.InitIndexFetchSpec(
+			&spec,
+			keys.SystemSQLCodec,
+			table,
+			idx,
+			fetcherCols,
+		))
 		var fetcher row.Fetcher
 		require.NoError(t, fetcher.Init(
 			ctx,
-			keys.SystemSQLCodec,
 			reverse,
 			descpb.ScanLockingStrength_FOR_NONE,
 			descpb.ScanLockingWaitPolicy_BLOCK,
 			0,
 			&alloc,
 			mm.Monitor(),
-			row.FetcherTableArgs{
-				Desc:    table,
-				Index:   idx,
-				Columns: fetcherCols,
-			},
+			&spec,
 		))
 
 		require.NoError(t, fetcher.StartScan(

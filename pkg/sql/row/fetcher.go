@@ -106,17 +106,6 @@ type tableInfo struct {
 	rowIsDeleted bool
 }
 
-// FetcherTableArgs are the arguments passed to Fetcher.Init
-// for a given table that includes descriptors and row information.
-type FetcherTableArgs struct {
-	Desc  catalog.TableDescriptor
-	Index catalog.Index
-
-	// Columns that are being fetched. The resulting datums for each row map
-	// 1-to-1 to these columns.
-	Columns []catalog.Column
-}
-
 // Fetcher handles fetching kvs and forming table rows for a single table.
 // Usage:
 //   var rf Fetcher
@@ -218,14 +207,13 @@ func (rf *Fetcher) Close(ctx context.Context) {
 // index.
 func (rf *Fetcher) Init(
 	ctx context.Context,
-	codec keys.SQLCodec,
 	reverse bool,
 	lockStrength descpb.ScanLockingStrength,
 	lockWaitPolicy descpb.ScanLockingWaitPolicy,
 	lockTimeout time.Duration,
 	alloc *tree.DatumAlloc,
 	memMonitor *mon.BytesMonitor,
-	tableArgs FetcherTableArgs,
+	spec *descpb.IndexFetchSpec,
 ) error {
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
@@ -240,15 +228,11 @@ func (rf *Fetcher) Init(
 		rf.kvFetcherMemAcc = &memAcc
 	}
 
-	columnIDs := make([]descpb.ColumnID, len(tableArgs.Columns))
-	for i := range columnIDs {
-		columnIDs[i] = tableArgs.Columns[i].GetID()
-	}
-
 	table := &rf.table
 	*table = tableInfo{
-		row:        make(rowenc.EncDatumRow, len(tableArgs.Columns)),
-		decodedRow: make(tree.Datums, len(tableArgs.Columns)),
+		spec:       *spec,
+		row:        make(rowenc.EncDatumRow, len(spec.FetchedColumns)),
+		decodedRow: make(tree.Datums, len(spec.FetchedColumns)),
 
 		// These slice fields might get re-allocated below, so reslice them from
 		// the old table here in case they've got enough capacity already.
@@ -257,11 +241,6 @@ func (rf *Fetcher) Init(
 		extraVals:          rf.table.extraVals[:0],
 		timestampOutputIdx: noOutputColumn,
 		oidOutputIdx:       noOutputColumn,
-	}
-
-	spec := &table.spec
-	if err := rowenc.InitIndexFetchSpec(spec, codec, tableArgs.Desc, tableArgs.Index, columnIDs); err != nil {
-		return err
 	}
 
 	for idx := range spec.FetchedColumns {
@@ -938,7 +917,7 @@ func (rf *Fetcher) processValueBytes(
 }
 
 // NextRow processes keys until we complete one row, which is returned as an
-// EncDatumRow. The row contains one value per FetcherTableArgs.Columns.
+// EncDatumRow. The row contains one value per IndexFetchSpec.FetchedColumns.
 //
 // The EncDatumRow should not be modified and is only valid until the next call.
 //

@@ -164,21 +164,25 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	rf := &f.fetcher
 
 	// TODO(dan): Allow for decoding a subset of the columns.
-	rfArgs := row.FetcherTableArgs{
-		Desc:    tableDesc,
-		Index:   tableDesc.GetPrimaryIndex(),
-		Columns: tableDesc.PublicColumns(),
+	publicCols := tableDesc.PublicColumns()
+	colIDs := make([]descpb.ColumnID, len(publicCols))
+	for i := range publicCols {
+		colIDs[i] = publicCols[i].GetID()
 	}
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, c.codec, tableDesc, tableDesc.GetPrimaryIndex(), colIDs); err != nil {
+		return nil, err
+	}
+
 	if err := rf.Init(
 		context.TODO(),
-		c.codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&c.a,
 		nil, /* memMonitor */
-		rfArgs,
+		&spec,
 	); err != nil {
 		return nil, err
 	}
