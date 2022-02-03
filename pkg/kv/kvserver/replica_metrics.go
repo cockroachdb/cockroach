@@ -249,8 +249,8 @@ func calcBehindCount(
 // A "Query" is a BatchRequest (regardless of its contents) arriving at the
 // leaseholder with a gateway node set in the header (i.e. excluding requests
 // that weren't sent through a DistSender, which in practice should be
-// practically none). Also return the amount of time over which the stat was
-// accumulated.
+// practically none). See Replica.getBatchRequestQPS() for how this is
+// accounted for.
 func (r *Replica) QueriesPerSecond() (float64, time.Duration) {
 	return r.leaseholderStats.avgQPS()
 }
