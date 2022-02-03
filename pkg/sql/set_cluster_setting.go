@@ -67,10 +67,19 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	if err != nil {
 		return err
 	}
-	if !hasModify {
+	if action == "set" && !hasModify {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"only users with the %s privilege are allowed to %s cluster setting '%s'",
 			roleoption.MODIFYCLUSTERSETTING, action, name)
+	}
+	hasView, err := p.HasRoleOption(ctx, roleoption.VIEWCLUSTERSETTING)
+	if err != nil {
+		return err
+	}
+	if action == "show" && !(hasModify || hasView) {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only users with either %s or %s privileges are allowed to %s cluster setting '%s'",
+			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING, action, name)
 	}
 	return nil
 }
