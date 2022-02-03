@@ -112,6 +112,7 @@ Typical usage:
 		makeBenchCmd(ret.bench),
 		makeBuildCmd(ret.build),
 		makeBuilderCmd(ret.builder),
+		makeCacheCmd(ret.cache),
 		makeComposeCmd(ret.compose),
 		makeDoctorCmd(ret.doctor),
 		makeGenerateCmd(ret.generate),

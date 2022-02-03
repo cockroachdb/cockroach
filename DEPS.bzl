@@ -824,6 +824,10 @@ def go_deps():
         name = "com_github_buchgr_bazel_remote",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/buchgr/bazel-remote",
+        patch_args = ["-p1"],
+        patches = [
+            "@cockroach//build/patches:com_github_buchgr_bazel_remote.patch",
+        ],
         sha256 = "7ab70784fddbc59e956501b2bc15a30c36baedb34df0d26009607d80c9e129e2",
         strip_prefix = "github.com/buchgr/bazel-remote@v1.3.3",
         urls = [
