@@ -317,11 +317,13 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 		iter.Next()
 	}
 
-	// Compare statistics with those passed by client.
+	// Compare statistics with those passed by client. We calculate them at the
+	// same timestamp as the given statistics, since they may contain
+	// timing-dependent values (typically MVCC garbage, i.e. multiple versions).
 	if stats != nil {
 		given := *stats
-		given.LastUpdateNanos = 0
-		actual, err := storage.ComputeStatsForRange(iter, keys.MinKey, keys.MaxKey, 0)
+		actual, err := storage.ComputeStatsForRange(
+			iter, keys.MinKey, keys.MaxKey, given.LastUpdateNanos)
 		if err != nil {
 			return errors.Wrap(err, "failed to compare stats: %w")
 		}
