@@ -14,7 +14,7 @@ import { analyticsActions, AppState } from "src/store";
 import { SessionsState } from "src/store/sessions";
 
 import { createSelector } from "reselect";
-import { SessionsPage } from "./index";
+import { OwnProps, SessionsPage } from "./index";
 
 import { actions as sessionsActions } from "src/store/sessions";
 import { actions as localStorageActions } from "src/store/localStorage";
@@ -24,6 +24,24 @@ import {
   ICancelSessionRequest,
 } from "src/store/terminateQuery";
 import { Dispatch } from "redux";
+import { nodeRegionsByIDSelector } from "../store/nodes";
+import { selectUIConfig } from "../store/uiConfig";
+import { Filters } from "../queryFilter";
+
+export const adminUISelector = createSelector(
+  (state: AppState) => state.adminUI,
+  adminUiState => adminUiState,
+);
+
+export const localStorageSelector = createSelector(
+  adminUISelector,
+  adminUiState => adminUiState.localStorage,
+);
+
+export const selectIsTenant = createSelector(
+  selectUIConfig,
+  uiConfig => uiConfig.isTenant,
+);
 
 export const selectSessions = createSelector(
   (state: AppState) => state.adminUI.sessions,
@@ -42,12 +60,29 @@ export const selectSortSetting = createSelector(
   localStorage => localStorage["sortSetting/SessionsPage"],
 );
 
+export const selectColumns = createSelector(
+  localStorageSelector,
+  localStorage =>
+    localStorage["showColumns/SessionsPage"]
+      ? localStorage["showColumns/SessionsPage"].split(",")
+      : null,
+);
+
+export const selectFilters = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["filters/SessionsPage"],
+);
+
 export const SessionsPageConnected = withRouter(
   connect(
-    (state: AppState, props: RouteComponentProps) => ({
+    (state: AppState, props: OwnProps) => ({
       sessions: selectSessions(state),
       sessionsError: state.adminUI.sessions.lastError,
       sortSetting: selectSortSetting(state),
+      columns: selectColumns(state),
+      filters: selectFilters(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
+      isTenant: selectIsTenant(state),
     }),
     (dispatch: Dispatch) => ({
       refreshSessions: () => dispatch(sessionsActions.refresh()),
@@ -95,6 +130,30 @@ export const SessionsPageConnected = withRouter(
           page: "Sessions",
           action: "Terminate Statement",
         }),
+      onFilterChange: (value: Filters) => {
+        dispatch(
+          analyticsActions.track({
+            name: "Filter Clicked",
+            page: "Sessions",
+            filterName: "app",
+            value: value.toString(),
+          }),
+        );
+        dispatch(
+          localStorageActions.update({
+            key: "filters/SessionsPage",
+            value: value,
+          }),
+        );
+      },
+      onColumnsChange: (selectedColumns: string[]) =>
+        dispatch(
+          localStorageActions.update({
+            key: "showColumns/SessionsPage",
+            value:
+              selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+          }),
+        ),
     }),
   )(SessionsPage),
 );
