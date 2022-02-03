@@ -18,11 +18,16 @@ import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 import { createSelector } from "reselect";
 import { SessionsResponseMessage } from "src/util/api";
 
-import { SessionsPage } from "@cockroachlabs/cluster-ui";
+import {
+  defaultFilters,
+  Filters,
+  SessionsPage,
+} from "@cockroachlabs/cluster-ui";
 import {
   terminateQueryAction,
   terminateSessionAction,
 } from "src/redux/sessions/sessionsSagas";
+import { nodeRegionsByIDSelector } from "oss/src/redux/nodes";
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -48,9 +53,24 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "statementAge" },
 );
 
+export const sessionColumnsLocalSetting = new LocalSetting(
+  "showColumns/SessionsPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+);
+
+export const filtersLocalSetting = new LocalSetting(
+  "filters/SessionsPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
 const SessionsPageConnected = withRouter(
   connect(
     (state: AdminUIState, props: RouteComponentProps) => ({
+      columns: sessionColumnsLocalSetting.selectorToArray(state),
+      filters: filtersLocalSetting.selector(state),
+      nodeRegions: nodeRegionsByIDSelector(state),
       sessions: selectSessions(state, props),
       sessionsError: state.cachedData.sessions.lastError,
       sortSetting: sortSettingLocalSetting.selector(state),
@@ -68,6 +88,11 @@ const SessionsPageConnected = withRouter(
           ascending: ascending,
           columnTitle: columnName,
         }),
+      onColumnsChange: (value: string[]) =>
+        sessionColumnsLocalSetting.set(
+          value.length === 0 ? " " : value.join(","),
+        ),
+      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
     },
   )(SessionsPage),
 );

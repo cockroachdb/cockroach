@@ -17,13 +17,91 @@ export const SessionTableTitle = {
       Session ID
     </Tooltip>
   ),
-  statement: (
+  start: (
     <Tooltip
       style="tableTitle"
       placement="bottom"
-      content={"Currently active statement."}
+      content={"The timestamp at which the session started."}
     >
-      Statement
+      Session Start Time (UTC)
+    </Tooltip>
+  ),
+  sessionDuration: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The amount of time the session has been open."}
+    >
+      Session Duration
+    </Tooltip>
+  ),
+  status: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={
+        "A session is active if it has an open transaction (including implicit transactions, which are individual SQL statements), and idle if it has no open transaction."
+      }
+    >
+      Status
+    </Tooltip>
+  ),
+  mostRecentStatement: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={
+        "If more than one statement is active, the most recent statement is shown. If the session is idle, the last statement is shown."
+      }
+    >
+      Most Recent Statement
+    </Tooltip>
+  ),
+  statementStartTime: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The timestamp at which the statement started."}
+    >
+      Statement Start Time (UTC)
+    </Tooltip>
+  ),
+  memUsage: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={
+        "Amount of memory currently allocated to this session, followed by the maximum amount of memory this session has ever been allocated."
+      }
+    >
+      Memory Usage
+    </Tooltip>
+  ),
+  clientAddress: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The IP address/port of the client that opened the session."}
+    >
+      Client IP Address
+    </Tooltip>
+  ),
+  username: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The user that opened the session."}
+    >
+      User name
+    </Tooltip>
+  ),
+  applicationName: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The application that ran the session."}
+    >
+      Application name
     </Tooltip>
   ),
   actions: (
@@ -33,45 +111,6 @@ export const SessionTableTitle = {
       content={"Actions to take on the session."}
     >
       Actions
-    </Tooltip>
-  ),
-  sessionAge: (
-    <Tooltip
-      style="tableTitle"
-      placement="bottom"
-      content={"The duration of the session."}
-    >
-      Session Duration
-    </Tooltip>
-  ),
-  txnAge: (
-    <Tooltip
-      style="tableTitle"
-      placement="bottom"
-      content={"The duration of the open transaction, if there is one."}
-    >
-      Transaction Duration
-    </Tooltip>
-  ),
-  statementAge: (
-    <Tooltip
-      style="tableTitle"
-      placement="bottom"
-      content={"The duration of the active statement, if there is one."}
-    >
-      Statement Duration
-    </Tooltip>
-  ),
-  memUsage: (
-    <Tooltip
-      style="tableTitle"
-      placement="bottom"
-      content={
-        "The current amount of allocated memory on this session and the maximum amount of memory this" +
-        " session has ever allocated."
-      }
-    >
-      Memory Usage
     </Tooltip>
   ),
   maxMemUsed: (
@@ -92,15 +131,6 @@ export const SessionTableTitle = {
       Retries
     </Tooltip>
   ),
-  lastActiveStatement: (
-    <Tooltip
-      style="tableTitle"
-      placement="bottom"
-      content={"The last statement that was completed on this session."}
-    >
-      Last Statement
-    </Tooltip>
-  ),
   numStmts: (
     <Tooltip
       style="tableTitle"
@@ -110,6 +140,15 @@ export const SessionTableTitle = {
       }
     >
       Statements Run
+    </Tooltip>
+  ),
+  txnAge: (
+    <Tooltip
+      style="tableTitle"
+      placement="bottom"
+      content={"The duration of the open transaction, if there is one."}
+    >
+      Transaction Duration
     </Tooltip>
   ),
 };

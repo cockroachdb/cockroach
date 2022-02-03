@@ -9,13 +9,14 @@
 // licenses/APL.txt.
 
 import React from "react";
-import { isNil } from "lodash";
+import { isNil, merge } from "lodash";
 
 import { syncHistory } from "src/util/query";
 import { appAttr } from "src/util/constants";
 import {
   makeSessionsColumns,
   SessionInfo,
+  sessionsColumnLabels,
   SessionsSortedTable,
 } from "./sessionsTable";
 import { RouteComponentProps } from "react-router-dom";
@@ -24,16 +25,23 @@ import { sessionsTable } from "src/util/docs";
 
 import emptyTableResultsIcon from "../assets/emptyState/empty-table-results.svg";
 import SQLActivityError from "../sqlActivity/errorComponent";
-
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import {
   SortSetting,
   ISortedTablePagination,
   updateSortSettingQueryParamsOnTab,
+  ColumnDescriptor,
 } from "src/sortedtable";
 import { Loading } from "src/loading";
 import { Anchor } from "src/anchor";
 import { EmptyTable } from "src/empty";
+import {
+  defaultFilters,
+  Filter,
+  Filters,
+  getTimeValueInSeconds,
+  handleFiltersFromQueryString,
+} from "../queryFilter";
 
 import TerminateQueryModal, {
   TerminateQueryModalRef,
@@ -49,6 +57,12 @@ import {
 
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import sessionPageStyles from "./sessionPage.module.scss";
+import ColumnsSelector, {
+  SelectOption,
+} from "../columnsSelector/columnsSelector";
+import { TimestampToMoment, unique } from "src/util";
+import { UIConfigState } from "../store";
+import moment from "moment";
 
 const statementsPageCx = classNames.bind(statementsPageStyles);
 const sessionsPageCx = classNames.bind(sessionPageStyles);
@@ -69,13 +83,32 @@ export interface OwnProps {
   onSessionClick?: () => void;
   onTerminateSessionClick?: () => void;
   onTerminateStatementClick?: () => void;
+  onColumnsChange?: (selectedColumns: string[]) => void;
+  onFilterChange?: (value: Filters) => void;
+  columns: string[];
+  nodeRegions: { [nodeId: string]: string };
+  filters: Filters;
+  isTenant: UIConfigState["isTenant"];
 }
 
 export interface SessionsPageState {
+  apps: string[];
   pagination: ISortedTablePagination;
+  filters: Filters;
+  activeFilters?: number;
 }
 
-export type SessionsPageProps = OwnProps & RouteComponentProps<any>;
+export type SessionsPageProps = OwnProps & RouteComponentProps;
+
+function getSessionAppFilterOptions(sessions: SessionInfo[]): string[] {
+  const uniqueAppNames = new Set(
+    sessions.map(s =>
+      s.session.application_name ? s.session.application_name : "(unset)",
+    ),
+  );
+
+  return Array.from(uniqueAppNames);
+}
 
 export class SessionsPage extends React.Component<
   SessionsPageProps,
@@ -87,11 +120,16 @@ export class SessionsPage extends React.Component<
   constructor(props: SessionsPageProps) {
     super(props);
     this.state = {
+      filters: defaultFilters,
+      apps: [],
       pagination: {
         pageSize: 20,
         current: 1,
       },
     };
+
+    const stateFromHistory = this.getStateFromHistory();
+    this.state = merge(this.state, stateFromHistory);
     this.terminateSessionRef = React.createRef();
     this.terminateQueryRef = React.createRef();
 
@@ -110,6 +148,21 @@ export class SessionsPage extends React.Component<
       this.props.onSortingChange("Sessions", columnTitle, ascending);
     }
   }
+
+  getStateFromHistory = (): Partial<SessionsPageState> => {
+    const { history, filters, onFilterChange } = this.props;
+
+    // Filters.
+    const latestFilter = handleFiltersFromQueryString(
+      history,
+      filters,
+      onFilterChange,
+    );
+
+    return {
+      filters: latestFilter,
+    };
+  };
 
   changeSortSetting = (ss: SortSetting): void => {
     if (this.props.onSortingChange) {
@@ -161,15 +214,176 @@ export class SessionsPage extends React.Component<
     this.props.onPageChanged(current);
   };
 
+  onSubmitFilters = (filters: Filters): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(filters);
+    }
+
+    this.setState({
+      filters: filters,
+    });
+    this.resetPagination();
+    syncHistory(
+      {
+        app: filters.app,
+        timeNumber: filters.timeNumber,
+        timeUnit: filters.timeUnit,
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      this.props.history,
+    );
+  };
+
+  onClearFilters = (): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(defaultFilters);
+    }
+
+    this.setState({
+      filters: {
+        ...defaultFilters,
+      },
+    });
+    this.resetPagination();
+    syncHistory(
+      {
+        app: undefined,
+        timeNumber: undefined,
+        timeUnit: undefined,
+        regions: undefined,
+        nodes: undefined,
+      },
+      this.props.history,
+    );
+  };
+
+  filteredSessionsData = (): {
+    sessions: SessionInfo[];
+    activeFilters: number;
+  } => {
+    const { filters } = this.state;
+    const { sessions } = this.props;
+    if (!filters) {
+      return {
+        sessions: sessions,
+        activeFilters: 0,
+      };
+    }
+    const internalAppNamePrefix = "$ internal";
+    const timeValue = getTimeValueInSeconds(filters);
+    const filteredSessions = sessions
+      .filter((s: SessionInfo) => {
+        const isInternal = (s: SessionInfo) =>
+          s.session.application_name.startsWith(internalAppNamePrefix);
+        if (filters.app && filters.app != "All") {
+          const apps = filters.app.split(",");
+          let showInternal = false;
+          if (apps.includes(internalAppNamePrefix)) {
+            showInternal = true;
+          }
+          if (apps.includes("(unset)")) {
+            apps.push("");
+          }
+
+          return (
+            (showInternal && isInternal(s)) ||
+            s.session.application_name === filters.app ||
+            apps.includes(s.session.application_name)
+          );
+        } else {
+          return !isInternal(s);
+        }
+      })
+      .filter((s: SessionInfo) => {
+        const sessionTime = moment().diff(
+          TimestampToMoment(s.session.start),
+          "seconds",
+        );
+        return sessionTime >= timeValue || timeValue === "empty";
+      });
+
+    return {
+      sessions: filteredSessions,
+      activeFilters: filteredSessions.length,
+    };
+  };
+
   renderSessions = (): React.ReactElement => {
     const sessionsData = this.props.sessions;
-    const { pagination } = this.state;
+    const { pagination, filters } = this.state;
+    const {
+      nodeRegions,
+      isTenant,
+      columns: userSelectedColumnsToShow,
+      onColumnsChange,
+    } = this.props;
+
+    const {
+      sessions: sessionsToDisplay,
+      activeFilters,
+    } = this.filteredSessionsData();
+
+    const appNames = getSessionAppFilterOptions(sessionsData);
+    const nodes = isTenant
+      ? []
+      : Object.keys(nodeRegions)
+          .map(n => Number(n))
+          .sort();
+    const regions = isTenant
+      ? []
+      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+
+    const columns = makeSessionsColumns(
+      this.terminateSessionRef,
+      this.terminateQueryRef,
+      this.props.onSessionClick,
+      this.props.onTerminateStatementClick,
+      this.props.onTerminateSessionClick,
+    );
+
+    const isColumnSelected = (c: ColumnDescriptor<SessionInfo>) => {
+      return (
+        ((userSelectedColumnsToShow === null ||
+          userSelectedColumnsToShow === undefined) &&
+          c.showByDefault !== false) ||
+        (userSelectedColumnsToShow !== null &&
+          userSelectedColumnsToShow.includes(c.name)) ||
+        c.alwaysShow === true
+      );
+    };
+
+    const tableColumns = columns
+      .filter(c => !c.alwaysShow)
+      .map(
+        (c): SelectOption => ({
+          label: sessionsColumnLabels[c.name],
+          value: c.name,
+          isSelected: isColumnSelected(c),
+        }),
+      );
+
+    const displayColumns = columns.filter(c => isColumnSelected(c));
 
     return (
       <>
         <section>
           <div className={statementsPageCx("cl-table-statistic")}>
             <h4 className={statementsPageCx("cl-count-title")}>
+              <Filter
+                onSubmitFilters={this.onSubmitFilters}
+                appNames={appNames}
+                regions={regions}
+                nodes={nodes.map(n => "n" + n)}
+                activeFilters={activeFilters}
+                filters={filters}
+                showRegions={regions.length > 1}
+                showNodes={nodes.length > 1}
+              />
+              <ColumnsSelector
+                options={tableColumns}
+                onSubmitColumns={onColumnsChange}
+              />
               <ResultsPerPageLabel
                 pagination={{
                   ...pagination,
@@ -182,14 +396,8 @@ export class SessionsPage extends React.Component<
           </div>
           <SessionsSortedTable
             className="sessions-table"
-            data={sessionsData}
-            columns={makeSessionsColumns(
-              this.terminateSessionRef,
-              this.terminateQueryRef,
-              this.props.onSessionClick,
-              this.props.onTerminateStatementClick,
-              this.props.onTerminateSessionClick,
-            )}
+            data={sessionsToDisplay}
+            columns={displayColumns}
             renderNoResult={
               <EmptyTable
                 title="No sessions are currently running"

@@ -69,6 +69,7 @@ export interface Filters {
 const timeUnit = [
   { label: "seconds", value: "seconds" },
   { label: "milliseconds", value: "milliseconds" },
+  { label: "minutes", value: "minutes" },
 ];
 
 export const defaultFilters: Filters = {
@@ -239,9 +240,15 @@ export const calculateActiveFilters = (filters: Filters): number => {
 
 export const getTimeValueInSeconds = (filters: Filters): number | "empty" => {
   if (filters.timeNumber === "0") return "empty";
-  return filters.timeUnit === "seconds"
-    ? Number(filters.timeNumber)
-    : Number(filters.timeNumber) / 1000;
+  switch (filters.timeUnit) {
+    case "seconds":
+      return Number(filters.timeNumber);
+    case "minutes":
+      return Number(filters.timeNumber) * 60;
+    default:
+      // Milliseconds
+      return Number(filters.timeNumber) / 1000;
+  }
 };
 
 export class Filter extends React.Component<QueryFilter, FilterState> {

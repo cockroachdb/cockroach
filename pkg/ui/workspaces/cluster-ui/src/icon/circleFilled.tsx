@@ -11,11 +11,15 @@
 import * as React from "react";
 
 interface IconProps {
+  fill?: string;
   className: string;
 }
 
-export const CircleFilled = ({ className, ...props }: IconProps) => (
-  <svg viewBox="0 0 12 12" className={className} {...props}>
-    <circle cx="6" cy="6" r="6" fillRule="evenodd" />
-  </svg>
-);
+export function CircleFilled(props: IconProps) {
+  const { fill, className } = props;
+  return (
+    <svg height={10} width={20} className={className} {...props}>
+      <circle cx="5" cy="5" r="5" fill={fill} />
+    </svg>
+  );
+}
