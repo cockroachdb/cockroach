@@ -1748,6 +1748,72 @@ func TestValidateTableDesc(t *testing.T) {
 				},
 				NextColumnID: 3,
 			}},
+		{`public index "ruroh" is using the delete preserving encoding`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"c1", "c2"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                  1,
+					Name:                "primary",
+					Unique:              true,
+					KeyColumnIDs:        []descpb.ColumnID{1},
+					KeyColumnNames:      []string{"c1"},
+					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:        descpb.PrimaryIndexEncoding,
+				},
+				Indexes: []descpb.IndexDescriptor{
+					{
+						ID:                          2,
+						Name:                        "ruroh",
+						KeyColumnIDs:                []descpb.ColumnID{2},
+						KeyColumnNames:              []string{"c2"},
+						KeyColumnDirections:         []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+						Version:                     descpb.LatestNonPrimaryIndexDescriptorVersion,
+						UseDeletePreservingEncoding: true,
+					},
+				},
+				NextColumnID: 3,
+				NextIndexID:  3,
+				NextFamilyID: 1,
+			}},
+		{`public index "primary" is using the delete preserving encoding`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				Columns: []descpb.ColumnDescriptor{
+					{ID: 1, Name: "c1"},
+					{ID: 2, Name: "c2"},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1, 2}, ColumnNames: []string{"c1", "c2"}},
+				},
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:                          1,
+					Name:                        "primary",
+					Unique:                      true,
+					KeyColumnIDs:                []descpb.ColumnID{1},
+					KeyColumnNames:              []string{"c1"},
+					KeyColumnDirections:         []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+					Version:                     descpb.PrimaryIndexWithStoredColumnsVersion,
+					EncodingType:                descpb.PrimaryIndexEncoding,
+					UseDeletePreservingEncoding: true,
+				},
+				NextColumnID: 3,
+				NextIndexID:  2,
+				NextFamilyID: 1,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
