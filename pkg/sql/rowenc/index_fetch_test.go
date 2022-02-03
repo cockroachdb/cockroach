@@ -13,6 +13,7 @@ package rowenc_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -76,6 +77,8 @@ func TestInitIndexFetchSpec(t *testing.T) {
 				if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, index, fetchColumnIDs); err != nil {
 					d.Fatalf(t, "%+v", err)
 				}
+				// Reset the modification time.
+				spec.TableModificationTime = hlc.Timestamp{}
 				res, err := json.MarshalIndent(&spec, "", "  ")
 				if err != nil {
 					d.Fatalf(t, "%+v", err)

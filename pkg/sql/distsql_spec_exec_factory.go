@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
@@ -238,16 +239,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	// what DistSQLPlanner.createTableReaders does.
 	trSpec := physicalplan.NewTableReaderSpec()
 	*trSpec = execinfrapb.TableReaderSpec{
-		Table:     *tabDesc.TableDesc(),
-		Reverse:   params.Reverse,
-		ColumnIDs: columnIDs,
+		Reverse: params.Reverse,
 	}
-	if vc := getInvertedColumn(colCfg.invertedColumnID, cols); vc != nil {
-		trSpec.InvertedColumn = vc.ColumnDesc()
-	}
-
-	trSpec.IndexIdx, err = getIndexIdx(idx, tabDesc)
-	if err != nil {
+	if err := rowenc.InitIndexFetchSpec(&trSpec.FetchSpec, e.planner.ExecCfg().Codec, tabDesc, idx, columnIDs); err != nil {
 		return nil, err
 	}
 	if params.Locking != nil {
@@ -284,7 +278,6 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 			parallelize:       params.Parallelize,
 			estimatedRowCount: uint64(params.EstimatedRowCount),
 			reqOrdering:       ReqOrdering(reqOrdering),
-			cols:              cols,
 		},
 	)
 

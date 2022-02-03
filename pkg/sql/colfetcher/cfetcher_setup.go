@@ -67,23 +67,13 @@ func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 
 // populateTableArgs fills in cFetcherTableArgs.
 func populateTableArgs(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	table catalog.TableDescriptor,
-	index catalog.Index,
-	columnIDs []descpb.ColumnID,
-	invertedCol catalog.Column,
-	helper *colexecargs.ExprHelper,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, fetchSpec *descpb.IndexFetchSpec,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
 	*args = cFetcherTableArgs{
+		spec: *fetchSpec,
 		typs: args.typs,
-	}
-	if err := rowenc.InitIndexFetchSpec(
-		&args.spec, flowCtx.Codec(), table, index, columnIDs,
-	); err != nil {
-		return nil, err
 	}
 	args.populateTypes(args.spec.FetchedColumns)
 	for i := range args.spec.FetchedColumns {

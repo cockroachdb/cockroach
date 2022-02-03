@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -1110,7 +1109,7 @@ func getIndexIdx(index catalog.Index, desc catalog.TableDescriptor) (uint32, err
 // The generated specs will be used as templates for planning potentially
 // multiple TableReaders.
 func initTableReaderSpecTemplate(
-	n *scanNode,
+	n *scanNode, codec keys.SQLCodec,
 ) (*execinfrapb.TableReaderSpec, execinfrapb.PostProcessSpec, error) {
 	if n.isCheck {
 		return nil, execinfrapb.PostProcessSpec{}, errors.AssertionFailedf("isCheck no longer supported")
@@ -1121,21 +1120,13 @@ func initTableReaderSpecTemplate(
 	}
 	s := physicalplan.NewTableReaderSpec()
 	*s = execinfrapb.TableReaderSpec{
-		Table:             *n.desc.TableDesc(),
 		Reverse:           n.reverse,
-		ColumnIDs:         colIDs,
 		LockingStrength:   n.lockingStrength,
 		LockingWaitPolicy: n.lockingWaitPolicy,
 	}
-	if vc := getInvertedColumn(n.colCfg.invertedColumnID, n.cols); vc != nil {
-		s.InvertedColumn = vc.ColumnDesc()
-	}
-
-	indexIdx, err := getIndexIdx(n.index, n.desc)
-	if err != nil {
+	if err := rowenc.InitIndexFetchSpec(&s.FetchSpec, codec, n.desc, n.index, colIDs); err != nil {
 		return nil, execinfrapb.PostProcessSpec{}, err
 	}
-	s.IndexIdx = indexIdx
 
 	var post execinfrapb.PostProcessSpec
 	if n.hardLimit != 0 {
@@ -1260,7 +1251,7 @@ func (dsp *DistSQLPlanner) CheckInstanceHealthAndVersion(
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode,
 ) (*PhysicalPlan, error) {
-	spec, post, err := initTableReaderSpecTemplate(n)
+	spec, post, err := initTableReaderSpecTemplate(n, planCtx.ExtendedEvalCtx.Codec)
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1269,6 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			parallelize:       n.parallelize,
 			estimatedRowCount: n.estimatedRowCount,
 			reqOrdering:       n.reqOrdering,
-			cols:              n.cols,
 		},
 	)
 	return p, err
@@ -1296,7 +1286,6 @@ type tableReaderPlanningInfo struct {
 	parallelize       bool
 	estimatedRowCount uint64
 	reqOrdering       ReqOrdering
-	cols              []catalog.Column
 }
 
 const defaultLocalScansConcurrencyLimit = 1024
@@ -1474,13 +1463,15 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		corePlacement[i].Core.TableReader = tr
 	}
 
-	invertedColumn := tabledesc.FindInvertedColumn(info.desc, info.spec.InvertedColumn)
-	typs := catalog.ColumnTypesWithInvertedCol(info.cols, invertedColumn)
+	typs := make([]*types.T, len(info.spec.FetchSpec.FetchedColumns))
+	for i := range typs {
+		typs[i] = info.spec.FetchSpec.FetchedColumns[i].Type
+	}
 
 	// Note: we will set a merge ordering below.
 	p.AddNoInputStage(corePlacement, info.post, typs, execinfrapb.Ordering{})
 
-	p.PlanToStreamColMap = identityMap(make([]int, len(info.cols)), len(info.cols))
+	p.PlanToStreamColMap = identityMap(make([]int, len(typs)), len(typs))
 	p.SetMergeOrdering(dsp.convertOrdering(info.reqOrdering, p.PlanToStreamColMap))
 
 	if parallelizeLocal {
