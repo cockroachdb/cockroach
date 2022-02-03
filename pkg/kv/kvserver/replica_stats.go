@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,6 +31,29 @@ const (
 	// return outlier/anomalous data.
 	MinStatsDuration = 5 * time.Second
 )
+
+// AddSSTableRequestSizeFactor wraps
+// "kv.replica_stats.addsst_request_size_factor". When this setting is set to
+// 0, all batch requests are treated uniformly as 1 QPS. When this setting is
+// greater than or equal to 1, AddSSTable requests will add additional QPS,
+// when present within a batch request. The additional QPS is size of the
+// SSTable data, divided by this factor. Thereby, the magnitude of this factor
+// is inversely related to QPS sensitivity to AddSSTableRequests.
+var AddSSTableRequestSizeFactor = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"kv.replica_stats.addsst_request_size_factor",
+	"the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1",
+	// The default value of 50,000 was chosen as the default divisor, following manual testing that
+	// is discussed in this pull request: #76252. Every additional 50,000 AddSSTable bytes will
+	// increase accounted QPS by 1. Typically AddSSTableRequests are ~1mb in size, accounted as 20
+	// QPS.
+	50000,
+).WithPublic()
+
+// AddSSTableRequestSizeFactor returns the size cost factor for a given replica.
+func (r *Replica) AddSSTableRequestSizeFactor() int64 {
+	return AddSSTableRequestSizeFactor.Get(&r.store.cfg.Settings.SV)
+}
 
 type localityOracle func(roachpb.NodeID) string
 
@@ -103,10 +127,6 @@ func (rs *replicaStats) splitRequestCounts(other *replicaStats) {
 			other.mu.requests[i][k] = newVal
 		}
 	}
-}
-
-func (rs *replicaStats) record(nodeID roachpb.NodeID) {
-	rs.recordCount(1, nodeID)
 }
 
 func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
