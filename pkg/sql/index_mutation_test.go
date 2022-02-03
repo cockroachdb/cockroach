@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -31,9 +32,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMerginIndexKVOps is another poor-man's logictest that assert
-// that indexes in the MERGING state do not see CPuts or InitPuts.
-func TestMergingIndexKVOps(t *testing.T) {
+// TestIndexMutationKVOps is another poor-man's logictest that make
+// assertions about the KV traces for indexes in various states of
+// mutations.
+func TestIndexMutationKVOps(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -43,12 +45,12 @@ func TestMergingIndexKVOps(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec("CREATE DATABASE t; USE t")
-	require.NoError(t, err)
 	datadriven.Walk(t, testutils.TestDataPath(t, "index_mutations"), func(t *testing.T, path string) {
+		s, sqlDB, kvDB := serverutils.StartServer(t, params)
+		defer s.Stopper().Stop(ctx)
+		_, err := sqlDB.Exec("CREATE DATABASE t; USE t")
+		require.NoError(t, err)
 		datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 			switch td.Cmd {
 			case "mutate-index":
@@ -60,9 +62,27 @@ func TestMergingIndexKVOps(t *testing.T) {
 				stateStr := strings.ToUpper(td.CmdArgs[2].Key)
 				state := descpb.DescriptorMutation_State(descpb.DescriptorMutation_State_value[stateStr])
 
+				mutFn := func(idx *descpb.IndexDescriptor) error {
+					if len(td.CmdArgs) < 4 {
+						return nil
+					}
+					for _, arg := range td.CmdArgs[3:] {
+						switch arg.Key {
+						case "use_delete_preserving_encoding":
+							b, err := strconv.ParseBool(arg.Vals[0])
+							if err != nil {
+								td.Fatalf(t, "use_delete_preserving_encoding expects a boolean: %s", err)
+							}
+							idx.UseDeletePreservingEncoding = b
+						default:
+							td.Fatalf(t, "unknown index option %q", arg.Key)
+						}
+					}
+					return nil
+				}
 				codec := s.ExecutorConfig().(sql.ExecutorConfig).Codec
 				tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "t", tableName)
-				err = mutateIndexByName(kvDB, codec, tableDesc, name, nil, state)
+				err = mutateIndexByName(kvDB, codec, tableDesc, name, mutFn, state)
 				require.NoError(t, err)
 			case "statement":
 				_, err := sqlDB.Exec(td.Input)
