@@ -263,6 +263,13 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
+	// PebbleFormatVersionBlockProperties enables a new Pebble SSTable format
+	// version for block property collectors.
+	// NB: a cluster version (PebbleFormatBlockPropertyCollector) was previously
+	// introduced for this change, however, it enabled the feature on an
+	// incompatible SSTable format version. This newer cluster version supersedes
+	// it.
+	PebbleFormatVersionBlockProperties
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -407,7 +414,6 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
-
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
@@ -415,6 +421,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     PebbleFormatVersionBlockProperties,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
 
 	// *************************************************

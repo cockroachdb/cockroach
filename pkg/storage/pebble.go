@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1563,28 +1564,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		return err
 	}
 
-	// Pebble has a concept of format major versions, similar to cluster
-	// versions. Backwards incompatible changes to Pebble's on-disk
-	// format are gated behind new format major versions. Bumping the
-	// storage engine's format major version is tied to a CockroachDB
-	// cluster version.
-	//
-	// Format major versions and cluster versions both only ratchet
-	// upwards. Here we map the persisted cluster version to the
-	// corresponding format major version, ratcheting Pebble's format
-	// major version if necessary.
-	formatVers := pebble.FormatMostCompatible
-	// Cases are ordered from newer to older versions.
-	switch {
-	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
-		if formatVers < pebble.FormatBlockPropertyCollector {
-			formatVers = pebble.FormatBlockPropertyCollector
-		}
-	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)):
-		if formatVers < pebble.FormatSetWithDelete {
-			formatVers = pebble.FormatSetWithDelete
-		}
-	}
+	formatVers := clusterVersionToFormatMajorVersion(version)
 	if p.db.FormatMajorVersion() < formatVers {
 		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
 			return errors.Wrap(err, "ratcheting format major version")
@@ -1593,9 +1573,51 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	return nil
 }
 
+func clusterVersionToFormatMajorVersion(version roachpb.Version) pebble.FormatMajorVersion {
+	// Pebble has a concept of format major versions, similar to cluster versions.
+	// Backwards incompatible changes to Pebble's on-disk format are gated behind
+	// new format major versions. Bumping the storage engine's format major
+	// version is tied to a CockroachDB cluster version.
+	//
+	// Format major versions and cluster versions both only ratchet upwards. Here
+	// we map the persisted cluster version to the corresponding format major
+	// version, ratcheting Pebble's format major version if necessary.
+	formatVers := pebble.FormatMostCompatible
+	// Cases are ordered from newer to older versions.
+	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
+		formatVers = pebble.FormatBlockPropertyCollector
+	case !version.Less(clusterversion.ByKey(clusterversion.TODOPreV21_2)):
+		formatVers = pebble.FormatSetWithDelete
+	}
+	return formatVers
+}
+
 // MinVersionIsAtLeastTargetVersion implements the Engine interface.
 func (p *Pebble) MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error) {
 	return MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, target)
+}
+
+// FormatMajorVersion implements the Engine interface.
+func (p *Pebble) FormatMajorVersion() pebble.FormatMajorVersion {
+	return p.db.FormatMajorVersion()
+}
+
+// WaitForCompatibleEngineVersion implements the Engine interface.
+func (p *Pebble) WaitForCompatibleEngineVersion(ctx context.Context, target roachpb.Version) error {
+	var current pebble.FormatMajorVersion
+	desired := clusterVersionToFormatMajorVersion(target)
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
+		current = p.FormatMajorVersion()
+		if current >= desired {
+			return nil
+		}
+		log.Warningf(ctx, "waiting for desired engine version %s (current=%s)...",
+			desired, current,
+		)
+		continue
+	}
+	return errors.Newf("could not set desired engine version %s (current=%s)", desired, current)
 }
 
 type pebbleReadOnly struct {

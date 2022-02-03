@@ -119,6 +119,11 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
 		postRaftAppliedIndexTermMigration,
 	),
+	migration.NewSystemMigration(
+		"update engine table format to support block property collectors and filters",
+		toCV(clusterversion.PebbleFormatVersionBlockProperties),
+		ensureEngineVersionAtLeast,
+	),
 }
 
 func init() {

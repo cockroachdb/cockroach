@@ -625,6 +625,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.Cache = pebbleCache
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
+			if cfg.TestingKnobs.Store != nil {
+				v := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs).StorageKnobs.FormatMajorVersion
+				pebbleConfig.Opts.FormatMajorVersion = v
+			}
+
 			// If the spec contains Pebble options, set those too.
 			if len(spec.PebbleOptions) > 0 {
 				err := pebbleConfig.Opts.Parse(spec.PebbleOptions, &pebble.ParseHooks{})

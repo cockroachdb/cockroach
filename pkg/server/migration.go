@@ -267,3 +267,34 @@ func (m *migrationServer) WaitForSpanConfigSubscription(
 	resp := &serverpb.WaitForSpanConfigSubscriptionResponse{}
 	return resp, nil
 }
+
+func (m *migrationServer) WaitForEngineVersion(
+	ctx context.Context, req *serverpb.WaitForEngineVersionRequest,
+) (*serverpb.WaitForEngineVersionResponse, error) {
+	const opName = "wait-for-engine-version"
+	ctx, span := m.server.AnnotateCtxWithSpan(ctx, opName)
+	defer span.Finish()
+	ctx = logtags.AddTag(ctx, opName, nil)
+
+	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
+		ctx context.Context,
+	) error {
+		// Same as in SyncAllEngines, because stores can be added asynchronously, we
+		// need to ensure that the bootstrap process has happened.
+		m.server.node.waitForAdditionalStoreInit()
+
+		// Wait for each engine on this node to be ratcheted to at least the
+		// requested version.
+		for _, eng := range m.server.engines {
+			if err := eng.WaitForCompatibleEngineVersion(ctx, *req.Version); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	resp := &serverpb.WaitForEngineVersionResponse{}
+	return resp, nil
+}

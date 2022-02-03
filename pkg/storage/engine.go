@@ -768,6 +768,13 @@ type Engine interface {
 	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
 	// storage min version is at least the target version.
 	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
+
+	// FormatMajorVersion returns the current format major version of the engine.
+	FormatMajorVersion() pebble.FormatMajorVersion
+
+	// WaitForCompatibleEngineVersion waits for the engine's format major version
+	// to be at least at a version that is compatible with the target version.
+	WaitForCompatibleEngineVersion(ctx context.Context, target roachpb.Version) error
 }
 
 // Batch is the interface for batch specific operations.
