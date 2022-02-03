@@ -14,6 +14,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -94,31 +95,30 @@ func TestSetMinVersion(t *testing.T) {
 	p, err := Open(context.Background(), InMemory(), CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
-	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatMostCompatible, p.FormatMajorVersion())
 
 	// The earliest supported Cockroach version advances the pebble version.
 	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V21_2))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatSetWithDelete, p.FormatMajorVersion())
 
 	// Setting the same min version twice is okay.
 	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.V21_2))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatSetWithDelete, p.FormatMajorVersion())
 
 	// Advancing the store cluster version to another cluster version
 	// that does not advance the Pebble format major version should
 	// leave the format major version unchanged.
 	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.ValidateGrantOption))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatSetWithDelete, p.db.FormatMajorVersion())
+	require.Equal(t, pebble.FormatSetWithDelete, p.FormatMajorVersion())
 
 	// Advancing the store cluster version to PebbleFormatBlockPropertyCollector
 	// should also advance the store's format major version.
 	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector))
 	require.NoError(t, err)
-	require.Equal(t, pebble.FormatBlockPropertyCollector, p.db.FormatMajorVersion())
-
+	require.Equal(t, pebble.FormatBlockPropertyCollector, p.FormatMajorVersion())
 }
 
 func TestMinVersion_IsNotEncrypted(t *testing.T) {
@@ -218,4 +218,72 @@ func (f fauxEncryptedFile) ReadAt(p []byte, off int64) (int, error) {
 		p[i] = p[i] - 1
 	}
 	return n, err
+}
+
+func TestWaitForCompatibleEngineVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	p, err := Open(context.Background(), InMemory(), CacheSize(0))
+	require.NoError(t, err)
+	defer p.Close()
+
+	const timeout = 5 * time.Second
+	setAndWait := func(ctx context.Context, vers roachpb.Version) (err error) {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+
+		errSet, errWait := make(chan error), make(chan error)
+		go func() {
+			errSet <- p.SetMinVersion(vers)
+		}()
+		go func() {
+			errWait <- p.WaitForCompatibleEngineVersion(ctx, vers)
+		}()
+
+		// First wait for the set version operation to complete ...
+		if err = <-errSet; err != nil {
+			return err
+		}
+
+		// ... then wait for the version to ratchet.
+		select {
+		case <-ctx.Done():
+			err = ctx.Err()
+		case err = <-errWait:
+		}
+
+		return
+	}
+
+	ctx := context.Background()
+
+	// The DB starts in the most compatible state.
+	require.Equal(t, pebble.FormatMostCompatible, p.FormatMajorVersion())
+
+	// Waiting for a newer engine version (without telling the store to update) is
+	// expected to time out.
+	ctx1, cancel := context.WithTimeout(ctx, timeout)
+	err = p.WaitForCompatibleEngineVersion(ctx1, clusterversion.ByKey(clusterversion.V21_2))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "could not set desired engine version")
+	cancel()
+
+	// Upgrade the DB to a cluster version with corresponding engine version for
+	// v21_2 (i.e. v4, SetWithDelete).
+	err = setAndWait(ctx, clusterversion.ByKey(clusterversion.V21_2))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatSetWithDelete, p.FormatMajorVersion())
+
+	// Upgrade the DB to a cluster version that requires a more recent Pebble
+	// engine version (i.e. block property collectors).
+	err = setAndWait(ctx, clusterversion.ByKey(clusterversion.PebbleFormatVersionBlockProperties))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatBlockPropertyCollector, p.FormatMajorVersion())
+
+	// Waiting for older store version is a no-op - the engine version is already
+	// at least at the corresponding minimum version.
+	err = setAndWait(ctx, clusterversion.ByKey(clusterversion.V21_2))
+	require.NoError(t, err)
+	require.Equal(t, pebble.FormatBlockPropertyCollector, p.FormatMajorVersion())
 }

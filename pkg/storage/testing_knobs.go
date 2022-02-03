@@ -10,6 +10,10 @@
 
 package storage
 
+import "github.com/cockroachdb/pebble"
+
 // TestingKnobs can be passed when instantiating a storage engine. Settings here
 // are used to change behavior in tests.
-type TestingKnobs struct{}
+type TestingKnobs struct {
+	FormatMajorVersion pebble.FormatMajorVersion
+}

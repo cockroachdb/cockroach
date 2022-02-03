@@ -70,6 +70,16 @@ message WaitForSpanConfigSubscriptionRequest{}
 // WaitForSpanConfigSubscriptionRequest.
 message WaitForSpanConfigSubscriptionResponse{}
 
+// WaitForEngineVersionRequest waits until the target node has an engine format
+// major version compatible with the given cluster version.
+message WaitForEngineVersionRequest{
+  roachpb.Version version = 1;
+}
+
+// WaitForEngineVersionResponse is the response to a
+// WaitForEngineVersionRequest.
+message WaitForEngineVersionResponse{}
+
 service Migration {
    // ValidateTargetClusterVersion is used to verify that the target node is
    // running a binary that's able to support the specified cluster version.
@@ -102,4 +112,8 @@ service Migration {
    // WaitForSpanConfigSubscription waits until the target node is wholly
    // subscribed to the global span configurations state.
    rpc WaitForSpanConfigSubscription (WaitForSpanConfigSubscriptionRequest) returns (WaitForSpanConfigSubscriptionResponse) { }
+
+  // WaitForEngineVersionRequest waits until the target node has an engine
+  // format major version compatible with a given cluster version.
+   rpc WaitForEngineVersion (WaitForEngineVersionRequest) returns (WaitForEngineVersionResponse) { }
 }

@@ -109,6 +109,11 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		runRemoveInvalidDatabasePrivileges,
 	),
+	migration.NewSystemMigration(
+		"update engine table format to support block property collectors and filters",
+		toCV(clusterversion.PebbleFormatVersionBlockProperties),
+		ensureEngineVersionAtLeast,
+	),
 }
 
 func init() {

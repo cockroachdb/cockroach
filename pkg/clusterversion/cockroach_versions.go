@@ -257,6 +257,13 @@ const (
 	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
 	// databases do not have incompatible privileges
 	RemoveIncompatibleDatabasePrivileges
+	// PebbleFormatVersionBlockProperties enables a new Pebble SSTable format
+	// version for block property collectors.
+	// NB: a cluster version (PebbleFormatBlockPropertyCollector) was previously
+	// introduced for this change, however, it enabled the feature on an
+	// incompatible SSTable format version. This newer cluster version supersedes
+	// it.
+	PebbleFormatVersionBlockProperties
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -400,7 +407,10 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
-
+	{
+		Key:     PebbleFormatVersionBlockProperties,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
