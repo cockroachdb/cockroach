@@ -14,8 +14,11 @@ interface IconProps {
   className: string;
 }
 
-export const CircleFilled = ({ className, ...props }: IconProps) => (
-  <svg viewBox="0 0 12 12" className={className} {...props}>
-    <circle cx="6" cy="6" r="6" fillRule="evenodd" />
-  </svg>
-);
+export function CircleFilled(props: IconProps) {
+  const { className } = props;
+  return (
+    <svg className={className} {...props}>
+      <circle cx="5" cy="5" r="5" />
+    </svg>
+  );
+}

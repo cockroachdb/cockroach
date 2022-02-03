@@ -11,13 +11,12 @@
 import classNames from "classnames/bind";
 
 import styles from "./sessionsTable.module.scss";
-import { SessionTableTitle } from "./sessionsTableContent";
 import { TimestampToMoment } from "src/util/convert";
-import { BytesWithPrecision, DATE_FORMAT } from "src/util/format";
+import { BytesWithPrecision } from "src/util/format";
 import { Link } from "react-router-dom";
 import React from "react";
 
-import { Moment } from "moment";
+import moment from "moment";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 type ISession = cockroach.server.serverpb.Session;
@@ -26,8 +25,8 @@ import { TerminateSessionModalRef } from "./terminateSessionModal";
 import { TerminateQueryModalRef } from "./terminateQueryModal";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable/sortedtable";
 
-import { Icon } from "antd";
-import { Ellipsis } from "@cockroachlabs/icons";
+import { Icon } from "@cockroachlabs/ui-components";
+import { CircleFilled } from "src/icon/circleFilled";
 
 import {
   Dropdown,
@@ -36,6 +35,11 @@ import {
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { computeOrUseStmtSummary } from "../util";
+import { StatementLinkTarget } from "../statementsTable";
+import {
+  statisticsTableTitles,
+  StatisticType,
+} from "../statsTableUtil/statsTableUtil";
 
 const cx = classNames.bind(styles);
 
@@ -61,37 +65,14 @@ const SessionLink = (props: { session: ISession; onClick?: () => void }) => {
   const { session, onClick } = props;
 
   const base = `/session`;
-  const start = TimestampToMoment(session.start);
   const sessionID = byteArrayToUuid(session.id);
 
   return (
     <div className={cx("sessionLink")}>
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={<>Session started at {start.format(DATE_FORMAT)}</>}
-      >
-        <Link onClick={onClick} to={`${base}/${encodeURIComponent(sessionID)}`}>
-          <div>{start.fromNow(true)}</div>
-        </Link>
-      </Tooltip>
+      <Link onClick={onClick} to={`${base}/${encodeURIComponent(sessionID)}`}>
+        <div>{formatSessionStart(session)}</div>
+      </Link>
     </div>
-  );
-};
-
-const AgeLabel = (props: { start: Moment; thingName: string }) => {
-  return (
-    <Tooltip
-      placement="bottom"
-      style="tableTitle"
-      content={
-        <>
-          {props.thingName} started at {props.start.format(DATE_FORMAT)}
-        </>
-      }
-    >
-      {props.start.fromNow(true)}
-    </Tooltip>
   );
 };
 
@@ -99,21 +80,67 @@ const StatementTableCell = (props: { session: ISession }) => {
   const { session } = props;
 
   if (!(session.active_queries?.length > 0)) {
+    if (session.last_active_query == "") {
+      return <div>{"N/A"}</div>;
+    }
+    return <div>{session.last_active_query}</div>;
+  }
+  const stmt = session.active_queries[0];
+  const sql = stmt.sql;
+  const stmtSummary = session.active_queries[0].sql_summary;
+  const stmtCellText = computeOrUseStmtSummary(sql, stmtSummary);
+  return (
+    <Link
+      to={StatementLinkTarget({
+        statementFingerprintID: stmt.id,
+        statementNoConstants: stmt.sql_no_constants,
+        implicitTxn: session.active_txn?.implicit,
+        app: session.application_name,
+      })}
+    >
+      <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
+        <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
+      </Tooltip>
+    </Link>
+  );
+};
+
+function formatSessionStart(session: ISession): string {
+  const formatStr = "MMM DD, YYYY [at] h:mm A";
+  const start = moment.unix(Number(session.start.seconds)).utc();
+
+  return start.format(formatStr);
+}
+
+function formatStatementStart(session: ISession): string {
+  if (session.active_queries.length == 0) {
     return "N/A";
   }
-  const stmt = session.active_queries[0].sql;
-  const stmtSummary = session.active_queries[0].sql_summary;
-  const stmtCellText = computeOrUseStmtSummary(stmt, stmtSummary);
+  const formatStr = "MMM DD, YYYY [at] h:mm A";
+  const start = moment
+    .unix(Number(session.active_queries[0].start.seconds))
+    .utc();
+
+  return start.format(formatStr);
+}
+
+const SessionStatus = (props: { session: ISession }) => {
+  const { session } = props;
+  const status = session.active_queries.length > 0 ? "Active" : "Idle";
+  const classname =
+    session.active_queries.length > 0
+      ? "session-status-icon__active"
+      : "session-status-icon__idle";
   return (
     <div>
-      <Tooltip placement="bottom" style="tableTitle" content={<>{stmt}</>}>
-        {stmtCellText}
-      </Tooltip>
+      <CircleFilled className={cx(classname)} />
+      <span>{status}</span>
     </div>
   );
 };
 
 export function makeSessionsColumns(
+  statType: StatisticType,
   terminateSessionRef?: React.RefObject<TerminateSessionModalRef>,
   terminateQueryRef?: React.RefObject<TerminateQueryModalRef>,
   onSessionClick?: () => void,
@@ -122,51 +149,48 @@ export function makeSessionsColumns(
 ): ColumnDescriptor<SessionInfo>[] {
   const columns: ColumnDescriptor<SessionInfo>[] = [
     {
-      name: "sessionAge",
-      title: SessionTableTitle.sessionAge,
+      name: "sessionStart",
+      title: statisticsTableTitles.sessionStart(statType),
       className: cx("cl-table__col-session"),
       cell: session =>
         SessionLink({ session: session.session, onClick: onSessionClick }),
+      sort: session => session.session.start.seconds,
+      alwaysShow: true,
+    },
+    {
+      name: "sessionDuration",
+      title: statisticsTableTitles.sessionDuration(statType),
+      className: cx("cl-table__col-session"),
+      cell: session => TimestampToMoment(session.session.start).fromNow(true),
       sort: session => TimestampToMoment(session.session.start).valueOf(),
     },
     {
-      name: "txnAge",
-      title: SessionTableTitle.txnAge,
+      name: "status",
+      title: statisticsTableTitles.status(statType),
       className: cx("cl-table__col-session"),
-      cell: function(session: SessionInfo) {
-        if (session.session.active_txn) {
-          return AgeLabel({
-            start: TimestampToMoment(session.session.active_txn.start),
-            thingName: "Transaction",
-          });
-        }
-        return "N/A";
-      },
-      sort: session => session.session.active_txn?.start.seconds || 0,
+      cell: session => SessionStatus(session),
+      sort: session => session.session.active_queries.length,
     },
     {
-      name: "statementAge",
-      title: SessionTableTitle.statementAge,
+      name: "mostRecentStatement",
+      title: statisticsTableTitles.mostRecentStatement(statType),
+      className: cx("cl-table__col-query-text"),
+      cell: session => StatementTableCell(session),
+      sort: session => session.session.last_active_query,
+    },
+    {
+      name: "statementStartTime",
+      title: statisticsTableTitles.statementStartTime(statType),
       className: cx("cl-table__col-session"),
-      cell: function(session: SessionInfo) {
-        if (session.session.active_queries?.length > 0) {
-          return AgeLabel({
-            start: TimestampToMoment(session.session.active_queries[0].start),
-            thingName: "Statement",
-          });
-        }
-        return "N/A";
-      },
-      sort: function(session: SessionInfo): number {
-        if (session.session.active_queries?.length > 0) {
-          return session.session.active_queries[0].start.seconds.toNumber();
-        }
-        return 0;
-      },
+      cell: session => formatStatementStart(session.session),
+      sort: session =>
+        session.session.active_queries.length > 0
+          ? session.session.active_queries[0].start.seconds
+          : 0,
     },
     {
       name: "memUsage",
-      title: SessionTableTitle.memUsage,
+      title: statisticsTableTitles.memUsage(statType),
       className: cx("cl-table__col-session"),
       cell: session =>
         BytesWithPrecision(session.session.alloc_bytes?.toNumber(), 0) +
@@ -175,14 +199,29 @@ export function makeSessionsColumns(
       sort: session => session.session.alloc_bytes?.toNumber(),
     },
     {
-      name: "statement",
-      title: SessionTableTitle.statement,
-      className: cx("cl-table__col-session", "code"),
-      cell: session => StatementTableCell({ session: session.session }),
+      name: "clientAddress",
+      title: statisticsTableTitles.clientAddress(statType),
+      className: cx("cl-table__col-session"),
+      cell: session => session.session.client_address,
+      sort: session => session.session.client_address,
+    },
+    {
+      name: "username",
+      title: statisticsTableTitles.username(statType),
+      className: cx("cl-table__col-session"),
+      cell: session => session.session.username,
+      sort: session => session.session.username,
+    },
+    {
+      name: "applicationName",
+      title: statisticsTableTitles.applicationName(statType),
+      className: cx("cl-table__col-session"),
+      cell: session => session.session.application_name,
+      sort: session => session.session.application_name,
     },
     {
       name: "actions",
-      title: SessionTableTitle.actions,
+      title: statisticsTableTitles.actions(statType),
       className: cx("cl-table__col-session-actions"),
       titleAlign: "right",
       cell: ({ session }) => {
@@ -226,7 +265,11 @@ export function makeSessionsColumns(
         const renderDropdownToggleButton: JSX.Element = (
           <>
             <Button type="secondary" size="small">
-              <Icon component={Ellipsis} />
+              <Icon
+                iconName="Ellipsis"
+                className="cluster-row__status-icon"
+                color="warning-color"
+              />
             </Button>
           </>
         );
@@ -241,6 +284,7 @@ export function makeSessionsColumns(
           />
         );
       },
+      alwaysShow: true,
     },
   ];
 

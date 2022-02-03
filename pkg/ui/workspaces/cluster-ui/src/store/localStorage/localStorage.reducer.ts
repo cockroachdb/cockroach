@@ -23,12 +23,14 @@ export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
+  "showColumns/SessionsPage": string;
   "timeScale/SQLActivity": TimeScale;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
   "sortSetting/SessionsPage": SortSetting;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
+  "filters/SessionsPage": Filters;
   "search/StatementsPage": string;
   "search/TransactionsPage": string;
 };
@@ -57,6 +59,8 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
   "showColumns/TransactionPage":
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
+  "showColumns/SessionsPage":
+    JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
   "timeScale/SQLActivity":
     JSON.parse(localStorage.getItem("timeScale/SQLActivity")) ||
     defaultTimeScaleSelected,
@@ -75,6 +79,8 @@ const initialState: LocalStorageState = {
   "filters/TransactionsPage":
     JSON.parse(localStorage.getItem("filters/TransactionsPage")) ||
     defaultFilters,
+  "filters/SessionsPage":
+    JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
   "search/StatementsPage":
     JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
   "search/TransactionsPage":
