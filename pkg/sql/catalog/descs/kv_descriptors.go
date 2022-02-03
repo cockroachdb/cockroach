@@ -166,12 +166,12 @@ func (kd *kvDescriptors) getByName(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-) (desc catalog.MutableDescriptor, err error) {
+) (catalog.MutableDescriptor, error) {
 	descID, err := kd.lookupName(ctx, txn, maybeDB, parentID, parentSchemaID, name)
 	if err != nil || descID == descpb.InvalidID {
 		return nil, err
 	}
-	desc, err = kd.getByID(ctx, txn, descID)
+	descs, err := kd.getByIDs(ctx, txn, []descpb.ID{descID})
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// Having done the namespace lookup, the descriptor must exist.
@@ -179,7 +179,7 @@ func (kd *kvDescriptors) getByName(
 		}
 		return nil, err
 	}
-	if desc.GetName() != name {
+	if descs[0].GetName() != name {
 		// Immediately after a RENAME an old name still points to the descriptor
 		// during the drain phase for the name. Do not return a descriptor during
 		// draining.
@@ -190,31 +190,44 @@ func (kd *kvDescriptors) getByName(
 		// uncommitted namespace operations.
 		return nil, nil
 	}
-	return desc, nil
+	return descs[0], nil
 }
 
-// getByID actually reads a descriptor from the storage layer.
-func (kd *kvDescriptors) getByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) (_ catalog.MutableDescriptor, _ error) {
-	if id == keys.SystemDatabaseID {
-		// Special handling for the system database descriptor.
-		//
-		// This is done for performance reasons, to save ourselves an unnecessary
-		// round trip to storage which otherwise quickly compounds.
-		//
-		// The system database descriptor should never actually be mutated, which is
-		// why we return the same hard-coded descriptor every time. It's assumed
-		// that callers of this method will check the privileges on the descriptor
-		// (like any other database) and return an error.
-		return dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildExistingMutable(), nil
+// getByIDs actually reads a batch of descriptors from the storage layer.
+func (kd *kvDescriptors) getByIDs(
+	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
+) ([]catalog.MutableDescriptor, error) {
+	ret := make([]catalog.MutableDescriptor, len(ids))
+	kvIDs := make([]descpb.ID, 0, len(ids))
+	indexes := make([]int, 0, len(ids))
+	for i, id := range ids {
+		if id == keys.SystemDatabaseID {
+			// Special handling for the system database descriptor.
+			//
+			// This is done for performance reasons, to save ourselves an unnecessary
+			// round trip to storage which otherwise quickly compounds.
+			//
+			// The system database descriptor should never actually be mutated, which is
+			// why we return the same hard-coded descriptor every time. It's assumed
+			// that callers of this method will check the privileges on the descriptor
+			// (like any other database) and return an error.
+			ret[i] = dbdesc.NewBuilder(systemschema.SystemDB.DatabaseDesc()).BuildExistingMutable()
+		} else {
+			kvIDs = append(kvIDs, id)
+			indexes = append(indexes, i)
+		}
 	}
-
-	imm, err := catkv.MustGetDescriptorByID(ctx, txn, kd.codec, id, catalog.Any)
+	if len(kvIDs) == 0 {
+		return ret, nil
+	}
+	kvDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, kvIDs, catalog.Any)
 	if err != nil {
 		return nil, err
 	}
-	return imm.NewBuilder().BuildExistingMutable(), err
+	for j, desc := range kvDescs {
+		ret[indexes[j]] = desc.NewBuilder().BuildExistingMutable()
+	}
+	return ret, nil
 }
 
 func (kd *kvDescriptors) getAllDescriptors(
