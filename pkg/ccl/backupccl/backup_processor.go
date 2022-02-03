@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -84,11 +85,17 @@ var (
 		128<<20,
 	).WithPublic()
 
+	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
+		"backup-merge-file-buffer-size",
+		128<<20, /* defaultValue */
+		1<<20,   /* metamorphic min */
+		16<<20,  /* metamorphic max */
+	)
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
-		16<<20,
+		int64(defaultSmallFileBuffer),
 		settings.NonNegativeInt,
 	)
 
@@ -582,7 +589,10 @@ type sstSink struct {
 	dest cloud.ExternalStorage
 	conf sstSinkConf
 
-	queue     []returnedSST
+	queue []returnedSST
+	// queueCap is the maximum byte size that the queue can grow to.
+	queueCap int64
+	// queueSize is the current byte size of the queue.
 	queueSize int
 
 	sst     storage.SSTWriter
@@ -616,12 +626,33 @@ func makeSSTSink(
 	s := &sstSink{conf: conf, dest: dest}
 	s.memAcc.ba = backupMem
 
-	// Reserve memory for the file buffer.
-	bufSize := smallFileBuffer.Get(s.conf.settings)
-	if err := s.memAcc.ba.Grow(ctx, bufSize); err != nil {
-		return nil, errors.Wrap(err, "failed to reserve memory for sstSink queue")
+	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
+	// upto a maximum of the `smallFileBuffer` cluster setting value. If we fail
+	// to grow the bound account at any stage, use the buffer size we arrived at
+	// prior to the error.
+	incrementSize := int64(32 << 20)
+	maxSize := smallFileBuffer.Get(s.conf.settings)
+	log.Infof(ctx, "this is the max size we are using %d", (maxSize / (1024 * 1024)))
+	for {
+		if s.queueCap >= maxSize {
+			break
+		}
+
+		if incrementSize > maxSize-s.queueCap {
+			incrementSize = maxSize - s.queueCap
+		}
+
+		if err := s.memAcc.ba.Grow(ctx, incrementSize); err != nil {
+			log.Infof(ctx, "failed to grow file queue by %d bytes, running backup with queue size %d bytes: %+v", incrementSize, s.queueCap, err)
+			break
+		}
+		s.queueCap += incrementSize
 	}
-	s.memAcc.reservedBytes += bufSize
+	if s.queueCap == 0 {
+		return nil, errors.New("failed to reserve memory for sstSink queue")
+	}
+
+	s.memAcc.reservedBytes += s.queueCap
 	return s, nil
 }
 
@@ -653,7 +684,7 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 	s.queue = append(s.queue, resp)
 	s.queueSize += len(resp.sst)
 
-	if s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
+	if s.queueSize >= int(s.queueCap) {
 		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
 
 		// Drain the first half.
