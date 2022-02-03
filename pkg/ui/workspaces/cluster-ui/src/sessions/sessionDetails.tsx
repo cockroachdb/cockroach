@@ -50,6 +50,7 @@ import statementsPageStyles from "src/statementsPage/statementsPage.module.scss"
 import styles from "./sessionDetails.module.scss";
 import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
+import { CircleFilled } from "../icon";
 
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
@@ -279,18 +280,18 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
           <Col className="gutter-row" span={4} />
           <Col className="gutter-row" span={10}>
             <SummaryCardItem
-              label={"Priority"}
-              value={txn.priority}
-              className={cx("details-item")}
-            />
-            <SummaryCardItem
-              label={"Read Only?"}
+              label={"Read Only"}
               value={yesOrNo(txn.read_only)}
               className={cx("details-item")}
             />
             <SummaryCardItem
               label={"AS OF SYSTEM TIME?"}
               value={yesOrNo(txn.is_historical)}
+              className={cx("details-item")}
+            />
+            <SummaryCardItem
+              label={"Priority"}
+              value={txn.priority}
               className={cx("details-item")}
             />
             <MemoryUsageItem
@@ -374,17 +375,45 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                   className={cx("details-item")}
                 />
               )}
+              <SummaryCardItem
+                label={"Application name"}
+                value={session.application_name}
+                className={cx("details-item")}
+              />
+              <SummaryCardItem
+                label={"Status"}
+                value={
+                  <div>
+                    <CircleFilled
+                      className={cx(
+                        session.active_queries.length > 0
+                          ? "session-status-icon__active"
+                          : "session-status-icon__idle",
+                      )}
+                    />
+                    <span>
+                      {session.active_queries.length > 0 ? "Active" : "Idle"}
+                    </span>
+                  </div>
+                }
+                className={cx("details-item")}
+              />
             </Col>
             <Col className="gutter-row" span={4} />
             <Col className="gutter-row" span={10}>
               <SummaryCardItem
-                label={"Client Address"}
+                label={"Client IP Address"}
                 value={session.client_address}
                 className={cx("details-item")}
               />
               <MemoryUsageItem
                 alloc_bytes={session.alloc_bytes}
                 max_alloc_bytes={session.max_alloc_bytes}
+              />
+              <SummaryCardItem
+                label={"User name"}
+                value={session.username}
+                className={cx("details-item")}
               />
             </Col>
           </Row>
