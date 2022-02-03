@@ -1805,24 +1805,41 @@ func insertStats(
 		return nil
 	}
 
-	if latestStats == nil {
-		return nil
-	}
+	// We could be restoring hundreds of tables, so insert the new stats in
+	// batches instead of all in a single, long-running txn. This prevents intent
+	// buildup in the face of txn retries.
+	batchSize := 10
+	for {
+		if len(latestStats) == 0 {
+			return nil
+		}
 
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, txn, latestStats); err != nil {
-			return errors.Wrapf(err, "inserting stats from backup")
+		if len(latestStats) < batchSize {
+			batchSize = len(latestStats)
 		}
-		details.StatsInserted = true
-		if err := job.SetDetails(ctx, txn, details); err != nil {
-			return errors.Wrapf(err, "updating job marking stats insertion complete")
+
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, txn,
+				latestStats[:batchSize]); err != nil {
+				return errors.Wrapf(err, "inserting stats from backup")
+			}
+
+			// If this is the last batch, mark the stats insertion complete.
+			if batchSize == len(latestStats) {
+				details.StatsInserted = true
+				if err := job.SetDetails(ctx, txn, details); err != nil {
+					return errors.Wrapf(err, "updating job marking stats insertion complete")
+				}
+			}
+
+			return nil
+		}); err != nil {
+			return err
 		}
-		return nil
-	})
-	if err != nil {
-		return err
+
+		// Truncate the stats that we have inserted in the txn above.
+		latestStats = latestStats[batchSize:]
 	}
-	return nil
 }
 
 // publishDescriptors updates the RESTORED descriptors' status from OFFLINE to
