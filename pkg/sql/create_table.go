@@ -1143,6 +1143,10 @@ func newTableDescIfAs(
 	privileges *descpb.PrivilegeDescriptor,
 	evalContext *tree.EvalContext,
 ) (desc *tabledesc.Mutable, err error) {
+	if err := validateUniqueConstraintParamsForCreateTableAs(p); err != nil {
+		return nil, err
+	}
+
 	colResIndex := 0
 	// TableDefs for a CREATE TABLE ... AS AST node comprise of a ColumnTableDef
 	// for each column, and a ConstraintTableDef for any constraints on those
@@ -2233,6 +2237,10 @@ func newTableDesc(
 	privileges *descpb.PrivilegeDescriptor,
 	affected map[descpb.ID]*tabledesc.Mutable,
 ) (ret *tabledesc.Mutable, err error) {
+	if err := validateUniqueConstraintParamsForCreateTable(n); err != nil {
+		return nil, err
+	}
+
 	newDefs, err := replaceLikeTableOpts(n, params)
 	if err != nil {
 		return nil, err
@@ -2675,5 +2683,43 @@ func setSequenceOwner(
 	seqDesc.SequenceOpts.SequenceOwner.OwnerTableID = table.ID
 	seqDesc.SequenceOpts.SequenceOwner.OwnerColumnID = col.GetID()
 
+	return nil
+}
+
+// validateUniqueConstraintParamsForCreateTable validate storage params of
+// unique constraints passed in through `CREATE TABLE` statement.
+func validateUniqueConstraintParamsForCreateTable(n *tree.CreateTable) error {
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *tree.ColumnTableDef:
+			if err := paramparse.ValidateUniqueConstraintParams(d.PrimaryKey.StorageParams, true /* isPK */); err != nil {
+				return err
+			}
+		case *tree.UniqueConstraintTableDef:
+			if err := paramparse.ValidateUniqueConstraintParams(d.IndexTableDef.StorageParams, d.PrimaryKey); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateUniqueConstraintParamsForCreateTableAs validate storage params of
+// unique constraints passed in through `CREATE TABLE...AS...` statement.
+func validateUniqueConstraintParamsForCreateTableAs(n *tree.CreateTable) error {
+	// TODO (issue 75896): enable storage parameters of primary key.
+	errMsg := "storage parameters are not supported on primary key for CREATE TABLE...AS... statement"
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *tree.ColumnTableDef:
+			if len(d.PrimaryKey.StorageParams) > 0 {
+				return pgerror.New(pgcode.FeatureNotSupported, errMsg)
+			}
+		case *tree.UniqueConstraintTableDef:
+			if d.PrimaryKey && len(d.StorageParams) > 0 {
+				return pgerror.New(pgcode.FeatureNotSupported, errMsg)
+			}
+		}
+	}
 	return nil
 }

@@ -718,3 +718,57 @@ table_id  name         state   refobjid
 
 statement ok
 DROP TABLE test_serial;
+
+subtest test_storage_params_validation
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) WITH (s2_max_level=20)
+);
+
+statement error pq: invalid storage param "s2_max_level" on Primary Key
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement ok
+CREATE TABLE t_source (
+  a INT PRIMARY KEY
+);
+
+statement error pq: storage parameters are not supported on primary key for CREATE TABLE...AS... statement
+CREATE TABLE t_bad_param (
+  a PRIMARY KEY WITH (s2_max_level=20)
+) AS SELECT * FROM t_source;
+
+statement error pq: storage parameters are not supported on primary key for CREATE TABLE...AS... statement
+CREATE TABLE t_bad_param (
+  a,
+  PRIMARY KEY (a) WITH (s2_max_level=20)
+) AS SELECT * FROM t_source;
+
+
