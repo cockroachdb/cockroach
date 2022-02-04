@@ -683,7 +683,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:                st,
 		HistogramWindowInterval: cfg.HistogramWindowInterval(),
 	})
-	registry.AddMetricStruct(kvProber.Metrics())
+	for _, metrics := range kvProber.Metrics() {
+		registry.AddMetricStruct(metrics)
+	}
 
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{

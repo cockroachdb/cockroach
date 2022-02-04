@@ -275,3 +275,15 @@ func meta2KVsToPlanImpl(kvs []kv.KeyValue) ([]Step, error) {
 
 	return plans, nil
 }
+
+type problemTrackerPlanner struct {
+	tracker *problemTracker
+}
+
+func newProblemTrackerPlanner(tracker *problemTracker) *problemTrackerPlanner {
+	return &problemTrackerPlanner{tracker: tracker}
+}
+
+func (p *problemTrackerPlanner) next(ctx context.Context) (Step, error) {
+	return p.tracker.next()
+}
