@@ -62,7 +62,7 @@ func TestIndexInterface(t *testing.T) {
 			INDEX s1 (c4 DESC, c5 DESC),
 			INVERTED INDEX s2 (c6),
 			INDEX s3 (c2, c3) STORING (c5, c6),
-			INDEX s4 (c5) USING HASH WITH BUCKET_COUNT=8,
+			INDEX s4 (c5) USING HASH WITH (bucket_count=8),
 			UNIQUE INDEX s5 (c1, c4) WHERE c4 = 'x',
 			INVERTED INDEX s6 (c7) WITH (s2_level_mod=2)
 		);

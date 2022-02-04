@@ -715,8 +715,17 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		if node.PrimaryKey.IsPrimaryKey {
 			ctx.WriteString(" PRIMARY KEY")
 			if node.PrimaryKey.Sharded {
-				ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
-				ctx.FormatNode(node.PrimaryKey.ShardBuckets)
+				if _, ok := node.PrimaryKey.ShardBuckets.(DefaultVal); ok {
+					ctx.WriteString(" USING HASH")
+				} else {
+					ctx.WriteString(" USING HASH WITH BUCKET_COUNT=")
+					ctx.FormatNode(node.PrimaryKey.ShardBuckets)
+				}
+			}
+			if len(node.PrimaryKey.StorageParams) > 0 {
+				ctx.WriteString(" WITH (")
+				ctx.FormatNode(&node.PrimaryKey.StorageParams)
+				ctx.WriteString(")")
 			}
 		} else if node.Unique.IsUnique {
 			ctx.WriteString(" UNIQUE")
@@ -1234,6 +1243,10 @@ type ShardedIndexDef struct {
 
 // Format implements the NodeFormatter interface.
 func (node *ShardedIndexDef) Format(ctx *FmtCtx) {
+	if _, ok := node.ShardBuckets.(DefaultVal); ok {
+		ctx.WriteString(" USING HASH")
+		return
+	}
 	ctx.WriteString(" USING HASH WITH BUCKET_COUNT = ")
 	ctx.FormatNode(node.ShardBuckets)
 }

@@ -193,7 +193,7 @@ CREATE TABLE t (
   UNIQUE INDEX i4 (z), -- will be rewritten.
   UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
   INVERTED INDEX i6 (v), -- will be rewritten.
-  INDEX i7 (z) USING HASH WITH BUCKET_COUNT = 4, -- will be rewritten.
+  INDEX i7 (z) USING HASH WITH (bucket_count=4), -- will be rewritten.
   FAMILY (x, y, z, w, v)
 );
 INSERT INTO t VALUES (1, 2, 3, 4, '{}');
@@ -217,7 +217,7 @@ t  CREATE TABLE public.t (
    UNIQUE INDEX i4 (z ASC),
    UNIQUE INDEX i5 (w ASC) STORING (y),
    INVERTED INDEX i6 (v),
-   INDEX i7 (z ASC) USING HASH WITH BUCKET_COUNT = 4,
+   INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
    FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
 )
 
@@ -349,11 +349,11 @@ CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
   z INT,
-  INDEX i1 (z) USING HASH WITH BUCKET_COUNT = 5,
+  INDEX i1 (z) USING HASH WITH (bucket_count=5),
   FAMILY (x, y, z)
 );
 INSERT INTO t VALUES (1, 2, 3);
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT = 10
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=10)
 
 query TT
 SHOW CREATE t
@@ -364,9 +364,9 @@ t  CREATE TABLE public.t (
    z INT8 NULL,
    crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
    crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
    UNIQUE INDEX t_x_key (x ASC),
-   INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
+   INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
    FAMILY fam_0_x_y_z (x, y, z)
 )
 
@@ -406,7 +406,7 @@ SELECT * FROM t@i1
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (
-  x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=5,
+  x INT PRIMARY KEY USING HASH WITH (bucket_count=5),
   y INT NOT NULL,
   z INT,
   INDEX i (z),
@@ -424,7 +424,7 @@ t  CREATE TABLE public.t (
    y INT8 NOT NULL,
    z INT8 NULL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
    INDEX i (z ASC),
    FAMILY fam_0_x_y_z (x, y, z)
 )
@@ -542,7 +542,7 @@ t  CREATE TABLE public.t (
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT NOT NULL);
-ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH BUCKET_COUNT=4
+ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
 query TT
 SHOW CREATE t
@@ -551,7 +551,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4),
    FAMILY "primary" (x, rowid)
 )
 
@@ -934,8 +934,8 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 # count shouldn't cause the old primary key to be copied.
 statement ok
 DROP TABLE IF EXISTS t CASCADE;
-CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2);
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH BUCKET_COUNT=3
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
 query TT
 SHOW CREATE t
@@ -944,7 +944,7 @@ t  CREATE TABLE public.t (
    crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3),
    FAMILY "primary" (x)
 )
 
@@ -952,8 +952,8 @@ t  CREATE TABLE public.t (
 # primary key to be copied.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2, y INT NOT NULL, FAMILY (x, y));
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT=2
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2), y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=2)
 
 query TT
 SHOW CREATE t
@@ -963,8 +963,8 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
    FAMILY fam_0_x_y (x, y)
 )
 
@@ -1096,7 +1096,7 @@ t1_id_id2_key  id2    ASC
 t1_id_key      id     ASC
 
 statement ok
-alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
+alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
 
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
@@ -1149,7 +1149,7 @@ SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 t_pkey  i  ASC
 
 statement ok
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH BUCKET_COUNT = 2
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH (bucket_count=2)
 
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
@@ -1385,8 +1385,9 @@ ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (bucket_count=
 statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5);
 
+# Make sure old BUCKET_COUNT syntax still works
 statement ok
-ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (bucket_count=5);
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
 
 query T
 SELECT @2 FROM [SHOW CREATE TABLE t_test_param]
@@ -1395,7 +1396,7 @@ CREATE TABLE public.t_test_param (
    a INT8 NOT NULL,
    b INT8 NOT NULL,
    crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
-   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH BUCKET_COUNT = 5,
+   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
    UNIQUE INDEX t_test_param_a_key (a ASC),
    FAMILY fam_0_a_b (a, b)
 )

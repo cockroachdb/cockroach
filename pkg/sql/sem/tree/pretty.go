@@ -1579,8 +1579,11 @@ func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
 func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// USING HASH WITH BUCKET_COUNT = bucket_count
+	// USING HASH [WITH BUCKET_COUNT = bucket_count]
 	//
+	if _, ok := node.ShardBuckets.(DefaultVal); ok {
+		return pretty.Keyword("USING HASH")
+	}
 	parts := []pretty.Doc{
 		pretty.Keyword("USING HASH WITH BUCKET_COUNT = "),
 		p.Doc(node.ShardBuckets),
@@ -1957,8 +1960,19 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	}
 
 	if node.PrimaryKey.Sharded {
-		clauses = append(clauses, pretty.Keyword("USING HASH WITH BUCKET_COUNT = "))
-		clauses = append(clauses, p.Doc(node.PrimaryKey.ShardBuckets))
+		if _, ok := node.PrimaryKey.ShardBuckets.(DefaultVal); ok {
+			clauses = append(clauses, pretty.Keyword("USING HASH"))
+		} else {
+			clauses = append(clauses, pretty.Keyword("USING HASH WITH BUCKET_COUNT = "))
+			clauses = append(clauses, p.Doc(node.PrimaryKey.ShardBuckets))
+		}
+		if len(node.PrimaryKey.StorageParams) > 0 {
+			clauses = append(clauses, p.bracketKeyword(
+				"WITH", " (",
+				p.Doc(&node.PrimaryKey.StorageParams),
+				")", "",
+			))
+		}
 	}
 	// CHECK expressions/constraints.
 	for _, checkExpr := range node.CheckExprs {
