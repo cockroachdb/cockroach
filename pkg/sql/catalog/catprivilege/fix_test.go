@@ -31,8 +31,7 @@ func TestFixPrivileges(t *testing.T) {
 	// And create an entry for a fake system database.
 	systemDatabaseName := "system"
 	systemPrivs := privilege.List{
-		privilege.SELECT,
-		privilege.GRANT,
+		privilege.CONNECT,
 	}
 
 	type userPrivileges map[security.SQLUsername]privilege.List
@@ -65,17 +64,13 @@ func TestFixPrivileges(t *testing.T) {
 			userPrivileges{
 				security.RootUserName():  systemPrivs,
 				security.AdminRoleName(): systemPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 			false,
 			userPrivileges{
 				security.RootUserName():  systemPrivs,
 				security.AdminRoleName(): systemPrivs,
-				fooUser:                  privilege.List{privilege.SELECT},
-				barUser:                  privilege.List{privilege.GRANT},
-				bazUser:                  privilege.List{privilege.SELECT, privilege.GRANT},
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 		},
 		{
@@ -86,14 +81,14 @@ func TestFixPrivileges(t *testing.T) {
 				security.RootUserName():  privilege.List{privilege.ALL},
 				security.AdminRoleName(): privilege.List{privilege.ALL},
 				fooUser:                  privilege.List{privilege.ALL},
-				barUser:                  privilege.List{privilege.SELECT, privilege.UPDATE},
+				barUser:                  privilege.List{privilege.CONNECT, privilege.UPDATE},
 			},
 			true,
 			userPrivileges{
 				security.RootUserName():  systemPrivs,
 				security.AdminRoleName(): systemPrivs,
 				fooUser:                  privilege.List{},
-				barUser:                  privilege.List{privilege.SELECT},
+				barUser:                  privilege.List{privilege.CONNECT},
 			},
 		},
 		{

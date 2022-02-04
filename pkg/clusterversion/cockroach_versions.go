@@ -254,6 +254,9 @@ const (
 	// DeleteCommentsWithDroppedIndexes cleans up left over comments that belong
 	// to dropped indexes.
 	DeleteCommentsWithDroppedIndexes
+	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
+	// databases do not have incompatible privileges
+	RemoveIncompatibleDatabasePrivileges
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -393,6 +396,11 @@ var versionsSingleton = keyedVersions{
 		Key:     DeleteCommentsWithDroppedIndexes,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 52},
 	},
+	{
+		Key:     RemoveIncompatibleDatabasePrivileges,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
