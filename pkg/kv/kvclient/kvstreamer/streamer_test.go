@@ -38,10 +38,11 @@ import (
 func getStreamer(
 	ctx context.Context, s serverutils.TestServerInterface, limitBytes int64, acc *mon.BoundAccount,
 ) *Streamer {
+	rootTxn := kv.NewTxn(ctx, s.DB(), s.NodeID())
 	return NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
 		s.Stopper(),
-		kv.NewTxn(ctx, s.DB(), s.NodeID()),
+		kv.NewLeafTxn(ctx, s.DB(), s.NodeID(), rootTxn.GetLeafTxnInputState(ctx)),
 		cluster.MakeTestingClusterSettings(),
 		lock.WaitPolicy(0),
 		limitBytes,
@@ -421,4 +422,90 @@ func TestStreamerWideRows(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStreamerEmptyScans verifies that the Streamer behaves correctly when
+// Scan requests return empty responses.
+func TestStreamerEmptyScans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a cluster with large --max-sql-memory parameter so that the
+	// Streamer isn't hitting the root budget exceeded error.
+	const rootPoolSize = 1 << 30 /* 1GiB */
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: rootPoolSize,
+	})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// Create a dummy table for which we know the encoding of valid keys.
+	// Although not strictly necessary, we set up two column families since with
+	// a single family in production a Get request would have been used.
+	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob STRING, INDEX (k), FAMILY (pk, k), FAMILY (blob))")
+	require.NoError(t, err)
+
+	// Split the table into 5 ranges and populate the range cache.
+	for pk := 1; pk < 5; pk++ {
+		_, err = db.Exec(fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES(%d)", pk))
+		require.NoError(t, err)
+	}
+	_, err = db.Exec("SELECT count(*) from t")
+	require.NoError(t, err)
+
+	makeScanRequest := func(start, end int) roachpb.RequestUnion {
+		var res roachpb.RequestUnion
+		var scan roachpb.ScanRequest
+		var union roachpb.RequestUnion_Scan
+		makeKey := func(pk int) []byte {
+			return []byte{190, 137, byte(136 + pk)}
+		}
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		union.Scan = &scan
+		res.Value = &union
+		return res
+	}
+
+	getStreamer := func() *Streamer {
+		s := getStreamer(ctx, s, math.MaxInt64, nil /* acc */)
+		// There are two column families in the table.
+		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */)
+		return s
+	}
+
+	t.Run("scan single range", func(t *testing.T) {
+		streamer := getStreamer()
+		defer streamer.Close()
+
+		// Scan the row with pk=0.
+		reqs := make([]roachpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(0, 1)
+		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		results, err := streamer.GetResults(ctx)
+		require.NoError(t, err)
+		// We expect a single empty Scan response.
+		require.Equal(t, 1, len(results))
+	})
+
+	t.Run("scan multiple ranges", func(t *testing.T) {
+		streamer := getStreamer()
+		defer streamer.Close()
+
+		// Scan the rows with pk in range [1, 4).
+		reqs := make([]roachpb.RequestUnion, 1)
+		reqs[0] = makeScanRequest(1, 4)
+		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
+		// We expect an empty response for each range.
+		var numResults int
+		for {
+			results, err := streamer.GetResults(ctx)
+			require.NoError(t, err)
+			numResults += len(results)
+			if len(results) == 0 {
+				break
+			}
+		}
+		require.Equal(t, 3, numResults)
+	})
 }
