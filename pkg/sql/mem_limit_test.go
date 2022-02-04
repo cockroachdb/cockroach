@@ -175,10 +175,6 @@ func TestStreamerTightBudget(t *testing.T) {
 	_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
 	require.NoError(t, err)
 
-	// TODO(yuzefovich): remove this once the streamer is enabled by default.
-	_, err = db.Exec("SET CLUSTER SETTING sql.distsql.use_streamer.enabled = true;")
-	require.NoError(t, err)
-
 	// Perform an index join to read the blobs.
 	query := "EXPLAIN ANALYZE SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
 	maximumMemoryUsageRegex := regexp.MustCompile(`maximum memory usage: (\d+\.\d+) MiB`)
