@@ -73,6 +73,7 @@ func TestSampledStatsCollection(t *testing.T) {
 					},
 				))
 			require.NotNil(t, stats)
+			require.NotZero(t, stats.Key.PlanHash)
 			return stats
 		}
 
