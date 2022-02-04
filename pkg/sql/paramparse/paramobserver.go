@@ -303,6 +303,26 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_job_cron`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			str, err := DatumAsString(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLCronExpr(key, str); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.DeletionCron = str
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			// TODO(#75428): allow reset.
+			return unimplemented.NewWithIssue(75428, "not yet implemented")
+		},
+	},
 	`exclude_data_from_backup`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext,
 			evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
