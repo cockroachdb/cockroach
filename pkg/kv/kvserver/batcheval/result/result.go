@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -193,13 +194,29 @@ func coalesceBool(lhs *bool, rhs *bool) {
 func (p *Result) MergeAndDestroy(q Result) error {
 	if q.Replicated.State != nil {
 		if q.Replicated.State.RaftAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify RaftAppliedIndex")
 		}
 		if q.Replicated.State.LeaseAppliedIndex != 0 {
-			return errors.AssertionFailedf("must not specify RaftApplyIndex")
+			return errors.AssertionFailedf("must not specify LeaseAppliedIndex")
 		}
 		if p.Replicated.State == nil {
 			p.Replicated.State = &kvserverpb.ReplicaState{}
+		}
+		if q.Replicated.State.RaftAppliedIndexTerm != 0 {
+			if q.Replicated.State.RaftAppliedIndexTerm ==
+				stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration {
+				if p.Replicated.State.RaftAppliedIndexTerm != 0 &&
+					p.Replicated.State.RaftAppliedIndexTerm !=
+						stateloader.RaftLogTermSignalForAddRaftAppliedIndexTermMigration {
+					return errors.AssertionFailedf("invalid term value %d",
+						p.Replicated.State.RaftAppliedIndexTerm)
+				}
+				p.Replicated.State.RaftAppliedIndexTerm = q.Replicated.State.RaftAppliedIndexTerm
+				q.Replicated.State.RaftAppliedIndexTerm = 0
+			} else {
+				return errors.AssertionFailedf("invalid term value %d",
+					q.Replicated.State.RaftAppliedIndexTerm)
+			}
 		}
 		if p.Replicated.State.Desc == nil {
 			p.Replicated.State.Desc = q.Replicated.State.Desc
