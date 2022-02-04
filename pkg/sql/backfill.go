@@ -975,7 +975,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			true /* distribute */)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, chunkSize, addedIndexes)
+		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, false /* writeAtRequestTimestamp */, chunkSize, addedIndexes)
 		if err != nil {
 			return err
 		}
