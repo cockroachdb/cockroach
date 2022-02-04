@@ -131,7 +131,7 @@ func collectCombinedStatements(
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
-				aggregated_ts,
+				max(aggregated_ts) as aggregated_ts,
 				max(metadata) AS metadata,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
 				max(sampled_plan) AS sampled_plan,
@@ -141,7 +141,6 @@ func collectCombinedStatements(
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
-				aggregated_ts,
 				aggregation_interval
 		%s`, whereClause, orderAndLimit)
 
@@ -244,13 +243,17 @@ func collectCombinedTransactions(
 	query := fmt.Sprintf(
 		`SELECT
 				app_name,
-				aggregated_ts,
+				max(aggregated_ts) as aggregated_ts,
 				fingerprint_id,
-				metadata,
-				statistics,
+				max(metadata) as metadata,
+				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics,
 				aggregation_interval
-			FROM crdb_internal.transaction_statistics
-			%s %s`, whereClause, orderAndLimit)
+			FROM crdb_internal.transaction_statistics %s
+			GROUP BY
+				app_name,
+				fingerprint_id,
+				aggregation_interval
+			%s`, whereClause, orderAndLimit)
 
 	const expectedNumDatums = 6
 

@@ -163,17 +163,6 @@ export function makeTransactionsColumns(
       alwaysShow: true,
     },
     {
-      name: "aggregationInterval",
-      title: statisticsTableTitles.aggregationInterval("transaction"),
-      cell: (item: TransactionInfo) =>
-        formatAggregationIntervalColumn(
-          TimestampToNumber(item.stats_data?.aggregated_ts),
-          DurationToNumber(item.stats_data?.aggregation_interval),
-        ),
-      sort: (item: TransactionInfo) =>
-        TimestampToNumber(item.stats_data?.aggregated_ts),
-    },
-    {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
       cell: countBar,
