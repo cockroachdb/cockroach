@@ -256,16 +256,16 @@ func TestIndexForDisplay(t *testing.T) {
 			tableName:   descpb.AnonymousTable,
 			partition:   "",
 			displayMode: IndexDisplayDefOnly,
-			expected:    "INDEX baz (a DESC) USING HASH WITH BUCKET_COUNT = 8",
-			pgExpected:  "INDEX baz USING btree (a DESC) USING HASH WITH BUCKET_COUNT = 8",
+			expected:    "INDEX baz (a DESC) USING HASH WITH (bucket_count=8)",
+			pgExpected:  "INDEX baz USING btree (a DESC) USING HASH WITH (bucket_count=8)",
 		},
 		{
 			index:       shardedIndex,
 			tableName:   tableName,
 			partition:   "",
 			displayMode: IndexDisplayShowCreate,
-			expected:    "CREATE INDEX baz ON foo.public.bar (a DESC) USING HASH WITH BUCKET_COUNT = 8",
-			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH WITH BUCKET_COUNT = 8",
+			expected:    "CREATE INDEX baz ON foo.public.bar (a DESC) USING HASH WITH (bucket_count=8)",
+			pgExpected:  "CREATE INDEX baz ON foo.public.bar USING btree (a DESC) USING HASH WITH (bucket_count=8)",
 		},
 	}
 

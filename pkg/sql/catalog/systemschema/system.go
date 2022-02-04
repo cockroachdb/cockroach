@@ -505,7 +505,7 @@ CREATE TABLE system.statement_statistics (
     ) STORED,
 
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, transaction_fingerprint_id, plan_hash, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
+      USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id, transaction_fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_plan_hash_transaction_fingerprint_id_shard_8,
@@ -539,7 +539,7 @@ CREATE TABLE system.transaction_statistics (
     )) STORED,
 
     CONSTRAINT "primary" PRIMARY KEY (aggregated_ts, fingerprint_id, app_name, node_id)
-      USING HASH WITH BUCKET_COUNT = 8,
+      USING HASH WITH (bucket_count=8),
     INDEX "fingerprint_stats_idx" (fingerprint_id),
 		FAMILY "primary" (
 			crdb_internal_aggregated_ts_app_name_fingerprint_id_node_id_shard_8,
