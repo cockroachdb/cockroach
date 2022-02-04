@@ -192,7 +192,7 @@ func MakeColumnDefDescs(
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 			}
 		} else {
-			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+			buckets, err := EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
 			if err != nil {
 				return nil, err
 			}
@@ -220,14 +220,33 @@ func MakeColumnDefDescs(
 // EvalShardBucketCount evaluates and checks the integer argument to a `USING HASH WITH
 // BUCKET_COUNT` index creation query.
 func EvalShardBucketCount(
-	ctx context.Context, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, shardBuckets tree.Expr,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	shardBuckets tree.Expr,
+	storageParams tree.StorageParams,
 ) (int32, error) {
+	_, legacyBucketNotGiven := shardBuckets.(tree.DefaultVal)
+	paramVal := storageParams.GetVal(`bucket_count`)
+
+	// The legacy `BUCKET_COUNT` should not be set together with the new
+	// `bucket_count` storage param.
+	if !legacyBucketNotGiven && paramVal != nil {
+		return 0, pgerror.New(
+			pgcode.InvalidParameterValue,
+			`"bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time`,
+		)
+	}
+
 	var buckets int64
 	const invalidBucketCountMsg = `BUCKET_COUNT must be a 32-bit integer greater than 1, got %v`
 	// If shardBuckets is not specified, use default bucket count from cluster setting.
-	if _, ok := shardBuckets.(tree.DefaultVal); ok {
+	if legacyBucketNotGiven && paramVal == nil {
 		buckets = catconstants.DefaultHashShardedIndexBucketCount.Get(&evalCtx.Settings.SV)
 	} else {
+		if paramVal != nil {
+			shardBuckets = paramVal
+		}
 		typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
 			ctx, shardBuckets, types.Int, "BUCKET_COUNT", semaCtx, tree.VolatilityVolatile,
 		)

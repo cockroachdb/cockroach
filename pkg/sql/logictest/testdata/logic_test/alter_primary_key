@@ -1367,13 +1367,35 @@ a  b  k
 subtest test_storage_params_validation
 
 statement ok
-CREATE TABLE t_bad_param (
+CREATE TABLE t_test_param (
   a INT PRIMARY KEY,
-  b INT NOT NULL
+  b INT NOT NULL,
+  FAMILY fam_0_a_b (a, b)
 );
 
 statement error pq: invalid storage param "s2_max_level" on primary key
-ALTER TABLE t_bad_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (s2_max_level=20);
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (s2_max_level=20);
 
 statement error pq: invalid storage param "s2_max_level" on primary key
-ALTER TABLE t_bad_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (s2_max_level=20);
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (s2_max_level=20);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (bucket_count=5);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5);
+
+statement ok
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (bucket_count=5);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_test_param]
+----
+CREATE TABLE public.t_test_param (
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH BUCKET_COUNT = 5,
+   UNIQUE INDEX t_test_param_a_key (a ASC),
+   FAMILY fam_0_a_b (a, b)
+)

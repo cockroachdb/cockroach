@@ -472,6 +472,10 @@ func (po *IndexStorageParamObserver) onSet(
 		return po.applyS2ConfigSetting(evalCtx, key, expr, 1, 32)
 	case `geometry_min_x`, `geometry_max_x`, `geometry_min_y`, `geometry_max_y`:
 		return po.applyGeometryIndexSetting(evalCtx, key, expr)
+	// `bucket_count` is handled in schema changer when creating hash sharded
+	// indexes.
+	case `bucket_count`:
+		return nil
 	case `vacuum_cleanup_index_scale_factor`,
 		`buffering`,
 		`fastupdate`,
