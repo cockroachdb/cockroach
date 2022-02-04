@@ -1533,7 +1533,7 @@ func NewTableDesc(
 				if n.PartitionByTable.ContainsPartitions() {
 					return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
 				}
-				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets)
+				buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.PrimaryKey.ShardBuckets, d.PrimaryKey.StorageParams)
 				if err != nil {
 					return nil, err
 				}
@@ -1658,12 +1658,13 @@ func NewTableDesc(
 			d.Sharded.ShardBuckets,
 			&desc,
 			idx,
+			d.StorageParams,
 			true /* isNewTable */)
 		if err != nil {
 			return nil, err
 		}
 
-		buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets)
+		buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, d.Sharded.ShardBuckets, d.StorageParams)
 		if err != nil {
 			return nil, err
 		}
@@ -2692,12 +2693,30 @@ func validateUniqueConstraintParamsForCreateTable(n *tree.CreateTable) error {
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
-			if err := paramparse.ValidateUniqueConstraintParams(d.PrimaryKey.StorageParams, true /* isPK */); err != nil {
+			if err := paramparse.ValidateUniqueConstraintParams(
+				d.PrimaryKey.StorageParams,
+				paramparse.UniqueConstraintParamContext{
+					IsPrimaryKey: true,
+					IsSharded:    d.PrimaryKey.Sharded,
+				} /* isPK */); err != nil {
 				return err
 			}
 		case *tree.UniqueConstraintTableDef:
-			if err := paramparse.ValidateUniqueConstraintParams(d.IndexTableDef.StorageParams, d.PrimaryKey); err != nil {
+			if err := paramparse.ValidateUniqueConstraintParams(
+				d.IndexTableDef.StorageParams,
+				paramparse.UniqueConstraintParamContext{
+					IsPrimaryKey: d.PrimaryKey,
+					IsSharded:    d.Sharded != nil,
+				},
+			); err != nil {
 				return err
+			}
+		case *tree.IndexTableDef:
+			if d.Sharded == nil && d.StorageParams.GetVal(`bucket_count`) != nil {
+				return pgerror.New(
+					pgcode.InvalidParameterValue,
+					`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
+				)
 			}
 		}
 	}
