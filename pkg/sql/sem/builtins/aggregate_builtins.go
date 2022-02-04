@@ -204,6 +204,20 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
+	"final_regr_avgx": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgXAggregate,
+			"Calculates the average of the independent variable (sum(X)/N) in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_avgy": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgYAggregate,
+			"Calculates the average of the dependent variable (sum(Y)/N) in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
 	"covar_samp": makeRegressionAggregateBuiltin(
@@ -1171,6 +1185,8 @@ var _ tree.AggregateFunc = &finalCovarPopAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXXAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXYAggregate{}
 var _ tree.AggregateFunc = &finalRegrSYYAggregate{}
+var _ tree.AggregateFunc = &finalRegressionAvgXAggregate{}
+var _ tree.AggregateFunc = &finalRegressionAvgYAggregate{}
 var _ tree.AggregateFunc = &covarSampAggregate{}
 var _ tree.AggregateFunc = &regressionInterceptAggregate{}
 var _ tree.AggregateFunc = &regressionR2Aggregate{}
@@ -2153,6 +2169,30 @@ func (a *regressionAccumulatorDecimalBase) regrSYYLastStage() (tree.Datum, error
 	return mapToDFloat(&a.syy, a.ed.Err())
 }
 
+// regressionAvgXLastStage computes SQL:2003 average of the independent variable
+// (sum(X)/N) from the precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regressionAvgXLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sx / a.n
+	a.ed.Quo(&a.tmp, &a.sx, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// regressionAvgYLastStage computes SQL:2003 average of the dependent variable
+// (sum(Y)/N) from the precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regressionAvgYLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sy / a.n
+	a.ed.Quo(&a.tmp, &a.sy, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
 type finalRegressionAccumulatorDecimalBase struct {
 	regressionAccumulatorDecimalBase
 	otherTransitionValues [regrFieldsTotal]*apd.Decimal
@@ -2503,13 +2543,28 @@ func newRegressionAvgXAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
+	return a.regressionAvgXLastStage()
+}
 
-	// a.sx / a.n
-	a.ed.Quo(&a.tmp, &a.sx, &a.n)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionAvgXAggregate represents SQL:2003 average of the independent
+// variable (sum(X)/N).
+type finalRegressionAvgXAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionAvgXAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionAvgXAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionAvgXAggregate) Result() (tree.Datum, error) {
+	return a.regressionAvgXLastStage()
 }
 
 // regressionAvgYAggregate represents SQL:2003 average of the dependent
@@ -2535,6 +2590,27 @@ func (a *regressionAvgYAggregate) Result() (tree.Datum, error) {
 	// a.sy / a.n
 	a.ed.Quo(&a.tmp, &a.sy, &a.n)
 	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// finalRegressionAvgYAggregate represents SQL:2003 average of the independent
+// variable (sum(Y)/N).
+type finalRegressionAvgYAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionAvgYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionAvgYAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionAvgYAggregate) Result() (tree.Datum, error) {
+	return a.regressionAvgYLastStage()
 }
 
 // regressionInterceptAggregate represents y-intercept.

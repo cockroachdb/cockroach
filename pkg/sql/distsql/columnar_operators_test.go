@@ -93,6 +93,8 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.FinalRegrSxx:            1,
 	execinfrapb.FinalRegrSxy:            1,
 	execinfrapb.FinalRegrSyy:            1,
+	execinfrapb.FinalRegrAvgx:           1,
+	execinfrapb.FinalRegrAvgy:           1,
 }
 
 // TestAggregateFuncToNumArguments ensures that all aggregate functions are

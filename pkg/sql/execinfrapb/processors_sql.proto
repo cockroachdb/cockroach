@@ -832,6 +832,8 @@ message AggregatorSpec {
     FINAL_REGR_SXX = 50;
     FINAL_REGR_SXY = 51;
     FINAL_REGR_SYY = 52;
+    FINAL_REGR_AVGX = 53;
+    FINAL_REGR_AVGY = 54;
   }
 
   enum Type {

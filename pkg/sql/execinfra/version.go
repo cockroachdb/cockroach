@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 60
+const Version execinfrapb.DistSQLVersion = 61
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
@@ -50,6 +50,13 @@ const MinAcceptedVersion execinfrapb.DistSQLVersion = 60
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 61 (MinAcceptedVersion: 60)
+  - final_regr_avgx, and final_regr_avgy aggregate functions were introduced to
+    support local and final aggregation of the corresponding builtin functions.
+    It would be unrecognized by a server running older versions, hence the
+    version bump. However, a server running v61 can still process all plans from
+    servers running v60, thus the MinAcceptedVersion is kept at 60.
 
 - Version: 60 (MinAcceptedVersion: 60):
  - Deprecated ExportWriterSpec and ParquetWriterSpec and merged them into ExportSpec
