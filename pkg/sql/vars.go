@@ -692,6 +692,24 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	`testing_optimizer_random_cost_seed`: {
+		GetStringVal: makeIntGetStringValFn(`testing_optimizer_random_cost_seed`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			m.SetTestingOptimizerRandomCostSeed(i)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return strconv.FormatInt(evalCtx.SessionData().LocalOnlySessionData.TestingOptimizerRandomCostSeed, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(0, 10)
+		},
+	},
+
 	// CockroachDB extension.
 	// This is deprecated; the only allowable setting is "on".
 	`optimizer`: {
