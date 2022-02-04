@@ -1271,6 +1271,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> begin_transaction
 %type <tree.TransactionModes> transaction_mode_list transaction_mode
 
+%type <tree.Expr> opt_hash_sharded_bucket_count
 %type <*tree.ShardedIndexDef> opt_hash_sharded
 %type <tree.NameList> opt_storing
 %type <*tree.ColumnTableDef> column_def
@@ -2323,11 +2324,12 @@ alter_table_cmd:
   }
   // ALTER TABLE <name> VALIDATE CONSTRAINT ...
   // ALTER TABLE <name> ALTER PRIMARY KEY USING INDEX <name>
-| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded
+| ALTER PRIMARY KEY USING COLUMNS '(' index_params ')' opt_hash_sharded opt_with_storage_parameter_list
   {
     $$.val = &tree.AlterTableAlterPrimaryKey{
       Columns: $7.idxElems(),
       Sharded: $9.shardedIndexDef(),
+      StorageParams: $10.storageParams(),
     }
   }
 | VALIDATE CONSTRAINT constraint_name
@@ -6988,22 +6990,18 @@ col_qualification_elem:
       WithoutIndex: $2.bool(),
     }
   }
-| PRIMARY KEY
+| PRIMARY KEY opt_with_storage_parameter_list
   {
-    $$.val = tree.PrimaryKeyConstraint{}
+    $$.val = tree.PrimaryKeyConstraint{
+      StorageParams: $3.storageParams(),
+    }
   }
-| PRIMARY KEY USING HASH
+| PRIMARY KEY USING HASH opt_hash_sharded_bucket_count opt_with_storage_parameter_list
 {
   $$.val = tree.ShardedPrimaryKeyConstraint{
     Sharded: true,
-    ShardBuckets: tree.DefaultVal{},
-  }
-}
-| PRIMARY KEY USING HASH WITH_LA BUCKET_COUNT '=' a_expr
-{
-  $$.val = tree.ShardedPrimaryKeyConstraint{
-    Sharded: true,
-    ShardBuckets: $8.expr(),
+    ShardBuckets: $5.expr(),
+    StorageParams: $6.storageParams(),
   }
 }
 | CHECK '(' a_expr ')'
@@ -7165,12 +7163,13 @@ constraint_elem:
       },
     }
   }
-| PRIMARY KEY '(' index_params ')' opt_hash_sharded
+| PRIMARY KEY '(' index_params ')' opt_hash_sharded opt_with_storage_parameter_list
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
         Sharded: $6.shardedIndexDef(),
+        StorageParams: $7.storageParams(),
       },
       PrimaryKey: true,
     }
@@ -7242,11 +7241,12 @@ create_as_constraint_def:
   }
 
 create_as_constraint_elem:
-  PRIMARY KEY '(' create_as_params ')'
+  PRIMARY KEY '(' create_as_params ')' opt_with_storage_parameter_list
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
         Columns: $4.idxElems(),
+        StorageParams: $6.storageParams(),
       },
       PrimaryKey:    true,
     }
@@ -7289,9 +7289,11 @@ create_as_col_qualification:
   }
 
 create_as_col_qualification_elem:
-  PRIMARY KEY
+  PRIMARY KEY opt_with_storage_parameter_list
   {
-    $$.val = tree.PrimaryKeyConstraint{}
+    $$.val = tree.PrimaryKeyConstraint{
+      StorageParams: $3.storageParams(),
+    }
   }
 
 opt_deferrable:
@@ -7327,22 +7329,25 @@ opt_storing:
   }
 
 opt_hash_sharded:
-  USING HASH WITH_LA BUCKET_COUNT '=' a_expr
+  USING HASH opt_hash_sharded_bucket_count
   {
     $$.val = &tree.ShardedIndexDef{
-      ShardBuckets: $6.expr(),
-    }
-  }
-  |
-  USING HASH
-  {
-    $$.val = &tree.ShardedIndexDef{
-      ShardBuckets: tree.DefaultVal{},
+      ShardBuckets: $3.expr(),
     }
   }
   | /* EMPTY */
   {
     $$.val = (*tree.ShardedIndexDef)(nil)
+  }
+
+opt_hash_sharded_bucket_count:
+  WITH_LA BUCKET_COUNT '=' a_expr
+  {
+    $$.val = $4.expr()
+  }
+  |
+  {
+    $$.val = tree.DefaultVal{}
   }
 
 opt_column_list:

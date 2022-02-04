@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -51,6 +52,10 @@ func (p *planner) AlterPrimaryKey(
 	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
+	if err := paramparse.ValidateUniqueConstraintParams(alterPKNode.StorageParams, true /* isPK */); err != nil {
+		return err
+	}
+
 	if alterPrimaryKeyLocalitySwap != nil {
 		if err := p.checkNoRegionChangeUnderway(
 			ctx,

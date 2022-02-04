@@ -41,17 +41,19 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []inter
 		s.disableImpureFns = originalDisableImpureFns
 	}()
 
-	switch tlpType := s.rnd.Intn(4); tlpType {
+	switch tlpType := s.rnd.Intn(5); tlpType {
 	case 0:
-		return s.generateWhereTLP()
+		partitioned, unpartitioned, args = s.generateWhereTLP()
 	case 1:
 		partitioned, unpartitioned = s.generateOuterJoinTLP()
 	case 2:
 		partitioned, unpartitioned = s.generateInnerJoinTLP()
+	case 3:
+		partitioned, unpartitioned = s.generateDistinctTLP()
 	default:
 		partitioned, unpartitioned = s.generateAggregationTLP()
 	}
-	return partitioned, unpartitioned, nil
+	return partitioned, unpartitioned, args
 }
 
 // generateWhereTLP returns two SQL queries as strings that can be used by the
@@ -62,15 +64,22 @@ func (s *Smither) GenerateTLP() (unpartitioned, partitioned string, args []inter
 //
 // The first query returned is an unpartitioned query of the form:
 //
-//   SELECT * FROM table
+//   SELECT *, p, NOT (p), (p) IS NULL, true, false, false FROM table
 //
 // The second query returned is a partitioned query of the form:
 //
-//   SELECT * FROM table WHERE (p)
+//   SELECT *, p, NOT (p), (p) IS NULL, p, NOT (p), (p) IS NULL FROM table WHERE (p)
 //   UNION ALL
-//   SELECT * FROM table WHERE NOT (p)
+//   SELECT *, p, NOT (p), (p) IS NULL, NOT(p), p, (p) IS NULL FROM table WHERE NOT (p)
 //   UNION ALL
-//   SELECT * FROM table WHERE (p) IS NULL
+//   SELECT *, p, NOT (p), (p) IS NULL, (p) IS NULL, (p) IS NOT NULL, (NOT(p)) IS NOT NULL FROM table WHERE (p) IS NULL
+//
+// The last 3 boolean columns serve as a correctness check. The unpartitioned
+// query projects true, false, false at the end so that the partitioned queries
+// can project the expression that serves as the filter first, then the other
+// two expressions. This additional check ensures that, in the case an entire
+// projection column is returning a result that doesn't match the filter,
+// the test case won't falsely pass.
 //
 // If the resulting values of the two queries are not equal, there is a logical
 // bug.
@@ -84,8 +93,6 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	table.Format(f)
 	tableName := f.CloseAndGetString()
 
-	unpartitioned = fmt.Sprintf("SELECT * FROM %s", tableName)
-
 	var pred tree.Expr
 	if s.coin() {
 		pred = makeBoolExpr(s, cols)
@@ -95,12 +102,34 @@ func (s *Smither) generateWhereTLP() (unpartitioned, partitioned string, args []
 	pred.Format(f)
 	predicate := f.CloseAndGetString()
 
-	part1 := fmt.Sprintf("SELECT * FROM %s WHERE %s", tableName, predicate)
-	part2 := fmt.Sprintf("SELECT * FROM %s WHERE NOT (%s)", tableName, predicate)
-	part3 := fmt.Sprintf("SELECT * FROM %s WHERE (%s) IS NULL", tableName, predicate)
+	allPreds := fmt.Sprintf("%[1]s, NOT (%[1]s), (%[1]s) IS NULL", predicate)
+
+	unpartitioned = fmt.Sprintf("SELECT *, %s, true, false, false FROM %s", allPreds, tableName)
+
+	pred1 := predicate
+	pred2 := fmt.Sprintf("NOT (%s)", predicate)
+	pred3 := fmt.Sprintf("(%s) IS NULL", predicate)
+
+	part1 := fmt.Sprintf(`SELECT *,
+%s,
+%s, %s, %s
+FROM %s
+WHERE %s`, allPreds, pred1, pred2, pred3, tableName, pred1)
+	part2 := fmt.Sprintf(`SELECT *,
+%s,
+%s, %s, %s
+FROM %s
+WHERE %s`, allPreds, pred2, pred1, pred3, tableName, pred2)
+	part3 := fmt.Sprintf(`SELECT *,
+%s,
+%s, (%s) IS NOT NULL, (%s) IS NOT NULL
+FROM %s
+WHERE %s`, allPreds, pred3, pred1, pred2, tableName, pred3)
 
 	partitioned = fmt.Sprintf(
-		"(%s) UNION ALL (%s) UNION ALL (%s)",
+		`(%s)
+UNION ALL (%s)
+UNION ALL (%s)`,
 		part1, part2, part3,
 	)
 
@@ -346,6 +375,58 @@ func (s *Smither) generateAggregationTLP() (unpartitioned, partitioned string) {
 	partitioned = fmt.Sprintf(
 		"SELECT %s(agg) FROM (%s UNION ALL %s UNION ALL %s)",
 		outerAgg, part1, part2, part3,
+	)
+
+	return unpartitioned, partitioned
+}
+
+// generateDistinctTLP returns two SQL queries as strings that can be used by the
+// GenerateTLP function. These queries DISTINCT on random columns and make use
+// of the WHERE clause to partition the original query into three.
+//
+// The first query returned is an unpartitioned query of the form:
+//
+//   SELECT DISTINCT {cols...} FROM table
+//
+// The second query returned is a partitioned query of the form:
+//
+//   SELECT DISTINCT {cols...} FROM table WHERE (p) UNION
+//   SELECT DISTINCT {cols...} FROM table WHERE NOT (p) UNION
+//   SELECT DISTINCT {cols...} FROM table WHERE (p) IS NULL
+//
+// If the resulting values of the two queries are not equal, there is a logical
+// bug.
+func (s *Smither) generateDistinctTLP() (unpartitioned, partitioned string) {
+	f := tree.NewFmtCtx(tree.FmtParsable)
+
+	table, _, _, cols, ok := s.getSchemaTable()
+	if !ok {
+		panic(errors.AssertionFailedf("failed to find random table"))
+	}
+	table.Format(f)
+	tableName := f.CloseAndGetString()
+	// Take a random subset of the columns to distinct on.
+	s.rnd.Shuffle(len(cols), func(i, j int) { cols[i], cols[j] = cols[j], cols[i] })
+	n := s.rnd.Intn(len(cols))
+	if n == 0 {
+		n = 1
+	}
+	colStrs := make([]string, n)
+	for i, ref := range cols[:n] {
+		colStrs[i] = tree.AsStringWithFlags(ref.typedExpr(), tree.FmtParsable)
+	}
+	distinctCols := strings.Join(colStrs, ",")
+	unpartitioned = fmt.Sprintf("SELECT DISTINCT %s FROM %s", distinctCols, tableName)
+
+	pred := makeBoolExpr(s, cols)
+	pred.Format(f)
+	predicate := f.CloseAndGetString()
+
+	part1 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE %s", distinctCols, tableName, predicate)
+	part2 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE NOT (%s)", distinctCols, tableName, predicate)
+	part3 := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE (%s) IS NULL", distinctCols, tableName, predicate)
+	partitioned = fmt.Sprintf(
+		"(%s) UNION (%s) UNION (%s)", part1, part2, part3,
 	)
 
 	return unpartitioned, partitioned
