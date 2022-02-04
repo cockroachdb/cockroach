@@ -259,9 +259,10 @@ func (node *AlterTableAlterColumnType) GetColumn() Name {
 
 // AlterTableAlterPrimaryKey represents an ALTER TABLE ALTER PRIMARY KEY command.
 type AlterTableAlterPrimaryKey struct {
-	Columns IndexElemList
-	Sharded *ShardedIndexDef
-	Name    Name
+	Columns       IndexElemList
+	Sharded       *ShardedIndexDef
+	Name          Name
+	StorageParams StorageParams
 }
 
 // TelemetryCounter implements the AlterTableCmd interface.
