@@ -128,10 +128,8 @@ message ReplicatedEvalResult {
   bool is_probe = 23;
   // The timestamp at which this command is writing. Used to verify the validity
   // of the command against the GC threshold and to update the followers'
-  // clocks. If the request that produced this command is not a write that cares
-  // about the timestamp cache, then the request's write timestamp is
-  // meaningless; for such request's, this field is simply a clock reading from
-  // the proposer.
+  // clocks. Only set if the request that produced this command is a write that
+  // cares about the timestamp cache.
   util.hlc.Timestamp write_timestamp = 8 [(gogoproto.nullable) = false];
   // The stats delta corresponding to the data in this WriteBatch. On
   // a split, contains only the contributions to the left-hand side.

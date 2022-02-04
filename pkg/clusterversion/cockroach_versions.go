@@ -263,7 +263,10 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
-
+	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
+	// on lease transfer Raft proposals. New leaseholders now forward their clock
+	// directly to the new lease start time.
+	DontProposeWriteTimestampForLeaseTransfers
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -407,7 +410,6 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
-
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
@@ -415,6 +417,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     DontProposeWriteTimestampForLeaseTransfers,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
 
 	// *************************************************

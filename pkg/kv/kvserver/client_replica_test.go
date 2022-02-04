@@ -64,9 +64,9 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// TestReplicaClockUpdates verifies that the leaseholder and followers both
-// update their clocks when executing a command to the command's timestamp, as
-// long as the request timestamp is from a clock (i.e. is not synthetic).
+// TestReplicaClockUpdates verifies that the leaseholder updates its clocks
+// when executing a command to the command's timestamp, as long as the
+// request timestamp is from a clock (i.e. is not synthetic).
 func TestReplicaClockUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -125,43 +125,14 @@ func TestReplicaClockUpdates(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// If writing, wait for that command to execute on all the replicas.
-		// Consensus is asynchronous outside of the majority quorum, and Raft
-		// application is asynchronous on all nodes.
-		if write {
-			testutils.SucceedsSoon(t, func() error {
-				var values []int64
-				for i := range tc.Servers {
-					val, _, err := storage.MVCCGet(ctx,
-						tc.GetFirstStoreFromServer(t, i).Engine(), reqKey, reqTS,
-						storage.MVCCGetOptions{})
-					if err != nil {
-						return err
-					}
-					values = append(values, mustGetInt(val))
-				}
-				if !reflect.DeepEqual(values, []int64{5, 5, 5}) {
-					return errors.Errorf("expected (5, 5, 5), got %v", values)
-				}
-				return nil
-			})
-		}
-
-		// Verify that clocks were updated as expected. Check all clocks if we
-		// issued a write, but only the leaseholder's if we issued a read. In
-		// theory, we should be able to assert that _only_ the leaseholder's
-		// clock is updated by a read, but in practice an assertion against
-		// followers' clocks being updated is very difficult to make without
-		// being flaky because it's difficult to prevent other channels
-		// (background work, etc.) from carrying the clock update.
+		// Verify that clocks were updated as expected. Only the leaseholder should
+		// have updated its clock for either a read or a write. In theory, we should
+		// be able to assert that _only_ the leaseholder's clock is updated, but in
+		// practice an assertion against followers' clocks being updated is very
+		// difficult to make without being flaky because it's difficult to prevent
+		// other channels (background work, etc.) from carrying the clock update.
 		expUpdated := !synthetic
-		clocksToCheck := clocks
-		if !write {
-			clocksToCheck = clocks[:1]
-		}
-		for _, c := range clocksToCheck {
-			require.Equal(t, expUpdated, reqTS.Less(c.Now()))
-		}
+		require.Equal(t, expUpdated, reqTS.Less(clocks[0].Now()))
 	}
 
 	testutils.RunTrueAndFalse(t, "write", func(t *testing.T, write bool) {
@@ -169,68 +140,6 @@ func TestReplicaClockUpdates(t *testing.T) {
 			run(t, write, synthetic)
 		})
 	})
-}
-
-// TestFollowersDontRejectClockUpdateWithJump verifies that followers update
-// their clocks when executing a command, even if the leaseholder's clock is
-// far in the future.
-func TestFollowersDontRejectClockUpdateWithJump(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	const numNodes = 3
-	var manuals []*hlc.HybridManualClock
-	var clocks []*hlc.Clock
-	for i := 0; i < numNodes; i++ {
-		manuals = append(manuals, hlc.NewHybridManualClock())
-	}
-	serverArgs := make(map[int]base.TestServerArgs)
-	for i := 0; i < numNodes; i++ {
-		serverArgs[i] = base.TestServerArgs{
-			Knobs: base.TestingKnobs{
-				Server: &server.TestingKnobs{
-					ClockSource: manuals[i].UnixNano,
-				},
-			},
-		}
-	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: serverArgs,
-		})
-	defer tc.Stopper().Stop(ctx)
-
-	store := tc.GetFirstStoreFromServer(t, 0)
-	reqKey := roachpb.Key("a")
-	tc.SplitRangeOrFatal(t, reqKey)
-	tc.AddVotersOrFatal(t, reqKey, tc.Targets(1, 2)...)
-
-	for i, s := range tc.Servers {
-		clocks = append(clocks, s.Clock())
-		manuals[i].Pause()
-	}
-	// Advance the lease holder's clock ahead of the followers (by more than
-	// MaxOffset but less than the range lease) and execute a command.
-	manuals[0].Increment(int64(500 * time.Millisecond))
-	incArgs := incrementArgs(reqKey, 5)
-	ts := clocks[0].Now()
-	if _, err := kv.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Timestamp: ts}, incArgs); err != nil {
-		t.Fatal(err)
-	}
-	// Wait for that command to execute on all the followers.
-	tc.WaitForValues(t, reqKey, []int64{5, 5, 5})
-
-	// Verify that all the followers have accepted the clock update from
-	// node 0 even though it comes from outside the usual max offset.
-	now := clocks[0].Now()
-	for i, clock := range clocks {
-		// Only compare the WallTimes: it's normal for clock 0 to be a few logical ticks ahead.
-		if clock.Now().WallTime < now.WallTime {
-			t.Errorf("clock %d is behind clock 0: %s vs %s", i, clock.Now(), now)
-		}
-	}
 }
 
 // TestLeaseholdersRejectClockUpdateWithJump verifies that leaseholders reject

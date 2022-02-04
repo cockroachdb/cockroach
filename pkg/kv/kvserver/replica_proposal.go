@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -406,6 +407,12 @@ func (r *Replica) leasePostApplyLocked(
 			log.Fatalf(ctx, "failed checking for in-progress merge while installing new lease %s: %s",
 				newLease, err)
 		}
+
+		// Forward the node clock to the start time of the new lease. This ensures
+		// that the leaseholder's clock always leads its lease's start time. For an
+		// explanation about why this is needed, see "Cooperative lease transfers"
+		// in pkg/util/hlc/doc.go.
+		r.Clock().Update(newLease.Start)
 
 		// If this replica is a new holder of the lease, update the timestamp
 		// cache. Note that clock offset scenarios are handled via a stasis
@@ -854,11 +861,17 @@ func (r *Replica) evaluateProposal(
 		if ba.AppliesTimestampCache() {
 			res.Replicated.WriteTimestamp = ba.WriteTimestamp()
 		} else {
-			// For misc requests, use WriteTimestamp to propagate a clock signal. This
-			// is particularly important for lease transfers, as it assures that the
-			// follower getting the lease will have a clock above the start time of
-			// its lease.
-			res.Replicated.WriteTimestamp = r.store.Clock().Now()
+			if !r.ClusterSettings().Version.IsActive(ctx, clusterversion.DontProposeWriteTimestampForLeaseTransfers) {
+				// For misc requests, use WriteTimestamp to propagate a clock signal. This
+				// is particularly important for lease transfers, as it assures that the
+				// follower getting the lease will have a clock above the start time of
+				// its lease.
+				//
+				// This is no longer needed in v22.1 because nodes running v22.1 and
+				// above will update their clock directly from the new lease's start
+				// time.
+				res.Replicated.WriteTimestamp = r.store.Clock().Now()
+			}
 		}
 		res.Replicated.Delta = ms.ToStatsDelta()
 

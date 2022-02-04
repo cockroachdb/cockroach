@@ -172,10 +172,9 @@ func (s *Store) MergeRange(
 			// reads all the way up to freezeStart, the time at which the RHS
 			// promised to stop serving traffic.
 			//
-			// Note that we need to update our clock with freezeStart to preserve
-			// the invariant that our clock is always greater than or equal to any
-			// timestamps in the timestamp cache. For a full discussion, see the
-			// comment on TestStoreRangeMergeTimestampCacheCausality.
+			// For an explanation about why we need to update out clock with the
+			// merge's freezeStart, see "Range merges" in pkg/util/hlc/doc.go. Also,
+			// see the comment on TestStoreRangeMergeTimestampCacheCausality.
 			s.Clock().Update(freezeStart)
 
 			var sum rspb.ReadSummary

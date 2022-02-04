@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -425,11 +424,6 @@ type replicaAppBatch struct {
 	// replicaState other than Stats are overwritten completely rather than
 	// updated in-place.
 	stats enginepb.MVCCStats
-	// maxTS is the maximum clock timestamp that this command carries. Timestamps
-	// come from the writes that are part of this command, and also from the
-	// closed timestamp carried by this command. Synthetic timestamps are not
-	// registered here.
-	maxTS hlc.ClockTimestamp
 	// changeRemovesReplica tracks whether the command in the batch (there must
 	// be only one) removes this replica from the range.
 	changeRemovesReplica bool
@@ -520,11 +514,6 @@ func (b *replicaAppBatch) Stage(
 		// Set the splitMergeUnlock on the replicaAppBatch to be called
 		// after the batch has been applied (see replicaAppBatch.commit).
 		cmd.splitMergeUnlock = splitMergeUnlock
-	}
-
-	// Update the batch's max timestamp.
-	if clockTS, ok := cmd.replicatedResult().WriteTimestamp.TryToClockTimestamp(); ok {
-		b.maxTS.Forward(clockTS)
 	}
 
 	// Normalize the command, accounting for past migrations.
@@ -873,9 +862,6 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	if cts := cmd.raftCmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
 		b.state.RaftClosedTimestamp = *cts
 		b.closedTimestampSetter.record(cmd, b.state.Lease)
-		if clockTS, ok := cts.TryToClockTimestamp(); ok {
-			b.maxTS.Forward(clockTS)
-		}
 	}
 
 	res := cmd.replicatedResult()
@@ -896,13 +882,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	if log.V(4) {
 		log.Infof(ctx, "flushing batch %v of %d entries", b.state, b.entries)
 	}
-
-	// Update the node clock with the maximum timestamp of all commands in the
-	// batch. This maintains a high water mark for all ops serviced, so that
-	// received ops without a timestamp specified are guaranteed one higher than
-	// any op already executed for overlapping keys.
-	r := b.r
-	r.store.Clock().Update(b.maxTS)
 
 	// Add the replica applied state key to the write batch if this change
 	// doesn't remove us.
@@ -928,6 +907,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	b.batch = nil
 
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
+	r := b.r
 	r.mu.Lock()
 	r.mu.state.RaftAppliedIndex = b.state.RaftAppliedIndex
 	// RaftAppliedIndexTerm will be non-zero only when the
