@@ -71,6 +71,10 @@ const (
 	// DefaultAdminUIPort is the default port on which the cockroach process is
 	// listening for HTTP connections for the Admin UI.
 	DefaultAdminUIPort = 26258
+
+	// DefaultNumFilesLimit is the default limit on the number of files that can
+	// be opened by the process.
+	DefaultNumFilesLimit = 65 << 10
 )
 
 // IsLocalClusterName returns true if the given name is a valid name for a local
