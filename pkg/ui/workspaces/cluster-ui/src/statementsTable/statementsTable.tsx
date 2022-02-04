@@ -93,17 +93,6 @@ function makeCommonColumns(
 
   return [
     {
-      name: "aggregationInterval",
-      title: statisticsTableTitles.aggregationInterval(statType),
-      className: cx("statements-table__interval_time"),
-      cell: (stmt: AggregateStatistics) =>
-        formatAggregationIntervalColumn(
-          stmt.aggregatedTs,
-          stmt.aggregationInterval,
-        ),
-      sort: (stmt: AggregateStatistics) => stmt.aggregatedTs,
-    },
-    {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
       className: cx("statements-table__col-count"),
