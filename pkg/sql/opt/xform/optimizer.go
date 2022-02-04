@@ -113,7 +113,8 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation)
+	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation,
+		evalCtx.SessionData().LocalOnlySessionData.TestingOptimizerRandomCostSeed)
 	o.coster = &o.defaultCoster
 	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
 		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
@@ -951,7 +952,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.evalCtx, o.mem, 0 /* perturbation */)
+	c.Init(o.evalCtx, o.mem, 0 /* perturbation */, 0 /* seed */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
