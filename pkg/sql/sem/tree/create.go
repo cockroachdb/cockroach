@@ -1412,6 +1412,18 @@ func (o *StorageParams) Format(ctx *FmtCtx) {
 	}
 }
 
+// GetVal returns corresponding value if a key exists, otherwise nil is
+// returned.
+func (o *StorageParams) GetVal(key string) Expr {
+	k := Name(key)
+	for _, param := range *o {
+		if param.Key == k {
+			return param.Value
+		}
+	}
+	return nil
+}
+
 // CreateTableOnCommitSetting represents the CREATE TABLE ... ON COMMIT <action>
 // parameters.
 type CreateTableOnCommitSetting uint32
