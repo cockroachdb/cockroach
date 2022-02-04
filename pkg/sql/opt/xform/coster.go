@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/tools/container/intsets"
 )
@@ -83,6 +84,8 @@ type coster struct {
 	// 0.5, and the estimated cost of an expression is c, the cost returned by
 	// ComputeCost will be in the range [c - 0.5 * c, c + 0.5 * c).
 	perturbation float64
+
+	rng *rand.Rand
 }
 
 var _ Coster = &coster{}
@@ -439,9 +442,19 @@ var fnCost = map[string]memo.Cost{
 }
 
 // Init initializes a new coster structure with the given memo.
-func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64) {
+func (c *coster) Init(evalCtx *tree.EvalContext, mem *memo.Memo, perturbation float64, seed int64) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
+	if perturbation != 0 || seed != 0 {
+		c.rng, _ = randutil.NewPseudoRand()
+		c.rng.Seed(seed)
+		if perturbation == 0 {
+			// If we've been initialized with a random seed but not an explicit
+			// perturbation value, use the max perturbation. This is used for tests
+			// that set the seed with testing_optimizer_random_cost_seed.
+			perturbation = 1.0
+		}
+	}
 	*c = coster{
 		evalCtx:      evalCtx,
 		mem:          mem,
