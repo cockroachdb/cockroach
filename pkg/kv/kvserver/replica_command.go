@@ -344,6 +344,14 @@ func (r *Replica) adminSplitWithDescriptor(
 			return reply, errors.Errorf("requested split key %s out of bounds of %s", args.SplitKey, r)
 		}
 
+		// If predicate keys are specified, make sure they are contained by this
+		// range as well.
+		for _, k := range args.PredicateKeys {
+			if !kvserverbase.ContainsKey(desc, k) {
+				return reply, errors.Errorf("requested predicate key %s out of bounds of %s", k, r)
+			}
+		}
+
 		var err error
 		splitKey, err = keys.Addr(foundSplitKey)
 		if err != nil {

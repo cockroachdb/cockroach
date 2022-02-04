@@ -102,6 +102,9 @@ func (b *kvBuf) Swap(i, j int) {
 }
 
 func (b *kvBuf) Reset() {
+	// We could reset sorted to true here but in practice, if we saw any unsorted
+	// keys before, the rest are almost always unsorted as well, so we don't even
+	// bother checking.
 	b.slab = b.slab[:0]
 	b.entries = b.entries[:0]
 	b.MemSize = 0

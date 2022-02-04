@@ -13,6 +13,7 @@ package bulk
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
@@ -46,6 +47,10 @@ type BufferingAdder struct {
 
 	// currently buffered kvs.
 	curBuf kvBuf
+
+	sorted bool
+
+	initialSplits int
 
 	flushCounts struct {
 		total      int
@@ -116,6 +121,8 @@ func MakeBulkAdder(
 		maxBufferSize:       opts.MaxBufferSize,
 		incrementBufferSize: opts.StepBufferSize,
 		bulkMon:             bulkMon,
+		sorted:              true,
+		initialSplits:       opts.InitialSplitsIfUnordered,
 	}
 
 	// If no monitor is attached to the instance of a bulk adder, we do not
@@ -166,6 +173,11 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 
 // Add adds a key to the buffer and checks if it needs to flush.
 func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
+	if b.sorted {
+		if l := len(b.curBuf.entries); l > 0 && key.Compare(b.curBuf.Key(l-1)) < 0 {
+			b.sorted = false
+		}
+	}
 	if err := b.curBuf.append(key, value); err != nil {
 		return err
 	}
@@ -181,15 +193,11 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 			if err := b.memAcc.Grow(ctx, b.incrementBufferSize); err != nil {
 				// If we are unable to reserve the additional memory then flush the
 				// buffer, and continue as normal.
-				b.flushCounts.bufferSize++
-				log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
-				return b.Flush(ctx)
+				return b.sizeFlush(ctx)
 			}
 			b.curBufferSize += b.incrementBufferSize
 		} else {
-			b.flushCounts.bufferSize++
-			log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
-			return b.Flush(ctx)
+			return b.sizeFlush(ctx)
 		}
 	}
 	return nil
@@ -205,8 +213,18 @@ func (b *BufferingAdder) IsEmpty() bool {
 	return b.curBuf.Len() == 0
 }
 
+func (b *BufferingAdder) sizeFlush(ctx context.Context) error {
+	b.flushCounts.bufferSize++
+	log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
+	return b.doFlush(ctx, true)
+}
+
 // Flush flushes any buffered kvs to the batcher.
 func (b *BufferingAdder) Flush(ctx context.Context) error {
+	return b.doFlush(ctx, false)
+}
+
+func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 	if b.curBuf.Len() == 0 {
 		if b.onFlush != nil {
 			b.onFlush(b.sink.GetBatchSummary())
@@ -223,11 +241,21 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 
 	beforeSort := timeutil.Now()
 
-	sort.Sort(&b.curBuf)
+	if !b.sorted {
+		sort.Sort(&b.curBuf)
+	}
 	mvccKey := storage.MVCCKey{Timestamp: b.timestamp}
 
 	beforeFlush := timeutil.Now()
 	b.flushCounts.totalSort += beforeFlush.Sub(beforeSort)
+
+	// If this is the first flush and is due to size, if it was unsorted then
+	// create initial splits if requested before flushing.
+	if b.flushCounts.total == 0 && forSize && b.initialSplits != 0 && !b.sorted {
+		if err := b.createInitialSplits(ctx); err != nil {
+			return err
+		}
+	}
 
 	for i := range b.curBuf.entries {
 		mvccKey.Key = b.curBuf.Key(i)
@@ -270,6 +298,28 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 		b.onFlush(b.sink.GetBatchSummary())
 	}
 	b.curBuf.Reset()
+	return nil
+}
+
+func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
+	targetSize := b.curBuf.Len() / b.initialSplits
+	log.Infof(ctx, "creating up to %d initial splits from %d keys in %s buffer", b.initialSplits, b.curBuf.Len(), sz(b.curBuf.MemSize))
+
+	hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
+
+	for i := targetSize; i < b.curBuf.Len(); i += targetSize {
+		k := b.curBuf.Key(i)
+		prev := b.curBuf.Key(i - targetSize)
+		log.VEventf(ctx, 1, "splitting at key %d / %d: %s", i, b.curBuf.Len(), k)
+		if err := b.sink.db.SplitAndScatter(ctx, k, hour, prev); err != nil {
+			// TODO(dt): a typed error would be nice here.
+			if strings.Contains(err.Error(), "predicate") {
+				log.VEventf(ctx, 1, "split at %s rejected, had previously split and no longer included %s", k, prev)
+				continue
+			}
+			return err
+		}
+	}
 	return nil
 }
 

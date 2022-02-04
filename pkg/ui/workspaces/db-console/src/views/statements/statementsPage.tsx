@@ -18,12 +18,15 @@ import {
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
+import { AdminUIState, AppDispatch } from "src/redux/state";
 import { StatementsResponseMessage } from "src/util/api";
 import { appAttr } from "src/util/constants";
 import { PrintTime } from "src/views/reports/containers/range/print";
 import { selectDiagnosticsReportsPerStatement } from "src/redux/statements/statementsSelectors";
-import { createStatementDiagnosticsAlertLocalSetting } from "src/redux/alerts";
+import {
+  createStatementDiagnosticsAlertLocalSetting,
+  cancelStatementDiagnosticsAlertLocalSetting,
+} from "src/redux/alerts";
 import { statementsTimeScaleLocalSetting } from "src/redux/statementsTimeScale";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
@@ -36,11 +39,13 @@ import {
   util,
 } from "@cockroachlabs/cluster-ui";
 import {
+  cancelStatementDiagnosticsReportAction,
   createOpenDiagnosticsModalAction,
   createStatementDiagnosticsReportAction,
   setCombinedStatementsTimeScaleAction,
 } from "src/redux/statements";
 import {
+  trackCancelDiagnosticsBundleAction,
   trackDownloadDiagnosticsBundleAction,
   trackStatementsPaginationAction,
 } from "src/redux/analyticsActions";
@@ -277,8 +282,16 @@ export default withRouter(
       refreshStatementDiagnosticsRequests,
       refreshUserSQLRoles,
       resetSQLStats: resetSQLStatsAction,
-      dismissAlertMessage: () =>
-        createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+      dismissAlertMessage: () => {
+        return (dispatch: AppDispatch) => {
+          dispatch(
+            createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+          );
+          dispatch(
+            cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+          );
+        };
+      },
       onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
       onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
       onSearchComplete: (query: string) => searchLocalSetting.set(query),
@@ -293,8 +306,22 @@ export default withRouter(
           columnTitle: columnName,
         }),
       onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
-      onDiagnosticsReportDownload: (report: IStatementDiagnosticsReport) =>
-        trackDownloadDiagnosticsBundleAction(report.statement_fingerprint),
+      onSelectDiagnosticsReportDropdownOption: (
+        report: IStatementDiagnosticsReport,
+      ) => {
+        if (report.completed) {
+          return trackDownloadDiagnosticsBundleAction(
+            report.statement_fingerprint,
+          );
+        } else {
+          return (dispatch: AppDispatch) => {
+            dispatch(cancelStatementDiagnosticsReportAction(report.id));
+            dispatch(
+              trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
+            );
+          };
+        }
+      },
       // We use `null` when the value was never set and it will show all columns.
       // If the user modifies the selection and no columns are selected,
       // the function will save the value as a blank space, otherwise

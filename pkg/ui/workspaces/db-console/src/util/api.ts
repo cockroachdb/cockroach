@@ -131,6 +131,9 @@ export type StatementDiagnosticsReportsResponseMessage = protos.cockroach.server
 export type CreateStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
 export type CreateStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
 
+export type CancelStatementDiagnosticsReportRequestMessage = protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+export type CancelStatementDiagnosticsReportResponseMessage = protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
+
 export type StatementDiagnosticsRequestMessage = protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
 export type StatementDiagnosticsResponseMessage = protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
 
@@ -717,6 +720,18 @@ export function createStatementDiagnosticsReport(
   return timeoutFetch(
     serverpb.CreateStatementDiagnosticsReportResponse,
     `${STATUS_PREFIX}/stmtdiagreports`,
+    req as any,
+    timeout,
+  );
+}
+
+export function cancelStatementDiagnosticsReport(
+  req: CancelStatementDiagnosticsReportRequestMessage,
+  timeout?: moment.Duration,
+): Promise<CancelStatementDiagnosticsReportResponseMessage> {
+  return timeoutFetch(
+    serverpb.CancelStatementDiagnosticsReportResponse,
+    `${STATUS_PREFIX}/stmtdiagreports/cancel`,
     req as any,
     timeout,
   );

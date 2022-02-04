@@ -72,6 +72,8 @@ message BackfillerSpec {
   repeated uint32 indexes_to_backfill = 8 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
 
   reserved 6;
+
+  optional int32 initial_splits = 11 [(gogoproto.nullable) = false];
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -152,7 +154,9 @@ message ReadImportDataSpec {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
-  // NEXTID: 18
+  optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
+
+  // NEXTID: 19
 }
 
 message StreamIngestionDataSpec {
