@@ -2335,6 +2335,7 @@ func newTableDesc(
 		if err := j.Create(params.ctx, params.p.ExecCfg().InternalExecutor, params.p.txn); err != nil {
 			return nil, err
 		}
+		ttl.ScheduleID = j.ScheduleID()
 	}
 	return ret, nil
 }
