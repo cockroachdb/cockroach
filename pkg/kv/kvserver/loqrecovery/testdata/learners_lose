@@ -115,7 +115,7 @@ ok
 
 make-plan
 ----
-ERROR: Key space covering is not complete. Discovered following inconsistencies:
+ERROR: loss of quorum recovery error
 range gap /{Min-Table/1}
   r0: /Min
   r2: /{Table/1-Max}
