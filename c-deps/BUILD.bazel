@@ -143,6 +143,9 @@ configure_make(
     name = "libkrb5",
     autoreconf = True,
     autoreconf_directory = "src",
+    autoreconf_options = [
+        "-Wno-obsolete",
+    ],
     configure_command = "src/configure",
     configure_in_place = True,
     configure_options = [
