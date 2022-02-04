@@ -19,6 +19,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -145,7 +146,15 @@ func main() {
 	replaceFile(fileName, testName, issueNum)
 
 	// Update the package's BUILD.bazel.
-	if err := spawn("make", "bazel-generate"); err != nil {
+	devPath, err := exec.LookPath("./dev")
+	if err != nil {
+		fmt.Printf("./dev not found, trying dev\n")
+		devPath, err = exec.LookPath("dev")
+		if err != nil {
+			log.Fatal(errors.Wrapf(err, "no path found for dev"))
+		}
+	}
+	if err := spawn(devPath, "generate", "bazel"); err != nil {
 		log.Fatal(errors.Wrap(err, "failed to run bazel"))
 	}
 
