@@ -4140,6 +4140,24 @@ project
       │    └── columns: m:1
       └── filters (true)
 
+# Covering case. Join on virtual column expression but do not produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
+----
+project
+ ├── columns: m:1!null k:6!null
+ ├── immutable
+ ├── fd: (6)-->(1)
+ └── inner-join (lookup virt@v1)
+      ├── columns: m:1!null k:6!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters (true)
+
 # Covering case. Produce virtual column.
 opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
@@ -4154,9 +4172,43 @@ inner-join (lookup virt@v1)
  │    └── columns: m:1
  └── filters (true)
 
+# Covering case. Join on virtual column expression and produce it.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.k, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
+----
+inner-join (lookup virt@v1)
+ ├── columns: m:1!null k:6!null v1:9!null
+ ├── flags: force lookup join (into right side)
+ ├── key columns: [1] = [9]
+ ├── immutable
+ ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ ├── scan small
+ │    └── columns: m:1
+ └── filters (true)
+
 # Non-covering.
 opt expect=GenerateLookupJoinsWithVirtualCols
 SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.v1
+----
+inner-join (lookup virt)
+ ├── columns: m:1!null i:7 v1:9!null
+ ├── key columns: [6] = [6]
+ ├── lookup columns are key
+ ├── immutable
+ ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+ ├── inner-join (lookup virt@v1)
+ │    ├── columns: m:1!null k:6!null v1:9!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── key columns: [1] = [9]
+ │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+ │    ├── scan small
+ │    │    └── columns: m:1
+ │    └── filters (true)
+ └── filters (true)
+
+# Non-covering. Join on virtual column expression.
+opt expect=GenerateLookupJoinsWithVirtualCols
+SELECT m, virt.i, virt.v1 FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10
 ----
 inner-join (lookup virt)
  ├── columns: m:1!null i:7 v1:9!null
@@ -4288,7 +4340,7 @@ semi-join (hash)
  │    └── projections
  │         └── i + 10
  └── filters
-      └── m = column14
+      └── m = v1
 
 # Do not generate lookup joins with virtual columns for anti-joins.
 opt expect-not=GenerateLookupJoinsWithVirtualCols format=hide-all
@@ -4310,7 +4362,7 @@ anti-join (hash)
  │    └── projections
  │         └── i + 10
  └── filters
-      └── m = column14
+      └── m = v1
 
 exec-ddl
 DROP INDEX v1
@@ -4521,6 +4573,26 @@ project
       └── filters
            └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
 
+# Covering case. Join on virtual column expression with an extra filter on the
+# non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.i FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10 AND i > 0
+----
+project
+ ├── columns: m:1!null i:7!null
+ ├── immutable
+ ├── fd: (7)-->(1)
+ └── inner-join (lookup virt@v1_storing_i)
+      ├── columns: m:1!null i:7!null v1:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1] = [9]
+      ├── immutable
+      ├── fd: (7)-->(9), (1)==(9), (9)==(1)
+      ├── scan small
+      │    └── columns: m:1
+      └── filters
+           └── i:7 > 0 [outer=(7), constraints=(/7: [/1 - ]; tight)]
+
 # Covering case. Virtual column is the lookup column and there is an extra
 # filter on the non-virtual column, but the column is not selected. We do not
 # handle this case yet.
@@ -4574,6 +4646,31 @@ project
 # filter on a column not in the index.
 opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
 SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.v1 AND j > 0
+----
+project
+ ├── columns: m:1!null j:8!null
+ ├── immutable
+ └── inner-join (lookup virt)
+      ├── columns: m:1!null j:8!null v1:9!null
+      ├── key columns: [6] = [6]
+      ├── lookup columns are key
+      ├── immutable
+      ├── fd: (1)==(9), (9)==(1)
+      ├── inner-join (lookup virt@v1_storing_i)
+      │    ├── columns: m:1!null k:6!null v1:9!null
+      │    ├── flags: force lookup join (into right side)
+      │    ├── key columns: [1] = [9]
+      │    ├── fd: (6)-->(9), (1)==(9), (9)==(1)
+      │    ├── scan small
+      │    │    └── columns: m:1
+      │    └── filters (true)
+      └── filters
+           └── j:8 > 0 [outer=(8), constraints=(/8: [/1 - ]; tight)]
+
+# Non-covering case. Join on virtual column expression with an extra filter on the
+# non-virtual column.
+opt expect=GenerateLookupJoinsWithVirtualColsAndFilter
+SELECT m, virt.j FROM small INNER LOOKUP JOIN virt ON m = virt.i + 10 AND j > 0
 ----
 project
  ├── columns: m:1!null j:8!null
