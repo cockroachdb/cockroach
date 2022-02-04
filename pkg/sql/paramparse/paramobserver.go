@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/robfig/cron/v3"
 )
 
 // SetStorageParameters sets the given storage parameters using the
@@ -309,6 +310,31 @@ var tableParams = map[string]tableParam{
 				po.tableDesc.RowLevelTTL.DeleteBatchSize = 0
 			}
 			return nil
+		},
+	},
+	`ttl_job_cron`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			str, err := DatumAsString(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if _, err := cron.ParseStandard(str); err != nil {
+				return pgerror.Wrapf(
+					err,
+					pgcode.InvalidParameterValue,
+					`invalid cron expression for "%s"`,
+					key,
+				)
+			}
+			po.tableDesc.RowLevelTTL.DeletionCron = str
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			// TODO(#75428): allow reset.
+			return unimplemented.NewWithIssue(75428, "not yet implemented")
 		},
 	},
 	`exclude_data_from_backup`: {

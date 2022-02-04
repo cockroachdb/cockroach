@@ -100,6 +100,28 @@ SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ALTER TABLE [62 as T] WITH (expire_after = ...)
 
 statement ok
+DROP TABLE tbl
+
+statement error invalid cron expression for "ttl_job_cron"
+CREATE TABLE tbl () WITH (ttl_expire_after = '10 seconds', ttl_job_cron = 'bad expr')
+
+statement ok
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes'::interval, ttl_job_cron = '@daily')
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @daily  root
+
+statement ok
 CREATE TABLE no_ttl_table ();
 ALTER TABLE no_ttl_table SET (ttl = 'off');
 ALTER TABLE no_ttl_table SET (ttl_automatic_column = 'off')

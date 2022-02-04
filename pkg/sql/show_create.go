@@ -191,6 +191,9 @@ func ShowCreateTable(
 		if bs := ttl.DeleteBatchSize; bs != 0 {
 			storageParams = append(storageParams, fmt.Sprintf(`ttl_delete_batch_size = %d`, bs))
 		}
+		if cron := ttl.DeletionCron; cron != "" {
+			storageParams = append(storageParams, fmt.Sprintf(`ttl_delete_batch_size = '%s'`, cron))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		storageParams = append(storageParams, `exclude_data_from_backup = true`)
