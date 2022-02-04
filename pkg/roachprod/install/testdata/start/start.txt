@@ -23,6 +23,7 @@ BINARY=./cockroach
 KEY_CMD=echo foo && \
 echo bar $HOME
 MEMORY_MAX=81%
+NUM_FILES_LIMIT=0
 ARGS=(
 start
 --log
@@ -97,7 +98,7 @@ sudo systemd-run --unit cockroach \
   --service-type=notify -p NotifyAccess=all \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
-  -p LimitNOFILE=65536 \
+  -p "LimitNOFILE=${NUM_FILES_LIMIT}" \
   bash "${0}" run
 ----
 ----
