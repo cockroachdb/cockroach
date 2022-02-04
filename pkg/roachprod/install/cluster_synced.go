@@ -1385,7 +1385,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if config.Quiet && l.File == nil {
+			if !config.Quiet && l.File == nil {
 				fmt.Printf(".")
 			}
 		case r, ok := <-results:
@@ -1418,7 +1418,7 @@ func (c *SyncedCluster) Put(ctx context.Context, l *logger.Logger, src, dest str
 		}
 	}
 
-	if config.Quiet && l.File != nil {
+	if !config.Quiet && l.File != nil {
 		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
@@ -1740,7 +1740,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if config.Quiet && l.File == nil {
+			if !config.Quiet && l.File == nil {
 				fmt.Printf(".")
 			}
 		case r, ok := <-results:
@@ -1773,7 +1773,7 @@ func (c *SyncedCluster) Get(l *logger.Logger, src, dest string) error {
 		}
 	}
 
-	if config.Quiet && l.File == nil {
+	if !config.Quiet && l.File == nil {
 		l.Printf("\n")
 		linesMu.Lock()
 		for i := range lines {
@@ -1977,7 +1977,7 @@ func (c *SyncedCluster) ParallelE(
 	}
 
 	var ticker *time.Ticker
-	if !config.Quiet {
+	if config.Quiet {
 		ticker = time.NewTicker(100 * time.Millisecond)
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
@@ -1993,7 +1993,7 @@ func (c *SyncedCluster) ParallelE(
 	for done := false; !done; {
 		select {
 		case <-ticker.C:
-			if config.Quiet && l.File == nil {
+			if !config.Quiet && l.File == nil {
 				fmt.Fprintf(out, ".")
 			}
 		case r, ok := <-results:
@@ -2027,7 +2027,7 @@ func (c *SyncedCluster) ParallelE(
 		}
 	}
 
-	if config.Quiet && l.File == nil {
+	if !config.Quiet && l.File == nil {
 		fmt.Fprintf(out, "\n")
 	}
 
