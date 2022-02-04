@@ -164,6 +164,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
 	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
 	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
+	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 
 	s.ExecStats.Add(other.ExecStats)
 

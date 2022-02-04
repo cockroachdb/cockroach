@@ -74,6 +74,7 @@ func (s *Container) RecordStatement(
 		key.ImplicitTxn,
 		key.Database,
 		key.Failed,
+		key.PlanHash,
 		key.TransactionFingerprintID,
 		createIfNonExistent,
 	)
@@ -104,7 +105,7 @@ func (s *Container) RecordStatement(
 	if value.Plan != nil {
 		stats.mu.data.SensitiveInfo.MostRecentPlanDescription = *value.Plan
 		stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp = s.getTimeNow()
-		s.setLogicalPlanLastSampled(statementKey.planKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+		s.setLogicalPlanLastSampled(statementKey.sampledPlanKey, stats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
@@ -123,6 +124,7 @@ func (s *Container) RecordStatement(
 	stats.mu.data.RowsWritten.Record(stats.mu.data.Count, float64(value.RowsWritten))
 	stats.mu.data.LastExecTimestamp = s.getTimeNow()
 	stats.mu.data.Nodes = util.CombineUniqueInt64(stats.mu.data.Nodes, value.Nodes)
+	stats.mu.data.PlanGists = util.CombineUniqueString(stats.mu.data.PlanGists, []string{value.PlanGist})
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.
@@ -140,7 +142,7 @@ func (s *Container) RecordStatement(
 
 		// We also accounts for the memory used for s.sampledPlanMetadataCache.
 		// timestamp size + key size + hash.
-		estimatedMemoryAllocBytes += timestampSize + statementKey.planKey.size() + 8
+		estimatedMemoryAllocBytes += timestampSize + statementKey.sampledPlanKey.size() + 8
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
@@ -170,6 +172,7 @@ func (s *Container) RecordStatementExecStats(
 			key.ImplicitTxn,
 			key.Database,
 			key.Failed,
+			key.PlanHash,
 			key.TransactionFingerprintID,
 			false, /* createIfNotExists */
 		)
@@ -184,7 +187,7 @@ func (s *Container) RecordStatementExecStats(
 func (s *Container) ShouldSaveLogicalPlanDesc(
 	fingerprint string, implicitTxn bool, database string,
 ) bool {
-	lastSampled := s.getLogicalPlanLastSampled(planKey{
+	lastSampled := s.getLogicalPlanLastSampled(sampledPlanKey{
 		anonymizedStmt: fingerprint,
 		implicitTxn:    implicitTxn,
 		database:       database,
