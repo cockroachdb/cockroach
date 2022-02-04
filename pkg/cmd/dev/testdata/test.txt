@@ -80,7 +80,6 @@ dev test //pkg/testutils --rewrite
 ----
 find pkg/testutils -type d
 bazel query 'kind(go_test, //pkg/testutils:all)'
-bazel info workspace --color=no
 bazel test //pkg/testutils:testutils_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --test_output errors
 
 dev test //pkg/testutils pkg/other/test --rewrite
@@ -89,5 +88,4 @@ find pkg/testutils -type d
 bazel query 'kind(go_test, //pkg/testutils:all)'
 find pkg/other/test -type d
 bazel query 'kind(go_test, //pkg/other/test:all)'
-bazel info workspace --color=no
 bazel test //pkg/testutils:testutils_test //pkg/other/test:test_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_WORKSPACE=go/src/github.com/cockroachdb/cockroach --test_arg -rewrite --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/testutils --sandbox_writable_path=go/src/github.com/cockroachdb/cockroach/pkg/other/test --test_output errors

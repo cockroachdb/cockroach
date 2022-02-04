@@ -21,10 +21,6 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short
 ----
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
@@ -40,10 +36,6 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 bazel build //pkg/cmd/cockroach-short:cockroach-short
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
@@ -61,10 +53,6 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 bazel build --remote_local_fallback --remote_cache=grpc://127.0.0.1:9090 --experimental_remote_downloader=grpc://127.0.0.1:9090 //pkg/cmd/cockroach-short:cockroach-short
 ----
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
@@ -80,10 +68,6 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 bazel build //pkg/cmd/cockroach-short:cockroach-short //:go_path
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
@@ -147,10 +131,6 @@ cp /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/b
 bazel build //pkg/cmd/cockroach-short:cockroach-short -s
 ----
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
@@ -166,10 +146,6 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
@@ -191,10 +167,6 @@ go_binary rule @com_github_cockroachdb_stress//:stress
 bazel build @com_github_cockroachdb_stress//:stress
 ----
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
@@ -215,10 +187,6 @@ go_test rule //pkg/roachpb:roachpb_test
 bazel build //pkg/roachpb:roachpb_test --config=test
 ----
 
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
-
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----
 
@@ -237,10 +205,6 @@ go_proto_library rule //pkg/foo:bar_proto_library
 
 bazel build //pkg/foo:bar //pkg/foo:baz --config=test
 ----
-
-bazel info workspace --color=no
-----
-go/src/github.com/cockroachdb/cockroach
 
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 ----

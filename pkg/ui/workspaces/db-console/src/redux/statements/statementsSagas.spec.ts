@@ -11,15 +11,25 @@
 import { expectSaga } from "redux-saga-test-plan";
 import { call } from "redux-saga-test-plan/matchers";
 
-import { createDiagnosticsReportSaga } from "./statementsSagas";
+import {
+  cancelDiagnosticsReportSaga,
+  createDiagnosticsReportSaga,
+} from "./statementsSagas";
 import {
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
   createStatementDiagnosticsReportAction,
+  cancelStatementDiagnosticsReportCompleteAction,
+  cancelStatementDiagnosticsReportFailedAction,
+  cancelStatementDiagnosticsReportAction,
 } from "./statementsActions";
-import { createStatementDiagnosticsReport } from "src/util/api";
+import {
+  cancelStatementDiagnosticsReport,
+  createStatementDiagnosticsReport,
+} from "src/util/api";
 import { cockroach, google } from "src/js/protos";
 import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+import CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 import { throwError } from "redux-saga-test-plan/providers";
 import Duration = google.protobuf.Duration;
 import Long from "long";
@@ -77,6 +87,49 @@ describe("statementsSagas", () => {
       ])
       .call(createStatementDiagnosticsReport, createDiagnosticsReportRequest)
       .put(createStatementDiagnosticsReportFailedAction())
+      .dispatch(action)
+      .run();
+  });
+
+  describe("cancelDiagnostics generator", () => {
+    it("calls api#cancelStatementDiagnosticsReport with the diagnostic request ID field as payload", () => {
+      const requestID = Long.fromNumber(12345);
+      const action = cancelStatementDiagnosticsReportAction(requestID);
+      const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
+        {
+          request_id: requestID,
+        },
+      );
+
+      return expectSaga(cancelDiagnosticsReportSaga, action)
+        .provide([
+          [
+            call.fn(cancelStatementDiagnosticsReport),
+            Promise.resolve({ error: "" }),
+          ],
+        ])
+        .call(cancelStatementDiagnosticsReport, cancelDiagnosticsReportRequest)
+        .put(cancelStatementDiagnosticsReportCompleteAction())
+        .dispatch(action)
+        .run();
+    });
+  });
+
+  it("calls dispatched failed action if api#cancelStatementDiagnosticsReport request failed ", () => {
+    const requestID = new Long(12345);
+    const action = cancelStatementDiagnosticsReportAction(requestID);
+    const cancelDiagnosticsReportRequest = new CancelStatementDiagnosticsReportRequest(
+      {
+        request_id: requestID,
+      },
+    );
+
+    return expectSaga(cancelDiagnosticsReportSaga, action)
+      .provide([
+        [call.fn(cancelStatementDiagnosticsReport), throwError(new Error())],
+      ])
+      .call(cancelStatementDiagnosticsReport, cancelDiagnosticsReportRequest)
+      .put(cancelStatementDiagnosticsReportFailedAction())
       .dispatch(action)
       .run();
   });

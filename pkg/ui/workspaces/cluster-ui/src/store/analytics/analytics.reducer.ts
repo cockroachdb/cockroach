@@ -34,7 +34,7 @@ type SortingEvent = {
 type StatementDiagnosticEvent = {
   name: "Statement Diagnostics Clicked";
   page: Page;
-  action: "Activated" | "Downloaded";
+  action: "Activated" | "Downloaded" | "Cancelled";
 };
 
 type TabChangedEvent = {

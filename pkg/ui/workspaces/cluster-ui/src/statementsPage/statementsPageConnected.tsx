@@ -45,10 +45,14 @@ import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 
+type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;
 
 const CreateStatementDiagnosticsReportRequest =
   cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
+
+const CancelStatementDiagnosticsReportRequest =
+  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 
 export const ConnectedStatementsPage = withRouter(
   connect<
@@ -116,14 +120,34 @@ export const ConnectedStatementsPage = withRouter(
           }),
         );
       },
-      onDiagnosticsReportDownload: () =>
-        dispatch(
-          analyticsActions.track({
-            name: "Statement Diagnostics Clicked",
-            page: "Statements",
-            action: "Downloaded",
-          }),
-        ),
+      onSelectDiagnosticsReportDropdownOption: (
+        report: IStatementDiagnosticsReport,
+      ) => {
+        if (report.completed) {
+          dispatch(
+            analyticsActions.track({
+              name: "Statement Diagnostics Clicked",
+              page: "Statements",
+              action: "Downloaded",
+            }),
+          );
+        } else {
+          dispatch(
+            statementDiagnosticsActions.cancelReport(
+              new CancelStatementDiagnosticsReportRequest({
+                request_id: report.id,
+              }),
+            ),
+          );
+          dispatch(
+            analyticsActions.track({
+              name: "Statement Diagnostics Clicked",
+              page: "Statements",
+              action: "Cancelled",
+            }),
+          );
+        }
+      },
       onSearchComplete: (query: string) => {
         dispatch(
           analyticsActions.track({

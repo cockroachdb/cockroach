@@ -1,7 +1,6 @@
 dev builder
 ----
 id
-bazel info workspace --color=no
 cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 docker volume inspect bzlhome
 mkdir go/src/github.com/cockroachdb/cockroach/artifacts
@@ -10,7 +9,6 @@ docker run --rm -it -v go/src/github.com/cockroachdb/cockroach:/cockroach --work
 dev builder echo hi
 ----
 id
-bazel info workspace --color=no
 cat go/src/github.com/cockroachdb/cockroach/build/teamcity-bazel-support.sh
 docker volume inspect bzlhome
 mkdir go/src/github.com/cockroachdb/cockroach/artifacts
