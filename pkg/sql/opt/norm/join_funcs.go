@@ -526,8 +526,8 @@ func (c *CustomFuncs) ExtractJoinEquality(
 	}
 
 	var leftProj, rightProj projectBuilder
-	leftProj.init(c.f)
-	rightProj.init(c.f)
+	leftProj.init(c, leftCols)
+	rightProj.init(c, rightCols)
 
 	newFilters := make(memo.FiltersExpr, len(filters))
 	for i := range filters {
@@ -540,19 +540,26 @@ func (c *CustomFuncs) ExtractJoinEquality(
 			c.f.ConstructEq(leftProj.add(a), rightProj.add(b)),
 		)
 	}
-	if leftProj.empty() && rightProj.empty() {
-		panic(errors.AssertionFailedf("no equalities to extract"))
-	}
 
 	join := c.f.ConstructJoin(
 		joinOp,
-		leftProj.buildProject(left, leftCols),
-		rightProj.buildProject(right, rightCols),
+		leftProj.buildProject(left),
+		rightProj.buildProject(right),
 		newFilters,
 		private,
 	)
 
-	// Project away the synthesized columns.
+	if leftProj.empty() && rightProj.empty() {
+		// If no new projections were created, then there are no synthesized
+		// columns to project away, so we can return the join. This is possible
+		// when projections that are added to left and right are identical to
+		// computed columns that are already output left and right. There's no
+		// need to re-project these expressions, so projectBuilder will simply
+		// pass them through.
+		return join
+	}
+
+	// Otherwise, project away the synthesized columns.
 	outputCols := leftCols
 	if joinOp != opt.SemiJoinOp && joinOp != opt.AntiJoinOp {
 		// Semi/Anti join only produce the left side columns. All other join types
