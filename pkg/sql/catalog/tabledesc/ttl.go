@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/robfig/cron/v3"
 )
 
 // ValidateRowLevelTTL validates that the TTL options are valid.
@@ -37,6 +38,11 @@ func ValidateRowLevelTTL(ttl *descpb.TableDescriptor_RowLevelTTL) error {
 			return err
 		}
 	}
+	if ttl.DeletionCron != "" {
+		if err := ValidateTTLCronExpr("ttl_job_cron", ttl.DeletionCron); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -46,6 +52,19 @@ func ValidateTTLBatchSize(key string, val int64) error {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			`"%s" must be at least 1`,
+			key,
+		)
+	}
+	return nil
+}
+
+// ValidateTTLCronExpr validates the cron expression of TTL.
+func ValidateTTLCronExpr(key string, str string) error {
+	if _, err := cron.ParseStandard(str); err != nil {
+		return pgerror.Wrapf(
+			err,
+			pgcode.InvalidParameterValue,
+			`invalid cron expression for "%s"`,
 			key,
 		)
 	}
