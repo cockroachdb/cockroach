@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"google.golang.org/grpc/metadata"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -212,11 +213,28 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
+	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+
+	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
+	// if not disabled by configuration.
+	var authenticatedHandler http.Handler = gwMux
+	if args.RequireWebSession() {
+		authenticatedHandler = newAuthenticationMux(authServer, authenticatedHandler)
+	}
+
+	// Add HTTP authentication and admin authorization to the debug endpoints.
+	var handleDebugAuthenticated http.Handler = debugServer
+	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
+	if args.RequireWebSession() {
+		// Mandate both authentication and admin authorization.
+		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
+		handleDebugAuthenticated = newAuthenticationMux(authServer, handleDebugAuthenticated)
+	}
+
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-		mux.Handle("/", debugServer)
-		mux.Handle("/_status/", gwMux)
+		mux.Handle(debug.Endpoint, handleDebugAuthenticated)
+		mux.Handle("/_status/", authenticatedHandler)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 			// Return Bad Request if called with arguments.
 			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
@@ -320,6 +338,30 @@ func StartTenant(
 	}
 
 	return s, pgLAddr, httpLAddr, nil
+}
+
+// This authz code for the debug endpoint was back-ported from v22.1.
+func makeAdminAuthzCheckHandler(
+	adminAuthzCheck *adminPrivilegeChecker, handler http.Handler,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Retrieve the username embedded in the grpc metadata, if any.
+		// This will be provided by the authenticationMux.
+		md := forwardAuthenticationMetadata(req.Context(), req)
+		authCtx := metadata.NewIncomingContext(req.Context(), md)
+		// Check the privileges of the requester.
+		_, err := adminAuthzCheck.requireAdminUser(authCtx)
+		if errors.Is(err, errRequiresAdmin) {
+			http.Error(w, "admin privilege required", http.StatusUnauthorized)
+			return
+		} else if err != nil {
+			log.Ops.Infof(authCtx, "web session error: %s", err)
+			http.Error(w, "error checking authentication", http.StatusInternalServerError)
+			return
+		}
+		// Forward the request to the inner handler.
+		handler.ServeHTTP(w, req)
+	})
 }
 
 // Construct a handler responsible for serving the instant values of selected
