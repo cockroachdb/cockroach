@@ -2319,12 +2319,13 @@ func newTableDesc(
 	// Row level TTL tables require a scheduled job to be created as well.
 	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
 	// This involves plumbing InternalExecutor in there,
-	if ret.RowLevelTTL != nil {
+	if ttl := ret.RowLevelTTL; ttl != nil {
 		env := JobSchedulerEnv(params.p.ExecCfg())
 		j, err := newRowLevelTTLScheduledJob(
 			env,
 			params.p.User(),
 			ret.GetID(),
+			ttl,
 		)
 		if err != nil {
 			return nil, err
@@ -2336,10 +2337,18 @@ func newTableDesc(
 	return ret, nil
 }
 
+// defaultTTLScheduleCron is the default cron duration for row-level TTL.
+// defaultTTLScheduleCron cannot be a cluster setting as this would involve
+// changing all existing schedules to match the new setting.
+const defaultTTLScheduleCron = "@hourly"
+
 // newRowLevelTTLScheduledJob returns a *jobs.ScheduledJob for row level TTL
 // for a given table.
 func newRowLevelTTLScheduledJob(
-	env scheduledjobs.JobSchedulerEnv, owner security.SQLUsername, tblID descpb.ID,
+	env scheduledjobs.JobSchedulerEnv,
+	owner security.SQLUsername,
+	tblID descpb.ID,
+	ttl *descpb.TableDescriptor_RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%d", tblID))
@@ -2349,8 +2358,8 @@ func newRowLevelTTLScheduledJob(
 		// If a job fails, try again at the allocated cron time.
 		OnError: jobspb.ScheduleDetails_RETRY_SCHED,
 	})
-	// TODO(#75189): allow user to configure schedule.
-	if err := sj.SetSchedule("@hourly"); err != nil {
+
+	if err := sj.SetSchedule(rowLevelTTLSchedule(ttl)); err != nil {
 		return nil, err
 	}
 	args := &catpb.ScheduledRowLevelTTLArgs{
@@ -2365,6 +2374,13 @@ func newRowLevelTTLScheduledJob(
 		jobspb.ExecutionArguments{Args: any},
 	)
 	return sj, nil
+}
+
+func rowLevelTTLSchedule(ttl *descpb.TableDescriptor_RowLevelTTL) string {
+	if override := ttl.DeletionCron; override != "" {
+		return override
+	}
+	return defaultTTLScheduleCron
 }
 
 // replaceLikeTableOps processes the TableDefs in the input CreateTableNode,
