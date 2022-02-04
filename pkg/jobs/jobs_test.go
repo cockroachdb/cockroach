@@ -2322,6 +2322,7 @@ func TestJobInTxn(t *testing.T) {
 	defer sql.ClearPlanHooks()
 	// Piggy back on BACKUP to be able to create a succeeding test job.
 	sql.AddPlanHook(
+		"test",
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			st, ok := stmt.(*tree.Backup)
@@ -2358,6 +2359,7 @@ func TestJobInTxn(t *testing.T) {
 	})
 	// Piggy back on RESTORE to be able to create a failing test job.
 	sql.AddPlanHook(
+		"test",
 		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
 		) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 			_, ok := stmt.(*tree.Restore)

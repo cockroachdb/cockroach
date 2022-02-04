@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -51,7 +52,12 @@ type planHookFn func(
 //TODO(dt): should this take runParams like a normal planNode.Next?
 type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
 
-var planHooks []planHookFn
+type planHook struct {
+	name string
+	fn   planHookFn
+}
+
+var planHooks []planHook
 
 func (p *planner) RunParams(ctx context.Context) runParams {
 	return runParams{ctx, p.ExtendedEvalContext(), p}
@@ -109,8 +115,8 @@ type PlanHookState interface {
 // construct a planNode that runs that func in a goroutine during Start.
 //
 // See PlanHookState comments for information about why plan hooks are needed.
-func AddPlanHook(f planHookFn) {
-	planHooks = append(planHooks, f)
+func AddPlanHook(name string, fn planHookFn) {
+	planHooks = append(planHooks, planHook{name: name, fn: fn})
 }
 
 // ClearPlanHooks is used by tests to clear out any mocked out plan hooks that
@@ -125,12 +131,15 @@ func ClearPlanHooks() {
 type hookFnNode struct {
 	optColumnsSlot
 
+	name     string
 	f        PlanHookRowFn
 	header   colinfo.ResultColumns
 	subplans []planNode
 
 	run hookFnRun
 }
+
+var _ planNode = &hookFnNode{}
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
 type hookFnRun struct {
@@ -140,12 +149,33 @@ type hookFnRun struct {
 	row tree.Datums
 }
 
+func newHookFnNode(
+	name string, fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode,
+) *hookFnNode {
+	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans}
+}
+
 func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
+	// Start a new span for the execution of the hook's plan. This is particularly
+	// important since that execution might outlive the span in params.ctx.
+	// Generally speaking, the subplan is not supposed to outlive the caller since
+	// hookFnNode.Next() is supposed to be called until the subplan is exhausted.
+	// However, there's no strict protocol in place about the goroutines that the
+	// subplan might spawn. For example, if the subplan creates a DistSQL flow,
+	// the cleanup of that flow might race with an error bubbling up to Next(). In
+	// particular, there seem to be races around context cancelation, as Next()
+	// listens for cancellation for better or worse.
+	//
+	// TODO(andrei): We should implement a protocol where the hookFnNode doesn't
+	// listen for cancellation and guarantee Next() doesn't return false until the
+	// subplan has completely shutdown.
+	subplanCtx, sp := tracing.ChildSpan(params.ctx, f.name)
 	go func() {
-		err := f.f(params.ctx, f.subplans, f.run.resultsCh)
+		defer sp.Finish()
+		err := f.f(subplanCtx, f.subplans, f.run.resultsCh)
 		select {
 		case <-params.ctx.Done():
 		case f.run.errCh <- err:
