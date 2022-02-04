@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/sstable"
 )
 
 // CheckSSTConflicts iterates over an SST and a Reader in lockstep and errors
@@ -224,14 +225,23 @@ func CheckSSTConflicts(
 // is returned to protect against accidental inclusion of intents or inline
 // values. Tombstones are also rejected opportunistically, since we're iterating
 // over the entire SST anyway.
-//
-// TODO(erikgrinaker): This is a naïve implementation that will need significant
-// optimization. For example, the SST blocks can be rewritten in parallel, and
-// the Bloom filters and value checksums (which do not depend on the timestamp)
-// can be copied across without recomputation.
-func UpdateSSTTimestamps(sst []byte, ts hlc.Timestamp) ([]byte, error) {
+func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([]byte, error) {
 	sstOut := &MemFile{}
 	sstOut.Buffer.Grow(len(sst))
+	if concurrency > 0 && !from.IsEmpty() {
+		from := EncodeMVCCKeyToBuf([]byte{}, MVCCKey{Timestamp: from})[mvccEncodedTimeSentinelLen:]
+		to := EncodeMVCCKeyToBuf([]byte{}, MVCCKey{Timestamp: to})[mvccEncodedTimeSentinelLen:]
+		if _, err := sstable.RewriteKeySuffixes(sst,
+			DefaultPebbleOptions().MakeReaderOptions(),
+			sstOut,
+			MakeIngestionWriterOptions(),
+			from, to,
+			concurrency,
+		); err != nil {
+			return nil, err
+		}
+		return sstOut.Bytes(), nil
+	}
 	writer := MakeIngestionSSTWriter(sstOut)
 	defer writer.Close()
 
@@ -253,7 +263,7 @@ func UpdateSSTTimestamps(sst []byte, ts hlc.Timestamp) ([]byte, error) {
 		if len(iter.UnsafeValue()) == 0 {
 			return nil, errors.New("SST values cannot be tombstones")
 		}
-		err = writer.PutMVCC(MVCCKey{Key: iter.UnsafeKey().Key, Timestamp: ts}, iter.UnsafeValue())
+		err = writer.PutMVCC(MVCCKey{Key: iter.UnsafeKey().Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {
 			return nil, err
 		}
