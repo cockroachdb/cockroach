@@ -741,5 +741,5 @@ func showBackupsInCollectionPlanHook(
 }
 
 func init() {
-	sql.AddPlanHook(showBackupPlanHook)
+	sql.AddPlanHook("show backup", showBackupPlanHook)
 }
