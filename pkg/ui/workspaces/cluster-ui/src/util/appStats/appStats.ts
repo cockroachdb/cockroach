@@ -15,6 +15,7 @@ import {
   TimestampToNumber,
   DurationToNumber,
   uniqueLong,
+  unique,
 } from "src/util";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -127,6 +128,15 @@ export function addStatementStats(
 ): Required<StatementStatistics> {
   const countA = FixLong(a.count).toInt();
   const countB = FixLong(b.count).toInt();
+  let planGists: string[] = [];
+  if (a.plan_gists && b.plan_gists) {
+    planGists = unique(a.plan_gists.concat(b.plan_gists));
+  } else if (a.plan_gists) {
+    planGists = a.plan_gists;
+  } else if (b.plan_gists) {
+    planGists = b.plan_gists;
+  }
+
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -174,6 +184,7 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    plan_gists: planGists,
   };
 }
 

@@ -68,8 +68,8 @@ func getCombinedStatementStats(
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	whereClause, args := getFilterAndParams(startTime, endTime, limit, testingKnobs)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args)
+	whereClause, args := getFilterAndParams(startTime, endTime)
+	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, limit, testingKnobs)
 	if err != nil {
 		return nil, err
 	}
@@ -89,12 +89,9 @@ func getCombinedStatementStats(
 	return response, nil
 }
 
-func getFilterAndParams(
-	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs,
-) (string, []interface{}) {
+func getFilterAndParams(start, end *time.Time) (string, []interface{}) {
 	var args []interface{}
 	var buffer strings.Builder
-	buffer.WriteString(testingKnobs.GetAOSTClause())
 
 	// Filter out internal statements by app name.
 	buffer.WriteString(" WHERE app_name NOT LIKE '$ internal%'")
@@ -109,17 +106,16 @@ func getFilterAndParams(
 		args = append(args, *end)
 	}
 
-	// Retrieve the top rows ordered by aggregation time and service latency.
-	buffer.WriteString(fmt.Sprintf(`
-ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
-LIMIT $%d`, len(args)+1))
-	args = append(args, limit)
-
 	return buffer.String(), args
 }
 
 func collectCombinedStatements(
-	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	whereClause string,
+	qargs []interface{},
+	limit int64,
+	testingKnobs *sqlstats.TestingKnobs,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	query := fmt.Sprintf(
@@ -132,8 +128,29 @@ func collectCombinedStatements(
 				statistics,
 				sampled_plan,
         aggregation_interval
-			FROM crdb_internal.statement_statistics
-			%s`, whereClause)
+				FROM (
+					SELECT
+					fingerprint_id,
+					transaction_fingerprint_id,
+					app_name,
+					aggregated_ts,
+					max(metadata) AS metadata,
+					crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+					max(sampled_plan) AS sampled_plan,
+					aggregation_interval
+					FROM crdb_internal.statement_statistics
+					%s
+					GROUP BY
+					fingerprint_id,
+					transaction_fingerprint_id,
+					app_name,
+          aggregated_ts,
+					aggregation_interval)
+				%s
+				ORDER BY (statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
+				LIMIT $%d`, whereClause, testingKnobs.GetAOSTClause(), len(qargs)+1)
+
+	qargs = append(qargs, limit)
 
 	const expectedNumDatums = 8
 
