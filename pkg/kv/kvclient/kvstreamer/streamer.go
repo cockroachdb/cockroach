@@ -1281,7 +1281,15 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 		case *roachpb.ScanRequest:
 			scan := reply.(*roachpb.ScanResponse)
-			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
+				// Only the last part of the conditional is true whenever we
+				// received an empty response for the Scan request (i.e. there
+				// was no data in the span to scan). In such a scenario we still
+				// create a Result with no data that the client will skip over
+				// (this approach makes it easier to support Scans that span
+				// multiple ranges and the last range has no data in it - we
+				// want to be able to set Complete field on such an empty
+				// Result).
 				result := Result{
 					// This currently only works because all requests
 					// are unique.

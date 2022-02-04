@@ -38,7 +38,7 @@ var useStreamerEnabled = settings.RegisterBoolSetting(
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
 		"while adhering to memory limits.",
-	false,
+	true,
 )
 
 // TxnKVStreamer handles retrieval of key/values.
@@ -120,6 +120,8 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 	if len(f.lastResultState.remainingBatches) == 0 {
 		f.processedScanResponse()
 	}
+	// Note that scan.Rows and batchResp might be nil when the ScanResponse is
+	// empty, and the caller (the KVFetcher) will skip over it.
 	return false, scan.Rows, batchResp, nil
 }
 
