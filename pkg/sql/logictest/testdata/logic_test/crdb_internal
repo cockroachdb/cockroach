@@ -645,7 +645,7 @@ select crdb_internal.get_vmodule()
 query error pq: only users with the admin role are allowed to access the node runtime information
 select * from crdb_internal.node_runtime_info
 
-query error pq: only users with the admin role are allowed to read crdb_internal.ranges
+query error pq: only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases
 select * from crdb_internal.ranges
 
 query error pq: only users with the admin role are allowed to read crdb_internal.gossip_nodes
@@ -995,8 +995,8 @@ other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
-system         admin     GRANT           YES
-system         root      GRANT           YES
+system         admin     CONNECT         YES
+system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
 test           root      ALL             YES
@@ -1022,8 +1022,8 @@ other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
 postgres       root      ALL             YES
-system         admin     GRANT           YES
-system         root      GRANT           YES
+system         admin     CONNECT         YES
+system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
 test           root      ALL             YES

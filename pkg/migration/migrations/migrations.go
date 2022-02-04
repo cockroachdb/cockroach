@@ -103,6 +103,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		ensureCommentsHaveNonDroppedIndexes,
 	),
+	migration.NewTenantMigration(
+		"convert incompatible database privileges to default privileges",
+		toCV(clusterversion.RemoveIncompatibleDatabasePrivileges),
+		NoPrecondition,
+		runRemoveInvalidDatabasePrivileges,
+	),
 }
 
 func init() {
