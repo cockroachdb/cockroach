@@ -196,6 +196,7 @@ type RecordedStmtStats struct {
 	Nodes           []int64
 	StatementType   tree.StatementType
 	Plan            *roachpb.ExplainTreePlanNode
+	PlanGist        string
 	StatementError  error
 }
 

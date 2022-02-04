@@ -34,14 +34,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// TODO(azhng): currently we do not have the ability to compute a hash for
-	//  query plan. This is currently being worked on by the SQL Queries team.
-	//  Once we are able get consistent hash value from a query plan, we should
-	//  update this.
-	dummyPlanHash = int64(0)
-)
-
 // ErrConcurrentSQLStatsCompaction is reported when two sql stats compaction
 // jobs are issued concurrently. This is a sentinel error.
 var ErrConcurrentSQLStatsCompaction = errors.New("another sql stats compaction job is already running")

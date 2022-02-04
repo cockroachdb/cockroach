@@ -104,6 +104,12 @@ message StatementStatistics {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 24;
 
+  // plan_gists is list of a compressed version of plan that can be converted (lossily)
+  // back into a logical plan.
+  // Each statement contain only one plan gist, but the same statement fingerprint id
+  // can contain more than one value.
+  repeated string plan_gists = 26;
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
