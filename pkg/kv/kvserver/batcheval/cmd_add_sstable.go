@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -36,6 +37,14 @@ func init() {
 	// unpopulated spans.
 	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareIsolatedKeys, EvalAddSSTable)
 }
+
+var addSSTableRewriteConcurrency = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.bulk_io_write.sst_rewrite_concurrency.per_call",
+	"concurrency to use when rewriting a sstable timestamps by block, or 0 to use a loop",
+	0,
+	settings.NonNegativeInt,
+)
 
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
@@ -69,7 +78,9 @@ func EvalAddSSTable(
 	// observed or closed.
 	if args.WriteAtRequestTimestamp &&
 		(args.SSTTimestamp.IsEmpty() || h.Timestamp != args.SSTTimestamp) {
-		sst, err = storage.UpdateSSTTimestamps(sst, h.Timestamp)
+		// TODO(dt): use a quotapool.
+		concurrency := int(addSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
+		sst, err = storage.UpdateSSTTimestamps(sst, args.SSTTimestamp, h.Timestamp, concurrency)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 		}

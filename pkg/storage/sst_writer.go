@@ -52,6 +52,16 @@ func (noopSyncCloser) Close() error {
 	return nil
 }
 
+func MakeIngestionWriterOptions() sstable.WriterOptions {
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
+	// TODO(sumeer): we should use BlockPropertyCollectors here if the cluster
+	// version permits (which is also reflected in the store's roachpb.Version
+	// and pebble.FormatMajorVersion).
+	opts.BlockPropertyCollectors = nil
+	opts.MergerName = "nullptr"
+	return opts
+}
+
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
 func MakeBackupSSTWriter(f io.Writer) SSTWriter {
@@ -75,14 +85,7 @@ func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
 func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
-	// TODO(sumeer): we should use BlockPropertyCollectors here if the cluster
-	// version permits (which is also reflected in the store's roachpb.Version
-	// and pebble.FormatMajorVersion).
-	opts.BlockPropertyCollectors = nil
-	opts.MergerName = "nullptr"
-	sst := sstable.NewWriter(f, opts)
-	return SSTWriter{fw: sst, f: f}
+	return SSTWriter{fw: sstable.NewWriter(f, MakeIngestionWriterOptions()), f: f}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,
