@@ -609,13 +609,13 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 				if err != nil {
 					return nil, err
 				}
-				for i := range objectIDs {
-					descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
-					if err != nil {
-						return nil, err
-					}
-					if descriptor != nil && descriptor.DescriptorType() == catalog.Table {
-						descs = append(descs, descriptor)
+				muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+				if err != nil {
+					return nil, err
+				}
+				for _, mut := range muts {
+					if mut != nil && mut.DescriptorType() == catalog.Table {
+						descs = append(descs, mut)
 					}
 				}
 			}
@@ -673,14 +673,13 @@ func getDescriptorsFromTargetListForPrivilegeChange(
 		if err != nil {
 			return nil, err
 		}
-
-		for i := range objectIDs {
-			descriptor, err := p.Descriptors().GetMutableDescriptorByID(ctx, objectIDs[i], p.txn)
-			if err != nil {
-				return nil, err
-			}
-			if descriptor != nil && descriptor.DescriptorType() == catalog.Table {
-				descs = append(descs, descriptor)
+		muts, err := p.Descriptors().GetMutableDescriptorsByID(ctx, p.txn, objectIDs...)
+		if err != nil {
+			return nil, err
+		}
+		for _, mut := range muts {
+			if mut != nil && mut.DescriptorType() == catalog.Table {
+				descs = append(descs, mut)
 			}
 		}
 	}

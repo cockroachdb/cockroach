@@ -1089,7 +1089,7 @@ func createImportingDescriptors(
 			// Write the updated databases.
 			for dbID, schemas := range existingDBsWithNewSchemas {
 				log.Infof(ctx, "writing %d schema entries to database %d", len(schemas), dbID)
-				desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
+				desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbID)
 				if err != nil {
 					return err
 				}
@@ -1924,7 +1924,7 @@ func (r *restoreResumer) publishDescriptors(
 		}
 	}
 	for _, sc := range details.SchemaDescs {
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, sc.ID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, sc.ID)
 		if err != nil {
 			return err
 		}
@@ -1940,7 +1940,7 @@ func (r *restoreResumer) publishDescriptors(
 		// an offline state.
 		// TODO(lucy): Should we make this more explicit with a format version
 		// field in the details?
-		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, dbDesc.ID, txn)
+		mutDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbDesc.ID)
 		if err != nil {
 			return err
 		}
@@ -2216,7 +2216,7 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		mutSchema, err := descsCol.GetMutableDescriptorByID(ctx, schemaDesc.GetID(), txn)
+		mutSchema, err := descsCol.GetMutableDescriptorByID(ctx, txn, schemaDesc.GetID())
 		if err != nil {
 			return err
 		}
@@ -2244,7 +2244,7 @@ func (r *restoreResumer) dropDescriptors(
 	// modified schema slice after we have issued a `b.Del` to drop it.
 	for dbID, schemas := range dbsWithDeletedSchemas {
 		log.Infof(ctx, "deleting %d schema entries from database %d", len(schemas), dbID)
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, dbID, txn)
+		desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbID)
 		if err != nil {
 			return err
 		}
@@ -2286,7 +2286,7 @@ func (r *restoreResumer) dropDescriptors(
 			continue
 		}
 
-		db, err := descsCol.GetMutableDescriptorByID(ctx, dbDesc.GetID(), txn)
+		db, err := descsCol.GetMutableDescriptorByID(ctx, txn, dbDesc.GetID())
 		if err != nil {
 			return err
 		}

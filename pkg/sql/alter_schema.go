@@ -146,7 +146,7 @@ func (p *planner) alterSchemaOwner(
 	}
 
 	// The user must also have CREATE privilege on the schema's database.
-	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, scDesc.GetParentID(), p.txn)
+	parentDBDesc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, scDesc.GetParentID())
 	if err != nil {
 		return err
 	}
