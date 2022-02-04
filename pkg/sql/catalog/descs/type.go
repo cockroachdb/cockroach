@@ -111,7 +111,7 @@ func (tc *Collection) GetImmutableTypeByID(
 func (tc *Collection) getTypeByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
 ) (catalog.TypeDescriptor, error) {
-	desc, err := tc.getDescriptorByID(ctx, txn, typeID, flags.CommonLookupFlags)
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, typeID)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, pgerror.Newf(
@@ -119,7 +119,7 @@ func (tc *Collection) getTypeByID(
 		}
 		return nil, err
 	}
-	switch t := desc.(type) {
+	switch t := descs[0].(type) {
 	case catalog.TypeDescriptor:
 		// User-defined type.
 		return t, nil

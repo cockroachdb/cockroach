@@ -588,7 +588,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 	schemaMetadata.schemaPreparedDetails.Schemas = make([]jobspb.ImportDetails_Schema,
 		len(details.Schemas))
 
-	desc, err := descsCol.GetMutableDescriptorByID(ctx, details.ParentID, txn)
+	desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -1042,7 +1042,7 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	) error {
 		b := txn.NewBatch()
 		for _, schema := range details.Schemas {
-			newDesc, err := descsCol.GetMutableDescriptorByID(ctx, schema.Desc.GetID(), txn)
+			newDesc, err := descsCol.GetMutableDescriptorByID(ctx, txn, schema.Desc.GetID())
 			if err != nil {
 				return err
 			}
@@ -1515,7 +1515,7 @@ func (r *importResumer) dropSchemas(
 	}
 
 	// Resolve the database descriptor.
-	desc, err := descsCol.GetMutableDescriptorByID(ctx, details.ParentID, txn)
+	desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, details.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -1528,7 +1528,7 @@ func (r *importResumer) dropSchemas(
 
 	droppedSchemaIDs := make([]descpb.ID, 0)
 	for _, schema := range details.Schemas {
-		desc, err := descsCol.GetMutableDescriptorByID(ctx, schema.Desc.ID, txn)
+		desc, err := descsCol.GetMutableDescriptorByID(ctx, txn, schema.Desc.ID)
 		if err != nil {
 			return nil, err
 		}
