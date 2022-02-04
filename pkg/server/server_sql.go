@@ -255,9 +255,6 @@ type sqlServerArgs struct {
 	// Used for SHOW/CANCEL QUERIE(S)/SESSION(S).
 	sessionRegistry *sql.SessionRegistry
 
-	// Used to track the contention events on this node.
-	contentionRegistry *contention.Registry
-
 	// Used to track the DistSQL flows scheduled on this node but initiated on
 	// behalf of other nodes.
 	flowScheduler *flowinfra.FlowScheduler
@@ -656,7 +653,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SQLStatusServer:         cfg.sqlStatusServer,
 		RegionsServer:           cfg.regionsServer,
 		SessionRegistry:         cfg.sessionRegistry,
-		ContentionRegistry:      cfg.contentionRegistry,
+		ContentionRegistry:      contention.NewRegistry(),
 		SQLLiveness:             cfg.sqlLivenessProvider,
 		JobRegistry:             jobRegistry,
 		VirtualSchemas:          virtualSchemas,
