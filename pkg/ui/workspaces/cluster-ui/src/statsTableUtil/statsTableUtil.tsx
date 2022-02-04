@@ -35,7 +35,6 @@ export const statisticsColumnLabels = {
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
-  aggregationInterval: "Aggregation Interval (UTC)",
   maxMemUsage: "Max Memory",
   networkBytes: "Network",
   regionNodes: "Regions/Nodes",
@@ -137,27 +136,6 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("transactions")}
-      </Tooltip>
-    );
-  },
-  aggregationInterval: () => {
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <div>
-            <p>
-              The time interval of the statement execution. By default,
-              statements are configured to aggregate over an hour interval.
-              <br />
-              For example, if a statement is executed at 1:23PM it will fall in
-              the 1:00PM - 2:00PM time interval.
-            </p>
-          </div>
-        }
-      >
-        {getLabel("aggregationInterval")}
       </Tooltip>
     );
   },
