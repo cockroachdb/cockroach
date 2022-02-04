@@ -1579,8 +1579,11 @@ func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
 func (node *ShardedIndexDef) doc(p *PrettyCfg) pretty.Doc {
 	// Final layout:
 	//
-	// USING HASH WITH BUCKET_COUNT = bucket_count
+	// USING HASH [WITH BUCKET_COUNT = bucket_count]
 	//
+	if _, ok := node.ShardBuckets.(DefaultVal); ok {
+		return pretty.Keyword("USING HASH")
+	}
 	parts := []pretty.Doc{
 		pretty.Keyword("USING HASH WITH BUCKET_COUNT = "),
 		p.Doc(node.ShardBuckets),
@@ -1956,10 +1959,28 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.Unique.ConstraintName, pkConstraint))
 	}
 
+	// Always prefer to output hash sharding bucket count as a storage param.
+	pkStorageParams := node.PrimaryKey.StorageParams
 	if node.PrimaryKey.Sharded {
-		clauses = append(clauses, pretty.Keyword("USING HASH WITH BUCKET_COUNT = "))
-		clauses = append(clauses, p.Doc(node.PrimaryKey.ShardBuckets))
+		clauses = append(clauses, pretty.Keyword("USING HASH"))
+		bcStorageParam := node.PrimaryKey.StorageParams.GetVal(`bucket_count`)
+		if _, ok := node.PrimaryKey.ShardBuckets.(DefaultVal); !ok && bcStorageParam == nil {
+			pkStorageParams = append(
+				pkStorageParams, StorageParam{
+					Key:   `bucket_count`,
+					Value: node.PrimaryKey.ShardBuckets,
+				},
+			)
+		}
 	}
+	if len(pkStorageParams) > 0 {
+		clauses = append(clauses, p.bracketKeyword(
+			"WITH", " (",
+			p.Doc(&pkStorageParams),
+			")", "",
+		))
+	}
+
 	// CHECK expressions/constraints.
 	for _, checkExpr := range node.CheckExprs {
 		clauses = append(clauses, p.maybePrependConstraintName(&checkExpr.ConstraintName,
