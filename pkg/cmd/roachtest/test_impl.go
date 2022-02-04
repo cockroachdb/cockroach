@@ -97,18 +97,6 @@ type testImpl struct {
 	versionsBinaryOverride map[string]string
 }
 
-func (t *testImpl) timedOut() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.mu.timeout
-}
-
-func (t *testImpl) setTimedOut() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.mu.timeout = true
-}
-
 // BuildVersion exposes the build version of the cluster
 // in this test.
 func (t *testImpl) BuildVersion() *version.Version {
@@ -256,12 +244,14 @@ func (t *testImpl) Skipf(format string, args ...interface{}) {
 // ATTENTION: Since this calls panic(errTestFatal), it should only be called
 // from a test's closure. The test runner itself should never call this.
 func (t *testImpl) Fatal(args ...interface{}) {
-	t.fatalfInner("" /* format */, args...)
+	t.markFailedInner("" /* format */, args...)
+	panic(errTestFatal)
 }
 
 // Fatalf is like Fatal, but takes a format string.
 func (t *testImpl) Fatalf(format string, args ...interface{}) {
-	t.fatalfInner(format, args...)
+	t.markFailedInner(format, args...)
+	panic(errTestFatal)
 }
 
 // FailNow implements the TestingT interface.
@@ -271,17 +261,16 @@ func (t *testImpl) FailNow() {
 
 // Errorf implements the TestingT interface.
 func (t *testImpl) Errorf(format string, args ...interface{}) {
-	t.Fatalf(format, args...)
+	t.markFailedInner(format, args...)
 }
 
-func (t *testImpl) fatalfInner(format string, args ...interface{}) {
+func (t *testImpl) markFailedInner(format string, args ...interface{}) {
 	// Skip two frames: our own and the caller.
 	if format != "" {
 		t.printfAndFail(2 /* skip */, format, args...)
 	} else {
 		t.printAndFail(2 /* skip */, args...)
 	}
-	panic(errTestFatal)
 }
 
 func (t *testImpl) printAndFail(skip int, args ...interface{}) {
