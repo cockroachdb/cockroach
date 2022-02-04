@@ -85,6 +85,10 @@ type StoreTestingKnobs struct {
 	// per-Batch SlowReplicationThreshold.
 	SlowReplicationThresholdOverride func(ba *roachpb.BatchRequest) time.Duration
 
+	// CancelStorageFactory overrides the default CancelStorage used by Replica
+	// circuit breakers.
+	CancelStorageFactory func() CancelStorage
+
 	// TestingRangefeedFilter is called before a replica processes a rangefeed
 	// in order for unit tests to modify the request, error returned to the client
 	// or data.
