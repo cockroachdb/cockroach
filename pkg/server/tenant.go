@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"google.golang.org/grpc/metadata"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -61,19 +62,37 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
+) (sqlServer *SQLServer, pgAddr string, httpAddr string, err error) {
+	sqlServer, _, pgAddr, httpAddr, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	return
+}
+
+// startTenantInternal is used to build TestServers.
+func startTenantInternal(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+) (
+	sqlServer *SQLServer,
+	authServer *authenticationServer,
+	pgAddr string,
+	httpAddr string,
+	_ error,
+) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	args, err := makeTenantSQLServerArgs(stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          args.MemoryPoolSize,
@@ -107,7 +126,7 @@ func StartTenant(
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := StartListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	{
@@ -121,17 +140,17 @@ func StartTenant(
 		}
 		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(ctx)
-			return nil, "", "", err
+			return nil, nil, "", "", err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	httpL, err := ListenAndUpdateAddrs(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	if serverTLSConfig != nil {
 		httpL = tls.NewListener(httpL, serverTLSConfig)
@@ -144,7 +163,7 @@ func StartTenant(
 		}
 		if err := args.stopper.RunAsyncTask(ctx, "wait-quiesce-http", waitQuiesce); err != nil {
 			waitQuiesce(ctx)
-			return nil, "", "", err
+			return nil, nil, "", "", err
 		}
 	}
 	pgLAddr := pgL.Addr().String()
@@ -166,7 +185,7 @@ func StartTenant(
 	tenantStatusServer.sqlServer = s
 
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
@@ -174,7 +193,7 @@ func StartTenant(
 	s.execCfg.DistSQLPlanner.SetNodeInfo(roachpb.NodeDescriptor{NodeID: 0})
 	workersCtx := tenantStatusServer.AnnotateCtx(context.Background())
 
-	authServer := newAuthenticationServer(baseCfg.Config, s)
+	authServer = newAuthenticationServer(baseCfg.Config, s)
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
@@ -194,12 +213,12 @@ func StartTenant(
 		pgLAddr,
 	)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	for _, gw := range []grpcGatewayServer{tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, "", "", err
+			return nil, nil, "", "", err
 		}
 	}
 
@@ -212,11 +231,28 @@ func StartTenant(
 		pgLAddr,   // sql addr
 	)
 
+	debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+
+	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
+	// if not disabled by configuration.
+	var authenticatedHandler http.Handler = gwMux
+	if args.RequireWebSession() {
+		authenticatedHandler = newAuthenticationMux(authServer, authenticatedHandler)
+	}
+
+	// Add HTTP authentication and admin authorization to the debug endpoints.
+	var handleDebugAuthenticated http.Handler = debugServer
+	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
+	if args.RequireWebSession() {
+		// Mandate both authentication and admin authorization.
+		handleDebugAuthenticated = makeAdminAuthzCheckHandler(adminAuthzCheck, handleDebugAuthenticated)
+		handleDebugAuthenticated = newAuthenticationMux(authServer, handleDebugAuthenticated)
+	}
+
 	if err := args.stopper.RunAsyncTask(ctx, "serve-http", func(ctx context.Context) {
 		mux := http.NewServeMux()
-		debugServer := debug.NewServer(args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-		mux.Handle("/", debugServer)
-		mux.Handle("/_status/", gwMux)
+		mux.Handle(debug.Endpoint, handleDebugAuthenticated)
+		mux.Handle("/_status/", authenticatedHandler)
 		mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
 			// Return Bad Request if called with arguments.
 			if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
@@ -237,7 +273,7 @@ func StartTenant(
 
 		netutil.FatalIfUnexpected(tlsConnManager.Serve(httpL))
 	}); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	const (
@@ -256,7 +292,7 @@ func StartTenant(
 		runtime:              args.runtime,
 		sessionRegistry:      args.sessionRegistry,
 	}); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	if err := s.preStart(ctx,
@@ -267,7 +303,7 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	// This is necessary so the grpc server doesn't error out on heartbeat
@@ -308,7 +344,7 @@ func StartTenant(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -316,10 +352,34 @@ func StartTenant(
 		s.connManager,
 		s.pgL,
 		socketFile); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
-	return s, pgLAddr, httpLAddr, nil
+	return s, authServer, pgLAddr, httpLAddr, nil
+}
+
+// This authz code for the debug endpoint was back-ported from v22.1.
+func makeAdminAuthzCheckHandler(
+	adminAuthzCheck *adminPrivilegeChecker, handler http.Handler,
+) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		// Retrieve the username embedded in the grpc metadata, if any.
+		// This will be provided by the authenticationMux.
+		md := forwardAuthenticationMetadata(req.Context(), req)
+		authCtx := metadata.NewIncomingContext(req.Context(), md)
+		// Check the privileges of the requester.
+		_, err := adminAuthzCheck.requireAdminUser(authCtx)
+		if errors.Is(err, errRequiresAdmin) {
+			http.Error(w, "admin privilege required", http.StatusUnauthorized)
+			return
+		} else if err != nil {
+			log.Ops.Infof(authCtx, "web session error: %s", err)
+			http.Error(w, "error checking authentication", http.StatusInternalServerError)
+			return
+		}
+		// Forward the request to the inner handler.
+		handler.ServeHTTP(w, req)
+	})
 }
 
 // Construct a handler responsible for serving the instant values of selected

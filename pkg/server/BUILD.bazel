@@ -49,6 +49,7 @@ go_library(
         "tenant_status.go",
         "testing_knobs.go",
         "testserver.go",
+        "testserver_http.go",
         "user.go",
     ],
     cgo = True,

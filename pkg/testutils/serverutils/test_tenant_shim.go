@@ -14,6 +14,8 @@
 package serverutils
 
 import (
+	"net/http"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 )
@@ -56,4 +58,17 @@ type TestTenantInterface interface {
 
 	// RPCContext returns the *rpc.Context
 	RPCContext() *rpc.Context
+
+	// AdminURL returns the URL for the admin UI.
+	AdminURL() string
+	// GetHTTPClient returns an http client configured with the client TLS
+	// config required by the TestServer's configuration.
+	GetHTTPClient() (http.Client, error)
+	// GetAdminAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	// The user has admin privileges.
+	GetAdminAuthenticatedHTTPClient() (http.Client, error)
+	// GetAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
 }
