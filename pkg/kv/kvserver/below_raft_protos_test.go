@@ -133,6 +133,13 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     14695981039346656037,
 		populatedSum: 1187861800212570275,
 	},
+	reflect.TypeOf(&roachpb.RaftReplicaID{}): {
+		populatedConstructor: func(r *rand.Rand) protoutil.Message {
+			return roachpb.NewPopulatedRaftReplicaID(r, false)
+		},
+		emptySum:     598336668751268149,
+		populatedSum: 9313101058286450988,
+	},
 }
 
 func TestBelowRaftProtos(t *testing.T) {

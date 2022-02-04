@@ -2633,7 +2633,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 
 	uninitDesc := roachpb.RangeDescriptor{RangeID: repl1.Desc().RangeID}
 	if err := stateloader.WriteInitialRangeState(
-		ctx, s.Engine(), uninitDesc, roachpb.Version{},
+		ctx, s.Engine(), uninitDesc, 2, roachpb.Version{},
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -3044,6 +3044,32 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 	_, _, err := tc.store.ManuallyEnqueue(ctx, "replicaGC", repl, true)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not enqueueing uninitialized replica")
+}
+
+// TestStoreGetOrCreateReplicaWritesRaftReplicaID tests that an uninitialized
+// replica has a RaftReplicaID.
+func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc := testContext{}
+	tc.Start(ctx, t, stopper)
+
+	repl, created, err := tc.store.getOrCreateReplica(
+		ctx, 42, 7, &roachpb.ReplicaDescriptor{
+			NodeID:    tc.store.NodeID(),
+			StoreID:   tc.store.StoreID(),
+			ReplicaID: 7,
+		})
+	require.NoError(t, err)
+	require.True(t, created)
+	replicaID, found, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.Engine())
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, roachpb.RaftReplicaID{ReplicaID: 7}, replicaID)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

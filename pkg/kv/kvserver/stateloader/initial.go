@@ -96,6 +96,7 @@ func WriteInitialRangeState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	desc roachpb.RangeDescriptor,
+	replicaID roachpb.ReplicaID,
 	replicaVersion roachpb.Version,
 ) error {
 	initialLease := roachpb.Lease{}
@@ -108,7 +109,13 @@ func WriteInitialRangeState(
 	); err != nil {
 		return err
 	}
-	if err := Make(desc.RangeID).SynthesizeRaftState(ctx, readWriter); err != nil {
+	sl := Make(desc.RangeID)
+	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
+		return err
+	}
+	// Maintain the invariant that any replica (uninitialized or initialized),
+	// with persistent state, has a RaftReplicaID.
+	if err := sl.SetRaftReplicaID(ctx, readWriter, replicaID); err != nil {
 		return err
 	}
 	return nil

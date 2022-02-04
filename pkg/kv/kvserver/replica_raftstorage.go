@@ -863,6 +863,12 @@ func (r *Replica) applySnapshot(
 	if err := r.raftMu.stateLoader.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
+	// We've cleared all the raft state above, so we are forced to write the
+	// RaftReplicaID again here.
+	if err := r.raftMu.stateLoader.SetRaftReplicaID(
+		ctx, &unreplicatedSST, r.mu.replicaID); err != nil {
+		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
+	}
 
 	// Update Raft entries.
 	r.store.raftEntryCache.Drop(r.RangeID)

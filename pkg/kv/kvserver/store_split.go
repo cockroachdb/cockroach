@@ -42,7 +42,7 @@ func splitPreApply(
 	//
 	// The exception to that is if the DisableEagerReplicaRemoval testing flag is
 	// enabled.
-	_, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
+	rightDesc, hasRightDesc := split.RightDesc.GetReplicaDescriptor(r.StoreID())
 	_, hasLeftDesc := split.LeftDesc.GetReplicaDescriptor(r.StoreID())
 	if !hasRightDesc || !hasLeftDesc {
 		log.Fatalf(ctx, "cannot process split on s%s which does not exist in the split: %+v",
@@ -100,8 +100,19 @@ func splitPreApply(
 			log.Fatalf(ctx, "failed to clear range data for removed rhs: %v", err)
 		}
 		if rightRepl != nil {
+			// Cleared the HardState and RaftReplicaID, so rewrite them to the
+			// current values.
+			// TODO(sumeer): we know HardState.Commit cannot advance since the RHS
+			// cannot apply a snapshot yet. But there could be a concurrent change
+			// to HardState.{Term,Vote} that we would accidentally undo here,
+			// because we are not actually holding the appropriate mutex. See
+			// https://github.com/cockroachdb/cockroach/issues/75918.
 			if err := rightRepl.raftMu.stateLoader.SetHardState(ctx, readWriter, hs); err != nil {
 				log.Fatalf(ctx, "failed to set hard state with 0 commit index for removed rhs: %v", err)
+			}
+			if err := rightRepl.raftMu.stateLoader.SetRaftReplicaID(
+				ctx, readWriter, rightRepl.ReplicaID()); err != nil {
+				log.Fatalf(ctx, "failed to set RaftReplicaID for removed rhs: %v", err)
 			}
 		}
 		return
@@ -114,7 +125,14 @@ func splitPreApply(
 	if err := rsl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
-
+	// Write the RaftReplicaID for the RHS to maintain the invariant that any
+	// replica (uninitialized or initialized), with persistent state, has a
+	// RaftReplicaID. NB: this invariant will not be universally true until we
+	// introduce node startup code that will write this value for existing
+	// ranges.
+	if err := rsl.SetRaftReplicaID(ctx, readWriter, rightDesc.ReplicaID); err != nil {
+		log.Fatalf(ctx, "%v", err)
+	}
 	// Persist the closed timestamp.
 	//
 	// In order to tolerate a nil initClosedTS input, let's forward to
