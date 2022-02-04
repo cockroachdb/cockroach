@@ -27,7 +27,7 @@ interface LoadingProps {
   error?: Error | Error[] | null;
   className?: string;
   image?: string;
-  render: () => any;
+  render: React.ReactElement;
   errorClassName?: string;
   loadingClassName?: string;
   renderError?: () => React.ReactElement;
@@ -125,5 +125,5 @@ export const Loading: React.FC<LoadingProps> = props => {
       <Spinner className={cx("loading-indicator", props.loadingClassName)} />
     );
   }
-  return props.render();
+  return props.render;
 };

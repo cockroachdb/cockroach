@@ -40,10 +40,7 @@ import { merge } from "lodash";
 import { unique, syncHistory } from "src/util";
 import { EmptyTransactionsPlaceholder } from "./emptyTransactionsPlaceholder";
 import { Loading } from "../loading";
-import { PageConfig, PageConfigItem } from "../pageConfig";
-import { Search } from "../search";
 import {
-  Filter,
   Filters,
   defaultFilters,
   handleFiltersFromQueryString,
@@ -57,15 +54,9 @@ import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
-import ClearStats from "../sqlActivity/clearStats";
 import SQLActivityError from "../sqlActivity/errorComponent";
-import { commonStyles } from "../common";
-import {
-  TimeScaleDropdown,
-  defaultTimeScaleSelected,
-  TimeScale,
-  toDateRange,
-} from "../timeScaleDropdown";
+import { TimeScale, toDateRange } from "../timeScaleDropdown";
+import SQLStatsPageSettings from "src/statementsPage/statsPageSettings";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -245,18 +236,6 @@ export class TransactionsPage extends React.Component<
     });
   };
 
-  onClearSearchField = (): void => {
-    if (this.props.onSearchComplete) {
-      this.props.onSearchComplete("");
-    }
-    syncHistory(
-      {
-        q: undefined,
-      },
-      this.props.history,
-    );
-  };
-
   onSubmitSearchField = (search: string): void => {
     if (this.props.onSearchComplete) {
       this.props.onSearchComplete(search);
@@ -264,7 +243,7 @@ export class TransactionsPage extends React.Component<
     this.resetPagination();
     syncHistory(
       {
-        q: search,
+        q: search === "" ? undefined : search,
       },
       this.props.history,
     );
@@ -279,53 +258,28 @@ export class TransactionsPage extends React.Component<
       filters: filters,
     });
     this.resetPagination();
-    syncHistory(
-      {
-        app: filters.app,
-        timeNumber: filters.timeNumber,
-        timeUnit: filters.timeUnit,
-        regions: filters.regions,
-        nodes: filters.nodes,
-      },
-      this.props.history,
-    );
+
+    // Set all filters to undefined for history.
+    const stringifiedFilters: Record<string, string> = {};
+
+    Object.entries(filters).forEach(([filter, val]) => {
+      stringifiedFilters[filter] =
+        val === defaultFilters[filter as keyof Filters]
+          ? undefined
+          : val.toString();
+    });
+
+    syncHistory(stringifiedFilters, this.props.history);
   };
 
   onClearFilters = (): void => {
-    if (this.props.onFilterChange) {
-      this.props.onFilterChange(defaultFilters);
-    }
-
-    this.setState({
-      filters: {
-        ...defaultFilters,
-      },
-    });
-    this.resetPagination();
-    syncHistory(
-      {
-        app: undefined,
-        timeNumber: undefined,
-        timeUnit: undefined,
-        regions: undefined,
-        nodes: undefined,
-      },
-      this.props.history,
-    );
-  };
-
-  lastReset = (): Date => {
-    return new Date(Number(this.props.data?.last_reset.seconds) * 1000);
+    this.onSubmitFilters(defaultFilters);
   };
 
   changeTimeScale = (ts: TimeScale): void => {
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-  };
-
-  resetTime = (): void => {
-    this.changeTimeScale(defaultTimeScaleSelected);
   };
 
   render(): React.ReactElement {
@@ -338,6 +292,7 @@ export class TransactionsPage extends React.Component<
       columns: userSelectedColumnsToShow,
       sortSetting,
       search,
+      timeScale,
     } = this.props;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -377,45 +332,19 @@ export class TransactionsPage extends React.Component<
 
     return (
       <div className={cx("table-area")}>
-        <PageConfig>
-          <PageConfigItem>
-            <Search
-              onSubmit={this.onSubmitSearchField as any}
-              onClear={this.onClearSearchField}
-              defaultValue={search}
-              placeholder={"Search Transactions"}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Filter
-              onSubmitFilters={this.onSubmitFilters}
-              appNames={appNames}
-              regions={regions}
-              nodes={nodes.map(n => "n" + n)}
-              activeFilters={activeFilters}
-              filters={filters}
-              showRegions={regions.length > 1}
-              showNodes={nodes.length > 1}
-            />
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <TimeScaleDropdown
-              currentScale={this.props.timeScale}
-              setTimeScale={this.changeTimeScale}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
-          </PageConfigItem>
-          <PageConfigItem className={commonStyles("separator")}>
-            <ClearStats
-              resetSQLStats={resetSQLStats}
-              tooltipType="transaction"
-            />
-          </PageConfigItem>
-        </PageConfig>
+        <SQLStatsPageSettings
+          apps={appNames}
+          filters={filters}
+          nodes={nodes}
+          statType="statement"
+          regions={regions}
+          searchInit={search}
+          timeScale={timeScale}
+          onChangeTimeScale={this.changeTimeScale}
+          onSearchSubmit={this.onSubmitSearchField}
+          onSubmitFilters={this.onSubmitFilters}
+          resetSQLStats={resetSQLStats}
+        />
         <Loading
           loading={!this.props?.data}
           page={"transactions"}

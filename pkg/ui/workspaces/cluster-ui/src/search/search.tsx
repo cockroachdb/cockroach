@@ -30,7 +30,7 @@ interface ISearchState {
   submit?: boolean;
 }
 
-type TSearchProps = ISearchProps & InputProps;
+type TSearchProps = ISearchProps & Omit<InputProps, "onSubmit">;
 
 const cx = classNames.bind(styles);
 
@@ -40,7 +40,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     submitted: false,
   };
 
-  onSubmit = (e: React.SyntheticEvent) => {
+  onSubmit = (e: React.SyntheticEvent): void => {
     e && e.preventDefault();
     const { value } = this.state;
     const { onSubmit } = this.props;
@@ -52,7 +52,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     }
   };
 
-  onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  onChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const value: string = event.target.value;
     const submitted = value.length === 0;
     this.setState(
@@ -61,7 +61,7 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     );
   };
 
-  onClear = () => {
+  onClear = (): void => {
     const { onClear } = this.props;
     this.setState({ value: "", submit: false });
     onClear();
@@ -94,9 +94,11 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
     return null;
   };
 
-  render() {
+  render(): React.ReactChild {
     const { value, submitted } = this.state;
-    const { onClear, ...inputProps } = this.props;
+    // Extract functions we don't want to pass to the Input element.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { onClear, onSubmit, ...inputProps } = this.props;
     const className = submitted ? cx("submitted") : "";
 
     return (

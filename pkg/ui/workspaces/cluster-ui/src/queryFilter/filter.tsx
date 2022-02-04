@@ -38,7 +38,6 @@ interface QueryFilter {
   dbNames?: string[];
   regions?: string[];
   nodes?: string[];
-  showDB?: boolean;
   showSqlType?: boolean;
   showScan?: boolean;
   showRegions?: boolean;
@@ -61,7 +60,6 @@ export interface Filters {
   database?: string;
   sqlType?: string;
   fullScan?: boolean;
-  distributed?: boolean;
   regions?: string;
   nodes?: string;
 }
@@ -71,7 +69,7 @@ const timeUnit = [
   { label: "milliseconds", value: "milliseconds" },
 ];
 
-export const defaultFilters: Filters = {
+export const defaultFilters: Required<Filters> = {
   app: "",
   timeNumber: "0",
   timeUnit: "seconds",
@@ -269,11 +267,11 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       });
     }
   }
-  outsideClick = (event: any): void => {
+  outsideClick = (): void => {
     this.setState({ hide: true });
   };
 
-  insideClick = (event: any): void => {
+  insideClick = (): void => {
     event.stopPropagation();
   };
 
@@ -300,19 +298,22 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
     });
   };
 
-  handleChange = (event: any, field: string): void => {
+  handleChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    field: string,
+  ): void => {
     this.setState({
       filters: {
         ...this.state.filters,
         [field]:
-          event.value ||
+          event.target.value ||
           event.target.checked ||
           this.validateInput(event.target.value),
       },
     });
   };
 
-  toggleFullScan = (event: any) => {
+  toggleFullScan = (event: React.ChangeEvent<HTMLInputElement>): void => {
     this.setState({
       filters: {
         ...this.state.filters,
@@ -350,12 +351,12 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       regions,
       nodes,
       activeFilters,
-      showDB,
       showSqlType,
       showScan,
       showRegions,
       showNodes,
     } = this.props;
+    const showDB = dbNames != null;
     const dropdownArea = hide ? hidden : dropdown;
     const customStyles = {
       container: (provided: any) => ({
@@ -411,7 +412,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       </div>
     );
 
-    const databasesOptions = showDB
+    const databasesOptions = dbNames
       ? dbNames.map(db => ({
           label: db,
           value: db,
