@@ -257,6 +257,13 @@ const (
 	// RemoveIncompatibleDatabasePrivileges adds the migration which guarantees that
 	// databases do not have incompatible privileges
 	RemoveIncompatibleDatabasePrivileges
+	// AddRaftAppliedIndexTermMigration is a migration that causes each range
+	// replica to start populating RangeAppliedState.RaftAppliedIndexTerm field.
+	AddRaftAppliedIndexTermMigration
+	// PostAddRaftAppliedIndexTermMigration is used for asserting that
+	// RaftAppliedIndexTerm is populated.
+	PostAddRaftAppliedIndexTermMigration
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -399,6 +406,15 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
+	},
+
+	{
+		Key:     AddRaftAppliedIndexTermMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
+	},
+	{
+		Key:     PostAddRaftAppliedIndexTermMigration,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
 	},
 
 	// *************************************************

@@ -109,6 +109,16 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		runRemoveInvalidDatabasePrivileges,
 	),
+	migration.NewSystemMigration(
+		"populate RangeAppliedState.RaftAppliedIndexTerm for all ranges",
+		toCV(clusterversion.AddRaftAppliedIndexTermMigration),
+		raftAppliedIndexTermMigration,
+	),
+	migration.NewSystemMigration(
+		"purge all replicas not populating RangeAppliedState.RaftAppliedIndexTerm",
+		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
+		postRaftAppliedIndexTermMigration,
+	),
 }
 
 func init() {
