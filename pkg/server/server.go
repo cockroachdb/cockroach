@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -659,8 +658,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 
-	contentionRegistry := contention.NewRegistry()
-
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory && spec.Path != "" {
@@ -706,7 +703,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
-		contentionRegistry:       contentionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		circularJobRegistry:      jobRegistry,

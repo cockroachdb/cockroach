@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -101,7 +100,6 @@ func startTenantInternal(
 		histogramWindowInterval: args.HistogramWindowInterval(),
 		settings:                args.Settings,
 	})
-	args.contentionRegistry = contention.NewRegistry()
 
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
