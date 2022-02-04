@@ -77,6 +77,19 @@ type PlanningReport struct {
 	// UpdatedNodes contains information about nodes with their stores where plan
 	// needs to be applied. Stores are sorted in ascending order.
 	UpdatedNodes map[roachpb.NodeID][]roachpb.StoreID
+
+	// Problems contains any keyspace coverage problems
+	Problems []Problem
+}
+
+// Error returns error if there are problems with the cluster that could make
+// recovery "unsafe". Those errors could be ignored in dire situation and
+// produce cluster that is partially unblocked but can have inconsistencies.
+func (p PlanningReport) Error() error {
+	if len(p.Problems) > 0 {
+		return &RecoveryError{p.Problems}
+	}
+	return nil
 }
 
 // ReplicaUpdateReport contains detailed info about changes planned for
@@ -100,6 +113,11 @@ type ReplicaUpdateReport struct {
 // lost.
 // Devised plan doesn't guarantee data consistency after the recovery, only
 // the fact that ranges could progress and subsequently perform up-replication.
+// Moreover, if we discover conflicts in the range coverage or range descriptors
+// they would be returned in the report, but that would not prevent us from
+// making an "unsafe" recovery plan.
+// An error is returned in case of unrecoverable error in the collected data
+// that prevents creation of any sane plan or correctable user error.
 func PlanReplicas(
 	ctx context.Context, nodes []loqrecoverypb.NodeReplicaInfo, deadStores []roachpb.StoreID,
 ) (loqrecoverypb.ReplicaUpdatePlan, PlanningReport, error) {
@@ -123,7 +141,8 @@ func PlanReplicas(
 	for _, rangeReplicas := range replicasByRangeID {
 		proposedSurvivors = append(proposedSurvivors, rankReplicasBySurvivability(rangeReplicas))
 	}
-	if err = checkKeyspaceCovering(proposedSurvivors); err != nil {
+	problems, err := checkKeyspaceCovering(proposedSurvivors)
+	if err != nil {
 		return loqrecoverypb.ReplicaUpdatePlan{}, PlanningReport{}, err
 	}
 
@@ -132,6 +151,7 @@ func PlanReplicas(
 		report.TotalReplicas += len(p)
 		u, ok := makeReplicaUpdateIfNeeded(ctx, p, availableStoreIDs)
 		if ok {
+			problems = append(problems, checkDescriptor(p)...)
 			plan = append(plan, u)
 			report.DiscardedNonSurvivors += len(p) - 1
 			report.PlannedUpdates = append(report.PlannedUpdates, makeReplicaUpdateReport(ctx, p, u))
@@ -141,6 +161,11 @@ func PlanReplicas(
 			log.Infof(ctx, "range r%d didn't lose quorum", p.rangeID())
 		}
 	}
+
+	sort.Slice(problems, func(i, j int) bool {
+		return problems[i].Span().Key.Compare(problems[j].Span().Key) < 0
+	})
+	report.Problems = problems
 	report.UpdatedNodes = updatedLocations.asMapOfSlices()
 	return loqrecoverypb.ReplicaUpdatePlan{Updates: plan}, report, nil
 }
@@ -307,7 +332,7 @@ func rankReplicasBySurvivability(replicas []loqrecoverypb.ReplicaInfo) rankedRep
 // checkKeyspaceCovering given slice of all survivor ranges, checks that full
 // keyspace is covered.
 // Note that slice would be sorted in process of the check.
-func checkKeyspaceCovering(replicas []rankedReplicas) error {
+func checkKeyspaceCovering(replicas []rankedReplicas) ([]Problem, error) {
 	sort.Slice(replicas, func(i, j int) bool {
 		// We only need to sort replicas in key order to detect
 		// key collisions or gaps, but if we have matching keys
@@ -323,11 +348,11 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		}
 		return false
 	})
-	var anomalies []keyspaceCoverageAnomaly
+	var problems []Problem
 	prevDesc := rankedReplicas{{Desc: roachpb.RangeDescriptor{}}}
 	// We validate that first range starts at min key, last range ends at max key
 	// and that for every range start key is equal to end key of previous range.
-	// If any of those conditions fail, we record this as anomaly to indicate
+	// If any of those conditions fail, we record this as a problem to indicate
 	// there's a gap between ranges or an overlap between two or more ranges.
 	for _, rankedDescriptors := range replicas {
 		// We need to take special care of the case where the survivor replica is
@@ -337,7 +362,7 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		// then that would be a gap in keyspace coverage.
 		r, err := rankedDescriptors.survivor().Replica()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !r.IsVoterNewConfig() {
 			continue
@@ -346,21 +371,19 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		case rankedDescriptors.startKey().Less(prevDesc.endKey()):
 			start := keyMax(rankedDescriptors.startKey(), prevDesc.startKey())
 			end := keyMin(rankedDescriptors.endKey(), prevDesc.endKey())
-			anomalies = append(anomalies, keyspaceCoverageAnomaly{
+			problems = append(problems, keyspaceOverlap{
 				span:       roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)},
-				overlap:    true,
 				range1:     prevDesc.rangeID(),
 				range1Span: prevDesc.span(),
 				range2:     rankedDescriptors.rangeID(),
 				range2Span: rankedDescriptors.span(),
 			})
 		case prevDesc.endKey().Less(rankedDescriptors.startKey()):
-			anomalies = append(anomalies, keyspaceCoverageAnomaly{
+			problems = append(problems, keyspaceGap{
 				span: roachpb.Span{
 					Key:    roachpb.Key(prevDesc.endKey()),
 					EndKey: roachpb.Key(rankedDescriptors.startKey()),
 				},
-				overlap:    false,
 				range1:     prevDesc.rangeID(),
 				range1Span: prevDesc.span(),
 				range2:     rankedDescriptors.rangeID(),
@@ -376,9 +399,8 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		}
 	}
 	if !prevDesc.endKey().Equal(roachpb.RKeyMax) {
-		anomalies = append(anomalies, keyspaceCoverageAnomaly{
+		problems = append(problems, keyspaceGap{
 			span:       roachpb.Span{Key: roachpb.Key(prevDesc.endKey()), EndKey: roachpb.KeyMax},
-			overlap:    false,
 			range1:     prevDesc.rangeID(),
 			range1Span: prevDesc.span(),
 			range2:     roachpb.RangeID(0),
@@ -386,10 +408,7 @@ func checkKeyspaceCovering(replicas []rankedReplicas) error {
 		})
 	}
 
-	if len(anomalies) > 0 {
-		return &KeyspaceCoverageError{anomalies: anomalies}
-	}
-	return nil
+	return problems, nil
 }
 
 // makeReplicaUpdateIfNeeded if candidate range can't make progress, create an
@@ -447,6 +466,51 @@ func makeReplicaUpdateIfNeeded(
 		},
 		NextReplicaID: nextReplicaID + nextReplicaIDIncrement + 1,
 	}, true
+}
+
+// checkDescriptor analyses descriptor and raft log of surviving replica to find
+// if its state is safe to perform recovery from. Currently only unapplied
+// descriptor changes that either remove replica, or change KeySpan (splits or
+// merges) are treated as unsafe.
+func checkDescriptor(rankedDescriptors rankedReplicas) (problems []Problem) {
+	// We now need to analyze if range is unsafe to recover due to pending
+	// changes for the range descriptor in the raft log, but we only want to
+	// do that if range needs to be recovered.
+	for _, change := range rankedDescriptors.survivor().RaftLogDescriptorChanges {
+		switch change.ChangeType {
+		case loqrecoverypb.DescriptorChangeType_Split:
+			problems = append(problems, rangeSplit{
+				rangeID:    rankedDescriptors.rangeID(),
+				span:       rankedDescriptors.span(),
+				rHSRangeID: change.OtherDesc.RangeID,
+				rHSRangeSpan: roachpb.Span{
+					Key:    roachpb.Key(change.OtherDesc.StartKey),
+					EndKey: roachpb.Key(change.OtherDesc.EndKey),
+				},
+			})
+		case loqrecoverypb.DescriptorChangeType_Merge:
+			problems = append(problems, rangeMerge{
+				rangeID:    rankedDescriptors.rangeID(),
+				span:       rankedDescriptors.span(),
+				rHSRangeID: change.OtherDesc.RangeID,
+				rHSRangeSpan: roachpb.Span{
+					Key:    roachpb.Key(change.OtherDesc.StartKey),
+					EndKey: roachpb.Key(change.OtherDesc.EndKey),
+				},
+			})
+		case loqrecoverypb.DescriptorChangeType_ReplicaChange:
+			// Check if our own replica is being removed as part of descriptor
+			// change.
+			_, ok := change.Desc.GetReplicaDescriptor(rankedDescriptors.storeID())
+			if !ok {
+				problems = append(problems, rangeReplicaRemoval{
+					rangeID: rankedDescriptors.rangeID(),
+					span:    rankedDescriptors.span(),
+				})
+			}
+		}
+	}
+	return
 }
 
 // makeReplicaUpdateReport creates a detailed report of changes that needs to

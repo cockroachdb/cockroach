@@ -1300,3 +1300,12 @@ func DecodeRaftCommand(data []byte) (kvserverbase.CmdIDKey, []byte) {
 	}
 	return kvserverbase.CmdIDKey(data[1 : 1+raftCommandIDLen]), data[1+raftCommandIDLen:]
 }
+
+// EncodeTestRaftCommand encodes provided command as raft command by adding
+// appropriate prefix to the data. It is only used for testing to create test
+// raft log entries. No correctness guarantees are provided.
+//
+// See: #75729
+func EncodeTestRaftCommand(command []byte, commandID kvserverbase.CmdIDKey) []byte {
+	return encodeRaftCommand(raftVersionStandard, commandID, command)
+}
