@@ -147,7 +147,7 @@ func (s *PersistedSQLStats) doFlushSingleStmtStats(
 
 		serializedFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.ID))
 		serializedTransactionFingerprintID := sqlstatsutil.EncodeUint64ToBytes(uint64(scopedStats.Key.TransactionFingerprintID))
-		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(uint64(dummyPlanHash))
+		serializedPlanHash := sqlstatsutil.EncodeUint64ToBytes(scopedStats.Key.PlanHash)
 
 		insertFn := func(ctx context.Context, txn *kv.Txn) (alreadyExists bool, err error) {
 			rowsAffected, err := s.insertStatementStats(
@@ -417,7 +417,7 @@ WHERE fingerprint_id = $2
 			"plan_hash: %d, "+
 			"node_id: %d",
 			serializedFingerprintID, serializedTransactionFingerprintID, stats.Key.App,
-			aggregatedTs, dummyPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
+			aggregatedTs, serializedPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
 	return nil
@@ -581,12 +581,12 @@ FOR UPDATE
 	if row == nil {
 		return errors.AssertionFailedf(
 			"statement statistics not found fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash: %d, node_id: %d",
-			serializedFingerprintID, key.App, aggregatedTs, dummyPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
+			serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash, s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 
 	if len(row) != 1 {
 		return errors.AssertionFailedf("unexpectedly found %d returning columns for fingerprint_id: %s, app: %s, aggregated_ts: %s, plan_hash %d, node_id: %d",
-			len(row), serializedFingerprintID, key.App, aggregatedTs, dummyPlanHash,
+			len(row), serializedFingerprintID, key.App, aggregatedTs, serializedPlanHash,
 			s.cfg.SQLIDContainer.SQLInstanceID())
 	}
 

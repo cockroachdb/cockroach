@@ -94,6 +94,7 @@ func (s *StmtStatsIterator) Next() bool {
 			Failed:                   stmtKey.failed,
 			App:                      s.container.appName,
 			Database:                 database,
+			PlanHash:                 stmtKey.planHash,
 			TransactionFingerprintID: stmtKey.transactionFingerprintID,
 		},
 		ID:    stmtFingerprintID,
