@@ -368,4 +368,54 @@ var DistAggregationTable = map[execinfrapb.AggregatorSpec_Func]DistAggregationIn
 			},
 		},
 	},
+
+	execinfrapb.RegrAvgx: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrAvgx,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrAvgy: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrAvgy,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrIntercept: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrIntercept,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrR2: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrR2,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
+
+	execinfrapb.RegrSlope: {
+		LocalStage: []execinfrapb.AggregatorSpec_Func{execinfrapb.TransitionRegrAggregate},
+		FinalStage: []FinalStageInfo{
+			{
+				Fn:        execinfrapb.FinalRegrSlope,
+				LocalIdxs: passThroughLocalIdxs,
+			},
+		},
+	},
 }
