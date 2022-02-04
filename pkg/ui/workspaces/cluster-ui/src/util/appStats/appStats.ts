@@ -15,6 +15,7 @@ import {
   TimestampToNumber,
   DurationToNumber,
   uniqueLong,
+  unique,
 } from "src/util";
 
 export type StatementStatistics = protos.cockroach.sql.IStatementStatistics;
@@ -174,6 +175,7 @@ export function addStatementStats(
         ? a.last_exec_timestamp
         : b.last_exec_timestamp,
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
+    plan_gists: unique([...a.plan_gists, ...b.plan_gists]),
   };
 }
 
