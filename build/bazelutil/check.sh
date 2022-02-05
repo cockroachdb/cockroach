@@ -10,16 +10,16 @@ pkg/roachprod/vm/aws/config.go://go:generate go-bindata -mode 0600 -modtime 1400
 pkg/roachprod/vm/aws/config.go://go:generate gofmt -s -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate goimports -w embedded.go
 pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
-pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go -source=prometheus.go . Cluster
-pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -source drt.go -package tests -destination drt_generated.go
+pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go . Cluster
+pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated.go . PromClient
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
 pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecache -destination=mocks_generated.go . RangeDescriptorDB
-pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -package=rangefeed -source rangefeed.go -destination=mocks_generated.go .
+pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -destination=mocks_generated.go --package=rangefeed . DB
 pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
 pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 pkg/roachpb/api.go://go:generate mockgen -package=roachpb -destination=mocks_generated.go . InternalClient,Internal_RangeFeedClient
 pkg/roachpb/batch.go://go:generate go run -tags gen-batch gen/main.go
-pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go -source=cert.go . Cert
+pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go . Cert
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
@@ -39,7 +39,7 @@ pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto channe
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto log_channels.go log_channels_generated.go
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto logging.md ../../../docs/generated/logging.md
 pkg/util/log/channels.go://go:generate go run gen/main.go logpb/log.proto severity.go severity/severity_generated.go
-pkg/util/log/sinks.go://go:generate mockgen -package=log -source=sinks.go -destination=mock_generated.go -mock_names=logSink=MockLogSink logSink
+pkg/util/log/sinks.go://go:generate mockgen -package=log -destination=mocks_generated_test.go --mock_names=TestingLogSink=MockLogSink . TestingLogSink
 pkg/util/timeutil/zoneinfo.go://go:generate go run gen/main.go
 "
 
