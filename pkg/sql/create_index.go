@@ -135,6 +135,12 @@ func (p *planner) maybeSetupConstraintForShard(
 func makeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
+	if n.Sharded == nil && n.StorageParams.GetVal(`bucket_count`) != nil {
+		return nil, pgerror.New(
+			pgcode.InvalidParameterValue,
+			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
+		)
+	}
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
 	// mutated columns.
@@ -236,6 +242,7 @@ func makeIndexDescriptor(
 			n.Sharded.ShardBuckets,
 			tableDesc,
 			&indexDesc,
+			n.StorageParams,
 			false /* isNewTable */)
 		if err != nil {
 			return nil, err
@@ -495,6 +502,7 @@ func setupShardedIndex(
 	bucketsExpr tree.Expr,
 	tableDesc *tabledesc.Mutable,
 	indexDesc *descpb.IndexDescriptor,
+	storageParams tree.StorageParams,
 	isNewTable bool,
 ) (shard catalog.Column, newColumns tree.IndexElemList, err error) {
 	if !shardedIndexEnabled {
@@ -505,7 +513,7 @@ func setupShardedIndex(
 	for _, c := range columns {
 		colNames = append(colNames, string(c.Column))
 	}
-	buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr)
+	buckets, err := tabledesc.EvalShardBucketCount(ctx, semaCtx, evalCtx, bucketsExpr, storageParams)
 	if err != nil {
 		return nil, nil, err
 	}
