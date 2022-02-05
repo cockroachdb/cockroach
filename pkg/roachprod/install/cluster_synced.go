@@ -1982,6 +1982,9 @@ func (c *SyncedCluster) ParallelE(
 	} else {
 		ticker = time.NewTicker(1000 * time.Millisecond)
 		fmt.Fprintf(out, "%s", display)
+		if l.File != nil {
+			fmt.Fprintf(out, "\n")
+		}
 	}
 	defer ticker.Stop()
 	complete := make([]bool, count)
