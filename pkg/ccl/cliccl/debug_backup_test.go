@@ -11,7 +11,9 @@ package cliccl
 import (
 	"bytes"
 	"context"
+	gojson "encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -62,35 +64,73 @@ func TestShowSummary(t *testing.T) {
 	ts2 := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	sqlDB.Exec(t, `BACKUP DATABASE testDB TO $1 AS OF SYSTEM TIME `+ts2.AsOfSystemTime(), backupPath)
 
+	makeExpander := func(t *testing.T, extra [][2]string) func(string) string {
+		namesAndIDs := sqlDB.QueryStr(t,
+			`
+SELECT
+    replace(replace(ltrim(concat(db.name, '.', schema.name, '.', descriptor.name, '.id'), '.'), '..', '.'), '.', '_'),
+    descriptor.id
+FROM
+    (SELECT * FROM system.namespace) AS descriptor
+    LEFT JOIN (SELECT * FROM system.namespace) AS schema ON schema.id = descriptor."parentSchemaID"
+    LEFT JOIN (SELECT * FROM system.namespace) AS db ON db.id = descriptor."parentID";`)
+		expander := make(map[string]string, len(namesAndIDs))
+		for _, row := range namesAndIDs {
+			expander[row[0]] = row[1]
+		}
+		for _, e := range extra {
+			expander[e[0]] = e[1]
+		}
+		return func(s string) string {
+			return os.Expand(s, func(key string) string {
+				if replace, ok := expander[key]; ok {
+					return replace
+				}
+				return key
+			})
+		}
+	}
+	// Unmarshal the json to make the object order-invariant in terms of their
+	// keys.
+	checkJSONOutputEqual := func(t *testing.T, expected, out string) {
+		var expectedMap, gotMap interface{}
+		require.NoError(t, gojson.Unmarshal([]byte(expected), &expectedMap))
+		require.NoError(t, gojson.Unmarshal([]byte(trimFirstLine(out)), &gotMap))
+		require.EqualValues(t, expectedMap, gotMap)
+	}
 	t.Run("show-summary-without-types-or-tables", func(t *testing.T) {
 		setDebugContextDefault()
 		out, err := c.RunWithCapture(fmt.Sprintf("debug backup show %s --external-io-dir=%s", dbOnlyBackupPath, dir))
 		require.NoError(t, err)
-		expectedOutput := fmt.Sprintf(
+		expectedOutput :=
 			`{
 	"StartTime": "1970-01-01T00:00:00Z",
-	"EndTime": "%s",
+	"EndTime": "${end_time}",
 	"DataSize": "0 B",
 	"Rows": 0,
 	"IndexEntries": 0,
 	"FormatVersion": 1,
-	"ClusterID": "%s",
+	"ClusterID": "${cluster_id}",
 	"NodeID": 0,
-	"BuildInfo": "%s",
+	"BuildInfo": "${build_info}",
 	"Files": [],
 	"Spans": "[]",
 	"DatabaseDescriptors": {
-		"54": "testdb"
+		"${testdb_id}": "testdb"
 	},
 	"TableDescriptors": {},
 	"TypeDescriptors": {},
 	"SchemaDescriptors": {
 		"29": "public",
-		"55": "testdb.public"
+		"${testdb_public_id}": "testdb.public"
 	}
 }
-`, ts1.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short())
-		checkExpectedOutput(t, expectedOutput, out)
+`
+		checkJSONOutputEqual(t, makeExpander(t, [][2]string{
+			{"cluster_id", srv.ClusterID().String()},
+			{"end_time", ts1.GoTime().Format(time.RFC3339)},
+			{"build_info", build.GetInfo().Short()},
+		})(expectedOutput), out)
 	})
 
 	t.Run("show-summary-with-full-information", func(t *testing.T) {
@@ -108,48 +148,52 @@ func TestShowSummary(t *testing.T) {
 		err = rows.Scan(&sstFile)
 		require.NoError(t, err)
 
-		expectedOutput := fmt.Sprintf(
-			`{
+		expectedOutput := `{
 	"StartTime": "1970-01-01T00:00:00Z",
-	"EndTime": "%s",
-	"DataSize": "20 B",
+	"EndTime": "${end_time}",
+	"DataSize": "21 B",
 	"Rows": 1,
 	"IndexEntries": 0,
 	"FormatVersion": 1,
-	"ClusterID": "%s",
+	"ClusterID": "${cluster_id}",
 	"NodeID": 0,
-	"BuildInfo": "%s",
+	"BuildInfo": "${build_info}",
 	"Files": [
 		{
-			"Path": "%s",
-			"Span": "/Table/62/{1-2}",
-			"DataSize": "20 B",
+			"Path": "${sst_file}",
+			"Span": "/Table/${testdb_testschema_footable_id}/{1-2}",
+			"DataSize": "21 B",
 			"IndexEntries": 0,
 			"Rows": 1
 		}
 	],
-	"Spans": "[/Table/61/{1-2} /Table/62/{1-2}]",
+	"Spans": "[/Table/${testdb_public_footable_id}/{1-2} /Table/${testdb_testschema_footable_id}/{1-2}]",
 	"DatabaseDescriptors": {
-		"54": "testdb"
+		"${testdb_id}": "testdb"
 	},
 	"TableDescriptors": {
-		"61": "testdb.public.footable",
-		"62": "testdb.testschema.footable"
+		"${testdb_public_footable_id}": "testdb.public.footable",
+		"${testdb_testschema_footable_id}": "testdb.testschema.footable"
 	},
 	"TypeDescriptors": {
-		"57": "testdb.public.footype",
-		"58": "testdb.public._footype",
-		"59": "testdb.testschema.footype",
-		"60": "testdb.testschema._footype"
+		"${testdb_public_footype_id}": "testdb.public.footype",
+		"${testdb_public__footype_id}": "testdb.public._footype",
+		"${testdb_testschema_footype_id}": "testdb.testschema.footype",
+		"${testdb_testschema__footype_id}": "testdb.testschema._footype"
 	},
 	"SchemaDescriptors": {
 		"29": "public",
-		"55": "testdb.public",
-		"56": "testdb.testschema"
+		"${testdb_public_id}": "testdb.public",
+		"${testdb_testschema_id}": "testdb.testschema"
 	}
 }
-`, ts2.GoTime().Format(time.RFC3339), srv.ClusterID(), build.GetInfo().Short(), sstFile)
-		checkExpectedOutput(t, expectedOutput, out)
+`
+		checkJSONOutputEqual(t, makeExpander(t, [][2]string{
+			{"cluster_id", srv.ClusterID().String()},
+			{"end_time", ts2.GoTime().Format(time.RFC3339)},
+			{"build_info", build.GetInfo().Short()},
+			{"sst_file", sstFile},
+		})(expectedOutput), out)
 	})
 }
 
@@ -847,10 +891,13 @@ func TestExportDataWithRevisions(t *testing.T) {
 	}
 }
 
-func checkExpectedOutput(t *testing.T, expected string, out string) {
+func trimFirstLine(out string) string {
 	endOfCmd := strings.Index(out, "\n")
-	output := out[endOfCmd+1:]
-	require.Equal(t, expected, output)
+	return out[endOfCmd+1:]
+}
+
+func checkExpectedOutput(t *testing.T, expected string, out string) {
+	require.Equal(t, expected, trimFirstLine(out))
 }
 
 // generateBackupTimestamps creates n Timestamps with minimal

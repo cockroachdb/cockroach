@@ -38,16 +38,16 @@ CREATE table t2 (a STRING PRIMARY KEY) PARTITION BY LIST (a) (
 query IITTITTTII
 SELECT * FROM crdb_internal.partitions ORDER BY table_id, index_id, name
 ----
-56  1  NULL   p12      1  a     (1), (2)   NULL               0  0
-56  1  p12    p12p3    1  b     (3)        NULL               0  0
-56  1  p12p3  p12p3p8  1  c     (8)        NULL               0  0
-56  1  NULL   p6       1  a     (6)        NULL               0  0
-56  1  p6     p6p7     1  b     NULL       (MINVALUE) TO (7)  0  0
-56  1  p6     p6p8     1  b     NULL       (7) TO (8)         0  0
-56  1  p6     p6px     1  b     NULL       (8) TO (MAXVALUE)  0  0
-56  1  p12    pd       1  b     (DEFAULT)  NULL               0  0
-56  2  NULL   p00      2  a, b  (0, 0)     NULL               0  0
-57  1  NULL   pfoo     1  a     ('foo')    NULL               0  0
+106  1  NULL   p12      1  a     (1), (2)   NULL               0  0
+106  1  p12    p12p3    1  b     (3)        NULL               0  0
+106  1  p12p3  p12p3p8  1  c     (8)        NULL               0  0
+106  1  NULL   p6       1  a     (6)        NULL               0  0
+106  1  p6     p6p7     1  b     NULL       (MINVALUE) TO (7)  0  0
+106  1  p6     p6p8     1  b     NULL       (7) TO (8)         0  0
+106  1  p6     p6px     1  b     NULL       (8) TO (MAXVALUE)  0  0
+106  1  p12    pd       1  b     (DEFAULT)  NULL               0  0
+106  2  NULL   p00      2  a, b  (0, 0)     NULL               0  0
+107  1  NULL   pfoo     1  a     ('foo')    NULL               0  0
 
 # Test crdb_internal.zones functions correctly on zoned indexes.
 subtest privileged_zones_test
@@ -67,12 +67,12 @@ user testuser
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1
 ----
-0   RANGE default
-16  RANGE meta
-17  RANGE system
-22  RANGE liveness
-61  TABLE test.public.t4
-61  INDEX test.public.t4@myt4index
+0    RANGE default
+16   RANGE meta
+17   RANGE system
+22   RANGE liveness
+111  TABLE test.public.t4
+111  INDEX test.public.t4@myt4index
 
 query TT
 SELECT * FROM [SHOW ALL ZONE CONFIGURATIONS] ORDER BY 1

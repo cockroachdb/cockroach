@@ -4,7 +4,7 @@ CREATE TABLE t(x INT PRIMARY KEY)
 query I
 SELECT id FROM system.namespace WHERE name='t';
 ----
-56
+106
 
 # Ensure we can set and reset the exclude_data_from_backup bit on a table.
 statement ok

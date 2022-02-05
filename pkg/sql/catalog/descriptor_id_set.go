@@ -67,3 +67,8 @@ func (d DescriptorIDSet) Ordered() []descpb.ID {
 	})
 	return result
 }
+
+// Remove removes the ID from the set.
+func (d *DescriptorIDSet) Remove(id descpb.ID) {
+	d.set.Remove(int(id))
+}

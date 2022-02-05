@@ -11,36 +11,36 @@ DROP VIEW defaultdb.v1
 ----
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 55
+      DescID: 105
     *scop.RemoveTableComment
-      TableID: 55
+      TableID: 105
 PreCommitPhase stage 1 of 1 with 6 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 105, Name: v1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 55
+      DescID: 105
     *scop.DrainDescriptorName
-      TableID: 55
+      TableID: 105
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 55
-      TableID: 54
+      DependedOnBy: 105
+      TableID: 104
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -53,14 +53,14 @@ PreCommitPhase stage 1 of 1 with 6 MutationType ops
           statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 55
+          tableId: 105
       Statement: DROP VIEW ‹defaultdb›.public.‹v1›
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -68,12 +68,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 55
+      TableID: 105
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
@@ -82,36 +82,36 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 deps
 DROP VIEW defaultdb.v1
 ----
-- from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  to:   [View:{DescID: 55}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: v1}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Locality:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Locality:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 105, Name: v1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Owner:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
 
@@ -140,144 +140,144 @@ DROP VIEW defaultdb.v1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 56}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 57}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 58}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 61}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[TableComment:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 106}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 111}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[TableComment:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 55
+      DescID: 105
     *scop.RemoveTableComment
-      TableID: 55
+      TableID: 105
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 56
+      DescID: 106
     *scop.RemoveTableComment
-      TableID: 56
+      TableID: 106
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 57
+      DescID: 107
     *scop.RemoveTableComment
-      TableID: 57
+      TableID: 107
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 58
+      DescID: 108
     *scop.RemoveTableComment
-      TableID: 58
+      TableID: 108
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 61
+      DescID: 111
     *scop.RemoveTableComment
-      TableID: 61
+      TableID: 111
 PreCommitPhase stage 1 of 1 with 25 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 56}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 56, Name: v2}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 56, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 56, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 56, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 56}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 57}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 57, Name: v3}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 57, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 57, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 57, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 57}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 58}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 58, Name: v4}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 58, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 58, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 58, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 58}, ABSENT], PUBLIC] -> ABSENT
-    [[RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT], PUBLIC] -> ABSENT
-    [[View:{DescID: 61}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 61, Name: v5}, ABSENT], PUBLIC] -> ABSENT
-    [[Owner:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 61, Username: admin}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 61, Username: public}, ABSENT], PUBLIC] -> ABSENT
-    [[UserPrivileges:{DescID: 61, Username: root}, ABSENT], PUBLIC] -> ABSENT
-    [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, ABSENT], PUBLIC] -> ABSENT
-    [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, ABSENT], PUBLIC] -> ABSENT
-    [[Locality:{DescID: 61}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 105, Name: v1}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 105, ReferencedDescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 106}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 106, Name: v2}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 106, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 107}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 107, Name: v3}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 107, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 108, Name: v4}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 108, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
+    [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 111}, ABSENT], PUBLIC] -> ABSENT
+    [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 111, Name: v5}, ABSENT], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Username: admin}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Username: public}, ABSENT], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 111, Username: root}, ABSENT], PUBLIC] -> ABSENT
+    [[ViewDependsOnType:{DescID: 111, ReferencedDescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[ViewDependsOnType:{DescID: 111, ReferencedDescID: 110}, ABSENT], PUBLIC] -> ABSENT
+    [[Locality:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 55
+      DescID: 105
     *scop.DrainDescriptorName
-      TableID: 55
+      TableID: 105
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 55
-      TableID: 54
+      DependedOnBy: 105
+      TableID: 104
     *scop.MarkDescriptorAsDropped
-      DescID: 56
+      DescID: 106
     *scop.DrainDescriptorName
-      TableID: 56
+      TableID: 106
     *scop.MarkDescriptorAsDropped
-      DescID: 57
+      DescID: 107
     *scop.DrainDescriptorName
-      TableID: 57
+      TableID: 107
     *scop.MarkDescriptorAsDropped
-      DescID: 58
+      DescID: 108
     *scop.DrainDescriptorName
-      TableID: 58
+      TableID: 108
     *scop.MarkDescriptorAsDropped
-      DescID: 61
+      DescID: 111
     *scop.DrainDescriptorName
-      TableID: 61
+      TableID: 111
     *scop.RemoveTypeBackRef
-      DescID: 61
-      TypeID: 59
+      DescID: 111
+      TypeID: 109
     *scop.RemoveTypeBackRef
-      DescID: 61
-      TypeID: 60
+      DescID: 111
+      TypeID: 110
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 56
-      TableID: 55
+      DependedOnBy: 106
+      TableID: 105
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 57
-      TableID: 55
+      DependedOnBy: 107
+      TableID: 105
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 57
-      TableID: 56
+      DependedOnBy: 107
+      TableID: 106
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 58
-      TableID: 56
+      DependedOnBy: 108
+      TableID: 106
     *scop.RemoveRelationDependedOnBy
-      DependedOnBy: 61
-      TableID: 58
+      DependedOnBy: 111
+      TableID: 108
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 56
+      DescriptorID: 106
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 57
+      DescriptorID: 107
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 58
+      DescriptorID: 108
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 61
+      DescriptorID: 111
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -290,18 +290,18 @@ PreCommitPhase stage 1 of 1 with 25 MutationType ops
           statementtag: DROP VIEW
 PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
   transitions:
-    [[View:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 56}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 57}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 58}, ABSENT], DROPPED] -> ABSENT
-    [[View:{DescID: 61}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 55
+          tableId: 105
       Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -309,13 +309,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 55
+      TableID: 105
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 56
+          tableId: 106
       Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -323,13 +323,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 56
+      TableID: 106
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 57
+          tableId: 107
       Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -337,13 +337,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 57
+      TableID: 107
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 58
+          tableId: 108
       Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -351,13 +351,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 58
+      TableID: 108
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         View:
-          tableId: 61
+          tableId: 111
       Statement: DROP VIEW ‹defaultdb›.public.‹v1› CASCADE
       StatementTag: DROP VIEW
       TargetMetadata:
@@ -365,24 +365,24 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.CreateGcJobForTable
-      TableID: 61
+      TableID: 111
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 56
+      DescriptorID: 106
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 57
+      DescriptorID: 107
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 58
+      DescriptorID: 108
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 61
+      DescriptorID: 111
       JobID: 1
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
@@ -391,187 +391,187 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops
 deps
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- from: [Namespace:{DescID: 55, Name: v1}, ABSENT]
-  to:   [View:{DescID: 55}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: v1}, ABSENT]
+  to:   [View:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Namespace:{DescID: 56, Name: v2}, ABSENT]
-  to:   [View:{DescID: 56}, ABSENT]
+- from: [Namespace:{DescID: 106, Name: v2}, ABSENT]
+  to:   [View:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Namespace:{DescID: 57, Name: v3}, ABSENT]
-  to:   [View:{DescID: 57}, ABSENT]
+- from: [Namespace:{DescID: 107, Name: v3}, ABSENT]
+  to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Namespace:{DescID: 58, Name: v4}, ABSENT]
-  to:   [View:{DescID: 58}, ABSENT]
+- from: [Namespace:{DescID: 108, Name: v4}, ABSENT]
+  to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Namespace:{DescID: 61, Name: v5}, ABSENT]
-  to:   [View:{DescID: 61}, ABSENT]
+- from: [Namespace:{DescID: 111, Name: v5}, ABSENT]
+  to:   [View:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Locality:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Locality:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Namespace:{DescID: 55, Name: v1}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 105, Name: v1}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [Owner:{DescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 107}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: admin}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: public}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 55}, DROPPED]
-  to:   [UserPrivileges:{DescID: 55, Username: root}, ABSENT]
+- from: [View:{DescID: 105}, DROPPED]
+  to:   [UserPrivileges:{DescID: 105, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [Locality:{DescID: 56}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [Locality:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [Namespace:{DescID: 56, Name: v2}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [Namespace:{DescID: 106, Name: v2}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [Owner:{DescID: 56}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [Owner:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 106, ReferencedDescID: 108}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [UserPrivileges:{DescID: 56, Username: admin}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [UserPrivileges:{DescID: 106, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [UserPrivileges:{DescID: 56, Username: public}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [UserPrivileges:{DescID: 106, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 56}, DROPPED]
-  to:   [UserPrivileges:{DescID: 56, Username: root}, ABSENT]
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [UserPrivileges:{DescID: 106, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [Locality:{DescID: 57}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [Locality:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [Namespace:{DescID: 57, Name: v3}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [Namespace:{DescID: 107, Name: v3}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [Owner:{DescID: 57}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [Owner:{DescID: 107}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 107}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [UserPrivileges:{DescID: 57, Username: admin}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [UserPrivileges:{DescID: 57, Username: public}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 57}, DROPPED]
-  to:   [UserPrivileges:{DescID: 57, Username: root}, ABSENT]
+- from: [View:{DescID: 107}, DROPPED]
+  to:   [UserPrivileges:{DescID: 107, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [Locality:{DescID: 58}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [Locality:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [Namespace:{DescID: 58, Name: v4}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [Namespace:{DescID: 108, Name: v4}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [Owner:{DescID: 58}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [Owner:{DescID: 108}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 106, ReferencedDescID: 108}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 108, ReferencedDescID: 111}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [UserPrivileges:{DescID: 58, Username: admin}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [UserPrivileges:{DescID: 58, Username: public}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 58}, DROPPED]
-  to:   [UserPrivileges:{DescID: 58, Username: root}, ABSENT]
+- from: [View:{DescID: 108}, DROPPED]
+  to:   [UserPrivileges:{DescID: 108, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [Locality:{DescID: 61}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [Locality:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [Namespace:{DescID: 61, Name: v5}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [Namespace:{DescID: 111, Name: v5}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [Owner:{DescID: 61}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [Owner:{DescID: 111}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [RelationDependedOnBy:{DescID: 108, ReferencedDescID: 111}, ABSENT]
   kind: SameStagePrecedence
   rule: dependency needs relation/type as non-synthetically dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [UserPrivileges:{DescID: 61, Username: admin}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [UserPrivileges:{DescID: 111, Username: admin}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [UserPrivileges:{DescID: 61, Username: public}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [UserPrivileges:{DescID: 111, Username: public}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped
-- from: [View:{DescID: 61}, DROPPED]
-  to:   [UserPrivileges:{DescID: 61, Username: root}, ABSENT]
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [UserPrivileges:{DescID: 111, Username: root}, ABSENT]
   kind: Precedence
   rule: table deps removal happens after table marked as dropped

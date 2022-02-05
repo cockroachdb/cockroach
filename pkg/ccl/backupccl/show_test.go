@@ -166,19 +166,38 @@ ORDER BY object_type, object_name`, full)
 
 	details1Desc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "data", "details1")
 	details2Desc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), keys.SystemSQLCodec, "data", "details2")
-	details1Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, details1Desc.GetID(), details1Desc.GetPrimaryIndexID()))
-	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, details2Desc.GetID(), details2Desc.GetPrimaryIndexID()))
+	d1ID := details1Desc.GetID()
+	d2ID := details2Desc.GetID()
+	details1Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, d1ID, details1Desc.GetPrimaryIndexID()))
+	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, d2ID, details2Desc.GetPrimaryIndexID()))
 
 	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES '%s'`, details), [][]string{
-		{"/Table/64/1", "/Table/64/2", string(details1Key), string(details1Key.PrefixEnd())},
-		{"/Table/65/1", "/Table/65/2", string(details2Key), string(details2Key.PrefixEnd())},
+		{
+			fmt.Sprintf("/Table/%d/1", d1ID),
+			fmt.Sprintf("/Table/%d/2", d1ID),
+			string(details1Key),
+			string(details1Key.PrefixEnd())},
+		{
+			fmt.Sprintf("/Table/%d/1", d2ID),
+			fmt.Sprintf("/Table/%d/2", d2ID),
+			string(details2Key),
+			string(details2Key.PrefixEnd()),
+		},
 	})
 
 	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
 		FROM [SHOW BACKUP FILES '%s']`, details)
 	sqlDBRestore.CheckQueryResults(t, showFiles, [][]string{
-		{"/Table/64/1/1", "/Table/64/1/42", "369", "41"},
-		{"/Table/64/1/42", "/Table/64/2", "531", "59"},
+		{
+			fmt.Sprintf("/Table/%d/1/1", d1ID),
+			fmt.Sprintf("/Table/%d/1/42", d1ID),
+			"410", "41",
+		},
+		{
+			fmt.Sprintf("/Table/%d/1/42", d1ID),
+			fmt.Sprintf("/Table/%d/2", d1ID),
+			"590", "59",
+		},
 	})
 	sstMatcher := regexp.MustCompile(`\d+\.sst`)
 	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES $1]`, details)
@@ -661,7 +680,7 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 
 	expectedObjects := [][]string{
 		{"NULL", "NULL", "NULL", "NULL", "data", dbIDStr, "database"},
-		{"data", "54", "NULL", "NULL", "public", strconv.Itoa(dbID + 1), "schema"},
+		{"data", dbIDStr, "NULL", "NULL", "public", strconv.Itoa(dbID + 1), "schema"},
 		{"data", dbIDStr, "public", publicIDStr, "bank", strconv.Itoa(dbID + 2), "table"},
 		{"data", dbIDStr, "public", publicIDStr, "welcome", strconv.Itoa(dbID + 3), "type"},
 		{"data", dbIDStr, "public", publicIDStr, "_welcome", strconv.Itoa(dbID + 4), "type"},

@@ -2,6 +2,6 @@ debug doctor examine cluster
 ----
 debug doctor examine cluster
 Examining 43 descriptors and 42 namespace entries...
-  ParentID  50, ParentSchemaID 51: relation "foo" (55): expected matching namespace entry, found none
+  ParentID 100, ParentSchemaID 101: relation "foo" (105): expected matching namespace entry, found none
 Examining 4 jobs...
 ERROR: validation failed

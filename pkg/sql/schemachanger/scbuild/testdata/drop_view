@@ -9,45 +9,45 @@ CREATE VIEW defaultdb.v1 AS (SELECT name FROM defaultdb.t1)
 build
 DROP VIEW defaultdb.v1
 ----
-- [[Locality:{DescID: 55}, ABSENT], PUBLIC]
+- [[Locality:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
-- [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC]
+    descriptorId: 105
+- [[Namespace:{DescID: 105, Name: v1}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 55
+    databaseId: 100
+    descriptorId: 105
     name: v1
-    schemaId: 51
-- [[Owner:{DescID: 55}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     owner: root
-- [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
+- [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC]
   details:
-    dependedOn: 55
-    tableId: 54
-- [[TableComment:{DescID: 55}, ABSENT], PUBLIC]
+    dependedOn: 105
+    tableId: 104
+- [[TableComment:{DescID: 105}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 55
-- [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
+    tableId: 105
+- [[UserPrivileges:{DescID: 105, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 105, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     username: public
-- [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 105, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     privileges: 2
     username: root
-- [[View:{DescID: 55}, ABSENT], PUBLIC]
+- [[View:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    tableId: 55
+    tableId: 105
 
 create-view
 CREATE VIEW defaultdb.v2 AS (SELECT name AS n1, name AS n2 FROM v1)
@@ -72,215 +72,215 @@ CREATE VIEW v5 AS (SELECT 'a'::defaultdb.typ::string AS k, n2, n1 from defaultdb
 build
 DROP VIEW defaultdb.v1 CASCADE
 ----
-- [[Locality:{DescID: 55}, ABSENT], PUBLIC]
+- [[Locality:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
-- [[Locality:{DescID: 56}, ABSENT], PUBLIC]
+    descriptorId: 105
+- [[Locality:{DescID: 106}, ABSENT], PUBLIC]
   details:
-    descriptorId: 56
-- [[Locality:{DescID: 57}, ABSENT], PUBLIC]
+    descriptorId: 106
+- [[Locality:{DescID: 107}, ABSENT], PUBLIC]
   details:
-    descriptorId: 57
-- [[Locality:{DescID: 58}, ABSENT], PUBLIC]
+    descriptorId: 107
+- [[Locality:{DescID: 108}, ABSENT], PUBLIC]
   details:
-    descriptorId: 58
-- [[Locality:{DescID: 61}, ABSENT], PUBLIC]
+    descriptorId: 108
+- [[Locality:{DescID: 111}, ABSENT], PUBLIC]
   details:
-    descriptorId: 61
-- [[Namespace:{DescID: 55, Name: v1}, ABSENT], PUBLIC]
+    descriptorId: 111
+- [[Namespace:{DescID: 105, Name: v1}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 55
+    databaseId: 100
+    descriptorId: 105
     name: v1
-    schemaId: 51
-- [[Namespace:{DescID: 56, Name: v2}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Namespace:{DescID: 106, Name: v2}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 56
+    databaseId: 100
+    descriptorId: 106
     name: v2
-    schemaId: 51
-- [[Namespace:{DescID: 57, Name: v3}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Namespace:{DescID: 107, Name: v3}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 57
+    databaseId: 100
+    descriptorId: 107
     name: v3
-    schemaId: 51
-- [[Namespace:{DescID: 58, Name: v4}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Namespace:{DescID: 108, Name: v4}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 58
+    databaseId: 100
+    descriptorId: 108
     name: v4
-    schemaId: 51
-- [[Namespace:{DescID: 61, Name: v5}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Namespace:{DescID: 111, Name: v5}, ABSENT], PUBLIC]
   details:
-    databaseId: 50
-    descriptorId: 61
+    databaseId: 100
+    descriptorId: 111
     name: v5
-    schemaId: 51
-- [[Owner:{DescID: 55}, ABSENT], PUBLIC]
+    schemaId: 101
+- [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     owner: root
-- [[Owner:{DescID: 56}, ABSENT], PUBLIC]
+- [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   details:
-    descriptorId: 56
+    descriptorId: 106
     owner: root
-- [[Owner:{DescID: 57}, ABSENT], PUBLIC]
+- [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   details:
-    descriptorId: 57
+    descriptorId: 107
     owner: root
-- [[Owner:{DescID: 58}, ABSENT], PUBLIC]
+- [[Owner:{DescID: 108}, ABSENT], PUBLIC]
   details:
-    descriptorId: 58
+    descriptorId: 108
     owner: root
-- [[Owner:{DescID: 61}, ABSENT], PUBLIC]
+- [[Owner:{DescID: 111}, ABSENT], PUBLIC]
   details:
-    descriptorId: 61
+    descriptorId: 111
     owner: root
-- [[RelationDependedOnBy:{DescID: 54, ReferencedDescID: 55}, ABSENT], PUBLIC]
+- [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC]
   details:
-    dependedOn: 55
-    tableId: 54
-- [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 56}, ABSENT], PUBLIC]
+    dependedOn: 105
+    tableId: 104
+- [[RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT], PUBLIC]
   details:
     columnID: 1
-    dependedOn: 56
-    tableId: 55
-- [[RelationDependedOnBy:{DescID: 55, ReferencedDescID: 57}, ABSENT], PUBLIC]
+    dependedOn: 106
+    tableId: 105
+- [[RelationDependedOnBy:{DescID: 105, ReferencedDescID: 107}, ABSENT], PUBLIC]
   details:
     columnID: 1
-    dependedOn: 57
-    tableId: 55
-- [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 57}, ABSENT], PUBLIC]
+    dependedOn: 107
+    tableId: 105
+- [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT], PUBLIC]
   details:
     columnID: 1
-    dependedOn: 57
-    tableId: 56
-- [[RelationDependedOnBy:{DescID: 56, ReferencedDescID: 58}, ABSENT], PUBLIC]
+    dependedOn: 107
+    tableId: 106
+- [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 108}, ABSENT], PUBLIC]
   details:
     columnID: 1
-    dependedOn: 58
-    tableId: 56
-- [[RelationDependedOnBy:{DescID: 58, ReferencedDescID: 61}, ABSENT], PUBLIC]
+    dependedOn: 108
+    tableId: 106
+- [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 111}, ABSENT], PUBLIC]
   details:
     columnID: 1
-    dependedOn: 61
-    tableId: 58
-- [[TableComment:{DescID: 55}, ABSENT], PUBLIC]
+    dependedOn: 111
+    tableId: 108
+- [[TableComment:{DescID: 105}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 55
-- [[TableComment:{DescID: 56}, ABSENT], PUBLIC]
+    tableId: 105
+- [[TableComment:{DescID: 106}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 56
-- [[TableComment:{DescID: 57}, ABSENT], PUBLIC]
+    tableId: 106
+- [[TableComment:{DescID: 107}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 57
-- [[TableComment:{DescID: 58}, ABSENT], PUBLIC]
+    tableId: 107
+- [[TableComment:{DescID: 108}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 58
-- [[TableComment:{DescID: 61}, ABSENT], PUBLIC]
+    tableId: 108
+- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    tableId: 61
-- [[UserPrivileges:{DescID: 55, Username: admin}, ABSENT], PUBLIC]
+    tableId: 111
+- [[UserPrivileges:{DescID: 105, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 55, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 105, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     username: public
-- [[UserPrivileges:{DescID: 55, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 105, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 55
+    descriptorId: 105
     privileges: 2
     username: root
-- [[UserPrivileges:{DescID: 56, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 106, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 56
+    descriptorId: 106
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 56, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 106, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 56
+    descriptorId: 106
     username: public
-- [[UserPrivileges:{DescID: 56, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 106, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 56
+    descriptorId: 106
     privileges: 2
     username: root
-- [[UserPrivileges:{DescID: 57, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 107, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 57
+    descriptorId: 107
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 57, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 107, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 57
+    descriptorId: 107
     username: public
-- [[UserPrivileges:{DescID: 57, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 107, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 57
+    descriptorId: 107
     privileges: 2
     username: root
-- [[UserPrivileges:{DescID: 58, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 108, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 58
+    descriptorId: 108
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 58, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 108, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 58
+    descriptorId: 108
     username: public
-- [[UserPrivileges:{DescID: 58, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 108, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 58
+    descriptorId: 108
     privileges: 2
     username: root
-- [[UserPrivileges:{DescID: 61, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 111, Username: admin}, ABSENT], PUBLIC]
   details:
-    descriptorId: 61
+    descriptorId: 111
     privileges: 2
     username: admin
-- [[UserPrivileges:{DescID: 61, Username: public}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 111, Username: public}, ABSENT], PUBLIC]
   details:
-    descriptorId: 61
+    descriptorId: 111
     username: public
-- [[UserPrivileges:{DescID: 61, Username: root}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 111, Username: root}, ABSENT], PUBLIC]
   details:
-    descriptorId: 61
+    descriptorId: 111
     privileges: 2
     username: root
-- [[View:{DescID: 55}, ABSENT], PUBLIC]
+- [[View:{DescID: 105}, ABSENT], PUBLIC]
   details:
-    tableId: 55
-- [[View:{DescID: 56}, ABSENT], PUBLIC]
+    tableId: 105
+- [[View:{DescID: 106}, ABSENT], PUBLIC]
   details:
-    tableId: 56
-- [[View:{DescID: 57}, ABSENT], PUBLIC]
+    tableId: 106
+- [[View:{DescID: 107}, ABSENT], PUBLIC]
   details:
-    tableId: 57
-- [[View:{DescID: 58}, ABSENT], PUBLIC]
+    tableId: 107
+- [[View:{DescID: 108}, ABSENT], PUBLIC]
   details:
-    tableId: 58
-- [[View:{DescID: 61}, ABSENT], PUBLIC]
+    tableId: 108
+- [[View:{DescID: 111}, ABSENT], PUBLIC]
   details:
-    tableId: 61
-- [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 59}, ABSENT], PUBLIC]
+    tableId: 111
+- [[ViewDependsOnType:{DescID: 111, ReferencedDescID: 109}, ABSENT], PUBLIC]
   details:
-    tableId: 61
-    typeId: 59
-- [[ViewDependsOnType:{DescID: 61, ReferencedDescID: 60}, ABSENT], PUBLIC]
+    tableId: 111
+    typeId: 109
+- [[ViewDependsOnType:{DescID: 111, ReferencedDescID: 110}, ABSENT], PUBLIC]
   details:
-    tableId: 61
-    typeId: 60
+    tableId: 111
+    typeId: 110

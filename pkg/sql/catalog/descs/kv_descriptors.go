@@ -29,6 +29,10 @@ import (
 type kvDescriptors struct {
 	codec keys.SQLCodec
 
+	// systemNamespace is a cache of system table namespace entries. We assume
+	// these are immutable for the life of the process.
+	systemNamespace *systemDatabaseNamespaceCache
+
 	// allDescriptors is a slice of all available descriptors. The descriptors
 	// are cached to avoid repeated lookups by users like virtual tables. The
 	// cache is purged whenever events would cause a scan of all descriptors to
@@ -78,9 +82,12 @@ func (d *allDescriptors) contains(id descpb.ID) bool {
 	return d.c.IsInitialized() && d.c.LookupDescriptorEntry(id) != nil
 }
 
-func makeKVDescriptors(codec keys.SQLCodec) kvDescriptors {
+func makeKVDescriptors(
+	codec keys.SQLCodec, systemNamespace *systemDatabaseNamespaceCache,
+) kvDescriptors {
 	return kvDescriptors{
-		codec: codec,
+		codec:           codec,
+		systemNamespace: systemNamespace,
 	}
 }
 
@@ -108,10 +115,6 @@ func (kd *kvDescriptors) releaseAllDescriptors() {
 // - When we're looking up a schema for which we already have the descriptor
 //   of the parent database. The schema ID can be looked up in it.
 //
-// TODO(postamar): add namespace caching to the Collection
-// By having the Collection mediate all namespace queries for a transaction
-// (i.e. what it's already doing for descriptors) we could prevent more
-// unnecessary roundtrips to the storage layer.
 func (kd *kvDescriptors) lookupName(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -119,7 +122,7 @@ func (kd *kvDescriptors) lookupName(
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
 	name string,
-) (descpb.ID, error) {
+) (id descpb.ID, err error) {
 	// Handle special cases which might avoid a namespace table query.
 	switch parentID {
 	case descpb.InvalidID:
@@ -131,8 +134,20 @@ func (kd *kvDescriptors) lookupName(
 	case keys.SystemDatabaseID:
 		// Special case: looking up something in the system database.
 		// Those namespace table entries are cached.
-		id, err := lookupSystemDatabaseNamespaceCache(ctx, kd.codec, parentSchemaID, name)
-		return id, err
+		id = kd.systemNamespace.lookup(parentSchemaID, name)
+		if id != descpb.InvalidID {
+			return id, err
+		}
+		// Make sure to cache the result if we had to look it up.
+		defer func() {
+			if err == nil && id != descpb.InvalidID {
+				kd.systemNamespace.add(descpb.NameInfo{
+					ParentID:       keys.SystemDatabaseID,
+					ParentSchemaID: parentSchemaID,
+					Name:           name,
+				}, id)
+			}
+		}()
 	default:
 		if parentSchemaID == descpb.InvalidID {
 			// At this point we know that parentID is not zero, so a zero

@@ -131,12 +131,12 @@ SELECT id FROM system.descriptor
 45
 46
 47
-50
-51
-52
-53
-54
-55
+100
+101
+102
+103
+104
+105
 
 onlyif config 3node-tenant
 query I rowsort
@@ -177,12 +177,12 @@ SELECT id FROM system.descriptor
 43
 44
 46
-50
-51
-52
-53
-54
-55
+100
+101
+102
+103
+104
+105
 
 # Verify we can read ID on its own (see #58614).
 query I

@@ -26,8 +26,8 @@ INSERT INTO t VALUES (1, 1), (2, 2)
 query T
 SELECT key FROM crdb_internal.list_sql_keys_in_range($rangeid)
 ----
-/Table/56/1/1/0
-/Table/56/1/2/0
+/Table/106/1/1/0
+/Table/106/1/2/0
 
 # An error should be returned when an invalid range ID is specified.
 statement error pq: range with ID 1000000 not found

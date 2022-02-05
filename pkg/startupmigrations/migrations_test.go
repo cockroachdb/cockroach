@@ -26,10 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -536,64 +532,6 @@ func (mt *migrationTest) close(ctx context.Context) {
 		mt.server.Stopper().Stop(ctx)
 	}
 	backwardCompatibleMigrations = mt.oldMigrations
-}
-
-func TestCreateSystemTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	table := tabledesc.NewBuilder(systemschema.NamespaceTable.TableDesc()).BuildExistingMutableTable()
-	table.ID = descpb.ID(1000 /* suitably large descriptor ID */)
-
-	table.Name = "dummy"
-	nameKey := catalogkeys.MakePublicObjectNameKey(keys.SystemSQLCodec, table.ParentID, table.Name)
-	descKey := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, table.ID)
-	descVal := table.DescriptorProto()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	mt.start(t, base.TestServerArgs{})
-
-	// Verify that the keys were not written.
-	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
-		t.Error(err)
-	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", nameKey, kv)
-	}
-	if kv, err := mt.kvDB.Get(ctx, descKey); err != nil {
-		t.Error(err)
-	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", descKey, kv)
-	}
-
-	migration := migrationDescriptor{
-		name: "add system.dummy table",
-		workFn: func(ctx context.Context, r runner) error {
-			return createSystemTable(ctx, r, table)
-		},
-	}
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-
-	// Verify that the appropriate keys were written.
-	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
-		t.Error(err)
-	} else if !kv.Exists() {
-		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
-	}
-	var descriptor descpb.Descriptor
-	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
-		t.Error(err)
-	} else if !descVal.Equal(&descriptor) {
-		t.Errorf("expected %v for key %q, got %v", descVal, descKey, descriptor)
-	}
-
-	// Verify the idempotency of the migration.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestAdminUserExists(t *testing.T) {

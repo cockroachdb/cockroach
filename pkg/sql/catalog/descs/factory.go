@@ -25,6 +25,7 @@ type CollectionFactory struct {
 	leaseMgr       *lease.Manager
 	virtualSchemas catalog.VirtualSchemas
 	hydratedTables *hydratedtables.Cache
+	systemDatabase *systemDatabaseNamespaceCache
 }
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
@@ -41,6 +42,7 @@ func NewCollectionFactory(
 		leaseMgr:       leaseMgr,
 		virtualSchemas: virtualSchemas,
 		hydratedTables: hydratedTables,
+		systemDatabase: newSystemDatabaseNamespaceCache(leaseMgr.Codec()),
 	}
 }
 
@@ -60,7 +62,8 @@ func (cf *CollectionFactory) MakeCollection(
 	temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
 	return makeCollection(
-		cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.virtualSchemas, temporarySchemaProvider,
+		cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
+		cf.virtualSchemas, temporarySchemaProvider,
 	)
 }
 

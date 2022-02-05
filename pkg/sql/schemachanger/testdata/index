@@ -2,7 +2,7 @@ setup
 CREATE TABLE t (k INT PRIMARY KEY, v STRING NOT NULL);
 ----
 ...
-+object {50 51 t} -> 54
++object {100 101 t} -> 104
 
 test
 CREATE INDEX idx1 ON t (v);
@@ -14,10 +14,10 @@ begin transaction #1
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 3 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [54]
-upsert descriptor #54
+  descriptor IDs: [104]
+upsert descriptor #104
   ...
-     id: 54
+     id: 104
      modificationTime: {}
   +  mutations:
   +  - direction: ADD
@@ -50,10 +50,10 @@ upsert descriptor #54
   -  nextIndexId: 2
   +  nextIndexId: 3
      nextMutationId: 1
-     parentId: 50
+     parentId: 100
   ...
        time: {}
-     unexposedParentSchemaId: 51
+     unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
 # end PreCommitPhase
@@ -62,7 +62,7 @@ commit transaction #1
 begin transaction #2
 ## PostCommitPhase stage 1 of 4 with 2 MutationType ops
 update progress of schema change job #1
-upsert descriptor #54
+upsert descriptor #104
   ...
          version: 3
        mutationId: 1
@@ -72,25 +72,25 @@ upsert descriptor #54
      newSchemaChangeJobId: "1"
   ...
        time: {}
-     unexposedParentSchemaId: 51
+     unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
 commit transaction #2
 begin transaction #3
 ## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
-backfill indexes [2] from index #1 in table #54
+backfill indexes [2] from index #1 in table #104
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-validate forward indexes [2] in table #54
+validate forward indexes [2] in table #104
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 4 of 4 with 4 MutationType ops
 update progress of schema change job #1
-upsert descriptor #54
+upsert descriptor #104
   ...
      formatVersion: 3
-     id: 54
+     id: 104
   +  indexes:
   +  - createdExplicitly: true
   +    foreignKey: {}
@@ -142,7 +142,7 @@ upsert descriptor #54
      nextFamilyId: 1
   ...
        time: {}
-     unexposedParentSchemaId: 51
+     unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
 commit transaction #5

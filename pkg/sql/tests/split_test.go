@@ -78,7 +78,7 @@ func TestSplitOnTableBoundaries(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	expectedInitialRanges, err := server.ExpectedInitialRangeCount(
-		kvDB,
+		keys.SystemSQLCodec,
 		&s.(*server.TestServer).Cfg.DefaultZoneConfig,
 		&s.(*server.TestServer).Cfg.DefaultSystemZoneConfig,
 	)

@@ -1580,4 +1580,4 @@ INSERT INTO t73745 VALUES (1), (2), (3);
 query T kvtrace
 SELECT * FROM t73745
 ----
-Scan /Table/61/{1-2}
+Scan /Table/111/{1-2}

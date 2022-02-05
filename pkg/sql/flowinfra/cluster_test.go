@@ -513,12 +513,7 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 	var foundReq int64 // written atomically
 	var expectedGateway roachpb.NodeID
 
-	// We can't get the tableID programmatically here.
-	// The table id can be retrieved by doing.
-	// CREATE DATABASE test;
-	// CREATE TABLE test.t();
-	// SELECT id FROM system.namespace WHERE name = 't' AND "parentID" != 1
-	const tableID = 56
+	var tableID atomic.Value
 	tc := serverutils.StartNewTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -531,7 +526,10 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 							if !ok {
 								return nil
 							}
-							if !strings.HasPrefix(scanReq.Key.String(), fmt.Sprintf("/Table/%d/1", tableID)) {
+							if !strings.HasPrefix(
+								scanReq.Key.String(),
+								fmt.Sprintf("/Table/%d/1", tableID.Load()),
+							) {
 								return nil
 							}
 
@@ -554,6 +552,9 @@ func TestDistSQLReadsFillGatewayID(t *testing.T) {
 		"num INT PRIMARY KEY",
 		0, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+	tableID.Store(sqlutils.QueryTableID(
+		t, db, sqlutils.TestDB, "public", "t",
+	))
 
 	if _, err := db.Exec(`
 ALTER TABLE t SPLIT AT VALUES (1), (2), (3);

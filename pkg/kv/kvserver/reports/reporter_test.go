@@ -637,13 +637,13 @@ func TestRangeIteration(t *testing.T) {
 		key     string
 	}
 	exp := []entry{
-		{newZone: true, key: "/Table/51/1/1"},
-		{newZone: false, key: "/Table/51/1/2"},
-		{newZone: true, key: "/Table/51/1/100"},
-		{newZone: false, key: "/Table/51/1/101"},
-		{newZone: true, key: "/Table/51/1/200"},
-		{newZone: true, key: "/Table/51/1/305"},
-		{newZone: true, key: "/Table/52/1/1"},
+		{newZone: true, key: "/Table/101/1/1"},
+		{newZone: false, key: "/Table/101/1/2"},
+		{newZone: true, key: "/Table/101/1/100"},
+		{newZone: false, key: "/Table/101/1/101"},
+		{newZone: true, key: "/Table/101/1/200"},
+		{newZone: true, key: "/Table/101/1/305"},
+		{newZone: true, key: "/Table/102/1/1"},
 	}
 	got := make([]entry, len(v.rngs))
 	for i, r := range v.rngs {
