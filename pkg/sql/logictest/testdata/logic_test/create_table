@@ -731,6 +731,17 @@ CREATE TABLE t_bad_param (
   a INT PRIMARY KEY USING HASH WITH (s2_max_level=20)
 );
 
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+
 statement error pq: invalid storage param "s2_max_level" on primary key
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
@@ -741,6 +752,18 @@ statement error pq: invalid storage param "s2_max_level" on primary key
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
   PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
 );
 
 statement error pq: invalid storage param "s2_max_level" on primary key
@@ -755,6 +778,18 @@ CREATE TABLE t_bad_param (
   CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
 );
 
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT NOT NULL,
+  CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
 statement error pq: invalid storage param "s2_max_level" on unique index
 CREATE TABLE t_bad_param (
   a INT,
@@ -765,6 +800,30 @@ statement error pq: invalid storage param "s2_max_level" on unique index
 CREATE TABLE t_bad_param (
   a INT,
   UNIQUE INDEX (a) USING HASH WITH (s2_max_level=20)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT,
+  UNIQUE INDEX (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage param should only be set with "USING HASH" for hash sharded index
+CREATE TABLE t_bad_param (
+  a INT,
+  INDEX (a) WITH (bucket_count=5)
+);
+
+statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
+CREATE TABLE t_bad_param (
+  a INT,
+  INDEX (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
 );
 
 statement ok
@@ -783,4 +842,41 @@ CREATE TABLE t_bad_param (
   PRIMARY KEY (a) WITH (s2_max_level=20)
 ) AS SELECT * FROM t_source;
 
+statement ok
+CREATE TABLE t_good_hash_indexes_1 (
+ a INT PRIMARY KEY USING HASH WITH (bucket_count=5),
+ b INT,
+ c INT,
+ INDEX (b) USING HASH WITH (bucket_count=5),
+ FAMILY "primary" (a, b, c)
+);
 
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
+----
+CREATE TABLE public.t_good_hash_indexes_1 (
+  crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+  CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 5,
+  INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH BUCKET_COUNT = 5,
+  FAMILY "primary" (a, b, c)
+)
+
+statement ok
+CREATE TABLE t_good_hash_indexes_2 (
+ a INT,
+ PRIMARY KEY (a) USING HASH WITH (bucket_count=5)
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
+----
+CREATE TABLE public.t_good_hash_indexes_2 (
+    a INT8 NOT NULL,
+    crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+    CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 5,
+    FAMILY "primary" (a)
+)

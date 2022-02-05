@@ -52,7 +52,13 @@ func (p *planner) AlterPrimaryKey(
 	alterPKNode tree.AlterTableAlterPrimaryKey,
 	alterPrimaryKeyLocalitySwap *alterPrimaryKeyLocalitySwap,
 ) error {
-	if err := paramparse.ValidateUniqueConstraintParams(alterPKNode.StorageParams, true /* isPK */); err != nil {
+	if err := paramparse.ValidateUniqueConstraintParams(
+		alterPKNode.StorageParams,
+		paramparse.UniqueConstraintParamContext{
+			IsPrimaryKey: true,
+			IsSharded:    alterPKNode.Sharded != nil,
+		},
+	); err != nil {
 		return err
 	}
 
@@ -187,6 +193,7 @@ func (p *planner) AlterPrimaryKey(
 			alterPKNode.Sharded.ShardBuckets,
 			tableDesc,
 			newPrimaryIndexDesc,
+			alterPKNode.StorageParams,
 			false, /* isNewTable */
 		)
 		if err != nil {
@@ -546,7 +553,7 @@ func (p *planner) shouldCreateIndexes(
 
 	// Validate if sharding properties are the same.
 	if alterPKNode.Sharded != nil {
-		shardBuckets, err := tabledesc.EvalShardBucketCount(ctx, &p.semaCtx, p.EvalContext(), alterPKNode.Sharded.ShardBuckets)
+		shardBuckets, err := tabledesc.EvalShardBucketCount(ctx, &p.semaCtx, p.EvalContext(), alterPKNode.Sharded.ShardBuckets, alterPKNode.StorageParams)
 		if err != nil {
 			return true, err
 		}

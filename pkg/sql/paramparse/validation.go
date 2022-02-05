@@ -16,16 +16,37 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// UniqueConstraintParamContext is used as a validation context for
+// ValidateUniqueConstraintParams function.
+// IsPrimaryKey: set to true if the unique constraint for primary key.
+// IsSharded: set to true if the unique constraint has a hash sharded index.
+type UniqueConstraintParamContext struct {
+	IsPrimaryKey bool
+	IsSharded    bool
+}
+
 // ValidateUniqueConstraintParams checks if there is any storage parameters
 // invalid as a param for Unique Constraint.
-func ValidateUniqueConstraintParams(params tree.StorageParams, isPK bool) error {
-	// TODO (issue 75243): add `bucket_count` as a valid param. Current dummy
-	// implementation is just for a proof of concept and make golint happy.
-	if len(params) == 0 {
-		return nil
+func ValidateUniqueConstraintParams(
+	params tree.StorageParams, ctx UniqueConstraintParamContext,
+) error {
+	// Only `bucket_count` is allowed for primary key and unique index.
+	for _, param := range params {
+		switch param.Key {
+		case `bucket_count`:
+			if ctx.IsSharded {
+				continue
+			}
+			return pgerror.New(
+				pgcode.InvalidParameterValue,
+				`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
+			)
+		default:
+			if ctx.IsPrimaryKey {
+				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", params[0].Key)
+			}
+			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", params[0].Key)
+		}
 	}
-	if isPK {
-		return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", params[0].Key)
-	}
-	return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", params[0].Key)
+	return nil
 }

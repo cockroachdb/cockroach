@@ -196,7 +196,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if rel.IsLocalityRegionalByRow() {
 			panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
 		}
-		buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), n.Sharded.ShardBuckets)
+		buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), n.Sharded.ShardBuckets, n.StorageParams)
 		if err != nil {
 			panic(err)
 		}
