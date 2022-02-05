@@ -320,6 +320,15 @@ func (t *pebbleTimeBoundPropCollector) Name() string {
 	return "TimeBoundTblPropCollectorFactory"
 }
 
+func (t *pebbleTimeBoundPropCollector) UpdateKeySuffixes(
+	oldProps map[string]string, oldSuffix []byte, newSuffix []byte,
+) error {
+	t.updateBounds(newSuffix)
+	return nil
+}
+
+var _ sstable.SuffixReplaceableTableCollector = (*pebbleTimeBoundPropCollector)(nil)
+
 // pebbleDeleteRangeCollector is the equivalent table collector as the RocksDB
 // DeleteRangeTblPropCollector. Pebble does not require it because Pebble will
 // prioritize its own compactions of range tombstones.
@@ -338,6 +347,14 @@ func (pebbleDeleteRangeCollector) Name() string {
 	// table property collector. DO NOT CHANGE.
 	return "DeleteRangeTblPropCollectorFactory"
 }
+
+func (t *pebbleDeleteRangeCollector) UpdateKeySuffixes(
+	_ map[string]string, _ []byte, _ []byte,
+) error {
+	return nil
+}
+
+var _ sstable.SuffixReplaceableTableCollector = (*pebbleTimeBoundPropCollector)(nil)
 
 // PebbleTablePropertyCollectors is the list of Pebble TablePropertyCollectors.
 var PebbleTablePropertyCollectors = []func() pebble.TablePropertyCollector{

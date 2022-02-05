@@ -165,7 +165,7 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		ts := hlc.Timestamp{WallTime: 1634899098417970999, Logical: 9}
-		_, err := UpdateSSTTimestamps(sstFile.Bytes(), ts)
+		_, err := UpdateSSTTimestamps(sstFile.Bytes(), hlc.Timestamp{}, ts, 0)
 		require.NoError(b, err)
 	}
 }
