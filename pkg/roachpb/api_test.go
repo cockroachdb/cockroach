@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 	gogoproto "github.com/gogo/protobuf/proto"
@@ -315,7 +316,7 @@ func TestTenantConsumptionAddSub(t *testing.T) {
 func TestFlagCombinations(t *testing.T) {
 	// Any non-zero-valued request variants that conditionally affect flags.
 	reqVariants := []Request{
-		&AddSSTableRequest{WriteAtRequestTimestamp: true},
+		&AddSSTableRequest{SSTTimestampToRequestTimestamp: hlc.Timestamp{Logical: 1}},
 		&DeleteRangeRequest{Inline: true},
 		&GetRequest{KeyLocking: lock.Exclusive},
 		&ReverseScanRequest{KeyLocking: lock.Exclusive},
