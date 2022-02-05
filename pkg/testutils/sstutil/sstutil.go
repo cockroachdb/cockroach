@@ -26,7 +26,7 @@ import (
 // MakeSST builds a binary in-memory SST from the given tests data. It returns
 // the binary SST data as well as the start and end (exclusive) keys of the SST.
 func MakeSST(
-	ctx context.Context, cs *cluster.Settings, t *testing.T, kvs []KV,
+	t *testing.T, ctx context.Context, cs *cluster.Settings, kvs []KV,
 ) ([]byte, roachpb.Key, roachpb.Key) {
 	t.Helper()
 
