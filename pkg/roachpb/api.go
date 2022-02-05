@@ -1335,7 +1335,7 @@ func (*AdminScatterRequest) flags() flag                  { return isAdmin | isR
 func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }
 func (r *AddSSTableRequest) flags() flag {
 	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure
-	if r.WriteAtRequestTimestamp {
+	if r.SSTTimestampToRequestTimestamp.IsSet() {
 		flags |= appliesTSCache
 	}
 	return flags
