@@ -7106,6 +7106,7 @@ index_def:
         StorageParams:    $10.storageParams(),
         Predicate:        $11.expr(),
       },
+      ExplicitIndex: true,
     }
   }
 | INVERTED INDEX opt_name '(' index_params ')' opt_partition_by_index opt_with_storage_parameter_list opt_where_clause

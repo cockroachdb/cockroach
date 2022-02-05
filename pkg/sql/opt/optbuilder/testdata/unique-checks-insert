@@ -1374,7 +1374,7 @@ ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_index
  ├── columns: <none>
- ├── arbiter indexes: uniq_partial_constraint_and_index_a_key
+ ├── arbiter indexes: uniq_partial_constraint_and_index_a_idx
  ├── insert-mapping:
  │    ├── column1:6 => uniq_partial_constraint_and_index.k:1
  │    ├── column2:7 => uniq_partial_constraint_and_index.a:2
@@ -1393,7 +1393,7 @@ insert uniq_partial_constraint_and_index
  │    │    │    ├── scan uniq_partial_constraint_and_index
  │    │    │    │    ├── columns: uniq_partial_constraint_and_index.a:10
  │    │    │    │    └── partial index predicates
- │    │    │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+ │    │    │    │         └── uniq_partial_constraint_and_index_a_idx: filters (true)
  │    │    │    └── filters
  │    │    │         └── uniq_partial_constraint_and_index.a:10 = 1
  │    │    └── filters (true)
@@ -1420,7 +1420,7 @@ insert uniq_partial_constraint_and_index
                      │    ├── scan uniq_partial_constraint_and_index
                      │    │    ├── columns: uniq_partial_constraint_and_index.k:16!null uniq_partial_constraint_and_index.a:17 uniq_partial_constraint_and_index.b:18
                      │    │    └── partial index predicates
-                     │    │         └── uniq_partial_constraint_and_index_a_key: filters (true)
+                     │    │         └── uniq_partial_constraint_and_index_a_idx: filters (true)
                      │    └── filters
                      │         └── uniq_partial_constraint_and_index.b:18 > 10
                      └── filters
@@ -1464,7 +1464,7 @@ insert uniq_constraint_and_partial_index
       │    │    ├── scan uniq_constraint_and_partial_index
       │    │    │    ├── columns: a:10
       │    │    │    └── partial index predicates
-      │    │    │         └── uniq_constraint_and_partial_index_a_key: filters
+      │    │    │         └── uniq_constraint_and_partial_index_a_idx: filters
       │    │    │              └── b:11 > 0
       │    │    └── filters
       │    │         └── a:10 = 1
@@ -1490,7 +1490,7 @@ ON CONFLICT (a) WHERE b > 10 DO NOTHING
 ----
 insert uniq_partial_constraint_and_partial_index
  ├── columns: <none>
- ├── arbiter indexes: uniq_partial_constraint_and_partial_index_a_key
+ ├── arbiter indexes: uniq_partial_constraint_and_partial_index_a_idx
  ├── arbiter constraints: unique_a
  ├── insert-mapping:
  │    ├── column1:6 => k:1
@@ -1509,10 +1509,10 @@ insert uniq_partial_constraint_and_partial_index
       │         │    ├── project
       │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │    └── upsert-distinct-on
-      │         │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:19
-      │         │    │         ├── grouping columns: column2:7!null arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:19
+      │         │    │         ├── columns: column1:6!null column2:7!null column3:8!null arbiter_uniq_partial_constraint_and_partial_index_a_idx_distinct:19
+      │         │    │         ├── grouping columns: column2:7!null arbiter_uniq_partial_constraint_and_partial_index_a_idx_distinct:19
       │         │    │         ├── project
-      │         │    │         │    ├── columns: arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:19 column1:6!null column2:7!null column3:8!null
+      │         │    │         │    ├── columns: arbiter_uniq_partial_constraint_and_partial_index_a_idx_distinct:19 column1:6!null column2:7!null column3:8!null
       │         │    │         │    ├── anti-join (hash)
       │         │    │         │    │    ├── columns: column1:6!null column2:7!null column3:8!null
       │         │    │         │    │    ├── anti-join (hash)
@@ -1525,7 +1525,7 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    │    ├── columns: k:9!null a:10 b:11
       │         │    │         │    │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_idx: filters
       │         │    │         │    │    │    │    │              └── b:11 > 0
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── b:11 > 0
@@ -1537,7 +1537,7 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    ├── scan uniq_partial_constraint_and_partial_index
       │         │    │         │    │    │    │    ├── columns: k:14!null a:15 b:16
       │         │    │         │    │    │    │    └── partial index predicates
-      │         │    │         │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_key: filters
+      │         │    │         │    │    │    │         └── uniq_partial_constraint_and_partial_index_a_idx: filters
       │         │    │         │    │    │    │              └── b:16 > 0
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── b:16 > 10
@@ -1545,7 +1545,7 @@ insert uniq_partial_constraint_and_partial_index
       │         │    │         │    │         ├── column2:7 = a:15
       │         │    │         │    │         └── column3:8 > 10
       │         │    │         │    └── projections
-      │         │    │         │         └── (column3:8 > 0) OR NULL::BOOL [as=arbiter_uniq_partial_constraint_and_partial_index_a_key_distinct:19]
+      │         │    │         │         └── (column3:8 > 0) OR NULL::BOOL [as=arbiter_uniq_partial_constraint_and_partial_index_a_idx_distinct:19]
       │         │    │         └── aggregations
       │         │    │              ├── first-agg [as=column1:6]
       │         │    │              │    └── column1:6

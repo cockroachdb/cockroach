@@ -696,8 +696,9 @@ func (tt *Table) addIndexWithVersion(
 		tt.addUniqueConstraint(def.Name, def.Columns, def.Predicate, false /* withoutIndex */)
 	}
 
+	isPartial := def.Predicate != nil
 	idx := &Index{
-		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ),
+		IdxName:  tt.makeIndexName(def.Name, def.Columns, typ, isPartial),
 		Unique:   typ != nonUniqueIndex,
 		Inverted: def.Inverted,
 		IdxZone:  &zonepb.ZoneConfig{},
@@ -908,7 +909,9 @@ func (tt *Table) addIndexWithVersion(
 	return idx
 }
 
-func (tt *Table) makeIndexName(defName tree.Name, cols tree.IndexElemList, typ indexType) string {
+func (tt *Table) makeIndexName(
+	defName tree.Name, cols tree.IndexElemList, typ indexType, isPartial bool,
+) string {
 	name := string(defName)
 	if name != "" {
 		return name
@@ -934,7 +937,9 @@ func (tt *Table) makeIndexName(defName tree.Name, cols tree.IndexElemList, typ i
 		}
 	}
 
-	if typ == uniqueIndex {
+	// Unique partial and unique expression indexes should always have the "idx"
+	// suffix.
+	if typ == uniqueIndex && !isPartial && exprCount == 0 {
 		sb.WriteString("_key")
 	} else {
 		sb.WriteString("_idx")

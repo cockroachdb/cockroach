@@ -1156,6 +1156,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_created_by_type_created_by_id_idx",
@@ -1168,6 +1169,7 @@ var (
 				StoreColumnNames:    []string{"status"},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "jobs_run_stats_idx",
@@ -1181,6 +1183,7 @@ var (
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
 				Predicate:           JobsRunStatsIdxPredicate,
+				CreatedExplicitly:   true,
 			},
 		))
 
@@ -1227,6 +1230,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_createdAt_idx",
@@ -1237,6 +1241,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_revokedAt_idx",
@@ -1247,6 +1252,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{6},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "web_sessions_lastUsedAt_idx",
@@ -1257,6 +1263,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{7},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 		))
 
@@ -1382,6 +1389,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 			descpb.IndexDescriptor{
 				Name:                "role_members_member_idx",
@@ -1392,6 +1400,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 		))
 
@@ -1758,6 +1767,7 @@ var (
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 		))
 
@@ -1834,6 +1844,7 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 				Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:   true,
 			},
 		))
 
@@ -2023,6 +2034,7 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{2, 3},
 				KeySuffixColumnIDs: []descpb.ColumnID{11, 1, 4, 5, 6},
 				Version:            descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:  true,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {
@@ -2119,6 +2131,7 @@ var (
 				KeyColumnIDs:       []descpb.ColumnID{2},
 				KeySuffixColumnIDs: []descpb.ColumnID{8, 1, 3, 4},
 				Version:            descpb.LatestNonPrimaryIndexDescriptorVersion,
+				CreatedExplicitly:  true,
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {

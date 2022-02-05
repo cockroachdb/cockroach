@@ -792,7 +792,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: ("lookup_join_const_col_@22", column1, column2, column3, column4)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
+                    │ table: uniq_enum@uniq_enum_r_s_j_idx
                     │ equality: (lookup_join_const_col_@22, column2, column4) = (r,s,j)
                     │ equality cols are key
                     │ pred: (column1 != r) OR (column3 != i)
@@ -914,7 +914,7 @@ vectorized: true
 │ estimated row count: 0 (missing stats)
 │ into: uniq_enum(r, s, i, j)
 │ auto commit
-│ arbiter indexes: uniq_enum_pkey, uniq_enum_r_s_j_key
+│ arbiter indexes: uniq_enum_pkey, uniq_enum_r_s_j_idx
 │ arbiter constraints: unique_i, unique_s_j
 │
 └── • render
@@ -929,7 +929,7 @@ vectorized: true
     └── • lookup join (anti)
         │ columns: (column1, column2, column3, column4)
         │ estimated row count: 0 (missing stats)
-        │ table: uniq_enum@uniq_enum_r_s_j_key
+        │ table: uniq_enum@uniq_enum_r_s_j_idx
         │ equality cols are key
         │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
         │
@@ -950,7 +950,7 @@ vectorized: true
                 └── • lookup join (anti)
                     │ columns: (column1, column2, column3, column4)
                     │ estimated row count: 0 (missing stats)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
+                    │ table: uniq_enum@uniq_enum_r_s_j_idx
                     │ equality: (column1, column2, column4) = (r,s,j)
                     │ equality cols are key
                     │
@@ -2245,7 +2245,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (r_new, s_new, i_new, j, "lookup_join_const_col_@27")
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
+                    │ table: uniq_enum@uniq_enum_r_s_j_idx
                     │ equality: (lookup_join_const_col_@27, s_new, j) = (r,s,j)
                     │ equality cols are key
                     │ pred: (r_new != r) OR (i_new != i)
@@ -3463,7 +3463,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: ("lookup_join_const_col_@30", upsert_r, column2, upsert_i, column4)
-                    │ table: uniq_enum@uniq_enum_r_s_j_key
+                    │ table: uniq_enum@uniq_enum_r_s_j_idx
                     │ equality: (lookup_join_const_col_@30, column2, column4) = (r,s,j)
                     │ equality cols are key
                     │ pred: (upsert_r != r) OR (upsert_i != i)
@@ -3543,7 +3543,7 @@ vectorized: true
 │                   └── • lookup join (left outer)
 │                       │ columns: (column1, column2, column3, column4, r, s, i, j)
 │                       │ estimated row count: 2 (missing stats)
-│                       │ table: uniq_enum@uniq_enum_r_s_j_key
+│                       │ table: uniq_enum@uniq_enum_r_s_j_idx
 │                       │ equality cols are key
 │                       │ lookup condition: ((column2 = s) AND (column4 = j)) AND (r IN ('us-east', 'us-west', 'eu-west'))
 │                       │ locking strength: for update

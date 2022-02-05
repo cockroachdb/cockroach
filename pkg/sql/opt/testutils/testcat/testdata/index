@@ -48,6 +48,10 @@ CREATE INDEX idx ON kv (v) STORING (k) WHERE v > 1
 ----
 
 exec-ddl
+CREATE UNIQUE INDEX ON kv (v) WHERE v > 10
+----
+
+exec-ddl
 SHOW CREATE kv
 ----
 TABLE kv
@@ -57,10 +61,14 @@ TABLE kv
  ├── tableoid oid [hidden] [system]
  ├── PRIMARY INDEX kv_pkey
  │    └── k int not null
- └── INDEX idx
+ ├── INDEX idx
+ │    ├── v int
+ │    ├── k int not null
+ │    └── WHERE v > 1
+ └── UNIQUE INDEX kv_v_idx
       ├── v int
-      ├── k int not null
-      └── WHERE v > 1
+      ├── k int not null (storing)
+      └── WHERE v > 10
 
 exec-ddl
 CREATE TABLE g (
@@ -107,6 +115,7 @@ CREATE TABLE xyz (
     INDEX idx1 (lower(z)),
     INDEX idx2 (lower(z), y),
     INDEX idx3 ((y+1), lower(z)),
+    UNIQUE INDEX ((y+10)),
     INVERTED INDEX idx4 ((j->'a')),
     INVERTED INDEX idx5 (y, z, (j->'a'))
 )
@@ -134,14 +143,15 @@ TABLE xyz
  ├── crdb_internal_idx_expr_1 string as (lower(z)) virtual [inaccessible]
  ├── crdb_internal_idx_expr_2 int as (y + 1) virtual [inaccessible]
  ├── crdb_internal_idx_expr_3 string as (lower(z)) virtual [inaccessible]
- ├── crdb_internal_idx_expr_4 jsonb as (j->'a') virtual [inaccessible]
- ├── crdb_internal_idx_expr_4_inverted_key jsonb not null [inverted]
+ ├── crdb_internal_idx_expr_4 int as (y + 10) virtual [inaccessible]
  ├── crdb_internal_idx_expr_5 jsonb as (j->'a') virtual [inaccessible]
  ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
- ├── crdb_internal_idx_expr_6 int as (x + y) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_6 jsonb as (j->'a') virtual [inaccessible]
+ ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [inverted]
  ├── crdb_internal_idx_expr_7 int as (x + y) virtual [inaccessible]
- ├── crdb_internal_idx_expr_8 jsonb as (j->'a') virtual [inaccessible]
- ├── crdb_internal_idx_expr_8_inverted_key jsonb not null [inverted]
+ ├── crdb_internal_idx_expr_8 int as (x + y) virtual [inaccessible]
+ ├── crdb_internal_idx_expr_9 jsonb as (j->'a') virtual [inaccessible]
+ ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [inverted]
  ├── PRIMARY INDEX xyz_pkey
  │    └── x int not null
  ├── INDEX idx1
@@ -155,22 +165,25 @@ TABLE xyz
  │    ├── crdb_internal_idx_expr_2 int as (y + 1) virtual [inaccessible]
  │    ├── crdb_internal_idx_expr_3 string as (lower(z)) virtual [inaccessible]
  │    └── x int not null
+ ├── UNIQUE INDEX xyz_expr_idx
+ │    ├── crdb_internal_idx_expr_4 int as (y + 10) virtual [inaccessible]
+ │    └── x int not null (storing)
  ├── INVERTED INDEX idx4
- │    ├── crdb_internal_idx_expr_4_inverted_key jsonb not null [inverted]
+ │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
  │    └── x int not null
  ├── INVERTED INDEX idx5
  │    ├── y int
  │    ├── z string
- │    ├── crdb_internal_idx_expr_5_inverted_key jsonb not null [inverted]
+ │    ├── crdb_internal_idx_expr_6_inverted_key jsonb not null [inverted]
  │    └── x int not null
  ├── INDEX idx6
- │    ├── crdb_internal_idx_expr_6 int as (x + y) virtual [inaccessible]
+ │    ├── crdb_internal_idx_expr_7 int as (x + y) virtual [inaccessible]
  │    ├── y int
  │    ├── x int not null
  │    ├── z string (storing)
  │    └── WHERE v > 1
  └── INVERTED INDEX idx7
-      ├── crdb_internal_idx_expr_7 int as (x + y) virtual [inaccessible]
-      ├── crdb_internal_idx_expr_8_inverted_key jsonb not null [inverted]
+      ├── crdb_internal_idx_expr_8 int as (x + y) virtual [inaccessible]
+      ├── crdb_internal_idx_expr_9_inverted_key jsonb not null [inverted]
       ├── x int not null
       └── WHERE v > 1
