@@ -306,6 +306,10 @@ const (
 	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
 	// range tombstones.
 	ExperimentalMVCCRangeTombstones
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -497,6 +501,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ExperimentalMVCCRangeTombstones,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 78},
+	},
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
 	},
 
 	// *************************************************
