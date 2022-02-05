@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -89,23 +90,23 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		cmd := &replicatedCmd{
 			ctx: ctx,
-			ent: &raftpb.Entry{
-				Index: r.mu.state.RaftAppliedIndex + 1,
-				Type:  raftpb.EntryConfChange,
-			},
 			decodedRaftEntry: decodedRaftEntry{
-				idKey: makeIDKey(),
-				raftCmd: kvserverpb.RaftCommand{
-					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
-					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
-					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
-						State:          &kvserverpb.ReplicaState{Desc: &newDesc},
-						ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
-						WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
+				Entry: raftlog.Entry{
+					Ent: raftpb.Entry{
+						Index: r.mu.state.RaftAppliedIndex + 1,
+						Type:  raftpb.EntryConfChange,
 					},
-				},
-				confChange: &decodedConfChange{
-					ConfChangeI: confChange,
+					ID: makeIDKey(),
+					Cmd: kvserverpb.RaftCommand{
+						ProposerLeaseSequence: r.mu.state.Lease.Sequence,
+						MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+							State:          &kvserverpb.ReplicaState{Desc: &newDesc},
+							ChangeReplicas: &kvserverpb.ChangeReplicas{ChangeReplicasTrigger: trigger},
+							WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
+						},
+					},
+					CC1: &confChange,
 				},
 			},
 		}
@@ -113,8 +114,8 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		checkedCmd, err := b.Stage(cmd.ctx, cmd)
 		require.NoError(t, err)
 		require.Equal(t, !add, b.changeRemovesReplica)
-		require.Equal(t, b.state.RaftAppliedIndex, cmd.ent.Index)
-		require.Equal(t, b.state.LeaseAppliedIndex, cmd.raftCmd.MaxLeaseIndex)
+		require.Equal(t, b.state.RaftAppliedIndex, cmd.Ent.Index)
+		require.Equal(t, b.state.LeaseAppliedIndex, cmd.Cmd.MaxLeaseIndex)
 
 		// Check the replica's destroy status.
 		reason, _ := r.IsDestroyed()

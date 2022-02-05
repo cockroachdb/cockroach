@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"go.etcd.io/etcd/raft/v3"
-	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -135,12 +134,12 @@ func (r *Replica) shouldApplyCommand(
 	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
 ) bool {
 	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = checkForcedErr(
-		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
+		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), replicaState,
 	)
 	// Consider testing-only filters.
 	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
-			CmdID:                cmd.idKey,
+			CmdID:                cmd.ID,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
@@ -467,17 +466,17 @@ func (b *replicaAppBatch) Stage(
 	ctx context.Context, cmdI apply.Command,
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	if cmd.ent.Index == 0 {
+	if cmd.Ent.Index == 0 {
 		return nil, makeNonDeterministicFailure("processRaftCommand requires a non-zero index")
 	}
-	if idx, applied := cmd.ent.Index, b.state.RaftAppliedIndex; idx != applied+1 {
+	if idx, applied := cmd.Ent.Index, b.state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
 		return nil, makeNonDeterministicFailure("applied index jumped from %d to %d", applied, idx)
 	}
 	if log.V(4) {
 		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
-			cmd.idKey, cmd.ent.Index, cmd.raftCmd.MaxLeaseIndex, cmd.raftCmd.ClosedTimestamp)
+			cmd.ID, cmd.Ent.Index, cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
 	}
 
 	// Determine whether the command should be applied to the replicated state
@@ -488,10 +487,10 @@ func (b *replicaAppBatch) Stage(
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
 
 		// Apply an empty command.
-		cmd.raftCmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
-		cmd.raftCmd.WriteBatch = nil
-		cmd.raftCmd.LogicalOpLog = nil
-		cmd.raftCmd.ClosedTimestamp = nil
+		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
+		cmd.Cmd.WriteBatch = nil
+		cmd.Cmd.LogicalOpLog = nil
+		cmd.Cmd.ClosedTimestamp = nil
 	} else {
 		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
 			return nil, err
@@ -509,8 +508,8 @@ func (b *replicaAppBatch) Stage(
 	// TODO(tbg): can't this happen in splitPreApply which is called from
 	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
 	// way, it would become less of a one-off.
-	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.raftCmd); err != nil {
-		if cmd.raftCmd.ReplicatedEvalResult.Split != nil {
+	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
+		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
 			err = wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
 		} else {
 			err = wrapWithNonDeterministicFailure(err, "unable to acquire merge lock")
@@ -553,7 +552,7 @@ func (b *replicaAppBatch) Stage(
 	// them in the batch) is sufficient.
 	b.stageTrivialReplicatedEvalResult(ctx, cmd)
 	b.entries++
-	if len(cmd.ent.Data) == 0 {
+	if len(cmd.Ent.Data) == 0 {
 		b.emptyEntries++
 	}
 
@@ -580,7 +579,7 @@ func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *repl
 // stageWriteBatch applies the command's write batch to the application batch's
 // RocksDB batch. This batch is committed to RocksDB in replicaAppBatch.commit.
 func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
-	wb := cmd.raftCmd.WriteBatch
+	wb := cmd.Cmd.WriteBatch
 	if wb == nil {
 		return nil
 	}
@@ -613,7 +612,7 @@ func changeRemovesStore(
 func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
-	if ops := cmd.raftCmd.LogicalOpLog; ops != nil {
+	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
 		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	}
 	return nil
@@ -656,8 +655,8 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			b.r.store.cfg.Settings,
 			b.r.store.engine,
 			b.r.raftMu.sideloaded,
-			cmd.ent.Term,
-			cmd.ent.Index,
+			cmd.Ent.Term,
+			cmd.Ent.Index,
 			*res.AddSSTable,
 			b.r.store.limiters.BulkIOWriteRate,
 		)
@@ -685,7 +684,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		//
 		// Alternatively if we discover that the RHS has already been removed
 		// from this store, clean up its data.
-		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.raftCmd.ClosedTimestamp)
+		splitPreApply(ctx, b.r, b.batch, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -833,10 +832,10 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	// the logical operation log to also be nil. We don't want to trigger a
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
 	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
-	if ops := cmd.raftCmd.LogicalOpLog; cmd.raftCmd.WriteBatch != nil {
+	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
 		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
 	} else if ops != nil {
-		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.raftCmd)
+		log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 
 	return nil
@@ -850,7 +849,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	ctx context.Context, cmd *replicatedCmd,
 ) {
-	raftAppliedIndex := cmd.ent.Index
+	raftAppliedIndex := cmd.Ent.Index
 	if raftAppliedIndex == 0 {
 		log.Fatalf(ctx, "raft entry with index 0")
 	}
@@ -864,13 +863,13 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		// Replica.mu.state. The latter is used to initialize b.state, so future
 		// calls to this method will see that the migration has already happened
 		// and will continue to populate the term.
-		b.state.RaftAppliedIndexTerm = cmd.ent.Term
+		b.state.RaftAppliedIndexTerm = cmd.Ent.Term
 	}
 
 	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
-	if cts := cmd.raftCmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
+	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
 		b.state.RaftClosedTimestamp = *cts
 		b.closedTimestampSetter.record(cmd, b.state.Lease)
 		if clockTS, ok := cts.TryToClockTimestamp(); ok {
@@ -1028,8 +1027,8 @@ var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_R
 //
 // Note that we check that we're we're writing under b.state.RaftClosedTimestamp
 // (i.e. below the timestamp closed by previous commands), not below
-// cmd.raftCmd.ClosedTimestamp. A command is allowed to write below the closed
-// timestamp carried by itself; in other words cmd.raftCmd.ClosedTimestamp is a
+// cmd.Cmd.ClosedTimestamp. A command is allowed to write below the closed
+// timestamp carried by itself; in other words cmd.Cmd.ClosedTimestamp is a
 // promise about future commands, not the command carrying it.
 func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
 	if !cmd.IsLocal() || !cmd.proposal.Request.AppliesTimestampCache() {
@@ -1038,7 +1037,7 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
 	}
-	wts := cmd.raftCmd.ReplicatedEvalResult.WriteTimestamp
+	wts := cmd.Cmd.ReplicatedEvalResult.WriteTimestamp
 	if !wts.IsEmpty() && wts.LessEq(b.state.RaftClosedTimestamp) {
 		wts := wts // Make a shadow variable that escapes to the heap.
 		var req redact.StringBuilder
@@ -1052,8 +1051,8 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
 				"This assertion will fire again on restart; to ignore run with env var\n"+
 				"COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
-			cmd.idKey, wts,
-			b.state.RaftClosedTimestamp, cmd.raftCmd.ClosedTimestamp,
+			cmd.ID, wts,
+			b.state.RaftClosedTimestamp, cmd.Cmd.ClosedTimestamp,
 			req, b.state.Lease),
 			"command writing below closed timestamp")
 	}
@@ -1069,7 +1068,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 		return nil
 	}
 	existingClosed := &b.state.RaftClosedTimestamp
-	newClosed := cmd.raftCmd.ClosedTimestamp
+	newClosed := cmd.Cmd.ClosedTimestamp
 	if newClosed != nil && !newClosed.IsEmpty() && newClosed.Less(*existingClosed) {
 		var req redact.StringBuilder
 		if cmd.IsLocal() {
@@ -1098,7 +1097,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
-			cmd.idKey, cmd.ent.Term, cmd.ent.Index, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
+			cmd.ID, cmd.Ent.Term, cmd.Ent.Index, existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
 			logTail)
 	}
@@ -1207,7 +1206,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		}
 
 		rejected := cmd.Rejected()
-		higherReproposalsExist := cmd.raftCmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
+		higherReproposalsExist := cmd.Cmd.MaxLeaseIndex != cmd.proposal.command.MaxLeaseIndex
 		if !rejected && higherReproposalsExist {
 			log.Fatalf(ctx, "finishing proposal with outstanding reproposal at a higher max lease index")
 		}
@@ -1228,7 +1227,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 		// have failed because it carried the same MaxLeaseIndex.
 		if higherReproposalsExist {
 			sm.r.mu.Lock()
-			delete(sm.r.mu.proposals, cmd.idKey)
+			delete(sm.r.mu.proposals, cmd.ID)
 			sm.r.mu.Unlock()
 		}
 		cmd.proposal.applied = true
@@ -1327,77 +1326,74 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 }
 
 func (sm *replicaStateMachine) maybeApplyConfChange(ctx context.Context, cmd *replicatedCmd) error {
-	switch cmd.ent.Type {
-	case raftpb.EntryNormal:
+	cc := cmd.CC()
+	if cc == nil {
 		return nil
-	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
-		sm.stats.numConfChangeEntries++
-		if cmd.Rejected() {
-			// The command was rejected. There is no need to report a ConfChange
-			// to raft.
-			return nil
-		}
-		return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
-			// NB: `etcd/raft` configuration changes diverge from the official Raft way
-			// in that a configuration change becomes active when the corresponding log
-			// entry is applied (rather than appended). This ultimately enables the way
-			// we do things where the state machine's view of the range descriptor always
-			// dictates the active replication config but it is much trickier to prove
-			// correct. See:
-			//
-			// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
-			//
-			// INVARIANT: a leader will not append a config change to its logs when it
-			// hasn't applied all previous config changes in its logs.
-			//
-			// INVARIANT: a node will not campaign until it has applied any
-			// configuration changes with indexes less than or equal to its committed
-			// index.
-			//
-			// INVARIANT: appending a config change to the log (at leader or follower)
-			// implies that any previous config changes are durably known to be
-			// committed. That is, a commit index is persisted (and synced) that
-			// encompasses any earlier config changes before a new config change is
-			// appended[1].
-			//
-			// Together, these invariants ensure that a follower that is behind by
-			// multiple configuration changes will be using one of the two most recent
-			// configuration changes "by the time it matters", which is what is
-			// required for correctness (configuration changes are sequenced so that
-			// neighboring configurations are mutually compatible, i.e. don't cause
-			// split brain). To see this, consider a follower that is behind by
-			// multiple configuration changes. This is fine unless this follower
-			// becomes the leader (as it would then make quorum determinations based
-			// on its active config). To become leader, it needs to campaign, and
-			// thanks to the second invariant, it will only do so once it has applied
-			// all the configuration changes in its committed log. If it is to win the
-			// election, it will also have all committed configuration changes in its
-			// log (though not necessarily knowing that they are all committed). But
-			// the third invariant implies that when the follower received the most
-			// recent configuration change into its log, the one preceding it was
-			// durably marked as committed on the follower. In summary, we now know
-			// that it will apply all the way up to and including the second most
-			// recent configuration change, which is compatible with the most recent
-			// one.
-			//
-			// [1]: this rests on shaky and, in particular, untested foundations in
-			// etcd/raft and our syncing behavior. The argument goes as follows:
-			// because the leader will have at most one config change in flight at a
-			// given time, it will definitely wait until the previous config change is
-			// committed until accepting the next one. `etcd/raft` will always attach
-			// the optimal commit index to appends to followers, so each config change
-			// will mark the previous one as committed upon receipt, since we sync on
-			// append (as we have to) we make that HardState.Commit durable. Finally,
-			// when a follower is catching up on larger chunks of the historical log,
-			// it will receive batches of entries together with a committed index
-			// encompassing the entire batch, again making sure that these batches are
-			// durably committed upon receipt.
-			rn.ApplyConfChange(cmd.confChange.ConfChangeI)
-			return true, nil
-		})
-	default:
-		panic("unexpected")
 	}
+	sm.stats.numConfChangeEntries++
+	if cmd.Rejected() {
+		// The command was rejected. There is no need to report a ConfChange
+		// to raft.
+		return nil
+	}
+	return sm.r.withRaftGroup(true, func(rn *raft.RawNode) (bool, error) {
+		// NB: `etcd/raft` configuration changes diverge from the official Raft way
+		// in that a configuration change becomes active when the corresponding log
+		// entry is applied (rather than appended). This ultimately enables the way
+		// we do things where the state machine's view of the range descriptor always
+		// dictates the active replication config but it is much trickier to prove
+		// correct. See:
+		//
+		// https://github.com/etcd-io/etcd/issues/7625#issuecomment-489232411
+		//
+		// INVARIANT: a leader will not append a config change to its logs when it
+		// hasn't applied all previous config changes in its logs.
+		//
+		// INVARIANT: a node will not campaign until it has applied any
+		// configuration changes with indexes less than or equal to its committed
+		// index.
+		//
+		// INVARIANT: appending a config change to the log (at leader or follower)
+		// implies that any previous config changes are durably known to be
+		// committed. That is, a commit index is persisted (and synced) that
+		// encompasses any earlier config changes before a new config change is
+		// appended[1].
+		//
+		// Together, these invariants ensure that a follower that is behind by
+		// multiple configuration changes will be using one of the two most recent
+		// configuration changes "by the time it matters", which is what is
+		// required for correctness (configuration changes are sequenced so that
+		// neighboring configurations are mutually compatible, i.e. don't cause
+		// split brain). To see this, consider a follower that is behind by
+		// multiple configuration changes. This is fine unless this follower
+		// becomes the leader (as it would then make quorum determinations based
+		// on its active config). To become leader, it needs to campaign, and
+		// thanks to the second invariant, it will only do so once it has applied
+		// all the configuration changes in its committed log. If it is to win the
+		// election, it will also have all committed configuration changes in its
+		// log (though not necessarily knowing that they are all committed). But
+		// the third invariant implies that when the follower received the most
+		// recent configuration change into its log, the one preceding it was
+		// durably marked as committed on the follower. In summary, we now know
+		// that it will apply all the way up to and including the second most
+		// recent configuration change, which is compatible with the most recent
+		// one.
+		//
+		// [1]: this rests on shaky and, in particular, untested foundations in
+		// etcd/raft and our syncing behavior. The argument goes as follows:
+		// because the leader will have at most one config change in flight at a
+		// given time, it will definitely wait until the previous config change is
+		// committed until accepting the next one. `etcd/raft` will always attach
+		// the optimal commit index to appends to followers, so each config change
+		// will mark the previous one as committed upon receipt, since we sync on
+		// append (as we have to) we make that HardState.Commit durable. Finally,
+		// when a follower is catching up on larger chunks of the historical log,
+		// it will receive batches of entries together with a committed index
+		// encompassing the entire batch, again making sure that these batches are
+		// durably committed upon receipt.
+		rn.ApplyConfChange(cc)
+		return true, nil
+	})
 }
 
 func (sm *replicaStateMachine) moveStats() applyCommittedEntriesStats {
