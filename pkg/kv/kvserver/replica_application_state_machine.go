@@ -749,26 +749,57 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	}
 
 	if res.State != nil && res.State.TruncatedState != nil {
-		if apply, err := handleTruncatedStateBelowRaftPreApply(
-			ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
-		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
-		} else if !apply {
-			// The truncated state was discarded, so make sure we don't apply
-			// it to our in-memory state.
+		var err error
+		// Typically one should not be checking the cluster version below raft,
+		// since it can cause state machine divergence. However, this check is
+		// only for deciding how to truncate the raft log, which is not part of
+		// the state machine. Also, we will eventually eliminate this check by
+		// only supporting loosely coupled truncation.
+		looselyCoupledTruncation := isLooselyCoupledRaftLogTruncationEnabled(ctx, b.r.ClusterSettings())
+		// In addition to cluster version and cluster settings, we also apply
+		// immediately if RaftExpectedFirstIndex is not populated (see comment in
+		// that proto).
+		//
+		// In the release following LooselyCoupledRaftLogTruncation, we will
+		// retire the strongly coupled path. It is possible that some replica
+		// still has a truncation sitting in a raft log that never populated
+		// RaftExpectedFirstIndex, which will be interpreted as 0. When applying
+		// it, the loosely coupled code will mark the log size as untrusted and
+		// will recompute the size. This has no correctness impact, so we are not
+		// going to bother with a long-running migration.
+		apply := !looselyCoupledTruncation || res.RaftExpectedFirstIndex == 0
+		if apply {
+			if apply, err = handleTruncatedStateBelowRaftPreApply(
+				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
+			); err != nil {
+				return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
+			}
+		} else {
+			b.r.store.raftTruncator.addPendingTruncation(
+				ctx, (*replicaForTruncatorImpl)(b.r), *res.State.TruncatedState, res.RaftExpectedFirstIndex,
+				res.RaftLogDelta)
+		}
+		if !apply {
+			// The truncated state was discarded, or we are queuing a pending
+			// truncation, so make sure we don't apply it to our in-memory state.
 			res.State.TruncatedState = nil
 			res.RaftLogDelta = 0
-			// TODO(ajwerner): consider moving this code.
-			// We received a truncation that doesn't apply to us, so we know that
-			// there's a leaseholder out there with a log that has earlier entries
-			// than ours. That leader also guided our log size computations by
-			// giving us RaftLogDeltas for past truncations, and this was likely
-			// off. Mark our Raft log size is not trustworthy so that, assuming
-			// we step up as leader at some point in the future, we recompute
-			// our numbers.
-			b.r.mu.Lock()
-			b.r.mu.raftLogSizeTrusted = false
-			b.r.mu.Unlock()
+			res.RaftExpectedFirstIndex = 0
+			if !looselyCoupledTruncation {
+				// TODO(ajwerner): consider moving this code.
+				// We received a truncation that doesn't apply to us, so we know that
+				// there's a leaseholder out there with a log that has earlier entries
+				// than ours. That leader also guided our log size computations by
+				// giving us RaftLogDeltas for past truncations, and this was likely
+				// off. Mark our Raft log size is not trustworthy so that, assuming
+				// we step up as leader at some point in the future, we recompute
+				// our numbers.
+				// TODO(sumeer): this code will be deleted when there is no
+				// !looselyCoupledTruncation code path.
+				b.r.mu.Lock()
+				b.r.mu.raftLogSizeTrusted = false
+				b.r.mu.Unlock()
+			}
 		}
 	}
 
@@ -1227,6 +1258,7 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 		log.Fatalf(ctx, "zero-value ReplicatedEvalResult passed to handleNonTrivialReplicatedEvalResult")
 	}
 
+	isDeltaTrusted := true
 	if rResult.State != nil {
 		if newLease := rResult.State.Lease; newLease != nil {
 			sm.r.handleLeaseResult(ctx, newLease, rResult.PriorReadSummary)
@@ -1234,9 +1266,17 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 			rResult.PriorReadSummary = nil
 		}
 
+		// This strongly coupled truncation code will be removed in the release
+		// following LooselyCoupledRaftLogTruncation.
 		if newTruncState := rResult.State.TruncatedState; newTruncState != nil {
-			rResult.RaftLogDelta += sm.r.handleTruncatedStateResult(ctx, newTruncState)
+			raftLogDelta, expectedFirstIndexWasAccurate := sm.r.handleTruncatedStateResult(
+				ctx, newTruncState, rResult.RaftExpectedFirstIndex)
+			if !expectedFirstIndexWasAccurate && rResult.RaftExpectedFirstIndex != 0 {
+				isDeltaTrusted = false
+			}
+			rResult.RaftLogDelta += raftLogDelta
 			rResult.State.TruncatedState = nil
+			rResult.RaftExpectedFirstIndex = 0
 		}
 
 		if newThresh := rResult.State.GCThreshold; newThresh != nil {
@@ -1254,7 +1294,10 @@ func (sm *replicaStateMachine) handleNonTrivialReplicatedEvalResult(
 	}
 
 	if rResult.RaftLogDelta != 0 {
-		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta)
+		// This code path will be taken exactly when the preceding block has
+		// newTruncState != nil. It is needlessly confusing that these two are not
+		// in the same place.
+		sm.r.handleRaftLogDeltaResult(ctx, rResult.RaftLogDelta, isDeltaTrusted)
 		rResult.RaftLogDelta = 0
 	}
 

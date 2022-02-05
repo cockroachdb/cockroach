@@ -291,6 +291,11 @@ const (
 	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
 	// during joint configuration, including to VOTER_INCOMING replicas.
 	EnableLeaseHolderRemoval
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -466,6 +471,11 @@ var versionsSingleton = keyedVersions{
 		Key:     EnableLeaseHolderRemoval,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 72},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
