@@ -180,6 +180,11 @@ func (t Timestamp) IsEmpty() bool {
 	return t == Timestamp{}
 }
 
+// IsSet returns true if t is not an empty Timestamp.
+func (t Timestamp) IsSet() bool {
+	return !t.IsEmpty()
+}
+
 // Add returns a timestamp with the WallTime and Logical components increased.
 // wallTime is expressed in nanos.
 //
