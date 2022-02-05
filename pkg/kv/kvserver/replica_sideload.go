@@ -50,6 +50,10 @@ type SideloadStorage interface {
 	// the given one. Returns the number of bytes freed, the number of bytes in
 	// files that remain, or an error.
 	TruncateTo(_ context.Context, index uint64) (freed, retained int64, _ error)
+	// BytesIfTruncatedFromTo returns the number of bytes that would be freed,
+	// if one were to truncate [from, to). Additionally, it returns the the
+	// number of bytes that would be retained >= to.
+	BytesIfTruncatedFromTo(_ context.Context, from, to uint64) (freed, retained int64, _ error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index, term uint64) (string, error)
