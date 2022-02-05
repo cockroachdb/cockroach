@@ -83,6 +83,8 @@ func DecodeRaftCommand(data []byte) (CmdIDKey, []byte) {
 // raft log entries. No correctness guarantees are provided.
 //
 // See: #75729
+//
+// TODO(tbg): this method can go away since EncodeRaftCommand is exported, too.
 func EncodeTestRaftCommand(command []byte, commandID CmdIDKey) []byte {
 	return EncodeRaftCommand(RaftVersionStandard, commandID, command)
 }
