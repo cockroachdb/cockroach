@@ -186,7 +186,7 @@ const (
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
-	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
 	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
 	// have an entry in system.namespace upon being restored.
