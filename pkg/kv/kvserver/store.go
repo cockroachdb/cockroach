@@ -716,6 +716,7 @@ type Store struct {
 	replicateQueue     *replicateQueue             // Replication queue
 	replicaGCQueue     *replicaGCQueue             // Replica GC queue
 	raftLogQueue       *raftLogQueue               // Raft log truncation queue
+	raftTruncator      raftLogTruncator            // Enacts truncation
 	raftSnapshotQueue  *raftSnapshotQueue          // Raft repair queue
 	tsMaintenanceQueue *timeSeriesMaintenanceQueue // Time series maintenance queue
 	scanner            *replicaScanner             // Replica scanner
@@ -1162,6 +1163,7 @@ func NewStore(
 		)
 	}
 	s.replRankings = newReplicaRankings()
+	s.raftTruncator = makeRaftLogTruncator(s)
 
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(cfg.AmbientCtx, s.metrics, s, storeSchedulerConcurrency)
@@ -3459,6 +3461,11 @@ func (s *Store) unregisterLeaseholderByID(ctx context.Context, rangeID roachpb.R
 // tracking.
 func (s *Store) getRootMemoryMonitorForKV() *mon.BytesMonitor {
 	return s.cfg.KVMemoryMonitor
+}
+
+// getReplicaForTruncator implements storeForTruncator.
+func (s *Store) getReplicaForTruncator(rangeID roachpb.RangeID) (replicaForTruncator, error) {
+	return s.GetReplica(rangeID)
 }
 
 // WriteClusterVersion writes the given cluster version to the store-local
