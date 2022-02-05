@@ -1600,9 +1600,8 @@ message AdminVerifyProtectedTimestampResponse {
 // AddSSTableRequest contains arguments to the AddSSTable method, which links an
 // SST file into the Pebble log-structured merge-tree. The SST must only contain
 // committed versioned values with non-zero MVCC timestamps (no intents or
-// inline values) and no tombstones, but this is only fully enforced when
-// WriteAtRequestTimestamp is enabled, for performance. It cannot be used in a
-// transaction, cannot be split across ranges, and must be alone in a batch.
+// inline values) and no tombstones. It cannot be used in a transaction, cannot
+// be split across ranges, and must be alone in a batch.
 // 
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
@@ -1615,8 +1614,8 @@ message AdminVerifyProtectedTimestampResponse {
 // The following parameters can be used to make AddSSTable enforce these
 // guarantees, at a performance cost:
 //
-// * WriteAtRequestTimestamp: ensures compliance with the timestamp cache and
-//   closed timestamp, by rewriting SST timestamps to the request timestamp.
+// * SSTTimestampToRequestTimestamp: ensures compliance with the timestamp cache
+//   and closed timestamp, by rewriting SST timestamps to the request timestamp.
 //   Also emits the SST via the range feed.
 //
 // * DisallowConflicts, DisallowShadowing, or DisallowShadowingBelow: ensures
@@ -1643,11 +1642,12 @@ message AddSSTableRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
 
-  // WriteAtRequestTimestamp updates all MVCC timestamps in the SST to the
-  // request timestamp, even if the request gets pushed. This ensures the writes
-  // comply with the timestamp cache and closed timestamp. It also causes the
-  // AddSSTable to be emitted via the range feed, since it respects the closed
-  // timestamp.
+  // SSTTimestampToRequestTimestamp gives the timestamp used for all MVCC
+  // timestamps in the provided SST, and will rewrite the SST to use the request
+  // timestamp if it differs (e.g. if the request gets pushed). This ensures the
+  // writes comply with the timestamp cache and closed timestamp. It also causes
+  // the AddSSTable to be emitted via the range feed, since it respects the
+  // closed timestamp.
   //
   // Callers should always set this, except in very special circumstances when
   // the timestamp cache and closed timestamp can safely be ignored (e.g.
@@ -1660,17 +1660,8 @@ message AddSSTableRequest {
   // serializability.
   // 
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
-  bool write_at_request_timestamp = 6;
-
-  // SSTTimestamp is a promise from the client that all MVCC timestamps in the
-  // SST equal the provided timestamp, and that there are no inline values,
-  // intents, or tombstones. When used together with WriteAtRequestTimestamp,
-  // this can avoid an SST rewrite (and the associated overhead) if the SST
-  // timestamp equals the request timestamp (i.e. if it was provided by the
-  // client and the request was not pushed due to e.g. the closed timestamp or
-  // contention).
-  util.hlc.Timestamp sst_timestamp = 9
-    [(gogoproto.customname) = "SSTTimestamp", (gogoproto.nullable) = false];
+  util.hlc.Timestamp sst_timestamp_to_request_timestamp = 6 [
+    (gogoproto.customname) = "SSTTimestampToRequestTimestamp", (gogoproto.nullable) = false];
 
   // DisallowConflicts will check for MVCC conflicts with existing keys, i.e.
   // scan for existing keys with a timestamp at or above the SST key and
@@ -1680,7 +1671,7 @@ message AddSSTableRequest {
   // Note that this alone is not sufficient to guarantee serializability or
   // single-key linearizability, since it can write to a timestamp that another
   // reader has already observed, changing the value at that timestamp and above
-  // it. Use WriteAtRequestTimestamp in addition to guarantee serializability.
+  // it. Use with SSTTimestampToRequestTimestamp to guarantee serializability.
   //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   //
@@ -2626,10 +2617,10 @@ message RangeFeedError {
 
 // RangeFeedSSTable is a variant of RangeFeedEvent that represents an AddSSTable
 // operation, containing the entire ingested SST. It is only emitted for
-// SSTables written with WriteAtRequestTimestamp enabled, so it is guaranteed to
-// comply with the closed timestamp. The Span and WriteTS fields are advisory,
-// and contain the client-provided SST key span (may be wider than the SST data)
-// and the MVCC timestamp used for all contained entries.
+// SSTables written with SSTTimestampToRequestTimestamp enabled, so it is
+// guaranteed to comply with the closed timestamp. The Span and WriteTS fields
+// are advisory, and contain the client-provided SST key span (may be wider than
+// the SST data) and the MVCC timestamp used for all contained entries.
 //
 // The entire SST is emitted even for registrations that have a narrower span,
 // it is up to the caller to prune the SST as appropriate. Catchup scans emit
