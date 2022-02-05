@@ -48,11 +48,10 @@ go_library(
 gomock(
     name = "mock_rangefeed",
     out = "mocks_generated.go",
-    interfaces = [""],  # work-around for https://github.com/jmhodges/bazel_gomock/issues/58
+    interfaces = ["DB"],
     library = ":rangefeed",
     package = "rangefeed",
     self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
-    source = "rangefeed.go",
 )
 
 go_library(
