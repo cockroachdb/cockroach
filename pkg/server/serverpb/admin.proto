@@ -17,7 +17,7 @@ import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
 import "storage/enginepb/mvcc.proto";
 import "kv/kvserver/liveness/livenesspb/liveness.proto";
-import "kv/kvserver/kvserverpb/log.proto";
+import "kv/kvserver/kvserverpb/range_log.proto";
 import "roachpb/api.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
