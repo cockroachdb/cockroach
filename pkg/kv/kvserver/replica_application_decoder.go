@@ -85,7 +85,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 	var it replicatedCmdBufSlice
 	for it.init(&d.cmdBuf); it.Valid(); it.Next() {
 		cmd := it.cur()
-		cmd.proposal = d.r.mu.proposals[cmd.idKey]
+		cmd.proposal = d.r.mu.proposals[cmd.ID]
 		anyLocal = anyLocal || cmd.IsLocal()
 	}
 	if !anyLocal && d.r.mu.proposalQuota == nil {
@@ -109,7 +109,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// criterion. While such proposals can be reproposed, only the first
 			// instance that gets applied matters and so removing the command is
 			// always what we want to happen.
-			cmd.raftCmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
+			cmd.Cmd.MaxLeaseIndex == cmd.proposal.command.MaxLeaseIndex
 		if shouldRemove {
 			// Delete the proposal from the proposals map. There may be reproposals
 			// of the proposal in the pipeline, but those will all have the same max
@@ -122,7 +122,7 @@ func (d *replicaDecoder) retrieveLocalProposals(ctx context.Context) (anyLocal b
 			// We check the proposal map again first to avoid double free-ing quota
 			// when reproposals from the same proposal end up in the same entry
 			// application batch.
-			delete(d.r.mu.proposals, cmd.idKey)
+			delete(d.r.mu.proposals, cmd.ID)
 			toRelease = cmd.proposal.quotaAlloc
 			cmd.proposal.quotaAlloc = nil
 		}
@@ -146,11 +146,11 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 		cmd := it.cur()
 		if cmd.IsLocal() {
 			cmd.ctx, cmd.sp = tracing.ChildSpan(cmd.proposal.ctx, opName)
-		} else if cmd.raftCmd.TraceData != nil {
+		} else if cmd.Cmd.TraceData != nil {
 			// The proposal isn't local, and trace data is available. Extract
 			// the remote span and start a server-side span that follows from it.
 			spanMeta, err := d.r.AmbientContext.Tracer.ExtractMetaFrom(tracing.MapCarrier{
-				Map: cmd.raftCmd.TraceData,
+				Map: cmd.Cmd.TraceData,
 			})
 			if err != nil {
 				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
