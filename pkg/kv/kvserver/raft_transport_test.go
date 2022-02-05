@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -43,7 +44,7 @@ import (
 const channelServerBrokenRangeMessage = "channelServer broken range"
 
 type channelServer struct {
-	ch       chan *kvserver.RaftMessageRequest
+	ch       chan *kvserverpb.RaftMessageRequest
 	maxSleep time.Duration
 
 	// If non-zero, all messages to this range will return errors
@@ -52,13 +53,13 @@ type channelServer struct {
 
 func newChannelServer(bufSize int, maxSleep time.Duration) channelServer {
 	return channelServer{
-		ch:       make(chan *kvserver.RaftMessageRequest, bufSize),
+		ch:       make(chan *kvserverpb.RaftMessageRequest, bufSize),
 		maxSleep: maxSleep,
 	}
 }
 
 func (s channelServer) HandleRaftRequest(
-	ctx context.Context, req *kvserver.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
+	ctx context.Context, req *kvserverpb.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	if s.maxSleep != 0 {
 		// maxSleep simulates goroutine scheduling delays that could
@@ -74,7 +75,7 @@ func (s channelServer) HandleRaftRequest(
 }
 
 func (s channelServer) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	// Mimic the logic in (*Store).HandleRaftResponse without requiring an
 	// entire Store object to be pulled into these tests.
@@ -89,7 +90,7 @@ func (s channelServer) HandleRaftResponse(
 
 func (s channelServer) HandleSnapshot(
 	_ context.Context,
-	header *kvserver.SnapshotRequest_Header,
+	header *kvserverpb.SnapshotRequest_Header,
 	stream kvserver.SnapshotResponseStream,
 ) error {
 	panic("unexpected HandleSnapshot")
@@ -204,7 +205,7 @@ func (rttc *raftTransportTestContext) Send(
 ) bool {
 	msg.To = uint64(to.ReplicaID)
 	msg.From = uint64(from.ReplicaID)
-	req := &kvserver.RaftMessageRequest{
+	req := &kvserverpb.RaftMessageRequest{
 		RangeID:     rangeID,
 		Message:     msg,
 		ToReplica:   to,
@@ -273,7 +274,7 @@ func TestSendAndReceive(t *testing.T) {
 		}
 
 		for fromStoreID, fromNodeID := range storeNodes {
-			baseReq := kvserver.RaftMessageRequest{
+			baseReq := kvserverpb.RaftMessageRequest{
 				RangeID: 1,
 				Message: raftpb.Message{
 					From: uint64(fromStoreID),
@@ -343,7 +344,7 @@ func TestSendAndReceive(t *testing.T) {
 	// Send a message from replica 2 (on store 3, node 2) to replica 1 (on store 5, node 3)
 	fromStoreID := roachpb.StoreID(3)
 	toStoreID := roachpb.StoreID(5)
-	expReq := &kvserver.RaftMessageRequest{
+	expReq := &kvserverpb.RaftMessageRequest{
 		RangeID: 1,
 		Message: raftpb.Message{
 			Type: raftpb.MsgApp,
@@ -639,7 +640,7 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 	rttc.GossipNode(to, ln.Addr())
 	// Try to send a message, make sure we don't block waiting to set up the
 	// connection.
-	transport.SendAsync(&kvserver.RaftMessageRequest{
+	transport.SendAsync(&kvserverpb.RaftMessageRequest{
 		RangeID: rangeID,
 		ToReplica: roachpb.ReplicaDescriptor{
 			StoreID:   to,

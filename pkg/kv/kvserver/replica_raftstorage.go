@@ -419,7 +419,7 @@ func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
 // replica. If this method returns without error, callers must eventually call
 // OutgoingSnapshot.Close.
 func (r *Replica) GetSnapshot(
-	ctx context.Context, snapType SnapshotRequest_Type, recipientStore roachpb.StoreID,
+	ctx context.Context, snapType kvserverpb.SnapshotRequest_Type, recipientStore roachpb.StoreID,
 ) (_ *OutgoingSnapshot, err error) {
 	snapUUID := uuid.MakeV4()
 	// Get a snapshot while holding raftMu to make sure we're not seeing "half
@@ -514,7 +514,7 @@ type OutgoingSnapshot struct {
 	// sideloaded storage in the meantime.
 	WithSideloaded func(func(SideloadStorage) error) error
 	RaftEntryCache *raftentry.Cache
-	snapType       SnapshotRequest_Type
+	snapType       kvserverpb.SnapshotRequest_Type
 	onClose        func()
 }
 
@@ -546,7 +546,7 @@ type IncomingSnapshot struct {
 	// The descriptor in the snapshot, never nil.
 	Desc             *roachpb.RangeDescriptor
 	DataSize         int64
-	snapType         SnapshotRequest_Type
+	snapType         kvserverpb.SnapshotRequest_Type
 	placeholder      *ReplicaPlaceholder
 	raftAppliedIndex uint64 // logging only
 }
@@ -567,7 +567,7 @@ func snapshot(
 	ctx context.Context,
 	snapUUID uuid.UUID,
 	rsl stateloader.StateLoader,
-	snapType SnapshotRequest_Type,
+	snapType kvserverpb.SnapshotRequest_Type,
 	snap storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,

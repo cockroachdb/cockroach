@@ -741,8 +741,8 @@ type Store struct {
 
 	coalescedMu struct {
 		syncutil.Mutex
-		heartbeats         map[roachpb.StoreIdent][]RaftHeartbeat
-		heartbeatResponses map[roachpb.StoreIdent][]RaftHeartbeat
+		heartbeats         map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
+		heartbeatResponses map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
 	}
 	// 1 if the store was started, 0 if it wasn't. To be accessed using atomic
 	// ops.
@@ -1158,8 +1158,8 @@ func NewStore(
 	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
 
 	s.coalescedMu.Lock()
-	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
-	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.Unlock()
 
 	s.mu.Lock()

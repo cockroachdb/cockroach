@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -107,7 +108,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 	if !ok {
 		return errors.Errorf("%s: replica %d not present in %v", repl, id, desc.Replicas())
 	}
-	snapType := SnapshotRequest_VIA_SNAPSHOT_QUEUE
+	snapType := kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE
 	skipSnapLogLimiter := log.Every(10 * time.Second)
 
 	if typ := repDesc.GetType(); typ == roachpb.LEARNER || typ == roachpb.NON_VOTER {
@@ -146,7 +147,7 @@ func (rq *raftSnapshotQueue) processRaftSnapshot(
 		}
 	}
 
-	err := repl.sendSnapshot(ctx, repDesc, snapType, SnapshotRequest_RECOVERY)
+	err := repl.sendSnapshot(ctx, repDesc, snapType, kvserverpb.SnapshotRequest_RECOVERY)
 
 	// NB: if the snapshot fails because of an overlapping replica on the
 	// recipient which is also waiting for a snapshot, the "smart" thing is to

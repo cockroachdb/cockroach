@@ -1127,7 +1127,7 @@ const (
 
 func (h delayingRaftMessageHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *kvserver.RaftMessageRequest,
+	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	if h.rangeID != req.RangeID {

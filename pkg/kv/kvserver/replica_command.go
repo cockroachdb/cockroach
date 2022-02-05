@@ -957,7 +957,7 @@ func waitForReplicasInit(
 func (r *Replica) ChangeReplicas(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
@@ -987,7 +987,7 @@ func (r *Replica) ChangeReplicas(
 func (r *Replica) changeReplicasImpl(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	chgs roachpb.ReplicationChanges,
@@ -1538,7 +1538,7 @@ func getChangesByNodeID(chgs roachpb.ReplicationChanges) changesByNodeID {
 func (r *Replica) initializeRaftLearners(
 	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	targets []roachpb.ReplicationTarget,
@@ -1684,7 +1684,7 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, SnapshotRequest_INITIAL, priority); err != nil {
+		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
 			return nil, err
 		}
 	}
@@ -2426,8 +2426,8 @@ func recordRangeEventsInLog(
 func (r *Replica) sendSnapshot(
 	ctx context.Context,
 	recipient roachpb.ReplicaDescriptor,
-	snapType SnapshotRequest_Type,
-	priority SnapshotRequest_Priority,
+	snapType kvserverpb.SnapshotRequest_Type,
+	priority kvserverpb.SnapshotRequest_Priority,
 ) (retErr error) {
 	defer func() {
 		// Report the snapshot status to Raft, which expects us to do this once we
@@ -2481,10 +2481,10 @@ func (r *Replica) sendSnapshot(
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
 
-	req := SnapshotRequest_Header{
+	req := kvserverpb.SnapshotRequest_Header{
 		State:                                snap.State,
 		DeprecatedUnreplicatedTruncatedState: true,
-		RaftMessageRequest: RaftMessageRequest{
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID:     r.RangeID,
 			FromReplica: sender,
 			ToReplica:   recipient,
@@ -2498,7 +2498,7 @@ func (r *Replica) sendSnapshot(
 		},
 		RangeSize: r.GetMVCCStats().Total(),
 		Priority:  priority,
-		Strategy:  SnapshotRequest_KV_BATCH,
+		Strategy:  kvserverpb.SnapshotRequest_KV_BATCH,
 		Type:      snapType,
 	}
 	newBatchFn := func() storage.Batch {

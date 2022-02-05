@@ -911,10 +911,10 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 		if s != partStore {
 			// Only filter messages from the partitioned store on the other
 			// two stores.
-			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -1020,7 +1020,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 			rangeID:            partRepl.RangeID,
 			RaftMessageHandler: tc.GetFirstStoreFromServer(t, s),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserver.RaftMessageRequest) bool {
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -1028,8 +1028,8 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
-				dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
+				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 	}
@@ -1144,10 +1144,10 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 		if i != partitionNodeIdx {
 			// Only filter messages from the partitioned store on the other two
 			// stores.
-			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				return req.FromReplica.StoreID == partRepl.StoreID()
 			}
-			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				return hb.FromReplicaID == partReplDesc.ReplicaID
 			}
 		}
@@ -1283,17 +1283,17 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextReq *kvserver.SnapshotRequest
+	nextReq *kvserverpb.SnapshotRequest
 	nextErr error
 }
 
 // Recv implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Recv() (*kvserver.SnapshotRequest, error) {
+func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotRequest, error) {
 	return c.nextReq, c.nextErr
 }
 
 // Send implements the SnapshotResponseStream interface.
-func (c fakeSnapshotStream) Send(request *kvserver.SnapshotResponse) error {
+func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotResponse) error {
 	return nil
 }
 
@@ -1322,10 +1322,10 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	desc.AddReplica(2, 2, roachpb.LEARNER)
 	rep2Desc, found := desc.GetReplicaDescriptor(2)
 	require.True(t, found)
-	header := kvserver.SnapshotRequest_Header{
+	header := kvserverpb.SnapshotRequest_Header{
 		RangeSize: 100,
 		State:     kvserverpb.ReplicaState{Desc: desc},
-		RaftMessageRequest: kvserver.RaftMessageRequest{
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID:     rep.RangeID,
 			FromReplica: repDesc,
 			ToReplica:   rep2Desc,
@@ -1787,7 +1787,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
 		chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(storeNum))
-		_, err := repl.ChangeReplicas(ctx, desc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
+		_, err := repl.ChangeReplicas(ctx, desc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs)
 		return err
 	}
 
@@ -2774,10 +2774,10 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 		StoreID:   target2.StoreID,
 	}
 
-	tc.Servers[2].RaftTransport().SendAsync(&kvserver.RaftMessageRequest{
+	tc.Servers[2].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
 		ToReplica:   replica1,
 		FromReplica: replica2,
-		Heartbeats: []kvserver.RaftHeartbeat{
+		Heartbeats: []kvserverpb.RaftHeartbeat{
 			{
 				RangeID:       desc.RangeID,
 				FromReplicaID: replica2.ReplicaID,
@@ -2867,7 +2867,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_VOTER, roachpb.ADD_VOTER} {
 			for {
 				chgs := roachpb.MakeReplicationChanges(action, tc.Target(1))
-				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
+				if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonUnknown, "", chgs); err != nil {
 					if kvserver.IsRetriableReplicationChangeError(err) {
 						continue
 					} else {
@@ -2887,7 +2887,7 @@ type noConfChangeTestHandler struct {
 
 func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *kvserver.RaftMessageRequest,
+	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	for i, e := range req.Message.Entries {
@@ -2896,7 +2896,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
 				panic(err)
 			}
-			var ccCtx kvserver.ConfChangeContext
+			var ccCtx kvserverpb.ConfChangeContext
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
@@ -2917,7 +2917,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 }
 
 func (ncc *noConfChangeTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -2969,7 +2969,7 @@ func TestReplicaGCRace(t *testing.T) {
 		NodeID:  toStore.Ident.NodeID,
 		StoreID: toStore.Ident.StoreID,
 	})
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2985,10 +2985,10 @@ func TestReplicaGCRace(t *testing.T) {
 		t.Fatalf("expected %s to have a replica on %s", rangeDesc, toStore)
 	}
 
-	hbReq := kvserver.RaftMessageRequest{
+	hbReq := kvserverpb.RaftMessageRequest{
 		FromReplica: fromReplicaDesc,
 		ToReplica:   toReplicaDesc,
-		Heartbeats: []kvserver.RaftHeartbeat{
+		Heartbeats: []kvserverpb.RaftHeartbeat{
 			{
 				RangeID:       desc.RangeID,
 				FromReplicaID: fromReplicaDesc.ReplicaID,
@@ -3018,7 +3018,7 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3414,13 +3414,13 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 type errorChannelTestHandler chan *roachpb.Error
 
 func (errorChannelTestHandler) HandleRaftRequest(
-	_ context.Context, _ *kvserver.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
+	_ context.Context, _ *kvserverpb.RaftMessageRequest, _ kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	panic("unimplemented")
 }
 
 func (d errorChannelTestHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	switch val := resp.Union.GetValue().(type) {
 	case *roachpb.Error:
@@ -3432,7 +3432,7 @@ func (d errorChannelTestHandler) HandleRaftResponse(
 }
 
 func (errorChannelTestHandler) HandleSnapshot(
-	_ context.Context, _ *kvserver.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
+	_ context.Context, _ *kvserverpb.SnapshotRequest_Header, _ kvserver.SnapshotResponseStream,
 ) error {
 	panic("unimplemented")
 }
@@ -3539,7 +3539,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 
 	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
-	for !transport0.SendAsync(&kvserver.RaftMessageRequest{
+	for !transport0.SendAsync(&kvserverpb.RaftMessageRequest{
 		RangeID:     desc.RangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -4123,7 +4123,7 @@ func TestUninitializedReplicaRemainsQuiesced(t *testing.T) {
 	// Block incoming snapshots on s2 until channel is signaled.
 	blockSnapshot := make(chan struct{})
 	handlerFuncs := noopRaftHandlerFuncs()
-	handlerFuncs.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+	handlerFuncs.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
 		select {
 		case <-blockSnapshot:
 		case <-tc.Stopper().ShouldQuiesce():
@@ -4561,12 +4561,12 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		var repl44 *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
-			tc.Servers[0].RaftTransport().SendAsync(&kvserver.RaftMessageRequest{
+			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
 				},
-				Heartbeats: []kvserver.RaftHeartbeat{{RangeID: 44, ToReplicaID: 1}},
+				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: 44, ToReplicaID: 1}},
 			}, rpc.DefaultClass)
 			repl44, err = store.GetReplica(44)
 			return err
@@ -4621,7 +4621,7 @@ func TestTracingDoesNotRaceWithCancelation(t *testing.T) {
 			rangeID:            ri.Desc.RangeID,
 			RaftMessageHandler: tc.GetFirstStoreFromServer(t, i),
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserver.RaftMessageRequest) bool {
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					return rand.Intn(2) == 0
 				},
 			},
@@ -5494,7 +5494,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	require.True(t, found)
 	newReplDesc := replDesc
 	newReplDesc.ReplicaID = desc.NextReplicaID
-	require.Nil(t, store.HandleRaftRequest(ctx, &kvserver.RaftMessageRequest{
+	require.Nil(t, store.HandleRaftRequest(ctx, &kvserverpb.RaftMessageRequest{
 		RangeID:       desc.RangeID,
 		RangeStartKey: desc.StartKey,
 		FromReplica:   fromReplDesc,
@@ -5510,7 +5510,7 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 
 type noopRaftMessageResponseStream struct{}
 
-func (n noopRaftMessageResponseStream) Send(*kvserver.RaftMessageResponse) error {
+func (n noopRaftMessageResponseStream) Send(*kvserverpb.RaftMessageResponse) error {
 	return nil
 }
 

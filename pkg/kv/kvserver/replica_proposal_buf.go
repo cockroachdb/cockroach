@@ -537,7 +537,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			}
 			ents = ents[len(ents):]
 
-			confChangeCtx := ConfChangeContext{
+			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
 				Payload:   p.encodedCommand,
 			}
