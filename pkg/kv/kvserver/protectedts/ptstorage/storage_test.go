@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -661,7 +662,13 @@ func TestCorruptData(t *testing.T) {
 		scope := log.Scope(t)
 		defer scope.Close(t)
 
-		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					SpanConfig: &spanconfig.TestingKnobs{ManagerDisableJobCreation: true},
+				},
+			},
+		})
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
@@ -679,6 +686,7 @@ func TestCorruptData(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
 		ptsKnobs := &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}
 		params.Knobs.ProtectedTS = ptsKnobs
+		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
 
@@ -694,6 +702,7 @@ func TestCorruptData(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
 		ptsKnobs := &protectedts.TestingKnobs{EnableProtectedTimestampForMultiTenant: true}
 		params.Knobs.ProtectedTS = ptsKnobs
+		params.Knobs.SpanConfig = &spanconfig.TestingKnobs{ManagerDisableJobCreation: true}
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 		defer tc.Stopper().Stop(ctx)
 
