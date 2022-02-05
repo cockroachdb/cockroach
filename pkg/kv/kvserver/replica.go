@@ -447,6 +447,14 @@ type Replica struct {
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
 		raftLogLastCheckSize int64
+		// The log truncations that are pending. Note that the above sizes, when
+		// accurate, do not include the effect of pending truncations. Hence, they
+		// are fine for metrics etc., but not for deciding whether we should
+		// create another pending truncation. For the latter, we compute the
+		// post-pending-truncation size using pendingLogTruncations.
+		// Writes also require that raftMu be held, which means one of mu or
+		// raftMu is sufficient for reads.
+		pendingLogTruncations pendingLogTruncations
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
 		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only
@@ -2016,4 +2024,75 @@ func (r *Replica) LockRaftMuForTesting() (unlockFunc func()) {
 	return func() {
 		r.raftMu.Unlock()
 	}
+}
+
+// Implementation of replicaForTruncator interface.
+
+var _ replicaForTruncator = &Replica{}
+
+func (r *Replica) lockReplicaState() {
+	r.mu.Lock()
+}
+
+func (r *Replica) getDestroyStatus() destroyStatus {
+	return r.mu.destroyStatus
+}
+
+func (r *Replica) getTruncatedState() roachpb.RaftTruncatedState {
+	// TruncatedState is guaranteed to be non-nil
+	return *r.mu.state.TruncatedState
+}
+
+func (r *Replica) getPendingTruncs() *pendingLogTruncations {
+	return &r.mu.pendingLogTruncations
+}
+
+func (r *Replica) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
+	r.mu.raftLogSize += deltaBytes
+	r.mu.raftLogLastCheckSize += deltaBytes
+	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+	// between server restarts.
+	if r.mu.raftLogSize < 0 {
+		r.mu.raftLogSize = 0
+	}
+	if r.mu.raftLogLastCheckSize < 0 {
+		r.mu.raftLogLastCheckSize = 0
+	}
+	if !isDeltaTrusted {
+		r.mu.raftLogSizeTrusted = false
+	}
+}
+
+func (r *Replica) unlockReplicaState() {
+	r.mu.Unlock()
+}
+
+func (r *Replica) lockRaftState() {
+	r.raftMu.Lock()
+}
+
+func (r *Replica) assertRaftStateLockHeld() {
+	r.raftMu.AssertHeld()
+}
+
+func (r *Replica) sideloadedBytesIfTruncatedFromTo(
+	ctx context.Context, from, to uint64,
+) (freed, retained int64, _ error) {
+	return r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, from, to)
+}
+
+func (r *Replica) getStateLoader() stateloader.StateLoader {
+	return r.raftMu.stateLoader
+}
+
+func (r *Replica) unlockRaftState() {
+	r.raftMu.Unlock()
+}
+
+func (r *Replica) setTruncatedStateAndSideEffects(
+	ctx context.Context, trunc *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+) (expectedFirstIndexWasAccurate bool) {
+	_, expectedFirtIndexAccurate := r.handleTruncatedStateResult(
+		ctx, trunc, expectedFirstIndexPreTruncation)
+	return expectedFirtIndexAccurate
 }
