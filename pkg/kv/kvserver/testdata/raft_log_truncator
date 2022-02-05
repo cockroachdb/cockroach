@@ -1,0 +1,83 @@
+create-replica id=1 trunc-index=20 last-log-entry=30
+----
+
+print-engine-state id=1
+----
+truncated index: 20
+log entries: 21, 22, 23, 24, 25, 26, 27, 28, 29
+durable applied index: 0
+
+add-pending-truncation id=1 first-index=10 trunc-index=20 delta-bytes=-20 sideloaded-bytes=10
+----
+r1.getPendingTruncs
+r1.lockReplicaState
+r1.getTruncatedStateLocked
+r1.unlockReplicaState
+
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+
+add-pending-truncation id=1 first-index=16 trunc-index=22 delta-bytes=-20 sideloaded-bytes=10
+----
+r1.getPendingTruncs
+r1.lockReplicaState
+r1.getTruncatedStateLocked
+r1.unlockReplicaState
+r1.sideloadedBytesIfTruncatedFromTo(21, 23)
+r1.lockReplicaState
+r1.unlockReplicaState
+
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:16 logDeltaBytes:-30 isDeltaTrusted:true}
+
+durability-advanced
+----
+acquireReplica(1)
+r1.lockReplicaState
+r1.getTruncatedStateLocked
+r1.getPendingTruncs
+r1.unlockReplicaState
+r1.getStateLoader
+releaseReplica(1)
+
+print-replica-state id=1
+----
+truncIndex: 20
+pending:
+ {RaftTruncatedState:{Index:22 Term:0} expectedFirstIndex:16 logDeltaBytes:-30 isDeltaTrusted:true}
+
+write-raft-applied-index id=1 raft-applied-index=22
+----
+
+durability-advanced
+----
+acquireReplica(1)
+r1.lockReplicaState
+r1.getTruncatedStateLocked
+r1.getPendingTruncs
+r1.unlockReplicaState
+r1.getStateLoader
+r1.setTruncatedStateAndSideEffects(..., 16) => false
+r1.lockReplicaState
+r1.setTruncationDeltaAndTrustedLocked(-30, false)
+r1.unlockReplicaState
+releaseReplica(1)
+
+print-replica-state id=1
+----
+truncIndex: 22
+pending:
+
+print-engine-state id=1
+----
+truncated index: 22
+log entries: 23, 24, 25, 26, 27, 28, 29
+durable applied index: 22
+
+
+# TODO: add more test cases and add comments.
