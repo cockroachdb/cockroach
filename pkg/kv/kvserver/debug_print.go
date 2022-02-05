@@ -236,7 +236,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 			c = cc
 		}
 
-		var ctx ConfChangeContext
+		var ctx kvserverpb.ConfChangeContext
 		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
 			return "", err
 		}

@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,22 +28,22 @@ type unreliableRaftHandlerFuncs struct {
 	// If non-nil, can return false to avoid dropping the msg to
 	// unreliableRaftHandler.rangeID. If nil, all messages pertaining to the
 	// respective range are dropped.
-	dropReq  func(*kvserver.RaftMessageRequest) bool
-	dropHB   func(*kvserver.RaftHeartbeat) bool
-	dropResp func(*kvserver.RaftMessageResponse) bool
+	dropReq  func(*kvserverpb.RaftMessageRequest) bool
+	dropHB   func(*kvserverpb.RaftHeartbeat) bool
+	dropResp func(*kvserverpb.RaftMessageResponse) bool
 	// snapErr defaults to returning nil.
-	snapErr func(*kvserver.SnapshotRequest_Header) error
+	snapErr func(*kvserverpb.SnapshotRequest_Header) error
 }
 
 func noopRaftHandlerFuncs() unreliableRaftHandlerFuncs {
 	return unreliableRaftHandlerFuncs{
-		dropResp: func(*kvserver.RaftMessageResponse) bool {
+		dropResp: func(*kvserverpb.RaftMessageResponse) bool {
 			return false
 		},
-		dropReq: func(*kvserver.RaftMessageRequest) bool {
+		dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 			return false
 		},
-		dropHB: func(*kvserver.RaftHeartbeat) bool {
+		dropHB: func(*kvserverpb.RaftHeartbeat) bool {
 			return false
 		},
 	}
@@ -59,7 +60,7 @@ type unreliableRaftHandler struct {
 
 func (h *unreliableRaftHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *kvserver.RaftMessageRequest,
+	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
@@ -94,12 +95,12 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 }
 
 func (h *unreliableRaftHandler) filterHeartbeats(
-	hbs []kvserver.RaftHeartbeat,
-) []kvserver.RaftHeartbeat {
+	hbs []kvserverpb.RaftHeartbeat,
+) []kvserverpb.RaftHeartbeat {
 	if len(hbs) == 0 {
 		return hbs
 	}
-	var cpy []kvserver.RaftHeartbeat
+	var cpy []kvserverpb.RaftHeartbeat
 	for i := range hbs {
 		hb := &hbs[i]
 		if hb.RangeID != h.rangeID || (h.dropHB != nil && !h.dropHB(hb)) {
@@ -110,7 +111,7 @@ func (h *unreliableRaftHandler) filterHeartbeats(
 }
 
 func (h *unreliableRaftHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	if resp.RangeID == h.rangeID {
 		if h.dropResp == nil || h.dropResp(resp) {
@@ -122,7 +123,7 @@ func (h *unreliableRaftHandler) HandleRaftResponse(
 
 func (h *unreliableRaftHandler) HandleSnapshot(
 	ctx context.Context,
-	header *kvserver.SnapshotRequest_Header,
+	header *kvserverpb.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	if header.RaftMessageRequest.RangeID == h.rangeID && h.snapErr != nil {
@@ -147,7 +148,7 @@ func (h *testClusterStoreRaftMessageHandler) getStore() (*kvserver.Store, error)
 
 func (h *testClusterStoreRaftMessageHandler) HandleRaftRequest(
 	ctx context.Context,
-	req *kvserver.RaftMessageRequest,
+	req *kvserverpb.RaftMessageRequest,
 	respStream kvserver.RaftMessageResponseStream,
 ) *roachpb.Error {
 	store, err := h.getStore()
@@ -158,7 +159,7 @@ func (h *testClusterStoreRaftMessageHandler) HandleRaftRequest(
 }
 
 func (h *testClusterStoreRaftMessageHandler) HandleRaftResponse(
-	ctx context.Context, resp *kvserver.RaftMessageResponse,
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
 ) error {
 	store, err := h.getStore()
 	if err != nil {
@@ -169,7 +170,7 @@ func (h *testClusterStoreRaftMessageHandler) HandleRaftResponse(
 
 func (h *testClusterStoreRaftMessageHandler) HandleSnapshot(
 	ctx context.Context,
-	header *kvserver.SnapshotRequest_Header,
+	header *kvserverpb.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	store, err := h.getStore()
@@ -277,7 +278,7 @@ func setupPartitionedRangeWithHandlers(
 		// Only filter messages from the partitioned store on the other
 		// two stores.
 		if h.dropReq == nil {
-			h.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+			h.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 				pr.mu.RLock()
 				defer pr.mu.RUnlock()
 				return pr.mu.partitioned &&
@@ -286,7 +287,7 @@ func setupPartitionedRangeWithHandlers(
 			}
 		}
 		if h.dropHB == nil {
-			h.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+			h.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 				pr.mu.RLock()
 				defer pr.mu.RUnlock()
 				if !pr.mu.partitioned {
@@ -299,7 +300,7 @@ func setupPartitionedRangeWithHandlers(
 			}
 		}
 		if h.snapErr == nil {
-			h.snapErr = func(header *kvserver.SnapshotRequest_Header) error {
+			h.snapErr = func(header *kvserverpb.SnapshotRequest_Header) error {
 				pr.mu.RLock()
 				defer pr.mu.RUnlock()
 				if !pr.mu.partitioned {

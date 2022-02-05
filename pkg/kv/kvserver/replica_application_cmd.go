@@ -90,7 +90,7 @@ type decodedRaftEntry struct {
 // decodedConfChange represents the fields of a config change raft command.
 type decodedConfChange struct {
 	raftpb.ConfChangeI
-	ConfChangeContext
+	kvserverpb.ConfChangeContext
 }
 
 // decode decodes the entry e into the replicatedCmd.
