@@ -644,7 +644,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 		repl,
 		ops,
 		desc,
-		SnapshotRequest_RECOVERY,
+		kvserverpb.SnapshotRequest_RECOVERY,
 		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
@@ -697,7 +697,7 @@ func (rq *replicateQueue) addOrReplaceNonVoters(
 		repl,
 		ops,
 		desc,
-		SnapshotRequest_RECOVERY,
+		kvserverpb.SnapshotRequest_RECOVERY,
 		kvserverpb.ReasonRangeUnderReplicated,
 		details,
 		dryRun,
@@ -878,7 +878,7 @@ func (rq *replicateQueue) removeVoter(
 		repl,
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
-		SnapshotRequest_UNKNOWN, // unused
+		kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
@@ -921,7 +921,7 @@ func (rq *replicateQueue) removeNonVoter(
 		repl,
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_NON_VOTER, target),
 		desc,
-		SnapshotRequest_UNKNOWN,
+		kvserverpb.SnapshotRequest_UNKNOWN,
 		kvserverpb.ReasonRangeOverReplicated,
 		details,
 		dryRun,
@@ -978,7 +978,7 @@ func (rq *replicateQueue) removeDecommissioning(
 		repl,
 		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
-		SnapshotRequest_UNKNOWN, // unused
+		kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDecommissioning, "", dryRun,
 	); err != nil {
 		return false, err
@@ -1022,7 +1022,7 @@ func (rq *replicateQueue) removeDead(
 		repl,
 		roachpb.MakeReplicationChanges(targetType.RemoveChangeType(), target),
 		desc,
-		SnapshotRequest_UNKNOWN, // unused
+		kvserverpb.SnapshotRequest_UNKNOWN, // unused
 		kvserverpb.ReasonStoreDead,
 		"",
 		dryRun,
@@ -1057,7 +1057,7 @@ func (rq *replicateQueue) removeLearner(
 		repl,
 		roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, target),
 		desc,
-		SnapshotRequest_UNKNOWN,
+		kvserverpb.SnapshotRequest_UNKNOWN,
 		kvserverpb.ReasonAbandonedLearner,
 		"",
 		dryRun,
@@ -1140,7 +1140,7 @@ func (rq *replicateQueue) considerRebalance(
 				repl,
 				chgs,
 				desc,
-				SnapshotRequest_REBALANCE,
+				kvserverpb.SnapshotRequest_REBALANCE,
 				kvserverpb.ReasonRebalance,
 				details,
 				dryRun,
@@ -1380,7 +1380,7 @@ func (rq *replicateQueue) changeReplicas(
 	repl *Replica,
 	chgs roachpb.ReplicationChanges,
 	desc *roachpb.RangeDescriptor,
-	priority SnapshotRequest_Priority,
+	priority kvserverpb.SnapshotRequest_Priority,
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 	dryRun bool,

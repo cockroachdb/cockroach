@@ -12,13 +12,13 @@ syntax = "proto3";
 package cockroach.storage; // HACK
 option go_package = "kvserver";
 
-import "kv/kvserver/raft.proto";
+import "kv/kvserver/kvserverpb/raft.proto";
 import "kv/kvserver/api.proto";
 import "gogoproto/gogo.proto";
 
 service MultiRaft {
-    rpc RaftMessageBatch (stream cockroach.kv.kvserver.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.RaftMessageResponse) {}
-    rpc RaftSnapshot (stream cockroach.kv.kvserver.SnapshotRequest) returns (stream cockroach.kv.kvserver.SnapshotResponse) {}
+    rpc RaftMessageBatch (stream cockroach.kv.kvserver.kvserverpb.RaftMessageRequestBatch) returns (stream cockroach.kv.kvserver.kvserverpb.RaftMessageResponse) {}
+    rpc RaftSnapshot (stream cockroach.kv.kvserver.kvserverpb.SnapshotRequest) returns (stream cockroach.kv.kvserver.kvserverpb.SnapshotResponse) {}
 }
 
 service PerReplica {

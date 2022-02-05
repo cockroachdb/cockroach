@@ -6553,7 +6553,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			if _, err := tc.repl.ChangeReplicas(
 				context.Background(),
 				tc.repl.Desc(),
-				SnapshotRequest_REBALANCE,
+				kvserverpb.SnapshotRequest_REBALANCE,
 				kvserverpb.ReasonRebalance,
 				"",
 				chgs,
@@ -9926,7 +9926,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 
 	test := func(
 		expected bool,
-		transform func(*testQuiescer, RaftMessageRequest) (*testQuiescer, RaftMessageRequest),
+		transform func(*testQuiescer, kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest),
 	) {
 		t.Run("", func(t *testing.T) {
 			q := &testQuiescer{
@@ -9948,7 +9948,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 					3: {IsLive: true},
 				},
 			}
-			req := RaftMessageRequest{
+			req := kvserverpb.RaftMessageRequest{
 				Message: raftpb.Message{
 					Type:   raftpb.MsgHeartbeat,
 					From:   1,
@@ -9971,23 +9971,23 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		})
 	}
 
-	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(true, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		return q, req
 	})
-	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(false, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		req.Message.Term = 4
 		return q, req
 	})
-	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(false, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		req.Message.Commit = 9
 		return q, req
 	})
-	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(false, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		q.numProposals = 1
 		return q, req
 	})
 	// Lagging replica with same liveness information.
-	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(true, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
@@ -10001,7 +10001,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		return q, req
 	})
 	// Lagging replica with older liveness information.
-	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(false, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
@@ -10016,7 +10016,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lOld}
 		return q, req
 	})
-	test(false, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(false, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
@@ -10032,7 +10032,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		return q, req
 	})
 	// Lagging replica with newer liveness information.
-	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(true, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,
@@ -10047,7 +10047,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 		req.LaggingFollowersOnQuiesce = []livenesspb.Liveness{lNew}
 		return q, req
 	})
-	test(true, func(q *testQuiescer, req RaftMessageRequest) (*testQuiescer, RaftMessageRequest) {
+	test(true, func(q *testQuiescer, req kvserverpb.RaftMessageRequest) (*testQuiescer, kvserverpb.RaftMessageRequest) {
 		l := livenesspb.Liveness{
 			NodeID:     3,
 			Epoch:      7,

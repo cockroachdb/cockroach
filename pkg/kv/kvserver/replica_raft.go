@@ -464,7 +464,7 @@ var errRemoved = errors.New("replica removed")
 // stepRaftGroup calls Step on the replica's RawNode with the provided request's
 // message. Before doing so, it assures that the replica is unquiesced and ready
 // to handle the request.
-func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
+func (r *Replica) stepRaftGroup(req *kvserverpb.RaftMessageRequest) error {
 	// We're processing an incoming raft message (from a batch that may
 	// include MsgVotes), so don't campaign if we wake up our raft
 	// group.
@@ -1239,7 +1239,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	quiesce bool,
 	lagging laggingReplicaSet,
 ) bool {
-	var hbMap map[roachpb.StoreIdent][]RaftHeartbeat
+	var hbMap map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat
 	switch msg.Type {
 	case raftpb.MsgHeartbeat:
 		r.store.coalescedMu.Lock()
@@ -1250,7 +1250,7 @@ func (r *Replica) maybeCoalesceHeartbeat(
 	default:
 		return false
 	}
-	beat := RaftHeartbeat{
+	beat := kvserverpb.RaftHeartbeat{
 		RangeID:                           r.RangeID,
 		ToReplicaID:                       toReplica.ReplicaID,
 		FromReplicaID:                     fromReplica.ReplicaID,
@@ -1395,7 +1395,7 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 	}
 
 	req := newRaftMessageRequest()
-	*req = RaftMessageRequest{
+	*req = kvserverpb.RaftMessageRequest{
 		RangeID:       r.RangeID,
 		ToReplica:     toReplica,
 		FromReplica:   fromReplica,
@@ -1427,7 +1427,9 @@ func (r *Replica) addUnreachableRemoteReplica(remoteReplica roachpb.ReplicaID) {
 // sendRaftMessageRequest sends a raft message, returning false if the message
 // was dropped. It is the caller's responsibility to call ReportUnreachable on
 // the Raft group.
-func (r *Replica) sendRaftMessageRequest(ctx context.Context, req *RaftMessageRequest) bool {
+func (r *Replica) sendRaftMessageRequest(
+	ctx context.Context, req *kvserverpb.RaftMessageRequest,
+) bool {
 	if log.V(4) {
 		log.Infof(ctx, "sending raft request %+v", req)
 	}

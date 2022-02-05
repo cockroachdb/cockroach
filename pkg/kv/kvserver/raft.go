@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -222,16 +223,16 @@ func raftEntryFormatter(data []byte) string {
 
 var raftMessageRequestPool = sync.Pool{
 	New: func() interface{} {
-		return &RaftMessageRequest{}
+		return &kvserverpb.RaftMessageRequest{}
 	},
 }
 
-func newRaftMessageRequest() *RaftMessageRequest {
-	return raftMessageRequestPool.Get().(*RaftMessageRequest)
+func newRaftMessageRequest() *kvserverpb.RaftMessageRequest {
+	return raftMessageRequestPool.Get().(*kvserverpb.RaftMessageRequest)
 }
 
-func (m *RaftMessageRequest) release() {
-	*m = RaftMessageRequest{}
+func releaseRaftMessageRequest(m *kvserverpb.RaftMessageRequest) {
+	*m = kvserverpb.RaftMessageRequest{}
 	raftMessageRequestPool.Put(m)
 }
 
@@ -285,6 +286,3 @@ func traceProposals(r *Replica, ids []kvserverbase.CmdIDKey, event string) {
 		log.Eventf(ctx, "%v", event)
 	}
 }
-
-// SafeValue implements the redact.SafeValue interface.
-func (SnapshotRequest_Type) SafeValue() {}

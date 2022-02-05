@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -800,12 +801,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 // header before delegating to the underlying HandleSnapshot method.
 type RaftMessageHandlerInterceptor struct {
 	kvserver.RaftMessageHandler
-	handleSnapshotFilter func(header *kvserver.SnapshotRequest_Header)
+	handleSnapshotFilter func(header *kvserverpb.SnapshotRequest_Header)
 }
 
 func (mh RaftMessageHandlerInterceptor) HandleSnapshot(
 	ctx context.Context,
-	header *kvserver.SnapshotRequest_Header,
+	header *kvserverpb.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	mh.handleSnapshotFilter(header)
@@ -846,11 +847,11 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 	// snapshot request headers.
 	messageRecorder := struct {
 		syncutil.Mutex
-		headers []*kvserver.SnapshotRequest_Header
+		headers []*kvserverpb.SnapshotRequest_Header
 	}{}
 	messageHandler := RaftMessageHandlerInterceptor{
 		RaftMessageHandler: tc.GetFirstStoreFromServer(t, 1),
-		handleSnapshotFilter: func(header *kvserver.SnapshotRequest_Header) {
+		handleSnapshotFilter: func(header *kvserverpb.SnapshotRequest_Header) {
 			// Each snapshot request is handled in a new goroutine, so we need
 			// synchronization.
 			messageRecorder.Lock()
@@ -2143,7 +2144,7 @@ func TestStoreRangeSplitRaceUninitializedRHS(t *testing.T) {
 			// side in the split trigger was racing with the uninitialized
 			// version for the same group, resulting in clobbered HardState).
 			for term := uint64(1); ; term++ {
-				if sent := tc.Servers[1].RaftTransport().SendAsync(&kvserver.RaftMessageRequest{
+				if sent := tc.Servers[1].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
 					RangeID:     trigger.RightDesc.RangeID,
 					ToReplica:   replicas[0],
 					FromReplica: replicas[1],

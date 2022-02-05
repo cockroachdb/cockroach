@@ -15,6 +15,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +29,7 @@ import (
 )
 
 type raftRequestInfo struct {
-	req        *RaftMessageRequest
+	req        *kvserverpb.RaftMessageRequest
 	respStream RaftMessageResponseStream
 }
 
@@ -65,7 +66,7 @@ func (q *raftRequestQueue) recycle(processed []raftRequestInfo) {
 // HandleSnapshot reads an incoming streaming snapshot and applies it if
 // possible.
 func (s *Store) HandleSnapshot(
-	ctx context.Context, header *SnapshotRequest_Header, stream SnapshotResponseStream,
+	ctx context.Context, header *kvserverpb.SnapshotRequest_Header, stream SnapshotResponseStream,
 ) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle snapshot"
@@ -73,8 +74,8 @@ func (s *Store) HandleSnapshot(
 		s.metrics.RaftRcvdMessages[raftpb.MsgSnap].Inc(1)
 
 		if s.IsDraining() {
-			return stream.Send(&SnapshotResponse{
-				Status:  SnapshotResponse_ERROR,
+			return stream.Send(&kvserverpb.SnapshotResponse{
+				Status:  kvserverpb.SnapshotResponse_ERROR,
 				Message: storeDrainingMsg,
 			})
 		}
@@ -85,7 +86,7 @@ func (s *Store) HandleSnapshot(
 
 func (s *Store) uncoalesceBeats(
 	ctx context.Context,
-	beats []RaftHeartbeat,
+	beats []kvserverpb.RaftHeartbeat,
 	fromReplica, toReplica roachpb.ReplicaDescriptor,
 	msgT raftpb.MessageType,
 	respStream RaftMessageResponseStream,
@@ -96,7 +97,7 @@ func (s *Store) uncoalesceBeats(
 	if log.V(4) {
 		log.Infof(ctx, "uncoalescing %d beats of type %v: %+v", len(beats), msgT, beats)
 	}
-	beatReqs := make([]RaftMessageRequest, len(beats))
+	beatReqs := make([]kvserverpb.RaftMessageRequest, len(beats))
 	var toEnqueue []roachpb.RangeID
 	for i, beat := range beats {
 		msg := raftpb.Message{
@@ -106,7 +107,7 @@ func (s *Store) uncoalesceBeats(
 			Term:   beat.Term,
 			Commit: beat.Commit,
 		}
-		beatReqs[i] = RaftMessageRequest{
+		beatReqs[i] = kvserverpb.RaftMessageRequest{
 			RangeID: beat.RangeID,
 			FromReplica: roachpb.ReplicaDescriptor{
 				NodeID:    fromReplica.NodeID,
@@ -137,7 +138,7 @@ func (s *Store) uncoalesceBeats(
 // HandleRaftRequest dispatches a raft message to the appropriate Replica. It
 // requires that s.mu is not held.
 func (s *Store) HandleRaftRequest(
-	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
+	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) *roachpb.Error {
 	// NB: unlike the other two RaftMessageHandler methods implemented by Store,
 	// this one doesn't need to directly run through a Stopper task because it
@@ -162,7 +163,7 @@ func (s *Store) HandleRaftRequest(
 // Replica. The method returns whether the Range needs to be enqueued in the
 // Raft scheduler. It requires that s.mu is not held.
 func (s *Store) HandleRaftUncoalescedRequest(
-	ctx context.Context, req *RaftMessageRequest, respStream RaftMessageResponseStream,
+	ctx context.Context, req *kvserverpb.RaftMessageRequest, respStream RaftMessageResponseStream,
 ) (enqueue bool) {
 	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
 		log.Fatalf(ctx, "HandleRaftUncoalescedRequest cannot be given coalesced heartbeats or heartbeat responses, received %s", req)
@@ -200,7 +201,9 @@ func (s *Store) HandleRaftUncoalescedRequest(
 // initialized) Replica specified in the request. The replica passed to
 // the function will have its Replica.raftMu locked.
 func (s *Store) withReplicaForRequest(
-	ctx context.Context, req *RaftMessageRequest, f func(context.Context, *Replica) *roachpb.Error,
+	ctx context.Context,
+	req *kvserverpb.RaftMessageRequest,
+	f func(context.Context, *Replica) *roachpb.Error,
 ) *roachpb.Error {
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
@@ -221,7 +224,7 @@ func (s *Store) withReplicaForRequest(
 // the specified replica. Notably, it does not handle updates to the Raft Ready
 // state; callers will probably want to handle this themselves at some point.
 func (s *Store) processRaftRequestWithReplica(
-	ctx context.Context, r *Replica, req *RaftMessageRequest,
+	ctx context.Context, r *Replica, req *kvserverpb.RaftMessageRequest,
 ) *roachpb.Error {
 	if verboseRaftLoggingEnabled() {
 		log.Infof(ctx, "incoming raft message:\n%s", raftDescribeMessage(req.Message, raftEntryFormatter))
@@ -271,7 +274,7 @@ func (s *Store) processRaftRequestWithReplica(
 // If (and only if) no error is returned, the placeholder (if any) in inSnap
 // will have been removed.
 func (s *Store) processRaftSnapshotRequest(
-	ctx context.Context, snapHeader *SnapshotRequest_Header, inSnap IncomingSnapshot,
+	ctx context.Context, snapHeader *kvserverpb.SnapshotRequest_Header, inSnap IncomingSnapshot,
 ) *roachpb.Error {
 	return s.withReplicaForRequest(ctx, &snapHeader.RaftMessageRequest, func(
 		ctx context.Context, r *Replica,
@@ -352,7 +355,9 @@ func (s *Store) processRaftSnapshotRequest(
 // interface specification, an error is returned if and only if the underlying
 // Raft connection should be closed.
 // It requires that s.mu is not held.
-func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageResponse) error {
+func (s *Store) HandleRaftResponse(
+	ctx context.Context, resp *kvserverpb.RaftMessageResponse,
+) error {
 	ctx = s.AnnotateCtx(ctx)
 	const name = "storage.Store: handle raft response"
 	return s.stopper.RunTaskWithErr(ctx, name, func(ctx context.Context) error {
@@ -683,7 +688,7 @@ func (s *Store) coalescedHeartbeatsLoop(ctx context.Context) {
 // sendQueuedHeartbeatsToNode requires that the s.coalescedMu lock is held. It
 // returns the number of heartbeats that were sent.
 func (s *Store) sendQueuedHeartbeatsToNode(
-	ctx context.Context, beats, resps []RaftHeartbeat, to roachpb.StoreIdent,
+	ctx context.Context, beats, resps []kvserverpb.RaftHeartbeat, to roachpb.StoreIdent,
 ) int {
 	var msgType raftpb.MessageType
 
@@ -698,7 +703,7 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 	}
 
 	chReq := newRaftMessageRequest()
-	*chReq = RaftMessageRequest{
+	*chReq = kvserverpb.RaftMessageRequest{
 		RangeID: 0,
 		ToReplica: roachpb.ReplicaDescriptor{
 			NodeID:    to.NodeID,
@@ -740,8 +745,8 @@ func (s *Store) sendQueuedHeartbeats(ctx context.Context) {
 	s.coalescedMu.Lock()
 	heartbeats := s.coalescedMu.heartbeats
 	heartbeatResponses := s.coalescedMu.heartbeatResponses
-	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
-	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]RaftHeartbeat{}
+	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
+	s.coalescedMu.heartbeatResponses = map[roachpb.StoreIdent][]kvserverpb.RaftHeartbeat{}
 	s.coalescedMu.Unlock()
 
 	var beatsSent int

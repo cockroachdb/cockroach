@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -858,7 +859,7 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 			rangeID:            rangeID,
 			RaftMessageHandler: partitionStore,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserver.RaftMessageRequest) bool {
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we just truncated can
 					// make it through. The Raft transport is asynchronous so this is necessary
 					// to make the test pass reliably.
@@ -866,8 +867,8 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 					// entries in the MsgApp, so filter where msg.Index < index, not <= index.
 					return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 				},
-				dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
+				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 

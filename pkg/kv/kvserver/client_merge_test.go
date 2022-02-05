@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
@@ -467,7 +468,7 @@ func mergeCheckingTimestampCaches(
 	var snapshotFilter func(kvserver.IncomingSnapshot)
 	beforeSnapshotSSTIngestion := func(
 		inSnap kvserver.IncomingSnapshot,
-		snapType kvserver.SnapshotRequest_Type,
+		snapType kvserverpb.SnapshotRequest_Type,
 		_ []string,
 	) error {
 		filterMu.Lock()
@@ -631,7 +632,7 @@ func mergeCheckingTimestampCaches(
 
 		// Applied to the leaseholder's raft transport during the partition.
 		partitionedLeaseholderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaseholderFuncs.dropReq = func(*kvserver.RaftMessageRequest) bool {
+		partitionedLeaseholderFuncs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from new leader.
 			return true
 		}
@@ -639,12 +640,12 @@ func mergeCheckingTimestampCaches(
 		// Applied to the leader and other follower's raft transport during the
 		// partition.
 		partitionedLeaderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaderFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		partitionedLeaderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from leaseholder, except forwarded proposals.
 			return req.FromReplica.StoreID == lhsStore.StoreID() &&
 				req.Message.Type != raftpb.MsgProp
 		}
-		partitionedLeaderFuncs.dropHB = func(hb *kvserver.RaftHeartbeat) bool {
+		partitionedLeaderFuncs.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 			// Ignore heartbeats from leaseholder, results in campaign.
 			return hb.FromReplicaID == roachpb.ReplicaID(lhsRepls[0].RaftStatus().ID)
 		}
@@ -652,7 +653,7 @@ func mergeCheckingTimestampCaches(
 		// Applied to leaseholder after the partition heals.
 		var truncIndex uint64
 		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
-		restoredLeaseholderFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		restoredLeaseholderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Make sure that even going forward no MsgApp for what we just
 			// truncated can make it through. The Raft transport is asynchronous
 			// so this is necessary to make the test pass reliably - otherwise
@@ -2494,10 +2495,10 @@ func TestStoreReplicaGCAfterMerge(t *testing.T) {
 	) {
 		// Try several times, as the message may be dropped (see #18355).
 		for i := 0; i < 5; i++ {
-			if sent := transport.SendAsync(&kvserver.RaftMessageRequest{
+			if sent := transport.SendAsync(&kvserverpb.RaftMessageRequest{
 				FromReplica: fromReplDesc,
 				ToReplica:   toReplDesc,
-				Heartbeats: []kvserver.RaftHeartbeat{
+				Heartbeats: []kvserverpb.RaftHeartbeat{
 					{
 						RangeID:       rangeID,
 						FromReplicaID: fromReplDesc.ReplicaID,
@@ -2744,7 +2745,7 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		rangeID:            lhsDesc.RangeID,
 		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserver.RaftMessageRequest) bool {
+			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3025,7 +3026,7 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		rangeID:            lhsDesc.RangeID,
 		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(*kvserver.RaftMessageRequest) bool {
+			dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3232,7 +3233,7 @@ func (h *slowSnapRaftHandler) unblock() {
 
 func (h *slowSnapRaftHandler) HandleSnapshot(
 	ctx context.Context,
-	header *kvserver.SnapshotRequest_Header,
+	header *kvserverpb.SnapshotRequest_Header,
 	respStream kvserver.SnapshotResponseStream,
 ) error {
 	if header.RaftMessageRequest.RangeID == h.rangeID {
@@ -3327,7 +3328,7 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 		rangeID:            desc.RangeID,
 		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserver.RaftMessageRequest) bool {
+			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3725,7 +3726,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	rangeIds := make(map[string]roachpb.RangeID, 4)
 	beforeSnapshotSSTIngestion := func(
 		inSnap kvserver.IncomingSnapshot,
-		snapType kvserver.SnapshotRequest_Type,
+		snapType kvserverpb.SnapshotRequest_Type,
 		sstNames []string,
 	) error {
 		// Only verify snapshots of type VIA_SNAPSHOT_QUEUE and on the range under
@@ -3734,7 +3735,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// there are too many keys and the other replicated keys are verified later
 		// on in the test. This function verifies that the subsumed replicas have
 		// been handled properly.
-		if snapType != kvserver.SnapshotRequest_VIA_SNAPSHOT_QUEUE ||
+		if snapType != kvserverpb.SnapshotRequest_VIA_SNAPSHOT_QUEUE ||
 			inSnap.Desc.RangeID != rangeIds[string(keyA)] {
 			return nil
 		}
@@ -3943,7 +3944,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserver.RaftMessageRequest) bool {
+			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3988,7 +3989,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		rangeID:            aRepl0.RangeID,
 		RaftMessageHandler: store2,
 		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserver.RaftMessageRequest) bool {
+			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				// Make sure that even going forward no MsgApp for what we just
 				// truncated can make it through. The Raft transport is asynchronous
 				// so this is necessary to make the test pass reliably - otherwise
@@ -4000,8 +4001,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 			},
 			// Don't drop heartbeats or responses.
-			dropHB:   func(*kvserver.RaftHeartbeat) bool { return false },
-			dropResp: func(*kvserver.RaftMessageResponse) bool { return false },
+			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+			dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 		},
 	})
 
@@ -4687,7 +4688,7 @@ func TestMergeQueueWithSlowNonVoterSnaps(t *testing.T) {
 			1: {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						ReceiveSnapshot: func(header *kvserver.SnapshotRequest_Header) error {
+						ReceiveSnapshot: func(header *kvserverpb.SnapshotRequest_Header) error {
 							val := delaySnapshotTrap.Load()
 							if val != nil {
 								fn := val.(func() error)

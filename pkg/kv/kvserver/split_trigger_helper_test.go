@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -92,13 +93,13 @@ func TestProtoZeroNilSlice(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "isNil", func(t *testing.T, isNil bool) {
-		msg := &RaftMessageRequest{}
+		msg := &kvserverpb.RaftMessageRequest{}
 		if !isNil {
 			msg.RangeStartKey = roachpb.RKey("foo")
 		}
 		b, err := protoutil.Marshal(msg)
 		assert.NoError(t, err)
-		out := &RaftMessageRequest{}
+		out := &kvserverpb.RaftMessageRequest{}
 		assert.NoError(t, protoutil.Unmarshal(b, out))
 		assert.Equal(t, isNil, out.RangeStartKey == nil)
 	})
