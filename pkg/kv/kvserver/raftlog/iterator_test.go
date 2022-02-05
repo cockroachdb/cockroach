@@ -1,0 +1,204 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package raftlog
+
+import (
+	"context"
+	"math"
+	"math/rand"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+)
+
+const rangeID = 1
+
+type mockStorageIter struct {
+	val []byte
+}
+
+func (m *mockStorageIter) SeekGE(storage.MVCCKey) {}
+
+func (m *mockStorageIter) Valid() (bool, error) {
+	return true, nil
+}
+
+func (m *mockStorageIter) Next() {}
+
+func (m *mockStorageIter) Close() {}
+
+func (m *mockStorageIter) UnsafeValue() []byte {
+	return m.val
+}
+
+type mockReader struct {
+	iter storage.MVCCIterator
+}
+
+func (m *mockReader) NewMVCCIterator(
+	storage.MVCCIterKind, storage.IterOptions,
+) storage.MVCCIterator {
+	return m.iter
+}
+
+func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
+	r := rand.New(rand.NewSource(123))
+	// A realistic-ish raft command for a ~1kb write.
+	cmd := &kvserverpb.RaftCommand{
+		ProposerLeaseSequence: 1,
+		MaxLeaseIndex:         1159192591,
+		ClosedTimestamp:       &hlc.Timestamp{WallTime: 12512591925, Logical: 1},
+		ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+			WriteTimestamp: hlc.Timestamp{WallTime: 18581258253},
+			Delta: enginepb.MVCCStatsDelta{
+				LastUpdateNanos: 123581285,
+				LiveBytes:       1000,
+				LiveCount:       1,
+				KeyBytes:        100,
+				KeyCount:        1,
+				ValBytes:        900,
+				ValCount:        1,
+			},
+			RaftLogDelta: 1300,
+		},
+		WriteBatch: &kvserverpb.WriteBatch{Data: randutil.RandBytes(r, 2000)},
+		LogicalOpLog: &kvserverpb.LogicalOpLog{Ops: []enginepb.MVCCLogicalOp{
+			{
+				WriteValue: &enginepb.MVCCWriteValueOp{
+					Key:       roachpb.Key(randutil.RandBytes(r, 100)),
+					Timestamp: hlc.Timestamp{WallTime: 1284581285},
+					Value:     roachpb.Key(randutil.RandBytes(r, 1800)),
+				},
+			},
+		}},
+	}
+	cmdB, err := protoutil.Marshal(cmd)
+	require.NoError(b, err)
+	data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, "cmd12345", cmdB)
+
+	ent := raftpb.Entry{
+		Term:  1,
+		Index: 1,
+		Type:  raftpb.EntryNormal,
+		Data:  data,
+	}
+
+	e, err := NewEntry(ent)
+	require.NoError(b, err)
+
+	metaB, err = e.ToRawBytes()
+	require.NoError(b, err)
+
+	return ent, metaB
+}
+
+// BenchmarkIterator micro-benchmarks Iterator and its methods. This mocks out
+// the storage engine to avoid measuring its overhead.
+func BenchmarkIterator(b *testing.B) {
+	defer leaktest.AfterTest(b)()
+	defer log.Scope(b).Close(b)
+	b.ReportAllocs()
+
+	_, metaB := mkBenchEnt(b)
+
+	setMockIter := func(it *Iterator) {
+		if it.iter != nil {
+			it.iter.Close()
+		}
+		it.iter = &mockStorageIter{
+			val: metaB,
+		}
+
+	}
+
+	b.Run("NewIterator", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+			it.Close()
+		}
+	})
+
+	benchForOp := func(b *testing.B, method func(*Iterator) (bool, error)) {
+		it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+		setMockIter(it)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			ok, err := method(it)
+			if err != nil {
+				b.Fatal(err)
+			}
+			if !ok {
+				b.Fatal("entry missing")
+			}
+			e := it.Entry()
+			_ = e
+		}
+	}
+
+	b.Run("Next", func(b *testing.B) {
+		benchForOp(b, (*Iterator).Next)
+	})
+
+	b.Run("SeekGE", func(b *testing.B) {
+		benchForOp(b, (*Iterator).Next)
+	})
+
+	b.Run("NextPooled", func(b *testing.B) {
+		benchForOp(b, func(it *Iterator) (bool, error) {
+			ok, err := it.Next()
+			if err != nil || !ok {
+				return false, err
+			}
+			ent := it.Entry()
+			ent.Release()
+			return true, nil
+		})
+	})
+}
+
+// Visit benchmarks Visit on a pebble engine, i.e. the results will measure
+// overhead and allocations inside pebble as well.
+func BenchmarkVisit(b *testing.B) {
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	ent, metaB := mkBenchEnt(b)
+	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		err := Visit(context.Background(), rangeID, eng, 0, math.MaxUint64,
+			func(ctx context.Context, entry *Entry) error {
+				entry.Release()
+				return nil
+			})
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
