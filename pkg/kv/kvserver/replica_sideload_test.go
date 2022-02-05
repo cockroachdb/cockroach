@@ -242,10 +242,19 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 	assertCreated(true)
 
 	for n := range payloads {
-		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		if _, _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, payloads[n])
+		require.NoError(t, err)
+		freedWhatWasRetained, retainedNothing, err :=
+			ss.BytesIfTruncatedFromTo(ctx, payloads[n], math.MaxUint64)
+		require.Zero(t, retainedNothing)
+		require.Equal(t, freedWhatWasRetained, retained)
+		// Truncate indexes < payloads[n] (payloads is sorted in increasing order).
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, payloads[n])
+		if err != nil {
 			t.Fatalf("%d: %+v", n, err)
 		}
+		require.Equal(t, freedByTruncateTo, freed)
+		require.Equal(t, retainedByTruncateTo, retained)
 		// Index payloads[n] and above are still there (truncation is exclusive)
 		// at both terms.
 		for _, term := range []uint64{lowTerm, highTerm} {
@@ -302,8 +311,13 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 			require.NoError(t, ss.Put(ctx, i, highTerm, file(i*highTerm)))
 		}
 		assertCreated(true)
-		_, _, err = ss.TruncateTo(ctx, math.MaxUint64)
+		freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, math.MaxUint64)
 		require.NoError(t, err)
+		require.Zero(t, retained)
+		freedByTruncateTo, retainedByTruncateTo, err := ss.TruncateTo(ctx, math.MaxUint64)
+		require.NoError(t, err)
+		require.Zero(t, retainedByTruncateTo)
+		require.Equal(t, freedByTruncateTo, freed)
 		// Ensure directory is removed when all records are removed.
 		_, err = eng.Stat(ss.Dir())
 		require.True(t, oserror.IsNotExist(err), "%v", err)
@@ -313,9 +327,16 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	assertCreated(false)
 
-	// Sanity check that we can call TruncateTo without the directory existing.
-	_, _, err := ss.TruncateTo(ctx, 1)
+	// Sanity check that we can call BytesIfTruncatedFromTo and TruncateTo
+	// without the directory existing.
+	freed, retained, err := ss.BytesIfTruncatedFromTo(ctx, 0, 1)
 	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
+	freed, retained, err = ss.TruncateTo(ctx, 1)
+	require.NoError(t, err)
+	require.Zero(t, freed)
+	require.Zero(t, retained)
 
 	assertCreated(false)
 
