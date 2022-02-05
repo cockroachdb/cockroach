@@ -444,6 +444,12 @@ type Replica struct {
 		// until the first truncation is carried out), but it prevents a large
 		// dormant Raft log from sitting around forever, which has caused problems
 		// in the past.
+		//
+		// Note that both raftLogSize and raftLogSizeTrusted do not include the
+		// effect of pending log truncations (see Replica.pendingLogTruncations).
+		// Hence, they are fine for metrics etc., but not for deciding whether we
+		// should create another pending truncation. For the latter, we compute
+		// the post-pending-truncation size using pendingLogTruncations.
 		raftLogSize int64
 		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
 		// it has been recomputed.
@@ -634,6 +640,12 @@ type Replica struct {
 		// Historical information about the command that set the closed timestamp.
 		closedTimestampSetter closedTimestampSetterInfo
 	}
+
+	// The raft log truncations that are pending. Access is protected by its own
+	// mutex. All implementation details should be considered hidden except to
+	// the code in raft_log_truncator.go. External code should only use the
+	// computePostTrunc* methods.
+	pendingLogTruncations pendingLogTruncations
 
 	rangefeedMu struct {
 		syncutil.RWMutex
@@ -2023,4 +2035,64 @@ func (r *Replica) LockRaftMuForTesting() (unlockFunc func()) {
 	return func() {
 		r.raftMu.Unlock()
 	}
+}
+
+// Implementation of the replicaForTruncator interface.
+type replicaForTruncatorImpl Replica
+
+var _ replicaForTruncator = &replicaForTruncatorImpl{}
+
+func (r *replicaForTruncatorImpl) getRangeID() roachpb.RangeID {
+	return r.RangeID
+}
+
+func (r *replicaForTruncatorImpl) getTruncatedState() roachpb.RaftTruncatedState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// TruncatedState is guaranteed to be non-nil
+	return *r.mu.state.TruncatedState
+}
+
+func (r *replicaForTruncatorImpl) setTruncatedStateAndSideEffects(
+	ctx context.Context, trunc *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+) (expectedFirstIndexWasAccurate bool) {
+	_, expectedFirstIndexAccurate := (*Replica)(r).handleTruncatedStateResult(
+		ctx, trunc, expectedFirstIndexPreTruncation)
+	return expectedFirstIndexAccurate
+}
+
+func (r *replicaForTruncatorImpl) setTruncationDeltaAndTrusted(
+	deltaBytes int64, isDeltaTrusted bool,
+) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.mu.raftLogSize += deltaBytes
+	r.mu.raftLogLastCheckSize += deltaBytes
+	// Ensure raftLog{,LastCheck}Size is not negative since it isn't persisted
+	// between server restarts.
+	if r.mu.raftLogSize < 0 {
+		r.mu.raftLogSize = 0
+	}
+	if r.mu.raftLogLastCheckSize < 0 {
+		r.mu.raftLogLastCheckSize = 0
+	}
+	if !isDeltaTrusted {
+		r.mu.raftLogSizeTrusted = false
+	}
+}
+
+func (r *replicaForTruncatorImpl) getPendingTruncs() *pendingLogTruncations {
+	return &r.pendingLogTruncations
+}
+
+func (r *replicaForTruncatorImpl) sideloadedBytesIfTruncatedFromTo(
+	ctx context.Context, from, to uint64,
+) (freed int64, err error) {
+	freed, _, err = r.raftMu.sideloaded.BytesIfTruncatedFromTo(ctx, from, to)
+	return freed, err
+}
+
+func (r *replicaForTruncatorImpl) getStateLoader() stateloader.StateLoader {
+	// NB: the replicaForTruncator contract says that Replica.raftMu is held.
+	return r.raftMu.stateLoader
 }

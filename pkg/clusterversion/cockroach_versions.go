@@ -283,6 +283,11 @@ const (
 	// to disable the data propagation mechanism it and the entire spanconfig
 	// infrastructure obviates.
 	DisableSystemConfigGossipTrigger
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -449,6 +454,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DisableSystemConfigGossipTrigger,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 66},
+	},
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
 
 	// *************************************************

@@ -16,8 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,6 +31,92 @@ import (
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
+
+// Overview of Raft log truncation:
+//
+// The safety requirement for truncation is that the entries being truncated
+// are already durably applied to the state machine. This is because after a
+// truncation, the only remaining source of information regarding the data in
+// the truncated entries is the state machine, which represents a prefix of
+// the log. If we truncated entries that were not durably applied to the state
+// machine, a crash would create a gap in what the state machine knows and the
+// first entry in the untruncated log, which prevents any more application.
+//
+// Initialized replicas may need to provide log entries to slow followers to
+// catch up, so for performance reasons they should also base truncation on
+// the state of followers. Additionally, truncation should typically do work
+// when there are "significant" bytes or number of entries to truncate.
+// However, if the replica is quiescent we would like to truncate the whole
+// log when it becomes possible.
+//
+// An attempt is made to add a replica to the queue under two situations:
+// - Event occurs that indicates that there are significant bytes/entries that
+//   can be truncated. Until the truncation is proposed (see below), these
+//   events can keep firing. The queue dedups the additions until the replica
+//   has been processed. Note that there is insufficient information at the
+//   time of addition to predict that the truncation will actually happen.
+//   Only the processing will finally decide whether truncation should happen,
+//   hence the deduping cannot happen outside the queue (say by changing the
+//   firing condition). If nothing is done when processing the replica, the
+//   continued firing of the events will cause the replica to again be added
+//   to the queue. In the current code, these events can only trigger after
+//   application to the state machine.
+//
+// - Periodic addition via the replicaScanner: this is helpful in two ways (a)
+//   the events in the previous bullet can under-fire if the size estimates
+//   are wrong, (b) if the replica becomes quiescent, those events can stop
+//   firing but truncation may not have been done due to other constraints
+//   (like lagging followers). The periodic addition (polling) takes care of
+//   ensuring that when those other constraints are removed, the truncation
+//   happens.
+//
+// The raftLogQueue proposes "replicated" truncation. This is done by the raft
+// leader, which has knowledge of the followers and results in a
+// TruncateLogRequest. This proposal will be raft replicated and serve as an
+// upper bound to all replicas on what can be truncated. Each replica
+// remembers in-memory what truncations have been proposed, so that truncation
+// can be done independently at each replica when the corresponding
+// RaftAppliedIndex is durable (see raftLogTruncator). Note that since raft
+// state (including truncated state) is not part of the state machine, this
+// loose coupling is fine. The loose coupling is enabled with cluster version
+// LooselyCoupledRaftLogTruncation and cluster setting
+// kv.raft_log.enable_loosely_coupled_truncation. When not doing loose
+// coupling (legacy), the proposal causes immediate truncation -- this is
+// correct because other externally maintained invariants ensure that the
+// state machine is durable (though we have some concerns in
+// https://github.com/cockroachdb/cockroach/issues/38566).
+//
+// NB: Loosely coupled truncation loses the pending truncations that were
+// queued in-memory when a node restarts. This is considered ok for now since
+// either (a) the range will keep seeing new writes and eventually another
+// truncation will be proposed, (b) if the range becomes quiescent we are
+// willing to accept some amount of garbage. (b) can be addressed by
+// unilaterally truncating at each follower if the range is quiescent. And
+// since we check that the RaftAppliedIndex is durable, it is easy to truncate
+// all the entries of the log in this quiescent case.
+
+// This is a temporary cluster setting that we will remove after one release
+// cycle of everyone running with the default value of true. It only exists as
+// a safety switch in case the new behavior causes unanticipated issues.
+// Current plan:
+// - v22.1: Has the setting. Expectation is that no one changes to false.
+// - v22.2: The code behavior is hard-coded to true, in that the setting has
+//   no effect (we can also delete a bunch of legacy code).
+// Mixed version clusters:
+// - v21.2 and v22.1: Will behave as strongly coupled since the cluster
+//   version serves as an additional gate.
+// - v22.1 and v22.2: If the setting has been changed to false the v22.1 nodes
+//   will do strongly coupled truncation and the v22.2 will do loosely
+//   coupled. This co-existence is correct.
+var enableLooselyCoupledTruncation = func() *settings.BoolSetting {
+	s := settings.RegisterBoolSetting(
+		settings.SystemOnly,
+		"kv.raft_log.enable_loosely_coupled_truncation",
+		"set to true to loosely couple the raft log truncation.",
+		true)
+	s.SetVisibility(settings.Reserved)
+	return s
+}()
 
 const (
 	// raftLogQueueTimerDuration is the duration between truncations.
@@ -94,7 +183,9 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 
 // newTruncateDecision returns a truncateDecision for the given Replica if no
 // error occurs. If input data to establish a truncateDecision is missing, a
-// zero decision is returned.
+// zero decision is returned. When there are pending truncations queued below
+// raft (see raftLogTruncator), this function pretends as if those truncations
+// have already happened, and decides whether another truncation is merited.
 //
 // At a high level, a truncate decision operates based on the Raft log size, the
 // number of entries in the log, and the Raft status of the followers. In an
@@ -142,17 +233,16 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 //
 // Ideally, a Raft log that grows large for whichever reason (for instance the
 // queue being stuck on another replica) wouldn't be more than a nuisance on
-// nodes with sufficient disk space. Unfortunately, at the time of writing, the
-// Raft log is included in Raft snapshots. On the other hand, IMPORT/RESTORE's
-// split/scatter phase interacts poorly with overly aggressive truncations and
-// can DDOS the Raft snapshot queue.
+// nodes with sufficient disk space. Also, IMPORT/RESTORE's split/scatter
+// phase interacts poorly with overly aggressive truncations and can DDOS the
+// Raft snapshot queue.
 func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
 	// NB: we need an exclusive lock due to grabbing the first index.
 	r.mu.Lock()
-	raftLogSize := r.mu.raftLogSize
+	raftLogSize := r.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
 	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
@@ -172,9 +262,18 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	raftStatus := r.raftStatusRLocked()
 
 	firstIndex, err := r.raftFirstIndexLocked()
+	firstIndex = r.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 	const anyRecipientStore roachpb.StoreID = 0
 	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore)
 	lastIndex := r.mu.lastIndex
+	// NB: raftLogSize above adjusts for pending truncations that have already
+	// been successfully replicated via raft, but logSizeTrusted does not see if
+	// those pending truncations would cause a transition from trusted =>
+	// !trusted. This is done since we don't want to trigger a recomputation of
+	// the raft log size while we still have pending truncations. Note that as
+	// soon as those pending truncations are enacted r.mu.raftLogSizeTrusted
+	// will become false and we will recompute the size -- so this cannot cause
+	// an indefinite delay in recomputation.
 	logSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.Unlock()
 
@@ -189,8 +288,8 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		return truncateDecision{}, nil
 	}
 
-	// Is this the raft leader? We only perform log truncation on the raft leader
-	// which has the up to date info on followers.
+	// Is this the raft leader? We only propose log truncation on the raft
+	// leader which has the up to date info on followers.
 	if raftStatus.RaftState != raft.StateLeader {
 		return truncateDecision{}, nil
 	}
@@ -559,6 +658,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 	// processing the recomputation quickly, and not starving replicas which see
 	// a significant amount of write traffic until they run over and truncate
 	// more aggressively than they need to.
+	// NB: this happens even on followers.
 	return true, true, 1.0 + float64(decision.Input.MaxLogSize)/2.0
 }
 
@@ -615,11 +715,16 @@ func (rlq *raftLogQueue) process(
 		log.VEventf(ctx, 1, "%v", log.Safe(decision.String()))
 	}
 	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.TruncateLogRequest{
+	truncRequest := &roachpb.TruncateLogRequest{
 		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Index:         decision.NewFirstIndex,
 		RangeID:       r.RangeID,
-	})
+	}
+	if rlq.store.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.LooselyCoupledRaftLogTruncation) {
+		truncRequest.ExpectedFirstIndex = decision.Input.FirstIndex
+	}
+	b.AddRawRequest(truncRequest)
 	if err := rlq.db.Run(ctx, b); err != nil {
 		return false, err
 	}
@@ -635,4 +740,15 @@ func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 // purgatoryChan returns nil.
 func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 	return nil
+}
+
+func isLooselyCoupledRaftLogTruncationEnabled(
+	ctx context.Context, settings *cluster.Settings,
+) bool {
+	// TODO(sumeer): remove the false when hooking up the
+	// raftLogTruncator.durabilityAdvanced and fixing that method to do a
+	// durable read of RaftAppliedIndex.
+	return settings.Version.IsActive(
+		ctx, clusterversion.LooselyCoupledRaftLogTruncation) &&
+		enableLooselyCoupledTruncation.Get(&settings.SV) && false
 }
