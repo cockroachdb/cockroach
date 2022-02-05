@@ -444,6 +444,12 @@ type Replica struct {
 		// until the first truncation is carried out), but it prevents a large
 		// dormant Raft log from sitting around forever, which has caused problems
 		// in the past.
+		//
+		// Note that both raftLogSize and raftLogSizeTrusted do not include the
+		// effect of pending log truncations (see Replica.pendingLogTruncations).
+		// Hence, they are fine for metrics etc., but not for deciding whether we
+		// should create another pending truncation. For the latter, we compute
+		// the post-pending-truncation size using pendingLogTruncations.
 		raftLogSize int64
 		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
 		// it has been recomputed.
@@ -634,6 +640,12 @@ type Replica struct {
 		// Historical information about the command that set the closed timestamp.
 		closedTimestampSetter closedTimestampSetterInfo
 	}
+
+	// The raft log truncations that are pending. Access is protected by its own
+	// mutex. All implementation details should be considered hidden except to
+	// the code in raft_log_truncator.go. External code should only use the
+	// computePostTrunc* methods.
+	pendingLogTruncations pendingLogTruncations
 
 	rangefeedMu struct {
 		syncutil.RWMutex

@@ -2025,9 +2025,9 @@ func ComputeRaftLogSize(
 	var totalSideloaded int64
 	if sideloaded != nil {
 		var err error
-		// Truncating all indexes strictly smaller than zero is a no-op but
-		// gives us the number of bytes in the storage back.
-		_, totalSideloaded, err = sideloaded.TruncateTo(ctx, 0)
+		// The remaining bytes if one were to truncate [0, 0) gives us the total
+		// number of bytes in sideloaded files.
+		_, totalSideloaded, err = sideloaded.BytesIfTruncatedFromTo(ctx, 0, 0)
 		if err != nil {
 			return 0, err
 		}
