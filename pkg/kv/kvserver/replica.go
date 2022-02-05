@@ -447,6 +447,14 @@ type Replica struct {
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
 		raftLogLastCheckSize int64
+		// The log truncations that are pending. Note that the above sizes, when
+		// accurate, do not include the effect of pending truncations. Hence, they
+		// are fine for metrics etc., but not for deciding whether we should
+		// create another pending truncation. For the latter, we compute the
+		// post-pending-truncation size using pendingLogTruncations.
+		// Writes also require that raftMu be held, which means one of mu or
+		// raftMu is sufficient for reads.
+		pendingLogTruncations pendingLogTruncations
 		// pendingLeaseRequest is used to coalesce RequestLease requests.
 		pendingLeaseRequest pendingLeaseRequest
 		// minLeaseProposedTS is the minimum acceptable lease.ProposedTS; only

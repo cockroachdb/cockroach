@@ -281,9 +281,11 @@ func (r *Replica) handleLeaseResult(
 }
 
 func (r *Replica) handleTruncatedStateResult(
-	ctx context.Context, t *roachpb.RaftTruncatedState,
-) (raftLogDelta int64) {
+	ctx context.Context, t *roachpb.RaftTruncatedState, expectedFirstIndexPreTruncation uint64,
+) (raftLogDelta int64, expectedFirstIndexWasAccurate bool) {
 	r.mu.Lock()
+	expectedFirstIndexWasAccurate =
+		r.mu.state.TruncatedState.Index+1 == expectedFirstIndexPreTruncation
 	r.mu.state.TruncatedState = t
 	r.mu.Unlock()
 
@@ -301,7 +303,7 @@ func (r *Replica) handleTruncatedStateResult(
 		// loud error, but keep humming along.
 		log.Errorf(ctx, "while removing sideloaded files during log truncation: %+v", err)
 	}
-	return -size
+	return -size, expectedFirstIndexWasAccurate
 }
 
 func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Timestamp) {
@@ -368,7 +370,8 @@ func (r *Replica) handleChangeReplicasResult(
 	return true
 }
 
-func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
+// TODO(sumeer): remove method when all truncation is loosely coupled.
+func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64, deltaNotTrusted bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mu.raftLogSize += delta
@@ -380,5 +383,8 @@ func (r *Replica) handleRaftLogDeltaResult(ctx context.Context, delta int64) {
 	}
 	if r.mu.raftLogLastCheckSize < 0 {
 		r.mu.raftLogLastCheckSize = 0
+	}
+	if deltaNotTrusted {
+		r.mu.raftLogSizeTrusted = false
 	}
 }

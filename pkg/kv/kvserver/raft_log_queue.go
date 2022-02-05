@@ -16,18 +16,88 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
+
+// Overview of Raft log truncation:
+
+// The safety requirement for truncation is that the entries being truncated
+// are already durably applied to the state machine. Initialized replicas may
+// need to provide log entries to slow followers to catch up, so for
+// performance reasons they should also base truncation on the state of
+// followers. Additionally, truncation should typically do work when there are
+// "significant" bytes or number of entries to truncate. However, if the
+// replica is quiescent we would like to truncate the whole log when it
+// becomes possible.
+//
+// An attempt is made to add a replica to the queue under two situations:
+// - Event occurs that indicates that there are significant bytes/entries that
+//   can be truncated. Until the truncation is proposed (see below), these
+//   events can keep firing. The queue dedups the additions until the replica
+//   has been processed. Note that there is insufficient information at the
+//   time of addition to predict that the truncation will actually happen.
+//   Only the processing will finally decide whether truncation should happen,
+//   hence the deduping cannot happen outside the queue (say by changing the
+//   firing condition). If nothing is done when processing the replica, the
+//   continued firing of the events will cause the replica to again be added
+//   to the queue. In the current code, these events can only trigger after
+//   application to the state machine.
+//
+// - Periodic addition via the replicaScanner: this is helpful in two ways (a)
+//   the events in the previous bullet can under-fire if the size estimates
+//   are wrong, (b) if the replica becomes quiescent, those events can stop
+//   firing but truncation may not have been done due to other constraints
+//   (lagging followers; latest applied state was not durable). The periodic
+//   addition (polling) takes care of ensuring that when those other
+//   constraints are removed, the truncation happens.
+//
+// The raftLogQueue does the following:
+// 1. Proposes "replicated" truncation
+// This is done by the raft leader, which has knowledge of the followers and
+// results in a TruncateLogRequest. This proposal will be raft replicated and
+// serve as an upper bound to all replicas on what can be truncated. Each
+// replica remembers in-memory what truncations have been proposed, so that
+// truncation can be done independently at each replica when the corresponding
+// RaftAppliedIndex is durable. Note that since raft state (including truncated
+// state) is not part of the state machine, this loose coordination is fine.
+//
+// 2. Proposes "local" truncation
+// This is done at any replica if the replica (a) is quiescent, and (b) the
+// raft log is non-empty. We treat this similar to the case where a
+// TruncateLogRequest arrived with the latest entry in the raft log. We need
+// this path since nodes can fail before they did the actual truncation, and
+// forget the "replicated" truncation proposals -- this ensures that such
+// replicas will eventually be truncated.
+//
+// The loose coupling implied by (1) above, and the corresponding need to do
+// (2) are enabled with cluster version LooselyCoupledRaftLogTruncation.
+
+// This is a temporary cluster setting that we will remove after one release
+// cycle of everyone running with the default value of true. It only exists as
+// a safety switch in case the new behavior causes unanticipated issues.
+var enableLooselyCoupledTruncation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.raft_log.enable_loosely_coupled_truncation",
+	"set to true to loosely couple the raft log truncation.",
+	true)
+
+func init() {
+	enableLooselyCoupledTruncation.SetVisibility(settings.Reserved)
+}
 
 const (
 	// raftLogQueueTimerDuration is the duration between truncations.
@@ -142,17 +212,16 @@ func newRaftLogQueue(store *Store, db *kv.DB) *raftLogQueue {
 //
 // Ideally, a Raft log that grows large for whichever reason (for instance the
 // queue being stuck on another replica) wouldn't be more than a nuisance on
-// nodes with sufficient disk space. Unfortunately, at the time of writing, the
-// Raft log is included in Raft snapshots. On the other hand, IMPORT/RESTORE's
-// split/scatter phase interacts poorly with overly aggressive truncations and
-// can DDOS the Raft snapshot queue.
+// nodes with sufficient disk space. Also, IMPORT/RESTORE's split/scatter
+// phase interacts poorly with overly aggressive truncations and can DDOS the
+// Raft snapshot queue.
 func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, error) {
 	rangeID := r.RangeID
 	now := timeutil.Now()
 
 	// NB: we need an exclusive lock due to grabbing the first index.
 	r.mu.Lock()
-	raftLogSize := r.mu.raftLogSize
+	raftLogSize := r.mu.pendingLogTruncations.computePostTruncLogSize(r.mu.raftLogSize)
 	// A "cooperative" truncation (i.e. one that does not cut off followers from
 	// the log) takes place whenever there are more than
 	// RaftLogQueueStaleThreshold entries or the log's estimated size is above
@@ -172,10 +241,17 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	raftStatus := r.raftStatusRLocked()
 
 	firstIndex, err := r.raftFirstIndexLocked()
+	firstIndex = r.mu.pendingLogTruncations.computePostTruncFirstIndex(firstIndex)
 	const anyRecipientStore roachpb.StoreID = 0
 	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now, anyRecipientStore)
 	lastIndex := r.mu.lastIndex
+	// NB: raftLogSize above adjusts for pending truncations that have already
+	// been successfully replicated via raft, but logSizeTrusted does not see if
+	// those pending truncations would cause a transition from trusted =>
+	// !trusted. This is done since we don't want to trigger a recomputation of
+	// the raft log size while we still have pending truncations.
 	logSizeTrusted := r.mu.raftLogSizeTrusted
+	isQuiescent := r.mu.quiescent
 	r.mu.Unlock()
 
 	if err != nil {
@@ -189,33 +265,42 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		return truncateDecision{}, nil
 	}
 
-	// Is this the raft leader? We only perform log truncation on the raft leader
-	// which has the up to date info on followers.
-	if raftStatus.RaftState != raft.StateLeader {
+	// Is this the raft leader? We only perform log truncation:
+	// - on the raft leader which has the up to date info on followers. This
+	//   proposal is replicated via raft.
+	// - on a follower (completely local truncation): if the replica is
+	//   quiescent.
+	if raftStatus.RaftState != raft.StateLeader &&
+		(!isQuiescent || !isLooselyCoupledRaftLogTruncationEnabled(ctx, r.ClusterSettings())) {
 		return truncateDecision{}, nil
 	}
 
-	// For all our followers, overwrite the RecentActive field (which is always
-	// true since we don't use CheckQuorum) with our own activity check.
-	r.mu.RLock()
-	log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
-	log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
-	updateRaftProgressFromActivity(
-		ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
-		func(replicaID roachpb.ReplicaID) bool {
-			return r.mu.lastUpdateTimes.isFollowerActiveSince(
-				ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
-		},
-	)
-	log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
-	r.mu.RUnlock()
+	if raftStatus.RaftState == raft.StateLeader {
+		// For all our followers, overwrite the RecentActive field (which is always
+		// true since we don't use CheckQuorum) with our own activity check.
+		r.mu.RLock()
+		log.Eventf(ctx, "raft status before lastUpdateTimes check: %+v", raftStatus.Progress)
+		log.Eventf(ctx, "lastUpdateTimes: %+v", r.mu.lastUpdateTimes)
+		updateRaftProgressFromActivity(
+			ctx, raftStatus.Progress, r.descRLocked().Replicas().Descriptors(),
+			func(replicaID roachpb.ReplicaID) bool {
+				return r.mu.lastUpdateTimes.isFollowerActiveSince(
+					ctx, replicaID, now, r.store.cfg.RangeLeaseActiveDuration())
+			},
+		)
+		log.Eventf(ctx, "raft status after lastUpdateTimes check: %+v", raftStatus.Progress)
+		r.mu.RUnlock()
 
-	if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
-		// TODO(tschottdorf): remove this line once we have picked up
-		// https://github.com/etcd-io/etcd/pull/10279
-		pr.State = tracker.StateReplicate
-		raftStatus.Progress[raftStatus.Lead] = pr
+		if pr, ok := raftStatus.Progress[raftStatus.Lead]; ok {
+			// TODO(tschottdorf): remove this line once we have picked up
+			// https://github.com/etcd-io/etcd/pull/10279
+			pr.State = tracker.StateReplicate
+			raftStatus.Progress[raftStatus.Lead] = pr
+		}
 	}
+	// Else follower, which doesn't care about the others in the system.
+	// TODO(sumeer): check if this will confuse the computation in
+	// computeTruncateDecision which does look at RaftStatus.Progress.
 
 	input := truncateDecisionInput{
 		RaftStatus:           *raftStatus,
@@ -531,7 +616,6 @@ func (rlq *raftLogQueue) shouldQueue(
 		log.Warningf(ctx, "%v", err)
 		return false, 0
 	}
-
 	shouldQ, _, prio := rlq.shouldQueueImpl(ctx, decision)
 	return shouldQ, prio
 }
@@ -559,6 +643,7 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 	// processing the recomputation quickly, and not starving replicas which see
 	// a significant amount of write traffic until they run over and truncate
 	// more aggressively than they need to.
+	// NB: this happens even on followers.
 	return true, true, 1.0 + float64(decision.Input.MaxLogSize)/2.0
 }
 
@@ -608,6 +693,35 @@ func (rlq *raftLogQueue) process(
 		log.VEventf(ctx, 3, "%s", log.Safe(decision.String()))
 		return false, nil
 	}
+	if decision.Input.RaftStatus.RaftState != raft.StateLeader {
+		// This is a follower and the replica is quiescent. Truncate the whole
+		// log, since a quiescent replica means all the followers are up-to-date.
+		err := func() error {
+			r.raftMu.Lock()
+			r.mu.Lock()
+			defer r.raftMu.Unlock()
+			if r.mu.state.TruncatedState.Index >= r.mu.lastIndex {
+				// Already truncated
+				r.mu.RUnlock()
+				return nil
+			}
+			term, err := (*replicaRaftStorage)(r).Term(r.mu.lastIndex)
+			if err != nil {
+				r.mu.RUnlock()
+				return err
+			}
+			r.mu.RUnlock()
+			rlq.store.raftTruncator.addPendingTruncation(ctx, r, roachpb.RaftTruncatedState{
+				Index: r.mu.lastIndex,
+				Term:  term,
+			}, decision.Input.FirstIndex, -r.mu.raftLogSize, true /* deltaIncludesSideloaded */)
+			return nil
+		}()
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 
 	if n := decision.NumNewRaftSnapshots(); log.V(1) || n > 0 && rlq.logSnapshots.ShouldProcess(timeutil.Now()) {
 		log.Infof(ctx, "%v", log.Safe(decision.String()))
@@ -615,11 +729,16 @@ func (rlq *raftLogQueue) process(
 		log.VEventf(ctx, 1, "%v", log.Safe(decision.String()))
 	}
 	b := &kv.Batch{}
-	b.AddRawRequest(&roachpb.TruncateLogRequest{
+	truncRequest := &roachpb.TruncateLogRequest{
 		RequestHeader: roachpb.RequestHeader{Key: r.Desc().StartKey.AsRawKey()},
 		Index:         decision.NewFirstIndex,
 		RangeID:       r.RangeID,
-	})
+	}
+	if rlq.store.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.LooselyCoupledRaftLogTruncation) {
+		truncRequest.ExpectedFirstIndex = decision.Input.FirstIndex
+	}
+	b.AddRawRequest(truncRequest)
 	if err := rlq.db.Run(ctx, b); err != nil {
 		return false, err
 	}
@@ -635,4 +754,362 @@ func (*raftLogQueue) timer(_ time.Duration) time.Duration {
 // purgatoryChan returns nil.
 func (*raftLogQueue) purgatoryChan() <-chan time.Time {
 	return nil
+}
+
+// pendingTruncations tracks proposed truncations for a replica that have not
+// yet been enacted due to the corresponding RaftAppliedIndex not yet being
+// durable.
+type pendingLogTruncations struct {
+	// We only track the oldest and latest pending truncation. We cannot track
+	// only the latest since it may always be ahead of the durable
+	// RaftAppliedIndex and so we may never be able to truncate. We assume
+	// liveness of durability advancement, which means that if no new pending
+	// truncations are added, the latest one will eventually be enacted.
+	//
+	// Note that this liveness assumption is not completely true -- if there are
+	// no writes happening to the store, the durability (due to memtable
+	// flushes) may not advance. We deem this (a) an uninteresting case, since
+	// if there are no writes we possibly don't care about aggressively
+	// truncating the log, (b) fixing the liveness assumption is not within
+	// scope of the truncator (it has to work with what it is given).
+	truncs [2]pendingTruncation
+}
+
+func (p *pendingLogTruncations) computePostTruncLogSize(raftLogSize int64) int64 {
+	p.iterate(func(trunc pendingTruncation) {
+		raftLogSize += trunc.logDeltaBytes
+	})
+	if raftLogSize < 0 {
+		raftLogSize = 0
+	}
+	return raftLogSize
+}
+
+func (p *pendingLogTruncations) computePostTruncFirstIndex(firstIndex uint64) uint64 {
+	p.iterate(func(trunc pendingTruncation) {
+		if firstIndex < trunc.Index+1 {
+			firstIndex = trunc.Index + 1
+		}
+	})
+	return firstIndex
+}
+
+func (p *pendingLogTruncations) empty() bool {
+	return p.truncs[0] == (pendingTruncation{})
+}
+
+func (p *pendingLogTruncations) front() pendingTruncation {
+	return p.truncs[0]
+}
+
+func (p *pendingLogTruncations) pop() {
+	p.truncs[0] = pendingTruncation{}
+	if !(p.truncs[1] == (pendingTruncation{})) {
+		p.truncs[0] = p.truncs[1]
+		p.truncs[1] = pendingTruncation{}
+	}
+}
+
+func (p *pendingLogTruncations) iterate(f func(trunc pendingTruncation)) {
+	for _, trunc := range p.truncs {
+		if !(trunc == (pendingTruncation{})) {
+			f(trunc)
+		}
+	}
+}
+
+type pendingTruncation struct {
+	// The pending truncation will truncate entries up to
+	// RaftTruncatedState.Index, inclusive.
+	roachpb.RaftTruncatedState
+
+	// The raftLogDeltaBytes are computed under the assumption that the
+	// truncation is deleting [expectedFirstIndex,RaftTruncatedState.Index]. It
+	// originates in ReplicatedEvalResult, where it is accurate.
+	// There are two reasons isDeltaTrusted could be considered false here:
+	// - The original "accurate" delta does not account for sideloaded files. It
+	//   is adjusted on this replica using
+	//   SideloadStorage.BytesIfTruncatedFromTo, but it is possible that the
+	//   truncated state of this replica is already > expectedFirstIndex. Note
+	//   here that problem is that the original "accurate" delta will result in
+	//   inaccuracy when added to this replica's raft log size. We don't
+	//   actually set isDeltaTrusted=false for this case since we will change
+	//   Replica.raftLogSizeTrusted to false after enacting this truncation.
+	// - We merge pendingTruncation entries in the pendingTruncations struct. We
+	//   are making an effort to have consecutive TruncateLogRequest provide us
+	//   stats for index intervals that are adjacent and non-overlapping, but
+	//   that behavior is best-effort.
+	expectedFirstIndex uint64
+	// logDeltaBytes includes the bytes from sideloaded files.
+	logDeltaBytes  int64
+	isDeltaTrusted bool
+}
+
+type rangeAndReplicaID struct {
+	rangeID   roachpb.RangeID
+	replicaID roachpb.ReplicaID
+}
+
+// truncatorForReplicasInStore is responsible for actually enacting
+// truncations.
+// Mutex ordering: Replica mutexes > truncatorForReplicasInStore.mu
+type truncatorForReplicasInStore struct {
+	store *Store
+	mu    struct {
+		syncutil.Mutex
+		ranges map[rangeAndReplicaID]struct{}
+	}
+}
+
+func makeTruncatorForReplicasInStore(store *Store) truncatorForReplicasInStore {
+	t := truncatorForReplicasInStore{
+		store: store,
+	}
+	t.mu.ranges = make(map[rangeAndReplicaID]struct{})
+	return t
+}
+
+// addPendingTruncation assumes r.raftMu is held and r.mu is not held.
+// raftExpectedFirstIndex and raftLogDelta have the same meaning as in
+// ReplicatedEvalResult. Never called before cluster is at
+// LooselyCoupledRaftLogTruncation. If deltaIncludesSideloaded is true, the
+// raftLogDelta already includes the contribution of sideloaded files.
+func (t *truncatorForReplicasInStore) addPendingTruncation(
+	ctx context.Context,
+	r *Replica,
+	trunc roachpb.RaftTruncatedState,
+	raftExpectedFirstIndex uint64,
+	raftLogDelta int64,
+	deltaIncludesSideloaded bool,
+) {
+	pendingTrunc := pendingTruncation{
+		RaftTruncatedState: trunc,
+		expectedFirstIndex: raftExpectedFirstIndex,
+		logDeltaBytes:      raftLogDelta,
+		isDeltaTrusted:     true,
+	}
+	pos, mergePending, alreadyTruncIndex :=
+		func() (pos int, mergePending bool, alreadyTruncIndex uint64) {
+			r.mu.RLock()
+			defer r.mu.RUnlock()
+			// truncState is guaranteed to be non-nil
+			truncState := r.mu.state.TruncatedState
+			alreadyTruncIndex = truncState.Index
+			pos = 0
+			mergePending = false
+			for i, n := 0, len(r.mu.pendingLogTruncations.truncs); i < n; i++ {
+				if !(r.mu.pendingLogTruncations.truncs[i] == (pendingTruncation{})) {
+					if r.mu.pendingLogTruncations.truncs[i].Index > alreadyTruncIndex {
+						alreadyTruncIndex = r.mu.pendingLogTruncations.truncs[i].Index
+					}
+					if i == n-1 {
+						mergePending = true
+						pos = i
+					}
+				} else {
+					pos = i
+					break
+				}
+			}
+			return
+		}()
+	if alreadyTruncIndex >= pendingTrunc.Index {
+		// Noop
+		return
+	}
+	if !deltaIncludesSideloaded {
+		// It is possible that alreadyTruncIndex + 1 > raftExpectedFirstIndex. When
+		// we merge or enact we will see this problem and set the trusted bit to
+		// false. But we can at least avoid double counting sideloaded entries,
+		// which can be large, since we do the computation here. That will reduce
+		// the undercounting of the bytes in the raft log.
+		sideloadedFreed, _, err := r.raftMu.sideloaded.BytesIfTruncatedFromTo(
+			ctx, alreadyTruncIndex+1, pendingTrunc.Index+1)
+		// Log a loud error since we need to continue enqueuing the truncation.
+		if err != nil {
+			log.Errorf(ctx, "while computing size of sideloaded files to truncate: %+v", err)
+			pendingTrunc.isDeltaTrusted = false
+		}
+		pendingTrunc.logDeltaBytes -= sideloadedFreed
+	}
+	if mergePending {
+		pendingTrunc.isDeltaTrusted = pendingTrunc.isDeltaTrusted ||
+			r.mu.pendingLogTruncations.truncs[pos].isDeltaTrusted
+		if r.mu.pendingLogTruncations.truncs[pos].Index+1 != pendingTrunc.expectedFirstIndex {
+			pendingTrunc.isDeltaTrusted = false
+		}
+		pendingTrunc.logDeltaBytes += r.mu.pendingLogTruncations.truncs[pos].logDeltaBytes
+		pendingTrunc.expectedFirstIndex = r.mu.pendingLogTruncations.truncs[pos].expectedFirstIndex
+	}
+	r.mu.Lock()
+	r.mu.pendingLogTruncations.truncs[pos] = pendingTrunc
+	r.mu.Unlock()
+
+	if pos == 0 {
+		if mergePending {
+			panic("should never be merging pending truncations at pos 0")
+		}
+		// First entry in queue of pending truncations for this replica.
+		t.mu.Lock()
+		t.mu.ranges[rangeAndReplicaID{rangeID: r.RangeID, replicaID: r.mu.replicaID}] = struct{}{}
+		t.mu.Unlock()
+	}
+}
+
+// Invoked whenever the durability of the store advances. We assume that this
+// is coarse in that the advancement of durability will apply to all ranges in
+// this store, and most of the preceding pending truncations have their goal
+// truncated index become durable in RangeAppliedState.RaftAppliedIndex. This
+// coarseness assumption is important for not wasting much work being done in
+// this method.
+// TODO(sumeer): hook this up to the callback that will be invoked on the
+// Store by the Engine (Pebble).
+func (t *truncatorForReplicasInStore) durabilityAdvanced(ctx context.Context) {
+	var ranges []rangeAndReplicaID
+	func() {
+		t.mu.Lock()
+		defer t.mu.Unlock()
+		n := len(t.mu.ranges)
+		if n == 0 {
+			return
+		}
+		ranges = make([]rangeAndReplicaID, n)
+		i := 0
+		for k := range t.mu.ranges {
+			ranges[i] = k
+			// If another pendingTruncation is added to this Replica, it will not be
+			// added back to the map since the Replica already has pending
+			// truncations. That is ok: we will try to enact all pending truncations
+			// for that Replica below, since there typically will only be one
+			// pending, and if there are any remaining we will add it back to the
+			// map.
+			delete(t.mu.ranges, k)
+			i++
+		}
+	}()
+	if len(ranges) == 0 {
+		return
+	}
+
+	// Create an engine Reader to provide a safe lower bound on what is durable.
+	//
+	// TODO(sumeer): This is incorrect -- change this reader to only read
+	// durable state after merging
+	// https://github.com/cockroachdb/pebble/pull/1490 and incorporating into
+	// CockroachDB.
+	reader := t.store.Engine().NewReadOnly()
+
+	for _, repl := range ranges {
+		r, err := t.store.GetReplica(repl.rangeID)
+		if err != nil || r == nil || r.mu.replicaID != repl.replicaID {
+			// Not found or not the same replica.
+			continue
+		}
+		r.raftMu.Lock()
+		r.mu.Lock()
+		if r.mu.destroyStatus.Removed() {
+			r.mu.Unlock()
+			r.raftMu.Unlock()
+			continue
+		}
+		// Not destroyed. We can release Replica.mu below and be sure it will not
+		// be replaced by another replica with the same RangeID, since we continue
+		// to hold Replica.raftMu.
+
+		truncState := *r.mu.state.TruncatedState
+		for !r.mu.pendingLogTruncations.empty() {
+			pendingTrunc := r.mu.pendingLogTruncations.front()
+			if pendingTrunc.Index <= truncState.Index {
+				r.mu.pendingLogTruncations.pop()
+			}
+		}
+		if r.mu.pendingLogTruncations.empty() {
+			r.mu.Unlock()
+			r.raftMu.Unlock()
+			continue
+		}
+		// Have some pending truncations.
+		r.mu.Unlock()
+		// NB: we can read r.mu.pendingTruncations since we still hold r.raftMu.
+		popAll := func() {
+			r.mu.Lock()
+			for !r.mu.pendingLogTruncations.empty() {
+				r.mu.pendingLogTruncations.pop()
+			}
+			r.mu.Unlock()
+			r.raftMu.Unlock()
+		}
+		// Use the reader to decide what is durable.
+		as, err := r.raftMu.stateLoader.LoadRangeAppliedState(ctx, reader)
+		if err != nil {
+			log.Errorf(ctx, "while loading RangeAppliedState for log truncation: %+v", err)
+			// Pop all the truncations.
+			popAll()
+			continue
+		}
+		enactIndex := -1
+		r.mu.pendingLogTruncations.iterate(func(trunc pendingTruncation) {
+			if trunc.Index > as.RaftAppliedIndex {
+				return
+			}
+			enactIndex++
+		})
+		if enactIndex > 0 {
+			// Do the truncation.
+			batch := t.store.Engine().NewUnindexedBatch(false)
+			apply, err := handleTruncatedStateBelowRaftPreApply(ctx, &truncState,
+				&r.mu.pendingLogTruncations.truncs[enactIndex].RaftTruncatedState, r.raftMu.stateLoader,
+				batch)
+			if err != nil {
+				popAll()
+				batch.Close()
+				continue
+			}
+			if !apply {
+				panic("unexpected !apply returned from handleTruncatedStateBelowRaftPreApply")
+			}
+			if err := batch.Commit(false); err != nil {
+				popAll()
+				continue
+			}
+			// Truncation done. Need to update the Replica state.
+			r.mu.Lock()
+			for i := 0; i <= enactIndex; i++ {
+				pendingTrunc := r.mu.pendingLogTruncations.front()
+				if r.mu.state.TruncatedState.Index+1 != pendingTrunc.expectedFirstIndex ||
+					!pendingTrunc.isDeltaTrusted {
+					r.mu.raftLogSizeTrusted = false
+				}
+				r.mu.raftLogSize += pendingTrunc.logDeltaBytes
+				r.mu.raftLogLastCheckSize += pendingTrunc.logDeltaBytes
+				*r.mu.state.TruncatedState = pendingTrunc.RaftTruncatedState
+				r.mu.pendingLogTruncations.pop()
+			}
+			if r.mu.raftLogSize < 0 {
+				r.mu.raftLogSize = 0
+			}
+			if r.mu.raftLogLastCheckSize < 0 {
+				r.mu.raftLogLastCheckSize = 0
+			}
+			if !r.mu.pendingLogTruncations.empty() {
+				t.mu.Lock()
+				t.mu.ranges[rangeAndReplicaID{rangeID: r.RangeID, replicaID: r.mu.replicaID}] = struct{}{}
+				t.mu.Unlock()
+			}
+			r.mu.Unlock()
+		} else {
+			t.mu.Lock()
+			t.mu.ranges[rangeAndReplicaID{rangeID: r.RangeID, replicaID: r.mu.replicaID}] = struct{}{}
+			t.mu.Unlock()
+		}
+		r.raftMu.Unlock()
+	}
+}
+
+func isLooselyCoupledRaftLogTruncationEnabled(
+	ctx context.Context, settings *cluster.Settings,
+) bool {
+	return settings.Version.IsActive(
+		ctx, clusterversion.LooselyCoupledRaftLogTruncation) &&
+		enableLooselyCoupledTruncation.Get(&settings.SV)
 }
