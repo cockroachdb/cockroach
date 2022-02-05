@@ -146,3 +146,95 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		}
 	})
 }
+
+// TODO(sumeer): when isLooselyCoupledRaftLogTruncationEnabled can return
+// true, add a test that queues up a pending truncation.
+
+func TestReplicaStateMachineRaftLogTruncation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testutils.RunTrueAndFalse(t, "accurate first index", func(t *testing.T, accurate bool) {
+		tc := testContext{}
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		tc.Start(ctx, t, stopper)
+
+		// Lock the replica for the entire test.
+		r := tc.repl
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		sm := r.getStateMachine()
+
+		// Create a new application batch.
+		b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
+		defer b.Close()
+
+		r.mu.Lock()
+		raftAppliedIndex := r.mu.state.RaftAppliedIndex
+		truncatedIndex := r.mu.state.TruncatedState.Index
+		raftLogSize := r.mu.raftLogSize
+		// Overwrite to be trusted, since we want to check if transitions to false
+		// or not.
+		r.mu.raftLogSizeTrusted = true
+		r.mu.Unlock()
+
+		expectedFirstIndex := truncatedIndex + 1
+		if !accurate {
+			expectedFirstIndex = truncatedIndex
+		}
+		// Stage a command that truncates one raft log entry which we pretend has a
+		// byte size of 1.
+		cmd := &replicatedCmd{
+			ctx: ctx,
+			ent: &raftpb.Entry{
+				Index: raftAppliedIndex + 1,
+				Type:  raftpb.EntryNormal,
+			},
+			decodedRaftEntry: decodedRaftEntry{
+				idKey: makeIDKey(),
+				raftCmd: kvserverpb.RaftCommand{
+					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
+					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
+					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
+						State: &kvserverpb.ReplicaState{
+							TruncatedState: &roachpb.RaftTruncatedState{
+								Index: truncatedIndex + 1,
+							},
+						},
+						RaftLogDelta:           -1,
+						RaftExpectedFirstIndex: expectedFirstIndex,
+						WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
+					},
+				},
+			},
+		}
+
+		checkedCmd, err := b.Stage(cmd.ctx, cmd)
+		require.NoError(t, err)
+
+		// Apply the batch to the StateMachine.
+		err = b.ApplyToStateMachine(ctx)
+		require.NoError(t, err)
+
+		// Apply the side effects of the command to the StateMachine.
+		_, err = sm.ApplySideEffects(checkedCmd.Ctx(), checkedCmd)
+		func() {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
+			require.Equal(t, truncatedIndex+1, r.mu.state.TruncatedState.Index)
+			expectedSize := raftLogSize - 1
+			// We typically have a raftLogSize > 0 (based on inspecting some test
+			// runs), but we can't be sure.
+			if expectedSize < 0 {
+				expectedSize = 0
+			}
+			require.Equal(t, expectedSize, r.mu.raftLogSize)
+			require.Equal(t, accurate, r.mu.raftLogSizeTrusted)
+			truncState, err := r.mu.stateLoader.LoadRaftTruncatedState(context.Background(), tc.engine)
+			require.NoError(t, err)
+			require.Equal(t, r.mu.state.TruncatedState.Index, truncState.Index)
+		}()
+	})
+}
