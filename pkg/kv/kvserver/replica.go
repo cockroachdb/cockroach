@@ -1092,7 +1092,7 @@ func (r *Replica) mergeInProgressRLocked() bool {
 
 // setLastReplicaDescriptors sets the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest.
-func (r *Replica) setLastReplicaDescriptorsRaftMuLocked(req *RaftMessageRequest) {
+func (r *Replica) setLastReplicaDescriptorsRaftMuLocked(req *kvserverpb.RaftMessageRequest) {
 	r.raftMu.AssertHeld()
 	r.raftMu.lastFromReplica = req.FromReplica
 	r.raftMu.lastToReplica = req.ToReplica

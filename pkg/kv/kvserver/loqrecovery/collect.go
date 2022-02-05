@@ -100,7 +100,7 @@ func GetDescriptorChangesFromRaftLog(
 	var ent raftpb.Entry
 
 	decodeRaftChange := func(ccI raftpb.ConfChangeI) ([]byte, error) {
-		var ccC kvserver.ConfChangeContext
+		var ccC kvserverpb.ConfChangeContext
 		if err := protoutil.Unmarshal(ccI.AsV2().Context, &ccC); err != nil {
 			return nil, errors.Wrap(err, "while unmarshaling CCContext")
 		}

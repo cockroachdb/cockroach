@@ -11,7 +11,7 @@ pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/closedts/ctpb/service.go | `SeqNum`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
-pkg/kv/kvserver/raft.go | `SnapshotRequest_Type`
+pkg/kv/kvserver/kvserverpb/raft.go | `SnapshotRequest_Type`
 pkg/roachpb/data.go | `LeaseSequence`
 pkg/roachpb/data.go | `ReplicaChangeType`
 pkg/roachpb/data.go | `TransactionStatus`

@@ -2015,7 +2015,7 @@ func TestDrainRangeRejection(t *testing.T) {
 	drainingIdx := 1
 	tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(drainingIdx))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
@@ -2035,7 +2035,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 
 	oldGeneration := repl.Desc().Generation
 	chgs := roachpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(1))
-	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
+	if _, err := repl.ChangeReplicas(context.Background(), repl.Desc(), kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeUnderReplicated, "", chgs); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assert.EqualValues(t, repl.Desc().Generation, oldGeneration+2)
@@ -2043,7 +2043,7 @@ func TestChangeReplicasGeneration(t *testing.T) {
 	oldGeneration = repl.Desc().Generation
 	oldDesc := repl.Desc()
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
-	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserver.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
+	newDesc, err := repl.ChangeReplicas(context.Background(), oldDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonRangeOverReplicated, "", chgs)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -2311,7 +2311,7 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// ensures that that when node 2 comes back up it will require a snapshot
 		// from Raft.
 		funcs := noopRaftHandlerFuncs()
-		funcs.dropReq = func(*kvserver.RaftMessageRequest) bool {
+		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
 		tc.Servers[2].RaftTransport().Listen(store2.StoreID(), &unreliableRaftHandler{
@@ -2592,7 +2592,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// it rather than receiving a ReplicaTooOldError.
 		store, _ := getFirstStoreReplica(t, tc.Server(1), key)
 		funcs := noopRaftHandlerFuncs()
-		funcs.dropResp = func(*kvserver.RaftMessageResponse) bool {
+		funcs.dropResp = func(*kvserverpb.RaftMessageResponse) bool {
 			return true
 		}
 		tc.Servers[1].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2639,7 +2639,7 @@ func TestReplicaTombstone(t *testing.T) {
 		// ReplicaTooOldError.
 		sawTooOld := make(chan struct{}, 1)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropResp = func(resp *kvserver.RaftMessageResponse) bool {
+		raftFuncs.dropResp = func(resp *kvserverpb.RaftMessageResponse) bool {
 			if pErr, ok := resp.Union.GetValue().(*roachpb.Error); ok {
 				if _, isTooOld := pErr.GetDetail().(*roachpb.ReplicaTooOldError); isTooOld {
 					select {
@@ -2650,7 +2650,7 @@ func TestReplicaTombstone(t *testing.T) {
 			}
 			return false
 		}
-		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return req.ToReplica.StoreID == store.StoreID()
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -2823,17 +2823,17 @@ func TestReplicaTombstone(t *testing.T) {
 			rangeID:            desc.RangeID,
 			RaftMessageHandler: store,
 			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropResp: func(*kvserver.RaftMessageResponse) bool {
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool {
 					return true
 				},
-				dropReq: func(*kvserver.RaftMessageRequest) bool {
+				dropReq: func(*kvserverpb.RaftMessageRequest) bool {
 					return true
 				},
-				dropHB: func(hb *kvserver.RaftHeartbeat) bool {
+				dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
 					recordHeartbeat(hb.ToReplicaID)
 					return false
 				},
-				snapErr: func(*kvserver.SnapshotRequest_Header) error {
+				snapErr: func(*kvserverpb.SnapshotRequest_Header) error {
 					waitForSnapshot()
 					return errors.New("boom")
 				},
@@ -2925,7 +2925,7 @@ func TestReplicaTombstone(t *testing.T) {
 		var partActive atomic.Value
 		partActive.Store(false)
 		raftFuncs := noopRaftHandlerFuncs()
-		raftFuncs.dropReq = func(req *kvserver.RaftMessageRequest) bool {
+		raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
 		}
 		tc.Servers[2].RaftTransport().Listen(store.StoreID(), &unreliableRaftHandler{
@@ -3059,7 +3059,7 @@ func TestAdminRelocateRangeSafety(t *testing.T) {
 	change := func() {
 		<-seenAdd
 		chgs := roachpb.MakeReplicationChanges(roachpb.REMOVE_VOTER, makeReplicationTargets(2)...)
-		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserver.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, &expDescAfterAdd, kvserverpb.SnapshotRequest_REBALANCE, "replicate", "testing", chgs)
 	}
 	relocate := func() {
 		relocateErr = db.AdminRelocateRange(
@@ -3879,7 +3879,7 @@ func TestTenantID(t *testing.T) {
 				Store: &kvserver.StoreTestingKnobs{
 					BeforeSnapshotSSTIngestion: func(
 						snapshot kvserver.IncomingSnapshot,
-						request_type kvserver.SnapshotRequest_Type,
+						request_type kvserverpb.SnapshotRequest_Type,
 						strings []string,
 					) error {
 						if snapshot.Desc.RangeID == repl.RangeID {
@@ -3958,7 +3958,7 @@ func TestUninitializedMetric(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				BeforeSnapshotSSTIngestion: func(
 					snapshot kvserver.IncomingSnapshot,
-					_ kvserver.SnapshotRequest_Type,
+					_ kvserverpb.SnapshotRequest_Type,
 					_ []string,
 				) error {
 					if snapshot.Desc.RangeID == repl.RangeID {

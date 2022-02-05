@@ -9,8 +9,8 @@
 // licenses/APL.txt.
 
 syntax = "proto3";
-package cockroach.kv.kvserver;
-option go_package = "kvserver";
+package cockroach.kv.kvserver.kvserverpb;
+option go_package = "kvserverpb";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
@@ -222,4 +222,3 @@ message ConfChangeContext {
   // kvserverpb.RaftCommand).
   bytes payload = 2;
 }
-

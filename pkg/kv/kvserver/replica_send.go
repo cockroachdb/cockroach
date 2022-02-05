@@ -821,7 +821,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.AdminChangeReplicasRequest:
 		chgs := tArgs.Changes()
-		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
+		desc, err := r.ChangeReplicas(ctx, &tArgs.ExpDesc, kvserverpb.SnapshotRequest_REBALANCE, kvserverpb.ReasonAdminRequest, "", chgs)
 		pErr = roachpb.NewError(err)
 		if pErr != nil {
 			resp = &roachpb.AdminChangeReplicasResponse{}
