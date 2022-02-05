@@ -2655,9 +2655,9 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	// Wrap the snapshot in a minimal header. The request will be dropped
 	// because the Raft log index and term are less than the hard state written
 	// above.
-	req := &SnapshotRequest_Header{
+	req := &kvserverpb.SnapshotRequest_Header{
 		State: kvserverpb.ReplicaState{Desc: repl1.Desc()},
-		RaftMessageRequest: RaftMessageRequest{
+		RaftMessageRequest: kvserverpb.RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
 				NodeID:    1,
@@ -2720,15 +2720,15 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 }
 
 type fakeSnapshotStream struct {
-	nextResp *SnapshotResponse
+	nextResp *kvserverpb.SnapshotResponse
 	nextErr  error
 }
 
-func (c fakeSnapshotStream) Recv() (*SnapshotResponse, error) {
+func (c fakeSnapshotStream) Recv() (*kvserverpb.SnapshotResponse, error) {
 	return c.nextResp, c.nextErr
 }
 
-func (c fakeSnapshotStream) Send(request *SnapshotRequest) error {
+func (c fakeSnapshotStream) Send(request *kvserverpb.SnapshotRequest) error {
 	return nil
 }
 
@@ -2757,7 +2757,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 
-	header := SnapshotRequest_Header{
+	header := kvserverpb.SnapshotRequest_Header{
 		State: kvserverpb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
@@ -2781,8 +2781,8 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	// Test that an errored snapshot causes a fail throttle.
 	{
 		sp := &fakeStorePool{}
-		resp := &SnapshotResponse{
-			Status: SnapshotResponse_ERROR,
+		resp := &kvserverpb.SnapshotResponse{
+			Status: kvserverpb.SnapshotResponse_ERROR,
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(ctx, st, c, sp, header, nil, newBatch, nil)
@@ -2806,7 +2806,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 	s := tc.store
 
-	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty1, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -2817,7 +2817,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 	}
 
 	// Ensure we allow a concurrent empty snapshot.
-	cleanupEmpty, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{})
+	cleanupEmpty, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2843,7 +2843,7 @@ func TestReserveSnapshotThrottling(t *testing.T) {
 		}
 	}()
 
-	cleanupNonEmpty3, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupNonEmpty3, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -2886,7 +2886,7 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	}
 
 	// A snapshot should be allowed.
-	cleanupAccepted, err := s.reserveSnapshot(ctx, &SnapshotRequest_Header{
+	cleanupAccepted, err := s.reserveSnapshot(ctx, &kvserverpb.SnapshotRequest_Header{
 		RangeSize: 1,
 	})
 	if err != nil {
@@ -2960,7 +2960,7 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 				if err := func() error {
 					snapCtx, cancel := context.WithTimeout(ctx, timeout)
 					defer cancel()
-					cleanup, err := s.reserveSnapshot(snapCtx, &SnapshotRequest_Header{RangeSize: 1})
+					cleanup, err := s.reserveSnapshot(snapCtx, &kvserverpb.SnapshotRequest_Header{RangeSize: 1})
 					if err != nil {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil
@@ -3003,13 +3003,13 @@ func TestSnapshotRateLimit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testCases := []struct {
-		priority      SnapshotRequest_Priority
+		priority      kvserverpb.SnapshotRequest_Priority
 		expectedLimit rate.Limit
 		expectedErr   string
 	}{
-		{SnapshotRequest_UNKNOWN, 0, "unknown snapshot priority"},
-		{SnapshotRequest_RECOVERY, 32 << 20, ""},
-		{SnapshotRequest_REBALANCE, 32 << 20, ""},
+		{kvserverpb.SnapshotRequest_UNKNOWN, 0, "unknown snapshot priority"},
+		{kvserverpb.SnapshotRequest_RECOVERY, 32 << 20, ""},
+		{kvserverpb.SnapshotRequest_REBALANCE, 32 << 20, ""},
 	}
 	for _, c := range testCases {
 		t.Run(c.priority.String(), func(t *testing.T) {
