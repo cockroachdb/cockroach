@@ -622,6 +622,8 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         []sstutil.KV{{"a", 7, "a7"}, {"a", 6, "a6"}},
 			expectStatsEst: true,
 		},
+		/* Disabled due to nondeterminism under metamorphic tests. SSTTimestamp will
+		 * shortly be removed anyway.
 		"SSTTimestamp doesn't rewrite with incorrect timestamp, but errors under race": {
 			atReqTS:        8,
 			data:           []sstutil.KV{{"a", 6, "a6"}},
@@ -630,7 +632,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:         []sstutil.KV{{"a", 7, "a7"}, {"a", 6, "a6"}},
 			expectErrRace:  `incorrect timestamp 0.000000007,0 for SST key "a" (expected 0.000000008,0)`,
 			expectStatsEst: true,
-		},
+		},*/
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
 		for name, tc := range testcases {
