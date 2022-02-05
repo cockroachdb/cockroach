@@ -347,6 +347,7 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
+	log.Infof(ctx, "newSQLServer: %s, %d\n", cfg.SQLAddr, cfg.SQLConfig.TenantID)
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
 		return nil, err
 	}
@@ -377,6 +378,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.sqlInstanceProvider = instanceprovider.New(
 		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
 	)
+
+	tcCfg := kvtenant.ConnectorConfig{
+		AmbientCtx:          cfg.AmbientCtx,
+		RPCContext:          cfg.rpcContext,
+		RPCRetryOptions:     base.DefaultRetryOptions(),
+		DefaultZoneConfig:   &cfg.DefaultZoneConfig,
+		SqlInstanceProvider: cfg.sqlInstanceProvider,
+	}
+	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, cfg.TenantKVAddrs)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating node dialer")
+	}
+	resolver := kvtenant.AddressResolver(tenantConnect)
+	nodeDialer := nodedialer.New(cfg.rpcContext, resolver)
+	cfg.nodeDialer = nodeDialer
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -585,8 +601,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		distSQLCfg.TestingKnobs.JobsTestingKnobs = cfg.TestingKnobs.JobsTestingKnobs
 	}
 
-	log.Info(ctx, "registering distsql server \n")
 	distSQLServer := distsql.NewServer(ctx, distSQLCfg, cfg.flowScheduler)
+	log.Infof(ctx, "registering distsql server %s with gossip %v\n", distSQLServer.NodeID.String(), distSQLCfg.Gossip)
 	execinfrapb.RegisterDistSQLServer(cfg.grpcServer, distSQLServer)
 
 	// Set up Executor

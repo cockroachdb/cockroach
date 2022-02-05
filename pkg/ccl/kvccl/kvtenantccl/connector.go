@@ -17,6 +17,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,13 +66,14 @@ func init() {
 type Connector struct {
 	log.AmbientContext
 
-	rpcContext      *rpc.Context
-	rpcRetryOptions retry.Options
-	rpcDialTimeout  time.Duration // for testing
-	rpcDial         singleflight.Group
-	defaultZoneCfg  *zonepb.ZoneConfig
-	addrs           []string
-	startupC        chan struct{}
+	rpcContext          *rpc.Context
+	rpcRetryOptions     retry.Options
+	rpcDialTimeout      time.Duration // for testing
+	rpcDial             singleflight.Group
+	defaultZoneCfg      *zonepb.ZoneConfig
+	addrs               []string
+	startupC            chan struct{}
+	sqlInstanceProvider sqlinstance.Provider
 
 	mu struct {
 		syncutil.RWMutex
@@ -118,12 +122,13 @@ var _ spanconfig.KVAccessor = (*Connector)(nil)
 func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	cfg.AmbientCtx.AddLogTag("tenant-connector", nil)
 	return &Connector{
-		AmbientContext:  cfg.AmbientCtx,
-		rpcContext:      cfg.RPCContext,
-		rpcRetryOptions: cfg.RPCRetryOptions,
-		defaultZoneCfg:  cfg.DefaultZoneConfig,
-		addrs:           addrs,
-		startupC:        make(chan struct{}),
+		AmbientContext:      cfg.AmbientCtx,
+		rpcContext:          cfg.RPCContext,
+		rpcRetryOptions:     cfg.RPCRetryOptions,
+		defaultZoneCfg:      cfg.DefaultZoneConfig,
+		sqlInstanceProvider: cfg.SqlInstanceProvider,
+		addrs:               addrs,
+		startupC:            make(chan struct{}),
 	}
 }
 
@@ -269,7 +274,17 @@ func (c *Connector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescr
 	defer c.mu.RUnlock()
 	desc, ok := c.mu.nodeDescs[nodeID]
 	if !ok {
-		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+		if c.sqlInstanceProvider == nil {
+			return nil, errors.Errorf("no sqlInstanceProvider for node n%d", nodeID)
+		}
+		info, err := c.sqlInstanceProvider.GetInstance(c.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
+		if err != nil {
+			return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+		}
+		return &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(info.InstanceID),
+			Address: util.UnresolvedAddr{AddressField: info.InstanceAddr},
+		}, nil
 	}
 	return desc, nil
 }

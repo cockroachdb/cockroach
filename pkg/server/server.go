@@ -790,6 +790,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	})
 	registry.AddMetricStruct(kvProber.Metrics())
 
+	log.Infof(ctx, "make newSQLServer with gossip %v\n", g)
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),

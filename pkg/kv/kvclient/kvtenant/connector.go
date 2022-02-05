@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -86,10 +87,11 @@ type TokenBucketProvider interface {
 
 // ConnectorConfig encompasses the configuration required to create a Connector.
 type ConnectorConfig struct {
-	AmbientCtx        log.AmbientContext
-	RPCContext        *rpc.Context
-	RPCRetryOptions   retry.Options
-	DefaultZoneConfig *zonepb.ZoneConfig
+	AmbientCtx          log.AmbientContext
+	RPCContext          *rpc.Context
+	RPCRetryOptions     retry.Options
+	DefaultZoneConfig   *zonepb.ZoneConfig
+	SqlInstanceProvider sqlinstance.Provider
 }
 
 // ConnectorFactory constructs a new tenant Connector from the provide network

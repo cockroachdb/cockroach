@@ -319,7 +319,7 @@ func TestTenantClusterFlow(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	const numPods = 3
-	const numRows = 100
+	const numRows = 10
 
 	serverParams, _ := tests.CreateTestServerParams()
 	args := base.TestClusterArgs{ReplicationMode: base.ReplicationManual, ServerArgs: serverParams}
@@ -336,12 +336,13 @@ func TestTenantClusterFlow(t *testing.T) {
 	podConns := make([]*sql.DB, numPods)
 	tenantID := serverutils.TestTenantID()
 	for i := 0; i < numPods; i++ {
-		print("Start tenant ", i, "\n")
+		print("Start pod ", i, "\n")
 		pods[i], podConns[i] = serverutils.StartTenant(t, tci.Server(0), base.TestTenantArgs{
 			TenantID:     tenantID,
 			Existing:     i != 0,
 			TestingKnobs: testingKnobs,
 		})
+		print("Started pod ", i, " ID: ", pods[i].SQLInstanceID(), "\n")
 		defer podConns[i].Close()
 	}
 
@@ -354,7 +355,6 @@ func TestTenantClusterFlow(t *testing.T) {
 		return tree.NewDInt(tree.DInt(sum))
 	}
 
-	// TODO: create table in the tenant node, to tenant conn
 	sqlutils.CreateTable(t, podConns[0], "t",
 		"num INT PRIMARY KEY, digitsum INT, numstr STRING, INDEX s (digitsum)",
 		numRows,
@@ -362,18 +362,30 @@ func TestTenantClusterFlow(t *testing.T) {
 
 	kvDB := tc.Server(0).DB()
 	codec := keys.MakeSQLCodec(tenantID)
-	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
+	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, sqlutils.TestDB, "t")
 	makeIndexSpan := func(start, end int) roachpb.Span {
 		var span roachpb.Span
-		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(keys.SystemSQLCodec, desc.GetID(), desc.PublicNonPrimaryIndexes()[0].GetID()))
+		prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, desc.GetID(), desc.PublicNonPrimaryIndexes()[0].GetID()))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
 		return span
 	}
 
+	log.Infof(ctx, "Index span: %s\n", makeIndexSpan(0, 8).String())
+	sqlDB := sqlutils.MakeSQLRunner(podConns[0])
+	rows := sqlDB.Query(t, "SELECT num FROM test.t")
+	defer rows.Close()
+	for rows.Next() {
+		var key int
+		if err := rows.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		log.Infof(ctx, "Rows: %d\n", key)
+	}
+
 	// successful indicates whether the flow execution is successful.
-	for _, successful := range []bool{true, false} {
+	for _, successful := range []bool{true} {
 		// Set up table readers on three hosts feeding data into a join reader on
 		// the third host. This is a basic test for the distributed flow
 		// infrastructure, including local and remote streams.
@@ -500,12 +512,9 @@ func TestTenantClusterFlow(t *testing.T) {
 		}
 
 		var clients []execinfrapb.DistSQLClient
-		_ = successful
-		_ = req1
-		_ = req2
-		_ = req3
 		for i := 0; i < numPods; i++ {
 			pod := pods[i]
+			log.Infof(ctx, "Add grpc conn to pod %d, addr %s, ID %s\n", i, pod.SQLAddr(), pod.SQLInstanceID().String())
 			conn, err := pod.RPCContext().GRPCDialPod(pod.SQLAddr(), pod.SQLInstanceID(), rpc.DefaultClass).Connect(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -521,89 +530,86 @@ func TestTenantClusterFlow(t *testing.T) {
 				t.Fatal(resp.Error)
 			}
 		}
-		setupRemoteFlow(0 /* podIdx */, req1)
-		/*
 
-			if successful {
-				setupRemoteFlow(0 , req1)
-				setupRemoteFlow(1 , req2)
+		if successful {
+			setupRemoteFlow(0, req1)
+			setupRemoteFlow(1, req2)
 
-				log.Infof(ctx, "Running local sync flow on 2")
-				rows, err := runLocalFlow(ctx, tc.Server(2), req3)
-				if err != nil {
-					t.Fatal(err)
-				}
-				// The result should be all the numbers in string form, ordered by the
-				// digit sum (and then by number).
-				var results []string
-				for sum := 1; sum <= 50; sum++ {
-					for i := 1; i <= numRows; i++ {
-						if int(tree.MustBeDInt(sumDigitsFn(i))) == sum {
-							results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
-						}
-					}
-				}
-				expected := strings.Join(results, " ")
-				expected = "[" + expected + "]"
-				if rowStr := rows.String([]*types.T{types.String}); rowStr != expected {
-					t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
-				}
-			} else {
-				// Simulate a scenario in which the query is canceled on the gateway
-				// which results in the cancellation of already scheduled flows.
-				//
-				// First, reduce the number of active remote flows to 0.
-				sqlRunner := sqlutils.MakeSQLRunner(tc.ServerConn(2))
-				sqlRunner.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=0")
-				// Make sure that all nodes have the updated cluster setting value.
-				testutils.SucceedsSoon(t, func() error {
-					for i := 0; i < numPods; i++ {
-						sqlRunner = sqlutils.MakeSQLRunner(tc.ServerConn(i))
-						rows := sqlRunner.Query(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows")
-						defer rows.Close()
-						rows.Next()
-						var maxRunningFlows int
-						if err := rows.Scan(&maxRunningFlows); err != nil {
-							t.Fatal(err)
-						}
-						if maxRunningFlows != 0 {
-							return errors.New("still old value")
-						}
-					}
-					return nil
-				})
-				const numScheduledPerNode = 4
-				// Now schedule some remote flows on all nodes.
-				for i := 0; i < numScheduledPerNode; i++ {
-					setupRemoteFlow(0 , req1)
-					setupRemoteFlow(1 , req2)
-					setupRemoteFlow(2 , req3)
-				}
-				// Wait for all flows to be scheduled.
-				testutils.SucceedsSoon(t, func() error {
-					for nodeIdx := 0; nodeIdx < numPods; nodeIdx++ {
-
-						numQueued := pods[nodeIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
-						if numQueued != numScheduledPerNode {
-							return errors.New("not all flows are scheduled yet")
-						}
-					}
-					return nil
-				})
-				// Now, the meat of the test - cancel all queued up flows and make
-				// sure that the corresponding queues are empty.
-				req := &execinfrapb.CancelDeadFlowsRequest{
-					FlowIDs: []execinfrapb.FlowID{fid},
-				}
-				for nodeIdx := 0; nodeIdx < numPods; nodeIdx++ {
-					_, _ = clients[nodeIdx].CancelDeadFlows(ctx, req)
-					numQueued := pods[nodeIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
-					if numQueued != 0 {
-						t.Fatalf("unexpectedly %d flows in queue (expected 0)", numQueued)
+			log.Infof(ctx, "Running local sync flow on 2")
+			rows, err := runLocalFlowTenant(ctx, pods[2], req3)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// The result should be all the numbers in string form, ordered by the
+			// digit sum (and then by number).
+			var results []string
+			for sum := 1; sum <= 50; sum++ {
+				for i := 1; i <= numRows; i++ {
+					if int(tree.MustBeDInt(sumDigitsFn(i))) == sum {
+						results = append(results, fmt.Sprintf("['%s']", sqlutils.IntToEnglish(i)))
 					}
 				}
 			}
-		*/
+			expected := strings.Join(results, " ")
+			expected = "[" + expected + "]"
+			if rowStr := rows.String([]*types.T{types.String}); rowStr != expected {
+				t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
+			}
+		} else {
+			// Simulate a scenario in which the query is canceled on the gateway
+			// which results in the cancellation of already scheduled flows.
+			//
+			// First, reduce the number of active remote flows to 0.
+			sqlRunner := sqlutils.MakeSQLRunner(podConns[2])
+			sqlRunner.Exec(t, "SET CLUSTER SETTING sql.distsql.max_running_flows=0")
+			// Make sure that all nodes have the updated cluster setting value.
+			testutils.SucceedsSoon(t, func() error {
+				for i := 0; i < numPods; i++ {
+					sqlRunner = sqlutils.MakeSQLRunner(podConns[i])
+					rows := sqlRunner.Query(t, "SHOW CLUSTER SETTING sql.distsql.max_running_flows")
+					defer rows.Close()
+					rows.Next()
+					var maxRunningFlows int
+					if err := rows.Scan(&maxRunningFlows); err != nil {
+						t.Fatal(err)
+					}
+					if maxRunningFlows != 0 {
+						return errors.New("still old value")
+					}
+				}
+				return nil
+			})
+			const numScheduledPerNode = 4
+			// Now schedule some remote flows on all nodes.
+			for i := 0; i < numScheduledPerNode; i++ {
+				setupRemoteFlow(0, req1)
+				setupRemoteFlow(1, req2)
+				setupRemoteFlow(2, req3)
+			}
+			// Wait for all flows to be scheduled.
+			testutils.SucceedsSoon(t, func() error {
+				for podIdx := 0; podIdx < numPods; podIdx++ {
+
+					numQueued := pods[podIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
+					if numQueued != numScheduledPerNode {
+						return errors.New("not all flows are scheduled yet")
+					}
+				}
+				return nil
+			})
+			// Now, the meat of the test - cancel all queued up flows and make
+			// sure that the corresponding queues are empty.
+			req := &execinfrapb.CancelDeadFlowsRequest{
+				FlowIDs: []execinfrapb.FlowID{fid},
+			}
+			for podIdx := 0; podIdx < numPods; podIdx++ {
+				_, _ = clients[podIdx].CancelDeadFlows(ctx, req)
+				numQueued := pods[podIdx].DistSQLServer().(*distsql.ServerImpl).NumRemoteFlowsInQueue()
+				if numQueued != 0 {
+					t.Fatalf("unexpectedly %d flows in queue (expected 0)", numQueued)
+				}
+			}
+		}
 	}
 }
 

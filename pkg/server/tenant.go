@@ -87,6 +87,22 @@ func StartTenant(
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
 	grpcMain.setMode(modeOperational)
+	args.grpcServer = grpcMain.Server
+
+	/*
+		g := gossip.New(
+			args.AmbientCtx,
+			args.rpcContext.ClusterID,
+			args.IDContainer,
+			args.rpcContext,
+			args.grpcServer,
+			stopper,
+			args.registry,
+			args.Locality,
+			&args.DefaultZoneConfig,
+		)
+		args.gossip = gossip.MakeOptionalGossip(g)
+	*/
 
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
@@ -174,6 +190,24 @@ func StartTenant(
 	if err != nil {
 		return nil, "", "", err
 	}
+
+	/*
+		// TODO: work on address resolver that works for pod communication
+		tcCfg := kvtenant.ConnectorConfig{
+			AmbientCtx:          baseCfg.AmbientCtx,
+			RPCContext:          args.rpcContext,
+			RPCRetryOptions:     base.DefaultRetryOptions(),
+			DefaultZoneConfig:   &baseCfg.DefaultZoneConfig,
+			SqlInstanceProvider: s.sqlInstanceProvider,
+		}
+		tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
+		if err != nil {
+			return nil, "", "", err
+		}
+		resolver := kvtenant.AddressResolver(tenantConnect)
+		nodeDialer := nodedialer.New(args.rpcContext, resolver)
+		args.nodeDialer = nodeDialer
+	*/
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
@@ -387,6 +421,7 @@ func makeTenantSQLServerArgs(
 		RPCRetryOptions:   rpcRetryOptions,
 		DefaultZoneConfig: &baseCfg.DefaultZoneConfig,
 	}
+	// TODO: investigate this address resolver.
 	tenantConnect, err := kvtenant.Factory.NewConnector(tcCfg, sqlCfg.TenantKVAddrs)
 	if err != nil {
 		return sqlServerArgs{}, err
@@ -484,10 +519,6 @@ func makeTenantSQLServerArgs(
 	}
 	esb.init(sqlCfg.ExternalIODirConfig, baseCfg.Settings, blobClientFactory, circularInternalExecutor, db)
 
-	// We don't need this for anything except some services that want a gRPC
-	// server to register against (but they'll never get RPCs at the time of
-	// writing): the blob service and DistSQL.
-	dummyRPCServer := rpc.NewServer(rpcContext)
 	sessionRegistry := sql.NewSessionRegistry()
 	contentionRegistry := contention.NewRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
@@ -496,7 +527,6 @@ func makeTenantSQLServerArgs(
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
-			grpcServer:        dummyRPCServer,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
