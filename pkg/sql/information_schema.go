@@ -974,6 +974,15 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	},
 }
 
+var builtinTypePrivileges = []struct {
+	grantee *tree.DString
+	kind    *tree.DString
+}{
+	{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
+	{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
+	{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
+}
+
 // Custom; PostgreSQL has data_type_privileges, which only shows one row per type,
 // which may result in confusing semantics for the user compared to this table
 // which has one row for each grantee.
@@ -986,24 +995,24 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 			func(db catalog.DatabaseDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
 				pgCatalogStr := tree.NewDString("pg_catalog")
-
+				populateGrantOption := p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.ValidateGrantOption)
+				var isGrantable tree.Datum
+				if populateGrantOption {
+					isGrantable = noString
+				} else {
+					isGrantable = tree.DNull
+				}
 				// Generate one for each existing type.
 				for _, typ := range types.OidToType {
-					for _, it := range []struct {
-						grantee   *tree.DString
-						privilege *tree.DString
-					}{
-						{tree.NewDString(security.RootUser), tree.NewDString(privilege.ALL.String())},
-						{tree.NewDString(security.AdminRole), tree.NewDString(privilege.ALL.String())},
-						{tree.NewDString(security.PublicRole), tree.NewDString(privilege.USAGE.String())},
-					} {
-						typeNameStr := tree.NewDString(typ.Name())
+					typeNameStr := tree.NewDString(typ.Name())
+					for _, it := range builtinTypePrivileges {
 						if err := addRow(
-							it.grantee,
-							dbNameStr,
-							pgCatalogStr,
-							typeNameStr,
-							it.privilege,
+							it.grantee,   // grantee
+							dbNameStr,    // type_catalog
+							pgCatalogStr, // type_schema
+							typeNameStr,  // type_name
+							it.kind,      // privilege_type
+							isGrantable,  // is_grantable
 						); err != nil {
 							return err
 						}
@@ -1020,12 +1029,19 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 					for _, u := range privs {
 						userNameStr := tree.NewDString(u.User.Normalized())
 						for _, priv := range u.Privileges {
+							var isGrantable tree.Datum
+							if populateGrantOption {
+								isGrantable = yesOrNoDatum(priv.GrantOption)
+							} else {
+								isGrantable = tree.DNull
+							}
 							if err := addRow(
 								userNameStr,                         // grantee
 								dbNameStr,                           // type_catalog
 								scNameStr,                           // type_schema
 								typeNameStr,                         // type_name
 								tree.NewDString(priv.Kind.String()), // privilege_type
+								isGrantable,                         // is_grantable
 							); err != nil {
 								return err
 							}

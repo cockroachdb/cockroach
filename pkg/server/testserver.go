@@ -47,11 +47,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -735,7 +734,7 @@ func (ts *TestServer) StartTenant(
 // process.
 func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(
-		ts.DB(),
+		ts.sqlServer.execCfg.Codec,
 		&ts.cfg.DefaultZoneConfig,
 		&ts.cfg.DefaultSystemZoneConfig,
 	)
@@ -744,32 +743,13 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after bootstrap.
 func ExpectedInitialRangeCount(
-	db *kv.DB, defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+	codec keys.SQLCodec,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (int, error) {
-	descriptorIDs, err := startupmigrations.ExpectedDescriptorIDs(
-		context.Background(), db, keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig,
-	)
-	if err != nil {
-		return 0, err
-	}
-
-	// System table splits occur at every possible table boundary between the end
-	// of the system config ID space (keys.MaxSystemConfigDescID) and the system
-	// table with the maximum ID (maxSystemDescriptorID), even when an ID within
-	// the span does not have an associated descriptor.
-	maxSystemDescriptorID := descriptorIDs[0]
-	for _, descID := range descriptorIDs {
-		if descID > maxSystemDescriptorID && uint32(descID) <= keys.MaxReservedDescID {
-			maxSystemDescriptorID = descID
-		}
-	}
-	if maxSystemDescriptorID < descpb.ID(keys.MaxPseudoTableID) {
-		maxSystemDescriptorID = descpb.ID(keys.MaxPseudoTableID)
-	}
-	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
-
-	// `n` splits create `n+1` ranges.
-	return len(config.StaticSplits()) + systemTableSplits + 1, nil
+	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).GetInitialValues()
+	// N splits means N+1 ranges.
+	return len(config.StaticSplits()) + len(splits) + 1, nil
 }
 
 // Stores returns the collection of stores from this TestServer's node.

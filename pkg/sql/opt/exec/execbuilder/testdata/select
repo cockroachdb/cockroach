@@ -1777,11 +1777,11 @@ SELECT message FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'querying next range at /Table/$t_id3/1%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
-querying next range at /Table/77/1/0/0
-querying next range at /Table/77/1/10/0
-querying next range at /Table/77/1/0/0
+querying next range at /Table/127/1/0/0
+querying next range at /Table/127/1/10/0
+querying next range at /Table/127/1/0/0
 === SPAN START: kv.DistSender: sending partial batch ===
-querying next range at /Table/77/1/10/0
+querying next range at /Table/127/1/10/0
 
 # Test for 42202 -- ensure filters can get pushed down through project-set.
 statement ok

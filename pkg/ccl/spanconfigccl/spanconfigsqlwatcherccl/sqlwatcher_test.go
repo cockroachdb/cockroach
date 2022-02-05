@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -44,6 +45,96 @@ import (
 func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var idBase descpb.ID
+	id := func(n int) descpb.ID {
+		return idBase + descpb.ID(n)
+	}
+	ids := func(in ...int) (r descpb.IDs) {
+		for _, n := range in {
+			r = append(r, id(n))
+		}
+		return r
+	}
+
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			ExternalIODir: dir,
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerDisableJobCreation: true, // disable the automatic job creation.
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
+				ProtectedTS: &protectedts.TestingKnobs{
+					EnableProtectedTimestampForMultiTenant: true,
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	ts := tc.Server(0 /* idx */)
+
+	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
+	tdb.QueryRow(t, `SELECT max(id) FROM system.descriptor`).Scan(&idBase)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms'`)
+
+	noopCheckpointDuration := 100 * time.Millisecond
+	sqlWatcher := spanconfigsqlwatcher.New(
+		keys.SystemSQLCodec,
+		ts.ClusterSettings(),
+		ts.RangeFeedFactory().(*rangefeed.Factory),
+		1<<20, /* 1 MB, bufferMemLimit */
+		ts.Stopper(),
+		noopCheckpointDuration,
+		nil, /* knobs */
+	)
+
+	var mu struct {
+		syncutil.Mutex
+		receivedIDs     catalog.DescriptorIDSet
+		receivedTargets map[spanconfig.ProtectedTimestampUpdate]struct{}
+		lastCheckpoint  hlc.Timestamp
+	}
+	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
+	reset := func() {
+		locked(func() {
+			mu.receivedIDs = catalog.DescriptorIDSet{}
+			mu.receivedTargets = make(map[spanconfig.ProtectedTimestampUpdate]struct{})
+		})
+	}
+
+	var wg sync.WaitGroup
+	watcherStartTS := ts.Clock().Now()
+
+	watcherCtx, watcherCancel := context.WithCancel(context.Background())
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, watcherStartTS,
+			func(ctx context.Context, updates []spanconfig.SQLUpdate, checkpointTS hlc.Timestamp) error {
+				mu.Lock()
+				defer mu.Unlock()
+
+				require.True(t, mu.lastCheckpoint.LessEq(checkpointTS))
+				mu.lastCheckpoint = checkpointTS
+
+				for _, update := range updates {
+					if update.IsDescriptorUpdate() {
+						mu.receivedIDs.Add(update.GetDescriptorUpdate().ID)
+					} else if update.IsProtectedTimestampUpdate() {
+						ptsUpdate := update.GetProtectedTimestampUpdate()
+						mu.receivedTargets[ptsUpdate] = struct{}{}
+					}
+				}
+				return nil
+			})
+	}()
+
 	testCases := []struct {
 		stmt               string
 		expectedIDs        descpb.IDs
@@ -51,27 +142,27 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 	}{
 		{
 			stmt:        "CREATE TABLE t()",
-			expectedIDs: descpb.IDs{54},
+			expectedIDs: ids(1),
 		},
 		{
 			stmt:        "CREATE TABLE t2(); ALTER TABLE t2 CONFIGURE ZONE USING num_replicas = 3",
-			expectedIDs: descpb.IDs{55},
+			expectedIDs: ids(2),
 		},
 		{
 			stmt:        "CREATE DATABASE d; CREATE TABLE d.t1(); CREATE TABLE d.t2()",
-			expectedIDs: descpb.IDs{56, 57, 58, 59},
+			expectedIDs: ids(3, 4, 5, 6),
 		},
 		{
 			stmt:        "ALTER DATABASE d CONFIGURE ZONE USING num_replicas=5",
-			expectedIDs: descpb.IDs{56},
+			expectedIDs: ids(3),
 		},
 		{
 			stmt:        "CREATE TABLE t3(); CREATE TABLE t4()",
-			expectedIDs: descpb.IDs{60, 61},
+			expectedIDs: ids(7, 8),
 		},
 		{
 			stmt:        "ALTER TABLE t3 CONFIGURE ZONE USING num_replicas=5; CREATE TABLE t5(); DROP TABLE t4;",
-			expectedIDs: descpb.IDs{60, 61, 62},
+			expectedIDs: ids(7, 8, 9),
 		},
 		// Named zone tests.
 		{
@@ -98,25 +189,25 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		{
 			stmt: "CREATE DATABASE db; CREATE SCHEMA db.sc",
 			// One ID each for the parent database, the public schema and the schema.
-			expectedIDs: descpb.IDs{63, 64, 65},
+			expectedIDs: ids(10, 11, 12),
 		},
 		{
 			stmt: "CREATE TYPE typ AS ENUM()",
 			// One ID each for the enum and the array type.
-			expectedIDs: descpb.IDs{66, 67},
+			expectedIDs: ids(13, 14),
 		},
 		// Test that pts updates are seen.
 		{
 			stmt:        "BACKUP TABLE t,t2 INTO 'nodelocal://1/foo'",
-			expectedIDs: descpb.IDs{54, 55},
+			expectedIDs: ids(1, 2),
 		},
 		{
 			stmt:        "BACKUP DATABASE d INTO 'nodelocal://1/foo'",
-			expectedIDs: descpb.IDs{56},
+			expectedIDs: ids(3),
 		},
 		{
 			stmt:        "BACKUP TABLE d.* INTO 'nodelocal://1/foo'",
-			expectedIDs: descpb.IDs{56},
+			expectedIDs: ids(3),
 		},
 		{
 			stmt: "BACKUP INTO 'nodelocal://1/foo'",
@@ -132,108 +223,38 @@ BACKUP TENANT 2 INTO 'nodelocal://1/foo'`,
 		},
 	}
 
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			ExternalIODir: dir,
-			Knobs: base.TestingKnobs{
-				SpanConfig: &spanconfig.TestingKnobs{
-					ManagerDisableJobCreation: true, // disable the automatic job creation.
-				},
-				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speed up schema changes.
-				ProtectedTS: &protectedts.TestingKnobs{
-					EnableProtectedTimestampForMultiTenant: true,
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(context.Background())
+	for _, tc := range testCases {
+		t.Run(tc.stmt, func(t *testing.T) {
+			reset()
+			tdb.Exec(t, tc.stmt)
+			afterStmtTS := ts.Clock().Now()
 
-	ts := tc.Server(0 /* idx */)
-
-	tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0 /* idx */))
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
-
-	noopCheckpointDuration := 100 * time.Millisecond
-	sqlWatcher := spanconfigsqlwatcher.New(
-		keys.SystemSQLCodec,
-		ts.ClusterSettings(),
-		ts.RangeFeedFactory().(*rangefeed.Factory),
-		1<<20, /* 1 MB, bufferMemLimit */
-		ts.Stopper(),
-		noopCheckpointDuration,
-		nil, /* knobs */
-	)
-
-	var mu struct {
-		syncutil.Mutex
-		receivedIDs     map[descpb.ID]struct{}
-		receivedTargets map[spanconfig.ProtectedTimestampUpdate]struct{}
-		lastCheckpoint  hlc.Timestamp
-	}
-	mu.receivedIDs = make(map[descpb.ID]struct{})
-	mu.receivedTargets = make(map[spanconfig.ProtectedTimestampUpdate]struct{})
-
-	var wg sync.WaitGroup
-	watcherStartTS := ts.Clock().Now()
-
-	watcherCtx, watcherCancel := context.WithCancel(context.Background())
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		_ = sqlWatcher.WatchForSQLUpdates(watcherCtx, watcherStartTS,
-			func(ctx context.Context, updates []spanconfig.SQLUpdate, checkpointTS hlc.Timestamp) error {
+			testutils.SucceedsSoon(t, func() error {
 				mu.Lock()
 				defer mu.Unlock()
 
-				require.True(t, mu.lastCheckpoint.LessEq(checkpointTS))
-				mu.lastCheckpoint = checkpointTS
-
-				for _, update := range updates {
-					if update.IsDescriptorUpdate() {
-						mu.receivedIDs[update.GetDescriptorUpdate().ID] = struct{}{}
-					} else if update.IsProtectedTimestampUpdate() {
-						ptsUpdate := update.GetProtectedTimestampUpdate()
-						mu.receivedTargets[ptsUpdate] = struct{}{}
-					}
+				if mu.lastCheckpoint.Less(afterStmtTS) {
+					return errors.New("checkpoint precedes statement timestamp")
 				}
 				return nil
 			})
-	}()
 
-	for _, tc := range testCases {
-		tdb.Exec(t, tc.stmt)
-		afterStmtTS := ts.Clock().Now()
+			// Rangefeed events aren't guaranteed to be in any particular order for
+			// different keys.
+			locked(func() {
+				require.ElementsMatch(t,
+					tc.expectedIDs,
+					descpb.IDs(mu.receivedIDs.Ordered()))
+				require.Equal(t, len(tc.expectedIDs), mu.receivedIDs.Len())
 
-		testutils.SucceedsSoon(t, func() error {
-			mu.Lock()
-			defer mu.Unlock()
-
-			if mu.lastCheckpoint.Less(afterStmtTS) {
-				return errors.New("checkpoint precedes statement timestamp")
-			}
-			return nil
+				require.Equal(t, len(tc.expectedPTSUpdates), len(mu.receivedTargets))
+				for _, ptsUpdate := range tc.expectedPTSUpdates {
+					_, seen := mu.receivedTargets[ptsUpdate]
+					require.True(t, seen)
+					delete(mu.receivedTargets, ptsUpdate)
+				}
+			})
 		})
-
-		// Rangefeed events aren't guaranteed to be in any particular order for
-		// different keys.
-		mu.Lock()
-		require.Equal(t, len(tc.expectedPTSUpdates), len(mu.receivedTargets))
-		require.Equal(t, len(tc.expectedIDs), len(mu.receivedIDs))
-		for _, id := range tc.expectedIDs {
-			_, seen := mu.receivedIDs[id]
-			require.True(t, seen)
-			delete(mu.receivedIDs, id)
-		}
-		for _, ptsUpdate := range tc.expectedPTSUpdates {
-			_, seen := mu.receivedTargets[ptsUpdate]
-			require.True(t, seen)
-			delete(mu.receivedTargets, ptsUpdate)
-		}
-		mu.Unlock()
 	}
 
 	// Stop the watcher and wait for the goroutine to complete.

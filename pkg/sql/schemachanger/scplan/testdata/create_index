@@ -7,7 +7,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -20,9 +20,9 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 54
+      TableID: 104
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -36,42 +36,42 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
           statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       SourceIndexID: 1
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 54
+      TableID: 104
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
       JobID: 1
@@ -79,12 +79,12 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC]
+- from: [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
-- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
-  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
+  to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
   rule: index named after index existence
 
@@ -93,7 +93,7 @@ CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money
 ----
 PreCommitPhase stage 1 of 1 with 3 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       Concurrently: true
@@ -108,9 +108,9 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 54
+      TableID: 104
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -125,42 +125,42 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
           statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       SourceIndexID: 1
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 54
+      TableID: 104
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
       JobID: 1
@@ -168,12 +168,12 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC]
+- from: [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
-- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
-  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
+  to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
   rule: index named after index existence
 
@@ -182,8 +182,8 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
 ----
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [[Partitioning:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
+    [[Partitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
       IndexID: 2
@@ -196,7 +196,7 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       SecondaryIndex: true
       StoreColumnIDs:
       - 3
-      TableID: 54
+      TableID: 104
     *scop.AddIndexPartitionInfo
       IndexID: 2
       ListPartitions:
@@ -206,9 +206,9 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       PartitionFields:
       - id
       RangePartitions: []
-      TableID: 54
+      TableID: 104
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -223,42 +223,42 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
           statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 4 with 2 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_ONLY] -> DELETE_AND_WRITE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteAndWriteOnly
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.UpdateSchemaChangerJob
       JobID: 1
 PostCommitPhase stage 2 of 4 with 1 BackfillType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], DELETE_AND_WRITE_ONLY] -> BACKFILLED
   ops:
     *scop.BackfillIndex
       IndexID: 2
       SourceIndexID: 1
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 3 of 4 with 1 ValidationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], BACKFILLED] -> VALIDATED
   ops:
     *scop.ValidateUniqueIndex
       IndexID: 2
-      TableID: 54
+      TableID: 104
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
-    [[SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
+    [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
+    [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
       Name: id1
-      TableID: 54
+      TableID: 104
     *scop.MakeAddedSecondaryIndexPublic
       IndexID: 2
-      TableID: 54
+      TableID: 104
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.UpdateSchemaChangerJob
       JobID: 1
@@ -266,15 +266,15 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
 ----
-- from: [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
-  to:   [SecondaryIndex:{DescID: 54, IndexID: 2}, PUBLIC]
+- from: [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
-- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
-  to:   [IndexName:{DescID: 54, IndexID: 2, Name: id1}, PUBLIC]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
+  to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
   rule: index named after index existence
-- from: [SecondaryIndex:{DescID: 54, IndexID: 2}, DELETE_ONLY]
-  to:   [Partitioning:{DescID: 54, IndexID: 2}, PUBLIC]
+- from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
+  to:   [Partitioning:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: partitioning information needs the basic index as created

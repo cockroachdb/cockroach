@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -683,39 +682,6 @@ func getCompletedMigrations(
 
 func migrationKey(codec keys.SQLCodec, migration migrationDescriptor) roachpb.Key {
 	return append(codec.MigrationKeyPrefix(), roachpb.RKey(migration.name)...)
-}
-
-func createSystemTable(ctx context.Context, r runner, desc catalog.TableDescriptor) error {
-	return CreateSystemTable(ctx, r.db, r.codec, r.settings, desc)
-}
-
-// CreateSystemTable is a function to inject a new system table. If the table
-// already exists, ths function is a no-op.
-func CreateSystemTable(
-	ctx context.Context,
-	db DB,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	desc catalog.TableDescriptor,
-) error {
-	// We install the table at the KV layer so that we can choose a known ID in
-	// the reserved ID space. (The SQL layer doesn't allow this.)
-	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := txn.NewBatch()
-		tKey := catalogkeys.MakePublicObjectNameKey(codec, desc.GetParentID(), desc.GetName())
-		b.CPut(tKey, desc.GetID(), nil)
-		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	})
-	// CPuts only provide idempotent inserts if we ignore the errors that arise
-	// when the condition isn't met.
-	if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
-		return nil
-	}
-	return err
 }
 
 func extendCreateRoleWithCreateLogin(ctx context.Context, r runner) error {

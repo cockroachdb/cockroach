@@ -7,33 +7,33 @@ DROP TYPE defaultdb.typ
 ----
 StatementPhase stage 1 of 1 with 2 MutationType ops
   transitions:
-    [[Type:{DescID: 54}, ABSENT], PUBLIC] -> TXN_DROPPED
-    [[Type:{DescID: 55}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Type:{DescID: 104}, ABSENT], PUBLIC] -> TXN_DROPPED
+    [[Type:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
   ops:
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 54
+      DescID: 104
     *scop.MarkDescriptorAsDroppedSynthetically
-      DescID: 55
+      DescID: 105
 PreCommitPhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [[Type:{DescID: 54}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 54, Name: typ}, ABSENT], PUBLIC] -> ABSENT
-    [[Type:{DescID: 55}, ABSENT], TXN_DROPPED] -> DROPPED
-    [[Namespace:{DescID: 55, Name: _typ}, ABSENT], PUBLIC] -> ABSENT
+    [[Type:{DescID: 104}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 104, Name: typ}, ABSENT], PUBLIC] -> ABSENT
+    [[Type:{DescID: 105}, ABSENT], TXN_DROPPED] -> DROPPED
+    [[Namespace:{DescID: 105, Name: _typ}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
-      DescID: 54
+      DescID: 104
     *scop.DrainDescriptorName
-      TableID: 54
+      TableID: 104
     *scop.MarkDescriptorAsDropped
-      DescID: 55
+      DescID: 105
     *scop.DrainDescriptorName
-      TableID: 55
+      TableID: 105
     *scop.AddJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.AddJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.CreateDeclarativeSchemaChangerJob
       JobID: 1
@@ -46,15 +46,15 @@ PreCommitPhase stage 1 of 1 with 7 MutationType ops
           statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
   transitions:
-    [[Type:{DescID: 54}, ABSENT], DROPPED] -> ABSENT
-    [[Type:{DescID: 55}, ABSENT], DROPPED] -> ABSENT
+    [[Type:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
+    [[Type:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
   ops:
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Type:
-          typeId: 54
+          typeId: 104
       Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
       StatementTag: DROP TYPE
       TargetMetadata:
@@ -62,13 +62,13 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
         SubWorkID: 1
       TargetStatus: 1
     *scop.DeleteDescriptor
-      DescriptorID: 54
+      DescriptorID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
       Element:
         Type:
-          typeId: 55
+          typeId: 105
       Statement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
       StatementTag: DROP TYPE
       TargetMetadata:
@@ -76,12 +76,12 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
         SubWorkID: 2
       TargetStatus: 1
     *scop.DeleteDescriptor
-      DescriptorID: 55
+      DescriptorID: 105
     *scop.RemoveJobReference
-      DescriptorID: 54
+      DescriptorID: 104
       JobID: 1
     *scop.RemoveJobReference
-      DescriptorID: 55
+      DescriptorID: 105
       JobID: 1
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
@@ -90,19 +90,19 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
 deps
 DROP TYPE defaultdb.typ
 ----
-- from: [Namespace:{DescID: 54, Name: typ}, ABSENT]
-  to:   [Type:{DescID: 54}, ABSENT]
+- from: [Namespace:{DescID: 104, Name: typ}, ABSENT]
+  to:   [Type:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Namespace:{DescID: 55, Name: _typ}, ABSENT]
-  to:   [Type:{DescID: 55}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: _typ}, ABSENT]
+  to:   [Type:{DescID: 105}, ABSENT]
   kind: Precedence
   rule: descriptor can only be cleaned up once the name is drained
-- from: [Type:{DescID: 54}, DROPPED]
-  to:   [Namespace:{DescID: 54, Name: typ}, ABSENT]
+- from: [Type:{DescID: 104}, DROPPED]
+  to:   [Namespace:{DescID: 104, Name: typ}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
-- from: [Type:{DescID: 55}, DROPPED]
-  to:   [Namespace:{DescID: 55, Name: _typ}, ABSENT]
+- from: [Type:{DescID: 105}, DROPPED]
+  to:   [Namespace:{DescID: 105, Name: _typ}, ABSENT]
   kind: Precedence
   rule: namespace needs descriptor to be dropped
