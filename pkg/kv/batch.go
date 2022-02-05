@@ -776,8 +776,7 @@ func (b *Batch) addSSTable(
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
-	writeAtRequestTimestamp bool,
-	sstTimestamp hlc.Timestamp,
+	updateToRequestTimestamp hlc.Timestamp,
 ) {
 	begin, err := marshalKey(s)
 	if err != nil {
@@ -794,14 +793,13 @@ func (b *Batch) addSSTable(
 			Key:    begin,
 			EndKey: end,
 		},
-		Data:                    data,
-		DisallowConflicts:       disallowConflicts,
-		DisallowShadowing:       disallowShadowing,
-		DisallowShadowingBelow:  disallowShadowingBelow,
-		MVCCStats:               stats,
-		IngestAsWrites:          ingestAsWrites,
-		WriteAtRequestTimestamp: writeAtRequestTimestamp,
-		SSTTimestamp:            sstTimestamp,
+		Data:                     data,
+		DisallowConflicts:        disallowConflicts,
+		DisallowShadowing:        disallowShadowing,
+		DisallowShadowingBelow:   disallowShadowingBelow,
+		MVCCStats:                stats,
+		IngestAsWrites:           ingestAsWrites,
+		UpdateToRequestTimestamp: updateToRequestTimestamp,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

@@ -163,7 +163,7 @@ func WithOnCheckpoint(f OnCheckpoint) Option {
 // requested by WithDiff, and callers must obtain these themselves if needed.
 //
 // Also note that AddSSTable requests that do not set the
-// WriteAtRequestTimestamp flag, possibly writing below the closed timestamp,
+// UpdateToRequestTimestamp param, possibly writing below the closed timestamp,
 // will cause affected rangefeeds to be disconnected with a terminal
 // MVCCHistoryMutationError and thus will not be emitted here -- there should be
 // no such requests into spans with rangefeeds across them, but it is up to

@@ -632,7 +632,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 
 // handleSSTableRaftMuLocked emits an ingested SSTable from AddSSTable via the
 // rangefeed. These can be expected to have timestamps at the write timestamp
-// (i.e. submitted with WriteAtRequestTimestamp) since we assert elsewhere that
+// (i.e. submitted with UpdateToRequestTimestamp) since we assert elsewhere that
 // MVCCHistoryMutation commands disconnect rangefeeds.
 //
 // NB: We currently don't have memory budgeting for rangefeeds, instead using a
