@@ -288,6 +288,10 @@ const (
 	// preserving temporary indexes, and a post-backfill merging
 	// processing.
 	MVCCIndexBackfiller
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -460,6 +464,11 @@ var versionsSingleton = keyedVersions{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
 	},
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
