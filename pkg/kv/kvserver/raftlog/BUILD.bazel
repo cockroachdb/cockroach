@@ -1,0 +1,53 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "raftlog",
+    srcs = [
+        "entry.go",
+        "iterator.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/iterutil",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)
+
+go_test(
+    name = "raftlog_test",
+    srcs = [
+        "entry_bench_test.go",
+        "entry_test.go",
+        "iter_bench_test.go",
+        "iter_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    embed = [":raftlog"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/storage/enginepb",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+    ],
+)
+
+get_x_data(name = "get_x_data")
