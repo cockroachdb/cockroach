@@ -243,6 +243,7 @@ show_stmt ::=
 	| show_tables_stmt
 	| show_trace_stmt
 	| show_transactions_stmt
+	| show_transfer_stmt
 	| show_users_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
@@ -779,6 +780,10 @@ show_transactions_stmt ::=
 	'SHOW' opt_cluster 'TRANSACTIONS'
 	| 'SHOW' 'ALL' opt_cluster 'TRANSACTIONS'
 
+show_transfer_stmt ::=
+	'SHOW' 'TRANSFER' 'STATE' 'WITH' name
+	| 'SHOW' 'TRANSFER' 'STATE'
+
 show_users_stmt ::=
 	'SHOW' 'USERS'
 
@@ -1157,6 +1162,7 @@ unreserved_keyword ::=
 	| 'SQL'
 	| 'SQLLOGIN'
 	| 'START'
+	| 'STATE'
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
@@ -1183,6 +1189,7 @@ unreserved_keyword ::=
 	| 'TRACE'
 	| 'TRANSACTION'
 	| 'TRANSACTIONS'
+	| 'TRANSFER'
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'

@@ -1,0 +1,12 @@
+# LogicTest: !3node-tenant
+
+# Statement does not work on system tenant.
+query TTT
+SHOW TRANSFER STATE
+----
+session revival tokens are not supported on this cluster NULL NULL
+
+query TTTT
+SHOW TRANSFER STATE WITH "foo-bar"
+----
+session revival tokens are not supported on this cluster NULL NULL foo-bar
