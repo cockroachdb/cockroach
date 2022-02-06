@@ -635,6 +635,7 @@ func DefaultStartOpts() install.StartOpts {
 	return install.StartOpts{
 		Sequential:      true,
 		EncryptedStores: false,
+		NumFilesLimit:   config.DefaultNumFilesLimit,
 		SkipInit:        false,
 		StoreCount:      1,
 		TenantID:        2,

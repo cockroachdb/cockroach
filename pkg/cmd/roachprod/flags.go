@@ -256,6 +256,8 @@ func initFlags() {
 	for _, cmd := range []*cobra.Command{startCmd, startTenantCmd} {
 		cmd.Flags().BoolVar(&startOpts.Sequential,
 			"sequential", startOpts.Sequential, "start nodes sequentially so node IDs match hostnames")
+		cmd.Flags().Int64Var(&startOpts.NumFilesLimit, "num-files-limit", startOpts.NumFilesLimit,
+			"limit the number of files that can be created by the cockroach process")
 	}
 
 	for _, cmd := range []*cobra.Command{
