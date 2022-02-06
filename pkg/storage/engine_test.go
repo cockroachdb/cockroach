@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1661,5 +1662,226 @@ func TestScanIntents(t *testing.T) {
 				require.Equal(t, tc.expectIntents[i], intent.Key)
 			}
 		})
+	}
+}
+
+// TestEngineMVCCRangeKeyMutations tests that range key mutations work as
+// expected, both for the engine directly and for batches.
+func TestEngineMVCCRangeKeyMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "batch", func(t *testing.T, useBatch bool) {
+		eng := NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		opts := MVCCRangeKeyIterOptions{}
+		rw := ReadWriter(eng)
+		if useBatch {
+			rw = eng.NewBatch()
+			defer rw.Close()
+		}
+
+		// Check errors for invalid, empty, and zero-length range keys. Not
+		// exhaustive, since we assume validation dispatches to
+		// MVCCRangeKey.Validate() which is tested.
+		empty := MVCCRangeKey{}
+		invalid := rangeKey("b", "a", 1)
+		zeroLength := rangeKey("a", "a", 1)
+
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(empty, nil))
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(invalid, nil))
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(zeroLength, nil))
+
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(empty))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(invalid))
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(zeroLength))
+
+		require.Error(t, rw.ExperimentalClearMVCCRangeKeys(empty.StartKey, empty.EndKey))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKeys(invalid.StartKey, invalid.EndKey))
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
+
+		require.Empty(t, scanRangeKVs(t, rw, opts))
+
+		// TODO(erikgrinaker): Pebble doesn't support reading range keys back from
+		// batches yet, so we stop batch tests here.
+		if useBatch {
+			return
+		}
+
+		// Write some range keys and read them back.
+		rangeKVs := []MVCCRangeKeyValue{
+			rangeKV("a", "d", 2, "ad2"),
+			rangeKV("c", "g", 3, "cg3"),
+			rangeKV("f", "h", 2, "fh2"),
+			rangeKV("a", "z", 10, ""), // tombstone
+			rangeKV("a", "z", 1, "az1"),
+		}
+		for _, rkv := range rangeKVs {
+			require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rkv.Key, rkv.Value))
+		}
+		require.Equal(t, rangeKVs, scanRangeKVs(t, rw, opts))
+
+		// Clear the f-g portion of [f-h)@2, twice for idempotency. This should not
+		// affect any other range keys.
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 2)))
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 2)))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "d", 2, "ad2"),
+			rangeKV("c", "g", 3, "cg3"),
+			rangeKV("g", "h", 2, "fh2"),
+			rangeKV("a", "z", 10, ""),
+			rangeKV("a", "z", 1, "az1"),
+		}, scanRangeKVs(t, rw, opts))
+
+		// Replace the [g-h)@2 value with gh2.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("g", "h", 2), []byte("gh2")))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "d", 2, "ad2"),
+			rangeKV("c", "g", 3, "cg3"),
+			rangeKV("g", "h", 2, "gh2"),
+			rangeKV("a", "z", 10, ""),
+			rangeKV("a", "z", 1, "az1"),
+		}, scanRangeKVs(t, rw, opts))
+
+		// Replace the [d-k)@10 portion of [a-z)@10 with a value dk10.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("d", "k", 10), []byte("dk10")))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "d", 10, ""),
+			rangeKV("a", "d", 2, "ad2"),
+			rangeKV("c", "g", 3, "cg3"),
+			rangeKV("g", "h", 2, "gh2"),
+			rangeKV("d", "k", 10, "dk10"),
+			rangeKV("k", "z", 10, ""),
+			rangeKV("a", "z", 1, "az1"),
+		}, scanRangeKVs(t, rw, opts))
+
+		// Clear all range keys in the [c-p) span.
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKeys(roachpb.Key("c"), roachpb.Key("p")))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 10, ""),
+			rangeKV("a", "c", 2, "ad2"),
+			rangeKV("a", "c", 1, "az1"),
+			rangeKV("p", "z", 10, ""),
+			rangeKV("p", "z", 1, "az1"),
+		}, scanRangeKVs(t, rw, opts))
+
+		// Write another range key to bridge the [c-p)@1 gap.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("c", "p", 1), roachpb.Key("az1")))
+		require.Equal(t, []MVCCRangeKeyValue{
+			rangeKV("a", "c", 10, ""),
+			rangeKV("a", "c", 2, "ad2"),
+			rangeKV("p", "z", 10, ""),
+			rangeKV("a", "z", 1, "az1"),
+		}, scanRangeKVs(t, rw, opts))
+
+		// If using a batch, make sure nothing has been written to the engine, then
+		// commit the batch and make sure it gets written to the engine.
+		if useBatch {
+			require.Empty(t, scanRangeKVs(t, eng, opts))
+			require.NoError(t, rw.(Batch).Commit(true))
+			require.Equal(t, []MVCCRangeKeyValue{
+				rangeKV("a", "c", 10, ""),
+				rangeKV("a", "c", 2, "ad2"),
+				rangeKV("p", "z", 10, ""),
+				rangeKV("a", "z", 1, "az1"),
+			}, scanRangeKVs(t, eng, opts))
+		}
+	})
+}
+
+// TestEngineRangeKeysUnsupported tests that engines without range key
+// support behave as expected, i.e. writes fail but reads degrade gracefully.
+func TestEngineRangeKeysUnsupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up an engine with a version that doesn't support range keys.
+	version := clusterversion.ByKey(clusterversion.EnsurePebbleFormatVersionRangeKeys - 1)
+	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+
+	eng := NewDefaultInMemForTesting(Settings(st))
+	defer eng.Close()
+
+	require.NoError(t, eng.PutMVCC(pointKey("a", 1), []byte("a1")))
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+	readOnly := eng.NewReadOnly(StandardDurability)
+	defer readOnly.Close()
+
+	writers := map[string]Writer{
+		"engine": eng,
+		"batch":  batch,
+	}
+	readers := map[string]Reader{
+		"engine":   eng,
+		"batch":    batch,
+		"snapshot": snapshot,
+		"readonly": readOnly,
+	}
+
+	// Range key puts should error, but clears are noops (since old databases
+	// cannot contain range keys by definition).
+	for name, w := range writers {
+		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
+			rk := rangeKey("a", "b", 2)
+			err := w.ExperimentalPutMVCCRangeKey(rk, nil)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rk))
+			require.NoError(t, w.ExperimentalClearMVCCRangeKeys(rk.StartKey, rk.EndKey))
+		})
+	}
+
+	// All range key iterators should degrade gracefully to point key iterators,
+	// and be empty for IterKeyTypeRangesOnly.
+	keyTypes := map[string]IterKeyType{
+		"PointsOnly":       IterKeyTypePointsOnly,
+		"PointsAndRanges":  IterKeyTypePointsAndRanges,
+		"PointsWithRanges": IterKeyTypePointsWithRanges,
+		"RangesOnly":       IterKeyTypeRangesOnly,
+	}
+	for name, r := range readers {
+		for keyTypeName, keyType := range keyTypes {
+			t.Run(fmt.Sprintf("read/%s/%s", name, keyTypeName), func(t *testing.T) {
+				iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					KeyTypes:   keyType,
+					UpperBound: keys.MaxKey,
+				})
+				defer iter.Close()
+
+				iter.SeekGE(pointKey("a", 0))
+
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+				if keyType == IterKeyTypeRangesOnly {
+					// With RangesOnly, the iterator must be empty.
+					require.False(t, ok)
+				} else {
+					require.True(t, ok)
+					require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
+					require.Equal(t, []byte("a1"), iter.UnsafeValue())
+				}
+
+				hasPoint, hasRange := iter.HasPointAndRange()
+				require.True(t, hasPoint)
+				require.False(t, hasRange)
+				rangeStart, rangeEnd := iter.RangeBounds()
+				require.Nil(t, rangeStart)
+				require.Nil(t, rangeEnd)
+				require.Empty(t, iter.RangeKeys())
+
+				// If the iterator was at a point, exhaust the iterator.
+				if ok {
+					iter.Next()
+					ok, err = iter.Valid()
+					require.NoError(t, err)
+					require.False(t, ok)
+				}
+			})
+		}
 	}
 }

@@ -13,6 +13,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +39,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 // TestMVCCHistories verifies that sequences of MVCC reads and writes
@@ -55,13 +58,24 @@ import (
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
 //
-// cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// cput           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
+// del            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
+// del_range      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// get            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// increment      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// put            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// put_rangekey   k=<key> end=<key> ts=<int>[,<int>] [v=<string>]
+// scan           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// scan_rangekeys k=<key> end=<key> [minTS=<int>[,<int>]] [maxTS=<int>[,<int>]] [fragmented]
+//
+// iter           [k=<key>] [end=<key>] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly]
+// iter_seek_ge   k=<key> [ts=<int>[,<int>]]
+// iter_seek_lt   k=<key> [ts=<int>[,<int>]]
+// iter_seek_intent_ge k=<key> txn=<name>
+// iter_next
+// iter_next_key
+// iter_prev
+// iter_scan      [reverse]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
@@ -112,8 +126,26 @@ func TestMVCCHistories(t *testing.T) {
 		defer engine.Close()
 
 		reportDataEntries := func(buf *redact.StringBuilder) error {
-			hasData := false
-			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
+			var hasData bool
+
+			iter := NewMVCCRangeKeyIterator(engine, MVCCRangeKeyIterOptions{
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
+			})
+			defer iter.Close()
+			for {
+				if ok, err := iter.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+				hasData = true
+				buf.Printf("rangekey: %s -> %+v\n",
+					iter.Key(), roachpb.Value{RawBytes: iter.Value()}.PrettyPrint())
+				iter.Next()
+			}
+
+			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
 				hasData = true
 				if r.Key.Timestamp.IsEmpty() {
 					// Meta is at timestamp zero.
@@ -135,6 +167,9 @@ func TestMVCCHistories(t *testing.T) {
 		}
 
 		e := newEvalCtx(ctx, engine)
+		defer func() {
+			e.iterClose() // NB: iterClose() changes during the test, so don't defer it directly.
+		}()
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			// We'll be overriding cmd/cmdargs below, because the
@@ -396,15 +431,26 @@ var commands = map[string]cmd{
 	// TODO(nvanbenschoten): test "resolve_intent_range".
 	"check_intent": {typReadOnly, cmdCheckIntent},
 
-	"clear_range": {typDataUpdate, cmdClearRange},
-	"cput":        {typDataUpdate, cmdCPut},
-	"del":         {typDataUpdate, cmdDelete},
-	"del_range":   {typDataUpdate, cmdDeleteRange},
-	"get":         {typReadOnly, cmdGet},
-	"increment":   {typDataUpdate, cmdIncrement},
-	"merge":       {typDataUpdate, cmdMerge},
-	"put":         {typDataUpdate, cmdPut},
-	"scan":        {typReadOnly, cmdScan},
+	"clear_range":    {typDataUpdate, cmdClearRange},
+	"cput":           {typDataUpdate, cmdCPut},
+	"del":            {typDataUpdate, cmdDelete},
+	"del_range":      {typDataUpdate, cmdDeleteRange},
+	"get":            {typReadOnly, cmdGet},
+	"increment":      {typDataUpdate, cmdIncrement},
+	"merge":          {typDataUpdate, cmdMerge},
+	"put":            {typDataUpdate, cmdPut},
+	"put_rangekey":   {typDataUpdate, cmdPutRangeKey},
+	"scan":           {typReadOnly, cmdScan},
+	"scan_rangekeys": {typReadOnly, cmdScanRangeKeys},
+
+	"iter_new":            {typReadOnly, cmdIterNew},
+	"iter_seek_ge":        {typReadOnly, cmdIterSeekGE},
+	"iter_seek_lt":        {typReadOnly, cmdIterSeekLT},
+	"iter_seek_intent_ge": {typReadOnly, cmdIterSeekIntentGE},
+	"iter_next":           {typReadOnly, cmdIterNext},
+	"iter_next_key":       {typReadOnly, cmdIterNextKey},
+	"iter_prev":           {typReadOnly, cmdIterPrev},
+	"iter_scan":           {typReadOnly, cmdIterScan},
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
@@ -832,6 +878,211 @@ func cmdScan(e *evalCtx) error {
 	return err
 }
 
+func cmdPutRangeKey(e *evalCtx) error {
+	var rangeKey MVCCRangeKey
+	rangeKey.StartKey, rangeKey.EndKey = e.getKeyRange()
+	rangeKey.Timestamp = e.getTs(nil)
+	val := e.getVal()
+
+	return e.withWriter("put_rangekey", func(rw ReadWriter) error {
+		return rw.ExperimentalPutMVCCRangeKey(rangeKey, val.RawBytes)
+	})
+}
+
+func cmdScanRangeKeys(e *evalCtx) error {
+	opts := MVCCRangeKeyIterOptions{}
+	opts.LowerBound, opts.UpperBound = e.getKeyRange()
+	opts.MinTimestamp = e.getTsWithName(nil, "minTS")
+	opts.MaxTimestamp = e.getTsWithName(nil, "maxTS")
+	opts.Fragmented = e.hasArg("fragmented")
+
+	iter := NewMVCCRangeKeyIterator(e.engine, opts)
+	if ok, err := iter.Valid(); err != nil {
+		return err
+	} else if !ok {
+		e.results.buf.Printf("scan_rangekeys: %s-%s -> <no data>\n", opts.LowerBound, opts.UpperBound)
+	}
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		e.results.buf.Printf("scan_rangekeys: %s -> %s\n",
+			iter.Key(), roachpb.Value{RawBytes: iter.Value()}.PrettyPrint())
+		iter.Next()
+	}
+	return nil
+}
+
+func cmdIterNew(e *evalCtx) error {
+	opts := IterOptions{
+		UpperBound: keys.MaxKey,
+	}
+	if e.hasArg("k") {
+		e.scanArg("k", &opts.LowerBound)
+	}
+	if e.hasArg("end") {
+		e.scanArg("end", &opts.UpperBound)
+	}
+	kind := MVCCKeyAndIntentsIterKind
+	if e.hasArg("kind") {
+		var arg string
+		e.scanArg("kind", &arg)
+		switch arg {
+		case "keys":
+			kind = MVCCKeyIterKind
+		case "keysAndIntents":
+			kind = MVCCKeyAndIntentsIterKind
+		default:
+			return errors.Errorf("unknown iterator kind %s", arg)
+		}
+	}
+	if e.hasArg("types") {
+		var arg string
+		e.scanArg("types", &arg)
+		switch arg {
+		case "pointsOnly":
+			opts.KeyTypes = IterKeyTypePointsOnly
+		case "pointsWithRanges":
+			opts.KeyTypes = IterKeyTypePointsWithRanges
+		case "pointsAndRanges":
+			opts.KeyTypes = IterKeyTypePointsAndRanges
+		case "rangesOnly":
+			opts.KeyTypes = IterKeyTypeRangesOnly
+		default:
+			return errors.Errorf("unknown key type %s", arg)
+		}
+	}
+
+	var r Reader
+	var rClose func()
+	rType := util.ConstantWithMetamorphicTestChoice(
+		fmt.Sprintf("iter-reader@%s", filepath.Base(e.td.Pos)),
+		"engine", "readonly", "batch", "snapshot").(string)
+	switch rType {
+	case "engine":
+		r = e.engine
+	case "readonly":
+		r = e.engine.NewReadOnly(StandardDurability)
+	case "batch":
+		r = e.engine.NewBatch()
+		rClose = r.Close
+	case "snapshot":
+		r = e.engine.NewSnapshot()
+		rClose = r.Close
+	default:
+		return errors.Errorf("unknown reader type %s", rType)
+	}
+
+	e.iterClose()
+	e.iter = e.engine.NewMVCCIterator(kind, opts)
+	e.iterClose = func() {
+		e.iter.Close()
+		if rClose != nil {
+			rClose()
+		}
+	}
+	return nil
+}
+
+func cmdIterSeekGE(e *evalCtx) error {
+	key := e.getKey()
+	ts := e.getTs(nil)
+	e.iter.SeekGE(MVCCKey{Key: key, Timestamp: ts})
+	printIter(e)
+	return nil
+}
+
+func cmdIterSeekIntentGE(e *evalCtx) error {
+	key := e.getKey()
+	var txnName string
+	e.scanArg("txn", &txnName)
+	txn := e.txns[txnName]
+	e.iter.SeekIntentGE(key, txn.ID)
+	printIter(e)
+	return nil
+}
+
+func cmdIterSeekLT(e *evalCtx) error {
+	key := e.getKey()
+	ts := e.getTs(nil)
+	e.iter.SeekLT(MVCCKey{Key: key, Timestamp: ts})
+	printIter(e)
+	return nil
+}
+
+func cmdIterNext(e *evalCtx) error {
+	e.iter.Next()
+	printIter(e)
+	return nil
+}
+
+func cmdIterNextKey(e *evalCtx) error {
+	e.iter.NextKey()
+	printIter(e)
+	return nil
+}
+
+func cmdIterPrev(e *evalCtx) error {
+	e.iter.Prev()
+	printIter(e)
+	return nil
+}
+
+func cmdIterScan(e *evalCtx) error {
+	reverse := e.hasArg("reverse")
+	for {
+		printIter(e)
+		if ok, err := e.iter.Valid(); err != nil || !ok {
+			return nil
+		}
+		if reverse {
+			e.iter.Prev()
+		} else {
+			e.iter.Next()
+		}
+	}
+}
+
+func printIter(e *evalCtx) {
+	e.results.buf.Printf("%s:", e.td.Cmd)
+	defer e.results.buf.Printf("\n")
+
+	ok, err := e.iter.Valid()
+	if err != nil {
+		e.results.buf.Printf(" err=%v", err)
+		return
+	}
+	if !ok {
+		e.results.buf.Print(" .")
+		return
+	}
+	hasPoint, hasRange := e.iter.HasPointAndRange()
+	if hasPoint {
+		if !e.iter.UnsafeKey().IsValue() {
+			meta := enginepb.MVCCMetadata{}
+			require.NoError(e.t, protoutil.Unmarshal(e.iter.UnsafeValue(), &meta))
+			e.results.buf.Printf(" %s=%+v", e.iter.UnsafeKey(), &meta)
+		} else {
+			e.results.buf.Printf(" %s=%s",
+				e.iter.UnsafeKey(), roachpb.Value{RawBytes: e.iter.UnsafeValue()}.PrettyPrint())
+		}
+	}
+	if hasRange {
+		start, end := e.iter.RangeBounds()
+		e.results.buf.Printf(" %s=[", roachpb.Span{Key: start, EndKey: end})
+		for i, rkv := range e.iter.RangeKeys() {
+			if i > 0 {
+				e.results.buf.Printf(" ")
+			}
+			e.results.buf.Printf("%s=%s",
+				rkv.Key.Timestamp, roachpb.Value{RawBytes: rkv.Value}.PrettyPrint())
+		}
+		e.results.buf.Printf("]")
+	}
+}
+
 // evalCtx stored the current state of the environment of a running
 // script.
 type evalCtx struct {
@@ -842,6 +1093,8 @@ type evalCtx struct {
 	}
 	ctx        context.Context
 	engine     Engine
+	iter       MVCCIterator
+	iterClose  func()
 	t          *testing.T
 	td         *datadriven.TestData
 	txns       map[string]*roachpb.Transaction
@@ -854,6 +1107,7 @@ func newEvalCtx(ctx context.Context, engine Engine) *evalCtx {
 		engine:     engine,
 		txns:       make(map[string]*roachpb.Transaction),
 		txnCounter: uint128.FromInts(0, 1),
+		iterClose:  func() {},
 	}
 }
 

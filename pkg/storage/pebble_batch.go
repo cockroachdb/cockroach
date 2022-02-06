@@ -207,9 +207,10 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		return iter
 	}
 
-	if !opts.MinTimestampHint.IsEmpty() {
-		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts, StandardDurability))
+	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly
+	if !reusable {
+		iter := MVCCIterator(newPebbleIterator(
+			p.batch, nil, opts, StandardDurability, p.db.FormatMajorVersion()))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -230,9 +231,9 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts, StandardDurability)
+			iter.init(p.batch, p.iter, opts, StandardDurability, p.db.FormatMajorVersion())
 		} else {
-			iter.init(p.db, p.iter, opts, StandardDurability)
+			iter.init(p.db, p.iter, opts, StandardDurability, p.db.FormatMajorVersion())
 		}
 		if p.iter == nil {
 			// For future cloning.
@@ -258,6 +259,11 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		panic("write-only batch")
 	}
 
+	reusable := opts.KeyTypes == IterKeyTypePointsOnly
+	if !reusable {
+		return newPebbleIterator(p.batch, nil, opts, StandardDurability, p.db.FormatMajorVersion())
+	}
+
 	iter := &p.normalEngineIter
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
@@ -272,9 +278,9 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts, StandardDurability)
+			iter.init(p.batch, p.iter, opts, StandardDurability, p.db.FormatMajorVersion())
 		} else {
-			iter.init(p.db, p.iter, opts, StandardDurability)
+			iter.init(p.db, p.iter, opts, StandardDurability, p.db.FormatMajorVersion())
 		}
 		if p.iter == nil {
 			// For future cloning.
@@ -411,6 +417,52 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 		}
 	}
 	return nil
+}
+
+// ExperimentalClearMVCCRangeKey implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if format := p.db.FormatMajorVersion(); format < pebble.FormatRangeKeys {
+		return nil // noop
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.batch.Experimental().RangeKeyUnset(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		nil)
+}
+
+// ExperimentalClearMVCCRangeKeys implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
+	if format := p.db.FormatMajorVersion(); format < pebble.FormatRangeKeys {
+		return nil // noop
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.Timestamp{Logical: 1}}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.batch.Experimental().RangeKeyDelete(
+		EncodeMVCCKeyPrefix(start),
+		EncodeMVCCKeyPrefix(end),
+		nil)
+}
+
+// ExperimentalPutMVCCRangeKey implements the Batch interface.
+func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
+	if format := p.db.FormatMajorVersion(); format < pebble.FormatRangeKeys {
+		return errors.Errorf("range keys not supported by Pebble database version %s", format)
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.batch.Experimental().RangeKeySet(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		value,
+		nil)
 }
 
 // Merge implements the Batch interface.

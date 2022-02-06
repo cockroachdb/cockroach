@@ -1,0 +1,94 @@
+# Test basic MVCC range key primitives.
+
+run ok
+put_rangekey k=b end=c ts=3 v=bc3
+put_rangekey k=e end=g ts=3 v=eg3
+put_rangekey k=d end=f ts=5 v=df5
+put_rangekey k=d end=f ts=2 v=df2
+put_rangekey k=m end=z ts=1 v=mz1
+put_rangekey k=a end=m ts=4 v=az4 # merges with below
+put_rangekey k=m end=z ts=4 v=az4
+----
+>> at end:
+rangekey: {b-c}/3.000000000,0 -> /BYTES/bc3
+rangekey: {d-f}/5.000000000,0 -> /BYTES/df5
+rangekey: {d-f}/2.000000000,0 -> /BYTES/df2
+rangekey: {e-g}/3.000000000,0 -> /BYTES/eg3
+rangekey: {a-z}/4.000000000,0 -> /BYTES/az4
+rangekey: {m-z}/1.000000000,0 -> /BYTES/mz1
+
+# Iterate over all range keys.
+run ok
+scan_rangekeys k=a end=z
+----
+scan_rangekeys: {b-c}/3.000000000,0 -> /BYTES/bc3
+scan_rangekeys: {d-f}/5.000000000,0 -> /BYTES/df5
+scan_rangekeys: {d-f}/2.000000000,0 -> /BYTES/df2
+scan_rangekeys: {e-g}/3.000000000,0 -> /BYTES/eg3
+scan_rangekeys: {a-z}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {m-z}/1.000000000,0 -> /BYTES/mz1
+
+# Iterator truncates to range bounds.
+run ok
+scan_rangekeys k=c end=e
+----
+scan_rangekeys: {d-e}/5.000000000,0 -> /BYTES/df5
+scan_rangekeys: {c-e}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {d-e}/2.000000000,0 -> /BYTES/df2
+
+# Iterator truncates to bounds between range key bounds.
+run ok
+scan_rangekeys k=ccc end=eee
+----
+scan_rangekeys: {d-eee}/5.000000000,0 -> /BYTES/df5
+scan_rangekeys: {ccc-eee}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: e{-ee}/3.000000000,0 -> /BYTES/eg3
+scan_rangekeys: {d-eee}/2.000000000,0 -> /BYTES/df2
+
+# Iterator with constrained timestamps.
+run ok
+scan_rangekeys k=a end=z minTS=2 maxTS=3
+----
+scan_rangekeys: {b-c}/3.000000000,0 -> /BYTES/bc3
+scan_rangekeys: {d-f}/2.000000000,0 -> /BYTES/df2
+scan_rangekeys: {e-g}/3.000000000,0 -> /BYTES/eg3
+
+# Fragmented iteration.
+run ok
+scan_rangekeys k=a end=z fragmented
+----
+scan_rangekeys: {a-b}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {b-c}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {b-c}/3.000000000,0 -> /BYTES/bc3
+scan_rangekeys: {c-d}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {d-e}/5.000000000,0 -> /BYTES/df5
+scan_rangekeys: {d-e}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {d-e}/2.000000000,0 -> /BYTES/df2
+scan_rangekeys: {e-f}/5.000000000,0 -> /BYTES/df5
+scan_rangekeys: {e-f}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {e-f}/3.000000000,0 -> /BYTES/eg3
+scan_rangekeys: {e-f}/2.000000000,0 -> /BYTES/df2
+scan_rangekeys: {f-g}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {f-g}/3.000000000,0 -> /BYTES/eg3
+scan_rangekeys: {g-m}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {m-z}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {m-z}/1.000000000,0 -> /BYTES/mz1
+
+# Fragmented iteration with key and time bounds.
+run ok
+scan_rangekeys k=ccc end=eee fragmented minTS=3 maxTS=4
+----
+scan_rangekeys: {ccc-d}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: {d-e}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: e{-ee}/4.000000000,0 -> /BYTES/az4
+scan_rangekeys: e{-ee}/3.000000000,0 -> /BYTES/eg3
+
+# Empty iterations.
+run ok
+scan_rangekeys k=A end=Z
+scan_rangekeys k=c end=c
+scan_rangekeys k=z end=a
+----
+scan_rangekeys: "A"-"Z" -> <no data>
+scan_rangekeys: "c"-"c" -> <no data>
+scan_rangekeys: "z"-"a" -> <no data>
