@@ -55,17 +55,20 @@ import (
 // resolve_intent t=<name> k=<key> [status=<txnstatus>]
 // check_intent   k=<key> [none]
 //
-// cput      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
-// del       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
-// del_range [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
-// get       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
-// increment [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
-// put       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
-// scan      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
+// cput            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
+// del             [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
+// del_range       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// del_range_ts    [ts=<int>[,<int>]] k=<key> end=<key>
+// get             [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
+// increment       [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
+// iter_range_keys k=<key> end=<key> [minTS=<int>[,<int>]] [maxTS=<int>[,<int>]] [fragmented]
+// put             [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
+// scan            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [avoidExcess] [allowEmpty]
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
-// clear_range    k=<key> end=<key>
+// clear_range     k=<key> end=<key>
+// clear_range_key k=<key> end=<key> [ts=<int>[,<int>]]
 //
 // Where `<key>` can be a simple string, or a string
 // prefixed by the following characters:
@@ -112,8 +115,25 @@ func TestMVCCHistories(t *testing.T) {
 		defer engine.Close()
 
 		reportDataEntries := func(buf *redact.StringBuilder) error {
-			hasData := false
-			err := engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
+			var hasData bool
+
+			iter := NewMVCCRangeKeyIterator(engine, MVCCRangeKeyIterOptions{
+				LowerBound: span.Key,
+				UpperBound: span.EndKey,
+			})
+			defer iter.Close()
+			for {
+				if ok, err := iter.Valid(); err != nil {
+					return err
+				} else if !ok {
+					break
+				}
+				hasData = true
+				buf.Printf("range key: %s -> %+v\n", iter.Key(), iter.Value())
+				iter.Next()
+			}
+
+			err = engine.MVCCIterate(span.Key, span.EndKey, MVCCKeyAndIntentsIterKind, func(r MVCCKeyValue) error {
 				hasData = true
 				if r.Key.Timestamp.IsEmpty() {
 					// Meta is at timestamp zero.
@@ -396,15 +416,18 @@ var commands = map[string]cmd{
 	// TODO(nvanbenschoten): test "resolve_intent_range".
 	"check_intent": {typReadOnly, cmdCheckIntent},
 
-	"clear_range": {typDataUpdate, cmdClearRange},
-	"cput":        {typDataUpdate, cmdCPut},
-	"del":         {typDataUpdate, cmdDelete},
-	"del_range":   {typDataUpdate, cmdDeleteRange},
-	"get":         {typReadOnly, cmdGet},
-	"increment":   {typDataUpdate, cmdIncrement},
-	"merge":       {typDataUpdate, cmdMerge},
-	"put":         {typDataUpdate, cmdPut},
-	"scan":        {typReadOnly, cmdScan},
+	"clear_range":     {typDataUpdate, cmdClearRange},
+	"clear_range_key": {typDataUpdate, cmdClearRangeKey},
+	"cput":            {typDataUpdate, cmdCPut},
+	"del":             {typDataUpdate, cmdDelete},
+	"del_range":       {typDataUpdate, cmdDeleteRange},
+	"del_range_ts":    {typDataUpdate, cmdDeleteRangeTombstone},
+	"get":             {typReadOnly, cmdGet},
+	"increment":       {typDataUpdate, cmdIncrement},
+	"iter_range_keys": {typReadOnly, cmdIterRangeKeys},
+	"merge":           {typDataUpdate, cmdMerge},
+	"put":             {typDataUpdate, cmdPut},
+	"scan":            {typReadOnly, cmdScan},
 }
 
 func cmdTxnAdvance(e *evalCtx) error {
@@ -584,6 +607,16 @@ func cmdClearRange(e *evalCtx) error {
 	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
 }
 
+func cmdClearRangeKey(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+	return e.engine.ExperimentalClearMVCCRangeKey(MVCCRangeKey{
+		StartKey:  key,
+		EndKey:    endKey,
+		Timestamp: ts,
+	})
+}
+
 func cmdCPut(e *evalCtx) error {
 	txn := e.getTxn(optional)
 	ts := e.getTs(txn)
@@ -656,6 +689,24 @@ func cmdDeleteRange(e *evalCtx) error {
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
+		return nil
+	})
+}
+
+func cmdDeleteRangeTombstone(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+
+	return e.withWriter("del_range", func(rw ReadWriter) error {
+		err := ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, nil, key, endKey, ts, 0)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("del_range_ts: %s\n", MVCCRangeKey{
+			StartKey:  key,
+			EndKey:    endKey,
+			Timestamp: ts,
+		})
 		return nil
 	})
 }
@@ -830,6 +881,33 @@ func cmdScan(e *evalCtx) error {
 		e.results.buf.Printf("scan: %v-%v -> <no data>\n", key, endKey)
 	}
 	return err
+}
+
+func cmdIterRangeKeys(e *evalCtx) error {
+	opts := MVCCRangeKeyIterOptions{}
+	opts.LowerBound, opts.UpperBound = e.getKeyRange()
+	opts.MinTimestamp = e.getTsWithName(nil, "minTS")
+	opts.MaxTimestamp = e.getTsWithName(nil, "maxTS")
+	opts.Fragmented = e.hasArg("fragmented")
+
+	iter := NewMVCCRangeKeyIterator(e.engine, opts)
+	ok, err := iter.Valid()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		e.results.buf.Printf("iter_range_keys: %v-%v -> <no data>\n", opts.LowerBound, opts.UpperBound)
+	}
+	for {
+		if ok, err = iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		e.results.buf.Printf("iter_range_keys: %s -> %v\n", iter.Key(), iter.Value())
+		iter.Next()
+	}
+	return nil
 }
 
 // evalCtx stored the current state of the environment of a running

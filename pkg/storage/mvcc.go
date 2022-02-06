@@ -99,6 +99,12 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
+// MVCCRangeKeyValue represents a ranged key/value pair.
+type MVCCRangeKeyValue struct {
+	Key   MVCCRangeKey
+	Value []byte
+}
+
 // optionalValue represents an optional roachpb.Value. It is preferred
 // over a *roachpb.Value to avoid the forced heap allocation.
 type optionalValue struct {
@@ -2200,6 +2206,34 @@ func MVCCDeleteRange(
 		}
 	}
 	return keys, res.ResumeSpan, res.NumKeys, nil
+}
+
+// ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at
+// the given timestamp using a range tombstone (rather than point tombstones).
+// This operation is non-transactional, but will check for existing intents and
+// return a WriteIntentError containing up to maxIntents intents.
+//
+// This method is EXPERIMENTAL: range keys are under active development, and
+// have severe limitations including being ignored by all KV and MVCC APIs and
+// only being stored in memory.
+//
+// TODO(erikgrinaker): Needs handling of conflicts (e.g. WriteTooOldError),
+// MVCCStats, and tests.
+func ExperimentalMVCCDeleteRangeUsingTombstone(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	maxIntents int64,
+) error {
+	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+		return err
+	} else if len(intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: intents}
+	}
+	return rw.ExperimentalPutMVCCRangeKey(MVCCRangeKey{
+		StartKey: startKey, EndKey: endKey, Timestamp: timestamp}, nil)
 }
 
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
