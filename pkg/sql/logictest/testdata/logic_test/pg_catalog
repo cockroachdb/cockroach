@@ -1407,7 +1407,7 @@ fk         {2}      NULL       NULL       NULL       NULL       NULL    NULL
 query OOIOOIT colnames
 SELECT classid, objid, objsubid, refclassid, refobjid, refobjsubid, deptype
 FROM pg_catalog.pg_depend
-ORDER BY objid
+ORDER BY objid, refobjid, refobjsubid
 ----
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
 4294967126  111         0         4294967129  110         14           a
@@ -1415,8 +1415,8 @@ classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
 4294967126  192087236   0         4294967129  0           0            n
 4294967083  842401391   0         4294967129  110         1            n
 4294967083  842401391   0         4294967129  110         2            n
-4294967083  842401391   0         4294967129  110         4            n
 4294967083  842401391   0         4294967129  110         3            n
+4294967083  842401391   0         4294967129  110         4            n
 4294967126  2061447344  0         4294967129  3687884464  0            n
 4294967126  3764151187  0         4294967129  0           0            n
 4294967126  3836426375  0         4294967129  3687884465  0            n
