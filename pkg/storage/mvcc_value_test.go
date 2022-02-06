@@ -245,3 +245,8 @@ func stringValueRaw(s string) []byte {
 	}
 	return b
 }
+
+func withLocalTS(v MVCCValue, ts int) MVCCValue {
+	v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: int64(ts)}
+	return v
+}

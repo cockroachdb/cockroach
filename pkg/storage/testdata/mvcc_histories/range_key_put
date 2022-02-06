@@ -1,0 +1,68 @@
+# Test basic MVCC range key mutations.
+
+run trace
+# Write three range keys that extend each other on both sides.
+put_rangekey k=c end=e ts=1
+put_rangekey k=a end=c ts=1
+put_rangekey k=e end=f ts=1
+----
+>> put_rangekey k=c end=e ts=1
+rangekey: {c-e}/[1.000000000,0=/<empty>]
+>> put_rangekey k=a end=c ts=1
+rangekey: {a-e}/[1.000000000,0=/<empty>]
+>> put_rangekey k=e end=f ts=1
+rangekey: {a-f}/[1.000000000,0=/<empty>]
+
+# Write an overlapping range key above it causing fragmentation.
+run ok
+put_rangekey k=d end=k ts=2
+----
+>> at end:
+rangekey: {a-d}/[1.000000000,0=/<empty>]
+rangekey: {d-f}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-k}/[2.000000000,0=/<empty>]
+
+# Write a range key underneath the [f-k) fragment that fragments it in the middle.
+run ok
+put_rangekey k=g end=j ts=1
+----
+>> at end:
+rangekey: {a-d}/[1.000000000,0=/<empty>]
+rangekey: {d-f}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-g}/[2.000000000,0=/<empty>]
+rangekey: {g-j}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {j-k}/[2.000000000,0=/<empty>]
+
+# Merge the range keys at ts=1 again.
+run ok
+put_rangekey k=f end=g ts=1
+----
+>> at end:
+rangekey: {a-d}/[1.000000000,0=/<empty>]
+rangekey: {d-j}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {j-k}/[2.000000000,0=/<empty>]
+
+# Fill in the gaps to make a single fragment stack.
+run ok
+put_rangekey k=a end=d ts=2
+put_rangekey k=j end=k ts=1
+----
+>> at end:
+rangekey: {a-k}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+
+# Write a different value (localTs) at [c-e)@2 which should fragment it.
+run ok
+put_rangekey k=c end=e ts=2 localTs=1
+----
+>> at end:
+rangekey: {a-c}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-e}/[2.000000000,0=vheader{ localTs=1.000000000,0 } /<empty> 1.000000000,0=/<empty>]
+rangekey: {e-k}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+# Write the original value again to unfragment everything.
+run ok
+put_rangekey k=c end=e ts=2 localTs=0
+----
+>> at end:
+rangekey: {a-k}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
