@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
 	"strings"
@@ -1659,6 +1660,8 @@ func (ex *connExecutor) runObserverStatement(
 		return nil
 	case *tree.ShowLastQueryStatistics:
 		return ex.runShowLastQueryStatistics(ctx, res, sqlStmt)
+	case *tree.ShowTransferState:
+		return ex.runShowTransferState(ctx, res, sqlStmt)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
@@ -1694,6 +1697,102 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+// showTransferStateFns maps column names for the SHOW TRANSFER STATE statement
+// to their generator functions.
+//
+// NOTE: These functions are executed in the context of an observer statement,
+// and observer statements do not get planned, so a planner should not be used.
+var showTransferStateFns = map[string]func(ex *connExecutor) (tree.Datum, error){
+	"session_state_base64": func(ex *connExecutor) (tree.Datum, error) {
+		// Observer statements do not use implicit transactions at all, so
+		// we look at CurState() directly.
+		_, isNoTxn := ex.machine.CurState().(stateNoTxn)
+		state, err := serializeSessionState(
+			!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDString(base64.StdEncoding.EncodeToString([]byte(*state))), nil
+	},
+	"session_revival_token_base64": func(ex *connExecutor) (tree.Datum, error) {
+		cm, err := ex.server.cfg.RPCContext.SecurityContext.GetCertificateManager()
+		if err != nil {
+			return nil, err
+		}
+		token, err := createSessionRevivalToken(
+			ex.server.cfg.AllowSessionRevival,
+			ex.sessionData(),
+			cm,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDString(base64.StdEncoding.EncodeToString([]byte(*token))), nil
+	},
+}
+
+// runShowTransferState executes a SHOW TRANSFER STATE statement.
+//
+// If an error is returned, the connection needs to stop processing queries.
+func (ex *connExecutor) runShowTransferState(
+	ctx context.Context, res RestrictedCommandResult, stmt *tree.ShowTransferState,
+) error {
+	// When adding a new column, a generator function must be defined in
+	// showTransferStateFns. The "transfer_key" column will always be the last.
+	colNames := []string{
+		"error",
+		"session_state_base64",
+		"session_revival_token_base64",
+	}
+	if stmt.TransferKey != "" {
+		colNames = append(colNames, "transfer_key")
+	}
+	cols := make(colinfo.ResultColumns, len(colNames))
+	for i := 0; i < len(colNames); i++ {
+		cols[i] = colinfo.ResultColumn{Name: colNames[i], Typ: types.String}
+	}
+	res.SetColumns(ctx, cols)
+
+	const errIdx = 0
+	dataStartIdx := 1
+	dataEndIdx := len(colNames) - 1
+
+	row := make(tree.Datums, len(colNames))
+	row[errIdx] = tree.DNull
+
+	if stmt.TransferKey != "" {
+		dataEndIdx--
+		fmtCtx := tree.NewFmtCtx(tree.FmtBareIdentifiers)
+		fmtCtx.FormatNode(&stmt.TransferKey)
+		row[dataEndIdx+1] = tree.NewDString(fmtCtx.CloseAndGetString())
+	}
+
+	// When an error occurs, reset all data columns (excluding transfer_key) to
+	// NULL, and set the error column accordingly.
+	finishWithError := func(err error) error {
+		for i := dataStartIdx; i <= dataEndIdx; i++ {
+			row[i] = tree.DNull
+		}
+		row[errIdx] = tree.NewDString(err.Error())
+		return res.AddRow(ctx, row)
+	}
+	for i := dataStartIdx; i <= dataEndIdx; i++ {
+		// fn must exist for the given column name.
+		fn, ok := showTransferStateFns[colNames[i]]
+		if !ok {
+			return finishWithError(errors.AssertionFailedf(
+				"generator fn must exist for column '%s'", colNames[i]))
+		}
+		res, err := fn(ex)
+		if err != nil {
+			return finishWithError(err)
+		}
+		row[i] = res
+	}
+	return res.AddRow(ctx, row)
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients
