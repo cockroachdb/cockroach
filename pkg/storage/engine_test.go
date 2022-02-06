@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1660,4 +1661,484 @@ func TestScanIntents(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEngineConsistentIterators checks iterator consistency for various readers.
+//
+// 1. All iterators have a consistent view of the reader as of the time of its
+//    creation. Subsequent writes are never visible to it.
+//
+// 2. Iterators on readers with ConsistentIterators=true all have a consistent
+//    view of the Engine as of the time of the first iterator creation or
+//    PinEngineStateForIterators call: newer Engine writes are never visible to new
+//    iterators. The opposite is true for ConsistentIterators=false: new iterators
+//    always see the most recent Engine state at the time of their creation.
+//
+// 3. New iterators on unindexed Batches never see batch writes. They do satisfy
+//    ConsistentIterators: they never see new Engine writes after the first
+//    iterator was created or a PinEngineStateForIterators call.
+//
+// 4. New iterators on indexed Batches see all batch writes that happened before
+//    the iterator was created. However, they satisfy ConsistentIterators and
+//    do not see new Engine writes after the first iterator was created or a
+//    PinEngineStateForIterators call. Via 1, they never see later batch writes.
+func TestEngineConsistentIterators(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testcases := map[string]struct {
+		makeReader       func(Engine) Reader
+		expectConsistent bool
+		canWrite         bool
+		readOwnWrites    bool
+	}{
+		"Engine": {
+			makeReader:       func(e Engine) Reader { return e },
+			expectConsistent: false,
+			canWrite:         true,
+			readOwnWrites:    true,
+		},
+		"Batch": {
+			makeReader:       func(e Engine) Reader { return e.NewBatch() },
+			expectConsistent: true,
+			canWrite:         true,
+			readOwnWrites:    true,
+		},
+		"UnindexedBatch": {
+			makeReader:       func(e Engine) Reader { return e.NewUnindexedBatch(false) },
+			expectConsistent: true,
+			canWrite:         true,
+			readOwnWrites:    false,
+		},
+		"ReadOnly": {
+			makeReader:       func(e Engine) Reader { return e.NewReadOnly(StandardDurability) },
+			expectConsistent: true,
+			canWrite:         false,
+		},
+		"Snapshot": {
+			makeReader:       func(e Engine) Reader { return e.NewSnapshot() },
+			expectConsistent: true,
+			canWrite:         false,
+		},
+	}
+	keyKinds := []interface{}{MVCCKeyAndIntentsIterKind, MVCCKeyIterKind}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			testutils.RunValues(t, "IterKind", keyKinds, func(t *testing.T, iterKindI interface{}) {
+				iterKind := iterKindI.(MVCCIterKind)
+				eng := NewDefaultInMemForTesting()
+				defer eng.Close()
+
+				// Write initial point and range keys.
+				require.NoError(t, eng.PutMVCC(pointKey("a", 1), []byte("a1")))
+				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 1)))
+
+				// Set up two readers: one regular and one which will be pinned.
+				r := tc.makeReader(eng)
+				defer r.Close()
+				rPinned := tc.makeReader(eng)
+				defer rPinned.Close()
+
+				require.Equal(t, tc.expectConsistent, r.ConsistentIterators())
+
+				// Create an iterator. This will see the old engine state regardless
+				// of the type of reader.
+				opts := IterOptions{
+					KeyTypes:   IterKeyTypePointsAndRanges,
+					LowerBound: keys.LocalMax,
+					UpperBound: keys.MaxKey,
+				}
+				iterOld := r.NewMVCCIterator(iterKind, opts)
+				defer iterOld.Close()
+
+				// Pin the pinned reader, if it supports it. This should ensure later
+				// iterators see the current state.
+				if rPinned.ConsistentIterators() {
+					require.NoError(t, rPinned.PinEngineStateForIterators())
+				} else {
+					require.Error(t, rPinned.PinEngineStateForIterators())
+				}
+
+				// Write new point and range keys to the engine, and set up the expected
+				// old and new results.
+				require.NoError(t, eng.PutMVCC(pointKey("a", 2), []byte("a2")))
+				require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 2)))
+
+				expectOld := []interface{}{
+					pointKV("a", 1, "a1"),
+					rangeKey("b", "c", 1),
+				}
+				expectNew := []interface{}{
+					pointKV("a", 2, "a2"),
+					pointKV("a", 1, "a1"),
+					rangeKey("b", "c", 2),
+					rangeKey("b", "c", 1),
+				}
+
+				// Opened iterators should all see the old iterator state, regardless of
+				// reader type.
+				require.Equal(t, expectOld, scanIter(t, iterOld))
+
+				// Create new iterators from the pinned readers. Consistent iterators
+				// should see the old state, others should see the new state.
+				iterPinned := rPinned.NewMVCCIterator(iterKind, opts)
+				defer iterPinned.Close()
+				if rPinned.ConsistentIterators() {
+					require.Equal(t, expectOld, scanIter(t, iterPinned))
+				} else {
+					require.Equal(t, expectNew, scanIter(t, iterPinned))
+				}
+
+				// Create another iterator from the reader. Consistent iterators should
+				// see the old state, others should see the new state.
+				iterNew := r.NewMVCCIterator(iterKind, opts)
+				defer iterNew.Close()
+				if r.ConsistentIterators() {
+					require.Equal(t, expectOld, scanIter(t, iterNew))
+				} else {
+					require.Equal(t, expectNew, scanIter(t, iterNew))
+				}
+
+				// If the reader is also a writer, check interactions with writes.
+				// In particular, a Batch should read its own writes for any new
+				// iterators, but not for any existing iterators.
+				if tc.canWrite {
+					w, ok := r.(Writer)
+					require.Equal(t, tc.canWrite, ok)
+
+					require.NoError(t, w.PutMVCC(pointKey("a", 3), []byte("a3")))
+					require.NoError(t, w.ExperimentalPutMVCCRangeKey(rangeKey("b", "c", 3)))
+					expectNewAndOwn := []interface{}{
+						pointKV("a", 3, "a3"),
+						pointKV("a", 2, "a2"),
+						pointKV("a", 1, "a1"),
+						rangeKey("b", "c", 3),
+						rangeKey("b", "c", 2),
+						rangeKey("b", "c", 1),
+					}
+					expectOldAndOwn := []interface{}{
+						pointKV("a", 3, "a3"),
+						pointKV("a", 1, "a1"),
+						rangeKey("b", "c", 3),
+						rangeKey("b", "c", 1),
+					}
+
+					// TODO(erikgrinaker): existing batch iterators see new writes, and
+					// new batch iterators don't see new range keys. See:
+					// https://github.com/cockroachdb/pebble/issues/1638
+					if name == "Batch" {
+						return
+					}
+
+					// The existing iterators should see the same state as before these
+					// writes, because they always have a consistent view from when they
+					// were created.
+					require.Equal(t, expectOld, scanIter(t, iterOld))
+					if r.ConsistentIterators() {
+						require.Equal(t, expectOld, scanIter(t, iterPinned))
+						require.Equal(t, expectOld, scanIter(t, iterNew))
+					} else {
+						require.Equal(t, expectNew, scanIter(t, iterPinned))
+						require.Equal(t, expectNew, scanIter(t, iterNew))
+					}
+
+					// A new iterator should read our own writes if the reader supports it,
+					// but consistent iterators should not see the changes to the underlying
+					// engine either way.
+					iterOwn := r.NewMVCCIterator(iterKind, opts)
+					defer iterOwn.Close()
+					if tc.readOwnWrites {
+						if r.ConsistentIterators() {
+							require.Equal(t, expectOldAndOwn, scanIter(t, iterOwn))
+						} else {
+							require.Equal(t, expectNewAndOwn, scanIter(t, iterOwn))
+						}
+					} else {
+						if r.ConsistentIterators() {
+							require.Equal(t, expectOld, scanIter(t, iterOwn))
+						} else {
+							require.Equal(t, expectNew, scanIter(t, iterOwn))
+						}
+					}
+				}
+			})
+		})
+	}
+}
+
+// TestEngineRangeKeyMutations tests that range key mutations work as
+// expected, both for the engine directly and for batches.
+func TestEngineRangeKeyMutations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "batch", func(t *testing.T, useBatch bool) {
+		eng := NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		rw := ReadWriter(eng)
+		if useBatch {
+			// TODO(erikgrinaker): Pebble batches do not read back range key writes
+			// after the iterator was created, which breaks the iterator reuse in
+			// storage.Batch. See: https://github.com/cockroachdb/pebble/issues/1638
+			//
+			//rw = eng.NewBatch()
+			//defer rw.Close()
+			return
+		}
+
+		require.True(t, rw.SupportsRangeKeys())
+
+		// Check errors for invalid, empty, and zero-length range keys. Not
+		// exhaustive, since we assume validation dispatches to
+		// MVCCRangeKey.Validate() which is tested separately.
+		empty := MVCCRangeKey{}
+		invalid := rangeKey("b", "a", 1)
+		zeroLength := rangeKey("a", "a", 1)
+
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(empty))
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(invalid))
+		require.Error(t, rw.ExperimentalPutMVCCRangeKey(zeroLength))
+
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(empty))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(invalid))
+		require.Error(t, rw.ExperimentalClearMVCCRangeKey(zeroLength))
+
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(empty.StartKey, empty.EndKey))
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(invalid.StartKey, invalid.EndKey))
+		require.Error(t, rw.ExperimentalClearAllMVCCRangeKeys(zeroLength.StartKey, zeroLength.EndKey))
+
+		require.Empty(t, scanRangeKeys(t, rw))
+
+		// Write some range keys and read the fragmented keys back.
+		rangeKeys := []MVCCRangeKey{
+			rangeKey("a", "d", 1),
+			rangeKey("f", "h", 1),
+			rangeKey("c", "g", 2),
+		}
+		for _, rangeKey := range rangeKeys {
+			require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey))
+		}
+		require.Equal(t, []MVCCRangeKey{
+			rangeKey("a", "c", 1),
+			rangeKey("c", "d", 2),
+			rangeKey("c", "d", 1),
+			rangeKey("d", "f", 2),
+			rangeKey("f", "g", 2),
+			rangeKey("f", "g", 1),
+			rangeKey("g", "h", 1),
+		}, scanRangeKeys(t, rw))
+
+		// Clear the f-g portion of [f-h)@1, twice for idempotency. This should not
+		// affect any other range keys, apart from removing the fragment boundary
+		// at f for [d-g)@2.
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.NoError(t, rw.ExperimentalClearMVCCRangeKey(rangeKey("f", "g", 1)))
+		require.Equal(t, []MVCCRangeKey{
+			rangeKey("a", "c", 1),
+			rangeKey("c", "d", 2),
+			rangeKey("c", "d", 1),
+			rangeKey("d", "g", 2),
+			rangeKey("g", "h", 1),
+		}, scanRangeKeys(t, rw))
+
+		// Write [e-f)@2 on top of existing [d-g)@2. This should be a noop.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("e", "f", 2)))
+		require.Equal(t, []MVCCRangeKey{
+			rangeKey("a", "c", 1),
+			rangeKey("c", "d", 2),
+			rangeKey("c", "d", 1),
+			rangeKey("d", "g", 2),
+			rangeKey("g", "h", 1),
+		}, scanRangeKeys(t, rw))
+
+		// Clear all range keys in the [c-f) span.
+		require.NoError(t, rw.ExperimentalClearAllMVCCRangeKeys(roachpb.Key("c"), roachpb.Key("f")))
+		require.Equal(t, []MVCCRangeKey{
+			rangeKey("a", "c", 1),
+			rangeKey("f", "g", 2),
+			rangeKey("g", "h", 1),
+		}, scanRangeKeys(t, rw))
+
+		// Write another range key to bridge the [c-g)@1 gap.
+		require.NoError(t, rw.ExperimentalPutMVCCRangeKey(rangeKey("c", "g", 1)))
+		require.Equal(t, []MVCCRangeKey{
+			rangeKey("a", "f", 1),
+			rangeKey("f", "g", 2),
+			rangeKey("f", "g", 1),
+			rangeKey("g", "h", 1),
+		}, scanRangeKeys(t, rw))
+
+		// If using a batch, make sure nothing has been written to the engine, then
+		// commit the batch and make sure it gets written to the engine.
+		if useBatch {
+			require.Empty(t, scanRangeKeys(t, eng))
+			require.NoError(t, rw.(Batch).Commit(true))
+			require.Equal(t, []MVCCRangeKey{
+				rangeKey("a", "f", 1),
+				rangeKey("f", "g", 2),
+				rangeKey("f", "g", 1),
+				rangeKey("g", "h", 1),
+			}, scanRangeKeys(t, eng))
+		}
+	})
+}
+
+// TestEngineRangeKeysUnsupported tests that engines without range key
+// support behave as expected, i.e. writes fail but reads degrade gracefully.
+func TestEngineRangeKeysUnsupported(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Set up an engine with a version that doesn't support range keys.
+	version := clusterversion.ByKey(clusterversion.EnsurePebbleFormatVersionRangeKeys - 1)
+	st := cluster.MakeTestingClusterSettingsWithVersions(version, version, true)
+
+	eng := NewDefaultInMemForTesting(Settings(st))
+	defer eng.Close()
+
+	require.NoError(t, eng.PutMVCC(pointKey("a", 1), []byte("a1")))
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	snapshot := eng.NewSnapshot()
+	defer snapshot.Close()
+	readOnly := eng.NewReadOnly(StandardDurability)
+	defer readOnly.Close()
+
+	writers := map[string]Writer{
+		"engine": eng,
+		"batch":  batch,
+	}
+	readers := map[string]Reader{
+		"engine":   eng,
+		"batch":    batch,
+		"snapshot": snapshot,
+		"readonly": readOnly,
+	}
+
+	// Range key puts should error, but clears are noops (since old databases
+	// cannot contain range keys by definition).
+	for name, w := range writers {
+		t.Run(fmt.Sprintf("write/%s", name), func(t *testing.T) {
+			rangeKey := rangeKey("a", "b", 2)
+			err := w.ExperimentalPutMVCCRangeKey(rangeKey)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "range keys not supported")
+			require.NoError(t, w.ExperimentalClearMVCCRangeKey(rangeKey))
+			require.NoError(t, w.ExperimentalClearAllMVCCRangeKeys(rangeKey.StartKey, rangeKey.EndKey))
+		})
+	}
+
+	// All range key iterators should degrade gracefully to point key iterators,
+	// and be empty for IterKeyTypeRangesOnly.
+	keyTypes := map[string]IterKeyType{
+		"PointsOnly":      IterKeyTypePointsOnly,
+		"PointsAndRanges": IterKeyTypePointsAndRanges,
+		"RangesOnly":      IterKeyTypeRangesOnly,
+	}
+	for name, r := range readers {
+		for keyTypeName, keyType := range keyTypes {
+			t.Run(fmt.Sprintf("read/%s/%s", name, keyTypeName), func(t *testing.T) {
+				require.False(t, r.SupportsRangeKeys())
+
+				iter := r.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+					KeyTypes:   keyType,
+					UpperBound: keys.MaxKey,
+				})
+				defer iter.Close()
+
+				iter.SeekGE(pointKey("a", 0))
+
+				ok, err := iter.Valid()
+				require.NoError(t, err)
+
+				if keyType == IterKeyTypeRangesOnly {
+					// With RangesOnly, the iterator must be empty.
+					require.False(t, ok)
+					hasPoint, hasRange := iter.HasPointAndRange()
+					require.False(t, hasPoint)
+					require.False(t, hasRange)
+					return
+				}
+
+				require.True(t, ok)
+				require.Equal(t, pointKey("a", 1), iter.UnsafeKey())
+				require.Equal(t, []byte("a1"), iter.UnsafeValue())
+
+				hasPoint, hasRange := iter.HasPointAndRange()
+				require.True(t, hasPoint)
+				require.False(t, hasRange)
+				rangeStart, rangeEnd := iter.RangeBounds()
+				require.Nil(t, rangeStart)
+				require.Nil(t, rangeEnd)
+				require.Empty(t, iter.RangeKeys())
+
+				// Exhaust the iterator.
+				iter.Next()
+				ok, err = iter.Valid()
+				require.NoError(t, err)
+				require.False(t, ok)
+			})
+		}
+	}
+}
+
+func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKey {
+	t.Helper()
+
+	iter := r.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: keys.LocalMax})
+
+	var rangeKeys []MVCCRangeKey
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		for _, rangeKey := range iter.RangeKeys() {
+			rangeKeys = append(rangeKeys, rangeKey.Clone())
+		}
+		iter.Next()
+	}
+	return rangeKeys
+}
+
+func scanIter(t *testing.T, iter MVCCIterator) []interface{} {
+	t.Helper()
+
+	iter.SeekGE(MVCCKey{Key: keys.LocalMax})
+
+	var keys []interface{}
+	var prevRangeStart roachpb.Key
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange {
+			if rangeStart, _ := iter.RangeBounds(); !rangeStart.Equal(prevRangeStart) {
+				for _, rk := range iter.RangeKeys() {
+					keys = append(keys, rk.Clone())
+				}
+				prevRangeStart = rangeStart.Clone()
+			}
+		}
+		if hasPoint {
+			keys = append(keys, MVCCKeyValue{
+				Key:   iter.Key(),
+				Value: iter.Value(),
+			})
+		}
+		iter.Next()
+	}
+	return keys
 }

@@ -233,7 +233,8 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	if reader.ConsistentIterators() {
 		iter = reader.NewMVCCIterator(MVCCKeyIterKind, opts)
 	} else {
-		iter = newPebbleIterator(nil, intentIter.GetRawIter(), opts, StandardDurability)
+		iter = newPebbleIterator(
+			nil, intentIter.GetRawIter(), opts, StandardDurability, reader.SupportsRangeKeys())
 	}
 
 	*iiIter = intentInterleavingIter{
@@ -299,6 +300,36 @@ func (i *intentInterleavingIter) makeLowerLimitKey() roachpb.Key {
 	return i.intentLimitKeyBuf
 }
 
+// maybeSkipIntentRangeKey will step iter once (forwards or backwards) if iter
+// is positioned on a bare range key with the same key position (either start
+// key or seek key) as the current intentIter intent. We consider an intent with
+// timestamp 0 to be colocated with the bare key, such that seeking to the bare
+// intent key will not surface the bare range key by itself first (similarly to
+// seeking to an existing version of a point key).
+//
+// In the forward direction, this is necessary when intentIter lands on a new
+// intent, to ensure iter is positioned on the provisional value instead of the
+// bare range key. This must be done after positioning both iterators.
+//
+// In the reverse direction, this is necessary to skip over the bare range key
+// when leaving the intent. This must be done before stepping either iterator.
+//
+// NB: This is called before computePos(), and can't rely on intentCmp.
+func (i *intentInterleavingIter) maybeSkipIntentRangeKey() error {
+	if i.iterValid {
+		hasPoint, hasRange := i.iter.HasPointAndRange()
+		if hasRange && !hasPoint && i.iterKey.Key.Equal(i.intentKey) {
+			if i.dir == 1 {
+				i.iter.Next()
+			} else {
+				i.iter.Prev()
+			}
+			return i.tryDecodeKey()
+		}
+	}
+	return nil
+}
+
 func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 	i.dir = +1
 	i.valid = true
@@ -332,6 +363,9 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
 			return
 		}
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
+		}
 	}
 	i.computePos()
 }
@@ -359,6 +393,9 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	}
 	iterState, err := i.intentIter.SeekEngineKeyGEWithLimit(engineKey, limitKey)
 	if err = i.tryDecodeLockKey(iterState, err); err != nil {
+		return
+	}
+	if err := i.maybeSkipIntentRangeKey(); err != nil {
 		return
 	}
 	i.computePos()
@@ -406,6 +443,8 @@ func (i *intentInterleavingIter) computePos() {
 	}
 	if i.intentKey == nil {
 		i.intentCmp = i.dir
+	} else if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
+		i.intentCmp = 1 // bare range keys sort before intents
 	} else {
 		i.intentCmp = i.intentKey.Compare(i.iterKey.Key)
 	}
@@ -494,6 +533,9 @@ func (i *intentInterleavingIter) Next() {
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
 				return
 			}
+			if err := i.maybeSkipIntentRangeKey(); err != nil {
+				return
+			}
 			i.computePos()
 			return
 		}
@@ -510,6 +552,9 @@ func (i *intentInterleavingIter) Next() {
 			// version of that key.
 			i.iter.Next()
 			if err := i.tryDecodeKey(); err != nil {
+				return
+			}
+			if err := i.maybeSkipIntentRangeKey(); err != nil {
 				return
 			}
 			i.intentCmp = 0
@@ -539,6 +584,9 @@ func (i *intentInterleavingIter) Next() {
 			}
 			iterState, err := i.intentIter.NextEngineKeyWithLimit(limitKey)
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
+				return
+			}
+			if err := i.maybeSkipIntentRangeKey(); err != nil {
 				return
 			}
 			i.intentCmp = +1
@@ -579,6 +627,9 @@ func (i *intentInterleavingIter) Next() {
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
 			return
 		}
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
+		}
 		i.intentCmp = +1
 		if util.RaceEnabled && i.intentKey != nil {
 			cmp := i.intentKey.Compare(i.iterKey.Key)
@@ -604,6 +655,9 @@ func (i *intentInterleavingIter) Next() {
 			if err = i.tryDecodeLockKey(iterState, err); err != nil {
 				return
 			}
+		}
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
 		}
 		i.computePos()
 	}
@@ -641,6 +695,9 @@ func (i *intentInterleavingIter) NextKey() {
 		if err := i.tryDecodeLockKey(iterState, err); err != nil {
 			return
 		}
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
+		}
 		i.computePos()
 		return
 	}
@@ -657,6 +714,9 @@ func (i *intentInterleavingIter) NextKey() {
 		if err = i.tryDecodeLockKey(iterState, err); err != nil {
 			return
 		}
+	}
+	if err := i.maybeSkipIntentRangeKey(); err != nil {
+		return
 	}
 	i.computePos()
 }
@@ -713,6 +773,24 @@ func (i *intentInterleavingIter) Value() []byte {
 		return i.intentIter.Value()
 	}
 	return i.iter.Value()
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
+	// NB: We assume that EngineIterators, i.e. intentIter, cannot have range keys.
+	hasPoint, hasRange := i.iter.HasPointAndRange()
+	hasPoint = hasPoint || (i.valid && i.isCurAtIntentIter())
+	return hasPoint, hasRange
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeBounds() (roachpb.Key, roachpb.Key) {
+	return i.iter.RangeBounds()
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeKeys() []MVCCRangeKey {
+	return i.iter.RangeKeys()
 }
 
 func (i *intentInterleavingIter) Close() {
@@ -830,6 +908,9 @@ func (i *intentInterleavingIter) Prev() {
 			if err := i.tryDecodeKey(); err != nil {
 				return
 			}
+			if err := i.maybeSkipIntentRangeKey(); err != nil {
+				return
+			}
 			i.intentCmp = +1
 			if util.RaceEnabled && i.iterValid {
 				cmp := i.intentKey.Compare(i.iterKey.Key)
@@ -862,7 +943,11 @@ func (i *intentInterleavingIter) Prev() {
 		// The iterator is positioned at an intent in intentIter, and iter is
 		// exhausted or positioned at a versioned value of a preceding key.
 		// Stepping intentIter backward will ensure that intentKey is <= the key
-		// of iter (when neither is exhausted).
+		// of iter (when neither is exhausted). We also skip over the bare range
+		// key whose start key is colocated with the intent, if any.
+		if err := i.maybeSkipIntentRangeKey(); err != nil {
+			return
+		}
 		var limitKey roachpb.Key
 		if i.iterValid {
 			limitKey = i.makeLowerLimitKey()
