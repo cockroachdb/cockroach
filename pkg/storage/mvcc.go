@@ -101,6 +101,21 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
+// MVCCRangeKeyValue contains the raw bytes of the value for a key.
+type MVCCRangeKeyValue struct {
+	RangeKey MVCCRangeKey
+	Value    []byte
+}
+
+// Clone returns a copy of the MVCCRangeKeyValue.
+func (r MVCCRangeKeyValue) Clone() MVCCRangeKeyValue {
+	r.RangeKey = r.RangeKey.Clone()
+	if r.Value != nil {
+		r.Value = append([]byte(nil), r.Value...)
+	}
+	return r
+}
+
 // optionalValue represents an optional roachpb.Value. It is preferred
 // over a *roachpb.Value to avoid the forced heap allocation.
 type optionalValue struct {
@@ -3401,7 +3416,8 @@ func MVCCResolveWriteIntentRange(
 		mvccIter = rw.NewMVCCIterator(MVCCKeyIterKind, iterOpts)
 	} else {
 		// For correctness, we need mvccIter to be consistent with engineIter.
-		mvccIter = newPebbleIterator(nil, engineIter.GetRawIter(), iterOpts, StandardDurability)
+		mvccIter = newPebbleIterator(
+			nil, engineIter.GetRawIter(), iterOpts, StandardDurability, rw.SupportsRangeKeys())
 	}
 	iterAndBuf := GetBufUsingIter(mvccIter)
 	defer func() {
