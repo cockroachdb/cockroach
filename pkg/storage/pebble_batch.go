@@ -413,6 +413,31 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 	return nil
 }
 
+// ExperimentalClearMVCCRangeKey implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyUnset(
+		encodeMVCCKeyPrefix(rangeKey.StartKey),
+		encodeMVCCKeyPrefix(rangeKey.EndKey),
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		nil)
+}
+
+// ExperimentalPutMVCCRangeKey implements the Batch interface.
+func (p *pebbleBatch) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeySet(
+		encodeMVCCKeyPrefix(rangeKey.StartKey),
+		encodeMVCCKeyPrefix(rangeKey.EndKey),
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		value,
+		nil)
+}
+
 // Merge implements the Batch interface.
 func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {

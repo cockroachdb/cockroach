@@ -99,6 +99,12 @@ type MVCCKeyValue struct {
 	Value []byte
 }
 
+// MVCCRangeKeyValue represents a ranged key/value pair.
+type MVCCRangeKeyValue struct {
+	Key   MVCCRangeKey
+	Value []byte
+}
+
 // optionalValue represents an optional roachpb.Value. It is preferred
 // over a *roachpb.Value to avoid the forced heap allocation.
 type optionalValue struct {
@@ -2202,6 +2208,33 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
+// ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at
+// the given timestamp using a range tombstone (rather than point tombstones).
+// This operation is non-transactional, but will check for existing intents and
+// return a WriteIntentError containing up to maxIntents intents.
+//
+// This function is EXPERIMENTAL. Range tombstones are not supported throughout
+// the MVCC API, and the on-disk format is unstable.
+//
+// TODO(erikgrinaker): Needs conflict handling, e.g. WriteTooOldError.
+// TODO(erikgrinaker): Needs MVCCStats handling.
+func ExperimentalMVCCDeleteRangeUsingTombstone(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	maxIntents int64,
+) error {
+	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+		return err
+	} else if len(intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: intents}
+	}
+	return rw.ExperimentalPutMVCCRangeKey(MVCCRangeKey{
+		StartKey: startKey, EndKey: endKey, Timestamp: timestamp}, nil)
+}
+
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 	stats := iteratorStats.Stats
 	if traceSpan != nil {
@@ -3928,4 +3961,36 @@ func ComputeStatsForRange(
 
 	ms.LastUpdateNanos = nowNanos
 	return ms, nil
+}
+
+// MVCCScanRangeTombstones returns a list of range tombstones across the given
+// span at the given timestamp, in end,timestamp order rather than
+// start,timestamp. Any tombstones that straddle the bounds will be truncated.
+func MVCCScanRangeTombstones(
+	ctx context.Context, reader Reader, start, end roachpb.Key, ts hlc.Timestamp,
+) ([]MVCCRangeKey, error) {
+	var tombstones []MVCCRangeKey
+	iter := NewMVCCRangeKeyIterator(reader, MVCCRangeKeyIterOptions{
+		LowerBound:   start,
+		UpperBound:   end,
+		MaxTimestamp: ts,
+	})
+	for {
+		ok, err := iter.Valid()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		// Skip non-tombstone range keys (we don't expect these to exist currently).
+		if len(iter.Value()) == 0 {
+			tombstones = append(tombstones, iter.Key())
+		}
+		iter.Next()
+	}
+	return tombstones, nil
 }
