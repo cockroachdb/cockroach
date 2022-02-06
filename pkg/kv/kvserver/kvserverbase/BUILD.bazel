@@ -6,6 +6,7 @@ go_library(
         "base.go",
         "bulk_adder.go",
         "knobs.go",
+        "raftversion.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase",
     visibility = ["//visibility:public"],

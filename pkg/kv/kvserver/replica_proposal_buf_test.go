@@ -84,7 +84,7 @@ func (t *testProposerRaft) Step(msg raftpb.Message) error {
 	}
 	// Decode and save all the commands.
 	for _, e := range msg.Entries {
-		_ /* idKey */, encodedCommand := DecodeRaftCommand(e.Data)
+		_ /* idKey */, encodedCommand := kvserverbase.DecodeRaftCommand(e.Data)
 		t.proposals = append(t.proposals, kvserverpb.RaftCommand{})
 		if err := protoutil.Unmarshal(encodedCommand, &t.proposals[len(t.proposals)-1]); err != nil {
 			return err
@@ -249,11 +249,11 @@ func (pc proposalCreator) newProposal(ba roachpb.BatchRequest) *ProposalData {
 
 func (pc proposalCreator) encodeProposal(p *ProposalData) []byte {
 	cmdLen := p.command.Size()
-	needed := raftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, raftCommandPrefixLen, needed)
-	encodeRaftCommandPrefix(data, raftVersionStandard, p.idKey)
-	data = data[:raftCommandPrefixLen+p.command.Size()]
-	if _, err := protoutil.MarshalTo(p.command, data[raftCommandPrefixLen:]); err != nil {
+	needed := kvserverbase.RaftCommandPrefixLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+	data := make([]byte, kvserverbase.RaftCommandPrefixLen, needed)
+	kvserverbase.EncodeRaftCommandPrefix(data, kvserverbase.RaftVersionStandard, p.idKey)
+	data = data[:kvserverbase.RaftCommandPrefixLen+p.command.Size()]
+	if _, err := protoutil.MarshalTo(p.command, data[kvserverbase.RaftCommandPrefixLen:]); err != nil {
 		panic(err)
 	}
 	return data

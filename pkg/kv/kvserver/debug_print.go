@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -216,7 +217,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 		if len(ent.Data) == 0 {
 			return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 		}
-		_, cmdData := DecodeRaftCommand(ent.Data)
+		_, cmdData := kvserverbase.DecodeRaftCommand(ent.Data)
 		if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 			return "", err
 		}
