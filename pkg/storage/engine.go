@@ -72,6 +72,15 @@ type SimpleMVCCIterator interface {
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
+	// HasPointAndRange returns whether the current iterator position has a point
+	// key and/or a range key. Range keys are only emitted when requested via
+	// IterOptions.KeyTypes.
+	HasPointAndRange() (bool, bool)
+	// RangeBounds returns the range bounds for the current range key, if any.
+	RangeBounds() (roachpb.Key, roachpb.Key)
+	// RangeKeys returns the range key fragments at the current iterator position,
+	// if any.
+	RangeKeys() []MVCCRangeKeyValue
 }
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
@@ -309,7 +318,25 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	// KeyTypes specifies the types of keys to surface: point and/or range keys.
+	// Use HasPointAndRange() to determine which key type is present at a given
+	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
+	KeyTypes IterKeyType
 }
+
+// IterKeyType configures which types of keys an iterator should surface.
+//
+// TODO(erikgrinaker): Combine this with MVCCIterKind somehow.
+type IterKeyType = pebble.IterKeyType
+
+const (
+	// IterKeyTypePointsOnly iterates over point keys only.
+	IterKeyTypePointsOnly = pebble.IterKeyTypePointsOnly
+	// IterKeyTypePointsAndRanges iterates over both point and range keys.
+	IterKeyTypePointsAndRanges = pebble.IterKeyTypePointsAndRanges
+	// IterKeyTypeRangesOnly iterates over only range keys.
+	IterKeyTypeRangesOnly = pebble.IterKeyTypeRangesOnly
+)
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
 // by the caller.
@@ -583,6 +610,38 @@ type Writer interface {
 	// It is safe to modify the contents of the arguments after ClearIterRange
 	// returns.
 	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
+
+	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
+	// (inclusive) to end (exclusive) at the given timestamp. For any range key
+	// that straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intented for MVCC garbage collection and similar
+	// internal use. It mutates MVCC history, and does not check for intents or
+	// other conflicts.
+	//
+	// This method is EXPERIMENTAL. Range keys are not supported throughout the
+	// MVCC API, and the on-disk format is unstable.
+	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
+
+	// ExperimentalPutMVCCRangeKey writes a value to an MVCC range key. It is
+	// currently only used for range tombstones, which have a value of nil.
+	// Range keys exist separately from point keys in Pebble, and must be
+	// accessed via specialized iterator options and methods. See e.g.
+	// IterOptions.KeyTypes and SimpleMVCCIterator.RangeKeys().
+	//
+	// A range key does not have a distinct identity, but should be considered a
+	// key continuum. They will be fragmented by Pebble such that all overlapping
+	// range keys between two fragment bounds form a "stack" of range key
+	// fragments. This fragmentation is non-deterministic, and will also depend on
+	// the internal SST structure (and thus on Pebble compactions) and the store's
+	// write history. They will also split and merge along with CRDB ranges, can
+	// be partially removed via ExperimentalClearMVCCRangeKey, and may be
+	// truncated by bounded scans or iterators.
+	//
+	// This function is EXPERIMENTAL. Range keys are not handled throughout the
+	// MVCC API, and the on-disk format is unstable.
+	ExperimentalPutMVCCRangeKey(MVCCRangeKey, []byte) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
