@@ -11432,6 +11432,11 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 		},
 		{
 			// Case of a rollback after an unsuccessful implicit commit.
+			// The rollback request is not considered an authoritative indication that
+			// the transaction is not implicitly committed (i.e. the txn coordinator
+			// may have given up on the txn before it heard the result of a commit one
+			// way or another), so an IndeterminateCommitError is returned to force
+			// transaction recovery to be performed.
 			name: "end transaction (abort) after end transaction (stage)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
@@ -11440,6 +11445,27 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			expError: "found txn in indeterminate STAGING state",
+			expTxn:   txnWithStagingStatusAndInFlightWrites,
+		},
+		{
+			// Case of a rollback after an unsuccessful implicit commit and txn
+			// restart. Because the rollback request uses a newer epoch than the
+			// staging record, it is considered an authoritative indication that the
+			// transaction was never implicitly committed and was later restarted, so
+			// the rollback succeeds and the record is immediately aborted.
+			name: "end transaction (abort) with epoch bump after end transaction (stage)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				et.InFlightWrites = inFlightWrites
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, now)
+				et, etH := endTxnArgs(clone, false /* commit */)
 				return sendWrappedWithErr(etH, &et)
 			},
 			// The transaction record will be eagerly GC-ed.
@@ -11461,17 +11487,25 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "end transaction (abort) without eager gc after end transaction (stage)",
+			// Case of a rollback after an unsuccessful implicit commit.
+			name: "end transaction (abort) with epoch bump, without eager gc after end transaction (stage)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, true /* commit */)
 				et.InFlightWrites = inFlightWrites
 				return sendWrappedWithErr(etH, &et)
 			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, now)
+				et, etH := endTxnArgs(clone, false /* commit */)
 				return sendWrappedWithErr(etH, &et)
 			},
-			expTxn:           txnWithStatus(roachpb.ABORTED),
+			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, now)
+				record.Epoch = txn.Epoch + 1
+				record.WriteTimestamp.Forward(now)
+				return record
+			},
 			disableTxnAutoGC: true,
 		},
 		{
