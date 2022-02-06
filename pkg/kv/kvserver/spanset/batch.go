@@ -176,6 +176,21 @@ func (i *MVCCIterator) UnsafeValue() []byte {
 	return i.i.UnsafeValue()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *MVCCIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeBounds() roachpb.Span {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *MVCCIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+	panic("not implemented")
+}
+
 // ComputeStats is part of the storage.MVCCIterator interface.
 func (i *MVCCIterator) ComputeStats(
 	start, end roachpb.Key, nowNanos int64,
@@ -476,6 +491,11 @@ func (s spanSetReader) ConsistentIterators() bool {
 	return s.r.ConsistentIterators()
 }
 
+// SupportsRangeKeys implements the storage.Reader interface.
+func (s spanSetReader) SupportsRangeKeys() bool {
+	return s.r.SupportsRangeKeys()
+}
+
 // PinEngineStateForIterators implements the storage.Reader interface.
 func (s spanSetReader) PinEngineStateForIterators() error {
 	return s.r.PinEngineStateForIterators()
@@ -587,6 +607,18 @@ func (s spanSetWriter) ClearIterRange(start, end roachpb.Key) error {
 		return err
 	}
 	return s.w.ClearIterRange(start, end)
+}
+
+func (s spanSetWriter) ExperimentalPutMVCCRangeKey(storage.MVCCRangeKey, storage.MVCCValue) error {
+	panic("not implemented")
+}
+
+func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+func (s spanSetWriter) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+	panic("not implemented")
 }
 
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {

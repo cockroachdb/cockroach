@@ -41,12 +41,91 @@ func init() {
 
 // SimpleMVCCIterator is an interface for iterating over key/value pairs in an
 // engine. SimpleMVCCIterator implementations are thread safe unless otherwise
-// noted. SimpleMVCCIterator is a subset of the functionality offered by MVCCIterator.
+// noted. SimpleMVCCIterator is a subset of the functionality offered by
+// MVCCIterator.
+//
+// The iterator exposes both point keys and range keys. Range keys are only
+// emitted when enabled via IterOptions.KeyTypes. Currently, all range keys are
+// MVCC range tombstones, and this is enforced during writes.
+//
+// Range keys and point keys exist separately in Pebble. A specific key position
+// can have both a point key and multiple range keys overlapping it. Their
+// properties are accessed via:
+//
+// HasPointAndRange(): Key types present at the current position.
+// UnsafeKey():        Current position (point key if any).
+// UnsafeValue():      Current point key value (if any).
+// RangeBounds():      Start,end bounds of range keys at current position.
+// RangeKeys():        All range keys/values overlapping current position.
+//
+// Consider the following point keys and range keys:
+//
+//     4: a4  b4
+//     3: [-------)
+//     2: [-------)
+//     1:     b1  c1
+//        a   b   c
+//
+// Range keys cover a span between two roachpb.Key bounds (start inclusive, end
+// exclusive) and contain timestamp/value pairs. They overlap *all* point key
+// versions within their key bounds regardless of timestamp. For example, when
+// the iterator is positioned on b@4, it will also expose [a-c)@3 and [a-c)@2.
+//
+// During iteration with IterKeyTypePointsAndRanges, range keys are emitted at
+// their start key and at every overlapping point key. For example, iterating
+// across the above span would emit this sequence:
+//
+// UnsafeKey HasPointAndRange UnsafeValue RangeKeys
+// a         false,true       -           [a-c)@3 [a-c)@2
+// a@4       true,true        a4          [a-c)@3 [a-c)@2
+// b@4       true,true        b4          [a-c)@3 [a-c)@2
+// b@1       true,true        b1          [a-c)@3 [a-c)@2
+// c@1       true,false       c1          -
+//
+// MVCCIterator reverse iteration yields the above sequence in reverse.
+// Notably, bare range keys are still emitted at their start key (not end key),
+// so they will be emitted last in this example.
+//
+// When using SeekGE within range key bounds, the iterator may land on the bare
+// range key first, unless seeking exactly to an existing point key. E.g.:
+//
+// SeekGE UnsafeKey HasPointAndRange UnsafeValue RangeKeys
+// b      b         false,true       -           [a-c)@3 [a-c)@2
+// b@5    b@5       false,true       -           [a-c)@3 [a-c)@2
+// b@4    b@4       true,true        b@4         [a-c)@3 [a-c)@2
+// b@3    b@3       false,true       -           [a-c)@3 [a-c)@2
+//
+// Note that intents (with timestamp 0) encode to a bare roachpb.Key, so they
+// will be colocated with a range key start bound. For example, if there was an
+// intent on a in the above example, then both SeekGE(a) and forward iteration
+// would land on a@0 and [a-c)@3,[a-c)@2 simultaneously, instead of the bare
+// range keys first.
+//
+// Range keys do not have a stable, discrete identity, and should be
+// considered a continuum: they may be merged or fragmented by other range key
+// writes, split and merged along with CRDB ranges, partially removed by GC,
+// and truncated by iterator bounds.
+//
+// Range keys are fragmented by Pebble such that all overlapping range keys
+// between two keys form a stack of range key fragments at different timestamps.
+// For example, writing [a-e)@1 and [c-g)@2 will yield this fragment structure:
+//
+//     2:     |---|---|
+//     1: |---|---|
+//        a   c   e   g
+//
+// Fragmentation makes all range key properties local, which avoids incurring
+// unnecessary access costs across SSTs and CRDB ranges. It is deterministic
+// on the current range key state, and does not depend on write history.
+// Stacking allows easy access to all range keys overlapping a point key.
+//
+// TODO(erikgrinaker): Write a tech note on range keys and link it here.
 type SimpleMVCCIterator interface {
 	// Close frees up resources held by the iterator.
 	Close()
-	// SeekGE advances the iterator to the first key in the engine which
-	// is >= the provided key.
+	// SeekGE advances the iterator to the first key in the engine which is >= the
+	// provided key. This may be in the middle of a bare range key straddling the
+	// seek key.
 	SeekGE(key MVCCKey)
 	// Valid must be called after any call to Seek(), Next(), Prev(), or
 	// similar methods. It returns (true, nil) if the iterator points to
@@ -56,15 +135,23 @@ type SimpleMVCCIterator interface {
 	// range, or (false, err) if an error has occurred. Valid() will
 	// never return true with a non-nil error.
 	Valid() (bool, error)
-	// Next advances the iterator to the next key/value in the
-	// iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the last key.
+	// Next advances the iterator to the next key in the iteration. After this
+	// call, Valid() will be true if the iterator was not positioned at the last
+	// key.
 	Next()
 	// NextKey advances the iterator to the next MVCC key. This operation is
 	// distinct from Next which advances to the next version of the current key
 	// or the next key if the iterator is currently located at the last version
 	// for a key. NextKey must not be used to switch iteration direction from
 	// reverse iteration to forward iteration.
+	//
+	// If NextKey() lands on a bare range key, it is possible that there exists a
+	// versioned point key at the start key too. Calling NextKey() again would
+	// skip over this point key, since the start key was already emitted. If the
+	// caller wants to see it, it must call Next() to check for it. Note that
+	// this is not the case with intents: they don't have a timestamp, so the
+	// encoded key is identical to the range key's start bound, and they will
+	// be emitted together at that position.
 	NextKey()
 	// UnsafeKey returns the same value as Key, but the memory is invalidated on
 	// the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
@@ -72,6 +159,21 @@ type SimpleMVCCIterator interface {
 	// UnsafeValue returns the same value as Value, but the memory is
 	// invalidated on the next call to {Next,NextKey,Prev,SeekGE,SeekLT,Close}.
 	UnsafeValue() []byte
+	// HasPointAndRange returns whether the current iterator position has a point
+	// key and/or a range key. If Valid() returns true, one of these will be true,
+	// otherwise they are both false. For details on range keys, see comment on
+	// SimpleMVCCIterator.
+	HasPointAndRange() (bool, bool)
+	// RangeBounds returns the range bounds for the current range key, or an
+	// empty span if there are none. The returned keys are only valid until the
+	// next iterator call.
+	RangeBounds() roachpb.Span
+	// RangeKeys returns all range keys (with different timestamps) at the current
+	// key position, or an empty list if there are none. When at a point key, it
+	// will return all range keys overlapping that point key. The keys are only
+	// valid until the next iterator operation. For details on range keys, see
+	// comment on SimpleMVCCIterator.
+	RangeKeys() []MVCCRangeKeyValue
 }
 
 // IteratorStats is returned from {MVCCIterator,EngineIterator}.Stats.
@@ -103,15 +205,19 @@ type IteratorStats struct {
 // MVCCKey.Timestamp.IsEmpty()).
 //
 // MVCCIterator implementations are thread safe unless otherwise noted.
+//
+// For details on range keys and iteration, see comment on SimpleMVCCIterator.
 type MVCCIterator interface {
 	SimpleMVCCIterator
 
-	// SeekLT advances the iterator to the first key in the engine which
-	// is < the provided key.
+	// SeekLT advances the iterator to the first key in the engine which is < the
+	// provided key. Unlike SeekGE, when calling SeekLT within range key bounds
+	// this will not land on the seek key, but rather on the closest point key
+	// overlapping the range key or the range key's start bound.
 	SeekLT(key MVCCKey)
-	// Prev moves the iterator backward to the previous key/value
-	// in the iteration. After this call, Valid() will be true if the
-	// iterator was not positioned at the first key.
+	// Prev moves the iterator backward to the previous key in the iteration.
+	// After this call, Valid() will be true if the iterator was not positioned at
+	// the first key.
 	Prev()
 
 	// SeekIntentGE is a specialized version of SeekGE(MVCCKey{Key: key}), when
@@ -121,7 +227,9 @@ type MVCCIterator interface {
 	// keys by avoiding the need to iterate over many deleted intents.
 	SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID)
 
-	// Key returns the current key.
+	// Key returns the current key position. This may be a point key, or
+	// the current position inside a range key (typically the start key
+	// or the seek key when using SeekGE within its bounds).
 	Key() MVCCKey
 	// UnsafeRawKey returns the current raw key which could be an encoded
 	// MVCCKey, or the more general EngineKey (for a lock table key).
@@ -140,7 +248,7 @@ type MVCCIterator interface {
 	// currently used by callers who pass around key information as a []byte --
 	// this seems avoidable, and we should consider cleaning up the callers.
 	UnsafeRawMVCCKey() []byte
-	// Value returns the current value as a byte slice.
+	// Value returns the current point key value as a byte slice.
 	Value() []byte
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
@@ -278,6 +386,18 @@ type IterOptions struct {
 	// use such an iterator is to use it in concert with an iterator without
 	// timestamp hints, as done by MVCCIncrementalIterator.
 	MinTimestampHint, MaxTimestampHint hlc.Timestamp
+	// KeyTypes specifies the types of keys to surface: point and/or range keys.
+	// Use HasPointAndRange() to determine which key type is present at a given
+	// iterator position, and RangeBounds() and RangeKeys() to access range keys.
+	// Defaults to IterKeyTypePointsOnly. For more details on range keys, see
+	// comment on SimpleMVCCIterator.
+	//
+	// Range keys are only supported for use with MVCCIterators. Enabling them
+	// for EngineIterators will error.
+	//
+	// TODO(erikgrinaker): Consider separating the options structs for
+	// EngineIterator and MVCCIterator.
+	KeyTypes IterKeyType
 	// useL6Filters allows the caller to opt into reading filter blocks for
 	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
 	// Seeks are expected in quick succession, that are also likely to not
@@ -287,6 +407,20 @@ type IterOptions struct {
 	// this is a one-time Seek (where loading the data block directly is better).
 	useL6Filters bool
 }
+
+// IterKeyType configures which types of keys an iterator should surface.
+//
+// TODO(erikgrinaker): Combine this with MVCCIterKind somehow.
+type IterKeyType = pebble.IterKeyType
+
+const (
+	// IterKeyTypePointsOnly iterates over point keys only.
+	IterKeyTypePointsOnly = pebble.IterKeyTypePointsOnly
+	// IterKeyTypePointsAndRanges iterates over both point and range keys.
+	IterKeyTypePointsAndRanges = pebble.IterKeyTypePointsAndRanges
+	// IterKeyTypeRangesOnly iterates over only range keys.
+	IterKeyTypeRangesOnly = pebble.IterKeyTypeRangesOnly
+)
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
 // by the caller.
@@ -457,15 +591,18 @@ type Reader interface {
 	// NewEngineIterator returns a new instance of an EngineIterator over this
 	// engine. The caller must invoke EngineIterator.Close() when finished
 	// with the iterator to free resources. The caller can change IterOptions
-	// after this function returns.
+	// after this function returns. EngineIterators do not support range keys.
 	NewEngineIterator(opts IterOptions) EngineIterator
 	// ConsistentIterators returns true if the Reader implementation guarantees
 	// that the different iterators constructed by this Reader will see the same
-	// underlying Engine state. NB: this only applies to iterators without
-	// timestamp hints (see IterOptions), i.e., even if this returns true, those
-	// iterators can be "inconsistent" in terms of seeing a different engine
-	// state. The only exception to this is a Reader created using NewSnapshot.
+	// underlying Engine state. This is not true about Batch writes: new iterators
+	// will see new writes made to the batch, existing iterators won't.
 	ConsistentIterators() bool
+	// SupportsRangeKeys returns true if the Reader implementation supports
+	// range keys.
+	//
+	// TODO(erikgrinaker): Remove this after 22.2.
+	SupportsRangeKeys() bool
 
 	// PinEngineStateForIterators ensures that the state seen by iterators
 	// without timestamp hints (see IterOptions) is pinned and will not see
@@ -561,6 +698,49 @@ type Writer interface {
 	// per-key storage tombstones (not MVCC tombstones). Any separated
 	// intents/locks will also be cleared.
 	ClearIterRange(start, end roachpb.Key) error
+
+	// ExperimentalClearMVCCRangeKey deletes an MVCC range key from start
+	// (inclusive) to end (exclusive) at the given timestamp. For any range key
+	// that straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Range keys at other timestamps are unaffected.
+	// Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
+
+	// ExperimentalClearAllMVCCRangeKeys deletes all MVCC range keys (i.e. all
+	// versions) from start (inclusive) to end (exclusive). For any range key
+	// that straddles the start and end boundaries, only the segments within the
+	// boundaries will be cleared. Clears are idempotent.
+	//
+	// This method is primarily intended for MVCC garbage collection and similar
+	// internal use.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error
+
+	// ExperimentalPutMVCCRangeKey writes an MVCC range key. It will replace any
+	// overlapping range keys at the given timestamp (even partial overlap). Only
+	// MVCC range tombstones, i.e. an empty value, are currently allowed (other
+	// kinds will need additional handling in MVCC APIs and elsewhere, e.g. stats
+	// and GC).
+	//
+	// Range keys must be accessed using special iterator options and methods,
+	// see SimpleMVCCIterator.RangeKeys() for details.
+	//
+	// TODO(erikgrinaker): Write a tech note on range keys and link it here.
+	//
+	// This method is EXPERIMENTAL: range keys are under active development, and
+	// have severe limitations including being ignored by all KV and MVCC APIs and
+	// only being stored in memory.
+	ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error
 
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
