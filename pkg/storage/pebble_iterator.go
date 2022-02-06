@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -165,6 +166,8 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 	} else if !opts.MinTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
+
+	p.options.KeyTypes = opts.KeyTypes
 
 	if doClone {
 		var err error
@@ -332,6 +335,17 @@ func (p *pebbleIterator) Valid() (bool, error) {
 	// NB: A Pebble Iterator always returns Valid()==false when an error is
 	// present. If Valid() is true, there is no error.
 	if ok := p.iter.Valid(); ok {
+		// TODO(erikgrinaker): Pebble does not seem to respect bounds for range
+		// keys, so for now we invalidate the iterator here instead.
+		if hasPoint, hasRange := p.HasPointAndRange(); !hasPoint && hasRange {
+			start, end := p.iter.RangeBounds()
+			if len(p.options.UpperBound) > 0 && bytes.Compare(start, p.options.UpperBound) >= 0 {
+				return false, nil
+			}
+			if len(p.options.LowerBound) > 0 && bytes.Compare(end, p.options.LowerBound) <= 0 {
+				return false, nil
+			}
+		}
 		// The MVCCIterator interface is broken in that it silently discards
 		// the error when UnsafeKey(), Key() are unable to parse the key as
 		// an MVCCKey. This is especially problematic if the caller is
@@ -573,6 +587,88 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	value := p.UnsafeValue()
 
 	return protoutil.Unmarshal(value, msg)
+}
+
+// HasPointAndRange implements the MVCCIterator interface.
+func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
+	return p.iter.HasPointAndRange()
+}
+
+// RangeBounds implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	start, end := p.iter.RangeBounds()
+
+	// TODO(erikgrinaker): Pebble does not yet truncate range keys to the
+	// LowerBound or UpperBound, so we truncate them here.
+	if len(p.options.LowerBound) > 0 && bytes.Compare(start, p.options.LowerBound) < 0 {
+		start = p.options.LowerBound
+	}
+	if len(p.options.UpperBound) > 0 && bytes.Compare(end, p.options.UpperBound) > 0 {
+		end = p.options.UpperBound
+	}
+
+	// TODO(erikgrinaker): We should surface this error somehow, but for now
+	// we follow UnsafeKey()'s example and silenty return empty bounds.
+	startKey, err := DecodeMVCCKey(start)
+	if err != nil {
+		return nil, nil
+	}
+	endKey, err := DecodeMVCCKey(end)
+	if err != nil {
+		return nil, nil
+	}
+
+	// It's possible for a range key to straddle an SST boundary in between two
+	// versions/timestamps of a key, e.g. [b-c@5),[c@5-e). In this case, Pebble
+	// will return bounds with timestamps. Because we don't allow writing range
+	// keys with timestamp bounds, we know that all timestamps of the key (on both
+	// sides of the boundary) already have the complete set of range key values at
+	// all timestamps.
+	//
+	// We choose the simplest solution here, which is to allow overlapping range
+	// bounds such that at c@6 we claim [b-c\0) and at c@5 we claim [c-e). It
+	// would be possible to guarantee non-overlapping bounds with additional state
+	// tracking and seeks, but that appears non-trivial for every edge case and
+	// has a risk of leaving gaps, which seems more scary than dealing with
+	// overlaps.
+	//
+	// TODO(erikgrinaker): Consider coming up with a solution to guarantee
+	// non-overlapping bounds.
+	if !startKey.Timestamp.IsEmpty() {
+		startKey.Timestamp = hlc.Timestamp{}
+	}
+	if !endKey.Timestamp.IsEmpty() {
+		endKey.Key = endKey.Key.Next()
+		endKey.Timestamp = hlc.Timestamp{}
+	}
+	return startKey.Key, endKey.Key
+}
+
+// RangeKeys implements the MVCCIterator interface.
+//
+// TODO(erikgrinaker): Add unit tests for the range key methods.
+func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
+	startKey, endKey := p.RangeBounds()
+	rangeKeys := p.iter.RangeKeys()
+	rangeValues := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
+
+	for _, rangeKey := range rangeKeys {
+		timestamp, err := decodeMVCCTimestampSuffix(rangeKey.Suffix)
+		if err != nil {
+			// TODO(erikgrinaker): We should surface this error somehow, but for now
+			// we follow UnsafeKey()'s example and silenty return empty bounds.
+			continue
+		}
+		rangeValues = append(rangeValues, MVCCRangeKeyValue{
+			Key: MVCCRangeKey{
+				StartKey:  startKey,
+				EndKey:    endKey,
+				Timestamp: timestamp,
+			},
+			Value: rangeKey.Value,
+		})
+	}
+	return rangeValues
 }
 
 // ComputeStats implements the MVCCIterator interface.
