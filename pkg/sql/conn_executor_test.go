@@ -1230,6 +1230,82 @@ CREATE TABLE t1.test (k INT PRIMARY KEY, v TEXT);
 	})
 }
 
+// TestShowTransferStateError tests that the SHOW TRANSFER STATE statement
+// will return an error as a SQL value whenever a tenant server is not used.
+// For actual tests, see pkg/ccl/testccl/sqlccl.
+func TestShowTransferStateError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	s, sqlConn, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlConn.Exec("SELECT 1")
+	require.NoError(t, err)
+
+	t.Run("without_transfer_key", func(t *testing.T) {
+		rows, err := sqlConn.Query("SHOW TRANSFER STATE")
+		require.NoError(t, err, "show transfer state failed")
+		defer rows.Close()
+
+		resultColumns, err := rows.Columns()
+		require.NoError(t, err)
+
+		const expectedNumColumns = 3
+		if len(resultColumns) != expectedNumColumns {
+			t.Fatalf(
+				"unexpected number of columns in result; expected %d, found %d",
+				expectedNumColumns,
+				len(resultColumns),
+			)
+		}
+
+		var error, sessionState, sessionRevivalToken gosql.NullString
+
+		rows.Next()
+		err = rows.Scan(&error, &sessionState, &sessionRevivalToken)
+		require.NoError(t, err, "unexpected error while reading transfer state")
+
+		require.True(t, error.Valid)
+		require.Equal(t, "session revival tokens are not supported on this cluster", error.String)
+		require.False(t, sessionState.Valid)
+		require.False(t, sessionRevivalToken.Valid)
+	})
+
+	t.Run("with_transfer_key", func(t *testing.T) {
+		rows, err := sqlConn.Query("SHOW TRANSFER STATE WITH 'foobar'")
+		require.NoError(t, err, "show transfer state failed")
+		defer rows.Close()
+
+		resultColumns, err := rows.Columns()
+		require.NoError(t, err)
+
+		const expectedNumColumns = 4
+		if len(resultColumns) != expectedNumColumns {
+			t.Fatalf(
+				"unexpected number of columns in result; expected %d, found %d",
+				expectedNumColumns,
+				len(resultColumns),
+			)
+		}
+
+		var transferKey string
+		var error, sessionState, sessionRevivalToken gosql.NullString
+
+		rows.Next()
+		err = rows.Scan(&transferKey, &error, &sessionState, &sessionRevivalToken)
+		require.NoError(t, err, "unexpected error while reading transfer state")
+
+		require.Equal(t, "foobar", transferKey)
+		require.True(t, error.Valid)
+		require.Equal(t, "session revival tokens are not supported on this cluster", error.String)
+		require.False(t, sessionState.Valid)
+		require.False(t, sessionRevivalToken.Valid)
+	})
+}
+
 func TestShowLastQueryStatistics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

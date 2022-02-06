@@ -885,3 +885,22 @@ func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
 		ctx.WriteString("FOR ALL ROLES ")
 	}
 }
+
+// ShowTransferState represents a SHOW TRANSFER STATE statement.
+type ShowTransferState struct {
+	// WithTransferKey indicates that "WITH <transfer_key>" was used in the
+	// statement. This allows an empty string to be passed as a transfer key if
+	// necessary.
+	WithTransferKey bool
+	TransferKey     string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTransferState) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW TRANSFER STATE")
+	if node.WithTransferKey {
+		ctx.WriteString(" WITH '")
+		ctx.WriteString(node.TransferKey)
+		ctx.WriteString("'")
+	}
+}

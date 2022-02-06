@@ -245,6 +245,16 @@ func (*DummyEvalPlanner) DecodeGist(gist string) ([]string, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
+// SerializeSessionState is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) SerializeSessionState() (*tree.DBytes, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// DeserializeSessionState is part of the EvalPlanner interface.
+func (*DummyEvalPlanner) DeserializeSessionState(token *tree.DBytes) (*tree.DBool, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
 // CreateSessionRevivalToken is part of the EvalPlanner interface.
 func (*DummyEvalPlanner) CreateSessionRevivalToken() (*tree.DBytes, error) {
 	return nil, errors.WithStack(errEvalPlanner)

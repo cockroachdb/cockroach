@@ -1507,7 +1507,29 @@ EXPLAIN SHOW SAVEPOINT STATUS -- fully parenthesized
 EXPLAIN SHOW SAVEPOINT STATUS -- literals removed
 EXPLAIN SHOW SAVEPOINT STATUS -- identifiers removed
 
+parse
+SHOW TRANSFER STATE
+----
+SHOW TRANSFER STATE
+SHOW TRANSFER STATE -- fully parenthesized
+SHOW TRANSFER STATE -- literals removed
+SHOW TRANSFER STATE -- identifiers removed
 
+parse
+SHOW TRANSFER STATE WITH 'foo'
+----
+SHOW TRANSFER STATE WITH 'foo'
+SHOW TRANSFER STATE WITH 'foo' -- fully parenthesized
+SHOW TRANSFER STATE WITH 'foo' -- literals removed
+SHOW TRANSFER STATE WITH 'foo' -- identifiers removed
+
+parse
+SHOW TRANSFER STATE WITH foo
+----
+SHOW TRANSFER STATE WITH 'foo' -- normalized!
+SHOW TRANSFER STATE WITH 'foo' -- fully parenthesized
+SHOW TRANSFER STATE WITH 'foo' -- literals removed
+SHOW TRANSFER STATE WITH 'foo' -- identifiers removed
 
 parse
 SHOW LAST QUERY STATISTICS
