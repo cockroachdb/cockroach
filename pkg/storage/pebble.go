@@ -591,6 +591,8 @@ func DefaultPebbleOptions() *pebble.Options {
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 	}
+	// Used for experimental MVCC range tombstones.
+	opts.Experimental.RangeKeys = new(pebble.RangeKeysArena)
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -735,6 +737,13 @@ type Pebble struct {
 		syncutil.Mutex
 		flushCompletedCallback func()
 	}
+
+	// supportsRangeKeys is 1 if the database supports range keys. It must
+	// be accessed atomically.
+	//
+	// TODO(erikgrinaker): Remove this after 22.2 when all databases support it.
+	supportsRangeKeys int32
+
 	// closer is populated when the database is opened. The closer is associated
 	// with the filesyetem
 	closer io.Closer
@@ -976,6 +985,9 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 			return nil, err
 		}
 	}
+	if p.db.FormatMajorVersion() >= pebble.FormatRangeKeys {
+		atomic.StoreInt32(&p.supportsRangeKeys, 1)
+	}
 
 	return p, nil
 }
@@ -1132,7 +1144,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		return iter
 	}
 
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability)
+	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.SupportsRangeKeys())
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -1144,7 +1156,10 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability)
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("EngineIterator does not support range keys")
+	}
+	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.SupportsRangeKeys())
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -1154,6 +1169,11 @@ func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Engine interface.
 func (p *Pebble) ConsistentIterators() bool {
 	return false
+}
+
+// SupportsRangeKeys implements the Engine interface.
+func (p *Pebble) SupportsRangeKeys() bool {
+	return atomic.LoadInt32(&p.supportsRangeKeys) == 1
 }
 
 // PinEngineStateForIterators implements the Engine interface.
@@ -1255,6 +1275,60 @@ func (p *Pebble) ClearIterRange(start, end roachpb.Key) error {
 		return err
 	}
 	return batch.Commit(true)
+}
+
+// ExperimentalClearMVCCRangeKey implements the Engine interface.
+func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if !p.SupportsRangeKeys() {
+		// These databases cannot contain range keys, so clearing is a noop.
+		return nil
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyUnset(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		pebble.Sync)
+}
+
+// ExperimentalClearAllMVCCRangeKeys implements the Engine interface.
+func (p *Pebble) ExperimentalClearAllMVCCRangeKeys(start, end roachpb.Key) error {
+	if !p.SupportsRangeKeys() {
+		return nil // noop
+	}
+	rangeKey := MVCCRangeKey{StartKey: start, EndKey: end, Timestamp: hlc.MinTimestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyDelete(
+		EncodeMVCCKeyPrefix(start), EncodeMVCCKeyPrefix(end), pebble.Sync)
+}
+
+// ExperimentalPutMVCCRangeKey implements the Engine interface.
+func (p *Pebble) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value MVCCValue) error {
+	if !p.SupportsRangeKeys() {
+		return errors.Errorf("range keys not supported by Pebble database version %s",
+			p.db.FormatMajorVersion())
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	// NB: all MVCC APIs currently assume all range keys are range tombstones.
+	if !value.IsTombstone() {
+		return errors.New("range keys can only be MVCC range tombstones")
+	}
+	valueBytes, err := EncodeMVCCValue(value)
+	if err != nil {
+		return errors.Wrapf(err, "failed to encode MVCC value for range key %s", rangeKey)
+	}
+	return p.db.Experimental().RangeKeySet(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		valueBytes,
+		pebble.Sync)
 }
 
 // Merge implements the Engine interface.
@@ -1615,7 +1689,7 @@ func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
 func (p *Pebble) NewSnapshot() Reader {
 	return &pebbleSnapshot{
 		snapshot: p.db.NewSnapshot(),
-		settings: p.settings,
+		parent:   p,
 	}
 }
 
@@ -1814,6 +1888,9 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		if err := p.db.RatchetFormatMajorVersion(formatVers); err != nil {
 			return errors.Wrap(err, "ratcheting format major version")
 		}
+		if formatVers >= pebble.FormatRangeKeys {
+			atomic.StoreInt32(&p.supportsRangeKeys, 1)
+		}
 	}
 	return nil
 }
@@ -1997,13 +2074,13 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		iter = &p.prefixIter
 	}
 	if iter.inuse {
-		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
+		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2025,19 +2102,22 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if p.closed {
 		panic("using a closed pebbleReadOnly")
 	}
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("EngineIterator does not support range keys")
+	}
 
 	iter := &p.normalEngineIter
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
 	}
 	if iter.inuse {
-		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability)
+		return newPebbleIterator(p.parent.db, p.iter, opts, p.durability, p.SupportsRangeKeys())
 	}
 
 	if iter.iter != nil {
 		iter.setOptions(opts, p.durability)
 	} else {
-		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability, p.SupportsRangeKeys())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -2053,6 +2133,11 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 // ConsistentIterators implements the Engine interface.
 func (p *pebbleReadOnly) ConsistentIterators() bool {
 	return true
+}
+
+// SupportsRangeKeys implements the Engine interface.
+func (p *pebbleReadOnly) SupportsRangeKeys() bool {
+	return p.parent.SupportsRangeKeys()
 }
 
 // PinEngineStateForIterators implements the Engine interface.
@@ -2117,6 +2202,18 @@ func (p *pebbleReadOnly) ClearIterRange(start, end roachpb.Key) error {
 	panic("not implemented")
 }
 
+func (p *pebbleReadOnly) ExperimentalPutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKey(MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalClearAllMVCCRangeKeys(roachpb.Key, roachpb.Key) error {
+	panic("not implemented")
+}
+
 func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
@@ -2158,7 +2255,7 @@ func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
 	snapshot *pebble.Snapshot
-	settings *cluster.Settings
+	parent   *Pebble
 	closed   bool
 }
 
@@ -2181,7 +2278,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, p.settings, r, exportOptions, dest)
+	summary, k, err := pebbleExportToSst(ctx, p.parent.settings, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -2245,7 +2342,9 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		}
 		return iter
 	}
-	iter := MVCCIterator(newPebbleIterator(p.snapshot, nil, opts, StandardDurability))
+
+	iter := MVCCIterator(newPebbleIterator(
+		p.snapshot, nil, opts, StandardDurability, p.SupportsRangeKeys()))
 	if util.RaceEnabled {
 		iter = wrapInUnsafeIter(iter)
 	}
@@ -2254,12 +2353,20 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
-	return newPebbleIterator(p.snapshot, nil, opts, StandardDurability)
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("EngineIterator does not support range keys")
+	}
+	return newPebbleIterator(p.snapshot, nil, opts, StandardDurability, p.SupportsRangeKeys())
 }
 
 // ConsistentIterators implements the Reader interface.
 func (p pebbleSnapshot) ConsistentIterators() bool {
 	return true
+}
+
+// SupportsRangeKeys implements the Reader interface.
+func (p *pebbleSnapshot) SupportsRangeKeys() bool {
+	return p.parent.SupportsRangeKeys()
 }
 
 // PinEngineStateForIterators implements the Reader interface.
