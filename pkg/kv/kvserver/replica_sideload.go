@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -89,7 +90,7 @@ func maybeSideloadEntriesImpl(
 			}
 
 			ent := &entriesToAppend[i]
-			cmdID, data := DecodeRaftCommand(ent.Data) // cheap
+			cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data) // cheap
 
 			// Unmarshal the command into an object that we can mutate.
 			var strippedCmd kvserverpb.RaftCommand
@@ -111,9 +112,9 @@ func maybeSideloadEntriesImpl(
 
 			// Marshal the command and attach to the Raft entry.
 			{
-				data := make([]byte, raftCommandPrefixLen+strippedCmd.Size())
-				encodeRaftCommandPrefix(data[:raftCommandPrefixLen], raftVersionSideloaded, cmdID)
-				_, err := protoutil.MarshalTo(&strippedCmd, data[raftCommandPrefixLen:])
+				data := make([]byte, kvserverbase.RaftCommandPrefixLen+strippedCmd.Size())
+				kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, cmdID)
+				_, err := protoutil.MarshalTo(&strippedCmd, data[kvserverbase.RaftCommandPrefixLen:])
 				if err != nil {
 					return nil, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 				}
@@ -131,7 +132,7 @@ func maybeSideloadEntriesImpl(
 }
 
 func sniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
-	return len(data) > 0 && data[0] == byte(raftVersionSideloaded)
+	return len(data) > 0 && data[0] == byte(kvserverbase.RaftVersionSideloaded)
 }
 
 // maybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
@@ -170,7 +171,7 @@ func maybeInlineSideloadedRaftCommand(
 
 	log.Event(ctx, "inlined entry not cached")
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
-	cmdID, data := DecodeRaftCommand(ent.Data)
+	cmdID, data := kvserverbase.DecodeRaftCommand(ent.Data)
 
 	var command kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
@@ -195,9 +196,9 @@ func maybeInlineSideloadedRaftCommand(
 	}
 	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	{
-		data := make([]byte, raftCommandPrefixLen+command.Size())
-		encodeRaftCommandPrefix(data[:raftCommandPrefixLen], raftVersionSideloaded, cmdID)
-		_, err := protoutil.MarshalTo(&command, data[raftCommandPrefixLen:])
+		data := make([]byte, kvserverbase.RaftCommandPrefixLen+command.Size())
+		kvserverbase.EncodeRaftCommandPrefix(data[:kvserverbase.RaftCommandPrefixLen], kvserverbase.RaftVersionSideloaded, cmdID)
+		_, err := protoutil.MarshalTo(&command, data[kvserverbase.RaftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +217,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	}
 
 	var command kvserverpb.RaftCommand
-	_, data := DecodeRaftCommand(ent.Data)
+	_, data := kvserverbase.DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}

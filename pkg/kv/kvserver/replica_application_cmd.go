@@ -212,7 +212,7 @@ func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
 
 func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) error {
 	var encodedCommand []byte
-	d.idKey, encodedCommand = DecodeRaftCommand(e.Data)
+	d.idKey, encodedCommand = kvserverbase.DecodeRaftCommand(e.Data)
 	// An empty command is used to unquiesce a range and wake the
 	// leader. Clear commandID so it's ignored for processing.
 	if len(encodedCommand) == 0 {
