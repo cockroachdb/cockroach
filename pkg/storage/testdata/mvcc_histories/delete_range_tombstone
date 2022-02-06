@@ -1,0 +1,111 @@
+# TODO(erikgrinaker): The MVCC API does not respect range tombstones yet, so
+# we don't test point keys because they remain unaffected.
+# TODO(erikgrinaker): This needs conflict tests, implement later.
+
+# Write some range tombstones. Some will abut and merge.
+run ok
+del_range_ts k=b end=c ts=3
+del_range_ts k=e end=g ts=3
+del_range_ts k=d end=f ts=5
+del_range_ts k=d end=f ts=2
+del_range_ts k=m end=z ts=1
+del_range_ts k=a end=m ts=4
+del_range_ts k=m end=z ts=4
+----
+del_range_ts: {b-c}/3.000000000,0
+del_range_ts: {e-g}/3.000000000,0
+del_range_ts: {d-f}/5.000000000,0
+del_range_ts: {d-f}/2.000000000,0
+del_range_ts: {m-z}/1.000000000,0
+del_range_ts: {a-m}/4.000000000,0
+del_range_ts: {m-z}/4.000000000,0
+>> at end:
+range key: {b-c}/3.000000000,0 -> []
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {e-g}/3.000000000,0 -> []
+range key: {a-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Scan all tombstones.
+run ok
+scan_range_ts k=a end=z
+----
+scan_range_ts: {b-c}/3.000000000,0
+scan_range_ts: {d-f}/5.000000000,0
+scan_range_ts: {d-f}/2.000000000,0
+scan_range_ts: {e-g}/3.000000000,0
+scan_range_ts: {a-z}/4.000000000,0
+scan_range_ts: {m-z}/1.000000000,0
+
+# Scan truncates tombstones to scan bounds.
+run ok
+scan_range_ts k=c end=e
+----
+scan_range_ts: {d-e}/5.000000000,0
+scan_range_ts: {c-e}/4.000000000,0
+scan_range_ts: {d-e}/2.000000000,0
+
+# Scan truncates tombstones to scan bounds when not on tombstone bounds.
+run ok
+scan_range_ts k=ccc end=eee
+----
+scan_range_ts: {d-eee}/5.000000000,0
+scan_range_ts: {ccc-eee}/4.000000000,0
+scan_range_ts: e{-ee}/3.000000000,0
+scan_range_ts: {d-eee}/2.000000000,0
+
+# Scan at a timestamp.
+run ok
+scan_range_ts k=a end=z ts=3
+----
+scan_range_ts: {b-c}/3.000000000,0
+scan_range_ts: {d-f}/2.000000000,0
+scan_range_ts: {e-g}/3.000000000,0
+scan_range_ts: {m-z}/1.000000000,0
+
+# Empty scans.
+run ok
+scan_range_ts k=A end=Z
+scan_range_ts k=c end=c
+scan_range_ts k=z end=a
+----
+scan_range_ts: "A"-"Z" -> <no data>
+scan_range_ts: "c"-"c" -> <no data>
+scan_range_ts: "z"-"a" -> <no data>
+
+# Remove some tombstones, both a non-existant one and a span across two
+# tombstones.
+run ok
+clear_range_key k=a end=z ts=10
+clear_range_key k=b end=g ts=3
+----
+>> at end:
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {a-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Remove the middle section of the [a-z)@4 tombstone. Do it twice, to
+# make sure clears are idempotent.
+run ok
+clear_range_key k=k end=n ts=4
+clear_range_key k=k end=n ts=4
+----
+>> at end:
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {a-k}/4.000000000,0 -> []
+range key: {n-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
+
+# Remove portions of the [a-k)@4 and [n-z)@4 tombstones in one operation.
+run ok
+clear_range_key k=eee end=ttt ts=4
+----
+>> at end:
+range key: {a-eee}/4.000000000,0 -> []
+range key: {d-f}/5.000000000,0 -> []
+range key: {d-f}/2.000000000,0 -> []
+range key: {ttt-z}/4.000000000,0 -> []
+range key: {m-z}/1.000000000,0 -> []
