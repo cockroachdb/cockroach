@@ -488,6 +488,21 @@ func (i *MVCCIncrementalIterator) UnsafeKey() MVCCKey {
 	return i.iter.UnsafeKey()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) RangeBounds() roachpb.Span {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *MVCCIncrementalIterator) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
+}
+
 // UnsafeValue returns the same value as Value, but the memory is invalidated on
 // the next call to {Next,Reset,Close}.
 func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
