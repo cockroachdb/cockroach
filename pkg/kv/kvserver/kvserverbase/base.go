@@ -28,7 +28,7 @@ import (
 // MergeQueueEnabled is a setting that controls whether the merge queue is
 // enabled.
 var MergeQueueEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
 	true,
