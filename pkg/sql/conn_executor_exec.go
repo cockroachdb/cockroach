@@ -13,6 +13,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"runtime/pprof"
 	"strings"
@@ -1653,6 +1654,8 @@ func (ex *connExecutor) runObserverStatement(
 		return nil
 	case *tree.ShowLastQueryStatistics:
 		return ex.runShowLastQueryStatistics(ctx, res, sqlStmt)
+	case *tree.ShowTransferState:
+		return ex.runShowTransferState(ctx, res, sqlStmt)
 	default:
 		res.SetError(errors.AssertionFailedf("unrecognized observer statement type %T", ast))
 		return nil
@@ -1688,6 +1691,92 @@ func (ex *connExecutor) runShowTransactionState(
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
 	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
+}
+
+// sessionStateBase64 returns the serialized session state in a base64 form.
+// See runShowTransferState for more information.
+//
+// Note: Do not use a planner here because this is used in the context of an
+// observer statement.
+func (ex *connExecutor) sessionStateBase64() (tree.Datum, error) {
+	// Observer statements do not use implicit transactions at all, so
+	// we look at CurState() directly.
+	_, isNoTxn := ex.machine.CurState().(stateNoTxn)
+	state, err := serializeSessionState(
+		!isNoTxn, ex.extraTxnState.prepStmtsNamespace, ex.sessionData(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDString(base64.StdEncoding.EncodeToString([]byte(*state))), nil
+}
+
+// sessionRevivalTokenBase64 creates a session revival token and returns it in
+// a base64 form. See runShowTransferState for more information.
+//
+// Note: Do not use a planner here because this is used in the context of an
+// observer statement.
+func (ex *connExecutor) sessionRevivalTokenBase64() (tree.Datum, error) {
+	cm, err := ex.server.cfg.RPCContext.SecurityContext.GetCertificateManager()
+	if err != nil {
+		return nil, err
+	}
+	token, err := createSessionRevivalToken(
+		ex.server.cfg.AllowSessionRevival,
+		ex.sessionData(),
+		cm,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDString(base64.StdEncoding.EncodeToString([]byte(*token))), nil
+}
+
+// runShowTransferState executes a SHOW TRANSFER STATE statement.
+//
+// If an error is returned, the connection needs to stop processing queries.
+func (ex *connExecutor) runShowTransferState(
+	ctx context.Context, res RestrictedCommandResult, stmt *tree.ShowTransferState,
+) error {
+	// The transfer_key column must always be the last.
+	colNames := []string{
+		"error", "session_state_base64", "session_revival_token_base64",
+	}
+	if stmt.TransferKey != nil {
+		colNames = append(colNames, "transfer_key")
+	}
+	cols := make(colinfo.ResultColumns, len(colNames))
+	for i := 0; i < len(colNames); i++ {
+		cols[i] = colinfo.ResultColumn{Name: colNames[i], Typ: types.String}
+	}
+	res.SetColumns(ctx, cols)
+
+	var sessionState, sessionRevivalToken tree.Datum
+	var row tree.Datums
+	err := func() error {
+		// NOTE: These functions are executed in the context of an observer
+		// statement, and observer statements do not get planned, so a planner
+		// should not be used.
+		var err error
+		if sessionState, err = ex.sessionStateBase64(); err != nil {
+			return err
+		}
+		if sessionRevivalToken, err = ex.sessionRevivalTokenBase64(); err != nil {
+			return err
+		}
+		return nil
+	}()
+	if err != nil {
+		// When an error occurs, only show the error column (plus transfer_key
+		// column if it exists), and NULL for everything else.
+		row = []tree.Datum{tree.NewDString(err.Error()), tree.DNull, tree.DNull}
+	} else {
+		row = []tree.Datum{tree.DNull, sessionState, sessionRevivalToken}
+	}
+	if stmt.TransferKey != nil {
+		row = append(row, tree.NewDString(stmt.TransferKey.RawString()))
+	}
+	return res.AddRow(ctx, row)
 }
 
 // showQueryStatsFns maps column names as requested by the SQL clients
