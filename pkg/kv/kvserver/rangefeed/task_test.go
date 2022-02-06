@@ -200,6 +200,21 @@ func (s *testIterator) curKV() storage.MVCCKeyValue {
 	return s.kvs[s.cur]
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (s *testIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (s *testIterator) RangeBounds() roachpb.Span {
+	panic("not implemented")
+}
+
+// RangeTombstones implements SimpleMVCCIterator.
+func (s *testIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+	panic("not implemented")
+}
+
 func TestInitResolvedTSScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	startKey := roachpb.RKey("d")
