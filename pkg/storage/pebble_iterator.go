@@ -166,6 +166,8 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
+	p.options.KeyTypes = opts.KeyTypes
+
 	if doClone {
 		var err error
 		if p.iter, err = iterToClone.Clone(); err != nil {
@@ -573,6 +575,39 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	value := p.UnsafeValue()
 
 	return protoutil.Unmarshal(value, msg)
+}
+
+// HasPointAndRange implements the MVCCIterator interface.
+func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
+	return p.iter.HasPointAndRange()
+}
+
+// RangeBounds implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	return p.iter.RangeBounds()
+}
+
+// RangeKeys implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
+	start, end := p.iter.RangeBounds()
+	rangeKeys := p.iter.RangeKeys()
+	rangeValues := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
+
+	for _, rangeKey := range rangeKeys {
+		timestamp, err := decodeMVCCTimestampSuffix(rangeKey.Suffix)
+		if err != nil {
+			panic(err) // TODO(erikgrinaker): Don't panic.
+		}
+		rangeValues = append(rangeValues, MVCCRangeKeyValue{
+			Key: MVCCRangeKey{
+				StartKey:  start,
+				EndKey:    end,
+				Timestamp: timestamp,
+			},
+			Value: rangeKey.Value,
+		})
+	}
+	return rangeValues
 }
 
 // ComputeStats implements the MVCCIterator interface.
