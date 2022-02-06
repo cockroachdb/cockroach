@@ -361,6 +361,11 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	if err = i.tryDecodeLockKey(iterState, err); err != nil {
 		return
 	}
+	// If we find an intent, but we land on a range key covering it, skip to
+	// the point key.
+	if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint && len(i.intentKey) > 0 {
+		i.iter.Next()
+	}
 	i.computePos()
 }
 
@@ -406,6 +411,8 @@ func (i *intentInterleavingIter) computePos() {
 	}
 	if i.intentKey == nil {
 		i.intentCmp = i.dir
+	} else if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
+		i.intentCmp = 1 // range keys always sort before point keys
 	} else {
 		i.intentCmp = i.intentKey.Compare(i.iterKey.Key)
 	}
@@ -715,6 +722,26 @@ func (i *intentInterleavingIter) Value() []byte {
 	return i.iter.Value()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
+	// NB: We assume that EngineIterators, i.e. intentIter, cannot have range keys.
+	hasPoint, hasRange := i.iter.HasPointAndRange()
+	if i.isCurAtIntentIter() {
+		hasPoint = true
+	}
+	return hasPoint, hasRange
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeBounds() (roachpb.Key, roachpb.Key) {
+	return i.iter.RangeBounds()
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeKeys() []MVCCRangeKeyValue {
+	return i.iter.RangeKeys()
+}
+
 func (i *intentInterleavingIter) Close() {
 	i.iter.Close()
 	i.intentIter.Close()
@@ -976,7 +1003,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 // the identical engine state.
 func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
 	pIter := iter.GetRawIter()
-	it := newPebbleIterator(nil, pIter, opts, StandardDurability)
+	it := newPebbleIterator(nil, pIter, opts, StandardDurability, 0)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
