@@ -1,0 +1,42 @@
+# Test basic MVCC range key mutations.
+
+run trace
+# These three should merge.
+put_rangekey k=c end=e ts=1
+put_rangekey k=a end=c ts=1
+put_rangekey k=e end=f ts=1
+# Write overlapping key causing fragmentation.
+put_rangekey k=d end=k ts=2
+# Write key underneath that fragments in the middle.
+put_rangekey k=g end=j ts=1
+# Merge keys below.
+put_rangekey k=f end=g ts=1
+# Fill in the gaps to make one chunk.
+put_rangekey k=a end=d ts=2
+put_rangekey k=j end=k ts=1
+----
+>> put_rangekey k=c end=e ts=1
+rangekey: {c-e}/[1.000000000,0]
+>> put_rangekey k=a end=c ts=1
+rangekey: {a-e}/[1.000000000,0]
+>> put_rangekey k=e end=f ts=1
+rangekey: {a-f}/[1.000000000,0]
+>> put_rangekey k=d end=k ts=2
+rangekey: {a-d}/[1.000000000,0]
+rangekey: {d-f}/[2.000000000,0 1.000000000,0]
+rangekey: {f-k}/[2.000000000,0]
+>> put_rangekey k=g end=j ts=1
+rangekey: {a-d}/[1.000000000,0]
+rangekey: {d-f}/[2.000000000,0 1.000000000,0]
+rangekey: {f-g}/[2.000000000,0]
+rangekey: {g-j}/[2.000000000,0 1.000000000,0]
+rangekey: {j-k}/[2.000000000,0]
+>> put_rangekey k=f end=g ts=1
+rangekey: {a-d}/[1.000000000,0]
+rangekey: {d-j}/[2.000000000,0 1.000000000,0]
+rangekey: {j-k}/[2.000000000,0]
+>> put_rangekey k=a end=d ts=2
+rangekey: {a-j}/[2.000000000,0 1.000000000,0]
+rangekey: {j-k}/[2.000000000,0]
+>> put_rangekey k=j end=k ts=1
+rangekey: {a-k}/[2.000000000,0 1.000000000,0]
