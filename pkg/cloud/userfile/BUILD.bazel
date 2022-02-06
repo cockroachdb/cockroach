@@ -10,7 +10,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",

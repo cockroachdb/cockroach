@@ -32,7 +32,7 @@ go_test(
         "//pkg/gossip",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",
         "@com_github_gogo_protobuf//proto",

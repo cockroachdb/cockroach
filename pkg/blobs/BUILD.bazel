@@ -13,7 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/blobs/blobspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/fileutil",
@@ -37,7 +37,7 @@ go_test(
     embed = [":blobs"],
     deps = [
         "//pkg/blobs/blobspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/testutils",

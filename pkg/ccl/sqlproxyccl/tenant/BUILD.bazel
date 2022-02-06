@@ -31,7 +31,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/tenant",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
@@ -57,7 +57,7 @@ go_test(
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/utilccl",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

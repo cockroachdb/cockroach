@@ -45,7 +45,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/status/statuspb",
         "//pkg/settings",
@@ -130,7 +130,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

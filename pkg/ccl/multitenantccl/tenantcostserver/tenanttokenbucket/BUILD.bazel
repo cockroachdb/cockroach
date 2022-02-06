@@ -5,7 +5,7 @@ go_library(
     srcs = ["tenant_token_bucket.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl/tenantcostserver/tenanttokenbucket",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/roachpb:with-mocks"],
+    deps = ["//pkg/roachpb"],
 )
 
 go_test(
@@ -14,7 +14,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":tenanttokenbucket"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_datadriven//:datadriven",

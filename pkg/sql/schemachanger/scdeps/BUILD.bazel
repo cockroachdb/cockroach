@@ -18,7 +18,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -58,7 +58,7 @@ go_test(
     embed = [":scdeps"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/testutils",

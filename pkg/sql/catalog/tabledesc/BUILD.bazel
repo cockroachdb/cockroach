@@ -20,7 +20,7 @@ go_library(
         "//pkg/docs",
         "//pkg/geo/geoindex",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",

@@ -16,7 +16,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings",
         "//pkg/settings/cluster",

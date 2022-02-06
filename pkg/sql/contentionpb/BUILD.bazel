@@ -28,7 +28,7 @@ go_proto_library(
     proto = ":contentionpb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",

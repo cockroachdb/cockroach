@@ -93,7 +93,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo/geoindex",
-        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/types",
         "//pkg/util/hlc",

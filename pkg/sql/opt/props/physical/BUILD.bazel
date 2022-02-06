@@ -10,7 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
@@ -29,7 +29,7 @@ go_test(
     embed = [":physical"],
     deps = [
         "//pkg/config/zonepb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/opt",
         "//pkg/sql/opt/props",
         "//pkg/util/leaktest",

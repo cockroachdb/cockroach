@@ -12,7 +12,7 @@ go_library(
         "//pkg/acceptance/cluster",
         "//pkg/base",
         "//pkg/config/zonepb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/server/serverpb",

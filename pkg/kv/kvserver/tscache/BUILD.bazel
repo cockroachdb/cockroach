@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/tscache",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util",
         "//pkg/util/cache",
         "//pkg/util/envutil",
@@ -37,7 +37,7 @@ go_test(
     ],
     embed = [":tscache"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/testutils",
         "//pkg/util",
         "//pkg/util/hlc",

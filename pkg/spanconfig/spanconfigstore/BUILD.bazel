@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/spanconfig",
         "//pkg/util/interval",
@@ -24,7 +24,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils",

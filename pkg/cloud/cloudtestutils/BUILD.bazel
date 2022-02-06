@@ -10,7 +10,7 @@ go_library(
         "//pkg/blobs",
         "//pkg/cloud",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",

@@ -10,7 +10,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -37,7 +37,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

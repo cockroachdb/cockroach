@@ -18,7 +18,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvstreamer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
