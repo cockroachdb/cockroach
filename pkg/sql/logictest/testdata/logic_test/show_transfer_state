@@ -1,0 +1,14 @@
+# LogicTest: !3node-tenant
+
+# Statement does not work on system tenant.
+query TTT colnames
+SHOW TRANSFER STATE
+----
+error                                                     session_state_base64  session_revival_token_base64
+session revival tokens are not supported on this cluster  NULL                  NULL
+
+query TTTT colnames
+SHOW TRANSFER STATE WITH 'foo-bar'
+----
+error                                                     session_state_base64  session_revival_token_base64  transfer_key
+session revival tokens are not supported on this cluster  NULL                  NULL                          foo-bar
