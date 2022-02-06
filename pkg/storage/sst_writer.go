@@ -118,6 +118,24 @@ func (fw *SSTWriter) ClearMVCCRange(start, end MVCCKey) error {
 	return fw.clearRange(start, end)
 }
 
+// ExperimentalDeleteMVCCRange implements the Writer interface.
+func (fw *SSTWriter) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return fw.fw.RangeKeySet(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp), value)
+}
+
+// ExperimentalClearMVCCRangeTombstone implements the Writer interface.
+func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return fw.fw.RangeKeyUnset(rangeKey.StartKey, rangeKey.EndKey,
+		encodeMVCCTimestampSuffix(rangeKey.Timestamp))
+}
+
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")
