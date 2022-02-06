@@ -3271,6 +3271,14 @@ type EvalPlanner interface {
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(gist string) ([]string, error)
 
+	// SerializeSessionState serializes the variables in the current session
+	// and returns a state, in bytes form.
+	SerializeSessionState() (*DBytes, error)
+
+	// DeserializeSessionState deserializes the state as serialized variables
+	// into the current session.
+	DeserializeSessionState(state *DBytes) (*DBool, error)
+
 	// CreateSessionRevivalToken creates a token that can be used to log in
 	// as the current user, in bytes form.
 	CreateSessionRevivalToken() (*DBytes, error)
