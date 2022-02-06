@@ -715,6 +715,21 @@ func (i *intentInterleavingIter) Value() []byte {
 	return i.iter.Value()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeBounds() (roachpb.Key, roachpb.Key) {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
+}
+
 func (i *intentInterleavingIter) Close() {
 	i.iter.Close()
 	i.intentIter.Close()
