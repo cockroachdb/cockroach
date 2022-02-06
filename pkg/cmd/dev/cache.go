@@ -219,7 +219,7 @@ port: 9867
 	for _, line := range strings.Split(configFileContents, "\n") {
 		if strings.HasPrefix(line, "port:") {
 			port := strings.TrimSpace(strings.Split(line, ":")[1])
-			fmt.Printf("Add the string `--remote_cache=localhost:%s` to your ~/.bazelrc\n", port)
+			fmt.Printf("Add the string `--remote_cache=http://localhost:%s` to your ~/.bazelrc\n", port)
 			break
 		}
 	}
