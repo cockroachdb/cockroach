@@ -158,3 +158,18 @@ func (r *sstIterator) UnsafeKey() MVCCKey {
 func (r *sstIterator) UnsafeValue() []byte {
 	return r.value
 }
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (r *sstIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (r *sstIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (r *sstIterator) RangeKeys() []MVCCRangeKey {
+	panic("not implemented")
+}
