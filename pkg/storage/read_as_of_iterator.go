@@ -10,7 +10,10 @@
 
 package storage
 
-import "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+)
 
 // ReadAsOfIterator wraps a SimpleMVCCIterator and only surfaces the latest
 // valid key of a given MVCC key that is also below the asOf timestamp, if set.
@@ -87,6 +90,21 @@ func (f *ReadAsOfIterator) UnsafeKey() MVCCKey {
 // invalidated on the next call to {NextKey,Seek}.
 func (f *ReadAsOfIterator) UnsafeValue() []byte {
 	return f.iter.UnsafeValue()
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (f *ReadAsOfIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (f *ReadAsOfIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (f *ReadAsOfIterator) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
 }
 
 // advance moves past keys with timestamps later than f.asOf and skips MVCC keys

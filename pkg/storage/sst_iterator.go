@@ -13,6 +13,7 @@ package storage
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -169,4 +170,19 @@ func (r *sstIterator) verifyValue() {
 	} else {
 		r.err = mvccValue.Value.Verify(r.mvccKey.Key)
 	}
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (r *sstIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (r *sstIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (r *sstIterator) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
 }

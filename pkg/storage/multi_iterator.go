@@ -14,6 +14,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 const invalidIdxSentinel = -1
@@ -90,6 +91,21 @@ func (f *multiIterator) UnsafeKey() MVCCKey {
 // invalidated on the next call to {NextKey,Seek}.
 func (f *multiIterator) UnsafeValue() []byte {
 	return f.iters[f.currentIdx].UnsafeValue()
+}
+
+// HasPointAndRange implements SimpleMVCCIterator.
+func (f *multiIterator) HasPointAndRange() (bool, bool) {
+	panic("not implemented")
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (f *multiIterator) RangeBounds() (roachpb.Key, roachpb.Key) {
+	panic("not implemented")
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (f *multiIterator) RangeKeys() []MVCCRangeKeyValue {
+	panic("not implemented")
 }
 
 // Next advances the iterator to the next key/value in the iteration. After this
