@@ -84,6 +84,7 @@ const (
 type intentInterleavingIter struct {
 	prefix     bool
 	constraint intentInterleavingIterConstraint
+	keyTypes   IterKeyType
 
 	// iter is for iterating over MVCC keys and interleaved intents.
 	iter MVCCIterator
@@ -107,6 +108,7 @@ type intentInterleavingIter struct {
 	intentKey                            roachpb.Key
 	intentKeyAsNoTimestampMVCCKey        []byte
 	intentKeyAsNoTimestampMVCCKeyBacking []byte
+	intentRangeKeys                      []MVCCRangeKey
 
 	// - cmp output of (intentKey, current iter key) when both are valid.
 	//   This does not take timestamps into consideration. So if intentIter
@@ -239,6 +241,7 @@ func newIntentInterleavingIterator(reader Reader, opts IterOptions) MVCCIterator
 	*iiIter = intentInterleavingIter{
 		prefix:                               opts.Prefix,
 		constraint:                           constraint,
+		keyTypes:                             opts.KeyTypes,
 		iter:                                 iter,
 		intentIter:                           intentIter,
 		intentKeyAsNoTimestampMVCCKeyBacking: iiIter.intentKeyAsNoTimestampMVCCKeyBacking,
@@ -361,6 +364,11 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 	if err = i.tryDecodeLockKey(iterState, err); err != nil {
 		return
 	}
+	// If we find an intent, but we land on a range key covering it, skip to
+	// the point key.
+	if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint && len(i.intentKey) > 0 {
+		i.iter.Next()
+	}
 	i.computePos()
 }
 
@@ -406,8 +414,16 @@ func (i *intentInterleavingIter) computePos() {
 	}
 	if i.intentKey == nil {
 		i.intentCmp = i.dir
+	} else if hasPoint, _ := i.iter.HasPointAndRange(); !hasPoint {
+		i.intentCmp = 1 // range keys always sort before point keys
 	} else {
 		i.intentCmp = i.intentKey.Compare(i.iterKey.Key)
+	}
+	if i.intentRangeKeys != nil && (i.dir == 1 || i.intentCmp < 0) {
+		// See comment in Prev(). This stores the range keys overlapping an intent
+		// during reverse iteration with IterKeyTypePointsWithRanges, since iter may
+		// be positioned on a different range key. Clear it when we pass the intent.
+		i.intentRangeKeys = nil
 	}
 }
 
@@ -715,6 +731,34 @@ func (i *intentInterleavingIter) Value() []byte {
 	return i.iter.Value()
 }
 
+// HasPointAndRange implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) HasPointAndRange() (bool, bool) {
+	// NB: We assume that EngineIterators, i.e. intentIter, cannot have range keys.
+	hasPoint, hasRange := i.iter.HasPointAndRange()
+	if i.isCurAtIntentIter() {
+		hasPoint = true
+		hasRange = hasRange || i.intentRangeKeys != nil
+	}
+	return hasPoint, hasRange
+}
+
+// RangeBounds implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeBounds() (roachpb.Key, roachpb.Key) {
+	if i.isCurAtIntentIter() && len(i.intentRangeKeys) > 0 {
+		rangeKey := i.intentRangeKeys[0]
+		return rangeKey.StartKey, rangeKey.EndKey
+	}
+	return i.iter.RangeBounds()
+}
+
+// RangeKeys implements SimpleMVCCIterator.
+func (i *intentInterleavingIter) RangeKeys() []MVCCRangeKey {
+	if i.isCurAtIntentIter() && i.intentRangeKeys != nil {
+		return i.intentRangeKeys
+	}
+	return i.iter.RangeKeys()
+}
+
 func (i *intentInterleavingIter) Close() {
 	i.iter.Close()
 	i.intentIter.Close()
@@ -771,6 +815,39 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 		return
 	}
 	i.computePos()
+
+	// If we seeked to a versioned key in IterKeyTypePointsWithRanges mode and we
+	// landed on an intent, iter may be positioned on a different range key than
+	// the intent. If so, we seek to the provisional value and fetch the range
+	// key. See also comment in Prev().
+	//
+	// TODO(erikgrinaker): Come up with a better strategy for intent interleaving
+	// in the reverse direction that leaves both iter and intentIter on the same
+	// key when positioned on an intent.
+	if i.keyTypes == IterKeyTypePointsWithRanges && i.isCurAtIntentIter() {
+		// NB: We have to seek even if iter is not on a range key, because the
+		// intent may be on the start key of a range key. But we don't seek
+		// if iter's range key overlaps the intent.
+		var rangeEnd roachpb.Key
+		if _, hasRange := i.iter.HasPointAndRange(); hasRange {
+			_, rangeEnd = i.iter.RangeBounds()
+		}
+		if i.intentKey.Compare(rangeEnd) >= 0 {
+			i.iter.SeekGE(key)
+			if err := i.tryDecodeKey(); err != nil {
+				return
+			}
+			if _, hasRange := i.iter.HasPointAndRange(); hasRange {
+				for _, rk := range i.iter.RangeKeys() {
+					i.intentRangeKeys = append(i.intentRangeKeys, rk.Clone())
+				}
+			}
+			i.iter.SeekLT(key)
+			if err := i.tryDecodeKey(); err != nil {
+				return
+			}
+		}
+	}
 }
 
 func (i *intentInterleavingIter) Prev() {
@@ -882,6 +959,28 @@ func (i *intentInterleavingIter) Prev() {
 		// Common case:
 		// The iterator is positioned at iter. It could be a value or an intent,
 		// though usually it will be a value.
+
+		if i.keyTypes == IterKeyTypePointsWithRanges && i.intentCmp == 0 && i.intentRangeKeys == nil {
+			// In the reverse direction, isCurAtIntentIter() is determined by iter being
+			// positioned at a key before intentIter (intentCmp > 0). However, range
+			// keys overlapping the intent are fetched from iter, which is now at a
+			// different position than intentIter. In almost all cases this works out,
+			// because the bare range key is emitted separately and is ordered before
+			// the intent. The exception is IterKeyTypePointsWithRanges, where iter can
+			// now be positioned on a range key that does not overlap the intent. In
+			// these cases, we store a copy of the range key for the current intent.
+			// This is cleared in computePos() if we are not on the intent.
+			//
+			// TODO(erikgrinaker): We need a better solution here, but this gives the
+			// correct result, so it'll do for now. We should probably reevaluate how
+			// we interleave intents in the reverse direction.
+			if _, hasRange := i.iter.HasPointAndRange(); hasRange {
+				for _, rk := range i.iter.RangeKeys() {
+					i.intentRangeKeys = append(i.intentRangeKeys, rk.Clone())
+				}
+			}
+		}
+
 		i.iter.Prev()
 		if err := i.tryDecodeKey(); err != nil {
 			return
@@ -977,7 +1076,7 @@ func (i *intentInterleavingIter) SupportsPrev() bool {
 // the identical engine state.
 func newMVCCIteratorByCloningEngineIter(iter EngineIterator, opts IterOptions) MVCCIterator {
 	pIter := iter.GetRawIter()
-	it := newPebbleIterator(nil, pIter, opts, StandardDurability)
+	it := newPebbleIterator(nil, pIter, opts, StandardDurability, 0)
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}

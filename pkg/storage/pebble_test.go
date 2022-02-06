@@ -266,8 +266,8 @@ func TestPebbleIterBoundSliceStabilityAndNoop(t *testing.T) {
 
 	eng := createTestPebbleEngine().(*Pebble)
 	defer eng.Close()
-	iter := newPebbleIterator(
-		eng.db, nil, IterOptions{UpperBound: roachpb.Key("foo")}, StandardDurability)
+	iter := newPebbleIterator(eng.db, nil, IterOptions{UpperBound: roachpb.Key("foo")},
+		StandardDurability, eng.db.FormatMajorVersion())
 	defer iter.Close()
 	checker := &iterBoundsChecker{t: t}
 	iter.testingSetBoundsListener = checker
