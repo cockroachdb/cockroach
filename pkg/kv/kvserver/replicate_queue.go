@@ -51,7 +51,7 @@ const (
 // for rebalancing. It does not prevent transferring leases in order to allow
 // a replica to be removed from a range.
 var MinLeaseTransferInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.SystemOnly,
 	"kv.allocator.min_lease_transfer_interval",
 	"controls how frequently leases can be transferred for rebalancing. "+
 		"It does not prevent transferring leases in order to allow a "+
