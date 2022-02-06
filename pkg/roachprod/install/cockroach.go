@@ -107,6 +107,9 @@ type StartOpts struct {
 	Sequential bool
 	ExtraArgs  []string
 
+	// systemd limits on resources.
+	NumFilesLimit int64
+
 	// -- Options that apply only to StartDefault target --
 
 	SkipInit        bool
@@ -420,21 +423,23 @@ func (c *SyncedCluster) generateStartCmd(
 			"GOTRACEBACK=crash",
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
 		}, c.Env...), getEnvVars()...),
-		Binary:    cockroachNodeBinary(c, node),
-		Args:      args,
-		MemoryMax: config.MemoryMax,
-		Local:     c.IsLocal(),
+		Binary:        cockroachNodeBinary(c, node),
+		Args:          args,
+		MemoryMax:     config.MemoryMax,
+		NumFilesLimit: startOpts.NumFilesLimit,
+		Local:         c.IsLocal(),
 	})
 }
 
 type startTemplateData struct {
-	Local     bool
-	LogDir    string
-	Binary    string
-	KeyCmd    string
-	MemoryMax string
-	Args      []string
-	EnvVars   []string
+	Local         bool
+	LogDir        string
+	Binary        string
+	KeyCmd        string
+	MemoryMax     string
+	NumFilesLimit int64
+	Args          []string
+	EnvVars       []string
 }
 
 func execStartTemplate(data startTemplateData) (string, error) {

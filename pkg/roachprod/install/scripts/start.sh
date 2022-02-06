@@ -19,6 +19,7 @@ LOG_DIR=#{shesc .LogDir#}
 BINARY=#{shesc .Binary#}
 KEY_CMD=#{.KeyCmd#}
 MEMORY_MAX=#{.MemoryMax#}
+NUM_FILES_LIMIT=#{.NumFilesLimit#}
 ARGS=(
 #{range .Args -#}
 #{shesc .#}
@@ -93,5 +94,5 @@ sudo systemd-run --unit cockroach \
   --service-type=notify -p NotifyAccess=all \
   -p "MemoryMax=${MEMORY_MAX}" \
   -p LimitCORE=infinity \
-  -p LimitNOFILE=65536 \
+  -p "LimitNOFILE=${NUM_FILES_LIMIT}" \
   bash "${0}" run
