@@ -39,6 +39,10 @@ type pebbleIterator struct {
 	lowerBoundBuf []byte
 	upperBoundBuf []byte
 
+	// True if the iterator's underlying reader supports range keys.
+	//
+	// TODO(erikgrinaker): Remove after 22.2.
+	supportsRangeKeys bool
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
 	prefix bool
@@ -80,10 +84,11 @@ func newPebbleIterator(
 	iterToClone cloneableIter,
 	opts IterOptions,
 	durability DurabilityRequirement,
+	supportsRangeKeys bool,
 ) *pebbleIterator {
 	iter := pebbleIterPool.Get().(*pebbleIterator)
 	iter.reusable = false // defensive
-	iter.init(handle, iterToClone, false /* iterUnused */, opts, durability)
+	iter.init(handle, iterToClone, false /* iterUnused */, opts, durability, supportsRangeKeys)
 	return iter
 }
 
@@ -98,12 +103,14 @@ func (p *pebbleIterator) init(
 	iterUnused bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
+	supportsRangeKeys bool, // TODO(erikgrinaker): remove after 22.2.
 ) {
 	*p = pebbleIterator{
-		keyBuf:        p.keyBuf,
-		lowerBoundBuf: p.lowerBoundBuf,
-		upperBoundBuf: p.upperBoundBuf,
-		reusable:      p.reusable,
+		keyBuf:            p.keyBuf,
+		lowerBoundBuf:     p.lowerBoundBuf,
+		upperBoundBuf:     p.upperBoundBuf,
+		reusable:          p.reusable,
+		supportsRangeKeys: supportsRangeKeys,
 	}
 
 	if iterToClone != nil {
@@ -138,9 +145,22 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
+	// If this Pebble database does not support range keys yet, fall back to
+	// only iterating over point keys to avoid panics. This is effectively the
+	// same, since a database without range key support contains no range keys,
+	// except in the case of RangesOnly where the iterator must always be empty.
+	if !p.supportsRangeKeys {
+		if opts.KeyTypes == IterKeyTypeRangesOnly {
+			opts.LowerBound = nil
+			opts.UpperBound = []byte{0}
+		}
+		opts.KeyTypes = IterKeyTypePointsOnly
+	}
+
 	// Generate new Pebble iterator options.
 	p.options = pebble.IterOptions{
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
+		KeyTypes:                  opts.KeyTypes,
 		UseL6Filters:              opts.useL6Filters,
 	}
 	p.prefix = opts.Prefix
@@ -368,14 +388,29 @@ func (p *pebbleIterator) NextKey() {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
 	}
+	wasPoint, _ := p.HasPointAndRange()
 	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
 	if !p.iter.Next() {
 		return
 	}
-	if bytes.Equal(p.keyBuf, p.UnsafeKey().Key) {
+	hasPoint, _ := p.HasPointAndRange()
+
+	// If the Next() call above moved between two versions of a point key, seek to
+	// the next key. However, bare range keys should be emitted separately from a
+	// point key.
+	if wasPoint && hasPoint && p.UnsafeKey().Key.Equal(p.keyBuf) {
 		// This is equivalent to:
 		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
 		p.iter.SeekGE(append(p.keyBuf, 0, 0))
+		// If there's a range key straddling the seek point (e.g. a-c when seeking
+		// to b), it will be surfaced first as a bare range key but one that has
+		// already been emitted. In that case, we step past it to the next key,
+		// which may be either a point key or range key starting past the seek key.
+		if hasPoint, hasRange := p.HasPointAndRange(); !hasPoint && hasRange {
+			if p.RangeBounds().Key.Compare(p.keyBuf) <= 0 {
+				p.iter.Next()
+			}
+		}
 	}
 }
 
@@ -531,6 +566,66 @@ func (p *pebbleIterator) ValueProto(msg protoutil.Message) error {
 	value := p.UnsafeValue()
 
 	return protoutil.Unmarshal(value, msg)
+}
+
+// HasPointAndRange implements the MVCCIterator interface.
+func (p *pebbleIterator) HasPointAndRange() (bool, bool) {
+	// TODO(erikgrinaker): The MVCCIterator contract mandates returning false for
+	// an invalid iterator. We should improve pebbleIterator validity and error
+	// checking by doing it once per iterator operation and propagating errors.
+	if ok, err := p.Valid(); !ok || err != nil {
+		return false, false
+	}
+	return p.iter.HasPointAndRange()
+}
+
+// RangeBounds implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeBounds() roachpb.Span {
+	start, end := p.iter.RangeBounds()
+
+	// Avoid decoding empty keys: DecodeMVCCKey() will return errors for these,
+	// which are expensive to construct.
+	if len(start) == 0 && len(end) == 0 {
+		return roachpb.Span{}
+	}
+
+	// TODO(erikgrinaker): We should surface these errors somehow, but for now we
+	// follow UnsafeKey()'s example and silently return empty bounds.
+	startKey, err := DecodeMVCCKey(start)
+	if err != nil {
+		return roachpb.Span{}
+	}
+	endKey, err := DecodeMVCCKey(end)
+	if err != nil {
+		return roachpb.Span{}
+	}
+
+	return roachpb.Span{Key: startKey.Key, EndKey: endKey.Key}
+}
+
+// RangeKeys implements the MVCCIterator interface.
+func (p *pebbleIterator) RangeKeys() []MVCCRangeKeyValue {
+	bounds := p.RangeBounds()
+	rangeKeys := p.iter.RangeKeys()
+	rangeKVs := make([]MVCCRangeKeyValue, 0, len(rangeKeys))
+
+	for _, rangeKey := range rangeKeys {
+		timestamp, err := decodeMVCCTimestampSuffix(rangeKey.Suffix)
+		if err != nil {
+			// TODO(erikgrinaker): We should surface this error somehow, but for now
+			// we follow UnsafeKey()'s example and silently skip them.
+			continue
+		}
+		rangeKVs = append(rangeKVs, MVCCRangeKeyValue{
+			RangeKey: MVCCRangeKey{
+				StartKey:  bounds.Key,
+				EndKey:    bounds.EndKey,
+				Timestamp: timestamp,
+			},
+			Value: rangeKey.Value,
+		})
+	}
+	return rangeKVs
 }
 
 // ComputeStats implements the MVCCIterator interface.
