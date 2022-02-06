@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -150,7 +151,7 @@ func GetDescriptorChangesFromRaftLog(
 				return nil, err
 			}
 		case raftpb.EntryNormal:
-			_, payload = kvserver.DecodeRaftCommand(ent.Data)
+			_, payload = kvserverbase.DecodeRaftCommand(ent.Data)
 		default:
 			continue
 		}

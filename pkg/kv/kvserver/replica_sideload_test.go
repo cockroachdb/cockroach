@@ -50,8 +50,8 @@ func entryEq(l, r raftpb.Entry) error {
 	if reflect.DeepEqual(l, r) {
 		return nil
 	}
-	_, lData := DecodeRaftCommand(l.Data)
-	_, rData := DecodeRaftCommand(r.Data)
+	_, lData := kvserverbase.DecodeRaftCommand(l.Data)
+	_, rData := kvserverbase.DecodeRaftCommand(r.Data)
 	var lc, rc kvserverpb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
@@ -66,9 +66,11 @@ func entryEq(l, r raftpb.Entry) error {
 }
 
 func mkEnt(
-	v raftCommandEncodingVersion, index, term uint64, as *kvserverpb.ReplicatedEvalResult_AddSSTable,
+	v kvserverbase.RaftCommandEncodingVersion,
+	index, term uint64,
+	as *kvserverpb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
-	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
+	cmdIDKey := strings.Repeat("x", kvserverbase.RaftCommandIDLen)
 	var cmd kvserverpb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
@@ -77,7 +79,7 @@ func mkEnt(
 	}
 	var ent raftpb.Entry
 	ent.Index, ent.Term = index, term
-	ent.Data = encodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
+	ent.Data = kvserverbase.EncodeRaftCommand(v, kvserverbase.CmdIDKey(cmdIDKey), b)
 	return ent
 }
 
@@ -351,7 +353,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	v1, v2 := raftVersionStandard, raftVersionSideloaded
+	v1, v2 := kvserverbase.RaftVersionStandard, kvserverbase.RaftVersionSideloaded
 	rangeID := roachpb.RangeID(1)
 
 	type testCase struct {
@@ -475,11 +477,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	addSSTStripped := addSST
 	addSSTStripped.Data = nil
 
-	entV1Reg := mkEnt(raftVersionStandard, 10, 99, nil)
-	entV1SST := mkEnt(raftVersionStandard, 11, 99, &addSST)
-	entV2Reg := mkEnt(raftVersionSideloaded, 12, 99, nil)
-	entV2SST := mkEnt(raftVersionSideloaded, 13, 99, &addSST)
-	entV2SSTStripped := mkEnt(raftVersionSideloaded, 13, 99, &addSSTStripped)
+	entV1Reg := mkEnt(kvserverbase.RaftVersionStandard, 10, 99, nil)
+	entV1SST := mkEnt(kvserverbase.RaftVersionStandard, 11, 99, &addSST)
+	entV2Reg := mkEnt(kvserverbase.RaftVersionSideloaded, 12, 99, nil)
+	entV2SST := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSST)
+	entV2SSTStripped := mkEnt(kvserverbase.RaftVersionSideloaded, 13, 99, &addSSTStripped)
 
 	type tc struct {
 		name              string
