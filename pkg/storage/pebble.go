@@ -589,6 +589,8 @@ func DefaultPebbleOptions() *pebble.Options {
 		TablePropertyCollectors:     PebbleTablePropertyCollectors,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 	}
+	// Used for experimental MVCC range tombstones.
+	opts.Experimental.RangeKeys = new(pebble.RangeKeysArena)
 	// Automatically flush 10s after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
@@ -1111,7 +1113,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 		return iter
 	}
 
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability)
+	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.db.FormatMajorVersion())
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -1123,7 +1125,7 @@ func (p *Pebble) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) MVCCIt
 
 // NewEngineIterator implements the Engine interface.
 func (p *Pebble) NewEngineIterator(opts IterOptions) EngineIterator {
-	iter := newPebbleIterator(p.db, nil, opts, StandardDurability)
+	iter := newPebbleIterator(p.db, nil, opts, StandardDurability, p.db.FormatMajorVersion())
 	if iter == nil {
 		panic("couldn't create a new iterator")
 	}
@@ -1234,6 +1236,38 @@ func (p *Pebble) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
 		return err
 	}
 	return batch.Commit(true)
+}
+
+// ExperimentalClearMVCCRangeKey implements the Engine interface.
+func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if format := p.db.FormatMajorVersion(); format < pebble.FormatRangeKeys {
+		// These databases cannot contain range keys, so clearing is a noop.
+		return nil
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeyUnset(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		pebble.Sync)
+}
+
+// ExperimentalPutMVCCRangeKey implements the Engine interface.
+func (p *Pebble) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey) error {
+	if format := p.db.FormatMajorVersion(); format < pebble.FormatRangeKeys {
+		return errors.Errorf("range keys not supported by Pebble database version %s", format)
+	}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+	return p.db.Experimental().RangeKeySet(
+		EncodeMVCCKeyPrefix(rangeKey.StartKey),
+		EncodeMVCCKeyPrefix(rangeKey.EndKey),
+		EncodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		nil,
+		pebble.Sync)
 }
 
 // Merge implements the Engine interface.
@@ -1543,7 +1577,7 @@ func (p *Pebble) NewUnindexedBatch(writeOnly bool) Batch {
 func (p *Pebble) NewSnapshot() Reader {
 	return &pebbleSnapshot{
 		snapshot: p.db.NewSnapshot(),
-		settings: p.settings,
+		parent:   p,
 	}
 }
 
@@ -1911,9 +1945,11 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		return iter
 	}
 
-	if !opts.MinTimestampHint.IsEmpty() {
-		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.parent.db, nil, opts, p.durability))
+	// TODO(erikgrinaker): We should generalize and consolidate iterator reuse.
+	reusable := opts.MinTimestampHint.IsEmpty() && opts.KeyTypes == IterKeyTypePointsOnly
+	if !reusable {
+		iter := MVCCIterator(newPebbleIterator(
+			p.parent.db, nil, opts, p.durability, p.parent.db.FormatMajorVersion()))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -1933,7 +1969,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, opts, p.durability, p.parent.db.FormatMajorVersion())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -1955,6 +1991,11 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 		panic("using a closed pebbleReadOnly")
 	}
 
+	reusable := opts.KeyTypes == IterKeyTypePointsOnly
+	if !reusable {
+		return newPebbleIterator(
+			p.parent.db, nil, opts, StandardDurability, p.parent.db.FormatMajorVersion())
+	}
 	iter := &p.normalEngineIter
 	if opts.Prefix {
 		iter = &p.prefixEngineIter
@@ -1968,7 +2009,7 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, opts, p.durability, p.parent.db.FormatMajorVersion())
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
@@ -1986,6 +2027,11 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 func checkOptionsForIterReuse(opts IterOptions) {
 	if !opts.MinTimestampHint.IsEmpty() || !opts.MaxTimestampHint.IsEmpty() {
 		panic("iterator with timestamp hints cannot be reused")
+	}
+	// TODO(erikgrinaker): We should probably default to reusing a different
+	// keytype once e.g. pebbleMVCCScanner is migrated to respect range keys.
+	if opts.KeyTypes != IterKeyTypePointsOnly {
+		panic("iterators with range keys cannot be reused")
 	}
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
 		panic("iterator must set prefix or upper bound or lower bound")
@@ -2055,6 +2101,14 @@ func (p *pebbleReadOnly) ClearIterRange(iter MVCCIterator, start, end roachpb.Ke
 	panic("not implemented")
 }
 
+func (p *pebbleReadOnly) ExperimentalPutMVCCRangeKey(_ MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKey(_ MVCCRangeKey) error {
+	panic("not implemented")
+}
+
 func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
 	panic("not implemented")
 }
@@ -2088,7 +2142,7 @@ func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 // pebbleSnapshot represents a snapshot created using Pebble.NewSnapshot().
 type pebbleSnapshot struct {
 	snapshot *pebble.Snapshot
-	settings *cluster.Settings
+	parent   *Pebble
 	closed   bool
 }
 
@@ -2111,7 +2165,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, p.settings, r, exportOptions, dest)
+	summary, k, err := pebbleExportToSst(ctx, p.parent.settings, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -2175,7 +2229,9 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 		}
 		return iter
 	}
-	iter := MVCCIterator(newPebbleIterator(p.snapshot, nil, opts, StandardDurability))
+
+	iter := MVCCIterator(newPebbleIterator(
+		p.snapshot, nil, opts, StandardDurability, p.parent.db.FormatMajorVersion()))
 	if util.RaceEnabled {
 		iter = wrapInUnsafeIter(iter)
 	}
@@ -2184,7 +2240,8 @@ func (p *pebbleSnapshot) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 
 // NewEngineIterator implements the Reader interface.
 func (p pebbleSnapshot) NewEngineIterator(opts IterOptions) EngineIterator {
-	return newPebbleIterator(p.snapshot, nil, opts, StandardDurability)
+	return newPebbleIterator(
+		p.snapshot, nil, opts, StandardDurability, p.parent.db.FormatMajorVersion())
 }
 
 // ConsistentIterators implements the Reader interface.
