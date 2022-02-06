@@ -65,6 +65,8 @@ var (
 
 func makeIDKey() kvserverbase.CmdIDKey {
 	idKeyBuf := make([]byte, 0, kvserverbase.RaftCommandIDLen)
+	// TODO(tbg): this goes through a global mutex, which can't be helpful. Pass
+	// in a rand instead.
 	idKeyBuf = encoding.EncodeUint64Ascending(idKeyBuf, uint64(rand.Int63()))
 	return kvserverbase.CmdIDKey(idKeyBuf)
 }
@@ -290,6 +292,108 @@ func (r *Replica) evalAndPropose(
 	return proposalCh, abandon, idKey, nil
 }
 
+// TODO(tbg): extract logging singleton.
+func raftCmdToPayload(
+	ctx context.Context,
+	command *kvserverpb.RaftCommand,
+	idKey kvserverbase.CmdIDKey,
+	replID roachpb.ReplicaID,
+	ba *roachpb.BatchRequest, // TODO(tbg): only for logging, remove
+	onAddSSTable func(), // TODO(tbg): only for metrics , remove
+) ([]byte, error) {
+	// Determine the encoding style for the Raft command.
+	prefix := true
+	version := kvserverbase.RaftVersionStandard
+	if crt := command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
+		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
+		// needs to understand it; it cannot simply be an opaque command. To
+		// permit this, the command is proposed by the proposal buffer using
+		// ProposeConfChange. For that reason, we also don't need a Raft command
+		// prefix because the command ID is stored in a field in
+		// raft.ConfChange.
+		log.Infof(ctx, "proposing %s", crt)
+		prefix = false
+
+		// Ensure that we aren't trying to remove ourselves from the range without
+		// having previously given up our lease, since the range won't be able
+		// to make progress while the lease is owned by a removed replica (and
+		// leases can stay in such a state for a very long time when using epoch-
+		// based range leases). This shouldn't happen often, but has been seen
+		// before (#12591).
+		//
+		// Note that due to atomic replication changes, when a removal is initiated,
+		// the replica remains in the descriptor, but as VOTER_{OUTGOING,DEMOTING}.
+		// We want to block it from getting into that state in the first place,
+		// since there's no stopping the actual removal/demotion once it's there.
+		// IsVoterNewConfig checks that the leaseholder is a voter in the
+		// proposed configuration.
+		rDesc, ok := command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
+		for !ok || !rDesc.IsVoterNewConfig() {
+			if rDesc.ReplicaID == replID {
+				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
+					errMarkInvalidReplicationChange)
+				log.Errorf(ctx, "%v", err)
+				return nil, err
+			}
+		}
+	} else if command.ReplicatedEvalResult.AddSSTable != nil {
+		log.VEvent(ctx, 4, "sideloadable proposal detected")
+		version = kvserverbase.RaftVersionSideloaded
+		onAddSSTable()
+
+		if command.ReplicatedEvalResult.AddSSTable.Data == nil {
+			return nil, errors.New("cannot sideload empty SSTable")
+		}
+	} else if log.V(4) {
+		log.Infof(ctx, "proposing command %x: %s", idKey, ba.Summary())
+	}
+
+	// Create encoding buffer.
+	preLen := 0
+	if prefix {
+		preLen = kvserverbase.RaftCommandPrefixLen
+	}
+	cmdLen := command.Size()
+	// Allocate the data slice with enough capacity to eventually hold the two
+	// "footers" that are filled later.
+	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
+	data := make([]byte, preLen, needed)
+	// Encode prefix with command ID, if necessary.
+	if prefix {
+		kvserverbase.EncodeRaftCommandPrefix(data, version, idKey)
+	}
+	// Encode body of command.
+	data = data[:preLen+cmdLen]
+	if _, err := protoutil.MarshalTo(command, data[preLen:]); err != nil {
+		return nil, err
+	}
+
+	// Too verbose even for verbose logging, so manually enable if you want to
+	// debug proposal sizes.
+	if false {
+		log.Infof(ctx, `%s: proposal: %d
+  RaftCommand.ReplicatedEvalResult:          %d
+  RaftCommand.ReplicatedEvalResult.Delta:    %d
+  RaftCommand.WriteBatch:                    %d
+`, ba.Summary(), cmdLen,
+			command.ReplicatedEvalResult.Size(),
+			command.ReplicatedEvalResult.Delta.Size(),
+			command.WriteBatch.Size(),
+		)
+	}
+
+	// Log an event if this is a large proposal. These are more likely to cause
+	// blips or worse, and it's good to be able to pick them from traces.
+	//
+	// TODO(tschottdorf): can we mark them so lightstep can group them?
+	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
+	if cmdLen > largeProposalEventThresholdBytes {
+		log.Eventf(ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
+	}
+
+	return data, nil
+}
+
 // propose encodes a command, starts tracking it, and proposes it to Raft.
 //
 // The method hands ownership of the command over to the Raft machinery. After
@@ -303,6 +407,10 @@ func (r *Replica) propose(
 	ctx context.Context, p *ProposalData, tok TrackedRequestToken,
 ) (pErr *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
+	replID := r.ReplicaID()
+	onAddSSTable := func() {
+		r.store.metrics.AddSSTableProposals.Inc(1)
+	}
 
 	// If an error occurs reset the command's MaxLeaseIndex to its initial value.
 	// Failure to propose will propagate to the client. An invariant of this
@@ -319,97 +427,11 @@ func (r *Replica) propose(
 	// buffer as a MaxLeaseFooter.
 	p.command.MaxLeaseIndex = 0
 
-	// Determine the encoding style for the Raft command.
-	prefix := true
-	version := kvserverbase.RaftVersionStandard
-	if crt := p.command.ReplicatedEvalResult.ChangeReplicas; crt != nil {
-		// EndTxnRequest with a ChangeReplicasTrigger is special because Raft
-		// needs to understand it; it cannot simply be an opaque command. To
-		// permit this, the command is proposed by the proposal buffer using
-		// ProposeConfChange. For that reason, we also don't need a Raft command
-		// prefix because the command ID is stored in a field in
-		// raft.ConfChange.
-		log.Infof(p.ctx, "proposing %s", crt)
-		prefix = false
-
-		// Ensure that we aren't trying to remove ourselves from the range without
-		// having previously given up our lease, since the range won't be able
-		// to make progress while the lease is owned by a removed replica (and
-		// leases can stay in such a state for a very long time when using epoch-
-		// based range leases). This shouldn't happen often, but has been seen
-		// before (#12591).
-		//
-		// Note that due to atomic replication changes, when a removal is initiated,
-		// the replica remains in the descriptor, but as VOTER_{OUTGOING,DEMOTING}.
-		// We want to block it from getting into that state in the first place,
-		// since there's no stopping the actual removal/demotion once it's there.
-		// IsVoterNewConfig checks that the leaseholder is a voter in the
-		// proposed configuration.
-		replID := r.ReplicaID()
-		rDesc, ok := p.command.ReplicatedEvalResult.State.Desc.GetReplicaDescriptorByID(replID)
-		for !ok || !rDesc.IsVoterNewConfig() {
-			if rDesc.ReplicaID == replID {
-				err := errors.Mark(errors.Newf("received invalid ChangeReplicasTrigger %s to remove self (leaseholder)", crt),
-					errMarkInvalidReplicationChange)
-				log.Errorf(p.ctx, "%v", err)
-				return roachpb.NewError(err)
-			}
-		}
-	} else if p.command.ReplicatedEvalResult.AddSSTable != nil {
-		log.VEvent(p.ctx, 4, "sideloadable proposal detected")
-		version = kvserverbase.RaftVersionSideloaded
-		r.store.metrics.AddSSTableProposals.Inc(1)
-
-		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-			return roachpb.NewErrorf("cannot sideload empty SSTable")
-		}
-	} else if log.V(4) {
-		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
-	}
-
-	// Create encoding buffer.
-	preLen := 0
-	if prefix {
-		preLen = kvserverbase.RaftCommandPrefixLen
-	}
-	cmdLen := p.command.Size()
-	// Allocate the data slice with enough capacity to eventually hold the two
-	// "footers" that are filled later.
-	needed := preLen + cmdLen + kvserverpb.MaxRaftCommandFooterSize()
-	data := make([]byte, preLen, needed)
-	// Encode prefix with command ID, if necessary.
-	if prefix {
-		kvserverbase.EncodeRaftCommandPrefix(data, version, p.idKey)
-	}
-	// Encode body of command.
-	data = data[:preLen+cmdLen]
-	if _, err := protoutil.MarshalTo(p.command, data[preLen:]); err != nil {
+	payload, err := raftCmdToPayload(p.ctx, p.command, p.idKey, replID, p.Request, onAddSSTable)
+	if err != nil {
 		return roachpb.NewError(err)
 	}
-	p.encodedCommand = data
-
-	// Too verbose even for verbose logging, so manually enable if you want to
-	// debug proposal sizes.
-	if false {
-		log.Infof(p.ctx, `%s: proposal: %d
-  RaftCommand.ReplicatedEvalResult:          %d
-  RaftCommand.ReplicatedEvalResult.Delta:    %d
-  RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), cmdLen,
-			p.command.ReplicatedEvalResult.Size(),
-			p.command.ReplicatedEvalResult.Delta.Size(),
-			p.command.WriteBatch.Size(),
-		)
-	}
-
-	// Log an event if this is a large proposal. These are more likely to cause
-	// blips or worse, and it's good to be able to pick them from traces.
-	//
-	// TODO(tschottdorf): can we mark them so lightstep can group them?
-	const largeProposalEventThresholdBytes = 2 << 19 // 512kb
-	if cmdLen > largeProposalEventThresholdBytes {
-		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(cmdLen)))
-	}
+	p.encodedCommand = payload
 
 	// Insert into the proposal buffer, which passes the command to Raft to be
 	// proposed. The proposal buffer assigns the command a maximum lease index
@@ -417,8 +439,7 @@ func (r *Replica) propose(
 	//
 	// NB: we must not hold r.mu while using the proposal buffer, see comment
 	// on the field.
-	err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx))
-	if err != nil {
+	if err := r.mu.proposalBuf.Insert(ctx, p, tok.Move(ctx)); err != nil {
 		return roachpb.NewError(err)
 	}
 	return nil

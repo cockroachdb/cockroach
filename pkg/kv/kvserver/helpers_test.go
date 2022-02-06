@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -544,4 +545,21 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 			}
 		}
 	}
+}
+
+// RaftCmdToPayload wraps raftCmdToPayload for testing.
+func RaftCmdToPayload(
+	ctx context.Context,
+	cmdIDKey kvserverbase.CmdIDKey,
+	raftCmd *kvserverpb.RaftCommand,
+	replID roachpb.ReplicaID,
+) ([]byte, error) {
+	return raftCmdToPayload(ctx, raftCmd, cmdIDKey, replID, &roachpb.BatchRequest{}, func() {})
+}
+
+// MakeIDKey exports makeIDKey for testing.
+//
+// TODO(tbg): this should be in the `raftlog` package.
+func MakeIDKey() kvserverbase.CmdIDKey {
+	return makeIDKey()
 }
