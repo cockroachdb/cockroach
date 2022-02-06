@@ -17,7 +17,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/spanconfig/spanconfigkvsubscriber",

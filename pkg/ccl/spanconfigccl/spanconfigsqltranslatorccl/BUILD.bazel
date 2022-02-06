@@ -16,7 +16,7 @@ go_test(
         "//pkg/jobs/jobsprotectedts",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

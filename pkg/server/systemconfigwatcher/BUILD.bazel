@@ -12,7 +12,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed:with-mocks",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/stop",
         "//pkg/util/syncutil",

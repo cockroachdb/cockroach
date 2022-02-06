@@ -12,9 +12,9 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/admission",
@@ -38,9 +38,9 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/kv",
-        "//pkg/kv/kvclient/kvcoord:with-mocks",
+        "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvserver/concurrency/lock",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

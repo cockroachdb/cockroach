@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/syncutil",
     ],
 )
@@ -25,7 +25,7 @@ go_test(
     embed = [":split"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/encoding",
         "//pkg/util/leaktest",
         "//pkg/util/stop",

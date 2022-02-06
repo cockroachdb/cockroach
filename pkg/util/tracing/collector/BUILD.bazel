@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
         "//pkg/util/log",
@@ -31,7 +31,7 @@ go_test(
         "//pkg/base",
         "//pkg/ccl/utilccl",
         "//pkg/kv/kvserver/liveness",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/security",
         "//pkg/security/securitytest",

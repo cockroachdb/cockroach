@@ -14,7 +14,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/sqlliveness",
         "//pkg/util/metric",
         "//pkg/util/stop",

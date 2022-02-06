@@ -15,7 +15,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status/statuspb",

@@ -13,7 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/server/status",

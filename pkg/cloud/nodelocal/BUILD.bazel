@@ -9,7 +9,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "@com_github_cockroachdb_errors//:errors",

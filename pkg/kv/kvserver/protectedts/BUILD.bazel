@@ -13,7 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/hlc",
         "//pkg/util/metric",

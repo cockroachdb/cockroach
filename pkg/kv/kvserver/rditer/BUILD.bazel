@@ -10,7 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
     ],
@@ -24,7 +24,7 @@ go_test(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvserver/spanset",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/util/hlc",

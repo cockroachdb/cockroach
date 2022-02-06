@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvbase",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/util/grpcutil",
         "//pkg/util/log",
@@ -27,7 +27,7 @@ go_test(
     embed = [":nodedialer"],
     deps = [
         "//pkg/clusterversion",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/testutils",

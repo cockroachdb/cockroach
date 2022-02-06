@@ -9,7 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedbuffer",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/syncutil",
@@ -26,7 +26,7 @@ go_test(
     embed = [":rangefeedbuffer"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

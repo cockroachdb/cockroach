@@ -172,7 +172,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/server",

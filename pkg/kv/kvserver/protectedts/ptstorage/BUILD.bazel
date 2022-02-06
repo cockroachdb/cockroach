@@ -45,7 +45,7 @@ go_test(
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
@@ -93,7 +93,7 @@ go_proto_library(
     proto = ":ptstorage_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
         "@org_golang_google_genproto//googleapis/api/annotations:go_default_library",
     ],

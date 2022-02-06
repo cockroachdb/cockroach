@@ -12,7 +12,7 @@ go_test(
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

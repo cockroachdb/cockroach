@@ -22,7 +22,7 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
