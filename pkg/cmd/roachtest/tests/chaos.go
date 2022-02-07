@@ -159,9 +159,11 @@ func (ch *Chaos) Runner(
 				l.Printf("restarting %v (chaos is done)\n", target)
 				startOpts := option.DefaultStartOpts()
 				startOpts.RoachtestOpts.Worker = true
+				ch.sendEvent(ChaosEventTypePreStartup, target)
 				if err := c.StartE(ctx, l, startOpts, install.MakeClusterSettings(), target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
+				ch.sendEvent(ChaosEventTypeStartupComplete, target)
 				return nil
 			case <-ctx.Done():
 				// NB: the roachtest harness checks that at the end of the test,
