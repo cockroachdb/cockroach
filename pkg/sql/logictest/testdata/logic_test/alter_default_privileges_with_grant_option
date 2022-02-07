@@ -298,7 +298,7 @@ SHOW GRANTS ON TABLE t10
 database_name  schema_name  table_name  grantee   privilege_type  is_grantable
 test           public       t10         admin     ALL             true
 test           public       t10         root      ALL             true
-test           public       t10         testuser  ALL             true
+test           public       t10         testuser  ALL             false
 
 #
 # two non-superuser and non-object-owning users
@@ -647,7 +647,7 @@ SHOW GRANTS ON TABLE t16;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t16         admin      ALL             true
 test           public       t16         root       ALL             true
-test           public       t16         testuser   ALL             true
+test           public       t16         testuser   ALL             false
 test           public       t16         testuser2  ALL             true
 
 user root
@@ -666,7 +666,7 @@ SHOW GRANTS ON TABLE t17;
 database_name  schema_name  table_name  grantee    privilege_type  is_grantable
 test           public       t17         admin      ALL             true
 test           public       t17         root       ALL             true
-test           public       t17         testuser   ALL             true
+test           public       t17         testuser   ALL             false
 test           public       t17         testuser2  ALL             false
 
 user testuser2
