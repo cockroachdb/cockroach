@@ -70,12 +70,12 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 
 	{
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			tenantSpan,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 	}
 
 	{ // Ensure that no span config entries are to be found
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			tenantSpan,
 		})
 		require.NoError(t, err)
@@ -137,12 +137,12 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 	)
 
 	{ // Ensure that the tenant now has a span config entry.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			tenantSpan,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -191,12 +191,12 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 	}
 
 	{ // Ensure that the tenant already has a span config entry.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			tenantSpan,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 
 	// Ensure the cluster version bump goes through successfully.
@@ -206,11 +206,11 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 	)
 
 	{ // Ensure that the tenant's span config entry stay as it was.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			tenantSpan,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }

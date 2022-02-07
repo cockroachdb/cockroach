@@ -47,49 +47,52 @@ func newSpanConfigDecoder() *spanConfigDecoder {
 
 // decode a span config entry given a KV from the
 // system.span_configurations table.
-func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (entry roachpb.SpanConfigEntry, _ error) {
+func (sd *spanConfigDecoder) decode(kv roachpb.KeyValue) (spanconfig.Record, error) {
 	// First we need to decode the start_key field from the index key.
+	var rawSp roachpb.Span
+	var conf roachpb.SpanConfig
 	{
 		types := []*types.T{sd.columns[0].GetType()}
 		startKeyRow := make([]rowenc.EncDatum, 1)
 		_, _, err := rowenc.DecodeIndexKey(keys.SystemSQLCodec, types, startKeyRow, nil /* colDirs */, kv.Key)
 		if err != nil {
-			return roachpb.SpanConfigEntry{}, errors.Wrapf(err, "failed to decode key: %v", kv.Key)
+			return spanconfig.Record{}, errors.Wrapf(err, "failed to decode key: %v", kv.Key)
 		}
 		if err := startKeyRow[0].EnsureDecoded(types[0], &sd.alloc); err != nil {
-			return roachpb.SpanConfigEntry{}, err
+			return spanconfig.Record{}, err
 		}
-		entry.Span.Key = []byte(tree.MustBeDBytes(startKeyRow[0].Datum))
+		rawSp.Key = []byte(tree.MustBeDBytes(startKeyRow[0].Datum))
 	}
 	if !kv.Value.IsPresent() {
-		return roachpb.SpanConfigEntry{},
-			errors.AssertionFailedf("missing value for start key: %s", entry.Span.Key)
+		return spanconfig.Record{},
+			errors.AssertionFailedf("missing value for start key: %s", rawSp.Key)
 	}
 
 	// The remaining columns are stored as a family.
 	bytes, err := kv.Value.GetTuple()
 	if err != nil {
-		return roachpb.SpanConfigEntry{}, err
+		return spanconfig.Record{}, err
 	}
 
 	datums, err := sd.decoder.Decode(&sd.alloc, bytes)
 	if err != nil {
-		return roachpb.SpanConfigEntry{}, err
+		return spanconfig.Record{}, err
 	}
 	if endKey := datums[1]; endKey != tree.DNull {
-		entry.Span.EndKey = []byte(tree.MustBeDBytes(endKey))
+		rawSp.EndKey = []byte(tree.MustBeDBytes(endKey))
 	}
 	if config := datums[2]; config != tree.DNull {
-		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(config)), &entry.Config); err != nil {
-			return roachpb.SpanConfigEntry{}, err
+		if err := protoutil.Unmarshal([]byte(tree.MustBeDBytes(config)), &conf); err != nil {
+			return spanconfig.Record{}, err
 		}
 	}
 
-	return entry, nil
+	return spanconfig.Record{
+		Target: spanconfig.DecodeTarget(rawSp),
+		Config: conf,
+	}, nil
 }
 
-// translateEvent is intended to be used as a rangefeedcache.TranslateEventFunc.
-// The function converts a RangeFeedValue to a bufferEvent.
 func (sd *spanConfigDecoder) translateEvent(
 	ctx context.Context, ev *roachpb.RangeFeedValue,
 ) rangefeedbuffer.Event {
@@ -109,7 +112,7 @@ func (sd *spanConfigDecoder) translateEvent(
 	} else {
 		value = ev.Value
 	}
-	entry, err := sd.decode(roachpb.KeyValue{
+	record, err := sd.decode(roachpb.KeyValue{
 		Key:   ev.Key,
 		Value: value,
 	})
@@ -118,20 +121,20 @@ func (sd *spanConfigDecoder) translateEvent(
 	}
 
 	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.Infof(ctx, "received span configuration update for %s (deleted=%t)", entry.Span, deleted)
+		log.Infof(ctx, "received span configuration update for %s (deleted=%t)", record.Target, deleted)
 	}
 
 	var update spanconfig.Update
 	if deleted {
-		update = spanconfig.Deletion(entry.Span)
+		update = spanconfig.Deletion(record.Target)
 	} else {
-		update = spanconfig.Update(entry)
+		update = spanconfig.Update(record)
 	}
 
 	return &bufferEvent{update, ev.Value.Timestamp}
 }
 
 // TestingDecoderFn exports the decoding routine for testing purposes.
-func TestingDecoderFn() func(roachpb.KeyValue) (roachpb.SpanConfigEntry, error) {
+func TestingDecoderFn() func(roachpb.KeyValue) (spanconfig.Record, error) {
 	return newSpanConfigDecoder().decode
 }

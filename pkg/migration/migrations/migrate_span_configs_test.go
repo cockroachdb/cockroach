@@ -69,7 +69,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
 	{ // Ensure that no span config entries are found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			keys.EverythingSpan,
 		})
 		require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			keys.EverythingSpan,
 		})
 		require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
 	{ // Ensure that no span config entries are to be found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			keys.EverythingSpan,
 		})
 		require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			keys.EverythingSpan,
 		})
 		require.NoError(t, err)
@@ -220,7 +220,7 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true`)
 
 	testutils.SucceedsSoon(t, func() error {
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{
 			keys.EverythingSpan,
 		})
 		require.NoError(t, err)

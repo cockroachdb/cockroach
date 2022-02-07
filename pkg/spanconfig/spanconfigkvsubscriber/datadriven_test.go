@@ -81,10 +81,10 @@ import (
 //      ----
 //      ok
 //
-// - update and get tie into GetSpanConfigEntriesFor and
-//   UpdateSpanConfigEntries respectively on the KVAccessor interface, and are a
-//   convenient shorthand to populate the system table that the KVSubscriber
-//   subscribes to. The input is processed in a single batch.
+// - update and get tie into GetSpanConfigRecords and UpdateSpanConfigRecords
+//   respectively on the KVAccessor interface, and are a convenient shorthand to
+//   populate the system table that the KVSubscriber subscribes to. The input is
+//   processed in a single batch.
 // - start starts the subscription process. It can also be used to verify
 //   behavior when re-establishing subscriptions after hard errors.
 // - updates lists the span updates the KVSubscriber receives, in the listed
@@ -176,18 +176,18 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "get":
 				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
-				entries, err := kvAccessor.GetSpanConfigEntriesFor(ctx, spans)
+				entries, err := kvAccessor.GetSpanConfigRecords(ctx, spans)
 				require.NoError(t, err)
 
 				var output strings.Builder
 				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigEntry(entry)))
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(entry)))
 				}
 				return output.String()
 
 			case "update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				require.NoError(t, kvAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert))
+				require.NoError(t, kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert))
 				lastUpdateTS = ts.Clock().Now()
 
 			case "start":

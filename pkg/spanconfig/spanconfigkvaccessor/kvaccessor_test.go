@@ -42,7 +42,7 @@ import (
 // 		upsert [d,e):D
 //      ----
 //
-// They tie into GetSpanConfigEntriesFor and UpdateSpanConfigEntries
+// They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
 // respectively. For kvaccessor-get, each listed span is added to the set of
 // spans being read. For kvaccessor-update, the lines prefixed with "delete"
 // count towards the spans being deleted, and for "upsert" they correspond to
@@ -70,19 +70,19 @@ func TestDataDriven(t *testing.T) {
 			switch d.Cmd {
 			case "kvaccessor-get":
 				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
-				entries, err := accessor.GetSpanConfigEntriesFor(ctx, spans)
+				records, err := accessor.GetSpanConfigRecords(ctx, spans)
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 
 				var output strings.Builder
-				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigEntry(entry)))
+				for _, record := range records {
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(record)))
 				}
 				return output.String()
 			case "kvaccessor-update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
-				if err := accessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+				if err := accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"

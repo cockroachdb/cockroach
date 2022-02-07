@@ -191,16 +191,16 @@ func TestDataDriven(t *testing.T) {
 					}
 					return nil
 				})
-				entries, err := kvAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{keys.EverythingSpan})
+				records, err := kvAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{keys.EverythingSpan})
 				require.NoError(t, err)
-				sort.Slice(entries, func(i, j int) bool {
-					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
+				sort.Slice(records, func(i, j int) bool {
+					return records[i].Target.Less(records[j].Target)
 				})
 
-				lines := make([]string, len(entries))
-				for i, entry := range entries {
-					lines[i] = fmt.Sprintf("%-42s %s", entry.Span,
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config))
+				lines := make([]string, len(records))
+				for i, record := range records {
+					lines[i] = fmt.Sprintf("%-42s %s", record.Target.GetSpan().String(),
+						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config))
 				}
 				return spanconfigtestutils.MaybeLimitAndOffset(t, d, "...", lines)
 

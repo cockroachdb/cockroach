@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -149,17 +150,17 @@ func CreateTenantRecord(
 	// reconciling?
 	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
-	toUpsert := []roachpb.SpanConfigEntry{
+	toUpsert := []spanconfig.Record{
 		{
-			Span: roachpb.Span{
+			Target: spanconfig.MakeSpanTarget(roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
-			},
+			}),
 			Config: tenantSpanConfig,
 		},
 	}
 	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
-	return scKVAccessor.UpdateSpanConfigEntries(
+	return scKVAccessor.UpdateSpanConfigRecords(
 		ctx, nil /* toDelete */, toUpsert,
 	)
 }
@@ -440,7 +441,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			return nil
 		}
 
-		// Clear out all span config entries left over by the tenant.
+		// Clear out all span config records left over by the tenant.
 		tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
 		tenantSpan := roachpb.Span{
 			Key:    tenantPrefix,
@@ -448,16 +449,16 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		}
 
 		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []roachpb.Span{tenantSpan})
 		if err != nil {
 			return err
 		}
 
-		toDelete := make([]roachpb.Span, len(entries))
-		for i, entry := range entries {
-			toDelete[i] = entry.Span
+		toDelete := make([]spanconfig.Target, len(records))
+		for i, record := range records {
+			toDelete[i] = record.Target
 		}
-		return scKVAccessor.UpdateSpanConfigEntries(ctx, toDelete, nil /* toUpsert */)
+		return scKVAccessor.UpdateSpanConfigRecords(ctx, toDelete, nil /* toUpsert */)
 	})
 	return errors.Wrapf(err, "deleting tenant %d record", info.ID)
 }

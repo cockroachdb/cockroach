@@ -39,16 +39,16 @@ type dummyKVAccessor struct {
 
 var _ spanconfig.KVAccessor = &dummyKVAccessor{}
 
-// GetSpanConfigEntriesFor is part of the KVAccessor interface.
-func (k dummyKVAccessor) GetSpanConfigEntriesFor(
+// GetSpanConfigRecords is part of the KVAccessor interface.
+func (k dummyKVAccessor) GetSpanConfigRecords(
 	context.Context, []roachpb.Span,
-) ([]roachpb.SpanConfigEntry, error) {
+) ([]spanconfig.Record, error) {
 	return nil, k.error
 }
 
-// UpdateSpanConfigEntries is part of the KVAccessor interface.
-func (k dummyKVAccessor) UpdateSpanConfigEntries(
-	context.Context, []roachpb.Span, []roachpb.SpanConfigEntry,
+// UpdateSpanConfigRecords is part of the KVAccessor interface.
+func (k dummyKVAccessor) UpdateSpanConfigRecords(
+	context.Context, []spanconfig.Target, []spanconfig.Record,
 ) error {
 	return k.error
 }

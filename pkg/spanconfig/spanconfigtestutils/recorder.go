@@ -48,18 +48,18 @@ type mutation struct {
 	batchIdx int
 }
 
-// GetSpanConfigEntriesFor is part of the KVAccessor interface.
-func (r *KVAccessorRecorder) GetSpanConfigEntriesFor(
+// GetSpanConfigRecords is part of the KVAccessor interface.
+func (r *KVAccessorRecorder) GetSpanConfigRecords(
 	ctx context.Context, spans []roachpb.Span,
-) ([]roachpb.SpanConfigEntry, error) {
-	return r.underlying.GetSpanConfigEntriesFor(ctx, spans)
+) ([]spanconfig.Record, error) {
+	return r.underlying.GetSpanConfigRecords(ctx, spans)
 }
 
-// UpdateSpanConfigEntries is part of the KVAccessor interface.
-func (r *KVAccessorRecorder) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+// UpdateSpanConfigRecords is part of the KVAccessor interface.
+func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
-	if err := r.underlying.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+	if err := r.underlying.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 		return err
 	}
 
@@ -99,8 +99,8 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 		if mi.batchIdx != mj.batchIdx { // sort by batch/ts order
 			return mi.batchIdx < mj.batchIdx
 		}
-		if !mi.update.Span.Key.Equal(mj.update.Span.Key) { // sort by key order
-			return mi.update.Span.Key.Compare(mj.update.Span.Key) < 0
+		if !mi.update.Target.Key.Equal(mj.update.Target.Key) { // sort by key order
+			return mi.update.Target.Key.Compare(mj.update.Target.Key) < 0
 		}
 
 		return mi.update.Deletion() // sort deletes before upserts
@@ -112,9 +112,9 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 	var output strings.Builder
 	for _, m := range r.mu.mutations {
 		if m.update.Deletion() {
-			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Span))
+			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Target.String()))
 		} else {
-			output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Span,
+			output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target.String(),
 				PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
 		}
 	}
