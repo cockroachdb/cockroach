@@ -134,7 +134,7 @@ export class LocalSetting<S, T> {
    * and return as an array.
    * @param state The current top-level redux state of the application.
    */
-  selectorToArray = (state: S): string[] => {
+  selectorToArray = (state: S): string[] | null => {
     return this._value(state)
       ? this._value(state)
           .toString()

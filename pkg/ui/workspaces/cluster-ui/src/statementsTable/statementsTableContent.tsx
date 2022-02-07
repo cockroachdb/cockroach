@@ -166,7 +166,7 @@ type StatementLinkTargetProps = {
   aggregationInterval?: number;
   app: string;
   implicitTxn: boolean;
-  statementNoConstants?: string;
+  statement?: string;
   database?: string;
 };
 
@@ -199,7 +199,7 @@ interface StatementLinkProps {
   app: string;
   implicitTxn: boolean;
   search: string;
-  statementNoConstants?: string;
+  statementQuery?: string;
   database?: string;
   onClick?: (statement: string) => void;
 }
@@ -213,7 +213,7 @@ export const StatementLink = ({
   app,
   implicitTxn,
   search,
-  statementNoConstants,
+  statementQuery,
   database,
   onClick,
 }: StatementLinkProps): React.ReactElement => {
@@ -230,7 +230,7 @@ export const StatementLink = ({
     statement,
     app,
     implicitTxn,
-    statementNoConstants,
+    statementQuery,
     database,
   };
 

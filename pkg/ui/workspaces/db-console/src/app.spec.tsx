@@ -35,6 +35,12 @@ import {
   StatementDetails,
   TransactionsPage,
   TransactionDetails,
+  TransactionsPageRoot,
+  ActiveTransactionsView,
+  ActiveStatementDetails,
+  ActiveTransactionDetails,
+  StatementsPageRoot,
+  ActiveStatementsView,
 } from "@cockroachlabs/cluster-ui";
 import Debug from "src/views/reports/containers/debug";
 import { ReduxDebug } from "src/views/reports/containers/redux";
@@ -344,12 +350,12 @@ describe("Routing to", () => {
   });
 
   describe("'/statement' path", () => {
-    it("redirected to '/sql-activity?tab=Statements'", () => {
+    it("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
       navigateToPath("/statement");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=Statements",
+        "/sql-activity?tab=Statements&view=fingerprints",
       );
     });
   });
@@ -361,13 +367,40 @@ describe("Routing to", () => {
     });
   });
 
+  describe("'/sql-activity?tab=Statements' path", () => {
+    it("routes to <StatementsPageRoot> component", () => {
+      navigateToPath("/sql-activity?tab=Statements");
+      assert.lengthOf(appWrapper.find(StatementsPageRoot), 1);
+    });
+
+    it("routes to <TransactionsPage> component with view=fingerprints", () => {
+      navigateToPath("/sql-activity?tab=Statements&view=fingerprints");
+      assert.lengthOf(appWrapper.find(StatementsPage), 1);
+    });
+
+    it("routes to <ActiveTransactionsView> component with view=active", () => {
+      navigateToPath("/sql-activity?tab=Statements&view=active");
+      assert.lengthOf(appWrapper.find(ActiveStatementsView), 1);
+    });
+  });
+
   {
     /* transactions statistics */
   }
   describe("'/sql-activity?tab=Transactions' path", () => {
-    it("routes to <TransactionsPage> component", () => {
+    it("routes to <TransactionsPageRoot> component", () => {
       navigateToPath("/sql-activity?tab=Transactions");
+      assert.lengthOf(appWrapper.find(TransactionsPageRoot), 1);
+    });
+
+    it("routes to <TransactionsPage> component with view=fingerprints", () => {
+      navigateToPath("/sql-activity?tab=Transactions&view=fingerprints");
       assert.lengthOf(appWrapper.find(TransactionsPage), 1);
+    });
+
+    it("routes to <ActiveTransactionsView> component with view=active", () => {
+      navigateToPath("/sql-activity?tab=Transactions&view=active");
+      assert.lengthOf(appWrapper.find(ActiveTransactionsView), 1);
     });
   });
 
@@ -378,6 +411,19 @@ describe("Routing to", () => {
     });
   });
 
+  // Active execution details.
+
+  describe("'/execution' path", () => {
+    it("'/execution/statement/statementID' routes to <ActiveStatementDetails>", () => {
+      navigateToPath("/execution/statement/stmtID");
+      assert.lengthOf(appWrapper.find(ActiveStatementDetails), 1);
+    });
+
+    it("'/execution/transaction/transactionID' routes to <ActiveTransactionDetails>", () => {
+      navigateToPath("/execution/transaction/transactionID");
+      assert.lengthOf(appWrapper.find(ActiveTransactionDetails), 1);
+    });
+  });
   {
     /* debug pages */
   }
@@ -609,12 +655,12 @@ describe("Routing to", () => {
   });
 
   describe("'/statements' path", () => {
-    it("redirected to '/sql-activity?tab=Statements'", () => {
+    it("redirected to '/sql-activity?tab=Statements&view=fingerprints'", () => {
       navigateToPath("/statements");
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=Statements",
+        "/sql-activity?tab=Statements&view=fingerprints",
       );
     });
   });
@@ -636,7 +682,7 @@ describe("Routing to", () => {
       const location = history.location;
       assert.equal(
         location.pathname + location.search,
-        "/sql-activity?tab=Transactions",
+        "/sql-activity?tab=Transactions&ascending=false&columnTitle=startTime",
       );
     });
   });

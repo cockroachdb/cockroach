@@ -86,14 +86,16 @@ const StatementTableCell = (props: { session: ISession }) => {
     return <div>{session.last_active_query}</div>;
   }
   const stmt = session.active_queries[0];
-  const sql = stmt.sql;
+  const sql = session.active_queries[0].sql;
+  const sqlNoConstants = session.active_queries[0].sql_no_constants;
+  const stmtQuery = sql.length > 0 ? sql : sqlNoConstants;
   const stmtSummary = session.active_queries[0].sql_summary;
   const stmtCellText = computeOrUseStmtSummary(sql, stmtSummary);
   return (
     <Link
       to={StatementLinkTarget({
         statementFingerprintID: stmt.id,
-        statementNoConstants: stmt.sql_no_constants,
+        statement: stmtQuery,
         implicitTxn: session.active_txn?.implicit,
         app: session.application_name,
       })}
