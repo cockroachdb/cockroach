@@ -299,11 +299,15 @@ func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	return bufferedMeta
 }
 
-func (o *OrderedSynchronizer) Close() error {
+func (o *OrderedSynchronizer) Close(context.Context) error {
+	// Note that we're using the context of the synchronizer rather than the
+	// argument of Close() because the synchronizer derives its own tracing
+	// span.
+	ctx := o.EnsureCtx()
 	o.accountingHelper.Release()
 	var lastErr error
 	for _, input := range o.inputs {
-		if err := input.ToClose.Close(); err != nil {
+		if err := input.ToClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}

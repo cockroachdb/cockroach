@@ -76,12 +76,12 @@ func (a *countRowsWindowAggregator) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (a *countRowsWindowAggregator) Close() {
+func (a *countRowsWindowAggregator) Close(ctx context.Context) {
 	if !a.CloserHelper.Close() {
 		return
 	}
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 }
 
 // processBatch implements the bufferedWindower interface.

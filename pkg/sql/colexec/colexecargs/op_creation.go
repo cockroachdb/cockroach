@@ -106,7 +106,7 @@ var _ execinfra.Releasable = &NewColOperatorResult{}
 // TestCleanupNoError releases the resources associated with this result and
 // asserts that no error is returned. It should only be used in tests.
 func (r *NewColOperatorResult) TestCleanupNoError(t testing.TB) {
-	require.NoError(t, r.ToClose.Close())
+	require.NoError(t, r.ToClose.Close(context.Background()))
 }
 
 var newColOperatorResultPool = sync.Pool{

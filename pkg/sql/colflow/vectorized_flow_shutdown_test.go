@@ -59,13 +59,13 @@ var (
 )
 
 type callbackCloser struct {
-	closeCb func() error
+	closeCb func(context.Context) error
 }
 
 var _ colexecop.Closer = callbackCloser{}
 
-func (c callbackCloser) Close() error {
-	return c.closeCb()
+func (c callbackCloser) Close(ctx context.Context) error {
+	return c.closeCb(ctx)
 }
 
 // TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
@@ -257,7 +257,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						colexecargs.OpWithMetaInfo{
 							Root:            outboxInput,
 							MetadataSources: outboxMetadataSources,
-							ToClose: []colexecop.Closer{callbackCloser{closeCb: func() error {
+							ToClose: []colexecop.Closer{callbackCloser{closeCb: func(context.Context) error {
 								idToClosed.Lock()
 								idToClosed.mapping[id] = true
 								idToClosed.Unlock()
@@ -358,7 +358,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				inputInfo := colexecargs.OpWithMetaInfo{
 					Root:            input,
 					MetadataSources: colexecop.MetadataSources{inputMetadataSource},
-					ToClose: colexecop.Closers{callbackCloser{closeCb: func() error {
+					ToClose: colexecop.Closers{callbackCloser{closeCb: func(context.Context) error {
 						closeCalled = true
 						return nil
 					}}},
