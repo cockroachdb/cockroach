@@ -1595,9 +1595,9 @@ func (b *leadBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *leadBase) Close() {
+func (b *leadBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }

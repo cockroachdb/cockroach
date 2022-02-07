@@ -281,8 +281,12 @@ func (s *ColBatchScan) Release() {
 }
 
 // Close implements the colexecop.Closer interface.
-func (s *ColBatchScan) Close() error {
-	s.cf.Close(s.EnsureCtx())
+func (s *ColBatchScan) Close(context.Context) error {
+	// Note that we're using the context of the ColBatchScan rather than the
+	// argument of Close() because the ColBatchScan derives its own tracing
+	// span.
+	ctx := s.EnsureCtx()
+	s.cf.Close(ctx)
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
 		s.tracingSpan = nil

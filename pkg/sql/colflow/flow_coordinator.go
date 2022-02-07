@@ -266,7 +266,7 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 	// Make sure that we close the coordinator and notify the batch receiver in
 	// all cases.
 	defer func() {
-		if err := f.close(); err != nil && status != execinfra.ConsumerClosed {
+		if err := f.close(ctx); err != nil && status != execinfra.ConsumerClosed {
 			f.pushError(err)
 		}
 		f.output.ProducerDone()
@@ -332,11 +332,11 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 
 // close cancels the flow and closes all colexecop.Closers the coordinator is
 // responsible for.
-func (f *BatchFlowCoordinator) close() error {
+func (f *BatchFlowCoordinator) close(ctx context.Context) error {
 	f.cancelFlow()
 	var lastErr error
 	for _, toClose := range f.input.ToClose {
-		if err := toClose.Close(); err != nil {
+		if err := toClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}
