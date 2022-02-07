@@ -320,6 +320,10 @@ const (
 	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	WaitedForDelRangeInGCJob
+	// NoNonMVCCAddSSTable adds a migration which waits for all
+	// schema changes to complete. After this point, no non-MVCC
+	// AddSSTable calls will be used outside of tenant streaming.
+	NoNonMVCCAddSSTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -541,6 +545,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
+	},
+	{
+		Key:     NoNonMVCCAddSSTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
