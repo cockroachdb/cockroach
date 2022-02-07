@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -48,6 +49,24 @@ func DeleteRange(
 	args := cArgs.Args.(*roachpb.DeleteRangeRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
+
+	// Use experimental MVCC range tombstone if requested.
+	if args.UseExperimentalRangeTombstone {
+		if cArgs.Header.Txn != nil {
+			return result.Result{}, ErrTransactionUnsupported
+		}
+		if args.Inline {
+			return result.Result{}, errors.AssertionFailedf("Inline can't be used with range tombstones")
+		}
+		if args.ReturnKeys {
+			return result.Result{}, errors.AssertionFailedf(
+				"ReturnKeys can't be used with range tombstones")
+		}
+		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(
+			ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.Timestamp, maxIntents)
+		return result.Result{}, err
+	}
 
 	var timestamp hlc.Timestamp
 	if !args.Inline {
