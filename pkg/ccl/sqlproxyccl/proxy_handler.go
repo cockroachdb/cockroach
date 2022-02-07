@@ -392,6 +392,11 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 
 	// Monitor for idle connection, if requested.
+	//
+	// TODO(jaylim-crl): Wrap conn instead of crdbConn for idle connections.
+	// Once we have connection migration, this mechanism can be removed
+	// entirely since we will be migrating connections instead of closing them
+	// whenever a pod is draining. Also note that this isn't used in CC today.
 	if handler.idleMonitor != nil {
 		crdbConn = handler.idleMonitor.DetectIdle(crdbConn, func() {
 			err := newErrorf(codeIdleDisconnect, "idle connection closed")
@@ -420,42 +425,35 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	log.Infof(ctx, "new connection")
 	connBegin := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
-	// Copy all pgwire messages from frontend to backend connection until we
-	// encounter an error or shutdown signal.
-	go func() {
-		err := ConnectionCopy(crdbConn, conn)
-		select {
-		case errConnection <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
+	// Pass ownerships of conn and crdbConn to the forwarder.
+	f := newForwarder(ctx, conn, crdbConn)
+	defer f.Close()
 
+	// Start forwarding messages.
+	if err := f.Run(); err != nil {
+		// This should not happen.
+		panic(errors.Wrap(err, "forwarder.Run failed"))
+	}
+
+	// Block until an error is received, or when the stopper starts quiescing,
+	// whichever that happens first.
 	select {
-	case err := <-errConnection:
+	case err := <-f.errChan: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
-	case <-ctx.Done():
-		err := ctx.Err()
-		if err != nil {
-			// The client connection expired.
-			codeErr := newErrorf(
-				codeExpiredClientConnection, "expired client conn: %v", err,
-			)
-			handler.metrics.updateForError(codeErr)
-			return codeErr
-		}
-		return nil
+	case err := <-errConnection: // From denyListWatcher or idleMonitor.
+		handler.metrics.updateForError(err)
+		return err
 	case <-handler.stopper.ShouldQuiesce():
-		return nil
+		err := context.Canceled
+		handler.metrics.updateForError(err)
+		return err
 	}
 }
 
