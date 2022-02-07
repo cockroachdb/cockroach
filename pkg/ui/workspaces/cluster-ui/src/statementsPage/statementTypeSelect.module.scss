@@ -1,0 +1,34 @@
+.statement-select {
+  margin: 10px 0;
+}
+
+.select-options {
+  display: flex;
+}
+
+.description-button {
+  display: inline-block;
+  margin-left: auto;
+  min-width: 160px;
+  &:focus,
+  &:active {
+    outline: none;
+    border: none;
+  }
+}
+
+.description {
+  transition: 0.2s ease;
+  overflow: hidden;
+  display: block;
+  transform-origin: top;
+  max-height: 60px;
+  padding: 8px;
+  transform: scaleY(1);
+}
+
+.collapsed {
+  max-height: 0;
+  transform: scaleY(0);
+}
+
