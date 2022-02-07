@@ -11,6 +11,7 @@
 package exec
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -135,7 +136,7 @@ func WithIntercept(command, output string) func(e *Exec) {
 func (e *Exec) LookPath(file string) (string, error) {
 	command := fmt.Sprintf("which %s", file)
 	e.logger.Print(command)
-	return e.Next(command, func() (string, error) {
+	return e.Next(command, func(_, _ io.Writer) (string, error) {
 		return exec.LookPath(file)
 	})
 }
@@ -184,11 +185,11 @@ func (e *Exec) commandContextInheritingStdStreamsImpl(
 	}
 	e.logger.Print(command)
 
-	_, err := e.Next(command, func() (string, error) {
+	_, err := e.Next(command, func(outTrace, errTrace io.Writer) (string, error) {
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = e.stdout
-		cmd.Stderr = e.stderr
+		cmd.Stdout = io.MultiWriter(e.stdout, outTrace)
+		cmd.Stderr = io.MultiWriter(e.stderr, errTrace)
 		cmd.Dir = e.dir
 		cmd.Env = env
 
@@ -217,15 +218,15 @@ func (e *Exec) commandContextImpl(
 	}
 	e.logger.Print(command)
 
-	output, err := e.Next(command, func() (string, error) {
+	output, err := e.Next(command, func(outTrace, errTrace io.Writer) (string, error) {
 		cmd := exec.CommandContext(ctx, name, args...)
 		var buffer bytes.Buffer
 		if silent {
-			cmd.Stdout = &buffer
-			cmd.Stderr = nil
+			cmd.Stdout = io.MultiWriter(&buffer, outTrace)
+			cmd.Stderr = errTrace
 		} else {
-			cmd.Stdout = io.MultiWriter(e.stdout, &buffer)
-			cmd.Stderr = e.stderr
+			cmd.Stdout = io.MultiWriter(e.stdout, &buffer, outTrace)
+			cmd.Stderr = io.MultiWriter(e.stderr, errTrace)
 		}
 		if stdin != nil {
 			cmd.Stdin = stdin
@@ -240,6 +241,7 @@ func (e *Exec) commandContextImpl(
 		}
 		return buffer.String(), nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +250,9 @@ func (e *Exec) commandContextImpl(
 
 // Next is a thin interceptor for all exec activity, running them through
 // testing knobs first.
-func (e *Exec) Next(command string, f func() (output string, err error)) (string, error) {
+func (e *Exec) Next(
+	command string, f func(outTrace, errTrace io.Writer) (output string, err error),
+) (string, error) {
 	if e.knobs.intercept != nil {
 		if output, ok := e.knobs.intercept[command]; ok {
 			return output, nil
@@ -257,5 +261,22 @@ func (e *Exec) Next(command string, f func() (output string, err error)) (string
 	if e.knobs.dryrun {
 		return "", nil
 	}
-	return e.Recorder.Next(command, f)
+	return e.Recorder.Next(command, func() (output string, err error) {
+		var outTrace, errTrace bytes.Buffer
+		defer func() {
+			p := e.logger.Prefix()
+			defer e.logger.SetPrefix(p)
+			sc := bufio.NewScanner(&outTrace)
+			e.logger.SetPrefix(p + "EXEC OUT: ")
+			for sc.Scan() {
+				e.logger.Println(sc.Text())
+			}
+			sc = bufio.NewScanner(&errTrace)
+			e.logger.SetPrefix(p + "EXEC ERR: ")
+			for sc.Scan() {
+				e.logger.Println(sc.Text())
+			}
+		}()
+		return f(&outTrace, &errTrace)
+	})
 }
