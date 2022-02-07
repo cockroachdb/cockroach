@@ -60,6 +60,7 @@ import (
 // cput           [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw] [cond=<string>]
 // del            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key>
 // del_range      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [end=<key>] [max=<max>] [returnKeys]
+// del_range_ts   [ts=<int>[,<int>]] k=<key> end=<key>
 // get            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inconsistent] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // increment      [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> [inc=<val>]
 // put            [t=<name>] [ts=<int>[,<int>]] [resolve [status=<txnstatus>]] k=<key> v=<string> [raw]
@@ -440,6 +441,7 @@ var commands = map[string]cmd{
 	"cput":         {typDataUpdate, cmdCPut},
 	"del":          {typDataUpdate, cmdDelete},
 	"del_range":    {typDataUpdate, cmdDeleteRange},
+	"del_range_ts": {typDataUpdate, cmdDeleteRangeTombstone},
 	"get":          {typReadOnly, cmdGet},
 	"increment":    {typDataUpdate, cmdIncrement},
 	"merge":        {typDataUpdate, cmdMerge},
@@ -707,6 +709,15 @@ func cmdDeleteRange(e *evalCtx) error {
 			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
+	})
+}
+
+func cmdDeleteRangeTombstone(e *evalCtx) error {
+	key, endKey := e.getKeyRange()
+	ts := e.getTs(nil)
+
+	return e.withWriter("del_range_ts", func(rw ReadWriter) error {
+		return ExperimentalMVCCDeleteRangeUsingTombstone(e.ctx, rw, nil, key, endKey, ts, 0)
 	})
 }
 
