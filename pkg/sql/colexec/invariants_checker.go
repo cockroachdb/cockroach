@@ -127,10 +127,10 @@ func (i *invariantsChecker) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (i *invariantsChecker) Close() error {
+func (i *invariantsChecker) Close(ctx context.Context) error {
 	c, ok := i.Input.(colexecop.Closer)
 	if !ok {
 		return nil
 	}
-	return c.Close()
+	return c.Close(ctx)
 }

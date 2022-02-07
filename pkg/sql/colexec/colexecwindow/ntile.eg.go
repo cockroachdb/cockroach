@@ -276,4 +276,4 @@ func (b *nTileBase) startNewPartition() {
 
 func (b *nTileBase) Init(ctx context.Context) {}
 
-func (b *nTileBase) Close() {}
+func (b *nTileBase) Close(context.Context) {}
