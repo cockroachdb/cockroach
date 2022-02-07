@@ -145,11 +145,14 @@ type Closer interface {
 	// is an Operator, the implementation of Close must be safe to execute even
 	// if Operator.Init wasn't called.
 	//
+	// Unless the Closer derives its own tracing span, the passed-in context
+	// must be used by the implementation.
+	//
 	// If this Closer is an execinfra.Releasable, the implementation must be
 	// safe to execute even after Release() was called.
 	// TODO(yuzefovich): refactor this because the Release()'d objects should
 	// not be used anymore.
-	Close() error
+	Close(context.Context) error
 }
 
 // Closers is a slice of Closers.
@@ -162,7 +165,7 @@ type Closers []Closer
 func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 	if err := colexecerror.CatchVectorizedRuntimeError(func() {
 		for _, closer := range c {
-			if err := closer.Close(); err != nil && log.V(1) {
+			if err := closer.Close(ctx); err != nil && log.V(1) {
 				log.Infof(ctx, "%s: error closing Closer: %v", prefix, err)
 			}
 		}
@@ -172,10 +175,10 @@ func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
 }
 
 // Close closes all Closers and returns the last error (if any occurs).
-func (c Closers) Close() error {
+func (c Closers) Close(ctx context.Context) error {
 	var lastErr error
 	for _, closer := range c {
-		if err := closer.Close(); err != nil {
+		if err := closer.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}
@@ -331,12 +334,12 @@ type OneInputCloserHelper struct {
 var _ Closer = &OneInputCloserHelper{}
 
 // Close implements the Closer interface.
-func (c *OneInputCloserHelper) Close() error {
+func (c *OneInputCloserHelper) Close(ctx context.Context) error {
 	if !c.CloserHelper.Close() {
 		return nil
 	}
 	if closer, ok := c.Input.(Closer); ok {
-		return closer.Close()
+		return closer.Close(ctx)
 	}
 	return nil
 }

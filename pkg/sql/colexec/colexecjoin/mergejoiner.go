@@ -889,20 +889,20 @@ func (o *mergeJoinBase) completeRightBufferedGroup() {
 	o.finishRightBufferedGroup()
 }
 
-func (o *mergeJoinBase) Close() error {
+func (o *mergeJoinBase) Close(ctx context.Context) error {
 	if !o.CloserHelper.Close() {
 		return nil
 	}
 	var lastErr error
 	for _, op := range []colexecop.Operator{o.left.source, o.right.source} {
 		if c, ok := op.(colexecop.Closer); ok {
-			if err := c.Close(); err != nil {
+			if err := c.Close(ctx); err != nil {
 				lastErr = err
 			}
 		}
 	}
 	if h := o.bufferedGroup.helper; h != nil {
-		if err := h.Close(); err != nil {
+		if err := h.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}
