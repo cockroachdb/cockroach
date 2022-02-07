@@ -40,6 +40,14 @@ type Profiler interface {
 	) (*serverpb.JSONResponse, error)
 }
 
+const (
+	// ProfileConcurrency governs how many concurrent profiles can be collected.
+	ProfileConcurrency = 2
+
+	// ProfileExpiry governs how long a profile is retained in memory.
+	ProfileExpiry = 2 * time.Second
+)
+
 // A Server serves up the pprof web ui. A request to /<profiletype>
 // generates a profile of the desired type and redirects to the UI for
 // it at /<profiletype>/<id>. Valid profile types at the time of
