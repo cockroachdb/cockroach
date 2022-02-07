@@ -1458,13 +1458,13 @@ ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules
 
-pkg/cmd/roachtest/prometheus/mock_generated.go: bin/.bootstrap pkg/cmd/roachtest/prometheus/prometheus.go pkg/roachprod/vm/aws/embedded.go pkg/security/securitytest/embedded.go $(OPTGEN_TARGETS)
+pkg/cmd/roachtest/prometheus/mocks_generated_test.go: bin/.bootstrap pkg/cmd/roachtest/prometheus/prometheus.go pkg/roachprod/vm/aws/embedded.go pkg/security/securitytest/embedded.go $(OPTGEN_TARGETS)
 	(cd pkg/cmd/roachtest/prometheus && $(GO) generate)
 
-pkg/cmd/roachtest/tests/drt_generated.go: bin/.bootstrap pkg/cmd/roachtest/tests/drt.go pkg/roachprod/vm/aws/embedded.go $(OPTGEN_TARGETS) pkg/security/securitytest/embedded.go
+pkg/cmd/roachtest/tests/drt_generated_test.go: bin/.bootstrap pkg/cmd/roachtest/tests/drt.go pkg/roachprod/vm/aws/embedded.go $(OPTGEN_TARGETS) pkg/security/securitytest/embedded.go
 	(cd pkg/cmd/roachtest/tests && $(GO) generate)
 
-pkg/kv/kvclient/rangefeed/mocks_generated.go: bin/.bootstrap pkg/kv/kvclient/rangefeed/rangefeed.go
+pkg/kv/kvclient/rangefeed/mocks_generated_test.go: bin/.bootstrap pkg/kv/kvclient/rangefeed/rangefeed.go
 	(cd pkg/kv/kvclient/rangefeed && $(GO) generate)
 
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
@@ -1473,7 +1473,7 @@ pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.jso
 pkg/security/securitytest/embedded.go: bin/.bootstrap $(shell find pkg/security/securitytest/test_certs -type f -not -name README.md -not -name regenerate.sh)
 	(cd pkg/security/securitytest && $(GO) generate)
 
-pkg/security/certmgr/mocks_generated.go: bin/.bootstrap pkg/security/certmgr/cert.go
+pkg/security/certmgr/mocks_generated_test.go: bin/.bootstrap pkg/security/certmgr/cert.go
 	(cd pkg/security/certmgr && $(GO) generate)
 
 .SECONDARY: pkg/sql/parser/gen/sql.go.tmp
