@@ -93,6 +93,7 @@ go_library(
         "rebalance_load.go",
         "registry.go",
         "remove_invalid_database_privileges.go",
+        "replica_circuit_breaker.go",
         "replicagc.go",
         "reset_quorum.go",
         "restart.go",

@@ -58,6 +58,7 @@ type tpccOptions struct {
 	Chaos          func() Chaos                // for late binding of stopper
 	During         func(context.Context) error // for running a function during the test
 	Duration       time.Duration               // if zero, TPCC is not invoked
+	RampDuration   time.Duration               // defaults to 5m
 	SetupType      tpccSetupType
 	// PrometheusConfig, if set, overwrites the default prometheus config settings.
 	PrometheusConfig *prometheus.Config
@@ -213,6 +214,9 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 	}
 
 	rampDuration := 5 * time.Minute
+	if opts.RampDuration != 0 {
+		rampDuration = opts.RampDuration
+	}
 	if c.IsLocal() {
 		opts.Warehouses = 1
 		if opts.Duration > time.Minute {
