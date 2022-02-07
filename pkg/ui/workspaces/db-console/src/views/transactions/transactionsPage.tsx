@@ -64,7 +64,7 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
-export const filtersLocalSetting = new LocalSetting(
+export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/TransactionsPage",
   (state: AdminUIState) => state.localSettings,
   defaultFilters,

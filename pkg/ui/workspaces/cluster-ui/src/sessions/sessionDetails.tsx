@@ -327,7 +327,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
                       <Link
                         to={StatementLinkTarget({
                           statementFingerprintID: stmt.id,
-                          statementNoConstants: stmt.sql_no_constants,
+                          statement: stmt.sql_no_constants,
                           implicitTxn: session.active_txn?.implicit,
                           app: "",
                         })}
