@@ -65,8 +65,6 @@ exports_files([
 # tell gazelle to resolve to this second target instead. See
 # pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
 #
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus //pkg/cmd/roachtest/prometheus:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests //pkg/cmd/roachtest/tests:with-mocks
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
