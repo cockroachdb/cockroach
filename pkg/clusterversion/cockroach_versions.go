@@ -358,6 +358,9 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
+	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
+	// range tombstones.
+	ExperimentalMVCCRangeTombstones
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -626,6 +629,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 1002},
+	},
+	{
+		Key:     ExperimentalMVCCRangeTombstones,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 1004},
 	},
 }
 
