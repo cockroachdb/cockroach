@@ -175,39 +175,6 @@ message SpanConfigEntry {
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
-// SystemSpanConfig is a system installed configuration that may apply to
-// multiple spans.
-message SystemSpanConfig {
-  option (gogoproto.equal) = true;
-
-  // ProtectionPolicies is a list of policies which protect data from being
-  // GC-ed.
-  repeated ProtectionPolicy protection_policies = 1 [(gogoproto.nullable) = false];
-}
-
-// SystemSpanConfigTarget is used to specify the target of a SystemSpanConfig.
-message SystemSpanConfigTarget {
-   // TenantID indicates the tenant ID of the logical cluster being targeted.
-   // For secondary tenants this field is left unset. For the host we can use
-   // this field to protect a specific secondary tenant.
-   //
-   // TODO(arul): Ensure that secondary tenants don't populate this field when
-   // we make use of these in the RPC.
-   roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = true];
-}
-
-
-// SystemSpanConfigEntry is a SystemSpanConfigTarget and its corresponding
-// SystemSpanConfig.
-message SystemSpanConfigEntry {
-  // SystemSpanConfigTarget represents the target over which the config is said
-  // to apply.
-  SystemSpanConfigTarget system_span_config_target = 1 [(gogoproto.nullable) = false];
-
-  // SystemSpanConfig is the config that applies.
-  SystemSpanConfig system_span_config = 2 [(gogoproto.nullable) = false];
-}
-
 // GetSpanConfigsRequest is used to fetch the span configurations over the
 // specified keyspans.
 message GetSpanConfigsRequest {
