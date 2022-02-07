@@ -50,11 +50,12 @@ func _() {
 	_ = x[UseDelRangeInGCJob-39]
 	_ = x[WaitedForDelRangeInGCJob-40]
 	_ = x[RangefeedUseOneStreamPerNode-41]
+	_ = x[NoNonMVCCAddSSTable-42]
 }
 
-const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesChangefeedIdlenessEnableNewStoreRebalancerEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNode"
+const _Key_name = "V21_2Start22_1ProbeRequestPublicSchemasWithDescriptorsEnsureSpanConfigReconciliationEnsureSpanConfigSubscriptionEnableSpanConfigStoreEnablePebbleFormatVersionBlockPropertiesChangefeedIdlenessEnableNewStoreRebalancerEnableNewChangefeedOptionsV22_1Start22_2LocalTimestampsPebbleFormatSplitUserKeysMarkedCompactedEnsurePebbleFormatVersionRangeKeysEnablePebbleFormatVersionRangeKeysTrigramInvertedIndexesRemoveGrantPrivilegeMVCCRangeTombstonesUpgradeSequenceToBeReferencedByIDSampledStmtDiagReqsAddSSTableTombstonesSystemPrivilegesTableEnablePredicateProjectionChangefeedAlterSystemSQLInstancesAddLocalitySystemExternalConnectionsTableAlterSystemStatementStatisticsAddIndexRecommendationsRoleIDSequenceAddSystemUserIDColumnSystemUsersIDColumnIsBackfilledSetSystemUsersUserIDColumnNotNullSQLSchemaTelemetryScheduledJobsSchemaChangeSupportsCreateFunctionDeleteRequestReturnKeyPebbleFormatPrePebblev1MarkedRoleOptionsTableHasIDColumnRoleOptionsIDColumnIsBackfilledSetRoleOptionsUserIDColumnNotNullUseDelRangeInGCJobWaitedForDelRangeInGCJobRangefeedUseOneStreamPerNodeNoNonMVCCAddSSTable"
 
-var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 173, 191, 215, 241, 246, 255, 270, 310, 344, 378, 400, 420, 439, 472, 491, 511, 532, 567, 601, 631, 684, 698, 719, 750, 783, 814, 848, 870, 899, 926, 957, 990, 1008, 1032, 1060}
+var _Key_index = [...]uint16{0, 5, 14, 26, 54, 84, 112, 133, 173, 191, 215, 241, 246, 255, 270, 310, 344, 378, 400, 420, 439, 472, 491, 511, 532, 567, 601, 631, 684, 698, 719, 750, 783, 814, 848, 870, 899, 926, 957, 990, 1008, 1032, 1060, 1079}
 
 func (i Key) String() string {
 	if i < 0 || i >= Key(len(_Key_index)-1) {
