@@ -334,6 +334,10 @@ func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
 }
 
+func (s *crdbSpan) SpanID() tracingpb.SpanID {
+	return s.spanID
+}
+
 // GetRecording returns the span's recording.
 //
 // finishing indicates whether s is in the process of finishing. If it isn't,
