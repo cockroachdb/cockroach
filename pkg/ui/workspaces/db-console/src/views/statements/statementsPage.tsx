@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { connect } from "react-redux";
+import { bindActionCreators } from "redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
@@ -32,11 +33,16 @@ import { selectHasViewActivityRedactedRole } from "src/redux/user";
 import { queryByName } from "src/util/query";
 
 import {
-  StatementsPage,
   AggregateStatistics,
   Filters,
   defaultFilters,
   util,
+  StatementsPageRoot,
+  ActiveStatementsViewStateProps,
+  StatementsPageStateProps,
+  ActiveStatementsViewDispatchProps,
+  StatementsPageDispatchProps,
+  StatementsPageRootProps,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -52,6 +58,10 @@ import {
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
+import {
+  activeStatementsViewActions,
+  mapStateToActiveStatementViewProps,
+} from "./activeStatementsSelectors";
 
 type ICollectedStatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 type IStatementDiagnosticsReport = protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
@@ -252,7 +262,7 @@ export const sortSettingLocalSetting = new LocalSetting(
   { ascending: false, columnTitle: "executionCount" },
 );
 
-export const filtersLocalSetting = new LocalSetting(
+export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/StatementsPage",
   (state: AdminUIState) => state.localSettings,
   defaultFilters,
@@ -264,77 +274,115 @@ export const searchLocalSetting = new LocalSetting(
   null,
 );
 
-export default withRouter(
-  connect(
-    (state: AdminUIState, props: RouteComponentProps) => ({
-      apps: selectApps(state),
-      columns: statementColumnsLocalSetting.selectorToArray(state),
-      databases: selectDatabases(state),
-      timeScale: statementsTimeScaleLocalSetting.selector(state),
-      filters: filtersLocalSetting.selector(state),
-      lastReset: selectLastReset(state),
-      nodeRegions: nodeRegionsByIDSelector(state),
-      search: searchLocalSetting.selector(state),
-      sortSetting: sortSettingLocalSetting.selector(state),
-      statements: selectStatements(state, props),
-      statementsError: state.cachedData.statements.lastError,
-      totalFingerprints: selectTotalFingerprints(state),
-      hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+const fingerprintsPageActions = {
+  refreshStatements,
+  onTimeScaleChange: setCombinedStatementsTimeScaleAction,
+  refreshStatementDiagnosticsRequests,
+  refreshUserSQLRoles,
+  resetSQLStats: resetSQLStatsAction,
+  dismissAlertMessage: () => {
+    return (dispatch: AppDispatch) => {
+      dispatch(
+        createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+      );
+      dispatch(
+        cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
+      );
+    };
+  },
+  onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
+  onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
+  onSearchComplete: (query: string) => searchLocalSetting.set(query),
+  onPageChanged: trackStatementsPaginationAction,
+  onSortingChange: (
+    _tableName: string,
+    columnName: string,
+    ascending: boolean,
+  ) =>
+    sortSettingLocalSetting.set({
+      ascending: ascending,
+      columnTitle: columnName,
     }),
-    {
-      refreshStatements: refreshStatements,
-      onTimeScaleChange: setCombinedStatementsTimeScaleAction,
-      refreshStatementDiagnosticsRequests,
-      refreshUserSQLRoles,
-      resetSQLStats: resetSQLStatsAction,
-      dismissAlertMessage: () => {
-        return (dispatch: AppDispatch) => {
-          dispatch(
-            createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-          );
-          dispatch(
-            cancelStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-          );
-        };
+  onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
+  onSelectDiagnosticsReportDropdownOption: (
+    report: IStatementDiagnosticsReport,
+  ) => {
+    if (report.completed) {
+      return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
+    } else {
+      return (dispatch: AppDispatch) => {
+        dispatch(cancelStatementDiagnosticsReportAction(report.id));
+        dispatch(
+          trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
+        );
+      };
+    }
+  },
+  // We use `null` when the value was never set and it will show all columns.
+  // If the user modifies the selection and no columns are selected,
+  // the function will save the value as a blank space, otherwise
+  // it gets saved as `null`.
+  onColumnsChange: (value: string[]) =>
+    statementColumnsLocalSetting.set(
+      value.length === 0 ? " " : value.join(","),
+    ),
+};
+
+type StateProps = {
+  fingerprintsPageProps: StatementsPageStateProps;
+  activePageProps: ActiveStatementsViewStateProps;
+};
+
+type DispatchProps = {
+  fingerprintsPageProps: StatementsPageDispatchProps;
+  activePageProps: ActiveStatementsViewDispatchProps;
+};
+
+export default withRouter(
+  connect<
+    StateProps,
+    DispatchProps,
+    RouteComponentProps,
+    StatementsPageRootProps
+  >(
+    (state: AdminUIState, props: RouteComponentProps) => ({
+      fingerprintsPageProps: {
+        ...props,
+        apps: selectApps(state),
+        columns: statementColumnsLocalSetting.selectorToArray(state),
+        databases: selectDatabases(state),
+        timeScale: statementsTimeScaleLocalSetting.selector(state),
+        filters: filtersLocalSetting.selector(state),
+        lastReset: selectLastReset(state),
+        nodeRegions: nodeRegionsByIDSelector(state),
+        search: searchLocalSetting.selector(state),
+        sortSetting: sortSettingLocalSetting.selector(state),
+        statements: selectStatements(state, props),
+        statementsError: state.cachedData.statements.lastError,
+        totalFingerprints: selectTotalFingerprints(state),
+        hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
       },
-      onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
-      onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
-      onSearchComplete: (query: string) => searchLocalSetting.set(query),
-      onPageChanged: trackStatementsPaginationAction,
-      onSortingChange: (
-        _tableName: string,
-        columnName: string,
-        ascending: boolean,
-      ) =>
-        sortSettingLocalSetting.set({
-          ascending: ascending,
-          columnTitle: columnName,
-        }),
-      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
-      onSelectDiagnosticsReportDropdownOption: (
-        report: IStatementDiagnosticsReport,
-      ) => {
-        if (report.completed) {
-          return trackDownloadDiagnosticsBundleAction(
-            report.statement_fingerprint,
-          );
-        } else {
-          return (dispatch: AppDispatch) => {
-            dispatch(cancelStatementDiagnosticsReportAction(report.id));
-            dispatch(
-              trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
-            );
-          };
-        }
+      activePageProps: mapStateToActiveStatementViewProps(state),
+    }),
+    dispatch => ({
+      fingerprintsPageProps: bindActionCreators(
+        fingerprintsPageActions,
+        dispatch,
+      ),
+      activePageProps: bindActionCreators(
+        activeStatementsViewActions,
+        dispatch,
+      ),
+    }),
+    (stateProps, dispatchProps) => ({
+      fingerprintsPageProps: {
+        ...stateProps.fingerprintsPageProps,
+        ...dispatchProps.fingerprintsPageProps,
       },
-      // We use `null` when the value was never set and it will show all columns.
-      // If the user modifies the selection and no columns are selected,
-      // the function will save the value as a blank space, otherwise
-      // it gets saved as `null`.
-      onColumnsChange: (value: string[]) =>
-        statementColumnsLocalSetting.set(
-          value.length === 0 ? " " : value.join(","),
-        ),
-    },
-  )(StatementsPage),
+      activePageProps: {
+        ...stateProps.activePageProps,
+        ...dispatchProps.activePageProps,
+      },
+    }),
+  )(StatementsPageRoot),
 );

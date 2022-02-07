@@ -186,7 +186,7 @@ function AppLink(props: { app: string }) {
 
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
     >
       {props.app}
@@ -197,7 +197,7 @@ function AppLink(props: { app: string }) {
 function NodeLink(props: { node: string }) {
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/node/${encodeURIComponent(props.node)}`}
     >
       N{props.node}
@@ -373,7 +373,7 @@ export class StatementDetails extends React.Component<
   };
 
   backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=Statements");
+    this.props.history.push("/sql-activity?tab=Statements&view=fingerprints");
     if (this.props.onBackToStatementsClick) {
       this.props.onBackToStatementsClick();
     }
