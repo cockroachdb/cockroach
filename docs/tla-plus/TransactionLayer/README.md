@@ -21,8 +21,8 @@ InitT1 ==/\ op1 \in {Write} /\ op2 \in {Read} /\ op3 \in {Write, Read}
 　　　　　　　　　[op    |-> op2, key   |-> key2, value |-> 2],  
 　　　　　　　　　[op    |-> op3, key   |-> key3, value |-> 3]>>  
 Tansaction1 has 2 case :  
-　　Write A 1, Read A, Write B 3.  
-　　Write A 1, Read A, Read B.  
+　　 Write A 1, Read A, Write B 3.  
+　　 Write A 1, Read A, Read B.  
 Thus we have 2 initial state because of 2 cases of transaction-1.  
 
 ## Use CRDB's strategy to handle these three transactions. 
