@@ -11,49 +11,66 @@
 // All changes made on this file, should also be done on the equivalent
 // file on managed-service repo.
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Helmet from "react-helmet";
 import { Tabs } from "antd";
-import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
 import TransactionsPageConnected from "src/views/transactions/transactionsPage";
 import StatementsPageConnected from "src/views/statements/statementsPage";
+import {
+  StatementsPageRoot,
+  TransactionsPageRoot,
+  commonStyles,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
+import ActiveStatementsPage from "../statements/activeStatementsPage";
+import ActiveTransactionsPage from "../transactions/activeTransactionsPage";
+import { tabAttr } from "src/util/constants";
 
 const { TabPane } = Tabs;
 
+export enum SQLActivityTabType {
+  Statements = "Statements",
+  Sessions = "Sessions",
+  Transactions = "Transactions",
+}
+
+export const SQL_ACTIVITY_DEFAULT_TAB: SQLActivityTabType =
+  SQLActivityTabType.Statements;
+
 const SQLActivityPage = (props: RouteComponentProps) => {
-  const defaultTab = util.queryByName(props.location, "tab") || "Statements";
-  const [currentTab, setCurrentTab] = useState(defaultTab);
+  const currentTab =
+    util.queryByName(props.location, tabAttr) || SQLActivityTabType.Statements;
 
   const onTabChange = (tabId: string): void => {
-    setCurrentTab(tabId);
-    props.history.location.search = "";
-    util.syncHistory({ tab: tabId }, props.history, true);
+    props.history.push({
+      search: new URLSearchParams({ tab: tabId }).toString(),
+    });
   };
-
-  useEffect(() => {
-    const queryTab = util.queryByName(props.location, "tab") || "Statements";
-    if (queryTab !== currentTab) {
-      setCurrentTab(queryTab);
-    }
-  }, [props.location, currentTab]);
 
   return (
     <div>
-      <Helmet title={defaultTab} />
+      <Helmet title={currentTab} />
       <h3 className={commonStyles("base-heading")}>SQL Activity</h3>
       <Tabs
-        defaultActiveKey={defaultTab}
+        defaultActiveKey={SQL_ACTIVITY_DEFAULT_TAB}
         className={commonStyles("cockroach--tabs")}
         onChange={onTabChange}
         activeKey={currentTab}
+        destroyInactiveTabPane
       >
         <TabPane tab="Statements" key="Statements">
-          <StatementsPageConnected />
+          <StatementsPageRoot
+            activeQueriesView={ActiveStatementsPage}
+            fingerprintsView={StatementsPageConnected}
+          />
         </TabPane>
         <TabPane tab="Transactions" key="Transactions">
-          <TransactionsPageConnected />
+          <TransactionsPageRoot
+            activeTransactionsView={ActiveTransactionsPage}
+            fingerprintsView={TransactionsPageConnected}
+          />
         </TabPane>
         <TabPane tab="Sessions" key="Sessions">
           <SessionsPageConnected />
