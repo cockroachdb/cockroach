@@ -80,8 +80,8 @@ func TestSpanConfigDecoder(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Truef(t, span.Equal(got.Span),
-		"expected span=%s, got span=%s", span, got.Span)
+	require.Truef(t, span.Equal(*got.Target.GetSpan()),
+		"expected span=%s, got span=%s", span, *got.Target.GetSpan())
 	require.Truef(t, conf.Equal(got.Config),
 		"expected config=%s, got config=%s", conf, got.Config)
 }

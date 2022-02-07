@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -69,8 +68,8 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
 	{ // Ensure that no span config entries are found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeSpanTarget(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.Empty(t, entries)
@@ -91,8 +90,8 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeSpanTarget(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, entries)
@@ -154,8 +153,8 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
 	{ // Ensure that no span config entries are to be found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeSpanTarget(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.Empty(t, entries)
@@ -176,8 +175,8 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeSpanTarget(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, entries)
@@ -220,8 +219,8 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true`)
 
 	testutils.SucceedsSoon(t, func() error {
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
+		entries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeSpanTarget(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		if len(entries) == 0 {

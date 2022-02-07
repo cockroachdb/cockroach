@@ -14,17 +14,20 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidation(t *testing.T) {
+// TestValidateUpdateArgs ensures we validate arguments to
+// UpdateSpanConfigRecords correctly.
+func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, tc := range []struct {
-		toDelete []roachpb.Span
-		toUpsert []roachpb.SpanConfigEntry
+		toDelete []spanconfig.Target
+		toUpsert []spanconfig.Record
 		expErr   string
 	}{
 		{
@@ -32,61 +35,80 @@ func TestValidation(t *testing.T) {
 			expErr: "",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a")}, // empty end key in delete list
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeSpanTarget(
+					roachpb.Span{Key: roachpb.Key("a")}, // empty end key in delete list
+				),
 			},
 			expErr: "invalid span: a",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
+					),
 				},
 			},
 			expErr: "invalid span: a",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+					),
 				},
 			},
 			expErr: "invalid span: {b-a}",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeSpanTarget(
+					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+				),
 			},
 			expErr: "invalid span: {b-a}",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}, // overlapping spans in the same list
-				{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			toDelete: []spanconfig.Target{
+				// overlapping spans in the same list.
+				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}),
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{ // overlapping spans in the same list
+			toUpsert: []spanconfig.Record{ // overlapping spans in the same list
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+					),
 				},
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					),
 				},
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			// Overlapping spans in different lists.
+			toDelete: []spanconfig.Target{
+				// overlapping spans in the same list.
+				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 			},
-			toUpsert: []roachpb.SpanConfigEntry{ // overlapping spans in different lists
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					),
 				},
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					Target: spanconfig.MakeSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					),
 				},
 			},
 			expErr: "",

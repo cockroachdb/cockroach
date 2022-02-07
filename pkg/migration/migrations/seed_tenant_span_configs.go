@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -58,21 +59,21 @@ func seedTenantSpanConfigsMigration(
 			// boundary. Look towards CreateTenantRecord for more details.
 			tenantSpanConfig := d.SpanConfig.Default
 			tenantPrefix := keys.MakeTenantPrefix(tenantID)
-			tenantSpan := roachpb.Span{
+			tenantTarget := spanconfig.MakeSpanTarget(roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.PrefixEnd(),
-			}
+			})
 			tenantSeedSpan := roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
 			}
-			toUpsert := []roachpb.SpanConfigEntry{
+			toUpsert := []spanconfig.Record{
 				{
-					Span:   tenantSeedSpan,
+					Target: spanconfig.MakeSpanTarget(tenantSeedSpan),
 					Config: tenantSpanConfig,
 				},
 			}
-			scEntries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
+			scEntries, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{tenantTarget})
 			if err != nil {
 				return err
 			}
@@ -83,7 +84,7 @@ func seedTenantSpanConfigsMigration(
 				// nothing left to do here.
 				continue
 			}
-			if err := scKVAccessor.UpdateSpanConfigEntries(
+			if err := scKVAccessor.UpdateSpanConfigRecords(
 				ctx, nil /* toDelete */, toUpsert,
 			); err != nil {
 				return errors.Wrapf(err, "failed to seed span config for tenant %d", tenantID)
