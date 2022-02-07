@@ -66,6 +66,7 @@ import {
   TimeScale,
   toDateRange,
 } from "../timeScaleDropdown";
+import { TransactionViewType } from "./transactionsPageTypes";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -501,6 +502,7 @@ export class TransactionsPage extends React.Component<
                     pagination={pagination}
                     renderNoResult={
                       <EmptyTransactionsPlaceholder
+                        transactionView={TransactionViewType.FINGERPRINTS}
                         isEmptySearchResults={hasData && isUsedFilter}
                       />
                     }

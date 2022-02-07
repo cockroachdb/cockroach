@@ -30,7 +30,7 @@ interface ISearchState {
   submit?: boolean;
 }
 
-type TSearchProps = ISearchProps & InputProps;
+type TSearchProps = ISearchProps & Omit<InputProps, "onSubmit">;
 
 const cx = classNames.bind(styles);
 
@@ -96,7 +96,8 @@ export class Search extends React.Component<TSearchProps, ISearchState> {
 
   render() {
     const { value, submitted } = this.state;
-    const { onClear, ...inputProps } = this.props;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { onSubmit, onClear, ...inputProps } = this.props;
     const className = submitted ? cx("submitted") : "";
 
     return (

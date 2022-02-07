@@ -25,6 +25,7 @@ import {
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
+  executionIdAttr,
   implicitTxnAttr,
   indexNameAttr,
   nodeIDAttr,
@@ -70,6 +71,8 @@ import SessionDetails from "src/views/sessions/sessionDetails";
 import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
+import ActiveStatementDetails from "./views/statements/activeStatementDetails";
+import ActiveTransactionDetails from "./views/transactions/activeTransactionDetails";
 import "styl/app.styl";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
@@ -193,6 +196,19 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
 
                 {/* SQL activity */}
                 <Route exact path="/sql-activity" component={SQLActivityPage} />
+
+                {/* Active executions */}
+                <Route
+                  exact
+                  path={`/execution/statement/:${executionIdAttr}`}
+                  component={ActiveStatementDetails}
+                />
+
+                <Route
+                  exact
+                  path={`/execution/transaction/:${executionIdAttr}`}
+                  component={ActiveTransactionDetails}
+                />
 
                 {/* statement statistics */}
                 <Redirect

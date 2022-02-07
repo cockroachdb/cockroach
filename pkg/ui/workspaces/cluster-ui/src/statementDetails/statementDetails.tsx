@@ -34,8 +34,6 @@ import {
   calculateTotalWorkload,
   unique,
   queryByName,
-  aggregatedTsAttr,
-  aggregationIntervalAttr,
 } from "src/util";
 import { Loading } from "src/loading";
 import { Button } from "src/button";
@@ -199,7 +197,7 @@ function AppLink(props: { app: string }) {
 
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
     >
       {props.app}
@@ -210,7 +208,7 @@ function AppLink(props: { app: string }) {
 function NodeLink(props: { node: string }) {
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/node/${encodeURIComponent(props.node)}`}
     >
       N{props.node}
@@ -566,21 +564,6 @@ export class StatementDetails extends React.Component<
         <span className={cx("tooltip-info")}>unavailable</span>
       </Tooltip>
     );
-
-    // If the aggregatedTs is unset, we are aggregating over the whole date range.
-    const aggregatedTs = queryByName(this.props.location, aggregatedTsAttr);
-    const aggregationInterval =
-      queryByName(this.props.location, aggregationIntervalAttr) || 0;
-    const [timeScaleStart, timeScaleEnd] = toDateRange(this.props.timeScale);
-    const intervalStartTime = aggregatedTs
-      ? moment.unix(parseInt(aggregatedTs)).utc()
-      : timeScaleStart;
-    const intervalEndTime =
-      aggregatedTs && aggregationInterval
-        ? moment
-            .unix(parseInt(aggregatedTs) + parseInt(aggregationInterval))
-            .utc()
-        : timeScaleEnd;
 
     const db = database ? (
       <Text>{database}</Text>
