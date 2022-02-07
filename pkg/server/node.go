@@ -1538,26 +1538,3 @@ func (n *Node) UpdateSpanConfigs(
 	}
 	return &roachpb.UpdateSpanConfigsResponse{}, nil
 }
-
-// GetSystemSpanConfigs implements the roachpb.InternalServer interface.
-func (n *Node) GetSystemSpanConfigs(
-	ctx context.Context, _ *roachpb.GetSystemSpanConfigsRequest,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	entries, err := n.spanConfigAccessor.GetSystemSpanConfigEntries(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &roachpb.GetSystemSpanConfigsResponse{SystemSpanConfigEntries: entries}, nil
-}
-
-// UpdateSystemSpanConfigs implements the roachpb.InternalServer interface.
-func (n *Node) UpdateSystemSpanConfigs(
-	ctx context.Context, req *roachpb.UpdateSystemSpanConfigsRequest,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	err := n.spanConfigAccessor.UpdateSystemSpanConfigEntries(ctx, req.ToDelete, req.ToUpsert)
-	if err != nil {
-		return nil, err
-	}
-	return &roachpb.UpdateSystemSpanConfigsResponse{}, nil
-}
