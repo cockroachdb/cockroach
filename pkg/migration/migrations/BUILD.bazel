@@ -31,6 +31,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/serverpb",
+        "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
