@@ -33,7 +33,7 @@ var (
 	queryWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish "+
+		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
@@ -42,8 +42,7 @@ var (
 	drainWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.drain_wait",
-		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process "+
+		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		0*time.Second,
@@ -231,6 +230,10 @@ func delegateDrain(
 }
 
 // runDrain idempotently activates the draining mode.
+// Note: this represents ONE round of draining. This code is iterated on
+// indefinitely until all range leases have been drained.
+// This iteration can be found here: pkg/cli/start.go, pkg/cli/quit.go.
+//
 // Note: new code should not be taught to use this method
 // directly. Use the Drain() RPC instead with a suitably crafted
 // DrainRequest.
@@ -279,17 +282,17 @@ func (s *drainServer) runDrain(
 func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
-	// First drain all clients and SQL leases.
+	// Drain the SQL layer.
+	// Drains all SQL connections, distributed SQL execution flows, and SQL table leases.
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
-	// Finally, mark the node as draining in liveness and drain the
-	// range leases.
+	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
 }
 
-// isDraining returns true if either clients are being drained
-// or one of the stores on the node is not accepting replicas.
+// isDraining returns true if either SQL client connections are being drained
+// or if one of the stores on the node is not accepting replicas.
 func (s *drainServer) isDraining() bool {
 	return s.sqlServer.pgServer.IsDraining() || (s.kvServer.node != nil && s.kvServer.node.IsDraining())
 }
@@ -299,26 +302,34 @@ func (s *drainServer) drainClients(
 	ctx context.Context, reporter func(int, redact.SafeString),
 ) error {
 	shouldDelayDraining := !s.isDraining()
-	// Mark the server as draining in a way that probes to
-	// /health?ready=1 will notice.
+
+	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
+	// Probes to /health?ready=1 will now notice the change in the node's readiness.
 	s.grpc.setMode(modeDraining)
-	s.sqlServer.acceptingClients.Set(false)
-	// Wait for drainUnreadyWait. This will fail load balancer checks and
-	// delay draining so that client traffic can move off this node.
+	s.sqlServer.isReady.Set(false)
+
+	// Wait the duration of drainWait.
+	// This will fail load balancer checks and delay draining so that client
+	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
 		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
-	// Disable incoming SQL clients up to the queryWait timeout.
+	// Drain all SQL connections.
+	// The queryWait duration is a timeout for waiting on clients
+	// to self-disconnect. If the timeout is reached, any remaining connections
+	// will be closed.
 	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
-	// Stop ongoing SQL execution up to the queryWait timeout.
+
+	// Drain all distributed SQL execution flows.
+	// The queryWait duration is used to wait on currently running flows to finish.
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
-	// Drain the SQL leases. This must be done after the pgServer has
+	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
@@ -335,8 +346,10 @@ func (s *drainServer) drainNode(
 		// No KV subsystem. Nothing to do.
 		return nil
 	}
+	// Set the node's liveness status to "draining".
 	if err = s.kvServer.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
 	}
+	// Mark the stores of the node as "draining" and drain all range leases.
 	return s.kvServer.node.SetDraining(true /* drain */, reporter, verbose)
 }
