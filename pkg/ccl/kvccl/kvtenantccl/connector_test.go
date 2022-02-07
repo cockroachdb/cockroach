@@ -100,18 +100,6 @@ func (m *mockServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
-func (m *mockServer) GetSystemSpanConfigs(
-	context.Context, *roachpb.GetSystemSpanConfigsRequest,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
-func (m *mockServer) UpdateSystemSpanConfigs(
-	context.Context, *roachpb.UpdateSystemSpanConfigsRequest,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
 func (m *mockServer) TenantSettings(
 	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
 ) error {
