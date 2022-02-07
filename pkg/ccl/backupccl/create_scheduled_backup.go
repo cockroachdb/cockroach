@@ -1023,5 +1023,5 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 }
 
 func init() {
-	sql.AddPlanHook(createBackupScheduleHook)
+	sql.AddPlanHook("schedule backup", createBackupScheduleHook)
 }

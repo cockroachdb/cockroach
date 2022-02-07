@@ -1667,5 +1667,5 @@ func getBackupDetailAndManifest(
 }
 
 func init() {
-	sql.AddPlanHook(backupPlanHook)
+	sql.AddPlanHook("backup", backupPlanHook)
 }
