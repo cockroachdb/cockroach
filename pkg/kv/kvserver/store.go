@@ -152,7 +152,7 @@ var concurrentRangefeedItersLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"kv.rangefeed.concurrent_catchup_iterators",
 	"number of rangefeeds catchup iterators a store will allow concurrently before queueing",
-	64,
+	16,
 	settings.PositiveInt,
 )
 
