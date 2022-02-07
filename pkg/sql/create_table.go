@@ -1989,8 +1989,8 @@ func NewTableDesc(
 			desc.AddFamily(fam)
 		}
 	}
-
-	if err := desc.AllocateIDs(ctx); err != nil {
+	version := st.Version.ActiveVersionOrEmpty(ctx)
+	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
 	}
 
@@ -2166,7 +2166,7 @@ func NewTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, version); err != nil {
 		return nil, err
 	}
 
