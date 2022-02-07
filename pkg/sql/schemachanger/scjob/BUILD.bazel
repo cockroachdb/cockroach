@@ -13,7 +13,7 @@ go_library(
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/schemachanger/scdeps",

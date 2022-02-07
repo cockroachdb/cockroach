@@ -15,7 +15,7 @@ go_library(
     deps = [
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -35,7 +35,7 @@ go_test(
     deps = [
         ":tenantrate",
         "//pkg/multitenant/tenantcostmodel",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/metrictestutils",

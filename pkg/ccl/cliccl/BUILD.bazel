@@ -29,7 +29,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/cloud/nodelocal",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server",
         "//pkg/settings/cluster",

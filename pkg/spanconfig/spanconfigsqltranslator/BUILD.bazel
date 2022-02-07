@@ -13,7 +13,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/sql",
         "//pkg/sql/catalog",
@@ -36,7 +36,7 @@ go_test(
     deps = [
         "//pkg/jobs/jobsprotectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",

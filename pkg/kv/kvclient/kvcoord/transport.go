@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-//go:generate mockgen -package=kvcoord -destination=mocks_generated.go . Transport
+//go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
 
 // A SendOptions structure describes the algorithm for sending RPCs to one or
 // more replicas, depending on error conditions and how many successful

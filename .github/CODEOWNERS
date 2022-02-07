@@ -237,7 +237,7 @@
 /pkg/roachpb/merge_spans*    @cockroachdb/kv-prs
 /pkg/roachpb/metadata*       @cockroachdb/kv-prs
 /pkg/roachpb/method*         @cockroachdb/kv-prs
-/pkg/roachpb/mocks*          @cockroachdb/kv-prs
+/pkg/roachpb/roachpbmock/    @cockroachdb/kv-prs
 /pkg/roachpb/replica_*       @cockroachdb/kv-prs
 /pkg/roachpb/span*           @cockroachdb/kv-prs
 /pkg/roachpb/string_test.go  @cockroachdb/kv-prs

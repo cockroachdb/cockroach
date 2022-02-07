@@ -13,7 +13,7 @@ go_library(
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
         "//pkg/keys",  # keep
-        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/roachpb",  # keep
         "//pkg/sql/catalog",  # keep
         "//pkg/sql/catalog/descpb",  # keep
         "//pkg/sql/colexecerror",  # keep
@@ -45,7 +45,7 @@ go_test(
         "//pkg/col/coldataext",
         "//pkg/col/coldatatestutils",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",

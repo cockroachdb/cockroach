@@ -11,7 +11,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/sql/catalog/descpb",
         "//pkg/util/syncutil",

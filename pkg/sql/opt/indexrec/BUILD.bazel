@@ -13,7 +13,7 @@ go_library(
     deps = [
         "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt",

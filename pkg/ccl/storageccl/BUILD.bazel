@@ -13,7 +13,7 @@ go_library(
         "//pkg/base",
         "//pkg/cloud",
         "//pkg/kv/kvserver",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",

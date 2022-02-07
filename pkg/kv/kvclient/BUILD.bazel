@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/util/hlc",
     ],

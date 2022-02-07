@@ -6,11 +6,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache",
     visibility = ["//visibility:public"],
     deps = [
-        "//build/bazelutil:noop",
         "//pkg/base",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -32,12 +31,12 @@ go_test(
     ],
     embed = [":rangefeedcache"],
     deps = [
-        "//build/bazelutil:noop",
         "//pkg/base",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",  # keep
+        "//pkg/kv/kvclient/rangecache",  # keep
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

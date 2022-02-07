@@ -18,8 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,7 +81,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			transport := NewMockTransport(ctrl)
-			rangeDB := rangecache.NewMockRangeDescriptorDB(ctrl)
+			rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
 
 			// We start off with a cached lease on r1.
 			cachedLease := roachpb.Lease{
@@ -116,9 +117,9 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 			// cancels the context and closes the range feed stream.
 			if spec.expectRetry {
 				rangeDB.EXPECT().FirstRange().Return(&desc, nil)
-				stream := roachpb.NewMockInternal_RangeFeedClient(ctrl)
+				stream := roachpbmock.NewMockInternal_RangeFeedClient(ctrl)
 				stream.EXPECT().Recv().Do(cancel).Return(nil, io.EOF)
-				client := roachpb.NewMockInternalClient(ctrl)
+				client := roachpbmock.NewMockInternalClient(ctrl)
 				client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 				transport.EXPECT().IsExhausted().Return(false)
 				transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])

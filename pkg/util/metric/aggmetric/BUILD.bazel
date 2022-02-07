@@ -28,7 +28,7 @@ go_test(
     deps = [
         ":aggmetric",
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/leaktest",
         "//pkg/util/metric",
         "@com_github_prometheus_client_model//go",
