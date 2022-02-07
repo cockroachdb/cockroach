@@ -185,7 +185,7 @@ function AppLink(props: { app: string }) {
 
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/sql-activity?tab=Statements&${searchParams.toString()}`}
     >
       {props.app}
@@ -196,7 +196,7 @@ function AppLink(props: { app: string }) {
 function NodeLink(props: { node: string }) {
   return (
     <Link
-      className={cx("app-name")}
+      className={cx("text-link")}
       to={`/node/${encodeURIComponent(props.node)}`}
     >
       N{props.node}
