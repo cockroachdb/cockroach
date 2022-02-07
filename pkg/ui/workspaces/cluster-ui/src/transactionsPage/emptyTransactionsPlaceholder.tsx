@@ -14,29 +14,57 @@ import { Anchor } from "../anchor";
 import { transactionsTable } from "../util";
 import magnifyingGlassImg from "../assets/emptyState/magnifying-glass.svg";
 import emptyTableResultsImg from "../assets/emptyState/empty-table-results.svg";
+import { TransactionViewType } from "./transactionsPageTypes";
+import { tabAttr, viewAttr } from "src/util";
+import { Link } from "react-router-dom";
 
-export const EmptyTransactionsPlaceholder: React.FC<{
-  isEmptySearchResults: boolean;
-}> = ({ isEmptySearchResults }) => {
-  const footer = (
-    <Anchor href={transactionsTable} target="_blank">
-      Learn more about statements
-    </Anchor>
-  );
+const footer = (
+  <Anchor href={transactionsTable} target="_blank">
+    Learn more about statements
+  </Anchor>
+);
 
-  const emptyPlaceholderProps: EmptyTableProps = isEmptySearchResults
-    ? {
-        title:
-          "No transactions match your search since this page was last cleared",
-        icon: magnifyingGlassImg,
-        footer,
-      }
-    : {
+const emptySearchResults = {
+  title: "No transactions match your search.",
+  icon: magnifyingGlassImg,
+  footer,
+};
+
+function getMessage(type: TransactionViewType): EmptyTableProps {
+  switch (type) {
+    case TransactionViewType.ACTIVE:
+      return {
+        title: "No active SQL statements",
+        icon: emptyTableResultsImg,
+        message: "There are currently no active transaction executions.",
+        footer: (
+          <Link
+            to={`/sql-activity?${tabAttr}=Transactions&${viewAttr}=fingerprints`}
+          >
+            View Transaction Fingerprints to see historical transaction
+            statistics.
+          </Link>
+        ),
+      };
+    case TransactionViewType.FINGERPRINTS:
+    default:
+      return {
         title: "No transactions since this page was last cleared",
         icon: emptyTableResultsImg,
         message:
           "Transactions are cleared every hour by default, or according to your configuration.",
         footer,
       };
+  }
+}
+
+export const EmptyTransactionsPlaceholder: React.FC<{
+  isEmptySearchResults: boolean;
+  transactionView: TransactionViewType;
+}> = ({ isEmptySearchResults, transactionView }) => {
+  const emptyPlaceholderProps: EmptyTableProps = isEmptySearchResults
+    ? emptySearchResults
+    : getMessage(transactionView);
+
   return <EmptyTable {...emptyPlaceholderProps} />;
 };

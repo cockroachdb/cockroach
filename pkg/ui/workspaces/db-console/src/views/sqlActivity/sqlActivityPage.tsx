@@ -18,7 +18,13 @@ import { commonStyles, util } from "@cockroachlabs/cluster-ui";
 import SessionsPageConnected from "src/views/sessions/sessionsPage";
 import TransactionsPageConnected from "src/views/transactions/transactionsPage";
 import StatementsPageConnected from "src/views/statements/statementsPage";
+import {
+  StatementsPageRoot,
+  TransactionsPageRoot,
+} from "@cockroachlabs/cluster-ui";
 import { RouteComponentProps } from "react-router-dom";
+import ActiveStatementsPage from "../statements/activeStatementsPage";
+import ActiveTransactionsPage from "../transactions/activeTransactionsPage";
 
 const { TabPane } = Tabs;
 
@@ -50,10 +56,16 @@ const SQLActivityPage = (props: RouteComponentProps) => {
         activeKey={currentTab}
       >
         <TabPane tab="Statements" key="Statements">
-          <StatementsPageConnected />
+          <StatementsPageRoot
+            activeQueriesView={ActiveStatementsPage}
+            fingerprintsView={StatementsPageConnected}
+          />
         </TabPane>
         <TabPane tab="Transactions" key="Transactions">
-          <TransactionsPageConnected />
+          <TransactionsPageRoot
+            activeTransactionsView={ActiveTransactionsPage}
+            fingerprintsView={TransactionsPageConnected}
+          />
         </TabPane>
         <TabPane tab="Sessions" key="Sessions">
           <SessionsPageConnected />

@@ -101,7 +101,9 @@ const StatementTableCell = (props: { session: ISession }) => {
   if (!(session.active_queries?.length > 0)) {
     return "N/A";
   }
-  const stmt = session.active_queries[0].sql;
+  const sql = session.active_queries[0].sql;
+  const sqlNoConstants = session.active_queries[0].sql_no_constants;
+  const stmt = sql.length > 0 ? sql : sqlNoConstants;
   const stmtSummary = session.active_queries[0].sql_summary;
   const stmtCellText = computeOrUseStmtSummary(stmt, stmtSummary);
   return (
