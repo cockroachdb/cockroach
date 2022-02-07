@@ -134,12 +134,12 @@ export class LocalSetting<S, T> {
    * and return as an array.
    * @param state The current top-level redux state of the application.
    */
-  selectorToArray = (state: S): string[] => {
-    return this._value(state)
-      ? this._value(state)
-          .toString()
-          .split(",")
-      : null;
+  selectorToArray = (state: S): string[] | null => {
+    const value = this._value(state)
+      ?.toString()
+      .split(",");
+
+    return value ?? null;
   };
 
   /**
@@ -159,7 +159,7 @@ export class LocalSetting<S, T> {
       innerSelector,
       () => getValueFromSessionStorage(this.key),
       (uiSettings, cachedValue) => {
-        return uiSettings[this.key] || cachedValue || defaultValue;
+        return uiSettings[this.key] ?? cachedValue ?? defaultValue;
       },
     );
   }
