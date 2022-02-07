@@ -26,7 +26,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --config=ci test \
                                       --test_arg -ops --test_arg "uniform:5000-25000" \
     || exit_status=$?
 
-process_test_json \
+BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS=--formatter=pebble-metamorphic process_test_json \
     $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
     $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
     /artifacts $GO_TEST_JSON_OUTPUT_FILE $exit_status
