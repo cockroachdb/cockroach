@@ -35,7 +35,7 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-//go:generate mockgen -package=rangecache -destination=mocks_generated.go . RangeDescriptorDB
+//go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 
 // rangeCacheKey is the key type used to store and sort values in the
 // RangeCache.
