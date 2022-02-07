@@ -24,24 +24,22 @@ import (
 // KVAccessor mediates access to KV span configurations pertaining to a given
 // tenant.
 type KVAccessor interface {
-	// GetSpanConfigEntriesFor returns the span configurations that overlap with
-	// the given spans.
-	GetSpanConfigEntriesFor(
-		ctx context.Context,
-		spans []roachpb.Span,
-	) ([]roachpb.SpanConfigEntry, error)
+	// GetSpanConfigRecords returns the span configurations that apply to or
+	// overlap with the supplied targets.
+	GetSpanConfigRecords(ctx context.Context, targets []Target) ([]Record, error)
 
-	// UpdateSpanConfigEntries updates configurations for the given spans. This
-	// is a "targeted" API: the spans being deleted are expected to have been
-	// present with the exact same bounds; if spans are being updated with new
-	// configs, they're expected to have been present with the same bounds. When
-	// divvying up an existing span into multiple others with distinct configs,
-	// callers are to issue a delete for the previous span and upserts for the
-	// new ones.
-	UpdateSpanConfigEntries(
+	// UpdateSpanConfigRecords updates configurations for the given key targets.
+	// This is a "targeted" API: the exact targets being deleted are expected to
+	// have been present; if targets are being updated with new configs, they're
+	// expected to be present exactly as well.
+	//
+	// Targets are not allowed to overlap with each other. When divvying up an
+	// existing target into multiple others with distinct configs, callers must
+	// issue deletes for the previous target and upserts for the new records.
+	UpdateSpanConfigRecords(
 		ctx context.Context,
-		toDelete []roachpb.Span,
-		toUpsert []roachpb.SpanConfigEntry,
+		toDelete []Target,
+		toUpsert []Record,
 	) error
 
 	// WithTxn returns a KVAccessor that runs using the given transaction (with
@@ -111,15 +109,13 @@ type SQLTranslator interface {
 	// for each one of these accumulated IDs, we generate <span, config> tuples
 	// by following up the inheritance chain to fully hydrate the span
 	// configuration. Translate also accounts for and negotiates subzone spans.
-	Translate(ctx context.Context, ids descpb.IDs) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error)
+	Translate(ctx context.Context, ids descpb.IDs) ([]Record, hlc.Timestamp, error)
 }
 
 // FullTranslate translates the entire SQL zone configuration state to the span
 // configuration state. The timestamp at which such a translation is valid is
 // also returned.
-func FullTranslate(
-	ctx context.Context, s SQLTranslator,
-) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
+func FullTranslate(ctx context.Context, s SQLTranslator) ([]Record, hlc.Timestamp, error) {
 	// As RANGE DEFAULT is the root of all zone configurations (including other
 	// named zones for the system tenant), we can construct the entire span
 	// configuration state by starting from RANGE DEFAULT.
@@ -225,7 +221,7 @@ type StoreWriter interface {
 	// [1]: Unless dryrun is true. We'll still generate the same {deleted,added}
 	//      lists.
 	Apply(ctx context.Context, dryrun bool, updates ...Update) (
-		deleted []roachpb.Span, added []roachpb.SpanConfigEntry,
+		deleted []Target, added []Record,
 	)
 }
 
@@ -235,6 +231,20 @@ type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) bool
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) roachpb.RKey
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
+}
+
+// Record ties a target to its corresponding config.
+type Record struct {
+	// Target specifies the target (keyspan(s)) the config applies over.
+	Target Target
+
+	// Config is the set of attributes that apply over the corresponding target.
+	Config roachpb.SpanConfig
+}
+
+// IsEmpty returns true if the receiver is an empty Record.
+func (r *Record) IsEmpty() bool {
+	return r.Target.IsEmpty() && r.Config.IsEmpty()
 }
 
 // SQLUpdate captures either a descriptor or a protected timestamp update.
@@ -324,21 +334,22 @@ func (p *ProtectedTimestampUpdate) IsTenantsUpdate() bool {
 // what can be applied to a StoreWriter. The embedded span captures what's being
 // updated; the config captures what it's being updated to. An empty config
 // indicates a deletion.
-type Update roachpb.SpanConfigEntry
+type Update Record
 
-// Deletion constructs an update that represents a deletion over the given span.
-func Deletion(span roachpb.Span) Update {
+// Deletion constructs an update that represents a deletion over the given
+// target.
+func Deletion(target Target) Update {
 	return Update{
-		Span:   span,
+		Target: target,
 		Config: roachpb.SpanConfig{}, // delete
 	}
 }
 
 // Addition constructs an update that represents adding the given config over
-// the given span.
-func Addition(span roachpb.Span, conf roachpb.SpanConfig) Update {
+// the given target.
+func Addition(target Target, conf roachpb.SpanConfig) Update {
 	return Update{
-		Span:   span,
+		Target: target,
 		Config: conf,
 	}
 }
