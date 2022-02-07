@@ -126,17 +126,3 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 
 	return output.String()
 }
-
-// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (r *KVAccessorRecorder) GetSystemSpanConfigEntries(
-	context.Context,
-) ([]roachpb.SystemSpanConfigEntry, error) {
-	panic("unimplemented")
-}
-
-// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (r *KVAccessorRecorder) UpdateSystemSpanConfigEntries(
-	context.Context, []roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry,
-) error {
-	panic("unimplemented")
-}

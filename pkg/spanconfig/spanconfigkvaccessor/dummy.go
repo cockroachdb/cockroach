@@ -53,20 +53,6 @@ func (k dummyKVAccessor) UpdateSpanConfigEntries(
 	return k.error
 }
 
-// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k dummyKVAccessor) GetSystemSpanConfigEntries(
-	context.Context,
-) ([]roachpb.SystemSpanConfigEntry, error) {
-	return nil, k.error
-}
-
-// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k dummyKVAccessor) UpdateSystemSpanConfigEntries(
-	context.Context, []roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry,
-) error {
-	return k.error
-}
-
 func (k dummyKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	return k
 }
