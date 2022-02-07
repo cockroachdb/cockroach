@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -190,7 +191,7 @@ func TestSystemTableLiterals(t *testing.T) {
 			if err != nil {
 				t.Fatalf("test: %+v, err: %v", test, err)
 			}
-			require.NoError(t, descbuilder.ValidateSelf(gen))
+			require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
 
 			if test.pkg.TableDesc().Equal(gen.TableDesc()) {
 				return

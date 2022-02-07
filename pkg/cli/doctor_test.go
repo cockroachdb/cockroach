@@ -57,7 +57,7 @@ func TestDoctorZipDir(t *testing.T) {
 	defer c.Cleanup()
 
 	t.Run("examine", func(t *testing.T) {
-		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip")
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip 21.1")
 		if err != nil {
 			t.Fatal(err)
 		}

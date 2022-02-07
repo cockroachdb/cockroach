@@ -894,7 +894,7 @@ func (b *changefeedResumer) OnPauseRequest(
 func getQualifiedTableName(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (string, error) {
-	col := execCfg.CollectionFactory.MakeCollection(nil /* temporarySchemaProvider */)
+	col := execCfg.CollectionFactory.MakeCollection(ctx, nil /* TemporarySchemaProvider */)
 	dbDesc, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 	if err != nil {
 		return "", err

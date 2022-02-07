@@ -75,6 +75,7 @@ func CreateTestTableDescriptor(
 		desc, err := NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
+			st,
 			n.Name.Table(),
 			n.Options,
 			parentID, keys.PublicSchemaID, id,

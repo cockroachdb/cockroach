@@ -16,6 +16,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -790,7 +791,7 @@ func TestValidateTypeDesc(t *testing.T) {
 	for i, test := range testData {
 		desc := typedesc.NewBuilder(&test.desc).BuildImmutable()
 		expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
-		ve := cb.Validate(ctx, catalog.NoValidationTelemetry, catalog.ValidationLevelCrossReferences, desc)
+		ve := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelCrossReferences, desc)
 		if err := ve.CombinedError(); err == nil {
 			t.Errorf("#%d expected err: %s but found nil: %v", i, expectedErr, test.desc)
 		} else if expectedErr != err.Error() {
@@ -836,6 +837,6 @@ func TestTableImplicitTypeDescCannotBeSerializedOrValidated(t *testing.T) {
 
 	desc := typedesc.NewBuilder(td).BuildImmutable()
 
-	err := validate.Self(desc)
+	err := validate.Self(clusterversion.TestingClusterVersion, desc)
 	require.Contains(t, err.Error(), "kind TABLE_IMPLICIT_RECORD_TYPE should never be serialized")
 }

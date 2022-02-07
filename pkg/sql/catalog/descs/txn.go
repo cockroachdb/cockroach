@@ -92,7 +92,7 @@ func (cf *CollectionFactory) Txn(
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
 			deletedDescs = nil
-			descsCol = cf.MakeCollection(nil)
+			descsCol = cf.MakeCollection(ctx, nil)
 			defer descsCol.ReleaseAll(ctx)
 			if !UnsafeSkipSystemConfigTrigger.Get(&cf.settings.SV) {
 				if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {

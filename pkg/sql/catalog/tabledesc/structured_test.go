@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -83,7 +84,7 @@ func TestAllocateIDs(t *testing.T) {
 		Privileges:    descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 		FormatVersion: descpb.InterleavedFormatVersion,
 	}).BuildCreatedMutableTable()
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +142,7 @@ func TestAllocateIDs(t *testing.T) {
 		t.Fatalf("expected %s, but found %s", a, b)
 	}
 
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -560,7 +561,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			desc := b.BuildImmutableTable()
 			changes, err := GetPostDeserializationChanges(desc)
 			require.NoError(t, err)
-			err = validate.Self(desc)
+			err = validate.Self(clusterversion.TestingClusterVersion, desc)
 			if test.expValidErr != "" {
 				require.EqualError(t, err, test.expValidErr)
 				return
@@ -611,7 +612,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 			},
 		},
 	}).BuildCreatedMutableTable()
-	if err := desc.AllocateIDs(ctx); err != nil {
+	if err := desc.AllocateIDs(ctx, clusterversion.TestingClusterVersion); err != nil {
 		t.Fatal(err)
 	}
 	lookup := func(_ descpb.ID) (catalog.TableDescriptor, error) {
@@ -851,7 +852,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 	// This modified table descriptor should fail validation.
 	{
 		broken := NewBuilder(desc).BuildImmutableTable()
-		require.Error(t, validate.Self(broken))
+		require.Error(t, validate.Self(clusterversion.TestingClusterVersion, broken))
 	}
 
 	// This modified table descriptor should be fixed by removing the default
@@ -860,7 +861,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 		b := NewBuilder(desc)
 		b.RunPostDeserializationChanges()
 		fixed := b.BuildImmutableTable()
-		require.NoError(t, validate.Self(fixed))
+		require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, fixed))
 		changes, err := GetPostDeserializationChanges(fixed)
 		require.NoError(t, err)
 		require.True(t, changes.RemovedDefaultExprFromComputedColumn)

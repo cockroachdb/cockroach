@@ -105,7 +105,8 @@ func (s storage) acquire(
 			expiration = minExpiration.Add(int64(time.Millisecond), 0)
 		}
 
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, id, catalog.Any)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, version, id, catalog.Any)
 		if err != nil {
 			return err
 		}
@@ -217,7 +218,8 @@ func (s storage) getForExpiration(
 		if err != nil {
 			return err
 		}
-		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, id, catalog.Any)
+		version := s.settings.Version.ActiveVersion(ctx)
+		desc, err = catkv.MustGetDescriptorByID(ctx, txn, s.codec, version, id, catalog.Any)
 		if err != nil {
 			return err
 		}

@@ -32,6 +32,7 @@ go_test(
     srcs = ["database_test.go"],
     embed = [":dbdesc"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",

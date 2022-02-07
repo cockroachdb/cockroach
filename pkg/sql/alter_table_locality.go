@@ -345,7 +345,8 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		mutationIdxAllowedInSameTxn = &mutationIdx
 		newColumnName = &partColName
 
-		if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 			return err
 		}
 
