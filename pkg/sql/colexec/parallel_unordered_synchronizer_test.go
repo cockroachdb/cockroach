@@ -248,7 +248,7 @@ func TestParallelUnorderedSyncClosesInputs(t *testing.T) {
 	// closure occurred as expected.
 	closed := false
 	firstInput := &colexecop.CallbackOperator{
-		CloseCb: func() error {
+		CloseCb: func(context.Context) error {
 			closed = true
 			return nil
 		},
