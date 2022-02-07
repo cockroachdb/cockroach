@@ -35,7 +35,6 @@ import {
 import { Button } from "src/button/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { computeOrUseStmtSummary } from "../util";
-import { StatementLinkTarget } from "../statementsTable";
 import {
   statisticsTableTitles,
   StatisticType,
@@ -87,12 +86,16 @@ const StatementTableCell = (props: { session: ISession }) => {
   }
   const stmt = session.active_queries[0];
   const sql = stmt.sql;
-  const stmtSummary = session.active_queries[0].sql_summary;
-  const stmtCellText = computeOrUseStmtSummary(sql, stmtSummary);
+  const sqlNoConstants = stmt.sql_no_constants;
+  const stmtQuery = sql.length > 0 ? sql : sqlNoConstants;
+  const stmtSummary = stmt.sql_summary;
+  const stmtCellText = computeOrUseStmtSummary(stmtQuery, stmtSummary);
   return (
-    <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
-      <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
-    </Tooltip>
+    <Link to={`execution/statement/${stmt.id}`}>
+      <Tooltip placement="bottom" style="tableTitle" content={<>{sql}</>}>
+        <div className={cx("cl-table__col-query-text")}>{stmtCellText}</div>
+      </Tooltip>
+    </Link>
   );
 };
 
