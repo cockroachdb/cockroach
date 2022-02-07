@@ -53,6 +53,12 @@ fi
 
 bazel run //:gazelle
 
+if files_unchanged_from_upstream $(find ./pkg -name '*.proto'); then
+  echo "Skipping generation of protobuf dependencies."
+else
+  bazel run pkg/gen/genbzl --run_under="cd $PWD && " -- --out-dir pkg/gen
+fi
+
 if files_unchanged_from_upstream $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl'); then
   echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
 else
