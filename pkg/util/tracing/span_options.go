@@ -248,6 +248,11 @@ type remoteParent SpanMeta
 // corresponds to the expectation that the parent span will usually wait for the
 // child to Finish(). If this expectation does not hold, WithFollowsFrom should
 // be added to the StartSpan invocation.
+//
+// If you're in posession of a TraceInfo instead of a SpanMeta, prefer using
+// WithRemoteParentFromTraceInfo instead. If the TraceInfo is heap-allocated,
+// WithRemoteParentFromTraceInfo will not allocate (whereas WithRemoteParent
+// allocates).
 func WithRemoteParent(parent SpanMeta) SpanOption {
 	if parent.sterile {
 		return remoteParent{}
@@ -258,6 +263,23 @@ func WithRemoteParent(parent SpanMeta) SpanOption {
 func (p remoteParent) apply(opts spanOptions) spanOptions {
 	opts.RemoteParent = (SpanMeta)(p)
 	return opts
+}
+
+type remoteParentFromTraceInfoOpt tracingpb.TraceInfo
+
+var _ SpanOption = &remoteParentFromTraceInfoOpt{}
+
+func (r *remoteParentFromTraceInfoOpt) apply(opts spanOptions) spanOptions {
+	opts.RemoteParent = SpanMetaFromProto(*(*tracingpb.TraceInfo)(r))
+	return opts
+}
+
+// WithRemoteParentFromTraceInfo is like WithRemoteParent, except the remote
+// parent info is passed in as *TraceInfo. This is equivalent to
+// WithRemoteParent(SpanMetaFromProto(ti)), but more efficient because it
+// doesn't allocate.
+func WithRemoteParentFromTraceInfo(ti *tracingpb.TraceInfo) SpanOption {
+	return (*remoteParentFromTraceInfoOpt)(ti)
 }
 
 type detachedRecording struct{}

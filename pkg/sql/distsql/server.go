@@ -591,17 +591,16 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	var remoteParent tracing.SpanMeta
 	if !req.TraceInfo.Empty() {
-		remoteParent = tracing.SpanMetaFromProto(req.TraceInfo)
-	} else {
-		// For backwards compatibility with 21.2, if tracing info was passed as
-		// gRPC metadata, we use it.
-		var err error
-		remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
-		if err != nil {
-			log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
-		}
+		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+			tracing.WithRemoteParentFromTraceInfo(&req.TraceInfo),
+			tracing.WithServerSpanKind)
+	}
+	// For backwards compatibility with 21.2, if tracing info was passed as
+	// gRPC metadata, we use it.
+	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+	if err != nil {
+		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
 	return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
 		tracing.WithRemoteParent(remoteParent),

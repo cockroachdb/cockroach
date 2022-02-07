@@ -27,6 +27,8 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
+	otelsdk "go.opentelemetry.io/otel/sdk/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
 )
@@ -596,4 +598,33 @@ func TestOpenChildIncludedRecording(t *testing.T) {
 			=== operation:child _unfinished:1 _verbose:1
 	`))
 	child.Finish()
+}
+
+func TestWithRemoteParentFromTraceInfo(t *testing.T) {
+	traceID := tracingpb.TraceID(1)
+	parentSpanID := tracingpb.SpanID(2)
+	otelTraceID := [16]byte{1, 2, 3, 4, 5}
+	otelSpanID := [8]byte{6, 7, 8, 9, 10}
+	ti := tracingpb.TraceInfo{
+		TraceID:       traceID,
+		ParentSpanID:  parentSpanID,
+		RecordingMode: tracingpb.TraceInfo_STRUCTURED,
+		Otel: &tracingpb.TraceInfo_OtelInfo{
+			TraceID: otelTraceID[:],
+			SpanID:  otelSpanID[:],
+		},
+	}
+
+	tr := NewTracer()
+	tr.SetOpenTelemetryTracer(otelsdk.NewTracerProvider().Tracer("test"))
+
+	sp := tr.StartSpan("test", WithRemoteParentFromTraceInfo(&ti))
+	defer sp.Finish()
+
+	require.Equal(t, traceID, sp.TraceID())
+	require.Equal(t, parentSpanID, sp.i.crdb.parentSpanID)
+	require.Equal(t, RecordingStructured, sp.RecordingType())
+	require.NotNil(t, sp.i.otelSpan)
+	otelCtx := sp.i.otelSpan.SpanContext()
+	require.Equal(t, oteltrace.TraceID(otelTraceID), otelCtx.TraceID())
 }

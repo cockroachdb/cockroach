@@ -445,6 +445,11 @@ func (sp *Span) TraceID() tracingpb.TraceID {
 	return sp.i.TraceID()
 }
 
+// SpanID retrieves a span's ID.
+func (sp *Span) SpanID() tracingpb.SpanID {
+	return sp.i.SpanID()
+}
+
 // OperationName returns the name of this span assigned when the span was
 // created.
 func (sp *Span) OperationName() string {
