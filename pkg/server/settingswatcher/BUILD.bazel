@@ -12,7 +12,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedbuffer",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/roachpb",
@@ -49,7 +49,7 @@ go_test(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvclient/rangefeed/rangefeedcache",
         "//pkg/roachpb",
         "//pkg/security",

@@ -13,7 +13,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/liveness",

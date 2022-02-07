@@ -15,7 +15,7 @@ go_test(
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/keys",
-        "//pkg/kv/kvclient/rangefeed:with-mocks",
+        "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security",

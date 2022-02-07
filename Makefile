@@ -798,7 +798,7 @@ DOCGEN_TARGETS := \
 GENERATED_TARGETS = \
   pkg/cmd/roachtest/prometheus/mock_generated.go \
   pkg/cmd/roachtest/tests/drt_generated.go \
-  pkg/kv/kvclient/rangefeed/mocks_generated.go \
+  pkg/kv/kvclient/rangefeed/mocks_generated_test.go \
   pkg/roachprod/vm/aws/embedded.go \
   pkg/security/securitytest/embedded.go \
   pkg/security/certmgr/mocks_generated.go \
