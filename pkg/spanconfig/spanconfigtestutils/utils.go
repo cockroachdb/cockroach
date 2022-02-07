@@ -51,6 +51,14 @@ func ParseSpan(t *testing.T, sp string) roachpb.Span {
 	}
 }
 
+// ParseTarget is a helper function that constructs a spanconfig.Target from a
+// string that conforms to spanRe.
+// TODO(arul): Once we have system targets, we'll want to parse them here too
+// instead of just calling ParseSpan here.
+func ParseTarget(t *testing.T, target string) spanconfig.Target {
+	return spanconfig.Target(ParseSpan(t, target))
+}
+
 // ParseConfig is helper function that constructs a roachpb.SpanConfig that's
 // "tagged" with the given string (i.e. a constraint with the given string a
 // required key).
@@ -71,16 +79,16 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 	}
 }
 
-// ParseSpanConfigEntry is helper function that constructs a
-// roachpb.SpanConfigEntry from a string of the form [start,end]:config. See
-// ParseSpan and ParseConfig above.
-func ParseSpanConfigEntry(t *testing.T, conf string) roachpb.SpanConfigEntry {
+// ParseSpanConfigRecord is helper function that constructs a
+// spanconfig.Target from a string of the form target:config. See
+// ParseTarget and ParseConfig above.
+func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 	parts := strings.Split(conf, ":")
 	if len(parts) != 2 {
 		t.Fatalf("expected single %q separator", ":")
 	}
-	return roachpb.SpanConfigEntry{
-		Span:   ParseSpan(t, parts[0]),
+	return spanconfig.Record{
+		Target: ParseTarget(t, parts[0]),
 		Config: ParseConfig(t, parts[1]),
 	}
 }
@@ -93,8 +101,8 @@ func ParseSpanConfigEntry(t *testing.T, conf string) roachpb.SpanConfigEntry {
 // 		span [a,b)
 // 		span [b,c)
 //
-func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
-	var spans []roachpb.Span
+func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target {
+	var targets []spanconfig.Target
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -106,14 +114,14 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
 			t.Fatalf("malformed line %q, expected to find spanPrefix %q", line, spanPrefix)
 		}
 		line = strings.TrimPrefix(line, spanPrefix)
-		spans = append(spans, ParseSpan(t, line))
+		targets = append(targets, ParseTarget(t, line))
 	}
-	return spans
+	return targets
 }
 
 // ParseKVAccessorUpdateArguments is a helper function that parses datadriven
-// kvaccessor-update arguments into the relevant spans. The input is of the
-// following form:
+// kvaccessor-update arguments into the relevant targets and records. The input
+// is of the following form:
 //
 // 		delete [c,e)
 // 		upsert [c,d):C
@@ -121,9 +129,9 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
 //
 func ParseKVAccessorUpdateArguments(
 	t *testing.T, input string,
-) ([]roachpb.Span, []roachpb.SpanConfigEntry) {
-	var toDelete []roachpb.Span
-	var toUpsert []roachpb.SpanConfigEntry
+) ([]spanconfig.Target, []spanconfig.Record) {
+	var toDelete []spanconfig.Target
+	var toUpsert []spanconfig.Record
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -134,10 +142,10 @@ func ParseKVAccessorUpdateArguments(
 		switch {
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			toDelete = append(toDelete, ParseSpan(t, line))
+			toDelete = append(toDelete, ParseTarget(t, line))
 		case strings.HasPrefix(line, upsertPrefix):
 			line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
-			toUpsert = append(toUpsert, ParseSpanConfigEntry(t, line))
+			toUpsert = append(toUpsert, ParseSpanConfigRecord(t, line))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
 				line, upsertPrefix, deletePrefix)
@@ -164,10 +172,10 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 		switch {
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			updates = append(updates, spanconfig.Deletion(ParseSpan(t, line)))
+			updates = append(updates, spanconfig.Deletion(ParseTarget(t, line)))
 		case strings.HasPrefix(line, setPrefix):
 			line = strings.TrimPrefix(line, line[:len(setPrefix)])
-			entry := ParseSpanConfigEntry(t, line)
+			entry := ParseSpanConfigRecord(t, line)
 			updates = append(updates, spanconfig.Update(entry))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
@@ -184,6 +192,11 @@ func PrintSpan(sp roachpb.Span) string {
 	return fmt.Sprintf("[%s,%s)", string(sp.Key), string(sp.EndKey))
 }
 
+// PrintTarget is a helper function that prints a spanconfig.Target.
+func PrintTarget(target spanconfig.Target) string {
+	return PrintSpan(roachpb.Span(target))
+}
+
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
 // a readable string. The span config is assumed to have been constructed by the
 // ParseSpanConfig helper above.
@@ -191,13 +204,13 @@ func PrintSpanConfig(conf roachpb.SpanConfig) string {
 	return conf.Constraints[0].Constraints[0].Key // see ParseConfig for what a "tagged" roachpb.SpanConfig translates to
 }
 
-// PrintSpanConfigEntry is a helper function that transforms
-// roachpb.SpanConfigEntry into a string of the form "[start, end):config". The
-// entry is assumed to either have been constructed using ParseSpanConfigEntry
-// above, or the constituen span and config to have been constructed using the
+// PrintSpanConfigRecord is a helper function that transforms
+// spanconfig.Record into a string of the form "target:config". The
+// entry is assumed to either have been constructed using ParseSpanConfigRecord
+// above, or the constituent span and config to have been constructed using the
 // Parse{Span,Config} helpers above.
-func PrintSpanConfigEntry(entry roachpb.SpanConfigEntry) string {
-	return fmt.Sprintf("%s:%s", PrintSpan(entry.Span), PrintSpanConfig(entry.Config))
+func PrintSpanConfigRecord(record spanconfig.Record) string {
+	return fmt.Sprintf("%s:%s", PrintTarget(record.Target), PrintSpanConfig(record.Config))
 }
 
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given

@@ -39,6 +39,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
