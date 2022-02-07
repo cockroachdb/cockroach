@@ -317,6 +317,7 @@ func TestFlagCombinations(t *testing.T) {
 	reqVariants := []Request{
 		&AddSSTableRequest{WriteAtRequestTimestamp: true},
 		&DeleteRangeRequest{Inline: true},
+		&DeleteRangeRequest{UseExperimentalRangeTombstone: true},
 		&GetRequest{KeyLocking: lock.Exclusive},
 		&ReverseScanRequest{KeyLocking: lock.Exclusive},
 		&ScanRequest{KeyLocking: lock.Exclusive},
