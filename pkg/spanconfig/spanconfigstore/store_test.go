@@ -30,9 +30,17 @@ import (
 
 // TestingApplyInternal exports an internal method for testing purposes.
 func (s *Store) TestingApplyInternal(
-	_ context.Context, dryrun bool, updates ...spanconfig.Update,
-) (deleted []roachpb.Span, added []roachpb.SpanConfigEntry, err error) {
+	dryrun bool, updates ...spanconfig.Update,
+) (deleted []spanconfig.Target, added []spanconfig.Record, err error) {
 	return s.applyInternal(dryrun, updates...)
+}
+
+func (s *Store) TestingSpanConfigStoreForEachOverlapping(
+	span roachpb.Span, f func(spanConfigEntry) error,
+) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.forEachOverlappingRLocked(span, f)
 }
 
 // TestDataDriven runs datadriven tests against the Store interface.
@@ -80,22 +88,22 @@ func TestDataDriven(t *testing.T) {
 			case "apply":
 				updates := spanconfigtestutils.ParseStoreApplyArguments(t, d.Input)
 				dryrun := d.HasArg("dryrun")
-				deleted, added, err := store.TestingApplyInternal(ctx, dryrun, updates...)
+				deleted, added, err := store.TestingApplyInternal(dryrun, updates...)
 				if err != nil {
 					return fmt.Sprintf("err: %v", err)
 				}
 
-				sort.Sort(roachpb.Spans(deleted))
+				sort.Sort(spanconfig.Targets(deleted))
 				sort.Slice(added, func(i, j int) bool {
-					return added[i].Span.Key.Compare(added[j].Span.Key) < 0
+					return added[i].Target.Less(added[j].Target)
 				})
 
 				var b strings.Builder
-				for _, sp := range deleted {
-					b.WriteString(fmt.Sprintf("deleted %s\n", spanconfigtestutils.PrintSpan(sp)))
+				for _, target := range deleted {
+					b.WriteString(fmt.Sprintf("deleted %s\n", spanconfigtestutils.PrintTarget(target)))
 				}
 				for _, ent := range added {
-					b.WriteString(fmt.Sprintf("added %s\n", spanconfigtestutils.PrintSpanConfigEntry(ent)))
+					b.WriteString(fmt.Sprintf("added %s\n", spanconfigtestutils.PrintSpanConfigRecord(ent)))
 				}
 				return b.String()
 
@@ -124,9 +132,14 @@ func TestDataDriven(t *testing.T) {
 				span := spanconfigtestutils.ParseSpan(t, spanStr)
 
 				var results []string
-				_ = store.ForEachOverlapping(ctx, span,
-					func(entry roachpb.SpanConfigEntry) error {
-						results = append(results, spanconfigtestutils.PrintSpanConfigEntry(entry))
+				_ = store.TestingSpanConfigStoreForEachOverlapping(span,
+					func(entry spanConfigEntry) error {
+						results = append(results,
+							spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+								Target: spanconfig.MakeSpanTarget(entry.span),
+								Config: entry.config,
+							}),
+						)
 						return nil
 					},
 				)
@@ -139,6 +152,52 @@ func TestDataDriven(t *testing.T) {
 			return ""
 		})
 	})
+}
+
+// TestStoreClone verifies that a cloned store contains the same contents as the
+// original.
+func TestStoreClone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	updates := []spanconfig.Update{
+		spanconfig.Addition(
+			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[a, b)")),
+			spanconfigtestutils.ParseConfig(t, "A"),
+		),
+		spanconfig.Addition(
+			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[c, d)")),
+			spanconfigtestutils.ParseConfig(t, "C"),
+		),
+		spanconfig.Addition(
+			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[e, f)")),
+			spanconfigtestutils.ParseConfig(t, "E"),
+		),
+	}
+
+	original := New(roachpb.TestingDefaultSpanConfig())
+	original.Apply(ctx, false, updates...)
+	clone := original.Copy(ctx)
+
+	var originalRecords, clonedRecords []spanconfig.Record
+	_ = original.Iterate(func(rec spanconfig.Record) error {
+		originalRecords = append(originalRecords, rec)
+		return nil
+	})
+
+	_ = clone.Iterate(func(rec spanconfig.Record) error {
+		clonedRecords = append(clonedRecords, rec)
+		return nil
+	})
+
+	require.Equal(t, len(originalRecords), len(clonedRecords))
+	for i := 0; i < len(originalRecords); i++ {
+		require.True(
+			t, originalRecords[i].Target.Equal(clonedRecords[i].Target),
+		)
+		require.True(t, originalRecords[i].Config.Equal(clonedRecords[i].Config))
+	}
 }
 
 // TestRandomized randomly sets/deletes span configs for arbitrary keyspans
@@ -154,7 +213,7 @@ func TestRandomized(t *testing.T) {
 	configs := "ABCDEF"
 	ops := []string{"set", "del"}
 
-	genRandomSpan := func() roachpb.Span {
+	getRandomSpanTarget := func() spanconfig.Target {
 		startIdx, endIdx := rand.Intn(len(alphabet)-1), 1+rand.Intn(len(alphabet)-1)
 		if startIdx == endIdx {
 			endIdx = (endIdx + 1) % len(alphabet)
@@ -165,7 +224,7 @@ func TestRandomized(t *testing.T) {
 		spanStr := fmt.Sprintf("[%s, %s)", string(alphabet[startIdx]), string(alphabet[endIdx]))
 		sp := spanconfigtestutils.ParseSpan(t, spanStr)
 		require.True(t, sp.Valid())
-		return sp
+		return spanconfig.MakeSpanTarget(sp)
 	}
 
 	getRandomConf := func() roachpb.SpanConfig {
@@ -178,12 +237,12 @@ func TestRandomized(t *testing.T) {
 	}
 
 	getRandomUpdate := func() spanconfig.Update {
-		sp, conf, op := genRandomSpan(), getRandomConf(), getRandomOp()
+		target, conf, op := getRandomSpanTarget(), getRandomConf(), getRandomOp()
 		switch op {
 		case "set":
-			return spanconfig.Addition(sp, conf)
+			return spanconfig.Addition(target, conf)
 		case "del":
-			return spanconfig.Deletion(sp)
+			return spanconfig.Deletion(target)
 		default:
 		}
 		t.Fatalf("unexpected op: %s", op)
@@ -198,11 +257,11 @@ func TestRandomized(t *testing.T) {
 				updates[i] = getRandomUpdate()
 			}
 			sort.Slice(updates, func(i, j int) bool {
-				return updates[i].Span.Key.Compare(updates[j].Span.Key) < 0
+				return updates[i].Target.Less(updates[j].Target)
 			})
 			invalid := false
 			for i := 1; i < numUpdates; i++ {
-				if updates[i].Span.Overlaps(updates[i-1].Span) {
+				if updates[i].Target.GetSpan().Overlaps(*updates[i-1].Target.GetSpan()) {
 					invalid = true
 				}
 			}
@@ -228,7 +287,7 @@ func TestRandomized(t *testing.T) {
 		updates := getRandomUpdates()
 		store.Apply(ctx, false /* dryrun */, updates...)
 		for _, update := range updates {
-			if testSpan.Overlaps(update.Span) {
+			if testSpan.Overlaps(*update.Target.GetSpan()) {
 				if update.Addition() {
 					expConfig, expFound = update.Config, true
 				} else {
@@ -239,25 +298,31 @@ func TestRandomized(t *testing.T) {
 	}
 
 	if !expFound {
-		_ = store.ForEachOverlapping(ctx, testSpan,
-			func(entry roachpb.SpanConfigEntry) error {
+		_ = store.TestingSpanConfigStoreForEachOverlapping(testSpan,
+			func(entry spanConfigEntry) error {
 				t.Fatalf("found unexpected entry: %s",
-					spanconfigtestutils.PrintSpanConfigEntry(entry))
+					spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+						Target: spanconfig.MakeSpanTarget(entry.span),
+						Config: entry.config,
+					}))
 				return nil
 			},
 		)
 	} else {
-		var foundEntry roachpb.SpanConfigEntry
-		_ = store.ForEachOverlapping(ctx, testSpan,
-			func(entry roachpb.SpanConfigEntry) error {
-				if !foundEntry.Empty() {
+		var foundEntry spanConfigEntry
+		_ = store.TestingSpanConfigStoreForEachOverlapping(testSpan,
+			func(entry spanConfigEntry) error {
+				if !foundEntry.isEmpty() {
 					t.Fatalf("expected single overlapping entry, found second: %s",
-						spanconfigtestutils.PrintSpanConfigEntry(entry))
+						spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+							Target: spanconfig.MakeSpanTarget(entry.span),
+							Config: entry.config,
+						}))
 				}
 				foundEntry = entry
 
 				// Check that the entry is exactly what we'd expect.
-				gotSpan, gotConfig := entry.Span, entry.Config
+				gotSpan, gotConfig := entry.span, entry.config
 				require.Truef(t, gotSpan.Contains(testSpan),
 					"improper result: expected retrieved span (%s) to contain test span (%s)",
 					spanconfigtestutils.PrintSpan(gotSpan), spanconfigtestutils.PrintSpan(testSpan))
@@ -274,76 +339,37 @@ func TestRandomized(t *testing.T) {
 		// the same as above.
 		storeReaderConfig, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(testSpan.Key))
 		require.NoError(t, err)
-		require.True(t, foundEntry.Config.Equal(storeReaderConfig))
+		require.True(t, foundEntry.config.Equal(storeReaderConfig))
 	}
 
 	everythingSpan := spanconfigtestutils.ParseSpan(t, fmt.Sprintf("[%s,%s)",
 		string(alphabet[0]), string(alphabet[len(alphabet)-1])))
 
-	var last roachpb.SpanConfigEntry
-	_ = store.ForEachOverlapping(ctx, everythingSpan,
-		func(cur roachpb.SpanConfigEntry) error {
+	var last spanConfigEntry
+	_ = store.TestingSpanConfigStoreForEachOverlapping(everythingSpan,
+		func(cur spanConfigEntry) error {
 			// All spans are expected to be valid.
-			require.True(t, cur.Span.Valid(),
+			require.True(t, cur.span.Valid(),
 				"expected to only find valid spans, found %s",
-				spanconfigtestutils.PrintSpan(cur.Span),
+				spanconfigtestutils.PrintSpan(cur.span),
 			)
 
-			if last.Empty() {
+			if last.isEmpty() {
 				last = cur
 				return nil
 			}
 
 			// Span configs are returned in strictly sorted order.
-			require.True(t, last.Span.Key.Compare(cur.Span.Key) < 0,
+			require.True(t, last.span.Key.Compare(cur.span.Key) < 0,
 				"expected to find spans in strictly sorted order, found %s then %s",
-				spanconfigtestutils.PrintSpan(last.Span), spanconfigtestutils.PrintSpan(cur.Span))
+				spanconfigtestutils.PrintSpan(last.span), spanconfigtestutils.PrintSpan(cur.span))
 
 			// Span configs must also be non-overlapping.
-			require.Falsef(t, last.Span.Overlaps(cur.Span),
+			require.Falsef(t, last.span.Overlaps(cur.span),
 				"expected non-overlapping spans, found %s and %s",
-				spanconfigtestutils.PrintSpan(last.Span), spanconfigtestutils.PrintSpan(cur.Span))
+				spanconfigtestutils.PrintSpan(last.span), spanconfigtestutils.PrintSpan(cur.span))
 
 			return nil
 		},
 	)
-}
-
-// TestStoreClone verifies that a cloned store contains the same contents as the
-// original.
-func TestStoreClone(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-
-	everything := spanconfigtestutils.ParseSpan(t, "[a, z)")
-	updates := []spanconfig.Update{
-		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[a, b)"), spanconfigtestutils.ParseConfig(t, "A")),
-		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[c, d)"), spanconfigtestutils.ParseConfig(t, "C")),
-		spanconfig.Addition(spanconfigtestutils.ParseSpan(t, "[e, f)"), spanconfigtestutils.ParseConfig(t, "E")),
-	}
-
-	original := New(roachpb.TestingDefaultSpanConfig())
-	original.Apply(ctx, false, updates...)
-	clone := original.Copy(ctx)
-
-	var originalEntries, clonedEntries []roachpb.SpanConfigEntry
-	_ = original.ForEachOverlapping(ctx, everything,
-		func(entry roachpb.SpanConfigEntry) error {
-			originalEntries = append(originalEntries, entry)
-			return nil
-		},
-	)
-
-	_ = clone.ForEachOverlapping(ctx, everything,
-		func(entry roachpb.SpanConfigEntry) error {
-			clonedEntries = append(clonedEntries, entry)
-			return nil
-		},
-	)
-
-	require.Equal(t, len(originalEntries), len(clonedEntries))
-	for i := 0; i < len(originalEntries); i++ {
-		require.True(t, originalEntries[i].Equal(clonedEntries[i]))
-	}
 }

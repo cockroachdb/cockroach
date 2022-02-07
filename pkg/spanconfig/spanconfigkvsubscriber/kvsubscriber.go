@@ -250,7 +250,13 @@ func (s *KVSubscriber) handlePartialUpdate(
 
 	for _, h := range handlers {
 		for _, ev := range events {
-			h.invoke(ev.(*bufferEvent).Update.Span)
+			// TODO(arul): In the future, once we start reacting to system span
+			// configurations, we'll want to invoke handlers with the correct span
+			// here as well.
+			sp := ev.(*bufferEvent).Update.Target.GetSpan()
+			if sp != nil {
+				h.invoke(*sp)
+			}
 		}
 	}
 }
