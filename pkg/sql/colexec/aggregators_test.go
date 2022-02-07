@@ -1152,7 +1152,7 @@ func benchmarkAggregateFunction(
 						break
 					}
 				}
-				if err = a.(colexecop.Closer).Close(); err != nil {
+				if err = a.(colexecop.Closer).Close(ctx); err != nil {
 					b.Fatal(err)
 				}
 				source.Reset(ctx)
