@@ -262,5 +262,5 @@ func getReplicationStreamSpec(
 }
 
 func init() {
-	sql.AddPlanHook(createReplicationStreamHook)
+	sql.AddPlanHook("replication stream", createReplicationStreamHook)
 }

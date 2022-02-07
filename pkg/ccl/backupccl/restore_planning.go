@@ -2450,5 +2450,5 @@ func restoreCreateDefaultPrimaryRegionEnums(
 }
 
 func init() {
-	sql.AddPlanHook(restorePlanHook)
+	sql.AddPlanHook("restore", restorePlanHook)
 }
