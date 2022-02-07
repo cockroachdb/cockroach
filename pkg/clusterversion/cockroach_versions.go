@@ -269,6 +269,9 @@ const (
 	DontProposeWriteTimestampForLeaseTransfers
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
+	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
+	// range tombstones.
+	ExperimentalMVCCRangeTombstones
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -428,6 +431,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     ExperimentalMVCCRangeTombstones,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 
 	// *************************************************
