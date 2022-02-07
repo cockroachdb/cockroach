@@ -99,7 +99,7 @@ func (c *crossJoiner) Next() coldata.Batch {
 	}
 	willEmit := c.willEmit()
 	if willEmit == 0 {
-		if err := c.Close(); err != nil {
+		if err := c.Close(c.Ctx); err != nil {
 			colexecerror.InternalError(err)
 		}
 		c.done = true
@@ -462,8 +462,7 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 	b.builderState.numEmittedTotal = 0
 }
 
-func (b *crossJoinerBase) Close() error {
-	ctx := b.initHelper.EnsureCtx()
+func (b *crossJoinerBase) Close(ctx context.Context) error {
 	if b.rightTuples != nil {
 		return b.rightTuples.Close(ctx)
 	}

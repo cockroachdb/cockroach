@@ -589,7 +589,7 @@ func (s *ColIndexJoin) Release() {
 }
 
 // Close implements the colexecop.Closer interface.
-func (s *ColIndexJoin) Close() error {
+func (s *ColIndexJoin) Close(context.Context) error {
 	s.closeInternal()
 	if s.tracingSpan != nil {
 		s.tracingSpan.Finish()
@@ -601,7 +601,11 @@ func (s *ColIndexJoin) Close() error {
 // closeInternal is a subset of Close() which doesn't finish the operator's
 // span.
 func (s *ColIndexJoin) closeInternal() {
-	s.cf.Close(s.EnsureCtx())
+	// Note that we're using the context of the ColIndexJoin rather than the
+	// argument of Close() because the ColIndexJoin derives its own tracing
+	// span.
+	ctx := s.EnsureCtx()
+	s.cf.Close(ctx)
 	if s.spanAssembler != nil {
 		// spanAssembler can be nil if Release() has already been called.
 		s.spanAssembler.Close()

@@ -440,7 +440,7 @@ func RunTestsWithOrderedCols(
 // setting, the closing happens at the end of the query execution.
 func closeIfCloser(t *testing.T, op colexecop.Operator) {
 	if c, ok := op.(colexecop.Closer); ok {
-		if err := c.Close(); err != nil {
+		if err := c.Close(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}

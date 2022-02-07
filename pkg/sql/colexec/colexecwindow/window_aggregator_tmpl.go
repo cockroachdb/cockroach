@@ -179,15 +179,15 @@ func (a *windowAggregatorBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (a *windowAggregatorBase) Close() {
+func (a *windowAggregatorBase) Close(ctx context.Context) {
 	if !a.CloserHelper.Close() {
 		return
 	}
-	if err := a.closers.Close(); err != nil {
+	if err := a.closers.Close(ctx); err != nil {
 		colexecerror.InternalError(err)
 	}
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 }
 
 func (a *windowAggregator) startNewPartition() {
@@ -195,8 +195,8 @@ func (a *windowAggregator) startNewPartition() {
 	a.agg.Reset()
 }
 
-func (a *windowAggregator) Close() {
-	a.windowAggregatorBase.Close()
+func (a *windowAggregator) Close(ctx context.Context) {
+	a.windowAggregatorBase.Close(ctx)
 	a.agg.Reset()
 	*a = windowAggregator{}
 }
@@ -220,8 +220,8 @@ func (a *slidingWindowAggregator) startNewPartition() {
 	a.agg.Reset()
 }
 
-func (a *slidingWindowAggregator) Close() {
-	a.windowAggregatorBase.Close()
+func (a *slidingWindowAggregator) Close(ctx context.Context) {
+	a.windowAggregatorBase.Close(ctx)
 	a.agg.Reset()
 	*a = slidingWindowAggregator{}
 }

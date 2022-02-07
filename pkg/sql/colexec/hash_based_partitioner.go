@@ -618,7 +618,7 @@ StateChanged:
 			return b
 
 		case hbpFinished:
-			if err := op.Close(); err != nil {
+			if err := op.Close(op.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -629,11 +629,10 @@ StateChanged:
 	}
 }
 
-func (op *hashBasedPartitioner) Close() error {
+func (op *hashBasedPartitioner) Close(ctx context.Context) error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
-	ctx := op.EnsureCtx()
 	log.VEventf(ctx, 1, "%s is closed", op.name)
 	var retErr error
 	for i := range op.inputs {
@@ -644,7 +643,7 @@ func (op *hashBasedPartitioner) Close() error {
 	// The in-memory main operator might be a Closer (e.g. the in-memory hash
 	// aggregator), and we need to close it if so.
 	if c, ok := op.inMemMainOp.(colexecop.Closer); ok {
-		if err := c.Close(); err != nil {
+		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}
 	}
@@ -652,7 +651,7 @@ func (op *hashBasedPartitioner) Close() error {
 	// it will still be closed appropriately because we accumulate all closers
 	// in NewColOperatorResult.
 	if c, ok := op.diskBackedFallbackOp.(colexecop.Closer); ok {
-		if err := c.Close(); err != nil {
+		if err := c.Close(ctx); err != nil {
 			retErr = err
 		}
 	}

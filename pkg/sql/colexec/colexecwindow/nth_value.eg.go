@@ -767,9 +767,9 @@ func (b *nthValueBase) Init(ctx context.Context) {
 }
 
 // Close implements the bufferedWindower interface.
-func (b *nthValueBase) Close() {
+func (b *nthValueBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }
