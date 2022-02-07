@@ -365,13 +365,13 @@ const (
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
 	EnablePebbleFormatVersionRangeKeys
-
 	// TrigramInvertedIndexes enables the creation of trigram inverted indexes
 	// on strings.
 	TrigramInvertedIndexes
-
 	// RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
 	RemoveGrantPrivilege
+	// MVCCRangeTombstones enables the use of MVCC range tombstones.
+	MVCCRangeTombstones
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -652,6 +652,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
+	},
+	{
+		Key:     MVCCRangeTombstones,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
 
 	// *************************************************
