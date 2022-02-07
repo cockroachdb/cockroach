@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -423,33 +424,59 @@ func (c *Connector) TokenBucket(
 
 // GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
 func (c *Connector) GetSpanConfigEntriesFor(
-	ctx context.Context, spans []roachpb.Span,
-) (entries []roachpb.SpanConfigEntry, _ error) {
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	spans []roachpb.Span,
+	includeSystemSpanConfigs bool,
+) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		records = records[:0] // we're in a retryable.
+
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
-			Spans: spans,
+			TenantID:                 tenantID,
+			Spans:                    spans,
+			IncludeSystemSpanConfigs: includeSystemSpanConfigs,
 		})
 		if err != nil {
 			return err
 		}
 
-		entries = resp.SpanConfigEntries
+		for _, entry := range resp.SpanConfigEntries {
+			records = append(records, spanconfig.Record{
+				Target: spanconfigtarget.New(entry.Target),
+				Config: entry.Config,
+			})
+		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return entries, nil
+	return records, nil
 }
 
 // UpdateSpanConfigEntries implements the spanconfig.KVAccessor
 // interface.
 func (c *Connector) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
+
+	targetsToDelete := make([]roachpb.SpanConfigTarget, 0, len(toDelete))
+	for _, toDel := range toDelete {
+		targetsToDelete = append(targetsToDelete, *toDel.TargetProto())
+	}
+
+	entriesToUpsert := make([]roachpb.SpanConfigEntry, 0, len(toUpsert))
+	for _, toUps := range toUpsert {
+		entriesToUpsert = append(entriesToUpsert, roachpb.SpanConfigEntry{
+			Target: *toUps.Target.TargetProto(),
+			Config: toUps.Config,
+		})
+	}
+
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: toDelete,
-			ToUpsert: toUpsert,
+			ToDelete: targetsToDelete,
+			ToUpsert: entriesToUpsert,
 		})
 		return err
 	})

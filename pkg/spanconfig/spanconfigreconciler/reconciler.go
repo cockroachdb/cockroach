@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -211,15 +212,15 @@ func (f *fullReconciler) reconcile(
 
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
-	var entries []roachpb.SpanConfigEntry
-	entries, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
+	var records []spanconfig.Record
+	records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
-	updates := make([]spanconfig.Update, len(entries))
-	for i, entry := range entries {
-		updates[i] = spanconfig.Update(entry)
+	updates := make([]spanconfig.Update, len(records))
+	for i, record := range records {
+		updates[i] = spanconfig.Update(record)
 	}
 
 	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, updates...)
@@ -245,12 +246,12 @@ func (f *fullReconciler) reconcile(
 	var storeWithExtraneousSpanConfigs *spanconfigstore.Store
 	{
 		for _, u := range updates {
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Span))
+			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Target))
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
 
-	deletedSpans, err := f.deleteExtraneousSpanConfigs(ctx, storeWithExtraneousSpanConfigs)
+	deletedTargets, err := f.deleteExtraneousSpanConfigs(ctx, storeWithExtraneousSpanConfigs)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -258,7 +259,7 @@ func (f *fullReconciler) reconcile(
 	// Update the store that's supposed to reflect the latest span config
 	// contents. As before, we could've fetched this state from KV directly, but
 	// doing it this way is cheaper.
-	for _, d := range deletedSpans {
+	for _, d := range deletedTargets {
 		storeWithLatestSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(d))
 	}
 
@@ -301,7 +302,9 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
 		// Fully populate the store with KVAccessor contents.
-		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(ctx, spans)
+		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(
+			ctx, f.tenID, spans, true, /*includeSystemSpanConfigs */
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -316,24 +319,23 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 // deleteExtraneousSpanConfigs deletes all extraneous span configs from KV.
 func (f *fullReconciler) deleteExtraneousSpanConfigs(
 	ctx context.Context, storeWithExtraneousSpanConfigs *spanconfigstore.Store,
-) ([]roachpb.Span, error) {
-	var extraneousSpans []roachpb.Span
-	if err := storeWithExtraneousSpanConfigs.ForEachOverlapping(ctx, keys.EverythingSpan,
-		func(entry roachpb.SpanConfigEntry) error {
-			extraneousSpans = append(extraneousSpans, entry.Span)
-			return nil
-		},
+) ([]spanconfig.Target, error) {
+	var extraneousTargets []spanconfig.Target
+	if err := storeWithExtraneousSpanConfigs.Iterate(func(record spanconfig.Record) error {
+		extraneousTargets = append(extraneousTargets, record.Target)
+		return nil
+	},
 	); err != nil {
 		return nil, err
 	}
 
 	// Delete the extraneous entries, if any.
-	if len(extraneousSpans) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, extraneousSpans, nil); err != nil {
+	if len(extraneousTargets) != 0 {
+		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, extraneousTargets, nil); err != nil {
 			return nil, err
 		}
 	}
-	return extraneousSpans, nil
+	return extraneousTargets, nil
 }
 
 // incrementalReconciler is a single orchestrator for the incremental
@@ -397,11 +399,11 @@ func (r *incrementalReconciler) reconcile(
 			}
 			for _, missingID := range missingTableIDs {
 				// Delete span configs for missing tables.
-				tableSpan := roachpb.Span{
+				tableTarget := spanconfigtarget.NewSpanTarget(roachpb.Span{
 					Key:    r.codec.TablePrefix(uint32(missingID)),
 					EndKey: r.codec.TablePrefix(uint32(missingID)).PrefixEnd(),
-				}
-				updates = append(updates, spanconfig.Deletion(tableSpan))
+				})
+				updates = append(updates, spanconfig.Deletion(tableTarget))
 			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)

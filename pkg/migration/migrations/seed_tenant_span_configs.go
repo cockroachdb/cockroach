@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -66,13 +68,15 @@ func seedTenantSpanConfigsMigration(
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
 			}
-			toUpsert := []roachpb.SpanConfigEntry{
+			toUpsert := []spanconfig.Record{
 				{
-					Span:   tenantSeedSpan,
+					Target: spanconfigtarget.NewSpanTarget(tenantSeedSpan),
 					Config: tenantSpanConfig,
 				},
 			}
-			scEntries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
+			scEntries, err := scKVAccessor.GetSpanConfigEntriesFor(
+				ctx, tenantID, []roachpb.Span{tenantSpan}, true, /* includeSystemSpanConfigs */
+			)
 			if err != nil {
 				return err
 			}

@@ -250,7 +250,10 @@ func (s *KVSubscriber) handlePartialUpdate(
 
 	for _, h := range handlers {
 		for _, ev := range events {
-			h.invoke(ev.(*bufferEvent).Update.Span)
+			// TODO(arul): Hijack system span config events here.
+			if ev.(*bufferEvent).Update.IsSpanConfigUpdate() {
+				h.invoke(ev.(*bufferEvent).Update.Target.Encode())
+			}
 		}
 	}
 }

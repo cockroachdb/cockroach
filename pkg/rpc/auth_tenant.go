@@ -282,14 +282,22 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		return nil
 	}
 
+	// TODO(arul): validate system span config targets.
+
 	for _, entry := range args.ToUpsert {
-		if err := validate(entry.Span); err != nil {
-			return err
+		span := entry.Target.GetSpan()
+		if span != nil {
+			if err := validate(*span); err != nil {
+				return err
+			}
 		}
 	}
-	for _, span := range args.ToDelete {
-		if err := validate(span); err != nil {
-			return err
+	for _, target := range args.ToDelete {
+		span := target.GetSpan()
+		if span != nil {
+			if err := validate(*span); err != nil {
+				return err
+			}
 		}
 	}
 

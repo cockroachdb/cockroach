@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -71,15 +72,17 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "kvaccessor-get":
-				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
-				entries, err := accessor.GetSpanConfigEntriesFor(ctx, spans)
+				spans, includeSystemSpanConfigs := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
+				entries, err := accessor.GetSpanConfigEntriesFor(
+					ctx, roachpb.SystemTenantID, spans, includeSystemSpanConfigs,
+				)
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 
 				var output strings.Builder
 				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigEntry(entry)))
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(entry)))
 				}
 				return output.String()
 			case "kvaccessor-update":
@@ -88,26 +91,6 @@ func TestDataDriven(t *testing.T) {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
 				return "ok"
-			case "kvaccessor-system-scfgs-update":
-				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateSystemSpanConfigsArguments(t, d.Input)
-				if err := accessor.UpdateSystemSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
-					return fmt.Sprintf("err: %s", err.Error())
-				}
-				return "ok"
-			case "kvaccessor-system-scfgs-get":
-				entries, err := accessor.GetSystemSpanConfigEntries(ctx)
-				if err != nil {
-					return fmt.Sprintf("err: %s", err.Error())
-				}
-
-				var output strings.Builder
-				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf(
-						"%s\n", spanconfigtestutils.PrintSystemSpanConfigEntry(entry),
-					))
-				}
-				return output.String()
-
 			default:
 				t.Fatalf("unknown command: %s", d.Cmd)
 			}

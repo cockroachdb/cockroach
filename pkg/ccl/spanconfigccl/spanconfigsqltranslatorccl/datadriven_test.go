@@ -159,31 +159,37 @@ func TestDataDriven(t *testing.T) {
 				}
 
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				entries, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID})
+				records, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID})
 				require.NoError(t, err)
-				sort.Slice(entries, func(i, j int) bool {
-					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
+				sort.Slice(records, func(i, j int) bool {
+					return records[i].Target.Less(records[j].Target)
 				})
 
 				var output strings.Builder
-				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%-42s %s\n", entry.Span,
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config)))
+				for _, record := range records {
+					output.WriteString(fmt.Sprintf(
+						"%-42s %s\n",
+						*record.Target.TargetProto().GetSpan(),
+						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)),
+					)
 				}
 				return output.String()
 
 			case "full-translate":
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				entries, _, err := spanconfig.FullTranslate(ctx, sqlTranslator)
+				records, _, err := spanconfig.FullTranslate(ctx, sqlTranslator)
 				require.NoError(t, err)
 
-				sort.Slice(entries, func(i, j int) bool {
-					return entries[i].Span.Key.Compare(entries[j].Span.Key) < 0
+				sort.Slice(records, func(i, j int) bool {
+					return records[i].Target.Less(records[j].Target)
 				})
 				var output strings.Builder
-				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%-42s %s\n", entry.Span,
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(entry.Config)))
+				for _, record := range records {
+					output.WriteString(fmt.Sprintf(
+						"%-42s %s\n",
+						*record.Target.TargetProto().GetSpan(),
+						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)),
+					)
 				}
 				return output.String()
 

@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -149,12 +151,12 @@ func CreateTenantRecord(
 	// reconciling?
 	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
-	toUpsert := []roachpb.SpanConfigEntry{
+	toUpsert := []spanconfig.Record{
 		{
-			Span: roachpb.Span{
+			Target: spanconfigtarget.NewSpanTarget(roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
-			},
+			}),
 			Config: tenantSpanConfig,
 		},
 	}
@@ -441,21 +443,23 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		}
 
 		// Clear out all span config entries left over by the tenant.
-		tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+		tenantID := roachpb.MakeTenantID(info.ID)
+		tenantPrefix := keys.MakeTenantPrefix(tenantID)
 		tenantSpan := roachpb.Span{
 			Key:    tenantPrefix,
 			EndKey: tenantPrefix.PrefixEnd(),
 		}
 
 		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{tenantSpan})
+		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, tenantID, []roachpb.Span{tenantSpan}, true /* includeSystemSpanConfigs */)
 		if err != nil {
 			return err
 		}
 
-		toDelete := make([]roachpb.Span, len(entries))
+		// TODO(arul): account for removing system span config entries here as well.
+		toDelete := make([]spanconfig.Target, 0, len(entries)+1)
 		for i, entry := range entries {
-			toDelete[i] = entry.Span
+			toDelete[i] = entry.Target
 		}
 		return scKVAccessor.UpdateSpanConfigEntries(ctx, toDelete, nil /* toUpsert */)
 	})

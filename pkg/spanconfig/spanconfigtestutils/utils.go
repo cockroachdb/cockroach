@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/datadriven"
@@ -33,71 +34,51 @@ import (
 // and "end" keys.
 var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
 
-// configRe matches a single word. It's a shorthand for declaring a unique
+// configRe matches a single letter. It's a shorthand for declaring a unique
 // config.
-var configRe = regexp.MustCompile(`^(\w+)$`)
+var configRe = regexp.MustCompile(`^(\w)$`)
 
-// targetRe matches strings of the form "[cluster]" or "[tenant <id>]".
-var targetRe = regexp.MustCompile(`^\[(cluster|(tenant) (\d*))]$`)
+// systemSpanConfigTargetRe matches strings of the form "[cluster]" or "[tenant <id>]".
+var systemSpanConfigTargetRe = regexp.MustCompile(`^\[(cluster|(tenant) (\d*))]$`)
 
-// systemSpanConfigRe matches a single letter. It's a shorthand for declaring
-// a unique system span config.
-var systemSpanConfigRe = regexp.MustCompile(`^\s??(\w)$`)
-
-// parseTarget is a helper function that constructs a
+// parseSystemSpanConfigTarget is a helper function that constructs a
 // roachpb.SystemSpanConfigTarget from a string of the form "[cluster]" or
 // "[tenant <id>]".
-func parseTarget(t *testing.T, target string) roachpb.SystemSpanConfigTarget {
-	if !targetRe.MatchString(target) {
+// TODO(arul): Fix this parsing a bit.
+func parseSystemSpanConfigTarget(t *testing.T, target string) *spanconfigtarget.SystemTarget {
+	if !systemSpanConfigTargetRe.MatchString(target) {
 		t.Fatalf("expected %s to match target regex", target)
 	}
-	matches := targetRe.FindStringSubmatch(target)
+	matches := systemSpanConfigTargetRe.FindStringSubmatch(target)
 	const tenantPrefix = "tenant"
 	if matches[1] == "cluster" {
-		return roachpb.SystemSpanConfigTarget{}
+		target, err := spanconfigtarget.NewSystemTarget(roachpb.SystemTenantID, roachpb.SystemTenantID)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		return target
 	} else if matches[2] == tenantPrefix {
 		id, err := strconv.Atoi(matches[3])
 		require.NoError(t, err)
 		tenID := roachpb.MakeTenantID(uint64(id))
-		return roachpb.SystemSpanConfigTarget{
-			TenantID: &tenID,
+		target, err := spanconfigtarget.NewSystemTarget(tenID, tenID)
+		if err != nil {
+			t.Fatalf("%v", err)
 		}
+		return target
 	}
 	t.Fatalf("unkown target: %v %q %d", matches, matches[3], len(matches))
-	return roachpb.SystemSpanConfigTarget{}
+	return nil
 }
 
-// parseSystemSpanConfig is a helper function that constructs SystemSpanConfigs
-// using strings of the systemSpanConfigRe regex form.
-func parseSystemSpanConfig(t *testing.T, conf string) roachpb.SystemSpanConfig {
-	if !systemSpanConfigRe.MatchString(conf) {
-		t.Fatalf("expected %s to match system span config regex", conf)
+func parseTarget(t *testing.T, target string) spanconfig.Target {
+	if systemSpanConfigTargetRe.MatchString(target) {
+		return parseSystemSpanConfigTarget(t, target)
+	} else if spanRe.MatchString(target) {
+		sp := ParseSpan(t, target)
+		return spanconfigtarget.NewSpanTarget(sp)
 	}
-	matches := systemSpanConfigRe.FindStringSubmatch(conf)
-	return roachpb.SystemSpanConfig{
-		ProtectionPolicies: []roachpb.ProtectionPolicy{
-			{
-				ProtectedTimestamp: hlc.Timestamp{
-					WallTime: int64(matches[1][0]),
-				},
-			},
-		},
-	}
-}
-
-// parseSystemSpanConfig entry parses the given string and returns a
-// roachpb.SystemSpanConfigEntry.
-func parseSystemSpanConfigEntry(t *testing.T, entry string) roachpb.SystemSpanConfigEntry {
-	parts := strings.Split(entry, ":")
-	if len(parts) != 2 {
-		t.Fatalf("expected single %q separator", ":")
-	}
-	target := parseTarget(t, parts[0])
-	conf := parseSystemSpanConfig(t, parts[1])
-	return roachpb.SystemSpanConfigEntry{
-		SystemSpanConfigTarget: target,
-		SystemSpanConfig:       conf,
-	}
+	panic(fmt.Sprintf("expected %s to match span regex or system span config target regex", target))
 }
 
 // ParseSpan is helper function that constructs a roachpb.Span from a string of
@@ -123,11 +104,11 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 		t.Fatalf("expected %s to match config regex", conf)
 	}
 	return roachpb.SpanConfig{
-		Constraints: []roachpb.ConstraintsConjunction{
-			{
-				Constraints: []roachpb.Constraint{
-					{
-						Key: conf,
+		GCPolicy: roachpb.GCPolicy{
+			ProtectionPolicies: []roachpb.ProtectionPolicy{
+				{
+					ProtectedTimestamp: hlc.Timestamp{
+						WallTime: int64(conf[0]),
 					},
 				},
 			},
@@ -135,16 +116,20 @@ func ParseConfig(t *testing.T, conf string) roachpb.SpanConfig {
 	}
 }
 
-// ParseSpanConfigEntry is helper function that constructs a
+// ParseSpanConfigRecord is helper function that constructs a
 // roachpb.SpanConfigEntry from a string of the form [start,end]:config. See
 // ParseSpan and ParseConfig above.
-func ParseSpanConfigEntry(t *testing.T, conf string) roachpb.SpanConfigEntry {
+// ParseSpanConfigRecord is a helper function that constructs a
+// roachpb.SpanConfigEntry. It expects a colon separated string, where the left
+// half corresponds to a target and the right half corresponds to a config.
+// See ParseTarget and ParseConfig.
+func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 	parts := strings.Split(conf, ":")
 	if len(parts) != 2 {
 		t.Fatalf("expected single %q separator", ":")
 	}
-	return roachpb.SpanConfigEntry{
-		Span:   ParseSpan(t, parts[0]),
+	return spanconfig.Record{
+		Target: parseTarget(t, parts[0]),
 		Config: ParseConfig(t, parts[1]),
 	}
 }
@@ -156,9 +141,11 @@ func ParseSpanConfigEntry(t *testing.T, conf string) roachpb.SpanConfigEntry {
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//    include system span configs
 //
-func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
+func ParseKVAccessorGetArguments(t *testing.T, input string) ([]roachpb.Span, bool) {
 	var spans []roachpb.Span
+	includeSystemSpanConfigs := false
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -166,13 +153,17 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
 		}
 
 		const spanPrefix = "span "
-		if !strings.HasPrefix(line, spanPrefix) {
+		const includeSystemSpanConfigsStr = "include system span configs"
+		if strings.HasPrefix(line, includeSystemSpanConfigsStr) {
+			includeSystemSpanConfigs = true
+			continue
+		} else if !strings.HasPrefix(line, spanPrefix) {
 			t.Fatalf("malformed line %q, expected to find spanPrefix %q", line, spanPrefix)
 		}
 		line = strings.TrimPrefix(line, spanPrefix)
 		spans = append(spans, ParseSpan(t, line))
 	}
-	return spans
+	return spans, includeSystemSpanConfigs
 }
 
 // ParseKVAccessorUpdateArguments is a helper function that parses datadriven
@@ -185,45 +176,9 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []roachpb.Span {
 //
 func ParseKVAccessorUpdateArguments(
 	t *testing.T, input string,
-) ([]roachpb.Span, []roachpb.SpanConfigEntry) {
-	var toDelete []roachpb.Span
-	var toUpsert []roachpb.SpanConfigEntry
-	for _, line := range strings.Split(input, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		const upsertPrefix, deletePrefix = "upsert ", "delete "
-		switch {
-		case strings.HasPrefix(line, deletePrefix):
-			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			toDelete = append(toDelete, ParseSpan(t, line))
-		case strings.HasPrefix(line, upsertPrefix):
-			line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
-			toUpsert = append(toUpsert, ParseSpanConfigEntry(t, line))
-		default:
-			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
-				line, upsertPrefix, deletePrefix)
-		}
-	}
-	return toDelete, toUpsert
-}
-
-// ParseKVAccessorUpdateSystemSpanConfigsArguments is a helper function that
-// parses datadriven kvaccessor-system-scfgs-update arguments into the
-// relevant system span configs. The input is of the following form:
-//
-//    upsert [cluster]:C
-//    upsert [tenant: id]:B
-// 		delete [cluster]
-//    delete [tenant: id]
-//
-func ParseKVAccessorUpdateSystemSpanConfigsArguments(
-	t *testing.T, input string,
-) ([]roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry) {
-	var toDelete []roachpb.SystemSpanConfigTarget
-	var toUpsert []roachpb.SystemSpanConfigEntry
+) ([]spanconfig.Target, []spanconfig.Record) {
+	var toDelete []spanconfig.Target
+	var toUpsert []spanconfig.Record
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -237,7 +192,7 @@ func ParseKVAccessorUpdateSystemSpanConfigsArguments(
 			toDelete = append(toDelete, parseTarget(t, line))
 		case strings.HasPrefix(line, upsertPrefix):
 			line = strings.TrimPrefix(line, line[:len(upsertPrefix)])
-			toUpsert = append(toUpsert, parseSystemSpanConfigEntry(t, line))
+			toUpsert = append(toUpsert, ParseSpanConfigRecord(t, line))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
 				line, upsertPrefix, deletePrefix)
@@ -264,10 +219,10 @@ func ParseStoreApplyArguments(t *testing.T, input string) (updates []spanconfig.
 		switch {
 		case strings.HasPrefix(line, deletePrefix):
 			line = strings.TrimPrefix(line, line[:len(deletePrefix)])
-			updates = append(updates, spanconfig.Deletion(ParseSpan(t, line)))
+			updates = append(updates, spanconfig.Deletion(parseTarget(t, line)))
 		case strings.HasPrefix(line, setPrefix):
 			line = strings.TrimPrefix(line, line[:len(setPrefix)])
-			entry := ParseSpanConfigEntry(t, line)
+			entry := ParseSpanConfigRecord(t, line)
 			updates = append(updates, spanconfig.Update(entry))
 		default:
 			t.Fatalf("malformed line %q, expected to find prefix %q or %q",
@@ -284,43 +239,35 @@ func PrintSpan(sp roachpb.Span) string {
 	return fmt.Sprintf("[%s,%s)", string(sp.Key), string(sp.EndKey))
 }
 
-func printTarget(target roachpb.SystemSpanConfigTarget) string {
-	if target.TenantID == nil {
-		return "[cluster]"
+func printSystemSpanConfigTarget(target roachpb.SystemSpanConfigTarget) string {
+	if target.SourceTenantID == target.TargetTenantID {
+		return fmt.Sprintf("[cluster %d]", target.SourceTenantID.InternalValue)
 	}
-	return fmt.Sprintf("[tenant %d]", target.TenantID.InternalValue)
+	return fmt.Sprintf("[tenant %d]", target.TargetTenantID.InternalValue)
+}
+
+func PrintTarget(target spanconfig.Target) string {
+	if target.IsSystemTarget() {
+		return printSystemSpanConfigTarget(*target.TargetProto().GetSystemSpanConfigTarget())
+	}
+	return PrintSpan(target.Encode())
 }
 
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
 // a readable string. The span config is assumed to have been constructed by the
 // ParseSpanConfig helper above.
 func PrintSpanConfig(conf roachpb.SpanConfig) string {
-	return conf.Constraints[0].Constraints[0].Key // see ParseConfig for what a "tagged" roachpb.SpanConfig translates to
+	// See ParseConfig for why we do this.
+	return string(int(conf.GCPolicy.ProtectionPolicies[0].ProtectedTimestamp.WallTime))
 }
 
-// printSystemSpanConfig is a helper function that decodes a
-// roachpb.SystemSpanConfig constructed using parseSystemSpanConfig.
-func printSystemSpanConfig(conf roachpb.SystemSpanConfig) string {
-	// See parseSystemSpanConfig for why we do this.
-	return string(int(conf.ProtectionPolicies[0].ProtectedTimestamp.WallTime))
-}
-
-// PrintSpanConfigEntry is a helper function that transforms
+// PrintSpanConfigRecord is a helper function that transforms
 // roachpb.SpanConfigEntry into a string of the form "[start, end):config". The
-// entry is assumed to either have been constructed using ParseSpanConfigEntry
+// record is assumed to either have been constructed using ParseSpanConfigRecord
 // above, or the constituent span and config to have been constructed using the
 // Parse{Span,Config} helpers above.
-func PrintSpanConfigEntry(entry roachpb.SpanConfigEntry) string {
-	return fmt.Sprintf("%s:%s", PrintSpan(entry.Span), PrintSpanConfig(entry.Config))
-}
-
-// PrintSystemSpanConfigEntry isa helper function that transforms a
-// roachpb.SystemSpanConfigEntry into a string of the form "[target]:config".
-// The entry is assumed to have been constructed using
-// parseSystemSpanConfigEntry above, or the constituent span and config have
-// been constructed using parse{Target,SystemSpanConfig} helpers above.
-func PrintSystemSpanConfigEntry(entry roachpb.SystemSpanConfigEntry) string {
-	return fmt.Sprintf("%s:%s", printTarget(entry.SystemSpanConfigTarget), printSystemSpanConfig(entry.SystemSpanConfig))
+func PrintSpanConfigRecord(rec spanconfig.Record) string {
+	return fmt.Sprintf("%s:%s", PrintTarget(rec.Target), PrintSpanConfig(rec.Config))
 }
 
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given
@@ -389,7 +336,6 @@ func PrintSpanConfigDiffedAgainstDefaults(conf roachpb.SpanConfig) string {
 		}
 		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
 	}
-
 	return strings.Join(diffs, " ")
 }
 

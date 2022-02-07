@@ -14,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
@@ -24,9 +26,16 @@ import (
 func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	makeTenantClusterTarget := func(id uint64) spanconfig.Target {
+		tenID := roachpb.MakeTenantID(id)
+		target, err := spanconfigtarget.NewSystemTarget(tenID, tenID)
+		require.NoError(t, err)
+		return target
+	}
+
 	for _, tc := range []struct {
-		toDelete []roachpb.Span
-		toUpsert []roachpb.SpanConfigEntry
+		toDelete []spanconfig.Target
+		toUpsert []spanconfig.Record
 		expErr   string
 	}{
 		{
@@ -34,146 +43,145 @@ func TestValidateUpdateArgs(t *testing.T) {
 			expErr: "",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a")}, // empty end key in delete list
+			toDelete: []spanconfig.Target{
+				spanconfigtarget.NewSpanTarget(
+					roachpb.Span{Key: roachpb.Key("a")}, // empty end key in delete list
+				),
 			},
 			expErr: "invalid span: a",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
+					),
 				},
 			},
 			expErr: "invalid span: a",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+					),
 				},
 			},
 			expErr: "invalid span: {b-a}",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+			toDelete: []spanconfig.Target{
+				spanconfigtarget.NewSpanTarget(
+					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
+				),
 			},
 			expErr: "invalid span: {b-a}",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}, // overlapping spans in the same list
-				{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+			toDelete: []spanconfig.Target{
+				// overlapping spans in the same list.
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}),
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
-			toUpsert: []roachpb.SpanConfigEntry{ // overlapping spans in the same list
+			toUpsert: []spanconfig.Record{ // overlapping spans in the same list
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+					),
 				},
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					),
 				},
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
-			toDelete: []roachpb.Span{
-				{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
+			// Overlapping spans in different lists.
+			toDelete: []spanconfig.Target{
+				// overlapping spans in the same list.
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 			},
-			toUpsert: []roachpb.SpanConfigEntry{ // overlapping spans in different lists
+			toUpsert: []spanconfig.Record{
 				{
-					Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
+					),
 				},
 				{
-					Span: roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					Target: spanconfigtarget.NewSpanTarget(
+						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
+					),
+				},
+			},
+			expErr: "",
+		},
+
+		// Tests for system span configurations.
+		{
+			// Duplicate in toDelete.
+			toDelete: []spanconfig.Target{makeTenantClusterTarget(10), makeTenantClusterTarget(10)},
+			expErr:   "duplicate target",
+		},
+		{
+			// Duplicate in toUpsert.
+			toUpsert: []spanconfig.Record{
+				{
+					Target: makeTenantClusterTarget(10),
+				},
+				{
+					Target: makeTenantClusterTarget(10)},
+			},
+			expErr: "duplicate target",
+		},
+		{
+			// Duplicate in toDelete with some span targets.
+			toDelete: []spanconfig.Target{
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				makeTenantClusterTarget(roachpb.SystemTenantID.InternalValue),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				makeTenantClusterTarget(roachpb.SystemTenantID.InternalValue),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			expErr: "duplicate target",
+		},
+		{
+			// Duplicate in toDelete with some span targets.
+			toDelete: []spanconfig.Target{
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				makeTenantClusterTarget(roachpb.SystemTenantID.InternalValue),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				makeTenantClusterTarget(roachpb.SystemTenantID.InternalValue),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			expErr: "duplicate target",
+		},
+		{
+			// Duplicate some span/system target entries across different lists;
+			// should work.
+			toDelete: []spanconfig.Target{
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				makeTenantClusterTarget(20),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				makeTenantClusterTarget(roachpb.SystemTenantID.InternalValue),
+				spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			toUpsert: []spanconfig.Record{
+				{
+					Target: makeTenantClusterTarget(20),
+				},
+				{
+					Target: spanconfigtarget.NewSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 				},
 			},
 			expErr: "",
 		},
 	} {
 		require.True(t, testutils.IsError(validateUpdateArgs(tc.toDelete, tc.toUpsert), tc.expErr))
-	}
-}
-
-// TestValidateSystemSpanConfigUpdateArgs ensures we validate arguments to
-// UpdateSystemSpanConfigEntries correctly.
-func TestValidateSystemSpanConfigUpdateArgs(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	makeTarget := func(id uint64) roachpb.SystemSpanConfigTarget {
-		tenID := roachpb.MakeTenantID(id)
-		return roachpb.SystemSpanConfigTarget{
-			TenantID: &tenID,
-		}
-	}
-	clusterTarget := roachpb.SystemSpanConfigTarget{}
-	for _, tc := range []struct {
-		toDelete []roachpb.SystemSpanConfigTarget
-		toUpsert []roachpb.SystemSpanConfigEntry
-		expErr   string
-	}{
-		{
-			// Duplicate across toDelete.
-			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), makeTarget(10)},
-			expErr:   "duplicate target found",
-		},
-		{
-			// Duplicate across both lists.
-			toUpsert: []roachpb.SystemSpanConfigEntry{
-				{
-					SystemSpanConfigTarget: makeTarget(10),
-				},
-				{
-					SystemSpanConfigTarget: makeTarget(10),
-				},
-			},
-			expErr: "duplicate target found",
-		},
-		{
-			// Duplicate across both lists.
-			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), makeTarget(20)},
-			toUpsert: []roachpb.SystemSpanConfigEntry{
-				{
-					SystemSpanConfigTarget: makeTarget(10),
-				},
-			},
-			expErr: "duplicate target found",
-		},
-		{
-			// Duplicate cluster target in toDelete.
-			toDelete: []roachpb.SystemSpanConfigTarget{clusterTarget, clusterTarget},
-			expErr:   "duplicate cluster target found",
-		},
-		{
-			// Duplicate cluster target in toUpsert.
-			toUpsert: []roachpb.SystemSpanConfigEntry{
-				{SystemSpanConfigTarget: clusterTarget},
-				{SystemSpanConfigTarget: clusterTarget},
-			},
-			expErr: "duplicate cluster target found",
-		},
-		{
-			// Duplicate cluster target across lists.
-			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), clusterTarget},
-			toUpsert: []roachpb.SystemSpanConfigEntry{
-				{SystemSpanConfigTarget: makeTarget(20)},
-				{SystemSpanConfigTarget: clusterTarget},
-			},
-			expErr: "duplicate cluster target found",
-		},
-		{
-			// Should work.
-			toDelete: []roachpb.SystemSpanConfigTarget{makeTarget(10), clusterTarget},
-			toUpsert: []roachpb.SystemSpanConfigEntry{
-				{SystemSpanConfigTarget: makeTarget(20)},
-			},
-		},
-	} {
-		require.True(
-			t,
-			testutils.IsError(validateUpdateSystemSpanConfigArgs(tc.toDelete, tc.toUpsert), tc.expErr),
-		)
 	}
 }

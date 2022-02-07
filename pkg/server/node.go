@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -1497,9 +1498,19 @@ func (emptyMetricStruct) MetricStruct() {}
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
-	entries, err := n.spanConfigAccessor.GetSpanConfigEntriesFor(ctx, req.Spans)
+	records, err := n.spanConfigAccessor.GetSpanConfigEntriesFor(
+		ctx, req.TenantID, req.Spans, req.IncludeSystemSpanConfigs,
+	)
 	if err != nil {
 		return nil, err
+	}
+
+	entries := make([]roachpb.SpanConfigEntry, 0, len(records))
+	for _, rec := range records {
+		entries = append(entries, roachpb.SpanConfigEntry{
+			Target: *rec.Target.TargetProto(),
+			Config: rec.Config,
+		})
 	}
 
 	return &roachpb.GetSpanConfigsResponse{SpanConfigEntries: entries}, nil
@@ -1512,7 +1523,21 @@ func (n *Node) UpdateSpanConfigs(
 	// TODO(irfansharif): We want to protect ourselves from tenants creating
 	// outlandishly large string buffers here and OOM-ing the host cluster. Is
 	// the maximum protobuf message size enough of a safeguard?
-	err := n.spanConfigAccessor.UpdateSpanConfigEntries(ctx, req.ToDelete, req.ToUpsert)
+
+	toDelete := make([]spanconfig.Target, 0, len(req.ToDelete))
+	for _, toDel := range req.ToDelete {
+		toDelete = append(toDelete, spanconfigtarget.New(toDel))
+	}
+
+	toUpsert := make([]spanconfig.Record, 0, len(req.ToUpsert))
+	for _, entry := range req.ToUpsert {
+		toUpsert = append(toUpsert, spanconfig.Record{
+			Target: spanconfigtarget.New(entry.Target),
+			Config: entry.Config,
+		})
+	}
+
+	err := n.spanConfigAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert)
 	if err != nil {
 		return nil, err
 	}

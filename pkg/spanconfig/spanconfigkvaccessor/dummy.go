@@ -41,14 +41,14 @@ var _ spanconfig.KVAccessor = &dummyKVAccessor{}
 
 // GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k dummyKVAccessor) GetSpanConfigEntriesFor(
-	context.Context, []roachpb.Span,
-) ([]roachpb.SpanConfigEntry, error) {
+	context.Context, roachpb.TenantID, []roachpb.Span, bool,
+) ([]spanconfig.Record, error) {
 	return nil, k.error
 }
 
 // UpdateSpanConfigEntries is part of the KVAccessor interface.
 func (k dummyKVAccessor) UpdateSpanConfigEntries(
-	context.Context, []roachpb.Span, []roachpb.SpanConfigEntry,
+	context.Context, []spanconfig.Target, []spanconfig.Record,
 ) error {
 	return k.error
 }

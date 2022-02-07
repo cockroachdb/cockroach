@@ -175,13 +175,15 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "get":
-				spans := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
-				entries, err := kvAccessor.GetSpanConfigEntriesFor(ctx, spans)
+				spans, _ := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
+				entries, err := kvAccessor.GetSpanConfigEntriesFor(
+					ctx, roachpb.SystemTenantID, spans, false, /*includeSystemSpanConfigTargets */
+				)
 				require.NoError(t, err)
 
 				var output strings.Builder
 				for _, entry := range entries {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigEntry(entry)))
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(entry)))
 				}
 				return output.String()
 

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig/systemspanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtarget"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -71,33 +71,33 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 
 // GetSpanConfigEntriesFor is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigEntriesFor(
-	ctx context.Context, spans []roachpb.Span,
-) (resp []roachpb.SpanConfigEntry, retErr error) {
-	entries, err := k.getConfigEntries(ctx, spans)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		spanConfig := entry.Config.GetSpanConfig()
-		if spanConfig == nil {
-			return nil, errors.AssertionFailedf("did not find span configuration for span %s", entry.Span)
+	ctx context.Context,
+	tenantID roachpb.TenantID,
+	spans []roachpb.Span,
+	includeSystemSpanConfigs bool,
+) (resp []spanconfig.Record, retErr error) {
+	if includeSystemSpanConfigs {
+		if tenantID == roachpb.SystemTenantID {
+			spans = append(spans, spanconfigtarget.GetHostTenantInstalledSystemSpanConfigsEncoding()...)
+		} else {
+			clusterTarget, err := spanconfigtarget.NewSystemTarget(tenantID, tenantID)
+			if err != nil {
+				return nil, err
+			}
+			spans = append(spans, clusterTarget.Encode())
 		}
-		resp = append(resp, roachpb.SpanConfigEntry{
-			Span:   entry.Span,
-			Config: *spanConfig,
-		})
 	}
-	return resp, nil
+	return k.getConfigEntries(ctx, spans)
 }
 
 // GetSpanConfigEntriesFor is part of the spanconfig.KVAccessor interface.
 func (k *KVAccessor) getConfigEntries(
 	ctx context.Context, spans []roachpb.Span,
-) (resp []roachpb.SystemSpanConfigurationsTableEntry, retErr error) {
+) (resp []spanconfig.Record, retErr error) {
 	if len(spans) == 0 {
 		return resp, nil
 	}
-	if err := validateSpans(spans); err != nil {
+	if err := validateSpans(spans...); err != nil {
 		return nil, err
 	}
 
@@ -122,13 +122,13 @@ func (k *KVAccessor) getConfigEntries(
 			Key:    []byte(*row[0].(*tree.DBytes)),
 			EndKey: []byte(*row[1].(*tree.DBytes)),
 		}
-		var conf roachpb.Config
+		var conf roachpb.SpanConfig
 		if err := protoutil.Unmarshal(([]byte)(*row[2].(*tree.DBytes)), &conf); err != nil {
 			return nil, err
 		}
 
-		resp = append(resp, roachpb.SystemSpanConfigurationsTableEntry{
-			Span:   span,
+		resp = append(resp, spanconfig.Record{
+			Target: spanconfigtarget.Decode(span),
 			Config: conf,
 		})
 	}
@@ -140,120 +140,18 @@ func (k *KVAccessor) getConfigEntries(
 
 // UpdateSpanConfigEntries is part of the KVAccessor interface.
 func (k *KVAccessor) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
 	if err := validateUpdateArgs(toDelete, toUpsert); err != nil {
 		return err
 	}
 
-	tableEntriesToUpsert := make([]roachpb.SystemSpanConfigurationsTableEntry, 0, len(toUpsert))
-	for i := range toUpsert {
-		tableEntriesToUpsert = append(tableEntriesToUpsert, roachpb.SystemSpanConfigurationsTableEntry{
-			Span: toUpsert[i].Span,
-			Config: roachpb.Config{
-				Union: &roachpb.Config_SpanConfig{
-					SpanConfig: &toUpsert[i].Config,
-				},
-			},
-		})
-	}
 	if k.optionalTxn != nil {
-		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, tableEntriesToUpsert, k.optionalTxn)
+		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, toUpsert, k.optionalTxn)
 	}
 
 	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, tableEntriesToUpsert, txn)
-	})
-}
-
-// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k *KVAccessor) GetSystemSpanConfigEntries(
-	ctx context.Context,
-) (resp []roachpb.SystemSpanConfigEntry, _ error) {
-	getSpans := make([]roachpb.Span, 0, 2) // Capacity at most 2
-
-	clusterTarget, err := systemspanconfig.MakeTargetUsingSourceContext(ctx, roachpb.SystemSpanConfigTarget{})
-	if err != nil {
-		return nil, err
-	}
-	getSpans = append(getSpans, systemspanconfig.EncodeTarget(clusterTarget))
-
-	tenID, ok := roachpb.TenantFromContext(ctx)
-	if !ok || tenID == roachpb.SystemTenantID {
-		// We're in the system tenant.
-		getSpans = append(getSpans, systemspanconfig.GetHostTenantOnTenantKeyspaceSpan())
-	}
-
-	entries, err := k.getConfigEntries(ctx, getSpans)
-	if err != nil {
-		return nil, err
-	}
-	for _, entry := range entries {
-		target, err := systemspanconfig.DecodeTarget(entry.Span)
-		if err != nil {
-			return nil, err
-		}
-		systemSpanConfig := entry.Config.GetSystemSpanConfig()
-		if systemSpanConfig == nil {
-			return nil, errors.AssertionFailedf(
-				"did not find system span configuration for span %s", target,
-			)
-		}
-		t := roachpb.SystemSpanConfigTarget{}
-		if target.TargeterTenantID != target.TargeteeTenantID {
-			t.TenantID = &target.TargeteeTenantID
-		}
-		resp = append(resp, roachpb.SystemSpanConfigEntry{
-			SystemSpanConfigTarget: t,
-			SystemSpanConfig:       *systemSpanConfig,
-		})
-	}
-	return resp, nil
-}
-
-// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k *KVAccessor) UpdateSystemSpanConfigEntries(
-	ctx context.Context,
-	toDelete []roachpb.SystemSpanConfigTarget,
-	toUpsert []roachpb.SystemSpanConfigEntry,
-) error {
-	if err := validateUpdateSystemSpanConfigArgs(toDelete, toUpsert); err != nil {
-		return err
-	}
-	toDeleteSpans := make([]roachpb.Span, 0, len(toDelete))
-	for _, t := range toDelete {
-		target, err := systemspanconfig.MakeTargetUsingSourceContext(ctx, t)
-		if err != nil {
-			return err
-		}
-		toDeleteSpans = append(
-			toDeleteSpans,
-			systemspanconfig.EncodeTarget(target),
-		)
-	}
-
-	toUpsertTableEntries := make([]roachpb.SystemSpanConfigurationsTableEntry, 0, len(toUpsert))
-	for i := range toUpsert {
-		target, err := systemspanconfig.MakeTargetUsingSourceContext(ctx, toUpsert[i].SystemSpanConfigTarget)
-		if err != nil {
-			return err
-		}
-		span := systemspanconfig.EncodeTarget(target)
-		toUpsertTableEntries = append(toUpsertTableEntries, roachpb.SystemSpanConfigurationsTableEntry{
-			Span: span,
-			Config: roachpb.Config{
-				Union: &roachpb.Config_SystemSpanConfig{
-					SystemSpanConfig: &toUpsert[i].SystemSpanConfig,
-				},
-			},
-		})
-	}
-
-	if k.optionalTxn != nil {
-		return k.updateSpanConfigEntriesWithTxn(ctx, toDeleteSpans, toUpsertTableEntries, k.optionalTxn)
-	}
-	return k.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return k.updateSpanConfigEntriesWithTxn(ctx, toDeleteSpans, toUpsertTableEntries, txn)
+		return k.updateSpanConfigEntriesWithTxn(ctx, toDelete, toUpsert, txn)
 	})
 }
 
@@ -274,10 +172,7 @@ func newKVAccessor(
 }
 
 func (k *KVAccessor) updateSpanConfigEntriesWithTxn(
-	ctx context.Context,
-	toDelete []roachpb.Span,
-	toUpsert []roachpb.SystemSpanConfigurationsTableEntry,
-	txn *kv.Txn,
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record, txn *kv.Txn,
 ) error {
 	if txn == nil {
 		log.Fatalf(ctx, "expected non-nil txn")
@@ -410,7 +305,9 @@ SELECT start_key, end_key, config FROM (
 
 // constructDeleteStmtAndArgs constructs the statement and query arguments
 // needed to delete span configs for the given spans.
-func (k *KVAccessor) constructDeleteStmtAndArgs(toDelete []roachpb.Span) (string, []interface{}) {
+func (k *KVAccessor) constructDeleteStmtAndArgs(
+	toDelete []spanconfig.Target,
+) (string, []interface{}) {
 	// We're constructing a single delete statement to delete all requested
 	// spans. It's of the form:
 	//
@@ -419,10 +316,10 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(toDelete []roachpb.Span) (string
 	//
 	values := make([]string, len(toDelete))
 	deleteQueryArgs := make([]interface{}, len(toDelete)*2)
-	for i, sp := range toDelete {
+	for i, target := range toDelete {
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		deleteQueryArgs[startKeyIdx] = sp.Key
-		deleteQueryArgs[endKeyIdx] = sp.EndKey
+		deleteQueryArgs[startKeyIdx] = target.Encode().Key
+		deleteQueryArgs[endKeyIdx] = target.Encode().EndKey
 		values[i] = fmt.Sprintf("($%d::BYTES, $%d::BYTES)",
 			startKeyIdx+1, endKeyIdx+1) // prepared statement placeholders (1-indexed)
 	}
@@ -434,7 +331,7 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(toDelete []roachpb.Span) (string
 // constructUpsertStmtAndArgs constructs the statement and query arguments
 // needed to upsert the given span config entries.
 func (k *KVAccessor) constructUpsertStmtAndArgs(
-	toUpsert []roachpb.SystemSpanConfigurationsTableEntry,
+	toUpsert []spanconfig.Record,
 ) (string, []interface{}, error) {
 	// We're constructing a single upsert statement to upsert all requested
 	// spans. It's of the form:
@@ -451,8 +348,8 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 		}
 
 		startKeyIdx, endKeyIdx, configIdx := i*3, (i*3)+1, (i*3)+2
-		upsertQueryArgs[startKeyIdx] = entry.Span.Key
-		upsertQueryArgs[endKeyIdx] = entry.Span.EndKey
+		upsertQueryArgs[startKeyIdx] = entry.Target.Encode().Key
+		upsertQueryArgs[endKeyIdx] = entry.Target.Encode().EndKey
 		upsertQueryArgs[configIdx] = marshaled
 		upsertValues[i] = fmt.Sprintf("($%d::BYTES, $%d::BYTES, $%d::BYTES)",
 			startKeyIdx+1, endKeyIdx+1, configIdx+1) // prepared statement placeholders (1-indexed)
@@ -466,7 +363,7 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 // needed to validate that the spans being upserted don't violate table
 // invariants (spans are non overlapping).
 func (k *KVAccessor) constructValidationStmtAndArgs(
-	toUpsert []roachpb.SystemSpanConfigurationsTableEntry,
+	toUpsert []spanconfig.Record,
 ) (string, []interface{}) {
 	// We want to validate that upserting spans does not break the invariant
 	// that spans in the table are non-overlapping. We only need to validate
@@ -507,8 +404,8 @@ func (k *KVAccessor) constructValidationStmtAndArgs(
 		}
 
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		validationQueryArgs[startKeyIdx] = entry.Span.Key
-		validationQueryArgs[endKeyIdx] = entry.Span.EndKey
+		validationQueryArgs[startKeyIdx] = entry.Target.Encode().Key
+		validationQueryArgs[endKeyIdx] = entry.Target.Encode().EndKey
 
 		fmt.Fprintf(&validationInnerStmtBuilder, `
 SELECT count(*) = 1 FROM (
@@ -534,82 +431,77 @@ SELECT count(*) = 1 FROM (
 // are malformed. All spans included in the toDelete and toUpsert list are
 // expected to be valid and to have non-empty end keys. Spans are also expected
 // to be non-overlapping with other spans in the same list.
-func validateUpdateArgs(toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry) error {
-	spansToUpdate := func(ents []roachpb.SpanConfigEntry) []roachpb.Span {
-		spans := make([]roachpb.Span, len(ents))
+func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Record) error {
+	targetsToUpdate := func(ents []spanconfig.Record) []spanconfig.Target {
+		targets := make([]spanconfig.Target, len(ents))
 		for i, ent := range ents {
-			spans[i] = ent.Span
+			targets[i] = ent.Target
 		}
-		return spans
+		return targets
 	}(toUpsert)
 
-	for _, list := range [][]roachpb.Span{toDelete, spansToUpdate} {
-		if err := validateSpans(list); err != nil {
+	for _, list := range []spanconfig.Targets{toDelete, targetsToUpdate} {
+		if err := validateSpanTargets(list); err != nil {
 			return err
 		}
-
-		spans := make([]roachpb.Span, len(list))
-		copy(spans, list)
-		sort.Sort(roachpb.Spans(spans))
-		for i := range spans {
+		targets := make([]spanconfig.Target, len(list))
+		copy(targets, list)
+		sort.Sort(spanconfig.Targets(targets))
+		for i := range targets {
 			if i == 0 {
 				continue
 			}
 
-			if spans[i].Overlaps(spans[i-1]) {
-				return errors.AssertionFailedf("overlapping spans %s and %s in same list",
-					spans[i-1], spans[i])
+			cur := targets[i]
+			prev := targets[i-1]
+
+			if cur.IsSpanTarget() && prev.IsSpanTarget() {
+				curSpan := cur.Encode()
+				prevSpan := prev.Encode()
+				if curSpan.Overlaps(prevSpan) {
+					return errors.AssertionFailedf("overlapping spans %s and %s in same list",
+						prevSpan, curSpan)
+				}
 			}
+
+			if cur.IsSystemTarget() && prev.IsSystemTarget() {
+				curSystemTarget := targets[i].TargetProto().GetSystemSpanConfigTarget()
+				prevSystemTarget := targets[i-1].TargetProto().GetSystemSpanConfigTarget()
+				if curSystemTarget.SourceTenantID == prevSystemTarget.SourceTenantID &&
+					curSystemTarget.TargetTenantID == prevSystemTarget.TargetTenantID {
+					return errors.AssertionFailedf(
+						"duplicate targets %s and %s found in the same list",
+						prevSystemTarget,
+						curSystemTarget,
+					)
+				}
+			}
+
 		}
 	}
-
 	return nil
 }
 
-// validateSpans returns an error if any of the spans are invalid or have an
-// empty end key.
-func validateSpans(spans []roachpb.Span) error {
+// validateSpanTargets returns an error if any spans in the SpanTargets are
+// invalid or have an empty end key.
+func validateSpanTargets(targets []spanconfig.Target) error {
+	for _, target := range targets {
+		if !target.IsSpanTarget() {
+			// Nothing to do.
+			continue
+		}
+		span := target.Encode()
+		if err := validateSpans(span); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateSpans(spans ...roachpb.Span) error {
 	for _, span := range spans {
 		if !span.Valid() || len(span.EndKey) == 0 {
 			return errors.AssertionFailedf("invalid span: %s", span)
-		}
-	}
-	return nil
-}
-
-// validateUpdateSystemSpanConfigArgs validates arguments to a call to
-// UpdateSystemSpanConfigs by ensuring there are no duplicate targets, either in
-// one of the lists or across lists.
-func validateUpdateSystemSpanConfigArgs(
-	toDelete []roachpb.SystemSpanConfigTarget, toUpsert []roachpb.SystemSpanConfigEntry,
-) error {
-	foundClusterTarget := false
-	targets := make(map[roachpb.TenantID]struct{})
-
-	validateTarget := func(target roachpb.SystemSpanConfigTarget) error {
-		tenID := target.TenantID
-		if tenID == nil {
-			if foundClusterTarget {
-				return errors.AssertionFailedf("duplicate cluster target found")
-			}
-			foundClusterTarget = true
-			return nil
-		}
-		if _, found := targets[*tenID]; found {
-			return errors.AssertionFailedf("duplicate target found %s", target)
-		}
-		targets[*tenID] = struct{}{}
-		return nil
-	}
-
-	for _, target := range toDelete {
-		if err := validateTarget(target); err != nil {
-			return err
-		}
-	}
-	for _, entry := range toUpsert {
-		if err := validateTarget(entry.SystemSpanConfigTarget); err != nil {
-			return err
 		}
 	}
 	return nil
