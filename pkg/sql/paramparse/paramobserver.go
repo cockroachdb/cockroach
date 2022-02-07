@@ -100,12 +100,12 @@ type TableStorageParamObserver struct {
 	setAutomaticColumn bool
 }
 
+var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
+
 // NewTableStorageParamObserver returns a new TableStorageParamObserver.
 func NewTableStorageParamObserver(tableDesc *tabledesc.Mutable) *TableStorageParamObserver {
 	return &TableStorageParamObserver{tableDesc: tableDesc}
 }
-
-var _ StorageParamObserver = (*TableStorageParamObserver)(nil)
 
 // runPostChecks implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) runPostChecks() error {
@@ -333,8 +333,10 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			// TODO(#75428): allow reset.
-			return unimplemented.NewWithIssue(75428, "not yet implemented")
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.DeletionCron = ""
+			}
+			return nil
 		},
 	},
 	`exclude_data_from_backup`: {
