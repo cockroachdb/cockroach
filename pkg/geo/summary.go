@@ -15,7 +15,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -143,7 +144,7 @@ func summary(
 
 		return summaryLine, nil
 	default:
-		return "", errors.Newf("unsupported geom type: %T", t)
+		return "", pgerror.Newf(pgcode.InvalidParameterValue, "unsupported geom type: %T", t)
 	}
 }
 

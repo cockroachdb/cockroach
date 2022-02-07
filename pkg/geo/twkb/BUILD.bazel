@@ -6,7 +6,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/geo/twkb",
     visibility = ["//visibility:public"],
     deps = [
-        "@com_github_cockroachdb_errors//:errors",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "@com_github_twpayne_go_geom//:go-geom",
     ],
 )

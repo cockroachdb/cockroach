@@ -11,9 +11,9 @@
 package geogfn
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s2"
 )
 
@@ -111,7 +111,7 @@ func regionCovers(aRegion s2.Region, bRegion s2.Region) (bool, error) {
 		case *s2.Polygon:
 			return false, nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	case *s2.Polyline:
 		switch bRegion := bRegion.(type) {
@@ -122,7 +122,7 @@ func regionCovers(aRegion s2.Region, bRegion s2.Region) (bool, error) {
 		case *s2.Polygon:
 			return false, nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	case *s2.Polygon:
 		switch bRegion := bRegion.(type) {
@@ -133,10 +133,10 @@ func regionCovers(aRegion s2.Region, bRegion s2.Region) (bool, error) {
 		case *s2.Polygon:
 			return polygonCoversPolygon(aRegion, bRegion), nil
 		default:
-			return false, fmt.Errorf("unknown s2 type of b: %#v", bRegion)
+			return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of b: %#v", bRegion)
 		}
 	}
-	return false, fmt.Errorf("unknown s2 type of a: %#v", aRegion)
+	return false, pgerror.Newf(pgcode.InvalidParameterValue, "unknown s2 type of a: %#v", aRegion)
 }
 
 // polylineCoversPoints returns whether a polyline covers a given point.

@@ -15,7 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoproj"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -93,7 +94,7 @@ func transform(
 		}
 		return g, nil
 	default:
-		return nil, errors.Newf("unhandled type; %T", t)
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unhandled type: %T", t)
 	}
 }
 

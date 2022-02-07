@@ -15,7 +15,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
@@ -47,7 +48,7 @@ func Area(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (float64, er
 				totalArea += region.Area()
 			}
 		default:
-			return 0, errors.Newf("unknown type: %T", region)
+			return 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown type: %T", region)
 		}
 	}
 	if useSphereOrSpheroid == UseSphere {
@@ -113,7 +114,7 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 
 	point, ok := geomT.(*geom.Point)
 	if !ok {
-		return geo.Geography{}, errors.Newf("ST_Project(geography) is only valid for point inputs")
+		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "ST_Project(geography) is only valid for point inputs")
 	}
 
 	spheroid, err := g.Spheroid()
@@ -132,11 +133,11 @@ func Project(g geo.Geography, distance float64, azimuth s1.Angle) (geo.Geography
 
 	// Check the distance validity.
 	if distance > (math.Pi * spheroid.Radius) {
-		return geo.Geography{}, errors.Newf("distance must not be greater than %f", math.Pi*spheroid.Radius)
+		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "distance must not be greater than %f", math.Pi*spheroid.Radius)
 	}
 
 	if point.Empty() {
-		return geo.Geography{}, errors.Newf("cannot project POINT EMPTY")
+		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "cannot project POINT EMPTY")
 	}
 
 	// Convert to ta geodetic point.
@@ -189,7 +190,7 @@ func length(
 				}
 			}
 		default:
-			return 0, errors.Newf("unknown type: %T", region)
+			return 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown type: %T", region)
 		}
 	}
 	if useSphereOrSpheroid == UseSphere {
