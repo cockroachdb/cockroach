@@ -223,6 +223,7 @@ func maybeFillInDescriptor(
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
 	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
+	changes.RemovedDuplicateIDsInRefs = maybeRemoveDuplicateIDsInRefs(desc)
 	return changes
 }
 
@@ -596,4 +597,56 @@ func maybeFixPrimaryIndexEncoding(idx *descpb.IndexDescriptor) (hasChanged bool)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
 	return true
+}
+
+// maybeRemoveDuplicateIDsInRefs ensures that IDs in references to other tables
+// are not duplicated.
+func maybeRemoveDuplicateIDsInRefs(d *descpb.TableDescriptor) (hasChanged bool) {
+	// Strip duplicates from DependsOn.
+	if s := cleanedIDs(d.DependsOn); len(s) < len(d.DependsOn) {
+		d.DependsOn = s
+		hasChanged = true
+	}
+	// Do the same for DependsOnTypes.
+	if s := cleanedIDs(d.DependsOnTypes); len(s) < len(d.DependsOnTypes) {
+		d.DependsOnTypes = s
+		hasChanged = true
+	}
+	// Do the same for column IDs in DependedOnBy table references.
+	for i := range d.DependedOnBy {
+		ref := &d.DependedOnBy[i]
+		s := catalog.MakeTableColSet(ref.ColumnIDs...).Ordered()
+		// Also strip away O-IDs, which may have made their way in here in the past.
+		// But only strip them if they're not the only ID. Otherwise this will
+		// make for an even more confusing validation failure (we check that IDs
+		// are not zero).
+		if len(s) > 1 && s[0] == 0 {
+			s = s[1:]
+		}
+		if len(s) < len(ref.ColumnIDs) {
+			ref.ColumnIDs = s
+			hasChanged = true
+		}
+	}
+	// Do the same in columns for sequence refs.
+	for i := range d.Columns {
+		col := &d.Columns[i]
+		if s := cleanedIDs(col.UsesSequenceIds); len(s) < len(col.UsesSequenceIds) {
+			col.UsesSequenceIds = s
+			hasChanged = true
+		}
+		if s := cleanedIDs(col.OwnsSequenceIds); len(s) < len(col.OwnsSequenceIds) {
+			col.OwnsSequenceIds = s
+			hasChanged = true
+		}
+	}
+	return hasChanged
+}
+
+func cleanedIDs(input []descpb.ID) []descpb.ID {
+	s := catalog.MakeDescriptorIDSet(input...).Ordered()
+	if len(s) == 0 {
+		return nil
+	}
+	return s
 }

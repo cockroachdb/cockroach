@@ -20,10 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
@@ -270,51 +268,6 @@ func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
 	)
 }
 
-func (m *visitor) UpdateRelationDeps(ctx context.Context, op scop.UpdateRelationDeps) error {
-	// TODO(fqazi): Only implemented for sequences.
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	// Determine all the dependencies for this descriptor.
-	dependedOnBy := make([]descpb.TableDescriptor_Reference, len(tbl.DependedOnBy))
-	addDependency := func(dep descpb.TableDescriptor_Reference) {
-		for _, existingDep := range dependedOnBy {
-			if dep.Equal(existingDep) {
-				return
-			}
-			dependedOnBy = append(dependedOnBy, dep)
-		}
-	}
-	for _, col := range tbl.Columns {
-		sequenceRefByID := true
-		// Parse the default expression to determine
-		// if all references are by ID.
-		if col.DefaultExpr != nil && len(col.UsesSequenceIds) > 0 {
-			expr, err := parser.ParseExpr(*col.DefaultExpr)
-			if err != nil {
-				return err
-			}
-			usedSequences, err := seqexpr.GetUsedSequences(expr)
-			if err != nil {
-				return err
-			}
-			if len(usedSequences) > 0 {
-				sequenceRefByID = usedSequences[0].IsByID()
-			}
-		}
-		for _, seqID := range col.UsesSequenceIds {
-			addDependency(descpb.TableDescriptor_Reference{
-				ID:        seqID,
-				ColumnIDs: []descpb.ColumnID{col.ID},
-				ByID:      sequenceRefByID,
-			})
-		}
-	}
-	tbl.DependedOnBy = dependedOnBy
-	return nil
-}
-
 func (m *visitor) RemoveColumnDefaultExpression(
 	ctx context.Context, op scop.RemoveColumnDefaultExpression,
 ) error {
@@ -331,6 +284,37 @@ func (m *visitor) RemoveColumnDefaultExpression(
 	// Clean up the default expression and the sequence ID's
 	column.ColumnDesc().DefaultExpr = nil
 	column.ColumnDesc().UsesSequenceIds = nil
+	return nil
+}
+
+func (m *visitor) RemoveColumnSequenceReferences(
+	ctx context.Context, op scop.RemoveColumnSequenceReferences,
+) error {
+	seqIDs := catalog.MakeDescriptorIDSet(op.SequenceIDs...)
+	if seqIDs.Empty() {
+		return nil
+	}
+
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	newRefs := make([]descpb.TableDescriptor_Reference, 0, len(tbl.DependedOnBy))
+	for _, ref := range tbl.DependedOnBy {
+		if seqIDs.Contains(ref.ID) {
+			for j, colID := range ref.ColumnIDs {
+				if colID == op.ColumnID {
+					ref.ColumnIDs = append(ref.ColumnIDs[:j], ref.ColumnIDs[j+1:]...)
+					break
+				}
+			}
+		}
+		newRefs = append(newRefs, ref)
+	}
+	if len(newRefs) == 0 {
+		newRefs = nil
+	}
+	tbl.DependedOnBy = newRefs
 	return nil
 }
 

@@ -126,17 +126,20 @@ type DrainDescriptorName struct {
 	TableID descpb.ID
 }
 
-// UpdateRelationDeps updates dependencies for a relation.
-type UpdateRelationDeps struct {
-	mutationOp
-	TableID descpb.ID
-}
-
 // RemoveColumnDefaultExpression removes the default expression on a given table column.
 type RemoveColumnDefaultExpression struct {
 	mutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
+}
+
+// RemoveColumnSequenceReferences strips the depended-on-by references
+// from references to usage of the specified sequences by the specified column.
+type RemoveColumnSequenceReferences struct {
+	mutationOp
+	TableID     descpb.ID
+	ColumnID    descpb.ColumnID
+	SequenceIDs []descpb.ID
 }
 
 // AddTypeBackRef adds a type back references from a relation.
