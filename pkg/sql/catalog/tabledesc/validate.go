@@ -904,6 +904,12 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 
+		if !idx.IsMutation() {
+			if idx.IndexDesc().UseDeletePreservingEncoding {
+				return errors.Newf("public index %q is using the delete preserving encoding", idx.GetName())
+			}
+		}
+
 		// Ensure that indexes do not STORE virtual columns as suffix columns unless
 		// they are primary key columns or future primary key columns (when `ALTER
 		// PRIMARY KEY` is executed and a primary key mutation exists).
