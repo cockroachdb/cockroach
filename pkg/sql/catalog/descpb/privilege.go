@@ -237,37 +237,27 @@ func (p *PrivilegeDescriptor) Grant(
 	user security.SQLUsername, privList privilege.List, withGrantOption bool,
 ) {
 	userPriv := p.FindOrCreateUser(user)
-	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) && privilege.ALL.IsSetIn(userPriv.Privileges) {
-		// User already has 'ALL' privilege: no-op.
-		// If userPriv.WithGrantOption has ALL, then userPriv.Privileges must also have ALL.
-		// It is possible however for userPriv.Privileges to have ALL but userPriv.WithGrantOption to not have ALL
-		return
-	}
-
-	if privilege.ALL.IsSetIn(userPriv.Privileges) && !withGrantOption {
-		// A user can hold all privileges but not all grant options.
-		// If a user holds all privileges but withGrantOption is False,
-		// there is nothing left to be done
-		return
-	}
 
 	bits := privList.ToBitField()
-	if privilege.ALL.IsSetIn(bits) {
-		// Granting 'ALL' privilege: overwrite.
-		// TODO(marc): the grammar does not allow it, but we should
-		// check if other privileges are being specified and error out.
-		userPriv.Privileges = privilege.ALL.Mask()
-		if withGrantOption {
-			userPriv.WithGrantOption = privilege.ALL.Mask()
-		}
-		return
+	userPriv.Privileges |= bits
+	if withGrantOption {
+		// Prefer WITH GRANT OPTION syntax.
+		userPriv.WithGrantOption |= bits
+	} else if privilege.ALL.IsSetIn(userPriv.Privileges) || privilege.GRANT.IsSetIn(userPriv.Privileges) {
+		// fall back to checking GRANT privilege
+		userPriv.WithGrantOption = userPriv.Privileges
 	}
 
-	if withGrantOption {
-		userPriv.WithGrantOption |= bits
+	// Fold privileges into ALL WITH GRANT OPTION.
+	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+		allBit := privilege.ALL.Mask()
+		userPriv.Privileges = allBit
+		userPriv.WithGrantOption = allBit
 	}
-	if !privilege.ALL.IsSetIn(userPriv.Privileges) {
-		userPriv.Privileges |= bits
+
+	// Fold privileges into ALL.
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && userPriv.WithGrantOption == 0 {
+		userPriv.Privileges = privilege.ALL.Mask()
 	}
 }
 
@@ -279,7 +269,7 @@ func (p *PrivilegeDescriptor) Revoke(
 	grantOptionFor bool,
 ) {
 	userPriv, ok := p.FindUser(user)
-	if !ok || userPriv.Privileges == 0 {
+	if !ok {
 		// Removing privileges from a user without privileges is a no-op.
 		return
 	}
@@ -288,70 +278,44 @@ func (p *PrivilegeDescriptor) Revoke(
 	if privilege.ALL.IsSetIn(bits) {
 		userPriv.WithGrantOption = 0
 		if !grantOptionFor {
-			// Revoking 'ALL' privilege: remove user.
-			// TODO(marc): the grammar does not allow it, but we should
-			// check if other privileges are being specified and error out.
-			p.RemoveUser(user)
+			userPriv.Privileges = 0
 		}
-		return
-	}
-
-	if privilege.ALL.IsSetIn(userPriv.Privileges) && !grantOptionFor {
-		// User has 'ALL' privilege. Remove it and set
-		// all other privileges one.
-		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
-		userPriv.Privileges = 0
-		for _, v := range validPrivs {
-			if v != privilege.ALL {
-				userPriv.Privileges |= v.Mask()
-			}
-		}
-	}
-
-	// We will always revoke the grant options regardless of the flag.
-	if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
-		// User has 'ALL' grant option. Remove it and set
-		// all other grant options to one.
-		validPrivs := privilege.GetValidPrivilegesForObject(objectType)
-		userPriv.WithGrantOption = 0
-		for _, v := range validPrivs {
-			if v != privilege.ALL {
-				userPriv.WithGrantOption |= v.Mask()
-			}
-		}
-	}
-
-	// One doesn't see "AND NOT" very often.
-	// We will always revoke the grant options regardless of the flag.
-	userPriv.WithGrantOption &^= bits
-	if !grantOptionFor {
-		userPriv.Privileges &^= bits
-
-		if userPriv.Privileges == 0 {
-			p.RemoveUser(user)
-		}
-	}
-
-}
-
-// GrantPrivilegeToGrantOptions adjusts a user's grant option bits based on whether the GRANT or ALL
-// privilege was just granted or revoked. If GRANT/ALL was just granted, the user should obtain grant
-// options for each privilege it currently has. If GRANT/ALL was just revoked, the user should lose
-// grant options for each privilege it has
-// TODO(jackcwu): delete this function once the GRANT privilege is finally removed
-func (p *PrivilegeDescriptor) GrantPrivilegeToGrantOptions(
-	user security.SQLUsername, isGrant bool,
-) {
-	if isGrant {
-		userPriv := p.FindOrCreateUser(user)
-		userPriv.WithGrantOption = userPriv.Privileges
 	} else {
-		userPriv, ok := p.FindUser(user)
-		if !ok || userPriv.Privileges == 0 {
-			// Removing privileges from a user without privileges is a no-op.
-			return
+		// Do not switch ALL to all 1s if privList is empty.
+		if len(privList) > 0 {
+			if privilege.ALL.IsSetIn(userPriv.Privileges) && !grantOptionFor {
+				// User has 'ALL' privilege. Remove it and set
+				// all other privileges one.
+				userPriv.Privileges = privilege.GetValidPrivilegesForObject(objectType).ToBitField() &^ privilege.ALL.Mask()
+			}
+
+			// We will always revoke the grant options regardless of the flag.
+			if privilege.ALL.IsSetIn(userPriv.WithGrantOption) {
+				// User has 'ALL' grant option. Remove it and set
+				// all other grant options to one.
+				userPriv.WithGrantOption = privilege.GetValidPrivilegesForObject(objectType).ToBitField() &^ privilege.ALL.Mask()
+			}
 		}
-		userPriv.WithGrantOption = 0
+
+		// One doesn't see "AND NOT" very often.
+		// We will always revoke the grant options regardless of the flag.
+		userPriv.WithGrantOption &^= bits
+		if !grantOptionFor {
+			userPriv.Privileges &^= bits
+			// Revoking GRANT revokes all grant options.
+			if privilege.GRANT.IsSetIn(bits) {
+				userPriv.WithGrantOption = 0
+			}
+		}
+	}
+
+	// Fold privileges into ALL.
+	if privilege.ALL.IsSetIn(userPriv.Privileges) && userPriv.WithGrantOption == 0 {
+		userPriv.Privileges = privilege.ALL.Mask()
+	}
+
+	if userPriv.Privileges == 0 {
+		p.RemoveUser(user)
 	}
 }
 
