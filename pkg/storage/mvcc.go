@@ -2289,6 +2289,94 @@ func MVCCDeleteRange(
 	return keys, res.ResumeSpan, res.NumKeys, nil
 }
 
+// ExperimentalMVCCDeleteRangeUsingTombstone deletes the given MVCC keyspan at
+// the given timestamp using an MVCC range tombstone (rather than MVCC point
+// tombstones). This operation is non-transactional, but will check for
+// existing intents and return a WriteIntentError containing up to maxIntents
+// intents.
+//
+// This method is EXPERIMENTAL: range keys are under active development, and
+// have severe limitations including being ignored by all KV and MVCC APIs and
+// only being stored in memory.
+//
+// TODO(erikgrinaker): This needs MVCC stats handling.
+func ExperimentalMVCCDeleteRangeUsingTombstone(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	startKey, endKey roachpb.Key,
+	timestamp hlc.Timestamp,
+	localTimestamp hlc.ClockTimestamp,
+	maxIntents int64,
+) error {
+	// Validate the range key. We must do this first, to catch e.g. any bound violations.
+	rangeKey := MVCCRangeKey{StartKey: startKey, EndKey: endKey, Timestamp: timestamp}
+	if err := rangeKey.Validate(); err != nil {
+		return err
+	}
+
+	// Check for any overlapping intents, and return them to be resolved.
+	if intents, err := ScanIntents(ctx, rw, startKey, endKey, maxIntents, 0); err != nil {
+		return err
+	} else if len(intents) > 0 {
+		return &roachpb.WriteIntentError{Intents: intents}
+	}
+
+	// Check for any conflicts, i.e. newer values.
+	//
+	// TODO(erikgrinaker): This introduces an O(n) read penalty. We should
+	// consider either optimizing it or making the check optional somehow.
+	iter := rw.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		KeyTypes:         IterKeyTypePointsAndRanges,
+		LowerBound:       startKey,
+		UpperBound:       endKey,
+		MinTimestampHint: timestamp,
+		MaxTimestampHint: hlc.MaxTimestamp,
+	})
+	defer iter.Close()
+
+	iter.SeekGE(MVCCKey{Key: startKey})
+	var prevRangeStart roachpb.Key
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasPoint {
+			key := iter.UnsafeKey()
+			if timestamp.LessEq(key.Timestamp) {
+				return roachpb.NewWriteTooOldError(timestamp, key.Timestamp.Next(), key.Key.Clone())
+			}
+			if key.Timestamp.IsEmpty() {
+				return errors.Errorf("can't write range tombstone across inline key %s", key)
+			}
+		}
+		if hasRange {
+			if rangeStart := iter.RangeBounds().Key; !rangeStart.Equal(prevRangeStart) {
+				newest := iter.RangeKeys()[0].RangeKey
+				if timestamp.LessEq(newest.Timestamp) {
+					return roachpb.NewWriteTooOldError(
+						timestamp, newest.Timestamp.Next(), newest.StartKey.Clone())
+				}
+				prevRangeStart = append(prevRangeStart[:0], rangeStart...)
+			}
+		}
+		iter.NextKey()
+	}
+
+	// Write the tombstone.
+	var value MVCCValue
+	value.LocalTimestamp = localTimestamp
+	if !value.LocalTimestampNeeded(timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
+		value.LocalTimestamp = hlc.ClockTimestamp{}
+	}
+
+	return rw.ExperimentalPutMVCCRangeKey(rangeKey, value)
+}
+
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {
 	stats := iteratorStats.Stats
 	if traceSpan != nil {
