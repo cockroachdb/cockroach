@@ -1112,6 +1112,8 @@ child operation: %s, tracer created at:
 
 	s.i.crdb.enableRecording(opts.recordingType())
 
+	s.i.crdb.parentSpanID = opts.parentSpanID()
+
 	var localRoot bool
 	{
 		// If a parent is specified, link the newly created Span to the parent.
@@ -1122,8 +1124,6 @@ child operation: %s, tracer created at:
 		// NB: (!opts.Parent.empty() && opts.Parent.i.crdb == nil) is not possible at
 		// the moment, but let's not rely on that.
 		if !opts.Parent.empty() && opts.Parent.i.crdb != nil {
-			s.i.crdb.parentSpanID = opts.parentSpanID()
-
 			// Panic if the parent has already been finished, if configured to do so.
 			// If the parent has finished and we're configured not to panic,
 			// addChildLocked we'll return false below and we'll deal with it.
