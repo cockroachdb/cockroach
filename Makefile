@@ -801,7 +801,7 @@ GENERATED_TARGETS = \
   pkg/kv/kvclient/rangefeed/mocks_generated_test.go \
   pkg/roachprod/vm/aws/embedded.go \
   pkg/security/securitytest/embedded.go \
-  pkg/security/certmgr/mocks_generated.go \
+  pkg/security/certmgr/mocks_generated_test.go \
   pkg/kv/kvclient/kvcoord/mocks_generated_test.go \
   pkg/kv/kvclient/rangecache/rangecachemock/mocks_generated.go \
   pkg/roachpb/roachpbmock/mocks_generated.go \

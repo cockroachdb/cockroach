@@ -19,7 +19,7 @@ pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/g
 pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch
 pkg/roachpb/api.go://go:generate mockgen -package=roachpbmock -destination=roachpbmock/mocks_generated.go . InternalClient,Internal_RangeFeedClient
 pkg/roachpb/batch.go://go:generate go run -tags gen-batch gen/main.go
-pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated.go . Cert
+pkg/security/certmgr/cert.go://go:generate mockgen -package=certmgr -destination=mocks_generated_test.go . Cert
 pkg/security/securitytest/securitytest.go://go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg securitytest -o embedded.go -ignore README.md -ignore regenerate.sh test_certs
 pkg/security/securitytest/securitytest.go://go:generate gofmt -s -w embedded.go
 pkg/security/securitytest/securitytest.go://go:generate goimports -w embedded.go
