@@ -59,7 +59,7 @@ go_proto_library(
         "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/liveness/livenesspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/server/diagnostics/diagnosticspb",
         "//pkg/server/status/statuspb",
         "//pkg/sql/catalog/descpb",  # keep

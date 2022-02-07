@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/serverpb",
         "//pkg/sql/pgwire",
@@ -34,7 +34,7 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/utilccl",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/security",
         "//pkg/security/securitytest",

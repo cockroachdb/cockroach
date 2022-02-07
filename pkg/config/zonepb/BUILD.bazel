@@ -15,7 +15,7 @@ go_library(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/sem/tree",
@@ -33,7 +33,7 @@ go_test(
     embed = [":zonepb"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/sem/tree",
         "//pkg/testutils",

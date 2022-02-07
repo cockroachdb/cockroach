@@ -25,7 +25,7 @@ go_proto_library(
     proto = ":loqrecoverypb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
 )
@@ -37,7 +37,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/util/keysutil",
         "//pkg/util/log/eventpb",
         "@com_github_cockroachdb_errors//:errors",

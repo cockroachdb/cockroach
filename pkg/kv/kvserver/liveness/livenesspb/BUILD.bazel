@@ -33,7 +33,7 @@ go_proto_library(
     proto = ":livenesspb_proto",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/roachpb:with-mocks",  # keep
+        "//pkg/roachpb",  # keep
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],

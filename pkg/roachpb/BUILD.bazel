@@ -1,6 +1,5 @@
 # gazelle:exclude string_test.go
 
-load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
@@ -88,7 +87,7 @@ go_library(
     ],
     embed = [":roachpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb",
-    visibility = ["//visibility:public"],
+    visibility = [":__subpackages__"],
     deps = [
         "//pkg/geo",
         "//pkg/geo/geopb",
@@ -118,28 +117,6 @@ go_library(
     ],
 )
 
-gomock(
-    name = "mock_roachpb",
-    out = "mocks_generated.go",
-    interfaces = [
-        "InternalClient",
-        "Internal_RangeFeedClient",
-    ],
-    library = ":roachpb",
-    package = "roachpb",
-    self_package = "github.com/cockroachdb/cockroach/pkg/roachpb",
-)
-
-go_library(
-    name = "with-mocks",
-    srcs = [":mock_roachpb"],
-    embed = [":roachpb"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_github_golang_mock//gomock",
-    ],
-)
-
 go_test(
     name = "roachpb_test",
     size = "small",
@@ -161,7 +138,7 @@ go_test(
         "version_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":with-mocks"],  # keep
+    embed = [":roachpb"],
     tags = ["no-remote"],
     deps = [
         "//pkg/cli/exit",
@@ -205,7 +182,7 @@ go_test(
     srcs = ["string_test.go"],
     data = glob(["testdata/**"]),
     deps = [
-        ":with-mocks",
+        ":roachpb",  # keep
         "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvserver/concurrency/lock",

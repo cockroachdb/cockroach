@@ -8,7 +8,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigstore",
         "//pkg/sql",

@@ -65,25 +65,20 @@ exports_files([
 # tell gazelle to resolve to this second target instead. See
 # pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
 #
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus //pkg/cmd/roachtest/prometheus:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests //pkg/cmd/roachtest/tests:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord //pkg/kv/kvclient/kvcoord:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //pkg/kv/kvclient/rangefeed:with-mocks
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache //pkg/kv/kvclient/rangecache:with-mocks
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
-# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/internal.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb:with-mocks
-# gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb:with-mocks
+# gazelle:resolve proto go roachpb/api.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/app_stats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/data.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/errors.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/index_usage_stats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/internal.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/internal_raft.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/io-formats.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/metadata.proto //pkg/roachpb
+# gazelle:resolve proto go roachpb/span_config.proto //pkg/roachpb
 # gazelle:exclude pkg/roachpb/batch_generated-gen.go
 
 # See pkg/sql/opt/optgen/cmd/langgen/BUILD.bazel for more details.
@@ -122,6 +117,7 @@ exports_files([
 # gazelle:exclude **/*_interval_btree.go
 # gazelle:exclude **/*_interval_btree_test.go
 # gazelle:exclude **/*_generated.go
+# gazelle:exclude **/*_generated_test.go
 # gazelle:exclude pkg/sql/parser/sql.go
 # gazelle:exclude pkg/sql/parser/helpmap_test.go
 # gazelle:exclude pkg/sql/parser/help_messages.go

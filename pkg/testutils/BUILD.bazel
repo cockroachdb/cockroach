@@ -23,7 +23,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/util",

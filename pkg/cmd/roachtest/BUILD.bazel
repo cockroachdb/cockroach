@@ -22,7 +22,7 @@ go_library(
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
-        "//pkg/cmd/roachtest/tests:with-mocks",
+        "//pkg/cmd/roachtest/tests",
         "//pkg/internal/team",
         "//pkg/roachprod",
         "//pkg/roachprod/config",

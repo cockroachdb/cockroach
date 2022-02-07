@@ -7,7 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
@@ -30,7 +30,7 @@ go_test(
     srcs = ["system_test.go"],
     embed = [":systemschema"],
     deps = [
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",

@@ -17,7 +17,7 @@ go_library(
         "//pkg/ccl/changefeedccl/cdcutils",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/jobs/jobspb",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/util/hlc",
         "//pkg/util/log",
@@ -40,7 +40,7 @@ go_test(
     embed = [":kvevent"],
     deps = [
         "//pkg/keys",
-        "//pkg/roachpb:with-mocks",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql/randgen",
         "//pkg/sql/rowenc/keyside",

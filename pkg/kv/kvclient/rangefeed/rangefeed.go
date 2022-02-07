@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/logtags"
 )
 
-//go:generate mockgen -destination=mocks_generated.go --package=rangefeed . DB
+//go:generate mockgen -destination=mocks_generated_test.go --package=rangefeed . DB
 
 // TODO(ajwerner): Expose hooks for metrics.
 // TODO(ajwerner): Expose access to checkpoints and the frontier.
