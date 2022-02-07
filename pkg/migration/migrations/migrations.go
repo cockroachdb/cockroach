@@ -125,6 +125,12 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		tenantSettingsTableMigration,
 	),
+	migration.NewTenantMigration(
+		"wait for all in-flight schema changes",
+		toCV(clusterversion.NoNonMVCCIndexBackfills),
+		NoPrecondition,
+		waitForAllSchemaChanges,
+	),
 }
 
 func init() {

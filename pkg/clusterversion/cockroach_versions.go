@@ -269,6 +269,16 @@ const (
 	DontProposeWriteTimestampForLeaseTransfers
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
+	// NoNonMVCCIndexBackfills adds the migration which waits for
+	// all schema changes to complete. After this point, no
+	// non-MVCC index backfills will be used.
+	//
+	// TODO(ssd): Do we want to name this something related to
+	// AddSST since we will use it not just for the migration but
+	// also eventually to decide whether to start rejecting
+	// AddSSTable requests (and failing resumed old schema
+	// changes).
+	NoNonMVCCIndexBackfills
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -428,6 +438,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     NoNonMVCCIndexBackfills,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 
 	// *************************************************
