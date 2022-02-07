@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -1857,7 +1858,7 @@ func TestValidateTableDesc(t *testing.T) {
 			d.desc.Privileges = descpb.NewBasePrivilegeDescriptor(security.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
-			err := validate.Self(desc)
+			err := validate.Self(clusterversion.TestingClusterVersion, desc)
 			if d.err == "" && err != nil {
 				t.Errorf("%d: expected success, but found error: \"%+v\"", i, err)
 			} else if d.err != "" && err == nil {
@@ -2233,7 +2234,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			desc := NewBuilder(&test.desc).BuildImmutable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), test.err)
 			const validateCrossReferencesOnly = catalog.ValidationLevelCrossReferences &^ (catalog.ValidationLevelCrossReferences >> 1)
-			results := cb.Validate(ctx, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
+			results := cb.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, validateCrossReferencesOnly, desc)
 			if err := results.CombinedError(); err == nil {
 				if test.err != "" {
 					t.Errorf("%d: expected \"%s\", but found success: %+v", i, expectedErr, test.desc)

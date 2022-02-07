@@ -431,6 +431,7 @@ func mysqlTableToCockroach(
 		seqDesc, err = sql.NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
+			evalCtx.Settings,
 			seqName,
 			opts,
 			parentDB.GetID(),
@@ -600,7 +601,8 @@ func addDelayedFKs(
 		if err := fixDescriptorFKState(def.tbl); err != nil {
 			return err
 		}
-		if err := def.tbl.AllocateIDs(ctx); err != nil {
+		version := evalCtx.Settings.Version.ActiveVersion(ctx)
+		if err := def.tbl.AllocateIDs(ctx, version); err != nil {
 			return err
 		}
 	}
