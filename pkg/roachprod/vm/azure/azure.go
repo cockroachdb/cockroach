@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -53,14 +54,19 @@ var providerInstance = &Provider{}
 //
 // If the Azure CLI utilities are not installed, the provider is a stub.
 func Init() error {
-	const unimplemented = "please install the Azure CLI utilities +" +
+	const cliErr = "please install the Azure CLI utilities " +
 		"(https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)"
+	const authErr = "please use `az login` to login to Azure"
 
 	providerInstance = New()
 	providerInstance.OperationTimeout = 10 * time.Minute
 	providerInstance.SyncDelete = false
+	if _, err := exec.LookPath("az"); err != nil {
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, cliErr)
+		return err
+	}
 	if _, err := providerInstance.getAuthToken(); err != nil {
-		vm.Providers[ProviderName] = flagstub.New(&Provider{}, unimplemented)
+		vm.Providers[ProviderName] = flagstub.New(&Provider{}, authErr)
 		return err
 	}
 	vm.Providers[ProviderName] = providerInstance
