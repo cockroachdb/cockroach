@@ -297,6 +297,7 @@ go_test(
         "api_v2_test.go",
         "authentication_test.go",
         "auto_tls_init_test.go",
+        "bench_test.go",
         "config_test.go",
         "connectivity_test.go",
         "drain_test.go",
