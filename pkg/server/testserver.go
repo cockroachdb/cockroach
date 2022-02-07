@@ -725,7 +725,10 @@ func (ts *TestServer) StartTenant(
 		baseCfg,
 		sqlCfg,
 	)
-	return &TestTenant{SQLServer: sqlServer, Cfg: &baseCfg, sqlAddr: addr, httpAddr: httpAddr}, err
+	if err != nil {
+		return nil, err
+	}
+	return &TestTenant{SQLServer: sqlServer, Cfg: &baseCfg, sqlAddr: addr, httpAddr: httpAddr}, nil
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
