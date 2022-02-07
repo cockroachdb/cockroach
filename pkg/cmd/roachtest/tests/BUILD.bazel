@@ -115,6 +115,7 @@ go_library(
         "rebalance_load.go",
         "rebalance_stats.go",
         "registry.go",
+        "replica_circuit_breaker.go",
         "replicagc.go",
         "reset_quorum.go",
         "restart.go",
