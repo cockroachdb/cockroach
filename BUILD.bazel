@@ -68,7 +68,6 @@ exports_files([
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/prometheus //pkg/cmd/roachtest/prometheus:with-mocks
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests //pkg/cmd/roachtest/tests:with-mocks
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed //pkg/kv/kvclient/rangefeed:with-mocks
 
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
