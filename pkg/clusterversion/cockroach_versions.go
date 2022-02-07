@@ -328,6 +328,11 @@ const (
 	// index_recommendations column to the system.statement_statistics table.
 	AlterSystemStatementStatisticsAddIndexRecommendations
 
+	// NoNonMVCCAddSSTable adds a migration which waits for all
+	// schema changes to complete. After this point, no non-MVCC
+	// AddSSTable calls will be used outside of tenant streaming.
+	NoNonMVCCAddSSTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -563,6 +568,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
+	},
+	{
+		Key:     NoNonMVCCAddSSTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
 	},
 
 	// *************************************************

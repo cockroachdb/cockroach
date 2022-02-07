@@ -146,6 +146,12 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		alterSystemStatementStatisticsAddIndexRecommendations,
 	),
+	upgrade.NewTenantUpgrade(
+		"wait for all in-flight schema changes",
+		toCV(clusterversion.NoNonMVCCAddSSTable),
+		NoPrecondition,
+		waitForAllSchemaChanges,
+	),
 }
 
 func init() {
