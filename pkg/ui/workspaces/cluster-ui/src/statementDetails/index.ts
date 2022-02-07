@@ -13,3 +13,4 @@ export * from "./diagnostics/diagnosticsView";
 export * from "./diagnostics/diagnosticsUtils";
 export * from "./planView";
 export * from "./statementDetailsConnected";
+export * from "./activeStatementDetails";
