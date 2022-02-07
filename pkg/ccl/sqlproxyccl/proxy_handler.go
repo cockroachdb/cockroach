@@ -324,12 +324,16 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		}
 		return err
 	}
-	defer crdbConn.Close()
+	var f *forwarder
+	defer func() {
+		// Only close crdbConn if the forwarder hasn't been started. When the
+		// forwarder has been created, crdbConn is owned by the forwarder.
+		if f == nil {
+			_ = crdbConn.Close()
+		}
+	}()
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	log.Infof(ctx, "new connection")
 	connBegin := timeutil.Now()
@@ -337,33 +341,32 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
-	// Copy all pgwire messages from frontend to backend connection until we
-	// encounter an error or shutdown signal.
-	go func() {
-		err := ConnectionCopy(crdbConn, conn)
-		select {
-		case errConnection <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
+	// Pass ownership of crdbConn to the forwarder.
+	f = forward(ctx, conn, crdbConn)
+	defer f.Close()
 
+	// Block until an error is received, or when the stopper starts quiescing,
+	// whichever that happens first.
+	//
+	// TODO(jaylim-crl): We should handle all these errors properly, and
+	// propagate them back to the client if we're in a safe position to send.
+	// This PR https://github.com/cockroachdb/cockroach/pull/66205 removed error
+	// injections after connection handoff because there was a possibility of
+	// corrupted packets.
+	//
+	// TODO(jaylim-crl): It would be nice to have more consistency in how we
+	// manage background goroutines, communicate errors, etc.
 	select {
-	case err := <-errConnection:
+	case err := <-f.errChan: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
-	case <-ctx.Done():
-		err := ctx.Err()
-		if err != nil {
-			// The client connection expired.
-			codeErr := newErrorf(
-				codeExpiredClientConnection, "expired client conn: %v", err,
-			)
-			handler.metrics.updateForError(codeErr)
-			return codeErr
-		}
-		return nil
+	case err := <-errConnection: // From denyListWatcher or idleMonitor.
+		handler.metrics.updateForError(err)
+		return err
 	case <-handler.stopper.ShouldQuiesce():
-		return nil
+		err := context.Canceled
+		handler.metrics.updateForError(err)
+		return err
 	}
 }
 
