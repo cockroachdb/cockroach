@@ -19,7 +19,6 @@ import {
   TransactionsTable,
 } from "../transactionsTable";
 import {
-  ColumnDescriptor,
   handleSortSettingFromQueryString,
   ISortedTablePagination,
   SortSetting,
@@ -62,11 +61,12 @@ import SQLActivityError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 import {
   TimeScaleDropdown,
-  defaultTimeScaleSelected,
   TimeScale,
   toDateRange,
 } from "../timeScaleDropdown";
 import { InlineAlert } from "@cockroachlabs/ui-components";
+import { TransactionViewType } from "./transactionsPageTypes";
+import { isSelectedColumn } from "../columnsSelector/utils";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -383,7 +383,7 @@ export class TransactionsPage extends React.Component<
         <PageConfig>
           <PageConfigItem>
             <Search
-              onSubmit={this.onSubmitSearchField as any}
+              onSubmit={this.onSubmitSearchField}
               onClear={this.onClearSearchField}
               defaultValue={search}
               placeholder={"Search Transactions"}
@@ -446,17 +446,6 @@ export class TransactionsPage extends React.Component<
               .filter(c => !(c.name === "regionNodes" && regions.length < 2))
               .filter(c => !(isTenant && c.hideIfTenant));
 
-            const isColumnSelected = (c: ColumnDescriptor<TransactionInfo>) => {
-              return (
-                ((userSelectedColumnsToShow === null ||
-                  userSelectedColumnsToShow === undefined) &&
-                  c.showByDefault !== false) || // show column if list of visible was never defined and can be show by default.
-                (userSelectedColumnsToShow !== null &&
-                  userSelectedColumnsToShow.includes(c.name)) || // show column if user changed its visibility.
-                c.alwaysShow === true // show column if alwaysShow option is set explicitly.
-              );
-            };
-
             // Iterate over all available columns and create list of SelectOptions with initial selection
             // values based on stored user selections in local storage and default column configs.
             // Columns that are set to alwaysShow are filtered from the list.
@@ -469,12 +458,14 @@ export class TransactionsPage extends React.Component<
                     "transaction",
                   ),
                   value: c.name,
-                  isSelected: isColumnSelected(c),
+                  isSelected: isSelectedColumn(userSelectedColumnsToShow, c),
                 }),
               );
 
             // List of all columns that will be displayed based on the column selection.
-            const displayColumns = columns.filter(c => isColumnSelected(c));
+            const displayColumns = columns.filter(c =>
+              isSelectedColumn(userSelectedColumnsToShow, c),
+            );
 
             return (
               <>
@@ -499,6 +490,7 @@ export class TransactionsPage extends React.Component<
                     pagination={pagination}
                     renderNoResult={
                       <EmptyTransactionsPlaceholder
+                        transactionView={TransactionViewType.FINGERPRINTS}
                         isEmptySearchResults={hasData && isUsedFilter}
                       />
                     }
