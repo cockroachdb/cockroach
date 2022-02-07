@@ -49,7 +49,19 @@ var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurat
 	"kv.replica_circuit_breaker.slow_replication_threshold",
 	"duration after which slow proposals trip the per-Replica circuit breaker (zero duration disables breakers)",
 	defaultReplicaCircuitBreakerSlowReplicationThreshold,
-	settings.NonNegativeDuration,
+	func(d time.Duration) error {
+		// Setting the breaker duration too low could be very dangerous to cluster
+		// health (breaking things to the point where the cluster setting can't be
+		// changed), so enforce a sane minimum.
+		const min = 500 * time.Millisecond
+		if d == 0 {
+			return nil
+		}
+		if d <= min {
+			return errors.Errorf("must specify a minimum of %s", min)
+		}
+		return nil
+	},
 )
 
 // Telemetry counter to count number of trip events.
