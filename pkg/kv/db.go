@@ -548,6 +548,22 @@ func (db *DB) DelRange(
 	return r.Keys, err
 }
 
+// ExperimentalDelRangeUsingTombstone deletes the rows between begin (inclusive)
+// and end (exclusive) using an MVCC range tombstone. Callers must check the
+// MVCCRangeTombstones version gate before using this.
+//
+// This method is EXPERIMENTAL: range tombstones are under active development,
+// and have severe limitations including being ignored by all KV and MVCC APIs
+// and only being stored in memory.
+func (db *DB) ExperimentalDelRangeUsingTombstone(
+	ctx context.Context, begin, end interface{},
+) error {
+	b := &Batch{}
+	b.ExperimentalDelRangeUsingTombstone(begin, end)
+	_, err := getOneResult(db.Run(ctx, b), b)
+	return err
+}
+
 // AdminMerge merges the range containing key and the subsequent range. After
 // the merge operation is complete, the range containing key will contain all of
 // the key/value pairs of the subsequent range and the subsequent range will no
