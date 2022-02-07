@@ -263,6 +263,9 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
+	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
+	// range tombstones.
+	ExperimentalMVCCRangeTombstones
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -415,6 +418,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     ExperimentalMVCCRangeTombstones,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
 	},
 
 	// *************************************************
