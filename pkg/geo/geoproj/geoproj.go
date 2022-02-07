@@ -25,7 +25,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geographiclib"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoprojbase"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // maxArrayLen is the maximum safe length for this architecture.
@@ -53,7 +54,7 @@ func GetProjMetadata(b geoprojbase.Proj4Text) (bool, *geographiclib.Spheroid, er
 			(*C.double)(unsafe.Pointer(&eccentricitySquared)),
 		),
 	); err != nil {
-		return false, nil, errors.Newf("error from PROJ: %s", string(err))
+		return false, nil, pgerror.Newf(pgcode.InvalidParameterValue, "error from PROJ: %s", string(err))
 	}
 	// flattening = e^2 / 1 + sqrt(1-e^2).
 	// See: https://en.wikipedia.org/wiki/Eccentricity_(mathematics), derived from
@@ -73,7 +74,8 @@ func Project(
 	zCoords []float64,
 ) error {
 	if len(xCoords) != len(yCoords) || len(xCoords) != len(zCoords) {
-		return errors.Newf(
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"len(xCoords) != len(yCoords) != len(zCoords): %d != %d != %d",
 			len(xCoords),
 			len(yCoords),
@@ -91,7 +93,7 @@ func Project(
 		(*C.double)(unsafe.Pointer(&yCoords[0])),
 		(*C.double)(unsafe.Pointer(&zCoords[0])),
 	)); err != nil {
-		return errors.Newf("error from PROJ: %s", string(err))
+		return pgerror.Newf(pgcode.InvalidParameterValue, "error from PROJ: %s", string(err))
 	}
 	return nil
 }

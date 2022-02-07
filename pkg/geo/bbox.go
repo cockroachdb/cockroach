@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
@@ -56,7 +58,7 @@ func ParseCartesianBoundingBox(s string) (CartesianBoundingBox, error) {
 		return b, errors.Wrapf(err, "error parsing box2d")
 	}
 	if numScanned != 5 || strings.ToLower(prefix) != "box" {
-		return b, errors.Newf("expected format 'box(min_x min_y,max_x max_y)'")
+		return b, pgerror.Newf(pgcode.InvalidParameterValue, "expected format 'box(min_x min_y,max_x max_y)'")
 	}
 	return b, nil
 }
@@ -232,7 +234,7 @@ func boundingBoxFromGeomT(g geom.T, soType geopb.SpatialObjectType) (*geopb.Boun
 			HiY: rect.Lat.Hi,
 		}, nil
 	}
-	return nil, errors.Newf("unknown spatial type: %s", soType)
+	return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown spatial type: %s", soType)
 }
 
 // BoundingBoxFromGeomTGeometryType returns an appropriate bounding box for a Geometry type.

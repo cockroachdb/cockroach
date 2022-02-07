@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 	"github.com/twpayne/go-geom"
 )
@@ -26,7 +28,10 @@ const maxAllowedGridSize = 100 * geo.MaxAllowedSplitPoints
 
 // ErrGenerateRandomPointsInvalidPoints is returned if we have a negative number of points
 // or an empty geometry.
-var ErrGenerateRandomPointsInvalidPoints = errors.New("points must be positive and geometry must not be empty")
+var ErrGenerateRandomPointsInvalidPoints = pgerror.Newf(
+	pgcode.InvalidParameterValue,
+	"points must be positive and geometry must not be empty",
+)
 
 // GenerateRandomPoints generates provided number of pseudo-random points for the input area.
 func GenerateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geometry, error) {
@@ -37,13 +42,14 @@ func GenerateRandomPoints(g geo.Geometry, nPoints int, rng *rand.Rand) (geo.Geom
 	case geopb.ShapeType_MultiPolygon:
 		generateRandomPointsFunction = generateRandomPointsFromMultiPolygon
 	default:
-		return geo.Geometry{}, errors.Newf("unsupported type: %v", g.ShapeType().String())
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "unsupported type: %v", g.ShapeType().String())
 	}
 	if nPoints <= 0 {
 		return geo.Geometry{}, ErrGenerateRandomPointsInvalidPoints
 	}
 	if nPoints > geo.MaxAllowedSplitPoints {
-		return geo.Geometry{}, errors.Newf(
+		return geo.Geometry{}, pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"failed to generate random points, too many points to generate: requires %d points, max %d",
 			nPoints,
 			geo.MaxAllowedSplitPoints,
@@ -85,7 +91,7 @@ func generateRandomPointsFromPolygon(
 		return nil, errors.Wrap(err, "could not calculate Polygon area")
 	}
 	if area == 0.0 {
-		return nil, errors.New("zero area input Polygon")
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "zero area input Polygon")
 	}
 	bbox := g.CartesianBoundingBox()
 	bboxWidth := bbox.HiX - bbox.LoX
@@ -112,7 +118,8 @@ func generateRandomPointsFromPolygon(
 	}
 	n := sampleHeight * sampleWidth
 	if n > maxAllowedGridSize {
-		return nil, errors.Newf(
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
 			"generated area is too large: %d, max %d",
 			n,
 			maxAllowedGridSize,

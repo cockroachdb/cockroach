@@ -12,7 +12,8 @@ package geogfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/golang/geo/r3"
 	"github.com/golang/geo/s2"
 	"github.com/twpayne/go-geom"
@@ -46,7 +47,7 @@ func Centroid(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (geo.Geo
 	switch geomRepr.(type) {
 	case *geom.Point, *geom.LineString, *geom.Polygon, *geom.MultiPoint, *geom.MultiLineString, *geom.MultiPolygon:
 	default:
-		return geo.Geography{}, errors.Newf("unhandled geography type %s", g.ShapeType().String())
+		return geo.Geography{}, pgerror.Newf(pgcode.InvalidParameterValue, "unhandled geography type %s", g.ShapeType().String())
 	}
 
 	regions, err := geo.S2RegionsFromGeomT(geomRepr, geo.EmptyBehaviorOmit)

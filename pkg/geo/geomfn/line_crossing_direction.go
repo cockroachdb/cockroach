@@ -12,7 +12,8 @@ package geomfn
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -105,7 +106,7 @@ func LineCrossingDirection(geometry1, geometry2 geo.Geometry) (LineCrossingDirec
 	g2, ok2 := t2.(*geom.LineString)
 
 	if !ok1 || !ok2 {
-		return 0, errors.New("arguments must be LINESTRING")
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "arguments must be LINESTRING")
 	}
 
 	line1, line2 := g1.Coords(), g2.Coords()
