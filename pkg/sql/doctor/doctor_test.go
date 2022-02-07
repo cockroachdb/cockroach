@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -545,7 +546,13 @@ func TestExamineDescriptors(t *testing.T) {
 	for i, test := range tests {
 		var buf bytes.Buffer
 		valid, err := doctor.ExamineDescriptors(
-			context.Background(), test.descTable, test.namespaceTable, test.jobsTable, false, &buf)
+			context.Background(),
+			clusterversion.TestingClusterVersion,
+			test.descTable,
+			test.namespaceTable,
+			test.jobsTable,
+			false,
+			&buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)
 		if test.errStr != "" {
 			require.Containsf(t, err.Error(), test.errStr, msg)

@@ -11,6 +11,7 @@ go_library(
         "keyed_versions.go",
         "setting.go",
         "testutils.go",
+        "utilversions.go",
         ":gen-key-stringer",  # keep
     ],
     embed = [":clusterversion_go_proto"],

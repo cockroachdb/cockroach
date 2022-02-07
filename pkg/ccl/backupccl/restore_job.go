@@ -1885,7 +1885,8 @@ func (r *restoreResumer) publishDescriptors(
 				return err
 			}
 		}
-		if err := mutTable.AllocateIDs(ctx); err != nil {
+		version := r.settings.Version.ActiveVersion(ctx)
+		if err := mutTable.AllocateIDs(ctx, version); err != nil {
 			return err
 		}
 		allMutDescs = append(allMutDescs, mutTable)
