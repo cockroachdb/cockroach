@@ -1,9 +1,10 @@
 @import "src/core/index.module";
 
-.app-name {
+.text-link {
   white-space: nowrap;
   line-height: $line-height--medium;
   font-weight: $font-weight--bold;
+  color: $colors--link;
 
   &__unset {
     color: $tooltip-color;

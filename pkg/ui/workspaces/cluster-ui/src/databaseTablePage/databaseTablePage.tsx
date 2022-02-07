@@ -35,7 +35,6 @@ import { commonStyles } from "src/common";
 import { baseHeadingClasses } from "src/transactionsPage/transactionsPageClasses";
 import moment, { Moment } from "moment";
 import { Search as IndexIcon } from "@cockroachlabs/icons";
-import { formatDate } from "antd/es/date-picker/utils";
 import { Link } from "react-router-dom";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
@@ -232,8 +231,7 @@ export class DatabaseTablePage extends React.Component<
       return "Last reset: Never";
     } else {
       return (
-        "Last reset: " +
-        formatDate(lastReset, "MMM DD, YYYY [at] h:mm A [(UTC)]")
+        "Last reset: " + lastReset.format("MMM DD, YYYY [at] h:mm A [(UTC)]")
       );
     }
   }
@@ -242,8 +240,7 @@ export class DatabaseTablePage extends React.Component<
     const lastReset = this.props.indexStats.lastReset;
     switch (indexStat.lastUsedType) {
       case "read":
-        return formatDate(
-          indexStat.lastUsed,
+        return indexStat.lastUsed.format(
           "[Last read:] MMM DD, YYYY [at] h:mm A",
         );
       case "reset":
@@ -252,10 +249,7 @@ export class DatabaseTablePage extends React.Component<
         if (lastReset.isSame(this.minDate)) {
           return "Never";
         } else {
-          return formatDate(
-            lastReset,
-            "[Last reset:] MMM DD, YYYY [at] h:mm A",
-          );
+          return lastReset.format("[Last reset:] MMM DD, YYYY [at] h:mm A");
         }
     }
   }
@@ -377,8 +371,7 @@ export class DatabaseTablePage extends React.Component<
                     {this.props.details.statsLastUpdated && (
                       <SummaryCardItem
                         label="Table Stats Last Updated"
-                        value={formatDate(
-                          this.props.details.statsLastUpdated,
+                        value={this.props.details.statsLastUpdated.format(
                           "MMM DD, YYYY [at] h:mm A [(UTC)]",
                         )}
                       />
