@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -42,7 +43,13 @@ type replicaInCircuitBreaker interface {
 }
 
 var defaultReplicaCircuitBreakerSlowReplicationThreshold = envutil.EnvOrDefaultDuration(
-	"COCKROACH_REPLICA_CIRCUIT_BREAKER_SLOW_REPLICATION_THRESHOLD", 0,
+	"COCKROACH_REPLICA_CIRCUIT_BREAKER_SLOW_REPLICATION_THRESHOLD",
+	// SlowRequestThreshold is used in various places to log warnings on slow
+	// request phases. We are even more conservative about the circuit breakers,
+	// i.e. multiply by a factor. This is mainly defense in depth; at time of
+	// writing the slow request threshold is 15s which *should* also be good
+	// enough for circuit breakers since it's already fairly conservative.
+	4*base.SlowRequestThreshold,
 )
 
 var replicaCircuitBreakerSlowReplicationThreshold = settings.RegisterPublicDurationSettingWithExplicitUnit(
