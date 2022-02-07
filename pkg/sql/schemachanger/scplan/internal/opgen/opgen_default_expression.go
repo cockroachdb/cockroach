@@ -37,8 +37,10 @@ func init() {
 					}
 				}),
 				emit(func(this *scpb.DefaultExpression) scop.Op {
-					return &scop.UpdateRelationDeps{
-						TableID: this.TableID,
+					return &scop.RemoveColumnSequenceReferences{
+						TableID:     this.TableID,
+						ColumnID:    this.ColumnID,
+						SequenceIDs: this.UsesSequenceIDs,
 					}
 				}),
 			),

@@ -252,7 +252,12 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	}
 
 	// Validate the privilege descriptor.
-	vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Database))
+	if desc.Privileges == nil {
+		vea.Report(errors.AssertionFailedf("privileges not set"))
+	} else {
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Database))
+	}
+
 	// The DefaultPrivilegeDescriptor may be nil.
 	if desc.GetDefaultPrivileges() != nil {
 		// Validate the default privilege descriptor.

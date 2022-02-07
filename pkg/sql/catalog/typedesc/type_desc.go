@@ -486,9 +486,14 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		vea.Report(errors.AssertionFailedf("invalid parent schema ID %d", desc.GetParentSchemaID()))
 	}
 
+	if desc.Privileges == nil {
+		vea.Report(errors.AssertionFailedf("privileges not set"))
+	} else if desc.Kind != descpb.TypeDescriptor_ALIAS {
+		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Type))
+	}
+
 	switch desc.Kind {
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Type))
 		// Check presence of region config
 		if desc.RegionConfig == nil {
 			vea.Report(errors.AssertionFailedf("no region config on %s type desc", desc.Kind.String()))
@@ -507,7 +512,6 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			}
 		}
 	case descpb.TypeDescriptor_ENUM:
-		vea.Report(catprivilege.Validate(*desc.Privileges, desc, privilege.Type))
 		if desc.RegionConfig != nil {
 			vea.Report(errors.AssertionFailedf("found region config on %s type desc", desc.Kind.String()))
 		}
