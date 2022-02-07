@@ -1122,6 +1122,7 @@ child operation: %s, tracer created at:
 		// NB: (!opts.Parent.empty() && opts.Parent.i.crdb == nil) is not possible at
 		// the moment, but let's not rely on that.
 		if !opts.Parent.empty() && opts.Parent.i.crdb != nil {
+			s.i.crdb.parentSpanID = opts.parentSpanID()
 
 			// Panic if the parent has already been finished, if configured to do so.
 			// If the parent has finished and we're configured not to panic,
@@ -1139,7 +1140,6 @@ child operation: %s, tracer created at:
 				added := parent.addChildLocked(s, !opts.ParentDoesNotCollectRecording)
 				if added {
 					localRoot = false
-					s.i.crdb.parentSpanID = opts.parentSpanID()
 					// We take over the reference in opts.Parent. The child will release
 					// it once when it nils out s.i.crdb.mu.parent (i.e. when either the
 					// parent of the child finish). Note that some methods on opts cannot
