@@ -32,7 +32,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
-        "//pkg/kv/kvclient/rangecache:with-mocks",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",

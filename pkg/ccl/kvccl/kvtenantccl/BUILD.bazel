@@ -12,7 +12,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvclient/kvtenant",
-        "//pkg/kv/kvclient/rangecache:with-mocks",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/server/serverpb",

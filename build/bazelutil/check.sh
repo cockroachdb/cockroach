@@ -13,7 +13,7 @@ pkg/roachprod/vm/aws/config.go://go:generate terraformgen -o terraform/main.tf
 pkg/cmd/roachtest/prometheus/prometheus.go://go:generate mockgen -package=prometheus -destination=mock_generated.go . Cluster
 pkg/cmd/roachtest/tests/drt.go://go:generate mockgen -package tests -destination drt_generated.go . PromClient
 pkg/kv/kvclient/kvcoord/transport.go://go:generate mockgen -package=kvcoord -destination=mocks_generated_test.go . Transport
-pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecache -destination=mocks_generated.go . RangeDescriptorDB
+pkg/kv/kvclient/rangecache/range_cache.go://go:generate mockgen -package=rangecachemock -destination=rangecachemock/mocks_generated.go . RangeDescriptorDB
 pkg/kv/kvclient/rangefeed/rangefeed.go://go:generate mockgen -destination=mocks_generated.go --package=rangefeed . DB
 pkg/kv/kvserver/concurrency/lock_table.go://go:generate ../../../util/interval/generic/gen.sh *lockState concurrency
 pkg/kv/kvserver/spanlatch/manager.go://go:generate ../../../util/interval/generic/gen.sh *latch spanlatch

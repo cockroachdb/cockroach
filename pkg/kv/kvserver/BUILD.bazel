@@ -112,7 +112,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
-        "//pkg/kv/kvclient/rangecache:with-mocks",
+        "//pkg/kv/kvclient/rangecache",
         "//pkg/kv/kvserver/abortspan",
         "//pkg/kv/kvserver/apply",
         "//pkg/kv/kvserver/batcheval",

@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -81,7 +81,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			transport := NewMockTransport(ctrl)
-			rangeDB := rangecache.NewMockRangeDescriptorDB(ctrl)
+			rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
 
 			// We start off with a cached lease on r1.
 			cachedLease := roachpb.Lease{

@@ -803,7 +803,7 @@ GENERATED_TARGETS = \
   pkg/security/securitytest/embedded.go \
   pkg/security/certmgr/mocks_generated.go \
   pkg/kv/kvclient/kvcoord/mocks_generated_test.go \
-  pkg/kv/kvclient/rangecache/mocks_generated.go \
+  pkg/kv/kvclient/rangecache/rangecachemock/mocks_generated.go \
   pkg/roachpb/roachpbmock/mocks_generated.go \
   pkg/util/log/mock_generated.go
 
