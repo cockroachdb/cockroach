@@ -487,6 +487,28 @@ func (p *planner) AlterPrimaryKey(
 		newIndexIDs = append(newIndexIDs, newIndex.ID)
 	}
 
+	// Determine if removing this index would lead to the uniqueness for a foreign
+	// key back reference, which will cause this swap operation to be blocked.
+	nonDropIndexes := tableDesc.NonDropIndexes()
+	remainingIndexes := make([]descpb.UniqueConstraint, 0, len(nonDropIndexes))
+	for i := range nonDropIndexes {
+		// We can't copy directly because of the interface conversion.
+		if nonDropIndexes[i].GetID() == tableDesc.GetPrimaryIndex().GetID() {
+			continue
+		}
+		remainingIndexes = append(remainingIndexes, nonDropIndexes[i])
+	}
+	remainingIndexes = append(remainingIndexes, newPrimaryIndexDesc)
+	err = p.tryRemoveFKBackReferences(
+		ctx,
+		tableDesc,
+		tableDesc.GetPrimaryIndex(),
+		tree.DropRestrict,
+		remainingIndexes)
+	if err != nil {
+		return err
+	}
+
 	swapArgs := &descpb.PrimaryKeySwap{
 		OldPrimaryIndexId:   tableDesc.GetPrimaryIndexID(),
 		NewPrimaryIndexId:   newPrimaryIndexDesc.ID,
