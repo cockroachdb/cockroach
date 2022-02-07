@@ -71,6 +71,10 @@ type TestingKnobs struct {
 
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
+
+	// BeforeWaitForJobsQuery is called once per invocation of the
+	// poll-show-jobs query in WaitForJobs.
+	BeforeWaitForJobsQuery func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -96,6 +100,13 @@ type TestingIntervalOverrides struct {
 
 	// RetryMaxDelay overrides retryMaxDelaySetting cluster setting.
 	RetryMaxDelay *time.Duration
+
+	// WaitForJobsInitialDelay is the initial delay used in
+	// WaitForJobs calls.
+	WaitForJobsInitialDelay *time.Duration
+
+	// WaitForJobsMaxDelay
+	WaitForJobsMaxDelay *time.Duration
 }
 
 // NewTestingKnobsWithShortIntervals return a TestingKnobs structure with

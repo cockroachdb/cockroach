@@ -36,6 +36,7 @@ type TenantDeps struct {
 	Settings          *cluster.Settings
 	CollectionFactory *descs.CollectionFactory
 	LeaseManager      *lease.Manager
+	JobRegistry       *jobs.Registry
 	InternalExecutor  sqlutil.InternalExecutor
 
 	SpanConfig struct { // deps for span config upgrades; can be removed accordingly

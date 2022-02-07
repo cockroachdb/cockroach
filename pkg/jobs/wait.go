@@ -62,25 +62,44 @@ func (r *Registry) WaitForJobs(
 	return r.waitForJobs(ctx, ex, jobs, jobFinishedLocally)
 }
 
-func (r *Registry) waitForJobs(
+// WaitForJobsIgnoringJobErrors is like WaitForJobs but it only
+// returns an error in the case that polling the jobs table fails.
+func (r *Registry) WaitForJobsIgnoringJobErrors(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
+	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
+	defer cleanup()
+	return r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally)
+}
+
+func (r *Registry) waitForJobsToBeTerminalOrPaused(
 	ctx context.Context,
 	ex sqlutil.InternalExecutor,
 	jobs []jobspb.JobID,
 	jobFinishedLocally <-chan struct{},
 ) error {
-
 	if len(jobs) == 0 {
 		return nil
 	}
-
 	query := makeWaitForJobsQuery(jobs)
-	start := timeutil.Now()
 	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
 	// control over retries. Also, avoiding SHOW JOBS prevents us from having to
 	// populate the crdb_internal.jobs vtable.
+	initialBackoff := 500 * time.Millisecond
+	maxBackoff := 3 * time.Second
+
+	if r.knobs.IntervalOverrides.WaitForJobsInitialDelay != nil {
+		initialBackoff = *r.knobs.IntervalOverrides.WaitForJobsInitialDelay
+	}
+
+	if r.knobs.IntervalOverrides.WaitForJobsMaxDelay != nil {
+		maxBackoff = *r.knobs.IntervalOverrides.WaitForJobsMaxDelay
+	}
+
 	ret := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: 500 * time.Millisecond,
-		MaxBackoff:     3 * time.Second,
+		InitialBackoff: initialBackoff,
+		MaxBackoff:     maxBackoff,
 		Multiplier:     1.5,
 
 		// Setting the closer here will terminate the loop if the job finishes
@@ -92,6 +111,9 @@ func (r *Registry) waitForJobs(
 		// We poll the number of queued jobs that aren't finished. As with SHOW JOBS
 		// WHEN COMPLETE, if one of the jobs is missing from the jobs table for
 		// whatever reason, we'll fail later when we try to load the job.
+		if fn := r.knobs.BeforeWaitForJobsQuery; fn != nil {
+			fn()
+		}
 		row, err := ex.QueryRowEx(
 			ctx,
 			"poll-show-jobs",
@@ -110,13 +132,31 @@ func (r *Registry) waitForJobs(
 			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
 		}
 		if count == 0 {
-			break
+			return nil
 		}
 	}
+	return nil
+}
+
+func (r *Registry) waitForJobs(
+	ctx context.Context,
+	ex sqlutil.InternalExecutor,
+	jobs []jobspb.JobID,
+	jobFinishedLocally <-chan struct{},
+) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+	start := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "waited for %d %v queued jobs to complete %v",
 			len(jobs), jobs, timeutil.Since(start))
 	}()
+
+	if err := r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally); err != nil {
+		return err
+	}
+
 	for i, id := range jobs {
 		j, err := r.LoadJob(ctx, id)
 		if err != nil {
