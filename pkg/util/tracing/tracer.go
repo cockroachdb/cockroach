@@ -1452,7 +1452,7 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 // creates a root span.
 func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
-	var opts []SpanOption
+	opts := make([]SpanOption, 0, 3)
 	// If there's a span in ctx, we use it as a parent.
 	if sp != nil {
 		tr = sp.Tracer()
@@ -1492,27 +1492,13 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 func EnsureChildSpan(
 	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
 ) (context.Context, *Span) {
-	slp := optsPool.Get().(*[]SpanOption)
-	*slp = append(*slp, WithParent(SpanFromContext(ctx)))
-	*slp = append(*slp, os...)
-	ctx, sp := tr.StartSpanCtx(ctx, name, *slp...)
-	// Clear and zero-length the slice. Note that we have to clear
-	// explicitly or the options will continue to be referenced by
-	// the slice.
-	for i := range *slp {
-		(*slp)[i] = nil
-	}
-	*slp = (*slp)[0:0:cap(*slp)]
-	optsPool.Put(slp)
+	// NB: Making the capacity dynamic, based on len(os), makes this allocate.
+	// With a fixed length, it doesn't allocate.
+	opts := make([]SpanOption, 0, 3)
+	opts = append(opts, WithParent(SpanFromContext(ctx)))
+	opts = append(opts, os...)
+	ctx, sp := tr.StartSpanCtx(ctx, name, opts...)
 	return ctx, sp
-}
-
-var optsPool = sync.Pool{
-	New: func() interface{} {
-		// It is unusual to pass more than 5 SpanOptions.
-		sl := make([]SpanOption, 0, 5)
-		return &sl
-	},
 }
 
 // ContextWithRecordingSpan returns a context with an embedded trace Span. The
