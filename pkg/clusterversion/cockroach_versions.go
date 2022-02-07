@@ -303,6 +303,10 @@ const (
 	// BackupResolutionInJob defaults to resolving backup destinations during the
 	// execution of a backup job rather than during planning.
 	BackupResolutionInJob
+	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
+	// range tombstones.
+	ExperimentalMVCCRangeTombstones
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -486,11 +490,15 @@ var versionsSingleton = keyedVersions{
 		Key:     EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 74},
 	},
-
 	{
 		Key:     BackupResolutionInJob,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
 	},
+	{
+		Key:     ExperimentalMVCCRangeTombstones,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 78},
+	},
+
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
