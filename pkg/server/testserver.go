@@ -680,7 +680,17 @@ func (ts *TestServer) StartTenant(
 		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
 		stopper = stop.NewStopper(stop.WithTracer(tr))
 		// The server's stopper stops the tenant, for convenience.
-		ts.Stopper().AddCloser(stop.CloserFn(func() { stopper.Stop(context.Background()) }))
+		// Use main server quiesce as a signal to stop tenants stopper. in the perfect world, we
+		// want to have tenant stopped before the main server.  Using ts.Stopper().AddCloser() to
+		// propagate shutdown signal could result in stuck (or slow) shutdown since closers are the very
+		// last thing that runs -- and by then, the tenant maybe stuck, or re-trying an operation
+		// (e.g. to resolve tentant ranges).
+		if err := ts.Stopper().RunAsyncTask(ctx, "propagate-cancellation-to-tenant", func(ctx context.Context) {
+			<-ts.Stopper().ShouldQuiesce()
+			stopper.Stop(context.Background())
+		}); err != nil {
+			return nil, err
+		}
 	} else if stopper.Tracer() == nil {
 		tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV), tracing.WithTracingMode(params.TracingDefault))
 		stopper.SetTracer(tr)
