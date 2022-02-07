@@ -62,19 +62,27 @@ func (r *Registry) WaitForJobs(
 	return r.waitForJobs(ctx, ex, jobs, jobFinishedLocally)
 }
 
-func (r *Registry) waitForJobs(
+// WaitForJobsIgnoringJobErrors is like WaitForJobs but it only
+// returns an error in the case that polling the jobs table fails.
+func (r *Registry) WaitForJobsIgnoringJobErrors(
+	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
+) error {
+	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
+	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
+	defer cleanup()
+	return r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally)
+}
+
+func (r *Registry) waitForJobsToBeTerminalOrPaused(
 	ctx context.Context,
 	ex sqlutil.InternalExecutor,
 	jobs []jobspb.JobID,
 	jobFinishedLocally <-chan struct{},
 ) error {
-
 	if len(jobs) == 0 {
 		return nil
 	}
-
 	query := makeWaitForJobsQuery(jobs)
-	start := timeutil.Now()
 	// Manually retry instead of using SHOW JOBS WHEN COMPLETE so we have greater
 	// control over retries. Also, avoiding SHOW JOBS prevents us from having to
 	// populate the crdb_internal.jobs vtable.
@@ -110,13 +118,31 @@ func (r *Registry) waitForJobs(
 			log.Infof(ctx, "waiting for %d queued jobs to complete", count)
 		}
 		if count == 0 {
-			break
+			return nil
 		}
 	}
+	return nil
+}
+
+func (r *Registry) waitForJobs(
+	ctx context.Context,
+	ex sqlutil.InternalExecutor,
+	jobs []jobspb.JobID,
+	jobFinishedLocally <-chan struct{},
+) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+	start := timeutil.Now()
 	defer func() {
 		log.Infof(ctx, "waited for %d %v queued jobs to complete %v",
 			len(jobs), jobs, timeutil.Since(start))
 	}()
+
+	if err := r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally); err != nil {
+		return err
+	}
+
 	for i, id := range jobs {
 		j, err := r.LoadJob(ctx, id)
 		if err != nil {

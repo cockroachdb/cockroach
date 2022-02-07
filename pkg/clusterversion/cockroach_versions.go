@@ -267,6 +267,17 @@ const (
 	// on lease transfer Raft proposals. New leaseholders now forward their clock
 	// directly to the new lease start time.
 	DontProposeWriteTimestampForLeaseTransfers
+	// NoNonMVCCIndexBackfills adds the migration which waits for
+	// all schema changes to complete. After this point, no
+	// non-MVCC index backfills will be used.
+	//
+	// TODO(ssd): Do we want to name this something related to
+	// AddSST since we will use it not just for the migration but
+	// also eventually to decide whether to start rejecting
+	// AddSSTable requests (and failing resumed old schema
+	// changes).
+	NoNonMVCCIndexBackfills
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -421,6 +432,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DontProposeWriteTimestampForLeaseTransfers,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
+	},
+	{
+		Key:     NoNonMVCCIndexBackfills,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
 	},
 
 	// *************************************************

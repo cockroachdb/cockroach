@@ -119,6 +119,12 @@ var migrations = []migration.Migration{
 		toCV(clusterversion.PostAddRaftAppliedIndexTermMigration),
 		postRaftAppliedIndexTermMigration,
 	),
+	migration.NewTenantMigration(
+		"wait for all in-flight schema changes",
+		toCV(clusterversion.NoNonMVCCIndexBackfills),
+		NoPrecondition,
+		waitForAllSchemaChanges,
+	),
 }
 
 func init() {

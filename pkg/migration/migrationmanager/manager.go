@@ -416,6 +416,7 @@ func (m *Manager) checkPreconditions(
 			Settings:         m.settings,
 			LeaseManager:     m.lm,
 			InternalExecutor: m.ie,
+			JobRegistry:      m.jr,
 		}); err != nil {
 			return errors.Wrapf(
 				err,
