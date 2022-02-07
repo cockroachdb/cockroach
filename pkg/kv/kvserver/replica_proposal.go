@@ -926,6 +926,9 @@ func (r *Replica) getTraceData(ctx context.Context) map[string]string {
 	if sp == nil {
 		return nil
 	}
+	// TODO(andrei): We should propagate trace info even for non-verbose spans.
+	// We'd probably want to use a cheaper mechanism than `InjectMetaInto`,
+	// though.
 	if !sp.IsVerbose() {
 		return nil
 	}
