@@ -348,6 +348,18 @@ message DeleteRangeRequest {
   // Inline values cannot be deleted transactionally; a DeleteRange with
   // "inline" set to true will fail if it is executed within a transaction.
   bool inline = 4;
+  // If enabled, the range is deleted using an MVCC range tombstone, which is a
+  // cheaper constant-time write operation (but still requires a time-bounded
+  // scan to check for conflicts). This option cannot be used in a transaction,
+  // and it cannot be combined with Inline or ReturnKeys.
+  //
+  // The caller must check the MVCCRangeTombstones version gate before using
+  // this parameter, as it is new in 22.2.
+  //
+  // This parameter is EXPERIMENTAL: range tombstones are under active
+  // development, and have severe limitations including being ignored by all
+  // KV and MVCC APIs and only being stored in memory.
+  bool use_experimental_range_tombstone = 5;
 }
 
 // A DeleteRangeResponse is the return value from the DeleteRange()

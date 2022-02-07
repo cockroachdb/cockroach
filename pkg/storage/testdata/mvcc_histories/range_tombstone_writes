@@ -1,0 +1,487 @@
+# Tests MVCC range tombstone writes.
+#
+# Set up some point keys, point tombstones x, range tombstones o--o,
+# and intents [].
+#
+# 7             [d7]                [i7]
+# 6
+# 5
+# 4  x           d4      f4  x               o-------------------o
+# 3
+# 2  a2                      g2
+# 1
+# 0                              h0
+#    a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
+run ok
+put k=a ts=2 v=a2
+del k=a ts=4
+put k=d ts=4 v=d4
+put k=f ts=4 v=f4
+put k=g ts=2 v=g2
+del k=g ts=4
+put k=h ts=0 v=inline
+del_range_ts k=k end=p ts=4
+with t=A
+  txn_begin ts=7
+  put k=d v=d7
+  put k=i v=i7
+----
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing invalid range tombstones should error.
+run error
+del_range_ts k=z end=x ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*withstack.withStack:) invalid range key {z-x}/3.000000000,0: start key "z" is at or after end key "x"
+
+run error
+del_range_ts k=x end=z ts=0
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*withstack.withStack:) invalid range key {x-z}: no timestamp
+
+run error
+del_range_ts k=x end=x ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*withstack.withStack:) invalid range key x{-}/3.000000000,0: start key "x" is at or after end key "x"
+
+# Writing at or below existing point keys should return a WriteTooOldError,
+# both at the start key and in the middle of the range key.
+run error
+del_range_ts k=a end=b ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=a end=b ts=4
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=e end=g ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "f" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+# Writing at or below existing range tombstones should return a WriteTooOldError,
+# regardless of how they overlap.
+run error
+del_range_ts k=k end=p ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=k end=p ts=4
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 4.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=j end=m ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=o end=q ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "o" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=j end=q ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+run error
+del_range_ts k=k end=n ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "k" at timestamp 3.000000000,0 too old; wrote at 4.000000000,1
+
+# Writing below intents should return a WriteIntentError, both when above and
+# below the intent timestamp and any existing values.
+run error
+del_range_ts k=d end=e ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+
+run error
+del_range_ts k=d end=e ts=5
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteIntentError:) conflicting intents on "d"
+
+run error
+del_range_ts k=i end=j ts=5
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+run error
+del_range_ts k=i end=j ts=7
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+run error
+del_range_ts k=i end=j ts=10
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*roachpb.WriteIntentError:) conflicting intents on "i"
+
+# Writing above an inline value should error.
+run error
+del_range_ts k=h end=i ts=3
+----
+>> at end:
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+error: (*withstack.withStack:) can't write range tombstone across inline key "h"/0,0
+
+# Writing next to or above point keys and tombstones should work.
+run ok
+del_range_ts k=a end=b ts=10
+del_range_ts k=b end=d ts=4
+----
+>> at end:
+rangekey: {a-b}/[10.000000000,0=/<empty>]
+rangekey: {b-d}/[4.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing range tombstones next to other range tombstones will merge them, but
+# only at same timestamp.
+run ok
+del_range_ts k=s end=x ts=4
+del_range_ts k=p end=s ts=3
+----
+>> at end:
+rangekey: {a-b}/[10.000000000,0=/<empty>]
+rangekey: {b-d}/[4.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+rangekey: {p-s}/[3.000000000,0=/<empty>]
+rangekey: {s-x}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+run ok
+del_range_ts k=p end=s ts=4
+----
+>> at end:
+rangekey: {a-b}/[10.000000000,0=/<empty>]
+rangekey: {b-d}/[4.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+rangekey: {p-s}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {s-x}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing a local timestamp above the key timestamp should be rounded down,
+# and merge with an adjacent range tombstone.
+run ok
+del_range_ts k=x end=y ts=4 localTs=5
+----
+>> at end:
+rangekey: {a-b}/[10.000000000,0=/<empty>]
+rangekey: {b-d}/[4.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+rangekey: {p-s}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {s-y}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
+
+# Writing range tombstones next to others with a different local timestamp
+# (and thus value) should not merge.
+run ok
+del_range_ts k=y end=z ts=4 localTs=3
+----
+>> at end:
+rangekey: {a-b}/[10.000000000,0=/<empty>]
+rangekey: {b-d}/[4.000000000,0=/<empty>]
+rangekey: {k-p}/[4.000000000,0=/<empty>]
+rangekey: {p-s}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {s-y}/[4.000000000,0=/<empty>]
+rangekey: {y-z}/[4.000000000,0=vheader{ localTs=3.000000000,0 } /<empty>]
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "g"/4.000000000,0 -> /<empty>
+data: "g"/2.000000000,0 -> /BYTES/g2
+meta: "h"/0,0 -> txn={<nil>} ts=0,0 del=false klen=0 vlen=0 raw=/BYTES/inline mergeTs=<nil> txnDidNotUpdateMeta=false
+meta: "i"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "i"/7.000000000,0 -> /BYTES/i7
