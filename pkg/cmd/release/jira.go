@@ -13,6 +13,8 @@ const customFieldShaUrl = "customfield_10210"
 const customFieldTagUrl = "customfield_10211"
 const customFieldBuildId = "customfield_10251"
 
+const transitionIdInProgress = "11"
+
 // for DeployToClusterIssue
 const customFieldHasSlaKey = "customfield_10073"
 
@@ -46,6 +48,9 @@ func createReleaseTrackingIssue(meta metadata, setCustomFields bool) *jira.Issue
 		meta.SHA, shaUrl,
 		meta.Timestamp,
 	)
+	typeName := "CRDB Release"
+	fixVersionName := "testing"
+
 	var customFields jira.CustomFields
 	if setCustomFields {
 		customFields := make(jira.CustomFields)
@@ -54,11 +59,12 @@ func createReleaseTrackingIssue(meta metadata, setCustomFields bool) *jira.Issue
 		customFields[customFieldBuildId] = meta.Tag // We probably don't need to set "Build ID", since this is the same as Tag
 	}
 	return createNewIssue(&IssueDetails{
-		ProjectKey:   "REL",
-		TypeName:     "Task",
-		Summary:      summary,
-		Description:  description,
-		CustomFields: customFields,
+		ProjectKey:     "REL",
+		TypeName:       typeName,
+		Summary:        summary,
+		Description:    description,
+		CustomFields:   customFields,
+		FixVersionName: fixVersionName,
 	})
 }
 
@@ -126,13 +132,14 @@ func getClient(authUsername, authPassword string) (*jira.Client, error) {
 }
 
 type IssueDetails struct {
-	Id           string
-	Key          string
-	TypeName     string
-	ProjectKey   string
-	Summary      string
-	Description  string
-	CustomFields jira.CustomFields
+	Id             string
+	Key            string
+	TypeName       string
+	ProjectKey     string
+	Summary        string
+	Description    string
+	FixVersionName string
+	CustomFields   jira.CustomFields
 }
 
 // GetIssueDetails stores a subset of details from jira.Issue into IssueDetails.
@@ -167,6 +174,14 @@ func createNewIssue(details *IssueDetails) *jira.Issue {
 	}
 	issue.Fields.Summary = details.Summary
 	issue.Fields.Description = details.Description
+	if len(details.FixVersionName) > 0 {
+		issue.Fields.FixVersions = append(
+			issue.Fields.FixVersions,
+			&jira.FixVersion{
+				Name: details.FixVersionName,
+			},
+		)
+	}
 
 	if details.CustomFields != nil {
 		issue.Fields.Unknowns = make(map[string]interface{})

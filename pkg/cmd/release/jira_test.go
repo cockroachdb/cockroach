@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/andygrunwald/go-jira"
-	"github.com/cockroachdb/cockroach/vendor/github.com/andygrunwald/go-jira"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,13 +69,13 @@ func TestGetIssueDetails(t *testing.T) {
 // - https://cockroachlabs.atlassian.net/browse/ATS-351
 // This method should once (as well as posting the custom fields)
 // once ATS-351 is done.
-func TestCreateReleaseTrackingIssue_DOES_NOT_WORK_YET(t *testing.T) {
+func TestCreateReleaseTrackingIssue_WORKS(t *testing.T) {
 	username, password := getAuthUsernameAndPassword()
 	client, err := newJiraClient(username, password)
 	require.NoError(t, err)
 	setCustomFields := true
 	issue := createReleaseTrackingIssue(metadata{
-		Version:   "v21.2.4",
+		Version:   "TEST-TEST",
 		Tag:       "v21.2.3-144-g0c8df44947",
 		Branch:    "release-21.2",
 		SHA:       "fdd672fed84323279f7070127f36cdbdc5c26b03",
@@ -83,7 +83,9 @@ func TestCreateReleaseTrackingIssue_DOES_NOT_WORK_YET(t *testing.T) {
 	},
 		setCustomFields,
 	)
-	createRealJiraIssue(t, client, issue)
+	details := createRealJiraIssue(t, client, issue)
+
+	transitionRELToInProgress(t, client, details.Id)
 }
 
 // TestCreateTestREIssue_WORKS:
@@ -116,9 +118,9 @@ func TestCreateTestREIssue_WORKS(t *testing.T) {
 
 	// Before sending the post request, let's override
 	// the `REL` project with our test `RE` project.
-	issue.Fields.Project = jira.Project{
-		Key: "RE",
-	}
+	//issue.Fields.Project = jira.Project{
+	//	Key: "RE",
+	//}
 
 	createRealJiraIssue(t, client, issue)
 }
@@ -154,7 +156,7 @@ func TestCreateDeployToClusterIssue(t *testing.T) {
 // project, remember to cancel/delete the ticket
 // afterwards! :)
 // *******************************************************
-func createRealJiraIssue(t *testing.T, client *jiraClient, issue *jira.Issue) {
+func createRealJiraIssue(t *testing.T, client *jiraClient, issue *jira.Issue) *IssueDetails {
 	newIssue, resp, err := client.client.Issue.Create(issue)
 	// saving resp in case we need to inspect (e.g. get a 400)
 	require.NotEmpty(t, resp)
@@ -170,6 +172,15 @@ func createRealJiraIssue(t *testing.T, client *jiraClient, issue *jira.Issue) {
 	fmt.Printf("%s: %s\n", details.Key, details.Summary)
 	fmt.Printf("Type: %s\n", details.TypeName)
 	fmt.Printf("URL: https://cockroachlabs.atlassian.net/browse/%s\n", details.Key)
+
+	return details
+}
+
+func transitionRELToInProgress(t *testing.T, client *jiraClient, issueId string) {
+	_, err := client.client.Issue.DoTransition(issueId, transitionIdInProgress)
+	require.NoError(t, err)
+
+	fmt.Printf("Issue %s transitioned to In Progress", issueId)
 }
 
 func getAuthUsernameAndPassword() (string, string) {
