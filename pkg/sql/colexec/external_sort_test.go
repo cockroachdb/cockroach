@@ -298,7 +298,7 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	for b := sorter.Next(); b.Length() > 0; b = sorter.Next() {
 	}
 	for _, c := range closers {
-		require.NoError(t, c.Close())
+		require.NoError(t, c.Close(ctx))
 	}
 
 	require.True(t, spilled)

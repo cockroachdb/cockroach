@@ -341,10 +341,10 @@ func (a *minBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	}
 }
 
-func (a *minBoolAggregator) Close() {
+func (a *minBoolAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minBoolAggregator{}
 }
 
@@ -494,10 +494,10 @@ func (a *minBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *minBytesAggregator) Close() {
+func (a *minBytesAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minBytesAggregator{}
 }
 
@@ -649,10 +649,10 @@ func (a *minDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 	}
 }
 
-func (a *minDecimalAggregator) Close() {
+func (a *minDecimalAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minDecimalAggregator{}
 }
 
@@ -826,10 +826,10 @@ func (a *minInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *minInt16Aggregator) Close() {
+func (a *minInt16Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minInt16Aggregator{}
 }
 
@@ -1003,10 +1003,10 @@ func (a *minInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *minInt32Aggregator) Close() {
+func (a *minInt32Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minInt32Aggregator{}
 }
 
@@ -1180,10 +1180,10 @@ func (a *minInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *minInt64Aggregator) Close() {
+func (a *minInt64Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minInt64Aggregator{}
 }
 
@@ -1373,10 +1373,10 @@ func (a *minFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 	}
 }
 
-func (a *minFloat64Aggregator) Close() {
+func (a *minFloat64Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minFloat64Aggregator{}
 }
 
@@ -1542,10 +1542,10 @@ func (a *minTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 	}
 }
 
-func (a *minTimestampAggregator) Close() {
+func (a *minTimestampAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minTimestampAggregator{}
 }
 
@@ -1697,10 +1697,10 @@ func (a *minIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 	}
 }
 
-func (a *minIntervalAggregator) Close() {
+func (a *minIntervalAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minIntervalAggregator{}
 }
 
@@ -1895,10 +1895,10 @@ func (a *minJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	}
 }
 
-func (a *minJSONAggregator) Close() {
+func (a *minJSONAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minJSONAggregator{}
 }
 
@@ -2054,10 +2054,10 @@ func (a *minDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *minDatumAggregator) Close() {
+func (a *minDatumAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = minDatumAggregator{}
 }
 
@@ -2308,10 +2308,10 @@ func (a *maxBoolAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	}
 }
 
-func (a *maxBoolAggregator) Close() {
+func (a *maxBoolAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxBoolAggregator{}
 }
 
@@ -2461,10 +2461,10 @@ func (a *maxBytesAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *maxBytesAggregator) Close() {
+func (a *maxBytesAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxBytesAggregator{}
 }
 
@@ -2616,10 +2616,10 @@ func (a *maxDecimalAggregator) aggregateOverIntervals(intervals []windowInterval
 	}
 }
 
-func (a *maxDecimalAggregator) Close() {
+func (a *maxDecimalAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxDecimalAggregator{}
 }
 
@@ -2793,10 +2793,10 @@ func (a *maxInt16Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *maxInt16Aggregator) Close() {
+func (a *maxInt16Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxInt16Aggregator{}
 }
 
@@ -2970,10 +2970,10 @@ func (a *maxInt32Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *maxInt32Aggregator) Close() {
+func (a *maxInt32Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxInt32Aggregator{}
 }
 
@@ -3147,10 +3147,10 @@ func (a *maxInt64Aggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *maxInt64Aggregator) Close() {
+func (a *maxInt64Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxInt64Aggregator{}
 }
 
@@ -3340,10 +3340,10 @@ func (a *maxFloat64Aggregator) aggregateOverIntervals(intervals []windowInterval
 	}
 }
 
-func (a *maxFloat64Aggregator) Close() {
+func (a *maxFloat64Aggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxFloat64Aggregator{}
 }
 
@@ -3509,10 +3509,10 @@ func (a *maxTimestampAggregator) aggregateOverIntervals(intervals []windowInterv
 	}
 }
 
-func (a *maxTimestampAggregator) Close() {
+func (a *maxTimestampAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxTimestampAggregator{}
 }
 
@@ -3664,10 +3664,10 @@ func (a *maxIntervalAggregator) aggregateOverIntervals(intervals []windowInterva
 	}
 }
 
-func (a *maxIntervalAggregator) Close() {
+func (a *maxIntervalAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxIntervalAggregator{}
 }
 
@@ -3862,10 +3862,10 @@ func (a *maxJSONAggregator) aggregateOverIntervals(intervals []windowInterval) {
 	}
 }
 
-func (a *maxJSONAggregator) Close() {
+func (a *maxJSONAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxJSONAggregator{}
 }
 
@@ -4021,10 +4021,10 @@ func (a *maxDatumAggregator) aggregateOverIntervals(intervals []windowInterval) 
 	}
 }
 
-func (a *maxDatumAggregator) Close() {
+func (a *maxDatumAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = maxDatumAggregator{}
 }
 

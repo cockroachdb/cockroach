@@ -576,7 +576,7 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 			return r.output
 
 		case relativeRankFinished:
-			if err := r.Close(); err != nil {
+			if err := r.Close(r.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
 			return coldata.ZeroBatch
@@ -589,23 +589,23 @@ func (r *_RELATIVE_RANK_STRINGOp) Next() coldata.Batch {
 	}
 }
 
-func (r *_RELATIVE_RANK_STRINGOp) Close() error {
+func (r *_RELATIVE_RANK_STRINGOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() || r.Ctx == nil {
 		// Either Close() has already been called or Init() was never called. In
 		// both cases there is nothing to do.
 		return nil
 	}
 	var lastErr error
-	if err := r.bufferedTuples.Close(r.Ctx); err != nil {
+	if err := r.bufferedTuples.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{if .HasPartition}}
-	if err := r.partitionsState.Close(r.Ctx); err != nil {
+	if err := r.partitionsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}
 	// {{if .IsCumeDist}}
-	if err := r.peerGroupsState.Close(r.Ctx); err != nil {
+	if err := r.peerGroupsState.Close(ctx); err != nil {
 		lastErr = err
 	}
 	// {{end}}

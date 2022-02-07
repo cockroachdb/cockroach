@@ -296,10 +296,10 @@ func (a *_AGG_TYPEAggregator) aggregateOverIntervals(intervals []windowInterval)
 	}
 }
 
-func (a *_AGG_TYPEAggregator) Close() {
+func (a *_AGG_TYPEAggregator) Close(ctx context.Context) {
 	a.queue.close()
 	a.framer.close()
-	a.buffer.Close(a.EnsureCtx())
+	a.buffer.Close(ctx)
 	*a = _AGG_TYPEAggregator{}
 }
 

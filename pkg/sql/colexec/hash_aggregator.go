@@ -469,16 +469,16 @@ func (op *hashAggregator) resetBucketsAndTrackingState(ctx context.Context) {
 	op.curOutputBucketIdx = 0
 }
 
-func (op *hashAggregator) Close() error {
+func (op *hashAggregator) Close(ctx context.Context) error {
 	if !op.CloserHelper.Close() {
 		return nil
 	}
 	op.accountingHelper.Release()
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
-		retErr = op.inputTrackingState.tuples.Close(op.EnsureCtx())
+		retErr = op.inputTrackingState.tuples.Close(ctx)
 	}
-	if err := op.toClose.Close(); err != nil {
+	if err := op.toClose.Close(ctx); err != nil {
 		retErr = err
 	}
 	return retErr

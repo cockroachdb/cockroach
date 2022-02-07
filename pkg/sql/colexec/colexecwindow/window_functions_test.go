@@ -1083,7 +1083,7 @@ func TestWindowFunctions(t *testing.T) {
 			// Close all closers manually (in production this is done on the
 			// flow cleanup).
 			for _, c := range toClose {
-				require.NoError(t, c.Close())
+				require.NoError(t, c.Close(ctx))
 			}
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
