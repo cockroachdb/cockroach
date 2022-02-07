@@ -96,6 +96,12 @@ func (ddb *databaseDescriptorBuilder) RunRestoreChanges(
 func maybeConvertIncompatibleDBPrivilegesToDefaultPrivileges(
 	privileges *descpb.PrivilegeDescriptor, defaultPrivileges *descpb.DefaultPrivilegeDescriptor,
 ) (hasChanged bool) {
+	// If privileges are nil, there is nothing to convert.
+	// This case can happen during restore where privileges are not yet created.
+	if privileges == nil {
+		return false
+	}
+
 	var pgIncompatibleDBPrivileges = privilege.List{
 		privilege.SELECT, privilege.INSERT, privilege.UPDATE, privilege.DELETE,
 	}
