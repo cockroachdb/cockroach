@@ -13,7 +13,8 @@ package geomfn
 import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -27,10 +28,10 @@ func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, er
 	}
 	outerRing, ok := outerGeomT.(*geom.LineString)
 	if !ok {
-		return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "argument must be LINESTRING geometries")
 	}
 	if outerRing.Empty() {
-		return geo.Geometry{}, errors.Newf("polygon shell must not be empty")
+		return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "polygon shell must not be empty")
 	}
 	srid := outerRing.SRID()
 	coords := make([][]geom.Coord, len(interior)+1)
@@ -42,13 +43,13 @@ func MakePolygon(outer geo.Geometry, interior ...geo.Geometry) (geo.Geometry, er
 		}
 		interiorRing, ok := interiorRingGeomT.(*geom.LineString)
 		if !ok {
-			return geo.Geometry{}, errors.Newf("argument must be LINESTRING geometries")
+			return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "argument must be LINESTRING geometries")
 		}
 		if interiorRing.SRID() != srid {
-			return geo.Geometry{}, errors.Newf("mixed SRIDs are not allowed")
+			return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "mixed SRIDs are not allowed")
 		}
 		if outerRing.Layout() != interiorRing.Layout() {
-			return geo.Geometry{}, errors.Newf("mixed dimension rings")
+			return geo.Geometry{}, pgerror.Newf(pgcode.InvalidParameterValue, "mixed dimension rings")
 		}
 		coords[i+1] = interiorRing.Coords()
 	}
