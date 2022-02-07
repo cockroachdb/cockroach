@@ -805,7 +805,7 @@ GENERATED_TARGETS = \
   pkg/kv/kvclient/kvcoord/mocks_generated_test.go \
   pkg/kv/kvclient/rangecache/rangecachemock/mocks_generated.go \
   pkg/roachpb/roachpbmock/mocks_generated.go \
-  pkg/util/log/mock_generated.go
+  pkg/util/log/mocks_generated_test.go
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
