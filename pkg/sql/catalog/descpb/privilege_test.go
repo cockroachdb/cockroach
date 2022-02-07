@@ -77,7 +77,7 @@ func TestPrivilege(t *testing.T) {
 			[]descpb.UserPrivilege{
 				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
-				{testUser, []privilege.Privilege{{Kind: privilege.ALL}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
@@ -86,12 +86,12 @@ func TestPrivilege(t *testing.T) {
 				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 				{security.RootUserName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 				{testUser, []privilege.Privilege{
-					{Kind: privilege.CREATE},
-					{Kind: privilege.DELETE},
-					{Kind: privilege.DROP},
-					{Kind: privilege.GRANT},
-					{Kind: privilege.UPDATE},
-					{Kind: privilege.ZONECONFIG},
+					{Kind: privilege.CREATE, GrantOption: true},
+					{Kind: privilege.DELETE, GrantOption: true},
+					{Kind: privilege.DROP, GrantOption: true},
+					{Kind: privilege.GRANT, GrantOption: true},
+					{Kind: privilege.UPDATE, GrantOption: true},
+					{Kind: privilege.ZONECONFIG, GrantOption: true},
 				}},
 			},
 			privilege.Table,
@@ -115,7 +115,7 @@ func TestPrivilege(t *testing.T) {
 		{testUser, privilege.List{privilege.ALL}, privilege.List{privilege.USAGE},
 			[]descpb.UserPrivilege{
 				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
-				{testUser, []privilege.Privilege{{Kind: privilege.GRANT}}},
+				{testUser, []privilege.Privilege{{Kind: privilege.GRANT, GrantOption: true}}},
 			},
 			privilege.Type,
 		},
@@ -163,12 +163,12 @@ func TestPrivilege(t *testing.T) {
 		}
 		show := descriptor.Show(tc.objectType)
 		if len(show) != len(tc.show) {
-			t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
+			t.Fatalf("#%d: show output for descriptor %+v differs\n     got: %+v\nexpected: %+v",
 				tcNum, descriptor, show, tc.show)
 		}
 		for i := 0; i < len(show); i++ {
 			if !reflect.DeepEqual(show[i], tc.show[i]) {
-				t.Fatalf("#%d: show output for descriptor %+v differs, got: %+v, expected %+v",
+				t.Fatalf("#%d: show output for descriptor %+v differs\n     got: %+v\nexpected: %+v",
 					tcNum, descriptor, show, tc.show)
 			}
 		}
@@ -539,7 +539,7 @@ func TestGrantWithGrantOption(t *testing.T) {
 		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.SELECT, privilege.INSERT},
-			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL, privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.SELECT, privilege.INSERT}},
 		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.INSERT}, privilege.List{}, security.AdminRoleName()),
 			testUser, privilege.Table,
@@ -561,11 +561,11 @@ func TestGrantWithGrantOption(t *testing.T) {
 	for tcNum, tc := range testCases {
 		tc.pd.Grant(tc.user, tc.grantPrivileges, true)
 		if tc.pd.Users[0].Privileges != tc.expectedPrivileges.ToBitField() {
-			t.Errorf("#%d: Incorrect privileges, returned %v, expected %v",
+			t.Errorf("#%d: Incorrect privileges\n     got: %v\nexpected: %v",
 				tcNum, privilege.ListFromBitField(tc.pd.Users[0].Privileges, tc.objectType), tc.expectedPrivileges)
 		}
 		if tc.pd.Users[0].WithGrantOption != tc.expectedGrantOption.ToBitField() {
-			t.Errorf("#%d: Incorrect grant option, returned %v, expected %v",
+			t.Errorf("#%d: Incorrect grant option\n     got: %v\nexpected: %v",
 				tcNum, privilege.ListFromBitField(tc.pd.Users[0].WithGrantOption, tc.objectType), tc.expectedGrantOption)
 		}
 	}
@@ -656,11 +656,11 @@ func TestRevokeWithGrantOption(t *testing.T) {
 				tcNum)
 		}
 		if tc.pd.Users[0].Privileges != tc.expectedPrivileges.ToBitField() {
-			t.Errorf("#%d: Incorrect privileges, returned %v, expected %v",
+			t.Errorf("#%d: Incorrect privileges\n     got: %v\nexpected: %v",
 				tcNum, privilege.ListFromBitField(tc.pd.Users[0].Privileges, tc.objectType), tc.expectedPrivileges)
 		}
 		if tc.pd.Users[0].WithGrantOption != tc.expectedGrantOption.ToBitField() {
-			t.Errorf("#%d: Incorrect grant option, returned %v, expected %v",
+			t.Errorf("#%d: Incorrect grant option\n     got: %v\nexpected: %v",
 				tcNum, privilege.ListFromBitField(tc.pd.Users[0].WithGrantOption, tc.objectType), tc.expectedGrantOption)
 		}
 	}

@@ -227,11 +227,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForSchemas(
 		for _, role := range roles {
 			if n.n.IsGrant {
 				defaultPrivs.GrantDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUsernames, objectType, grantOption,
 				)
 			} else {
 				defaultPrivs.RevokeDefaultPrivileges(
-					role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+					role, privileges, granteeSQLUsernames, objectType, grantOption,
 				)
 			}
 
@@ -330,11 +330,11 @@ func (n *alterDefaultPrivilegesNode) alterDefaultPrivilegesForDatabase(
 	for _, role := range roles {
 		if n.n.IsGrant {
 			defaultPrivs.GrantDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		} else {
 			defaultPrivs.RevokeDefaultPrivileges(
-				role, privileges, granteeSQLUsernames, objectType, grantOption, grantPresent || allPresent,
+				role, privileges, granteeSQLUsernames, objectType, grantOption,
 			)
 		}
 

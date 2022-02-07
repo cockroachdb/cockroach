@@ -77,14 +77,14 @@ query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
 oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-625980300   1791217281  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-625980300   1791217281  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-625980300   1791217281  0                T              {bar=U*/,foo=U*/,=U/}
-625980300   1791217281  0                n              {bar=C*U*/,foo=C*U*/}
-1062786855  2026795574  0                r              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-1062786855  2026795574  0                S              {bar=C*a*d*r*w*/,foo=C*a*d*r*w*/}
-1062786855  2026795574  0                T              {bar=U*/,foo=U*/,=U/}
-1062786855  2026795574  0                n              {bar=C*U*/,foo=C*U*/}
+625980300   1791217281  0                r              {foo=C*a*d*r*w*/}
+625980300   1791217281  0                S              {foo=C*a*d*r*w*/}
+625980300   1791217281  0                T              {foo=U*/}
+625980300   1791217281  0                n              {foo=C*U*/}
+1062786855  2026795574  0                r              {bar=C*a*d*r*w*/}
+1062786855  2026795574  0                S              {bar=C*a*d*r*w*/}
+1062786855  2026795574  0                T              {bar=U*/}
+1062786855  2026795574  0                n              {bar=C*U*/}
 456512573   1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r*/}
 456512573   1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r*/}
 456512573   1546506610  0                T              {bar=U/,foo=U/}
@@ -154,12 +154,11 @@ ALTER DEFAULT PRIVILEGES FOR ROLE foo GRANT USAGE ON TYPES TO foo WITH GRANT OPT
 query OOOTT colnames,rowsort
 SELECT * FROM PG_CATALOG.PG_DEFAULT_ACL
 ----
-oid         defaclrole  defaclnamespace  defaclobjtype  defaclacl
-1062786855  2026795574  0                T              {foo=U*/,=U/}
-456512573   1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r*/}
-456512573   1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r*/}
-456512573   1546506610  0                T              {bar=U/,foo=U/}
-456512573   1546506610  0                n              {bar=CU/,foo=CU/,=U*/}
+oid        defaclrole  defaclnamespace  defaclobjtype  defaclacl
+456512573  1546506610  0                r              {bar=Cadrw/,foo=Cadrw/,=r*/}
+456512573  1546506610  0                S              {bar=Cadrw/,foo=Cadrw/,=r*/}
+456512573  1546506610  0                T              {bar=U/,foo=U/}
+456512573  1546506610  0                n              {bar=CU/,foo=CU/,=U*/}
 
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ROLE foo REVOKE GRANT OPTION FOR USAGE ON TYPES FROM foo
