@@ -92,7 +92,7 @@ func (t *tenantAdminServer) Health(
 		return resp, nil
 	}
 
-	if !t.sqlServer.acceptingClients.Get() {
+	if !t.sqlServer.isReady.Get() {
 		return nil, status.Errorf(codes.Unavailable, "node is not accepting SQL clients")
 	}
 

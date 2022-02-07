@@ -411,8 +411,8 @@ func (s *Server) Metrics() (res []interface{}) {
 	}
 }
 
-// Drain prevents new connections from being served and waits for drainWait for
-// open connections to terminate before canceling them.
+// Drain prevents new connections from being served and waits the duration of
+// queryWait for open connections to terminate before canceling them.
 // An error will be returned when connections that have been canceled have not
 // responded to this cancellation and closed themselves in time. The server
 // will remain in draining state, though open connections may continue to
@@ -426,9 +426,9 @@ func (s *Server) Metrics() (res []interface{}) {
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (s *Server) Drain(
-	ctx context.Context, drainWait time.Duration, reporter func(int, redact.SafeString),
+	ctx context.Context, queryWait time.Duration, reporter func(int, redact.SafeString),
 ) error {
-	return s.drainImpl(ctx, drainWait, cancelMaxWait, reporter)
+	return s.drainImpl(ctx, queryWait, cancelMaxWait, reporter)
 }
 
 // Undrain switches the server back to the normal mode of operation in which
@@ -515,7 +515,7 @@ func (s *Server) drainImpl(
 		}
 	}()
 
-	// Wait for all connections to finish up to drainWait.
+	// Wait for connections to finish up their queries for the duration of queryWait.
 	select {
 	case <-time.After(queryWait):
 		log.Ops.Warningf(ctx, "canceling all sessions after waiting %s", queryWait)
