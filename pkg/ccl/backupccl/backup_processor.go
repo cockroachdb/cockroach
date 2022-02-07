@@ -214,8 +214,12 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
-	bp.ProcessorBase.InternalClose()
-	bp.memAcc.Close(bp.Ctx)
+	// While it is safe to call `cancelAndWaitForWorker` more than once, all other
+	// cleanup operations should only be called once. The condition below prevents
+	// us from double closing the memory account.
+	if bp.InternalClose() {
+		bp.memAcc.Close(bp.Ctx)
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface. We have to override the
