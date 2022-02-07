@@ -10,7 +10,7 @@
 
 package tests
 
-//go:generate mockgen -package tests -destination drt_generated.go . PromClient
+//go:generate mockgen -package tests -destination drt_generated_test.go . PromClient
 
 import (
 	"context"
