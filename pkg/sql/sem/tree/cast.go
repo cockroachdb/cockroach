@@ -272,7 +272,8 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oidext.T_geometry:  {maxContext: CastContextImplicit, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		oid.T_uuid:         {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
 		// Automatic I/O conversions to string types.
-		// TODO(mgartner): Cast from BYTES to string types should be immutable.
+		// Casts from BYTEA to string types are stable, since they depend on
+		// the bytea_output session variable.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -419,7 +420,8 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_interval: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
 		oid.T_numeric:  {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		// Automatic I/O conversions to string types.
-		// TODO(mgartner): Cast from FLOAT4 to string types should be immutable.
+		// Casts from FLOAT4 to string types are stable, since they depend on the
+		// extra_float_digits session variable.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
@@ -435,7 +437,8 @@ var castMap = map[oid.Oid]map[oid.Oid]cast{
 		oid.T_interval: {maxContext: CastContextExplicit, origin: contextOriginLegacyConversion, volatility: VolatilityImmutable},
 		oid.T_numeric:  {maxContext: CastContextAssignment, origin: contextOriginPgCast, volatility: VolatilityImmutable},
 		// Automatic I/O conversions to string types.
-		// TODO(mgartner): Cast from FLOAT8 to string types should be immutable.
+		// Casts from FLOAT8 to string types are stable, since they depend on the
+		// extra_float_digits session variable.
 		oid.T_bpchar:  {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_char:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
 		oid.T_name:    {maxContext: CastContextAssignment, origin: contextOriginAutomaticIOConversion, volatility: VolatilityStable},
