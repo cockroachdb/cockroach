@@ -25,6 +25,7 @@ import {
   dashboardNameAttr,
   databaseAttr,
   databaseNameAttr,
+  executionIdAttr,
   implicitTxnAttr,
   indexNameAttr,
   nodeIDAttr,
@@ -34,6 +35,7 @@ import {
   tabAttr,
   tableNameAttr,
   txnFingerprintIdAttr,
+  viewAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
 import Layout from "src/views/app/containers/layout";
@@ -72,6 +74,8 @@ import TransactionDetails from "src/views/transactions/transactionDetails";
 import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
 import HotRangesPage from "src/views/hotRanges/index";
+import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
+import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 import "styl/app.styl";
 import { Tracez } from "src/views/tracez/tracez";
 
@@ -197,11 +201,24 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 {/* SQL activity */}
                 <Route exact path="/sql-activity" component={SQLActivityPage} />
 
+                {/* Active executions */}
+                <Route
+                  exact
+                  path={`/execution/statement/:${executionIdAttr}`}
+                  component={ActiveStatementDetails}
+                />
+
+                <Route
+                  exact
+                  path={`/execution/transaction/:${executionIdAttr}`}
+                  component={ActiveTransactionDetails}
+                />
+
                 {/* statement statistics */}
                 <Redirect
                   exact
                   from={`/statements`}
-                  to={`/sql-activity?${tabAttr}=Statements`}
+                  to={`/sql-activity?${tabAttr}=Statements&${viewAttr}=fingerprints`}
                 />
                 <Redirect
                   exact
@@ -241,7 +258,7 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 <Redirect
                   exact
                   from={`/statement`}
-                  to={`/sql-activity?${tabAttr}=Statements`}
+                  to={`/sql-activity?${tabAttr}=Statements&view=fingerprints`}
                 />
 
                 {/* sessions */}

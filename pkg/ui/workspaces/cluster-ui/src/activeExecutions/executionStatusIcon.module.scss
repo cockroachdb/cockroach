@@ -1,0 +1,16 @@
+@import "src/core/index.module";
+
+.status-icon {
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+  margin-right: 4px;
+}
+
+.waiting {
+  fill: $colors--warning;
+}
+
+.executing {
+  fill: $colors--success;
+}

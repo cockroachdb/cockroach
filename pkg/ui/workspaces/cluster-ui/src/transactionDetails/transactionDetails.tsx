@@ -192,7 +192,7 @@ export class TransactionDetails extends React.Component<
   };
 
   backToTransactionsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=Transactions");
+    this.props.history.push("/sql-activity?tab=Transactions&view=fingerprints");
   };
 
   render(): React.ReactElement {
