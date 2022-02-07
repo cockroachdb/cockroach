@@ -292,6 +292,10 @@ const (
 	WaitedForDelRangeInGCJob
 	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
 	RangefeedUseOneStreamPerNode
+	// NoNonMVCCAddSSTable adds a migration which waits for all
+	// schema changes to complete. After this point, no non-MVCC
+	// AddSSTable calls will be used outside of tenant streaming.
+	NoNonMVCCAddSSTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -486,7 +490,10 @@ var versionsSingleton = keyedVersions{
 		Key:     RangefeedUseOneStreamPerNode,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
-
+	{
+		Key:     NoNonMVCCAddSSTable,
+		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
