@@ -6,8 +6,8 @@ go_library(
         "atomic.go",
         "int_map.go",
         "mutex_deadlock.go",  # keep
-        "mutex_sync.go",
-        "mutex_sync_race.go",
+        "mutex_sync.go",  # keep
+        "mutex_sync_race.go",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil",
     visibility = ["//visibility:public"],
@@ -24,7 +24,7 @@ go_test(
         "int_map_bench_test.go",
         "int_map_reference_test.go",
         "int_map_test.go",
-        "mutex_sync_race_test.go",
+        "mutex_sync_race_test.go",  # keep
     ],
     embed = [":syncutil"],
     deps = ["@com_github_stretchr_testify//require"],
