@@ -125,6 +125,8 @@ func DetailsType(d isPayload_Details) Type {
 		return TypeStreamReplication
 	case *Payload_RowLevelTTL:
 		return TypeRowLevelTTL
+	case *Payload_CaptureIndexUsageStats:
+		return TypeCaptureIndexUsageStats
 	default:
 		panic(errors.AssertionFailedf("Payload.Type called on a payload with an unknown details type: %T", d))
 	}
@@ -169,6 +171,8 @@ func WrapProgressDetails(details ProgressDetails) interface {
 		return &Progress_StreamReplication{StreamReplication: &d}
 	case RowLevelTTLProgress:
 		return &Progress_RowLevelTTL{RowLevelTTL: &d}
+	case CaptureIndexUsageStatsProgress:
+		return &Progress_CaptureIndexUsageStats{CaptureIndexUsageStats: &d}
 	default:
 		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
 	}
@@ -208,6 +212,8 @@ func (p *Payload) UnwrapDetails() Details {
 		return *d.StreamReplication
 	case *Payload_RowLevelTTL:
 		return *d.RowLevelTTL
+	case *Payload_CaptureIndexUsageStats:
+		return *d.CaptureIndexUsageStats
 	default:
 		return nil
 	}
@@ -247,6 +253,8 @@ func (p *Progress) UnwrapDetails() ProgressDetails {
 		return *d.StreamReplication
 	case *Progress_RowLevelTTL:
 		return *d.RowLevelTTL
+	case *Progress_CaptureIndexUsageStats:
+		return *d.CaptureIndexUsageStats
 	default:
 		return nil
 	}
@@ -299,6 +307,8 @@ func WrapPayloadDetails(details Details) interface {
 		return &Payload_StreamReplication{StreamReplication: &d}
 	case RowLevelTTLDetails:
 		return &Payload_RowLevelTTL{RowLevelTTL: &d}
+	case CaptureIndexUsageStatsDetails:
+		return &Payload_CaptureIndexUsageStats{CaptureIndexUsageStats: &d}
 	default:
 		panic(errors.AssertionFailedf("jobs.WrapPayloadDetails: unknown details type %T", d))
 	}
@@ -334,7 +344,7 @@ const (
 func (Type) SafeValue() {}
 
 // NumJobTypes is the number of jobs types.
-const NumJobTypes = 17
+const NumJobTypes = 18
 
 // MarshalJSONPB implements jsonpb.JSONPBMarshaller to  redact sensitive sink URI
 // parameters from ChangefeedDetails.

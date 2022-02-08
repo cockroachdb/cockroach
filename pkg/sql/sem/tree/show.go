@@ -779,6 +779,11 @@ const (
 	// ScheduledRowLevelTTLExecutor is an executor responsible for the cleanup
 	// of rows on row level TTL tables.
 	ScheduledRowLevelTTLExecutor
+
+	// CaptureIndexUsageStatsExecutor is an executor responsible for the
+	// execution of capturing index usages statistics to the telemetry logging
+	// channel.
+	CaptureIndexUsageStatsExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
@@ -786,6 +791,7 @@ var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
 	ScheduledBackupExecutor:             "scheduled-backup-executor",
 	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
 	ScheduledRowLevelTTLExecutor:        "scheduled-row-level-ttl-executor",
+	CaptureIndexUsageStatsExecutor:      "captured-index-usage-stats-executor",
 }
 
 // InternalName returns an internal executor name.

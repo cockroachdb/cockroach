@@ -842,6 +842,12 @@ message AutoSQLStatsCompactionDetails {
 message AutoSQLStatsCompactionProgress {
 }
 
+message CaptureIndexUsageStatsDetails {
+}
+
+message CaptureIndexUsageStatsProgress {
+}
+
 message RowLevelTTLDetails {
   uint32 table_id = 1 [
     (gogoproto.customname) = "TableID",
@@ -852,6 +858,7 @@ message RowLevelTTLDetails {
 
 message RowLevelTTLProgress {
 }
+
 
 message Payload {
   string description = 1;
@@ -900,6 +907,7 @@ message Payload {
     AutoSQLStatsCompactionDetails autoSQLStatsCompaction = 30;
     StreamReplicationDetails streamReplication = 33;
     RowLevelTTLDetails row_level_ttl = 34 [(gogoproto.customname)="RowLevelTTL"];
+    CaptureIndexUsageStatsDetails captureIndexUsageStats = 35;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -911,7 +919,7 @@ message Payload {
   // the jobs.execution_errors.max_entries cluster setting.
   repeated RetriableExecutionFailure retriable_execution_failure_log = 32;
 
-  // NEXT ID: 34.
+  // NEXT ID: 36.
 }
 
 message Progress {
@@ -938,6 +946,7 @@ message Progress {
     AutoSQLStatsCompactionProgress autoSQLStatsCompaction = 23;
     StreamReplicationProgress streamReplication = 24;
     RowLevelTTLProgress row_level_ttl = 25 [(gogoproto.customname)="RowLevelTTL"];
+    CaptureIndexUsageStatsProgress captureIndexUsageStats = 26;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
@@ -966,6 +975,7 @@ enum Type {
   AUTO_SQL_STATS_COMPACTION = 14 [(gogoproto.enumvalue_customname) = "TypeAutoSQLStatsCompaction"];
   STREAM_REPLICATION = 15 [(gogoproto.enumvalue_customname) = "TypeStreamReplication"];
   ROW_LEVEL_TTL = 16 [(gogoproto.enumvalue_customname) = "TypeRowLevelTTL"];
+  CAPTURE_INDEX_USAGE_STATS = 17 [(gogoproto.enumvalue_customname) = "TypeCaptureIndexUsageStats"];
 }
 
 message Job {
