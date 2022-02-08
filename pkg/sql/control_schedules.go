@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -97,12 +98,14 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 }
 
 // deleteSchedule deletes specified schedule.
-func deleteSchedule(params runParams, scheduleID int64) error {
-	env := JobSchedulerEnv(params.ExecCfg())
-	_, err := params.ExecCfg().InternalExecutor.ExecEx(
-		params.ctx,
+func deleteSchedule(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, scheduleID int64,
+) error {
+	env := JobSchedulerEnv(execCfg)
+	_, err := execCfg.InternalExecutor.ExecEx(
+		ctx,
 		"delete-schedule",
-		params.EvalContext().Txn,
+		txn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
 			"DELETE FROM %s WHERE schedule_id = $1",
@@ -161,7 +164,7 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 			}
-			err = deleteSchedule(params, schedule.ScheduleID())
+			err = deleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
 		default:
 			err = errors.AssertionFailedf("unhandled command %s", n.command)
 		}
