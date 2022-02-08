@@ -1809,7 +1809,7 @@ func doRestorePlan(
 		if err != nil {
 			return err
 		}
-		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+		encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
 		encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
 			Key: encryptionKey}
 	} else if restoreStmt.Options.DecryptionKMSURI != nil {
@@ -1818,11 +1818,21 @@ func doRestorePlan(
 			return err
 		}
 		ioConf := baseStores[0].ExternalIOConf()
-		defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kms,
-			newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
-				baseStores[0].Settings(),
-				&ioConf,
-			})
+
+		// A backup could have been encrypted with multiple KMS keys that are stored across ENCRYPTION-INFO files.
+		// Iterate over all ENCRYPTION-INFO files to check if the KMS passed in during restore has been used to
+		// encrypt the backup at least once.
+		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+		for _, encFile := range opts {
+			defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(kms,
+				newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
+					baseStores[0].Settings(),
+					&ioConf,
+				})
+			if err == nil {
+				break
+			}
+		}
 		if err != nil {
 			return err
 		}
