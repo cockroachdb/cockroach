@@ -2006,13 +2006,12 @@ func (s *adminServer) Job(
 	}
 
 	const query = `
-      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
-						 running_status, created, started, finished, modified,
-						 fraction_completed, high_water_timestamp, error, last_run,
-						 next_run, num_runs
-        FROM crdb_internal.jobs
-       WHERE job_id = $1`
-
+	        SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
+	  						 running_status, created, started, finished, modified,
+	  						 fraction_completed, high_water_timestamp, error, last_run,
+	  						 next_run, num_runs, execution_events::string::bytes
+	          FROM crdb_internal.jobs
+	         WHERE job_id = $1`
 	row, cols, err := s.server.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "admin-job", nil,
 		sessiondata.InternalExecutorOverride{User: userName},

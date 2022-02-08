@@ -10,20 +10,35 @@ package serverccl
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/stretchr/testify/require"
 )
 
 var adminPrefix = "/_admin/v1/"
+
+func getAdminJSONProto(
+	ts serverutils.TestServerInterface, path string, response protoutil.Message,
+) error {
+	return getAdminJSONProtoWithAdminOption(ts, path, response, true)
+}
+
+func getAdminJSONProtoWithAdminOption(
+	ts serverutils.TestServerInterface, path string, response protoutil.Message, isAdmin bool,
+) error {
+	return serverutils.GetJSONProtoWithAdminOption(ts, adminPrefix+path, response, isAdmin)
+}
 
 // TestAdminAPIDataDistributionPartitioning partitions a table and verifies
 // that we see all zone configs (#27718).
@@ -92,4 +107,49 @@ func TestAdminAPIChartCatalog(t *testing.T) {
 	var resp serverpb.ChartCatalogResponse
 	err := serverutils.GetJSONProto(firstServer, adminPrefix+"chartcatalog", &resp)
 	require.NoError(t, err)
+}
+
+func TestAdminAPIJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	//ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://0/backup/1?AWS_SECRET_ACCESS_KEY=neverappears'`)
+
+	var jobsRes serverpb.JobsResponse
+	if err := getAdminJSONProto(s, "jobs", &jobsRes); err != nil {
+		t.Errorf(err.Error())
+	}
+
+	var backups []serverpb.JobResponse
+	for _, job := range jobsRes.Jobs {
+		if job.Type != "BACKUP" {
+			continue
+		}
+		backups = append(backups, job)
+
+	}
+
+	if len(backups) != 1 {
+		t.Errorf("Expected 1 Backup job, got %d", len(backups))
+	}
+
+	jobID := backups[0].ID
+
+	var jobRes serverpb.JobResponse
+	path := fmt.Sprintf("jobs/%v", jobID)
+	var err error
+	if err = getAdminJSONProto(s, path, &jobRes); err != nil {
+		t.Errorf(err.Error())
+	}
+
+	if !reflect.DeepEqual(backups[0], jobRes) {
+		t.Errorf("/jobs/:id response did not match /jobs response.")
+	}
 }
