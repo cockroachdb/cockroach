@@ -101,9 +101,6 @@ func (a kvAuth) streamInterceptor(
 func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	if grpcutil.IsLocalRequestContext(ctx) {
 		// This is an in-process request. Bypass authentication check.
-		//
-		// TODO(tbg): I don't understand when this is hit. Internal requests are routed
-		// directly to a `*Node` and should never pass through this code path.
 		return roachpb.TenantID{}, nil
 	}
 

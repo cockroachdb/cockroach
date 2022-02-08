@@ -13,6 +13,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -44,6 +46,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -219,7 +222,10 @@ func TestPingInterceptors(t *testing.T) {
 
 var _ roachpb.InternalServer = &internalServer{}
 
-type internalServer struct{}
+type internalServer struct {
+	// rangeFeedEvents are returned on RangeFeed() calls.
+	rangeFeedEvents []roachpb.RangeFeedEvent
+}
 
 func (*internalServer) Batch(
 	context.Context, *roachpb.BatchRequest,
@@ -233,10 +239,16 @@ func (*internalServer) RangeLookup(
 	panic("unimplemented")
 }
 
-func (*internalServer) RangeFeed(
-	*roachpb.RangeFeedRequest, roachpb.Internal_RangeFeedServer,
+func (s *internalServer) RangeFeed(
+	_ *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) error {
-	panic("unimplemented")
+	for _, ev := range s.rangeFeedEvents {
+		evCpy := ev
+		if err := stream.Send(&evCpy); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (*internalServer) GossipSubscription(
@@ -306,11 +318,223 @@ func TestInternalServerAddress(t *testing.T) {
 	serverCtx.NodeID.Set(context.Background(), 1)
 
 	internal := &internalServer{}
-	serverCtx.SetLocalInternalServer(internal)
+	serverCtx.SetLocalInternalServer(internal, ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
-	exp := internalClientAdapter{internal}
-	if ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1); ic != exp {
-		t.Fatalf("expected %+v, got %+v", exp, ic)
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
+}
+
+// Test that the internalClientAdapter runs the gRPC interceptors.
+func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	stopper.SetTracer(tracing.NewTracer())
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	serverCtx.Config.Addr = "127.0.0.1:9999"
+	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.NodeID.Set(context.Background(), 1)
+
+	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+
+	// Pile on one more interceptor to make sure it's called.
+	var serverUnaryInterceptor1Called, serverUnaryInterceptor2Called bool
+	interceptor1 := func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		serverUnaryInterceptor1Called = true
+		return handler(ctx, req)
+	}
+	serverInterceptors.UnaryInterceptors = append([]grpc.UnaryServerInterceptor{interceptor1}, serverInterceptors.UnaryInterceptors...)
+	serverInterceptors.UnaryInterceptors = append(serverInterceptors.UnaryInterceptors, func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		serverUnaryInterceptor2Called = true
+		return handler(ctx, req)
+	})
+
+	serverStreamInterceptor1Called := false
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		serverStreamInterceptor1Called = true
+		return handler(srv, stream)
+	})
+	serverStreamInterceptor2Called := false
+	serverInterceptors.StreamInterceptors = append(serverInterceptors.StreamInterceptors, func(srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		serverStreamInterceptor2Called = true
+		return handler(srv, stream)
+	})
+
+	var clientInterceptors ClientInterceptorInfo
+	var clientUnaryInterceptor1Called, clientUnaryInterceptor2Called bool
+	var clientStreamInterceptor1Called, clientStreamInterceptor2Called bool
+	clientInterceptors.UnaryInterceptors = append(clientInterceptors.UnaryInterceptors,
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			clientUnaryInterceptor1Called = true
+			return invoker(ctx, method, req, reply, cc, opts...)
+		},
+		func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			clientUnaryInterceptor2Called = true
+			return invoker(ctx, method, req, reply, cc, opts...)
+		})
+	clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
+		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			clientStreamInterceptor1Called = true
+			return streamer(ctx, desc, cc, method, opts...)
+		},
+		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			clientStreamInterceptor2Called = true
+			return streamer(ctx, desc, cc, method, opts...)
+		})
+
+	internal := &internalServer{}
+	serverCtx.SetLocalInternalServer(internal, serverInterceptors, clientInterceptors)
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
+
+	for i := 0; i < 2; i++ {
+		clientUnaryInterceptor1Called, clientUnaryInterceptor2Called = false, false
+		serverUnaryInterceptor1Called, serverUnaryInterceptor2Called = false, false
+		ba := &roachpb.BatchRequest{}
+		_, err := lic.Batch(ctx, ba)
+		require.NoError(t, err)
+		require.True(t, serverUnaryInterceptor1Called)
+		require.True(t, serverUnaryInterceptor2Called)
+		require.True(t, clientUnaryInterceptor1Called)
+		require.True(t, clientUnaryInterceptor2Called)
+	}
+
+	for i := 0; i < 2; i++ {
+		serverStreamInterceptor1Called, serverStreamInterceptor2Called = false, false
+		clientStreamInterceptor1Called, clientStreamInterceptor2Called = false, false
+		stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+		require.NoError(t, err)
+		_, err = stream.Recv()
+		require.ErrorIs(t, err, io.EOF)
+		require.True(t, clientStreamInterceptor1Called)
+		require.True(t, clientStreamInterceptor2Called)
+		require.True(t, serverStreamInterceptor1Called)
+		require.True(t, serverStreamInterceptor2Called)
+	}
+}
+
+// Test that a client stream interceptor can wrap the ClientStream when the
+// internalClientAdapter is used.
+func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	stopper.SetTracer(tracing.NewTracer())
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	serverCtx.Config.Addr = "127.0.0.1:9999"
+	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.NodeID.Set(context.Background(), 1)
+
+	_ /* server */, serverInterceptors := NewServerEx(serverCtx)
+
+	var clientInterceptors ClientInterceptorInfo
+	var s *testClientStream
+	clientInterceptors.StreamInterceptors = append(clientInterceptors.StreamInterceptors,
+		func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+			clientStream, err := streamer(ctx, desc, cc, method, opts...)
+			if err != nil {
+				return nil, err
+			}
+			s = &testClientStream{inner: clientStream}
+			return s, nil
+		})
+
+	internal := &internalServer{rangeFeedEvents: []roachpb.RangeFeedEvent{{}, {}}}
+	serverCtx.SetLocalInternalServer(internal, serverInterceptors, clientInterceptors)
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, 1)
+	lic, ok := ic.(internalClientAdapter)
+	require.True(t, ok)
+	require.Equal(t, internal, lic.server)
+
+	stream, err := lic.RangeFeed(ctx, &roachpb.RangeFeedRequest{})
+	require.NoError(t, err)
+	// Consume the stream.
+	for {
+		_, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+	}
+	require.Equal(t, len(internal.rangeFeedEvents)+1, s.recvCount)
+}
+
+type testClientStream struct {
+	inner     grpc.ClientStream
+	recvCount int
+}
+
+func (t *testClientStream) Header() (metadata.MD, error) {
+	return t.inner.Header()
+}
+
+func (t *testClientStream) Trailer() metadata.MD {
+	return t.inner.Trailer()
+}
+
+func (t *testClientStream) CloseSend() error {
+	return t.inner.CloseSend()
+}
+
+func (t *testClientStream) Context() context.Context {
+	return t.inner.Context()
+}
+
+func (t *testClientStream) SendMsg(m interface{}) error {
+	return t.inner.SendMsg(m)
+}
+
+func (t *testClientStream) RecvMsg(m interface{}) error {
+	t.recvCount++
+	return t.inner.RecvMsg(m)
+}
+
+var _ grpc.ClientStream = &testClientStream{}
+
+func BenchmarkInternalClientAdapter(b *testing.B) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Can't be zero because that'd be an empty offset.
+	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+
+	serverCtx := newTestContext(uuid.MakeV4(), clock, stopper)
+	serverCtx.Config.Addr = "127.0.0.1:9999"
+	serverCtx.Config.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.NodeID.Set(context.Background(), 1)
+
+	_, interceptors := NewServerEx(serverCtx)
+	internal := &internalServer{}
+	serverCtx.SetLocalInternalServer(internal, interceptors, ClientInterceptorInfo{})
+	ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr, roachpb.NodeID(1))
+	lic, ok := ic.(internalClientAdapter)
+	require.True(b, ok)
+	require.Equal(b, internal, lic.server)
+	ba := &roachpb.BatchRequest{}
+	_, err := lic.Batch(ctx, ba)
+	require.NoError(b, err)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = lic.Batch(ctx, ba)
 	}
 }
 
@@ -473,7 +697,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	// Ensure that the local Addr returns ErrNotHeartbeated without having dialed
 	// a connection but the local AdvertiseAddr successfully returns no error when
 	// an internal server has been registered.
-	clientCtx.SetLocalInternalServer(&internalServer{})
+	clientCtx.SetLocalInternalServer(&internalServer{}, ServerInterceptorInfo{}, ClientInterceptorInfo{})
 
 	if err := clientCtx.TestingConnHealth(clientCtx.Config.Addr, clientNodeID); !errors.Is(err, ErrNotHeartbeated) {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
@@ -1751,11 +1975,6 @@ func TestTestingKnobs(t *testing.T) {
 		class  ConnectionClass
 		method string
 	}
-	type unaryCall struct {
-		target string
-		class  ConnectionClass
-		method string
-	}
 	seen := make(map[interface{}]int)
 	var seenMu syncutil.Mutex
 	recordCall := func(call interface{}) {
@@ -1784,39 +2003,14 @@ func TestTestingKnobs(t *testing.T) {
 				return cs, nil
 			}
 		},
-		UnaryClientInterceptor: func(
-			target string, class ConnectionClass,
-		) grpc.UnaryClientInterceptor {
-			return func(
-				ctx context.Context, method string, req, reply interface{},
-				cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption,
-			) error {
-				recordCall(unaryCall{
-					target: target,
-					class:  class,
-					method: method,
-				})
-				return invoker(ctx, method, req, reply, cc, opts...)
-			}
-		},
 	})
 
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	require.Nil(t, err)
 	remoteAddr := ln.Addr().String()
-	sysConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, SystemClass).Connect(context.Background())
-	require.Nil(t, err)
 	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, DefaultClass).Connect(context.Background())
 	require.Nil(t, err)
-	const unaryMethod = "/cockroach.rpc.Testing/Foo"
 	const streamMethod = "/cockroach.rpc.Testing/Bar"
-	const numSysUnary = 3
-	for i := 0; i < numSysUnary; i++ {
-		ba := roachpb.BatchRequest{}
-		br := roachpb.BatchResponse{}
-		err := sysConn.Invoke(context.Background(), unaryMethod, &ba, &br)
-		require.Nil(t, err)
-	}
 	const numDefStream = 4
 	for i := 0; i < numDefStream; i++ {
 		desc := grpc.StreamDesc{
@@ -1832,11 +2026,6 @@ func TestTestingKnobs(t *testing.T) {
 	}
 
 	exp := map[interface{}]int{
-		unaryCall{
-			target: remoteAddr,
-			class:  SystemClass,
-			method: unaryMethod,
-		}: numSysUnary,
 		streamCall{
 			target: remoteAddr,
 			class:  DefaultClass,

@@ -15,6 +15,7 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -226,6 +227,11 @@ func ClientInterceptor(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
+		// Local RPCs don't need any special tracing, since the caller's context
+		// will be used on the "server".
+		if grpcutil.IsLocalRequestContext(ctx) {
+			return invoker(ctx, method, req, resp, cc, opts...)
+		}
 		parent := tracing.SpanFromContext(ctx)
 		if !tracing.SpanInclusionFuncForClient(parent) {
 			return invoker(ctx, method, req, resp, cc, opts...)
@@ -285,6 +291,11 @@ func StreamClientInterceptor(
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
+		// Local RPCs don't need any special tracing, since the caller's context
+		// will be used on the "server".
+		if grpcutil.IsLocalRequestContext(ctx) {
+			return streamer(ctx, desc, cc, method, opts...)
+		}
 		parent := tracing.SpanFromContext(ctx)
 		if !tracing.SpanInclusionFuncForClient(parent) {
 			return streamer(ctx, desc, cc, method, opts...)
