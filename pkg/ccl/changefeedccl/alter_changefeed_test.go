@@ -9,7 +9,6 @@
 package changefeedccl
 
 import (
-	gosql "database/sql"
 	"fmt"
 	"testing"
 
@@ -25,7 +24,12 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	t.Run(`alter changefeed add target`, func(t *testing.T) {
+		cluster, db, cleanup := startTestCluster(t)
+		defer cleanup()
+
+		f := makeKafkaFeedFactoryForCluster(cluster, db)
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
@@ -53,16 +57,19 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		assertPayloads(t, testFeed, []string{
 			`bar: [2]->{"after": {"a": 2}}`,
 		})
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
+	})
 }
 
 func TestAlterChangefeedDropTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	t.Run(`alter changefeed drop target`, func(t *testing.T) {
+		cluster, db, cleanup := startTestCluster(t)
+		defer cleanup()
+
+		f := makeKafkaFeedFactoryForCluster(cluster, db)
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
@@ -88,16 +95,19 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 
 		sqlDB.Exec(t, `INSERT INTO bar VALUES(2)`)
 		assertPayloads(t, testFeed, nil)
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
+	})
 }
 
 func TestAlterChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	t.Run(`alter changefeed errors`, func(t *testing.T) {
+		cluster, db, cleanup := startTestCluster(t)
+		defer cleanup()
+
+		f := makeKafkaFeedFactoryForCluster(cluster, db)
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
@@ -124,17 +134,19 @@ func TestAlterChangefeedErrors(t *testing.T) {
 			fmt.Sprintf(`job %d is not paused`, feed.JobID()),
 			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()),
 		)
-
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
+	})
 }
 
 func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+	t.Run(`alter changefeed drop all targets error`, func(t *testing.T) {
+		cluster, db, cleanup := startTestCluster(t)
+		defer cleanup()
+
+		f := makeKafkaFeedFactoryForCluster(cluster, db)
+
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
@@ -152,8 +164,5 @@ func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
 			fmt.Sprintf(`cannot drop all targets for changefeed job %d`, feed.JobID()),
 			fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo, bar`, feed.JobID()),
 		)
-
-	}
-
-	t.Run(`kafka`, kafkaTest(testFn))
+	})
 }

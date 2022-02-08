@@ -4316,6 +4316,7 @@ alter_changefeed_stmt:
       Cmds: $4.alterChangefeedCmds(),
     }
   }
+| ALTER CHANGEFEED error // SHOW HELP: ALTER CHANGEFEED
 
 alter_changefeed_cmds:
   alter_changefeed_cmd
