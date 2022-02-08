@@ -1040,19 +1040,34 @@ func sanitizeLocalityKV(kv string) string {
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
 ) (*jobspb.EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
+	files, err := getNumEncryptionInfoFiles(ctx, src)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
+
+	var fileName string
+	if files > 1 {
+		fileName = fmt.Sprintf("%s-%d", backupEncryptionInfoFile, files)
+	} else {
+		fileName = backupEncryptionInfoFile
+	}
+	r, err := src.ReadFile(ctx, fileName)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not find or read encryption information")
+	}
+
 	defer r.Close()
+
 	encInfoBytes, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
+
 	var encInfo jobspb.EncryptionInfo
 	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
 		return nil, err
 	}
+
 	return &encInfo, nil
 }
 

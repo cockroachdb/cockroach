@@ -1814,10 +1814,13 @@ func doRestorePlan(
 			Key: encryptionKey}
 	} else if restoreStmt.Options.DecryptionKMSURI != nil {
 		opts, err := readEncryptionOptions(ctx, baseStores[0])
+		// TODO: figure out how to decyrpt when > encryption-info
 		if err != nil {
 			return err
 		}
 		ioConf := baseStores[0].ExternalIOConf()
+
+		// Look for KMS info in all encryption-info files
 		defaultKMSInfo, err := validateKMSURIsAgainstFullBackup(kms,
 			newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), &backupKMSEnv{
 				baseStores[0].Settings(),
