@@ -4,7 +4,7 @@ statement ok
 SET experimental_enable_hash_sharded_indexes = true;
 
 statement ok
-CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=11)
+CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=11))
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_primary (a) VALUES (1), (2)
@@ -38,7 +38,7 @@ vectorized: true
               row 1, expr 0: 2
 
 statement ok
-CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
+CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH (bucket_count=12))
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO sharded_secondary (a) VALUES (1), (2)
@@ -93,7 +93,7 @@ CREATE TABLE sharded_primary_with_many_column_types  (
     inet  INET,
     vb    VARBIT,
     FAMILY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb),
-    PRIMARY KEY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb) USING HASH WITH BUCKET_COUNT = 7
+    PRIMARY KEY (i2, i4, i8, f4, f8, s, c, b, dc, ival, oid, tstz, ts, da, inet, vb) USING HASH WITH (bucket_count=7)
 );
 
 query T
@@ -129,7 +129,7 @@ subtest create_with_show_create_keeps_shard_col_constraint
 
 statement ok
 CREATE TABLE t (
-    a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+    a INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 );
 
 query T
@@ -167,7 +167,7 @@ SELECT @2 FROM [SHOW CREATE TABLE t]
 CREATE TABLE public.t (
     crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
     a INT8 NOT NULL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
+    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8),
     FAMILY "primary" (a)
 )
 
@@ -198,7 +198,7 @@ subtest test_hash_index_unique_constraint_pkey
 
 statement ok
 CREATE TABLE t_hash_indexed (
-  a INT8 PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8,
+  a INT8 PRIMARY KEY USING HASH WITH (bucket_count=8),
   b INT8 NOT NULL,
   FAMILY (a, b)
 );
@@ -434,7 +434,7 @@ CREATE TABLE t_hash_indexed (
 );
 
 statement ok
-CREATE UNIQUE INDEX idx_t_hash_indexed ON t_hash_indexed (b) USING HASH WITH BUCKET_COUNT = 8;
+CREATE UNIQUE INDEX idx_t_hash_indexed ON t_hash_indexed (b) USING HASH WITH (bucket_count=8);
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_hash_indexed VALUES (4321, 8765)

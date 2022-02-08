@@ -127,8 +127,12 @@ func indexForDisplay(
 	f.WriteByte(')')
 
 	if index.IsSharded() {
-		fmt.Fprintf(f, " USING HASH WITH BUCKET_COUNT = %v",
-			index.Sharded.ShardBuckets)
+		if f.HasFlags(tree.FmtPGCatalog) {
+			fmt.Fprintf(f, " USING HASH WITH (bucket_count=%v)",
+				index.Sharded.ShardBuckets)
+		} else {
+			f.WriteString(" USING HASH")
+		}
 	}
 
 	if !isPrimary && len(index.StoreColumnNames) > 0 {
@@ -224,6 +228,7 @@ func FormatIndexElements(
 func formatStorageConfigs(
 	table catalog.TableDescriptor, index *descpb.IndexDescriptor, f *tree.FmtCtx,
 ) error {
+	numCustomSettings := 0
 	if index.GeoConfig.S2Geometry != nil || index.GeoConfig.S2Geography != nil {
 		var s2Config *geoindex.S2Config
 
@@ -235,7 +240,6 @@ func formatStorageConfigs(
 		}
 
 		defaultS2Config := geoindex.DefaultS2Config()
-		numCustomSettings := 0
 		if *s2Config != *defaultS2Config {
 			for _, check := range []struct {
 				key        string
@@ -294,10 +298,21 @@ func formatStorageConfigs(
 				}
 			}
 		}
+	}
 
+	if index.IsSharded() {
 		if numCustomSettings > 0 {
-			f.WriteString(")")
+			f.WriteString(", ")
+		} else {
+			f.WriteString(" WITH (")
 		}
+		f.WriteString(`bucket_count=`)
+		f.WriteString(strconv.FormatInt(int64(index.Sharded.ShardBuckets), 10))
+		numCustomSettings++
+	}
+
+	if numCustomSettings > 0 {
+		f.WriteString(")")
 	}
 
 	return nil

@@ -2622,7 +2622,7 @@ SET experimental_enable_hash_sharded_indexes = true
 
 statement ok
 CREATE TABLE hash_sharded_idx_table (
-  pk INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+  pk INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 )
 
 statement error cannot convert hash_sharded_idx_table to REGIONAL BY ROW as the table contains hash sharded indexes
