@@ -107,7 +107,7 @@ func (r *Replica) evalAndPropose(
 ) (chan proposalResult, func(), kvserverbase.CmdIDKey, *roachpb.Error) {
 	defer tok.DoneIfNotMoved(ctx)
 	idKey := makeIDKey()
-	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, ui, g.LatchSpans())
+	proposal, pErr := r.requestToProposal(ctx, idKey, ba, st, ui, g)
 	log.Event(proposal.ctx, "evaluated request")
 
 	// If the request hit a server-side concurrency retry error, immediately

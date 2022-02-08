@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -183,7 +183,7 @@ func maybeStripInFlightWrites(ba *roachpb.BatchRequest) (*roachpb.BatchRequest, 
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
 func maybeBumpReadTimestampToWriteTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, latchSpans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard,
 ) bool {
 	if ba.Txn == nil {
 		return false
@@ -202,53 +202,43 @@ func maybeBumpReadTimestampToWriteTimestamp(
 	if batcheval.IsEndTxnExceedingDeadline(ba.Txn.WriteTimestamp, et.Deadline) {
 		return false
 	}
-	return tryBumpBatchTimestamp(ctx, ba, ba.Txn.WriteTimestamp, latchSpans)
+	return tryBumpBatchTimestamp(ctx, ba, g, ba.Txn.WriteTimestamp)
 }
 
 // tryBumpBatchTimestamp attempts to bump ba's read and write timestamps to ts.
 //
+// This function is called both below and above latching, which is indicated by
+// the concurrency guard argument. The concurrency guard, if not nil, indicates
+// that the caller is holding latches and cannot adjust its timestamp beyond the
+// limits of what is protected by those latches. If the concurrency guard is
+// nil, the caller indicates that it is not holding latches and can therefore
+// more freely adjust its timestamp because it will re-acquire latches at
+// whatever timestamp the batch is bumped to.
+//
 // Returns true if the timestamp was bumped. Returns false if the timestamp could
 // not be bumped.
 func tryBumpBatchTimestamp(
-	ctx context.Context, ba *roachpb.BatchRequest, ts hlc.Timestamp, latchSpans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
 ) bool {
-	if len(latchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) > 0 {
-		// If the batch acquired any read latches with bounded (MVCC) timestamps
-		// then we can not trivially bump the batch's timestamp without dropping
-		// and re-acquiring those latches. Doing so could allow the request to
-		// read at an unprotected timestamp. We only look at global latch spans
-		// because local latch spans always use unbounded (NonMVCC) timestamps.
-		//
-		// NOTE: even if we hold read latches with high enough timestamps to
-		// fully cover ("protect") the batch at the new timestamp, we still
-		// don't want to allow the bump. This is because a batch with read spans
-		// and a higher timestamp may now conflict with locks that it previously
-		// did not. However, server-side retries don't re-scan the lock table.
-		// This can lead to requests missing unreplicated locks in the lock
-		// table that they should have seen or discovering replicated intents in
-		// MVCC that they should not have seen (from the perspective of the lock
-		// table's AddDiscoveredLock method).
-		//
-		// NOTE: we could consider adding a retry-loop above the latch
-		// acquisition to allow this to be retried, but given that we try not to
-		// mix read-only and read-write requests, doing so doesn't seem worth
-		// it.
+	if g != nil && !g.IsolatedAtLaterTimestamps() {
 		return false
 	}
 	if ts.Less(ba.Timestamp) {
 		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
-	ba.Timestamp = ts
 	if ba.Txn == nil {
+		log.VEventf(ctx, 2, "bumping batch timestamp to %s from %s", ts, ba.Timestamp)
+		ba.Timestamp = ts
 		return true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
 		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
 			"ba.Txn.WriteTimestamp: %s", ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
-	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s)",
+	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",
 		ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	ba.Txn = ba.Txn.Clone()
 	ba.Txn.Refresh(ts)
+	ba.Timestamp = ba.Txn.ReadTimestamp // Refresh just updated ReadTimestamp
 	return true
 }

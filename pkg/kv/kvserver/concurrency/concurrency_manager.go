@@ -658,6 +658,26 @@ func (g *Guard) AssertNoLatches() {
 	}
 }
 
+// IsolatedAtLaterTimestamps returns whether the request holding the guard would
+// continue to be isolated from other requests / transactions even if it were to
+// increase its request timestamp while evaluating. If the method returns false,
+// the concurrency guard must be dropped and re-acquired with the new timestamp
+// before the request can evaluate at that later timestamp.
+func (g *Guard) IsolatedAtLaterTimestamps() bool {
+	// If the request acquired any read latches with bounded (MVCC) timestamps
+	// then it can not trivially bump its timestamp without dropping and
+	// re-acquiring those latches. Doing so could allow the request to read at an
+	// unprotected timestamp. We only look at global latch spans because local
+	// latch spans always use unbounded (NonMVCC) timestamps.
+	return len(g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
+		// Similarly, if the request declared any global or local read lock spans
+		// then it can not trivially bump its timestamp without dropping its
+		// lockTableGuard and re-scanning the lockTable. Doing so could allow the
+		// request to conflict with locks that it previously did not conflict with.
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal)) == 0 &&
+		len(g.Req.LockSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanLocal)) == 0
+}
+
 // CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
 // have a conflicting latch, lock.
 func (g *Guard) CheckOptimisticNoConflicts(

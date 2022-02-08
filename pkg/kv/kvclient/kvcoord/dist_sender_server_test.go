@@ -2262,9 +2262,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.Run(ctx, b)
 			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("a"))),
-			// Expect a transaction coord retry, which should succeed.
-			txnCoordRetry: true,
+			filter: newUncertaintyFilter(roachpb.Key("a")),
+			// We expect the request to succeed after a server-side retry.
+			txnCoordRetry: false,
 		},
 		{
 			// Even if accounting for the refresh spans would have exhausted the
@@ -2952,8 +2952,9 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			filter:        newUncertaintyFilter(roachpb.Key([]byte("a"))),
-			txnCoordRetry: true,
+			filter: newUncertaintyFilter(roachpb.Key("a")),
+			// We expect the request to succeed after a server-side retry.
+			txnCoordRetry: false,
 		},
 		{
 			name: "cput within uncertainty interval after timestamp leaked",
@@ -2963,7 +2964,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *kv.Txn) error {
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			filter:      newUncertaintyFilter(roachpb.Key("a")),
 			clientRetry: true,
 			tsLeaked:    true,
 		},
@@ -2984,7 +2985,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return txn.CPut(ctx, "a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 			},
-			filter:        newUncertaintyFilter(roachpb.Key([]byte("ac"))),
+			filter:        newUncertaintyFilter(roachpb.Key("ac")),
 			txnCoordRetry: true,
 		},
 		{
@@ -3007,7 +3008,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("ac"))),
+			filter:      newUncertaintyFilter(roachpb.Key("ac")),
 			clientRetry: true, // note this txn is read-only but still restarts
 		},
 		{
@@ -3023,7 +3024,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			filter:        newUncertaintyFilter(roachpb.Key("c")),
 			txnCoordRetry: true,
 		},
 		{
@@ -3045,7 +3046,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("a", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			filter:      newUncertaintyFilter(roachpb.Key("a")),
 			clientRetry: true, // will fail because of conflict on refresh span for the Get
 		},
 		{
@@ -3059,7 +3060,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b.CPut("c", "cput", kvclientutils.StrToCPutExistingValue("value"))
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
 			txnCoordRetry: true,
 		},
@@ -3069,7 +3070,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.Scan(ctx, "a", "d", 0)
 				return err
 			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
 			txnCoordRetry: true,
 		},
@@ -3079,7 +3080,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				_, err := txn.DelRange(ctx, "a", "d", false /* returnKeys */)
 				return err
 			},
-			filter: newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			filter: newUncertaintyFilter(roachpb.Key("c")),
 			// Expect a transaction coord retry, which should succeed.
 			txnCoordRetry: true,
 		},
