@@ -57,6 +57,7 @@ ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroac
 
 dev build --skip-generate -- --verbose_failures --sandbox_debug
 ----
+bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
 mkdir go/src/github.com/cockroachdb/cockroach/bin
 bazel info bazel-bin --color=no

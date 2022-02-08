@@ -221,8 +221,9 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
-	bp.ProcessorBase.InternalClose()
-	bp.memAcc.Close(bp.Ctx)
+	if bp.InternalClose() {
+		bp.memAcc.Close(bp.Ctx)
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface. We have to override the
