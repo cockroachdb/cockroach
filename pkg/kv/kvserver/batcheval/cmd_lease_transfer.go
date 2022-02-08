@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
@@ -26,7 +27,11 @@ func init() {
 }
 
 func declareKeysTransferLease(
-	_ ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	_ ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// TransferLease must not run concurrently with any other request so it uses
 	// latches to synchronize with all other reads and writes on the outgoing

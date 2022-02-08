@@ -575,9 +575,8 @@ func canDoServersideRetry(
 		case *roachpb.WriteTooOldError:
 			newTimestamp = tErr.RetryTimestamp()
 
-		// TODO(nvanbenschoten): give non-txn requests uncertainty intervals. #73732.
-		//case *roachpb.ReadWithinUncertaintyIntervalError:
-		//	newTimestamp = tErr.RetryTimestamp()
+		case *roachpb.ReadWithinUncertaintyIntervalError:
+			newTimestamp = tErr.RetryTimestamp()
 
 		default:
 			return false

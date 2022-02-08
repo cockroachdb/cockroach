@@ -226,7 +226,7 @@ func (tc *testContext) Sender() kv.Sender {
 			ba.RangeID = 1
 		}
 		if ba.Timestamp.IsEmpty() {
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				tc.Fatal(err)
 			}
 		}
@@ -2709,6 +2709,7 @@ func TestReplicaLatchingSplitDeclaresWrites(t *testing.T) {
 		},
 		&spans,
 		nil,
+		0,
 	)
 	for _, tc := range []struct {
 		access       spanset.SpanAccess
@@ -4511,7 +4512,7 @@ func TestEndTxnRollbackAbortedTransaction(t *testing.T) {
 		var ba roachpb.BatchRequest
 		gArgs := getArgs(key)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := tc.Sender().Send(ctx, ba)
@@ -4677,7 +4678,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&put)
 	assignSeqNumsForReqs(txn, &put)
-	if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+	if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 		t.Fatal(err)
 	}
 	br, pErr := tc.Sender().Send(ctx, ba)
@@ -4845,7 +4846,7 @@ func setupResolutionTest(
 		var ba roachpb.BatchRequest
 		ba.Header = h
 		ba.RangeID = newRepl.RangeID
-		if err := ba.SetActiveTimestamp(newRepl.store.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(newRepl.store.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		pArgs := putArgs(splitKey.AsRawKey(), []byte("value"))
@@ -4898,7 +4899,7 @@ func TestEndTxnResolveOnlyLocalIntents(t *testing.T) {
 		ba.Header.RangeID = newRepl.RangeID
 		gArgs := getArgs(splitKey)
 		ba.Add(&gArgs)
-		if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := newRepl.Send(ctx, ba)
@@ -7501,7 +7502,7 @@ func TestReplicaCancelRaft(t *testing.T) {
 			ba.Add(&roachpb.GetRequest{
 				RequestHeader: roachpb.RequestHeader{Key: key},
 			})
-			if err := ba.SetActiveTimestamp(tc.Clock().Now); err != nil {
+			if err := ba.SetActiveTimestamp(tc.Clock()); err != nil {
 				t.Fatal(err)
 			}
 			_, pErr := tc.repl.executeBatchWithConcurrencyRetries(ctx, &ba, (*Replica).executeWriteBatch)
@@ -8396,7 +8397,7 @@ func TestGCWithoutThreshold(t *testing.T) {
 
 			gc.Threshold = keyThresh
 			cmd, _ := batcheval.LookupCommand(roachpb.GC)
-			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil)
+			cmd.DeclareKeys(tc.repl.Desc(), &roachpb.Header{RangeID: tc.repl.RangeID}, &gc, &spans, nil, 0)
 
 			expSpans := 1
 			if !keyThresh.IsEmpty() {
@@ -9128,7 +9129,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		ba.Header.RangeID = repl.RangeID
 		ba.Add(req)
 		ba.Txn = txn
-		if err := ba.SetActiveTimestamp(repl.Clock().Now); err != nil {
+		if err := ba.SetActiveTimestamp(repl.Clock()); err != nil {
 			t.Fatal(err)
 		}
 		_, pErr := repl.Send(ctx, ba)
@@ -9421,7 +9422,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	ba.Header.Txn = txn
 	ba.Add(&etArgs)
 	assignSeqNumsForReqs(txn, &etArgs)
-	require.NoError(t, ba.SetActiveTimestamp(func() hlc.Timestamp { return hlc.Timestamp{} }))
+	require.NoError(t, ba.SetActiveTimestamp(s.Clock()))
 	// Get a reference to the txn's replica.
 	stores := s.GetStores().(*Stores)
 	store, err := stores.GetStore(s.GetFirstStoreID())
@@ -10695,6 +10696,27 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// EndTransaction. This is hard to do at the moment, though, because we
 		// never defer the handling of the write too old conditions to the end of
 		// the transaction (but we might in the future).
+		{
+			name: "serverside-refresh of read within uncertainty interval error on get in non-txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				// NOTE: set the TimestampFromServerClock field manually. This is
+				// usually set on the server for non-transactional requests without
+				// client-assigned timestamps. It is also usually set to the same
+				// value as the server-assigned timestamp. But to have more control
+				// over the uncertainty interval that this request receives, we set
+				// it here to a value above the request timestamp.
+				serverTS := ts.Next()
+				ba.TimestampFromServerClock = (*hlc.ClockTimestamp)(&serverTS)
+				expTS = ts.Next()
+				get := getArgs(roachpb.Key("a"))
+				ba.Add(&get)
+				return
+			},
+		},
 		{
 			name: "serverside-refresh of read within uncertainty interval error on get in non-1PC txn",
 			setupFn: func() (hlc.Timestamp, error) {
