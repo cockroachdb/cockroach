@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -226,7 +227,7 @@ func runSendKVBatch(cmd *cobra.Command, args []string) error {
 
 func sendKVBatchRequestWithTracingOption(
 	ctx context.Context, verboseTrace bool, admin serverpb.AdminClient, ba *roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, rec tracing.Recording, err error) {
+) (br *roachpb.BatchResponse, rec tracingpb.Recording, err error) {
 	var sp *tracing.Span
 	if verboseTrace {
 		// Set up a tracing span and enable verbose tracing if requested by
@@ -237,7 +238,7 @@ func sendKVBatchRequestWithTracingOption(
 		// because otherwise the unit test TestSendKVBatch becomes non-deterministic
 		// on the contents of the traceInfo JSON field in the request.
 		_, sp = tracing.NewTracer().StartSpanCtx(ctx, "debug-send-kv-batch",
-			tracing.WithRecording(tracing.RecordingVerbose))
+			tracing.WithRecording(tracingpb.RecordingVerbose))
 		defer sp.Finish()
 
 		// Inject the span metadata into the KV request.
@@ -252,7 +253,7 @@ func sendKVBatchRequestWithTracingOption(
 		sp.ImportRemoteSpans(br.CollectedSpans)
 
 		// Extract the recording.
-		rec = sp.GetRecording(tracing.RecordingVerbose)
+		rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	}
 
 	return br, rec, errors.Wrap(err, "request failed")

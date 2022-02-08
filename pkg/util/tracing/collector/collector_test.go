@@ -66,7 +66,7 @@ func newTestStructured(i string) *testStructuredImpl {
 // 		root2.child								<-- traceID2
 func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, func()) {
 	// Start a root span on "node 1".
-	root := t1.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
+	root := t1.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	root.RecordStructured(newTestStructured("root"))
 
 	time.Sleep(10 * time.Millisecond)
@@ -86,10 +86,10 @@ func setupTraces(t1, t2 *tracing.Tracer) (tracingpb.TraceID, tracingpb.TraceID, 
 
 	// Start another remote child span on "node 2" that we finish.
 	childRemoteChildFinished := t2.StartSpan("root.child.remotechilddone", tracing.WithRemoteParentFromSpanMeta(child.Meta()))
-	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracing.RecordingVerbose))
+	child.ImportRemoteSpans(childRemoteChildFinished.FinishAndGetRecording(tracingpb.RecordingVerbose))
 
 	// Start a root span on "node 2".
-	root2 := t2.StartSpan("root2", tracing.WithRecording(tracing.RecordingVerbose))
+	root2 := t2.StartSpan("root2", tracing.WithRecording(tracingpb.RecordingVerbose))
 	root2.RecordStructured(newTestStructured("root2"))
 
 	// Start a child span on "node 2".
@@ -127,8 +127,8 @@ func TestTracingCollectorGetSpanRecordings(t *testing.T) {
 	localTraceID, remoteTraceID, cleanup := setupTraces(localTracer, remoteTracer)
 	defer cleanup()
 
-	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracing.Recording {
-		res := make(map[roachpb.NodeID][]tracing.Recording)
+	getSpansFromAllNodes := func(traceID tracingpb.TraceID) map[roachpb.NodeID][]tracingpb.Recording {
+		res := make(map[roachpb.NodeID][]tracingpb.Recording)
 
 		var iter *collector.Iterator
 		var err error

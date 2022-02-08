@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -182,7 +183,7 @@ func (p *probeRangeGenerator) Next(ctx context.Context) (bool, error) {
 		ctx, p.tracer, opName,
 		tracing.WithForceRealSpan(),
 	)
-	sp.SetRecordingType(tracing.RecordingVerbose)
+	sp.SetRecordingType(tracingpb.RecordingVerbose)
 	defer func() {
 		p.curr.verboseTrace = sp.FinishAndGetConfiguredRecording().String()
 	}()
