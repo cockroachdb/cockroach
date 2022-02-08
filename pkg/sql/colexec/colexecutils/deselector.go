@@ -81,6 +81,5 @@ func (p *deselectorOp) Next() coldata.Batch {
 			)
 		}
 	})
-	p.output.SetLength(batch.Length())
 	return p.output
 }
