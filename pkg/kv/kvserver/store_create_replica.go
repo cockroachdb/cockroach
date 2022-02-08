@@ -98,7 +98,7 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 
 		// The current replica needs to be removed, remove it and go back around.
-		if toTooOld := repl.mu.replicaID < replicaID; toTooOld {
+		if toTooOld := repl.replicaID < replicaID; toTooOld {
 			if shouldLog := log.V(1); shouldLog {
 				log.Infof(ctx, "found message for replica ID %d which is newer than %v",
 					replicaID, repl)
@@ -115,14 +115,14 @@ func (s *Store) tryGetOrCreateReplica(
 		}
 		defer repl.mu.RUnlock()
 
-		if repl.mu.replicaID > replicaID {
+		if repl.replicaID > replicaID {
 			// The sender is behind and is sending to an old replica.
 			// We could silently drop this message but this way we'll inform the
 			// sender that they may no longer exist.
 			repl.raftMu.Unlock()
 			return nil, false, &roachpb.RaftGroupDeletedError{}
 		}
-		if repl.mu.replicaID != replicaID {
+		if repl.replicaID != replicaID {
 			// This case should have been caught by handleToReplicaTooOld.
 			log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
 				replicaID, repl)

@@ -895,7 +895,7 @@ func (r *Replica) applySnapshot(
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
 	if err := r.raftMu.stateLoader.SetRaftReplicaID(
-		ctx, &unreplicatedSST, r.mu.replicaID); err != nil {
+		ctx, &unreplicatedSST, r.replicaID); err != nil {
 		return errors.Wrapf(err, "unable to write RaftReplicaID to unreplicated SST writer")
 	}
 
@@ -1046,7 +1046,7 @@ func (r *Replica) applySnapshot(
 	// we missed the application of a merge) and we are the new leaseholder, we
 	// make sure to update the timestamp cache using the prior read summary to
 	// account for any reads that were served on the right-hand side range(s).
-	if len(subsumedRepls) > 0 && state.Lease.Replica.ReplicaID == r.mu.replicaID && prioReadSum != nil {
+	if len(subsumedRepls) > 0 && state.Lease.Replica.ReplicaID == r.replicaID && prioReadSum != nil {
 		applyReadSummaryToTimestampCache(r.store.tsCache, r.descRLocked(), *prioReadSum)
 	}
 
