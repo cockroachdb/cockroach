@@ -595,7 +595,7 @@ func PrimaryKeyString(desc catalog.TableDescriptor) string {
 	f.WriteByte(')')
 	if primaryIdx.IsSharded() {
 		f.WriteString(
-			fmt.Sprintf(" USING HASH WITH BUCKET_COUNT = %v", primaryIdx.GetSharded().ShardBuckets),
+			fmt.Sprintf(" USING HASH WITH (bucket_count=%v)", primaryIdx.GetSharded().ShardBuckets),
 		)
 	}
 	return f.CloseAndGetString()

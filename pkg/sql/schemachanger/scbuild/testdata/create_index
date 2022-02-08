@@ -87,7 +87,7 @@ CREATE INDEX id3
 
 build
 CREATE INDEX id4
-	ON defaultdb.t1 (id, name) USING HASH WITH BUCKET_COUNT =  8 STORING (money)
+	ON defaultdb.t1 (id, name) USING HASH STORING (money) WITH (bucket_count=8)
 ----
 - [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
   details:
