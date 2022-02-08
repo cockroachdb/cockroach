@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -150,7 +151,7 @@ RETURNING id;`).Scan(&secondID))
 	// another job. We'll make sure this happens by polling the trace to see
 	// the log line indicating what we want.
 	tr := tc.Server(0).TracerI().(*tracing.Tracer)
-	recCtx, sp := tr.StartSpanCtx(ctx, "test", tracing.WithRecording(tracing.RecordingVerbose))
+	recCtx, sp := tr.StartSpanCtx(ctx, "test", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	upgrade2Err := make(chan error, 1)
 	go func() {

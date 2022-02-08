@@ -6,14 +6,20 @@ go_library(
     name = "tracingpb",
     srcs = [
         "recorded_span.go",
+        "recording.go",
         "tracing.go",
     ],
     embed = [":tracingpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_gogo_protobuf//jsonpb",
+        "@com_github_gogo_protobuf//proto",
         "@com_github_gogo_protobuf//types",
+        "@com_github_jaegertracing_jaeger//model/json",
     ],
 )
 

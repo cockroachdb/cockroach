@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
@@ -446,7 +445,3 @@ func (cs *tracingClientStream) CloseSend() error {
 	}
 	return err
 }
-
-// Recording represents a group of RecordedSpans rooted at a fixed root span, as
-// returned by GetRecording. Spans are sorted by StartTime.
-type Recording []tracingpb.RecordedSpan

@@ -234,7 +234,7 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.finished = true
 
-		if s.recordingType() != RecordingOff {
+		if s.recordingType() != tracingpb.RecordingOff {
 			duration := timeutil.Since(s.startTime)
 			if duration == 0 {
 				duration = time.Nanosecond
@@ -314,17 +314,17 @@ func (s *crdbSpan) finish() bool {
 	return true
 }
 
-func (s *crdbSpan) recordingType() RecordingType {
+func (s *crdbSpan) recordingType() tracingpb.RecordingType {
 	if s == nil {
-		return RecordingOff
+		return tracingpb.RecordingOff
 	}
 	return s.mu.recording.recordingType.load()
 }
 
 // enableRecording start recording on the Span. From now on, log events and
 // child spans will be stored.
-func (s *crdbSpan) enableRecording(recType RecordingType) {
-	if recType == RecordingOff || s.recordingType() == recType {
+func (s *crdbSpan) enableRecording(recType tracingpb.RecordingType) {
+	if recType == tracingpb.RecordingOff || s.recordingType() == recType {
 		return
 	}
 
@@ -347,12 +347,14 @@ func (s *crdbSpan) SpanID() tracingpb.SpanID {
 //
 // finishing indicates whether s is in the process of finishing. If it isn't,
 // the recording will include an "_unfinished" tag.
-func (s *crdbSpan) GetRecording(recType RecordingType, finishing bool) Recording {
+func (s *crdbSpan) GetRecording(
+	recType tracingpb.RecordingType, finishing bool,
+) tracingpb.Recording {
 	return s.getRecordingImpl(recType, false /* includeDetachedChildren */, finishing)
 }
 
 // GetFullRecording is part of the RegistrySpan interface.
-func (s *crdbSpan) GetFullRecording(recType RecordingType) Recording {
+func (s *crdbSpan) GetFullRecording(recType tracingpb.RecordingType) tracingpb.Recording {
 	return s.getRecordingImpl(recType, true /* includeDetachedChildren */, false /* finishing */)
 }
 
@@ -361,14 +363,14 @@ func (s *crdbSpan) GetFullRecording(recType RecordingType) Recording {
 // finishing indicates whether s is in the process of finishing. If it isn't,
 // the recording will include an "_unfinished" tag.
 func (s *crdbSpan) getRecordingImpl(
-	recType RecordingType, includeDetachedChildren bool, finishing bool,
-) Recording {
+	recType tracingpb.RecordingType, includeDetachedChildren bool, finishing bool,
+) tracingpb.Recording {
 	switch recType {
-	case RecordingVerbose:
+	case tracingpb.RecordingVerbose:
 		return s.getVerboseRecording(includeDetachedChildren, finishing)
-	case RecordingStructured:
+	case tracingpb.RecordingStructured:
 		return s.getStructuredRecording(includeDetachedChildren)
-	case RecordingOff:
+	case tracingpb.RecordingOff:
 		return nil
 	default:
 		panic("unreachable")
@@ -379,7 +381,9 @@ func (s *crdbSpan) getRecordingImpl(
 //
 // finishing indicates whether s is in the process of finishing. If it isn't,
 // the recording will include an "_unfinished" tag.
-func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing bool) Recording {
+func (s *crdbSpan) getVerboseRecording(
+	includeDetachedChildren bool, finishing bool,
+) tracingpb.Recording {
 	if s == nil {
 		return nil // noop span
 	}
@@ -387,8 +391,8 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 	s.mu.Lock()
 	// The capacity here is approximate since we don't know how many
 	// grandchildren there are.
-	result := make(Recording, 0, 1+len(s.mu.openChildren)+len(s.mu.recording.finishedChildren))
-	result = append(result, s.getRecordingNoChildrenLocked(RecordingVerbose, finishing))
+	result := make(tracingpb.Recording, 0, 1+len(s.mu.openChildren)+len(s.mu.recording.finishedChildren))
+	result = append(result, s.getRecordingNoChildrenLocked(tracingpb.RecordingVerbose, finishing))
 	result = append(result, s.mu.recording.finishedChildren...)
 
 	for _, child := range s.mu.openChildren {
@@ -401,7 +405,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 
 	// Sort the spans by StartTime, except the first Span (the root of this
 	// recording) which stays in place.
-	toSort := sortPool.Get().(*Recording) // avoids allocations in sort.Sort
+	toSort := sortPool.Get().(*tracingpb.Recording) // avoids allocations in sort.Sort
 	*toSort = result[1:]
 	sort.Sort(toSort)
 	*toSort = nil
@@ -417,7 +421,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 // this span (even if the events had been recorded on different spans).
 //
 // The caller does not take ownership of the events.
-func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recording {
+func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) tracingpb.Recording {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	buffer := make([]*tracingpb.StructuredRecord, 0, 3)
@@ -439,7 +443,7 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	}
 
 	res := s.getRecordingNoChildrenLocked(
-		RecordingStructured,
+		tracingpb.RecordingStructured,
 		false, // finishing - since we're only asking for the structured recording, the argument doesn't matter
 	)
 	// If necessary, grow res.StructuredRecords to have space for buffer.
@@ -462,13 +466,13 @@ func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) Recordin
 	for i, e := range buffer {
 		reservedSpace[i] = *e
 	}
-	return Recording{res}
+	return tracingpb.Recording{res}
 }
 
 // recordFinishedChildren adds the spans in childRecording to s' recording.
 //
 // s takes ownership of childRecording; the caller is not allowed to use them anymore.
-func (s *crdbSpan) recordFinishedChildren(childRecording Recording) {
+func (s *crdbSpan) recordFinishedChildren(childRecording tracingpb.Recording) {
 	if len(childRecording) == 0 {
 		return
 	}
@@ -488,7 +492,7 @@ func (s *crdbSpan) recordFinishedChildren(childRecording Recording) {
 
 // s takes ownership of childRecording; the caller is not allowed to use them
 // anymore.
-func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
+func (s *crdbSpan) recordFinishedChildrenLocked(childRecording tracingpb.Recording) {
 	if len(childRecording) == 0 {
 		return
 	}
@@ -496,7 +500,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
 	// Depending on the type of recording, we either keep all the information
 	// received, or only the structured events.
 	switch s.recordingType() {
-	case RecordingVerbose:
+	case tracingpb.RecordingVerbose:
 		// Change the root of the recording to be a child of this Span. This is
 		// usually already the case, except with DistSQL traces where remote
 		// processors run in spans that FollowFrom an RPC Span that we don't
@@ -511,14 +515,14 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRecording Recording) {
 		// We don't have space for this recording. Let's collect just the structured
 		// records by falling through.
 		fallthrough
-	case RecordingStructured:
+	case tracingpb.RecordingStructured:
 		for ci := range childRecording {
 			child := &childRecording[ci]
 			for i := range child.StructuredRecords {
 				s.recordInternalLocked(&child.StructuredRecords[i], &s.mu.recording.structured)
 			}
 		}
-	case RecordingOff:
+	case tracingpb.RecordingOff:
 		break
 	default:
 		panic(fmt.Sprintf("unrecognized recording mode: %v", s.recordingType()))
@@ -604,7 +608,7 @@ func (s *crdbSpan) notifyEventListeners(item Structured) {
 
 // record includes a log message in s' recording.
 func (s *crdbSpan) record(msg redact.RedactableString) {
-	if s.recordingType() != RecordingVerbose {
+	if s.recordingType() != tracingpb.RecordingVerbose {
 		return
 	}
 
@@ -628,7 +632,7 @@ func (s *crdbSpan) record(msg redact.RedactableString) {
 
 // recordStructured includes a structured event in s' recording.
 func (s *crdbSpan) recordStructured(item Structured) {
-	if s.recordingType() == RecordingOff {
+	if s.recordingType() == tracingpb.RecordingOff {
 		return
 	}
 
@@ -737,7 +741,7 @@ func (s *crdbSpan) getStructuredEventsLocked(
 // finishing indicates whether s is in the process of finishing. If it isn't,
 // the recording will include an "_unfinished" tag.
 func (s *crdbSpan) getRecordingNoChildrenLocked(
-	recordingType RecordingType, finishing bool,
+	recordingType tracingpb.RecordingType, finishing bool,
 ) tracingpb.RecordedSpan {
 	rs := tracingpb.RecordedSpan{
 		TraceID:        s.traceID,
@@ -748,7 +752,7 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 		StartTime:      s.startTime,
 		Duration:       s.mu.duration,
 		RedactableLogs: true,
-		Verbose:        s.recordingType() == RecordingVerbose,
+		Verbose:        s.recordingType() == tracingpb.RecordingVerbose,
 		RecordingMode:  s.recordingType().ToProto(),
 	}
 
@@ -776,12 +780,12 @@ func (s *crdbSpan) getRecordingNoChildrenLocked(
 	// stringifying a {NodeID,StoreID}Container (a very common tag) was expensive.
 	// That has become cheap since, so this optimization might not be worth it any
 	// more.
-	wantTags := recordingType == RecordingVerbose
+	wantTags := recordingType == tracingpb.RecordingVerbose
 	if wantTags {
 		if !finishing && !s.mu.finished {
 			addTag("_unfinished", "1")
 		}
-		if s.recordingType() == RecordingVerbose {
+		if s.recordingType() == tracingpb.RecordingVerbose {
 			addTag("_verbose", "1")
 		}
 		if s.mu.recording.dropped {
@@ -928,7 +932,7 @@ func (s *crdbSpan) childFinished(child *crdbSpan) {
 
 	// Collect the child's recording.
 
-	if s.recordingType() == RecordingOff || !collectChildRec {
+	if s.recordingType() == tracingpb.RecordingOff || !collectChildRec {
 		return
 	}
 
@@ -957,7 +961,7 @@ func (s *crdbSpan) visitOpenChildren(visitor func(child *Span)) {
 }
 
 // SetRecordingType is part of the RegistrySpan interface.
-func (s *crdbSpan) SetRecordingType(to RecordingType) {
+func (s *crdbSpan) SetRecordingType(to tracingpb.RecordingType) {
 	s.mu.recording.recordingType.swap(to)
 
 	s.mu.Lock()
@@ -968,7 +972,7 @@ func (s *crdbSpan) SetRecordingType(to RecordingType) {
 }
 
 // RecordingType is part of the RegistrySpan interface.
-func (s *crdbSpan) RecordingType() RecordingType {
+func (s *crdbSpan) RecordingType() tracingpb.RecordingType {
 	return s.recordingType()
 }
 
@@ -995,33 +999,18 @@ func (s *crdbSpan) setGoroutineID(gid int64) {
 
 var sortPool = sync.Pool{
 	New: func() interface{} {
-		return &Recording{}
+		return &tracingpb.Recording{}
 	},
 }
 
-// Less implements sort.Interface.
-func (r Recording) Less(i, j int) bool {
-	return r[i].StartTime.Before(r[j].StartTime)
-}
-
-// Swap implements sort.Interface.
-func (r Recording) Swap(i, j int) {
-	r[i], r[j] = r[j], r[i]
-}
-
-// Len implements sort.Interface.
-func (r Recording) Len() int {
-	return len(r)
-}
-
-type atomicRecordingType RecordingType
+type atomicRecordingType tracingpb.RecordingType
 
 // load returns the recording type.
-func (art *atomicRecordingType) load() RecordingType {
-	return RecordingType(atomic.LoadInt32((*int32)(art)))
+func (art *atomicRecordingType) load() tracingpb.RecordingType {
+	return tracingpb.RecordingType(atomic.LoadInt32((*int32)(art)))
 }
 
 // swap stores the new recording type and returns the old one.
-func (art *atomicRecordingType) swap(recType RecordingType) RecordingType {
-	return RecordingType(atomic.SwapInt32((*int32)(art), int32(recType)))
+func (art *atomicRecordingType) swap(recType tracingpb.RecordingType) tracingpb.RecordingType {
+	return tracingpb.RecordingType(atomic.SwapInt32((*int32)(art), int32(recType)))
 }

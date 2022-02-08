@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"google.golang.org/grpc"
 )
 
@@ -151,7 +152,7 @@ func (*mockInternalClient) ResetQuorum(
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracing.RecordingVerbose))
+	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	ctx = tracing.ContextWithSpan(ctx, sp)
 

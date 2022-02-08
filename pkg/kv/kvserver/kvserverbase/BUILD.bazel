@@ -20,7 +20,7 @@ go_library(
         "//pkg/util/errorutil",
         "//pkg/util/hlc",
         "//pkg/util/quotapool",
-        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],

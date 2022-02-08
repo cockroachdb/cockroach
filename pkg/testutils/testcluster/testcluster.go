@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -151,7 +152,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
 			var ids []uint64
 			for _, sp := range sps {
-				rec := sp.GetFullRecording(tracing.RecordingVerbose)
+				rec := sp.GetFullRecording(tracingpb.RecordingVerbose)
 				for _, rs := range rec {
 					// NB: it would be a sight easier to just include these in the output of
 					// the string formatted recording, but making a change there presumably requires
