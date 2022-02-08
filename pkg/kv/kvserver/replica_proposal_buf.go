@@ -135,7 +135,7 @@ type proposer interface {
 	locker() sync.Locker
 	rlocker() sync.Locker
 	// The following require the proposer to hold (at least) a shared lock.
-	replicaID() roachpb.ReplicaID
+	getReplicaID() roachpb.ReplicaID
 	destroyed() destroyStatus
 	leaseAppliedIndex() uint64
 	enqueueUpdateCheck()
@@ -395,7 +395,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	if raftGroup != nil {
 		leaderInfo = b.p.leaderStatusRLocked(raftGroup)
 		// Sanity check.
-		if leaderInfo.leaderKnown && leaderInfo.leader == b.p.replicaID() && !leaderInfo.iAmTheLeader {
+		if leaderInfo.leaderKnown && leaderInfo.leader == b.p.getReplicaID() &&
+			!leaderInfo.iAmTheLeader {
 			log.Fatalf(ctx,
 				"inconsistent Raft state: state %s while the current replica is also the lead: %d",
 				raftGroup.BasicStatus().RaftState, leaderInfo.leader)
@@ -531,7 +532,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			if err := proposeBatch(raftGroup, b.p.replicaID(), ents); err != nil {
+			if err := proposeBatch(raftGroup, b.p.getReplicaID(), ents); err != nil {
 				firstErr = err
 				continue
 			}
@@ -581,7 +582,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	if firstErr != nil {
 		return 0, firstErr
 	}
-	return used, proposeBatch(raftGroup, b.p.replicaID(), ents)
+	return used, proposeBatch(raftGroup, b.p.getReplicaID(), ents)
 }
 
 // allocateLAIAndClosedTimestampLocked computes a LAI and closed timestamp to be
@@ -997,8 +998,8 @@ func (rp *replicaProposer) rlocker() sync.Locker {
 	return rp.mu.RWMutex.RLocker()
 }
 
-func (rp *replicaProposer) replicaID() roachpb.ReplicaID {
-	return rp.mu.replicaID
+func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {
+	return rp.replicaID
 }
 
 func (rp *replicaProposer) destroyed() destroyStatus {
