@@ -46,7 +46,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -399,7 +399,7 @@ func createTestAllocatorWithKnobs(
 
 // checkReplExists checks whether the given `repl` exists on any of the
 // `stores`.
-func checkReplExists(repl roachpb.ReplicaDescriptor, stores []roachpb.StoreID) (found bool) {
+func checkReplExists(repl roachpb.ReplicationTarget, stores []roachpb.StoreID) (found bool) {
 	for _, storeID := range stores {
 		if repl.StoreID == storeID {
 			found = true
@@ -503,7 +503,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
-	if result.Node.NodeID != 1 || result.StoreID != 1 {
+	if result.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
 	}
 }
@@ -520,7 +520,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		simpleSpanConfig,
 		nil /* existingVoters */, nil, /* existingNonVoters */
 	)
-	if result != nil {
+	if !roachpb.Empty(result) {
 		t.Errorf("expected nil result: %+v", result)
 	}
 	if err == nil {
@@ -548,17 +548,17 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		ctx,
 		multiDCConfigSSD,
 		[]roachpb.ReplicaDescriptor{{
-			NodeID:  result1.Node.NodeID,
+			NodeID:  result1.NodeID,
 			StoreID: result1.StoreID,
 		}}, nil, /* existingNonVoters */
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
-	ids := []int{int(result1.Node.NodeID), int(result2.Node.NodeID)}
+	ids := []int{int(result1.NodeID), int(result2.NodeID)}
 	sort.Ints(ids)
 	if expected := []int{1, 2}; !reflect.DeepEqual(ids, expected) {
-		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.Node, result2.Node)
+		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.NodeID, result2.NodeID)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
 	result3, _, err := a.AllocateVoter(
@@ -566,11 +566,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		multiDCConfigSSD,
 		[]roachpb.ReplicaDescriptor{
 			{
-				NodeID:  result1.Node.NodeID,
+				NodeID:  result1.NodeID,
 				StoreID: result1.StoreID,
 			},
 			{
-				NodeID:  result2.Node.NodeID,
+				NodeID:  result2.NodeID,
 				StoreID: result2.StoreID,
 			},
 		}, nil, /* existingNonVoters */
@@ -711,7 +711,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 			result, _, err := a.AllocateVoter(
 				ctx, emptySpanConfig(), tc.existing, nil,
 			)
-			if e, a := tc.expectTargetAllocate, result != nil; e != a {
+			if e, a := tc.expectTargetAllocate, !roachpb.Empty(result); e != a {
 				t.Errorf(
 					"AllocateVoter(%v) got target %v, err %v; expectTarget=%v",
 					tc.existing, result, err, tc.expectTargetAllocate,
@@ -5428,7 +5428,7 @@ func TestAllocatorRemoveTargetBasedOnCapacity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e1, e2 := targetRepl, replicas[1], replicas[2]; a != e1 && a != e2 {
+		if a, e1, e2 := targetRepl, replicas[1], replicas[2]; a.StoreID != e1.StoreID && a.StoreID != e2.StoreID {
 			t.Fatalf("%d: RemoveVoter did not select either expected replica; expected %v or %v, got %v",
 				i, e1, e2, a)
 		}
@@ -6989,7 +6989,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %+v", err)
 	}
-	if result.Node.NodeID != 1 || result.StoreID != 1 {
+	if result.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
 	}
 
