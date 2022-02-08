@@ -3334,6 +3334,64 @@ select
       ├── a:2 <@ ARRAY[1] [outer=(2), immutable]
       └── a:2 <@ ARRAY[2] [outer=(2), immutable]
 
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[1]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── a:2 && ARRAY[1] [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[1] OR a && ARRAY[2]
+----
+select
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── scan c
+ │    ├── columns: k:1!null a:2 u:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      └── (a:2 && ARRAY[1]) OR (a:2 && ARRAY[2]) [outer=(2), immutable]
+
+opt expect=GenerateInvertedIndexScans
+SELECT * FROM c WHERE a && ARRAY[1] AND a && ARRAY[2]
+----
+index-join c
+ ├── columns: k:1!null a:2 u:3
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /6
+      │    ├── tight: true, unique: false
+      │    ├── union spans: empty
+      │    └── INTERSECTION
+      │         ├── span expression
+      │         │    ├── tight: true, unique: false
+      │         │    └── union spans: ["\x89", "\x89"]
+      │         └── span expression
+      │              ├── tight: true, unique: false
+      │              └── union spans: ["\x8a", "\x8a"]
+      ├── key: (1)
+      └── scan c@a_inv_idx
+           ├── columns: k:1!null a_inverted_key:6!null
+           ├── inverted constraint: /6/1
+           │    └── spans: ["\x89", "\x8b")
+           ├── key: (1)
+           └── fd: (1)-->(6)
+
 # Tests for indexes with older descriptor versions.
 
 exec-ddl
