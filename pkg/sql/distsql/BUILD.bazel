@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/mon",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/grpcinterceptor",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tracing_test
+package grpcinterceptor_test
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -218,8 +219,8 @@ func TestGRPCInterceptors(t *testing.T) {
 			defer s.Stop(bgCtx)
 			tr := tracing.NewTracer()
 			srv := grpc.NewServer(
-				grpc.UnaryInterceptor(tracing.ServerInterceptor(tr)),
-				grpc.StreamInterceptor(tracing.StreamServerInterceptor(tr)),
+				grpc.UnaryInterceptor(grpcinterceptor.ServerInterceptor(tr)),
+				grpc.StreamInterceptor(grpcinterceptor.StreamServerInterceptor(tr)),
 			)
 			grpcutils.RegisterGRPCTestServer(srv, impl)
 			defer srv.GracefulStop()
@@ -233,10 +234,10 @@ func TestGRPCInterceptors(t *testing.T) {
 			conn, err := grpc.DialContext(bgCtx, ln.Addr().String(),
 				//lint:ignore SA1019 grpc.WithInsecure is deprecated
 				grpc.WithInsecure(),
-				grpc.WithUnaryInterceptor(tracing.ClientInterceptor(tr, nil, /* init */
+				grpc.WithUnaryInterceptor(grpcinterceptor.ClientInterceptor(tr, nil, /* init */
 					func(_ context.Context) bool { return false }, /* compatibilityMode */
 				)),
-				grpc.WithStreamInterceptor(tracing.StreamClientInterceptor(tr, nil /* init */)),
+				grpc.WithStreamInterceptor(grpcinterceptor.StreamClientInterceptor(tr, nil /* init */)),
 			)
 			require.NoError(t, err)
 			defer func() {

@@ -1,0 +1,35 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "grpcinterceptor",
+    srcs = ["grpc_interceptor.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/tracing",
+        "@io_opentelemetry_go_otel//attribute",
+        "@io_opentelemetry_go_otel//codes",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//metadata",
+        "@org_golang_google_grpc//status",
+    ],
+)
+
+go_test(
+    name = "grpcinterceptor_test",
+    srcs = ["grpc_interceptor_test.go"],
+    deps = [
+        ":grpcinterceptor",
+        "//pkg/testutils",
+        "//pkg/testutils/grpcutils",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+        "//pkg/util/stop",
+        "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//types",
+        "@com_github_stretchr_testify//require",
+        "@org_golang_google_grpc//:go_default_library",
+    ],
+)
