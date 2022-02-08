@@ -94,6 +94,7 @@ func newFlowCtxForExplainPurposes(planCtx *PlanningCtx, p *planner) *execinfra.F
 			ClusterID:      p.DistSQLPlanner().rpcCtx.ClusterID,
 			VecFDSemaphore: p.execCfg.DistSQLSrv.VecFDSemaphore,
 			NodeDialer:     p.DistSQLPlanner().nodeDialer,
+			PodNodeDialer:  p.DistSQLPlanner().podNodeDialer,
 		},
 		Descriptors: p.Descriptors(),
 		DiskMonitor: &mon.BytesMonitor{},

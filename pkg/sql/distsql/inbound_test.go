@@ -88,11 +88,13 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// The outbox uses this stopper to run a goroutine.
 	outboxStopper := stop.NewStopper()
 	defer outboxStopper.Stop(ctx)
+	nodeDialer := nodedialer.New(rpcContext, staticAddressResolver(ln.Addr()))
 	flowCtx := execinfra.FlowCtx{
 		Cfg: &execinfra.ServerConfig{
-			Settings:   st,
-			NodeDialer: nodedialer.New(rpcContext, staticAddressResolver(ln.Addr())),
-			Stopper:    outboxStopper,
+			Settings:      st,
+			NodeDialer:    nodeDialer,
+			PodNodeDialer: nodeDialer,
+			Stopper:       outboxStopper,
 		},
 		NodeID: base.TestingIDContainer,
 	}
