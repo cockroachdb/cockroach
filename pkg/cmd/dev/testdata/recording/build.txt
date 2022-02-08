@@ -144,6 +144,9 @@ rm go/src/github.com/cockroachdb/cockroach/cockroach-short
 ln -s /private/var/tmp/_bazel/99e666e4e674209ecdb66b46371278df/execroot/cockroach/bazel-out/darwin-fastbuild/bin/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short go/src/github.com/cockroachdb/cockroach/cockroach-short
 ----
 
+bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline
+----
+
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
 ----
 

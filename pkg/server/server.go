@@ -56,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -636,7 +635,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
 	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
-	sHTTP := newHTTPServer(cfg)
+	sHTTP := newHTTPServer(cfg.BaseConfig)
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
@@ -658,16 +657,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		flowScheduler,
 		internalExecutor,
 	)
-
-	contentionRegistry := contention.NewRegistry()
-	// TODO(tbg): don't pass all of Server into this to avoid this hack.
-	sAuth := newAuthenticationServer(lateBoundServer)
-	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
-		if reflect.ValueOf(gw).IsNil() {
-			return nil, errors.Errorf("%d: nil", i)
-		}
-		gw.RegisterService(grpcServer.Server)
-	}
 
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
@@ -714,7 +703,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		registry:                 registry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
-		contentionRegistry:       contentionRegistry,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		circularJobRegistry:      jobRegistry,
@@ -730,6 +718,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	sAuth := newAuthenticationServer(cfg.Config, sqlServer)
+	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
+		if reflect.ValueOf(gw).IsNil() {
+			return nil, errors.Errorf("%d: nil", i)
+		}
+		gw.RegisterService(grpcServer.Server)
+	}
+
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
@@ -1400,12 +1397,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// endpoints served by gwMux by the HTTP cookie authentication
 	// check.
 	if err := s.http.setupRoutes(ctx,
-		s.authentication,                      /* authnServer */
-		s.adminAuthzCheck,                     /* adminAuthzCheck */
-		gwMux,                                 /* handleRequestsUnauthenticated */
-		http.HandlerFunc(s.status.handleVars), /* handleStatusVarsUnauthenticated */
-		s.debug,                               /* handleDebugUnauthenticated */
-		newAPIV2Server(ctx, s),                /* apiServer */
+		s.authentication,       /* authnServer */
+		s.adminAuthzCheck,      /* adminAuthzCheck */
+		s.recorder,             /* metricSource */
+		s.runtime,              /* runtimeStatsSampler */
+		gwMux,                  /* handleRequestsUnauthenticated */
+		s.debug,                /* handleDebugUnauthenticated */
+		newAPIV2Server(ctx, s), /* apiServer */
 	); err != nil {
 		return err
 	}

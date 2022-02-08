@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"time"
 
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -61,10 +59,28 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (sqlServer *SQLServer, pgAddr string, httpAddr string, _ error) {
+) (sqlServer *SQLServer, err error) {
+	sqlServer, _, _, _, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	return
+}
+
+// startTenantInternal is used to build TestServers.
+func startTenantInternal(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
+	baseCfg BaseConfig,
+	sqlCfg SQLConfig,
+) (
+	sqlServer *SQLServer,
+	authServer *authenticationServer,
+	pgAddr string,
+	httpAddr string,
+	_ error,
+) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	// Inform the server identity provider that we're operating
@@ -73,11 +89,11 @@ func StartTenant(
 
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          args.MemoryPoolSize,
@@ -114,7 +130,7 @@ func StartTenant(
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	{
@@ -128,34 +144,15 @@ func StartTenant(
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)
-			return nil, "", "", err
+			return nil, nil, "", "", err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, "", "", err
-	}
-	httpL, err := ListenAndUpdateAddrs(ctx, &args.Config.HTTPAddr, &args.Config.HTTPAdvertiseAddr, "http")
-	if err != nil {
-		return nil, "", "", err
-	}
-	if serverTLSConfig != nil {
-		httpL = tls.NewListener(httpL, serverTLSConfig)
+		return nil, nil, "", "", err
 	}
 
-	{
-		waitQuiesce := func(ctx context.Context) {
-			<-args.stopper.ShouldQuiesce()
-			_ = httpL.Close()
-		}
-		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-http", waitQuiesce); err != nil {
-			waitQuiesce(background)
-			return nil, "", "", err
-		}
-	}
-	pgLAddr := pgL.Addr().String()
-	httpLAddr := httpL.Addr().String()
 	args.advertiseAddr = baseCfg.AdvertiseAddr
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
@@ -168,22 +165,28 @@ func StartTenant(
 		args.sessionRegistry, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
-	args.contentionRegistry = contention.NewRegistry()
+
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	tenantStatusServer.sqlServer = s
 
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
+
+	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
 	s.execCfg.DistSQLPlanner.SetSQLInstanceInfo(roachpb.NodeDescriptor{NodeID: 0})
 
+	authServer = newAuthenticationServer(baseCfg.Config, s)
+
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
-	tenantStatusServer.RegisterService(grpcMain.Server)
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
+		gw.RegisterService(grpcMain.Server)
+	}
 	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
@@ -191,53 +194,58 @@ func StartTenant(
 		ctx,
 		background,
 		args.AmbientCtx,
-		tenantStatusServer.rpcCtx,
+		args.rpcContext,
 		s.stopper,
 		grpcMain,
-		pgLAddr,
+		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
-	if err := tenantStatusServer.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-		return nil, "", "", err
+
+	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return nil, nil, "", "", err
+		}
+	}
+
+	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	adminAuthzCheck := &adminPrivilegeChecker{ie: s.execCfg.InternalExecutor}
+
+	httpServer := newHTTPServer(baseCfg)
+
+	httpServer.handleHealth(gwMux)
+
+	// TODO(knz): Add support for the APIv2 tree here.
+	if err := httpServer.setupRoutes(ctx,
+		authServer,      /* authnServer */
+		adminAuthzCheck, /* adminAuthzCheck */
+		args.recorder,   /* metricSource */
+		args.runtime,    /* runtimeStatSampler */
+		gwMux,           /* handleRequestsUnauthenticated */
+		debugServer,     /* handleDebugUnauthenticated */
+		nil,             /* apiServer */
+	); err != nil {
+		return nil, nil, "", "", err
+	}
+
+	connManager := netutil.MakeServer(
+		args.stopper,
+		serverTLSConfig,                          // tlsConfig
+		http.HandlerFunc(httpServer.baseHandler), // handler
+	)
+	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
+		return nil, nil, "", "", err
 	}
 
 	args.recorder.AddNode(
 		args.registry,
 		roachpb.NodeDescriptor{},
 		timeutil.Now().UnixNano(),
-		pgLAddr,   // advertised addr
-		httpLAddr, // http addr
-		pgLAddr,   // sql addr
+		baseCfg.AdvertiseAddr,     // advertised addr
+		baseCfg.HTTPAdvertiseAddr, // http addr
+		baseCfg.SQLAdvertiseAddr,  // sql addr
 	)
-
-	mux := http.NewServeMux()
-	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
-	mux.Handle("/", debugServer)
-	mux.Handle("/_status/", gwMux)
-	mux.HandleFunc("/health", func(w http.ResponseWriter, req *http.Request) {
-		// Return Bad Request if called with arguments.
-		if err := req.ParseForm(); err != nil || len(req.Form) != 0 {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-	})
-	f := varsHandler{metricSource: args.recorder, st: args.Settings}.handleVars
-	mux.Handle(statusVars, http.HandlerFunc(f))
-	ff := loadVarsHandler(ctx, args.runtime)
-	mux.Handle(loadStatusVars, http.HandlerFunc(ff))
-
-	connManager := netutil.MakeServer(
-		args.stopper,
-		serverTLSConfig, // tlsConfig
-		mux,             // handler
-	)
-	if err := args.stopper.RunAsyncTask(background, "serve-http", func(ctx context.Context) {
-		netutil.FatalIfUnexpected(connManager.Serve(httpL))
-	}); err != nil {
-		return nil, "", "", err
-	}
 
 	const (
 		socketFile = "" // no unix socket
@@ -254,7 +262,7 @@ func StartTenant(
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	if err := s.preStart(ctx,
@@ -265,7 +273,7 @@ func StartTenant(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
@@ -285,7 +293,7 @@ func StartTenant(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -293,47 +301,10 @@ func StartTenant(
 		s.connManager,
 		s.pgL,
 		socketFile); err != nil {
-		return nil, "", "", err
+		return nil, nil, "", "", err
 	}
 
-	return s, pgLAddr, httpLAddr, nil
-}
-
-// Construct a handler responsible for serving the instant values of selected
-// load metrics. These include user and system CPU time currently.
-func loadVarsHandler(
-	ctx context.Context, rsr *status.RuntimeStatSampler,
-) func(http.ResponseWriter, *http.Request) {
-	cpuUserNanos := metric.NewGauge(rsr.CPUUserNS.GetMetadata())
-	cpuSysNanos := metric.NewGauge(rsr.CPUSysNS.GetMetadata())
-	cpuNowNanos := metric.NewGauge(rsr.CPUNowNS.GetMetadata())
-	registry := metric.NewRegistry()
-	registry.AddMetric(cpuUserNanos)
-	registry.AddMetric(cpuSysNanos)
-	registry.AddMetric(cpuNowNanos)
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
-		if err != nil {
-			// Just log but don't return an error to match the _status/vars metrics handler.
-			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
-		}
-
-		// cpuTime.{User,Sys} are in milliseconds, convert to nanoseconds.
-		utime := userTimeMillis * 1e6
-		stime := sysTimeMillis * 1e6
-		cpuUserNanos.Update(utime)
-		cpuSysNanos.Update(stime)
-		cpuNowNanos.Update(timeutil.Now().UnixNano())
-
-		exporter := metric.MakePrometheusExporter()
-		exporter.ScrapeRegistry(registry, true)
-		if err := exporter.PrintAsText(w); err != nil {
-			log.Errorf(r.Context(), "%v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
+	return s, authServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
 }
 
 func makeTenantSQLServerArgs(

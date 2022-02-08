@@ -15,6 +15,7 @@ package serverutils
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -105,6 +106,19 @@ type TestTenantInterface interface {
 	// using the same context details as the server. This should not
 	// be used in non-test code.
 	AmbientCtx() log.AmbientContext
+
+	// AdminURL returns the URL for the admin UI.
+	AdminURL() string
+	// GetHTTPClient returns an http client configured with the client TLS
+	// config required by the TestServer's configuration.
+	GetHTTPClient() (http.Client, error)
+	// GetAdminAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	// The user has admin privileges.
+	GetAdminAuthenticatedHTTPClient() (http.Client, error)
+	// GetAuthenticatedHTTPClient returns an http client which has been
+	// authenticated to access Admin API methods (via a cookie).
+	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing

@@ -120,7 +120,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	initGEOS(ctx)
 
-	sqlServer, _, _, err := server.StartTenant(
+	sqlServer, err := server.StartTenant(
 		ctx,
 		stopper,
 		clusterName,
