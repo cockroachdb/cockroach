@@ -301,6 +301,30 @@ var (
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 	// TimeseriesKeyMax is the maximum value for any timeseries data.
 	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
+	//
+	// SystemSpanConfigPrefix is the key prefix for all system span config data.
+	//
+	// We sort this at the end of the system keyspace to easily be able to exclude
+	// it from the span configuration that applies over the system keyspace. This
+	// is important because spans carved out from this range are used to store
+	// system span configurations in the `system.span_configurations` table, and
+	// as such, have special meaning associated with them; nothing is stored in
+	// the range itself.
+	SystemSpanConfigPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("\xffsys-scfg")))
+	// SystemSpanConfigEntireKeyspace is the key prefix used to denote that the
+	// associated system span configuration applies over the entire keyspace
+	// (including all secondary tenants).
+	SystemSpanConfigEntireKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("host/all")))
+	// SystemSpanConfigHostOnTenantKeyspace is the key prefix used to denote that
+	// the associated system span configuration was applied by the host tenant
+	// over the keyspace of a secondary tenant.
+	SystemSpanConfigHostOnTenantKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("host/ten/")))
+	// SystemSpanConfigSecondaryTenantOnEntireKeyspace is the key prefix used to
+	// denote that the associated system span configuration was applied by a
+	// secondary tenant over its entire keyspace.
+	SystemSpanConfigSecondaryTenantOnEntireKeyspace = roachpb.Key(makeKey(SystemSpanConfigPrefix, roachpb.RKey("ten/")))
+	// SystemSpanConfigKeyMax is the maximum value for any system span config key.
+	SystemSpanConfigKeyMax = SystemSpanConfigPrefix.PrefixEnd()
 
 	// 3. System tenant SQL keys
 	//

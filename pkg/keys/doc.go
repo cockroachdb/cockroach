@@ -246,17 +246,18 @@ var _ = [...]interface{}{
 	// 	2. System keys: This is where we store global, system data which is
 	// 	replicated across the cluster.
 	SystemPrefix,
-	NodeLivenessPrefix,  // "\x00liveness-"
-	BootstrapVersionKey, // "bootstrap-version"
-	descIDGenerator,     // "desc-idgen"
-	NodeIDGenerator,     // "node-idgen"
-	RangeIDGenerator,    // "range-idgen"
-	StatusPrefix,        // "status-"
-	StatusNodePrefix,    // "status-node-"
-	StoreIDGenerator,    // "store-idgen"
-	MigrationPrefix,     // "system-version/"
-	MigrationLease,      // "system-version/lease"
-	TimeseriesPrefix,    // "tsd"
+	NodeLivenessPrefix,     // "\x00liveness-"
+	BootstrapVersionKey,    // "bootstrap-version"
+	descIDGenerator,        // "desc-idgen"
+	NodeIDGenerator,        // "node-idgen"
+	RangeIDGenerator,       // "range-idgen"
+	StatusPrefix,           // "status-"
+	StatusNodePrefix,       // "status-node-"
+	StoreIDGenerator,       // "store-idgen"
+	MigrationPrefix,        // "system-version/"
+	MigrationLease,         // "system-version/lease"
+	TimeseriesPrefix,       // "tsd"
+	SystemSpanConfigPrefix, // "xffsys-scfg"
 	SystemMax,
 
 	// 	3. System tenant SQL keys: This is where we store all system-tenant

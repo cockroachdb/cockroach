@@ -192,7 +192,7 @@ func TestDataDriven(t *testing.T) {
 					return nil
 				})
 				records, err := kvAccessor.GetSpanConfigRecords(
-					ctx, []spanconfig.Target{spanconfig.MakeSpanTarget(keys.EverythingSpan)},
+					ctx, []spanconfig.Target{spanconfig.MakeTargetFromSpan(keys.EverythingSpan)},
 				)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {

@@ -69,7 +69,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 
 	{ // Ensure that no span config entries are found.
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(keys.EverythingSpan),
+			spanconfig.MakeTargetFromSpan(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.Empty(t, records)
@@ -91,7 +91,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 
 	{ // Ensure that the host tenant's span configs are installed.
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(keys.EverythingSpan),
+			spanconfig.MakeTargetFromSpan(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, records)
@@ -154,7 +154,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 
 	{ // Ensure that no span config entries are to be found.
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(keys.EverythingSpan),
+			spanconfig.MakeTargetFromSpan(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.Empty(t, records)
@@ -176,7 +176,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 
 	{ // Ensure that the host tenant's span configs are installed.
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(keys.EverythingSpan),
+			spanconfig.MakeTargetFromSpan(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, records)
@@ -220,7 +220,7 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(keys.EverythingSpan),
+			spanconfig.MakeTargetFromSpan(keys.EverythingSpan),
 		})
 		require.NoError(t, err)
 		if len(records) == 0 {

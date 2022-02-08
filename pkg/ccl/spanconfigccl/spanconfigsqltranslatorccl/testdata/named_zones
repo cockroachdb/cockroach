@@ -47,4 +47,4 @@ translate named-zone=liveness
 translate named-zone=system
 ----
 /System/{NodeLivenessMax-tsd}              range system
-/System{tse-/Max}                          range system
+/System{tse-/SystemSpanConfigKeys}         range system

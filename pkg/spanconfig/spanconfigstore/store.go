@@ -129,7 +129,7 @@ func (s *Store) applyInternal(
 	spanStoreUpdates := make([]spanconfig.Update, 0, len(updates))
 	for _, update := range updates {
 		// TODO(arul): We'll hijack system span configurations here.
-		if update.Target.GetSpan() != nil {
+		if update.Target.IsSpanTarget() {
 			spanStoreUpdates = append(spanStoreUpdates, update)
 		}
 	}
@@ -139,12 +139,12 @@ func (s *Store) applyInternal(
 	}
 
 	for _, sp := range deletedSpans {
-		deleted = append(deleted, spanconfig.MakeSpanTarget(sp))
+		deleted = append(deleted, spanconfig.MakeTargetFromSpan(sp))
 	}
 
 	for _, entry := range addedEntries {
 		added = append(added, spanconfig.Record{
-			Target: spanconfig.MakeSpanTarget(entry.span),
+			Target: spanconfig.MakeTargetFromSpan(entry.span),
 			Config: entry.config,
 		})
 	}
@@ -159,7 +159,7 @@ func (s *Store) Iterate(f func(spanconfig.Record) error) error {
 		keys.EverythingSpan,
 		func(s spanConfigEntry) error {
 			return f(spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(s.span),
+				Target: spanconfig.MakeTargetFromSpan(s.span),
 				Config: s.config,
 			})
 		})
