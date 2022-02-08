@@ -469,6 +469,12 @@ func (d ReplicaSet) ReplicationStatus(
 	return res
 }
 
+// EmptyReplicationTarget returns true if `target` is an empty replication
+// target.
+func EmptyReplicationTarget(target ReplicationTarget) bool {
+	return target == ReplicationTarget{}
+}
+
 // ReplicationTargets returns a slice of ReplicationTargets corresponding to
 // each of the replicas in the set.
 func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
