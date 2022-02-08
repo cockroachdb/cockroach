@@ -209,6 +209,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		// Add spans for the system range without the timeseries and
 		// liveness ranges, which are individually captured above.
 		//
+		// We also don't apply configurations over the SystemSpanConfigSpan; spans
+		// carved from this range have no data, instead, associated configurations
+		// for these spans have special meaning in `system.span_configurations`.
+		//
 		// Note that the NodeLivenessSpan sorts before the rest of the system
 		// keyspace, so the first span here starts at the end of the
 		// NodeLivenessSpan.
@@ -218,7 +222,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		})
 		spans = append(spans, roachpb.Span{
 			Key:    keys.TimeseriesSpan.EndKey,
-			EndKey: keys.SystemMax,
+			EndKey: keys.SystemSpanConfigSpan.Key,
 		})
 	case zonepb.TenantsZoneName: // nothing to do.
 	default:
@@ -233,7 +237,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	var records []spanconfig.Record
 	for _, span := range spans {
 		records = append(records, spanconfig.Record{
-			Target: spanconfig.MakeSpanTarget(span),
+			Target: spanconfig.MakeTargetFromSpan(span),
 			Config: spanConfig,
 		})
 	}
@@ -290,7 +294,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// but looking at range boundaries, it's slightly less confusing
 			// this way.
 			records = append(records, spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(roachpb.Span{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    s.codec.TenantPrefix(),
 					EndKey: tableEndKey,
 				}),
@@ -307,7 +311,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// (tiny) re-splitting costs when switching between the two
 			// subsystems.
 			records = append(records, spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(roachpb.Span{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    keys.SystemConfigSpan.Key,
 					EndKey: tableEndKey,
 				}),
@@ -371,7 +375,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		if !prevEndKey.Equal(span.Key) {
 			records = append(records,
 				spanconfig.Record{
-					Target: spanconfig.MakeSpanTarget(roachpb.Span{Key: prevEndKey, EndKey: span.Key}),
+					Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: prevEndKey, EndKey: span.Key}),
 					Config: tableSpanConfig,
 				},
 			)
@@ -388,7 +392,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		}
 		records = append(records,
 			spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(roachpb.Span{Key: span.Key, EndKey: span.EndKey}),
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: span.Key, EndKey: span.EndKey}),
 				Config: subzoneSpanConfig,
 			},
 		)
@@ -401,7 +405,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	if !prevEndKey.Equal(tableEndKey) {
 		records = append(records,
 			spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(roachpb.Span{Key: prevEndKey, EndKey: tableEndKey}),
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: prevEndKey, EndKey: tableEndKey}),
 				Config: tableSpanConfig,
 			},
 		)
@@ -572,7 +576,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 			tableStartKey := s.codec.TablePrefix(pseudoTableID)
 			tableEndKey := tableStartKey.PrefixEnd()
 			records = append(records, spanconfig.Record{
-				Target: spanconfig.MakeSpanTarget(roachpb.Span{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    tableStartKey,
 					EndKey: tableEndKey,
 				}),
@@ -604,7 +608,7 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 		}
 
 		return spanconfig.Record{
-			Target: spanconfig.MakeSpanTarget(roachpb.Span{
+			Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 				Key:    keys.ScratchRangeMin,
 				EndKey: keys.ScratchRangeMax,
 			}),

@@ -244,7 +244,7 @@ type Record struct {
 
 // IsEmpty returns true if the receiver is an empty Record.
 func (r *Record) IsEmpty() bool {
-	return r.Target.IsEmpty() && r.Config.IsEmpty()
+	return r.Target.isEmpty() && r.Config.IsEmpty()
 }
 
 // SQLUpdate captures either a descriptor or a protected timestamp update.

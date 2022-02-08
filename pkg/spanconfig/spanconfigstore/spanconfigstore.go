@@ -44,7 +44,7 @@ func (s *spanConfigStore) copy(ctx context.Context) *spanConfigStore {
 	clone := newSpanConfigStore()
 	_ = s.forEachOverlapping(keys.EverythingSpan, func(entry spanConfigEntry) error {
 		_, _, err := clone.apply(false /* dryrun */, spanconfig.Update{
-			Target: spanconfig.MakeSpanTarget(entry.span),
+			Target: spanconfig.MakeTargetFromSpan(entry.span),
 			Config: entry.config,
 		})
 		if err != nil {
@@ -298,15 +298,15 @@ func (s *spanConfigStore) accumulateOpsFor(
 			}
 
 			var (
-				union = existing.span.Combine(*update.Target.GetSpan())
-				inter = existing.span.Intersect(*update.Target.GetSpan())
+				union = existing.span.Combine(update.Target.GetSpan())
+				inter = existing.span.Intersect(update.Target.GetSpan())
 
 				pre  = roachpb.Span{Key: union.Key, EndKey: inter.Key}
 				post = roachpb.Span{Key: inter.EndKey, EndKey: union.EndKey}
 			)
 
 			if update.Addition() {
-				if existing.span.Equal(*update.Target.GetSpan()) && existing.config.Equal(update.Config) {
+				if existing.span.Equal(update.Target.GetSpan()) && existing.config.Equal(update.Config) {
 					skipAddingSelf = true
 					break // no-op; peep-hole optimization
 				}
@@ -349,7 +349,7 @@ func (s *spanConfigStore) accumulateOpsFor(
 
 		if update.Addition() && !skipAddingSelf {
 			// Add the update itself.
-			toAdd = append(toAdd, s.makeEntry(*update.Target.GetSpan(), update.Config))
+			toAdd = append(toAdd, s.makeEntry(update.Target.GetSpan(), update.Config))
 
 			// TODO(irfansharif): If we're adding an entry, we could inspect the
 			// entries before and after and check whether either of them have
@@ -385,11 +385,11 @@ func (s *spanConfigStore) makeEntry(sp roachpb.Span, conf roachpb.SpanConfig) sp
 // spans, those spans be valid, and non-overlapping.
 func validateApplyArgs(updates ...spanconfig.Update) error {
 	for i := range updates {
-		sp := updates[i].Target.GetSpan()
-
-		if sp == nil {
+		if !updates[i].Target.IsSpanTarget() {
 			return errors.New("expected update to target a span")
 		}
+
+		sp := updates[i].Target.GetSpan()
 		if !sp.Valid() || len(sp.EndKey) == 0 {
 			return errors.New("invalid span")
 		}
@@ -406,11 +406,11 @@ func validateApplyArgs(updates ...spanconfig.Update) error {
 		if i == 0 {
 			continue
 		}
-		if updates[i].Target.GetSpan().Overlaps(*updates[i-1].Target.GetSpan()) {
+		if updates[i].Target.GetSpan().Overlaps(updates[i-1].Target.GetSpan()) {
 			return errors.Newf(
 				"found overlapping updates %s and %s",
-				*updates[i-1].Target.GetSpan(),
-				*updates[i].Target.GetSpan(),
+				updates[i-1].Target.GetSpan(),
+				updates[i].Target.GetSpan(),
 			)
 		}
 	}
