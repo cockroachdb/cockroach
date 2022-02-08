@@ -1004,3 +1004,210 @@ func TestExtractNotNullCols(t *testing.T) {
 		})
 	}
 }
+
+func TestCollectFirstColumnValues(t *testing.T) {
+	test := func(t *testing.T, evalCtx *tree.EvalContext, testConstraint *Constraint, expected string, hasNull bool) {
+		t.Helper()
+
+		var values tree.Datums
+		var hasNullValue, ok bool
+		values, hasNullValue, ok = testConstraint.CollectFirstColumnValues(evalCtx)
+		if !ok {
+			if expected != "()" {
+				format := "Failed to collect values from constraint: %s  Expected values: %v"
+				t.Errorf(format, testConstraint.String(), expected)
+			}
+		}
+		actual := values.String()
+
+		if hasNull != hasNullValue {
+			format := "Collect values hasNull mismatch for constraint: %s. expected: %t, actual: %t"
+			t.Errorf(format, testConstraint.String(), hasNull, hasNullValue)
+		}
+
+		if actual != expected {
+			format := "testConstraint: %s, expected: %v, actual: %v"
+			t.Errorf(format, testConstraint.String(), expected, actual)
+		}
+	}
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		spans          string
+		expectedValues string
+		hasNull        bool
+	}{
+		{ // 0
+			spans:          "/1: [/2 - ]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 1
+			spans:          "/1: [/2 - /2]",
+			expectedValues: "(2)",
+			hasNull:        false,
+		},
+		{ // 2
+			spans:          "/1: [/NULL - /4]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 3
+			spans:          "/1: [/1 - /4]",
+			expectedValues: "(1, 2, 3, 4)",
+			hasNull:        false,
+		},
+		{ // 4
+			spans:          "/1: [/1 - /4] [/5 - /5] [/7 - /8]",
+			expectedValues: "(1, 2, 3, 4, 5, 7, 8)",
+			hasNull:        false,
+		},
+		{ // 5
+			spans:          "/1: (/1 - /4]",
+			expectedValues: "()",
+			hasNull:        false,
+		},
+		{ // 6
+			spans:          "/1: [/NULL - /NULL]",
+			expectedValues: "(NULL)",
+			hasNull:        true,
+		},
+		{ // 7
+			spans:          "/1/2: [/NULL/1 - /NULL/3]",
+			expectedValues: "(NULL)",
+			hasNull:        true,
+		},
+		{ // 8
+			spans:          "/1/2: [/1/NULL - /2/NULL]",
+			expectedValues: "(1, 2)",
+			hasNull:        false,
+		},
+		{ // 9
+			spans:          "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/3/3/1 - /3/3/4/1]",
+			expectedValues: "(1, 3)",
+			hasNull:        false,
+		},
+		{ // 10
+			spans:          "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
+			expectedValues: "(1, 3)",
+			hasNull:        false,
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.spans)
+			test(t, &evalCtx, &c, tc.expectedValues, tc.hasNull)
+		})
+	}
+}
+
+func TestCollectFirstColumnBoundaryValues(t *testing.T) {
+	test := func(t *testing.T, evalCtx *tree.EvalContext, testConstraint *Constraint, expected string) {
+		t.Helper()
+
+		var values tree.Datums
+		var ok bool
+		values, ok = testConstraint.CollectFirstColumnBoundaryValues(evalCtx)
+		if !ok {
+			if expected != "()" {
+				format := "Failed to collect boundary values from constraint: %s  Expected values: %v"
+				t.Errorf(format, testConstraint.String(), expected)
+			}
+		}
+		actual := values.String()
+
+		if actual != expected {
+			format := "testConstraint: %s, expected: %v, actual: %v"
+			t.Errorf(format, testConstraint.String(), expected, actual)
+		}
+	}
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	testData := []struct {
+		spans          string
+		expectedValues string
+	}{
+		{ // 0
+			spans:          "/1: [/2 - ]",
+			expectedValues: "()",
+		},
+		{ // 1
+			spans:          "/1: [/2 - /2]",
+			expectedValues: "(2)",
+		},
+		{ // 2
+			spans:          "/1: [/NULL - /4]",
+			expectedValues: "()",
+		},
+		{ // 3
+			spans:          "/1: [/1 - /4]",
+			expectedValues: "(1, 4)",
+		},
+		{ // 4
+			spans:          "/1: [/1 - /4] [/5 - /5] [/7 - /8]",
+			expectedValues: "(1, 4, 5, 7, 8)",
+		},
+		{ // 5
+			spans:          "/1: (/1 - /4]",
+			expectedValues: "(2, 4)",
+		},
+		{ // 6
+			spans:          "/1: [/NULL - /NULL]",
+			expectedValues: "()",
+		},
+		{ // 7
+			spans:          "/1/2: [/NULL/1 - /NULL/3]",
+			expectedValues: "()",
+		},
+		{ // 8
+			spans:          "/1/2: [/1/NULL - /2/NULL]",
+			expectedValues: "(1, 2)",
+		},
+		{ // 9
+			spans:          "/1/2/3/4: [/1/1/1/1 - /1/1/2/1] [/3/3/3/1 - /3/3/4/1]",
+			expectedValues: "(1, 3)",
+		},
+		{ // 10
+			spans:          "/1/2/3: [/1/1/NULL - /1/1/2] [/3/3/3 - /3/3/4]",
+			expectedValues: "(1, 3)",
+		},
+		{ // 11
+			spans:          "/1: (/1 - /4)",
+			expectedValues: "(2, 3)",
+		},
+		{ // 12
+			spans:          "/1: (/1 - /3)",
+			expectedValues: "(2)",
+		},
+		{ // 13
+			spans:          "/1: (/1 - /2)",
+			expectedValues: "()",
+		},
+		{ // 14
+			spans:          "/1: (/1/2 - /2)",
+			expectedValues: "(1)",
+		},
+		{ // 15
+			spans:          "/1: (/1 - /2/1)",
+			expectedValues: "(2)",
+		},
+		{ // 16
+			spans:          "/1: (/1/2 - /2/1)",
+			expectedValues: "(1, 2)",
+		},
+		{ // 17
+			spans:          "/1: [/1 - /4] (/9 - /100]",
+			expectedValues: "(1, 4, 10, 100)",
+		},
+	}
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := ParseConstraint(&evalCtx, tc.spans)
+			test(t, &evalCtx, &c, tc.expectedValues)
+		})
+	}
+}
