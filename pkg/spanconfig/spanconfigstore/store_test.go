@@ -134,7 +134,7 @@ func TestDataDriven(t *testing.T) {
 					func(entry spanConfigEntry) error {
 						results = append(results,
 							spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
-								Target: spanconfig.MakeSpanTarget(entry.span),
+								Target: spanconfig.MakeTargetFromSpan(entry.span),
 								Config: entry.config,
 							}),
 						)
@@ -161,15 +161,15 @@ func TestStoreClone(t *testing.T) {
 
 	updates := []spanconfig.Update{
 		spanconfig.Addition(
-			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[a, b)")),
+			spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, "[a, b)")),
 			spanconfigtestutils.ParseConfig(t, "A"),
 		),
 		spanconfig.Addition(
-			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[c, d)")),
+			spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, "[c, d)")),
 			spanconfigtestutils.ParseConfig(t, "C"),
 		),
 		spanconfig.Addition(
-			spanconfig.MakeSpanTarget(spanconfigtestutils.ParseSpan(t, "[e, f)")),
+			spanconfig.MakeTargetFromSpan(spanconfigtestutils.ParseSpan(t, "[e, f)")),
 			spanconfigtestutils.ParseConfig(t, "E"),
 		),
 	}
