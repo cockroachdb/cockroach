@@ -259,6 +259,9 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
 	DeleteDatabaseRoleSettings(ctx context.Context, database catalog.DatabaseDescriptor) error
+
+	// SwapDescriptorSubComment moves a comment from one sub ID to another.
+	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

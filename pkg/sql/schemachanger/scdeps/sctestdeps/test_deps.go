@@ -866,11 +866,24 @@ func (s *TestState) DeleteConstraintComment(
 	return nil
 }
 
-// DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater
+// DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) DeleteDatabaseRoleSettings(
 	_ context.Context, database catalog.DatabaseDescriptor,
 ) error {
 	s.LogSideEffectf("delete role settings for database on #%d", database.GetID())
+	return nil
+}
+
+// SwapDescriptorSubComment implements scexec.DescriptorMetaDataUpdater.
+func (s *TestState) SwapDescriptorSubComment(
+	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
+) error {
+	s.LogSideEffectf("swapping sub comments on descriptor %d from "+
+		"%d to %d of type %s",
+		id,
+		oldSubID,
+		newSubID,
+		commentType)
 	return nil
 }
 

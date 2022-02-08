@@ -1400,3 +1400,32 @@ CREATE TABLE public.t_test_param (
    UNIQUE INDEX t_test_param_a_key (a ASC),
    FAMILY fam_0_a_b (a, b)
 )
+
+subtest pkey-comment-drop
+
+# Create a table with a primary key and add a comment on it.
+statement ok
+CREATE TABLE pkey_comment (a INT8, b INT8, c INT8, CONSTRAINT pkey PRIMARY KEY (a, b));
+COMMENT ON INDEX pkey IS 'idx';
+COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
+CREATE UNIQUE INDEX i2 ON pkey_comment(c);
+COMMENT ON INDEX i2 IS 'idx2';
+
+# Comment should exist inside the create statement, so filter it out
+query T
+SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+
+
+# Altering the primary key should clean up the comment.
+statement ok
+ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
+
+
+# No comment exists inside the CREATE statement
+query T
+SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'

@@ -127,3 +127,21 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(
 			return descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, txn)
 		})
 }
+
+// SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) SwapDescriptorSubComment(
+	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
+) error {
+	_, err := mu.ie.ExecEx(context.Background(),
+		fmt.Sprintf("upsert-%s-comment", commentType),
+		mu.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"UPDATE system.comments  SET sub_id= $1 WHERE "+
+			"object_id = $2 AND sub_id = $3 AND type = $4",
+		newSubID,
+		id,
+		oldSubID,
+		commentType,
+	)
+	return err
+}
