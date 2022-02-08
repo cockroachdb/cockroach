@@ -12,12 +12,12 @@ package kvserver
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"strings"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
