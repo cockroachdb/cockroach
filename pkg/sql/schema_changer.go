@@ -1196,18 +1196,30 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 				if m.Adding() {
 					scTable.RowLevelTTL = modify.RowLevelTTL()
-					j, err := createRowLevelTTLScheduledJob(
+					_, err := jobs.LoadScheduledJob(
 						ctx,
-						sc.execCfg,
+						JobSchedulerEnv(sc.execCfg),
+						scTable.RowLevelTTL.ScheduleID,
+						sc.execCfg.InternalExecutor,
 						txn,
-						getOwnerOfDesc(scTable),
-						scTable.GetID(),
-						modify.RowLevelTTL(),
 					)
 					if err != nil {
-						return err
+						if !jobs.HasScheduledJobNotFoundError(err) {
+							return errors.Wrapf(err, "unknown error fetching existing job for row level TTL in schema changer")
+						}
+						j, err := createRowLevelTTLScheduledJob(
+							ctx,
+							sc.execCfg,
+							txn,
+							getOwnerOfDesc(scTable),
+							scTable.GetID(),
+							modify.RowLevelTTL(),
+						)
+						if err != nil {
+							return err
+						}
+						scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 					}
-					scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
 				} else if m.Dropped() {
 					if ttl := scTable.RowLevelTTL; ttl != nil {
 						if err := deleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {

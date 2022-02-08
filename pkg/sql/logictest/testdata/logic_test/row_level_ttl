@@ -56,10 +56,44 @@ CREATE TABLE public.tbl (
                                                                                            FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10 days':::INTERVAL)
 
+# Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
+statement ok
+ALTER TABLE tbl RESET (ttl)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+   id INT8 NOT NULL,
+   text STRING NULL,
+   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+   FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
+)
+
+query I
+SELECT COUNT(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+# Ensure schedules are removed on DROP TABLE.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+query I
+SELECT COUNT(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
 statement ok
 DROP TABLE tbl
 
-# Ensure schedules are removed on DROP TABLE.
 query I
 SELECT COUNT(1) FROM [SHOW SCHEDULES]
 WHERE label LIKE 'row-level-ttl-%'
@@ -168,7 +202,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [119 as T] WITH (expire_after = ...)
+ALTER TABLE [120 as T] WITH (expire_after = ...)
 
 statement ok
 DROP TABLE tbl
