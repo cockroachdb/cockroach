@@ -626,6 +626,14 @@ message PrimaryKeySwap {
   optional LocalityConfigSwap locality_config_swap = 6;
 }
 
+// ModifyRowLevelTTL is a mutation corresponding to adding or dropping a TTL
+// from a table. This accompanies an ADD or DROP column.
+message ModifyRowLevelTTL {
+  option (gogoproto.equal) = true;
+
+  optional TableDescriptor.RowLevelTTL row_level_ttl = 1 [(gogoproto.customname) = "RowLevelTTL"];
+}
+
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
 // where Column a' that is computed using Column a is swapped to replace
 // Column a while Column a becomes computed using a'.
@@ -675,6 +683,7 @@ message DescriptorMutation {
     PrimaryKeySwap primaryKeySwap = 9;
     ComputedColumnSwap computedColumnSwap = 10;
     MaterializedViewRefresh materializedViewRefresh = 11;
+    ModifyRowLevelTTL modify_row_level_ttl = 12 [(gogoproto.customname)="ModifyRowLevelTTL"];
   }
   // A descriptor within a mutation is unavailable for reads, writes
   // and deletes. It is only available for implicit (internal to
