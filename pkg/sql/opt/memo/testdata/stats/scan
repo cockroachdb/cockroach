@@ -2277,3 +2277,353 @@ scan t76485@t76485_a_b_c_idx
  │   histogram(1)=  0 9.3109
  │                <---- 20 -
  └── fd: ()-->(1,2)
+
+exec-ddl
+CREATE TABLE a_check (
+  x INT8 PRIMARY KEY,
+  y INT8,
+  s STRING NOT NULL CHECK (s IN ('a', 'b', 'c', 'd')),
+  d DECIMAL NOT NULL,
+  b BOOL,
+  UNIQUE (s DESC, d)
+)
+----
+
+exec-ddl
+ALTER TABLE a_check INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 5
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 1
+  }
+]'
+----
+
+build
+SELECT * FROM a_check WHERE s >= 'a'
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=2000]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=2000, distinct(3)=4, null(3)=0, avgsize(3)=4]
+      │   histogram(3)=  0  500  0  500  0  500  0  500
+      │                <--- 'a' --- 'b' --- 'c' --- 'd'
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      ├── scan a_check
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    └── s:3 IN ('a', 'b', 'c', 'd') [type=bool, outer=(3), constraints=(/3: [/'a' - /'a'] [/'b' - /'b'] [/'c' - /'c'] [/'d' - /'d']; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(3)=4, null(3)=0, avgsize(3)=4, distinct(4)=2000, null(4)=0, avgsize(4)=5]
+      │    │   histogram(3)=  0  500  0  500  0  500  0  500
+      │    │                <--- 'a' --- 'b' --- 'c' --- 'd'
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      └── filters
+           └── s:3 >= 'a' [type=bool, outer=(3), constraints=(/3: [/'a' - ]; tight)]
+
+build
+SELECT * FROM a_check WHERE s > 'a'
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=1500]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=1500, distinct(3)=3, null(3)=0, avgsize(3)=4]
+      │   histogram(3)=  0  500  0  500  0  500
+      │                <--- 'b' --- 'c' --- 'd'
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      ├── scan a_check
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    └── s:3 IN ('a', 'b', 'c', 'd') [type=bool, outer=(3), constraints=(/3: [/'a' - /'a'] [/'b' - /'b'] [/'c' - /'c'] [/'d' - /'d']; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(3)=4, null(3)=0, avgsize(3)=4, distinct(4)=2000, null(4)=0, avgsize(4)=5]
+      │    │   histogram(3)=  0  500  0  500  0  500  0  500
+      │    │                <--- 'a' --- 'b' --- 'c' --- 'd'
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      └── filters
+           └── s:3 > 'a' [type=bool, outer=(3), constraints=(/3: [/e'a\x00' - ]; tight)]
+
+build
+SELECT * FROM a_check WHERE s < 'a'
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=2e-07]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=2e-07, distinct(3)=2e-07, null(3)=0, avgsize(3)=4]
+      │   histogram(3)=
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      ├── scan a_check
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    └── s:3 IN ('a', 'b', 'c', 'd') [type=bool, outer=(3), constraints=(/3: [/'a' - /'a'] [/'b' - /'b'] [/'c' - /'c'] [/'d' - /'d']; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(3)=4, null(3)=0, avgsize(3)=4, distinct(4)=2000, null(4)=0, avgsize(4)=5]
+      │    │   histogram(3)=  0  500  0  500  0  500  0  500
+      │    │                <--- 'a' --- 'b' --- 'c' --- 'd'
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      └── filters
+           └── s:3 < 'a' [type=bool, outer=(3), constraints=(/3: (/NULL - /'a'); tight)]
+
+exec-ddl
+ALTER TABLE a_check INJECT STATISTICS '[
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "avg_size": 2
+  }
+]'
+----
+
+# After injecting stats on the check constraint column, the manufactured
+# histogram seen in the output of the above test should be gone.
+build
+SELECT * FROM a_check WHERE s < 'a'
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=666.6667]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=666.6667, distinct(3)=3.33333, null(3)=0, avgsize(3)=2]
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      ├── scan a_check
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    └── s:3 IN ('a', 'b', 'c', 'd') [type=bool, outer=(3), constraints=(/3: [/'a' - /'a'] [/'b' - /'b'] [/'c' - /'c'] [/'d' - /'d']; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=4, distinct(3)=10, null(3)=0, avgsize(3)=2, distinct(4)=200, null(4)=0, avgsize(4)=4]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      └── filters
+           └── s:3 < 'a' [type=bool, outer=(3), constraints=(/3: (/NULL - /'a'); tight)]
+
+exec-ddl
+CREATE TABLE a_check2 (
+  x INT8 PRIMARY KEY,
+  y INT8,
+  s STRING NOT NULL CHECK (s = 'a' OR s = 'b' OR s = 'c' OR s = 'd'),
+  d DECIMAL NOT NULL,
+  b BOOL,
+  UNIQUE (s DESC, d)
+)
+----
+
+exec-ddl
+ALTER TABLE a_check2 INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 3
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 5
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 1
+  }
+]'
+----
+
+# We should be able to generate stats from ORed check constraints, the same as
+# from an IN expression.
+build
+SELECT * FROM a_check2 WHERE s > 'a'
+----
+project
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=1500]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)-->(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=1500, distinct(3)=3, null(3)=0, avgsize(3)=4]
+      │   histogram(3)=  0  500  0  500  0  500
+      │                <--- 'b' --- 'c' --- 'd'
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      ├── scan a_check2
+      │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    └── (((s:3 = 'a') OR (s:3 = 'b')) OR (s:3 = 'c')) OR (s:3 = 'd') [type=bool, outer=(3), constraints=(/3: [/'a' - /'a'] [/'b' - /'b'] [/'c' - /'c'] [/'d' - /'d']; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(3)=4, null(3)=0, avgsize(3)=4, distinct(4)=2000, null(4)=0, avgsize(4)=5]
+      │    │   histogram(3)=  0  500  0  500  0  500  0  500
+      │    │                <--- 'a' --- 'b' --- 'c' --- 'd'
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (3,4)-->(1,2,5-7)
+      └── filters
+           └── s:3 > 'a' [type=bool, outer=(3), constraints=(/3: [/e'a\x00' - ]; tight)]
+
+exec-ddl
+CREATE TABLE a_check_int_IN_LIST (
+  x INT8 PRIMARY KEY NOT NULL CHECK (x in (1,2,3,4,5,6,7,8,9,10)),
+  y INT8 NOT NULL CHECK (y in (1,2,3,4)),
+  s STRING NOT NULL,
+  d DECIMAL NOT NULL,
+  b BOOL,
+  UNIQUE (y DESC, d)
+)
+----
+
+exec-ddl
+ALTER TABLE a_check_int_IN_LIST INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 2
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 5
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "avg_size": 1
+  }
+]'
+----
+
+build
+SELECT * FROM a_check_int_IN_LIST WHERE y >= 3
+----
+project
+ ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2,4)-->(1,3,5)
+ └── select
+      ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      ├── stats: [rows=1000, distinct(2)=2, null(2)=0, avgsize(2)=1]
+      │   histogram(2)=  0 500 0 500
+      │                <--- 3 --- 4
+      ├── key: (1)
+      ├── fd: (1)-->(2-7), (2,4)-->(1,3,5-7)
+      ├── scan a_check_int_in_list
+      │    ├── columns: x:1(int!null) y:2(int!null) s:3(string!null) d:4(decimal!null) b:5(bool) crdb_internal_mvcc_timestamp:6(decimal) tableoid:7(oid)
+      │    ├── check constraint expressions
+      │    │    ├── x:1 IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7] [/8 - /8] [/9 - /9] [/10 - /10]; tight)]
+      │    │    └── y:2 IN (1, 2, 3, 4) [type=bool, outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, avgsize(1)=2, distinct(2)=4, null(2)=0, avgsize(2)=1, distinct(3)=200, null(3)=0, avgsize(3)=4, distinct(4)=2000, null(4)=0, avgsize(4)=5]
+      │    │   histogram(2)=  0 500 0 500 0 500 0 500
+      │    │                <--- 1 --- 2 --- 3 --- 4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-7), (2,4)-->(1,3,5-7)
+      └── filters
+           └── y:2 >= 3 [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+
+exec-ddl
+CREATE TABLE a_check_hash (
+  i INT,
+  crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL CHECK (crdb_internal_a_shard_8 IN (0,1,2,3,4,5,6,7))
+                               AS (mod(fnv32(crdb_internal.datums_to_bytes(i)), 8:::INT8)) VIRTUAL,
+  j int,
+  PRIMARY KEY(crdb_internal_a_shard_8, i))
+----
+
+exec-ddl
+ALTER TABLE a_check_hash INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1000,
+    "distinct_count": 100,
+    "avg_size": 2
+  }
+]'
+----
+
+build
+SELECT * FROM a_check_hash WHERE crdb_internal_a_shard_8 > 6
+----
+project
+ ├── columns: i:1(int!null) crdb_internal_a_shard_8:2(int4!null) j:3(int)
+ ├── stats: [rows=125]
+ ├── key: (1)
+ ├── fd: (1,2)-->(3), (1)-->(2)
+ └── select
+      ├── columns: i:1(int!null) crdb_internal_a_shard_8:2(int4!null) j:3(int) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      ├── stats: [rows=125, distinct(2)=1, null(2)=0, avgsize(2)=1]
+      │   histogram(2)=  0 125
+      │                <--- 7
+      ├── key: (1)
+      ├── fd: (1,2)-->(3-5), (1)-->(2)
+      ├── scan a_check_hash
+      │    ├── columns: i:1(int!null) crdb_internal_a_shard_8:2(int4!null) j:3(int) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
+      │    ├── check constraint expressions
+      │    │    └── crdb_internal_a_shard_8:2 IN (0, 1, 2, 3, 4, 5, 6, 7) [type=bool, outer=(2), constraints=(/2: [/0 - /0] [/1 - /1] [/2 - /2] [/3 - /3] [/4 - /4] [/5 - /5] [/6 - /6] [/7 - /7]; tight)]
+      │    ├── computed column expressions
+      │    │    └── crdb_internal_a_shard_8:2
+      │    │         └── mod(fnv32(crdb_internal.datums_to_bytes(i:1)), 8) [type=int]
+      │    ├── stats: [rows=1000, distinct(1)=100, null(1)=0, avgsize(1)=2, distinct(2)=8, null(2)=0, avgsize(2)=1]
+      │    │   histogram(2)=  0 125 0 125 0 125 0 125 0 125 0 125 0 125 0 125
+      │    │                <--- 0 --- 1 --- 2 --- 3 --- 4 --- 5 --- 6 --- 7
+      │    ├── key: (1)
+      │    └── fd: (1,2)-->(3-5), (1)-->(2)
+      └── filters
+           └── crdb_internal_a_shard_8:2 > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]

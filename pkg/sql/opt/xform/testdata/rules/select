@@ -1449,8 +1449,6 @@ select
  └── filters
       └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
 
-# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
-#  would be used here. But it isn't the plan being picked. Curious.
 opt
 SELECT * FROM xyz WHERE x > 5
 ----

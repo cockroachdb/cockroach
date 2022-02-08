@@ -228,6 +228,9 @@ message LocalOnlySessionData {
   // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
   // newly created transactions.
   int32 default_txn_quality_of_service = 62 [(gogoproto.casttype)="QoSLevel"];
+  // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
+  // Scan may be split into during query optimization to avoid a sort.
+  int32 opt_split_scan_limit = 63;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

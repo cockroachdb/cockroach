@@ -556,44 +556,52 @@ func (sc *TableStatisticsCache) parseStats(
 				return nil, err
 			}
 		}
-
-		var offset int
-		if res.NullCount > 0 {
-			// A bucket for NULL is not persisted, but we create a fake one to
-			// make histograms easier to work with. The length of res.Histogram
-			// is therefore 1 greater than the length of the histogram data
-			// buckets.
-			res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets)+1)
-			res.Histogram[0] = cat.HistogramBucket{
-				NumEq:         float64(res.NullCount),
-				NumRange:      0,
-				DistinctRange: 0,
-				UpperBound:    tree.DNull,
-			}
-			offset = 1
-		} else {
-			res.Histogram = make([]cat.HistogramBucket, len(res.HistogramData.Buckets))
-			offset = 0
-		}
-
-		// Decode the histogram data so that it's usable by the opt catalog.
-		var a tree.DatumAlloc
-		for i := offset; i < len(res.Histogram); i++ {
-			bucket := &res.HistogramData.Buckets[i-offset]
-			datum, _, err := keyside.Decode(&a, res.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
-			if err != nil {
-				return nil, err
-			}
-			res.Histogram[i] = cat.HistogramBucket{
-				NumEq:         float64(bucket.NumEq),
-				NumRange:      float64(bucket.NumRange),
-				DistinctRange: bucket.DistinctRange,
-				UpperBound:    datum,
-			}
+		if err := DecodeHistogramBuckets(res); err != nil {
+			return nil, err
 		}
 	}
 
 	return res, nil
+}
+
+// DecodeHistogramBuckets decodes encoded HistogramData in tabStat and writes
+// the resulting buckets into tabStat.Histogram.
+func DecodeHistogramBuckets(tabStat *TableStatistic) error {
+	var offset int
+	if tabStat.NullCount > 0 {
+		// A bucket for NULL is not persisted, but we create a fake one to
+		// make histograms easier to work with. The length of res.Histogram
+		// is therefore 1 greater than the length of the histogram data
+		// buckets.
+		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets)+1)
+		tabStat.Histogram[0] = cat.HistogramBucket{
+			NumEq:         float64(tabStat.NullCount),
+			NumRange:      0,
+			DistinctRange: 0,
+			UpperBound:    tree.DNull,
+		}
+		offset = 1
+	} else {
+		tabStat.Histogram = make([]cat.HistogramBucket, len(tabStat.HistogramData.Buckets))
+		offset = 0
+	}
+
+	// Decode the histogram data so that it's usable by the opt catalog.
+	var a tree.DatumAlloc
+	for i := offset; i < len(tabStat.Histogram); i++ {
+		bucket := &tabStat.HistogramData.Buckets[i-offset]
+		datum, _, err := keyside.Decode(&a, tabStat.HistogramData.ColumnType, bucket.UpperBound, encoding.Ascending)
+		if err != nil {
+			return err
+		}
+		tabStat.Histogram[i] = cat.HistogramBucket{
+			NumEq:         float64(bucket.NumEq),
+			NumRange:      float64(bucket.NumRange),
+			DistinctRange: bucket.DistinctRange,
+			UpperBound:    datum,
+		}
+	}
+	return nil
 }
 
 // getTableStatsFromDB retrieves the statistics in system.table_statistics

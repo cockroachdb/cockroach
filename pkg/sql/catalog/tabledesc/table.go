@@ -51,6 +51,10 @@ type ColumnDefDescs struct {
 	DefaultExpr, OnUpdateExpr tree.TypedExpr
 }
 
+// MaxBucketAllowed is the maximum number of buckets allowed when creating a
+// hash-sharded index or primary key.
+const MaxBucketAllowed = 2048
+
 // ForEachTypedExpr iterates over each typed expression in this struct.
 func (cdd *ColumnDefDescs) ForEachTypedExpr(fn func(tree.TypedExpr) error) error {
 	if cdd.ColumnTableDef.HasDefaultExpr() {
@@ -238,7 +242,6 @@ func EvalShardBucketCount(
 	}
 
 	var buckets int64
-	const maxBucketAllowed = 2048
 	const invalidBucketCountMsg = `hash sharded index bucket count must be in range [2, 2048], got %v`
 	// If shardBuckets is not specified, use default bucket count from cluster setting.
 	if legacyBucketNotGiven && paramVal == nil {
@@ -262,7 +265,7 @@ func EvalShardBucketCount(
 	if buckets < 2 {
 		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
-	if buckets > maxBucketAllowed {
+	if buckets > MaxBucketAllowed {
 		return 0, pgerror.Newf(pgcode.InvalidParameterValue, invalidBucketCountMsg, buckets)
 	}
 	return int32(buckets), nil

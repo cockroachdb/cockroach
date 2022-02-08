@@ -23,6 +23,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// DefaultHistogramBuckets is the maximum number of histogram buckets to build
+// when creating statistics.
+const DefaultHistogramBuckets = 200
+
 // HistogramClusterMode controls the cluster setting for enabling
 // histogram collection.
 var HistogramClusterMode = settings.RegisterBoolSetting(
@@ -68,29 +72,34 @@ Please add new entries at the top.
 // estimates the number of distinct values in each bucket. It distributes the
 // known number of distinct values (distinctCount) among the buckets, in
 // proportion with the number of rows in each bucket.
+//
+// In addition to returning the encoded histogram (HistogramData), it also
+// returns the unencoded histogram buckets ([]cat.HistogramBucket) when
+// HistogramData.HistogramData_Bucket is non-nil, otherwise a nil
+// []cat.HistogramBucket.
 func EquiDepthHistogram(
 	evalCtx *tree.EvalContext,
 	colType *types.T,
 	samples tree.Datums,
 	numRows, distinctCount int64,
 	maxBuckets int,
-) (HistogramData, error) {
+) (HistogramData, []cat.HistogramBucket, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
-		return HistogramData{ColumnType: colType}, nil
+		return HistogramData{ColumnType: colType}, nil, nil
 	}
 	if maxBuckets < 2 {
-		return HistogramData{}, errors.Errorf("histogram requires at least two buckets")
+		return HistogramData{}, nil, errors.Errorf("histogram requires at least two buckets")
 	}
 	if numRows < int64(numSamples) {
-		return HistogramData{}, errors.Errorf("more samples than rows")
+		return HistogramData{}, nil, errors.Errorf("more samples than rows")
 	}
 	if distinctCount == 0 {
-		return HistogramData{}, errors.Errorf("histogram requires distinctCount > 0")
+		return HistogramData{}, nil, errors.Errorf("histogram requires distinctCount > 0")
 	}
 	for _, d := range samples {
 		if d == tree.DNull {
-			return HistogramData{}, errors.Errorf("NULL values not allowed in histogram")
+			return HistogramData{}, nil, errors.Errorf("NULL values not allowed in histogram")
 		}
 	}
 
@@ -119,7 +128,7 @@ func EquiDepthHistogram(
 			if c := samples[i+numLess].Compare(evalCtx, upper); c == 0 {
 				break
 			} else if c > 0 {
-				return HistogramData{}, errors.AssertionFailedf("%+v", "samples not sorted")
+				return HistogramData{}, nil, errors.AssertionFailedf("%+v", "samples not sorted")
 			}
 		}
 		// Advance the boundary of the bucket to cover all samples equal to upper.
@@ -149,7 +158,8 @@ func EquiDepthHistogram(
 	}
 
 	h.adjustCounts(evalCtx, float64(numRows), float64(distinctCount))
-	return h.toHistogramData(colType)
+	histogramData, err := h.toHistogramData(colType)
+	return histogramData, h.buckets, err
 }
 
 type histogram struct {

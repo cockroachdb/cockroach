@@ -96,6 +96,35 @@
 =>
 (Limit $unionScans $limitExpr $ordering)
 
+# SplitLimitedSelectIntoUnionSelects splits a Select from a non-inverted scan
+# under a limit into a union-all of limited Selects over disjoint intervals.
+[SplitLimitedSelectIntoUnionSelects, Explore]
+(Limit
+    (Select
+        $scan:(Scan $scanPrivate:*) &
+            ^(ScanIsLimited $scanPrivate) &
+            ^(ScanIsInverted $scanPrivate)
+        $filters:*
+    )
+    $limitExpr:(Const $limit:*) & (IsPositiveInt $limit)
+    $ordering:* &
+        (Let
+            (
+                $unionScans
+                $ok
+            ):(SplitLimitedSelectIntoUnionScansOrSelects
+                $ordering
+                $scan
+                $scanPrivate
+                $limit
+                $filters
+            )
+            $ok
+        )
+)
+=>
+(Limit $unionScans $limitExpr $ordering)
+
 # GenerateTopK generates an operator that returns the top K rows, where K is a
 # positive constant integer, according to the ordering. It does not require its
 # input to be ordered. This rule matches on a Limit expression that has an input

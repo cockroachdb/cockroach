@@ -587,7 +587,8 @@ func (s *sampleAggregator) generateHistogram(
 			prevCapacity, sr.Cap(),
 		)
 	}
-	return stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
+	h, _, err := stats.EquiDepthHistogram(evalCtx, colType, values, numRows, distinctCount, maxBuckets)
+	return h, err
 }
 
 var _ execinfra.DoesNotUseTxn = &sampleAggregator{}

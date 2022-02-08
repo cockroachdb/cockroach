@@ -788,3 +788,30 @@ SET parallelize_multi_key_lookup_joins_enabled = true
 
 statement ok
 SET parallelize_multi_key_lookup_joins_enabled = false
+
+query T
+SHOW opt_split_scan_limit
+----
+2048
+
+statement error pq: cannot set opt_split_scan_limit to a negative value: -1
+SET opt_split_scan_limit = -1
+
+statement error pq: cannot set opt_split_scan_limit to a value greater than 2147483647
+SET opt_split_scan_limit = 2147483648
+
+statement ok
+SET opt_split_scan_limit = 100000
+
+query T
+SHOW opt_split_scan_limit
+----
+100000
+
+statement ok
+RESET opt_split_scan_limit
+
+query T
+SHOW opt_split_scan_limit
+----
+2048

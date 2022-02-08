@@ -61,7 +61,6 @@ var featureStatsEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 ).WithPublic()
 
-const defaultHistogramBuckets = 200
 const nonIndexColHistogramBuckets = 2
 
 // StubTableStats generates "stub" statistics for a table which are missing
@@ -268,7 +267,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			// By default, create histograms on all explicitly requested column stats
 			// with a single column that doesn't use an inverted index.
 			HasHistogram:        len(columnIDs) == 1 && !isInvIndex,
-			HistogramMaxBuckets: defaultHistogramBuckets,
+			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 		}}
 		// Make histograms for inverted index column types.
 		if len(columnIDs) == 1 && isInvIndex {
@@ -276,7 +275,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 				ColumnIDs:           columnIDs,
 				HasHistogram:        true,
 				Inverted:            true,
-				HistogramMaxBuckets: defaultHistogramBuckets,
+				HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 			})
 		}
 	}
@@ -388,7 +387,7 @@ func createStatsDefaultColumns(
 		colStat := jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colList,
 			HasHistogram:        !isInverted,
-			HistogramMaxBuckets: defaultHistogramBuckets,
+			HistogramMaxBuckets: stats.DefaultHistogramBuckets,
 		}
 		colStats = append(colStats, colStat)
 
@@ -520,10 +519,10 @@ func createStatsDefaultColumns(
 		// Non-index columns have very small histograms since it's not worth the
 		// overhead of storing large histograms for these columns. Since bool and
 		// enum types only have a few values anyway, include all possible values
-		// for those types, up to defaultHistogramBuckets.
+		// for those types, up to DefaultHistogramBuckets.
 		maxHistBuckets := uint32(nonIndexColHistogramBuckets)
 		if col.GetType().Family() == types.BoolFamily || col.GetType().Family() == types.EnumFamily {
-			maxHistBuckets = defaultHistogramBuckets
+			maxHistBuckets = stats.DefaultHistogramBuckets
 		}
 		colStats = append(colStats, jobspb.CreateStatsDetails_ColStat{
 			ColumnIDs:           colList,

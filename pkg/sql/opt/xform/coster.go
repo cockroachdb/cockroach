@@ -1159,6 +1159,14 @@ func (c *coster) computeZigzagJoinCost(join *memo.ZigzagJoinExpr) memo.Cost {
 	return cost
 }
 
+// isStreamingSetOperator returns true if relation is a streaming set operator.
+func isStreamingSetOperator(relation memo.RelExpr) bool {
+	if opt.IsSetOp(relation) {
+		return !relation.Private().(*memo.SetPrivate).Ordering.Any()
+	}
+	return false
+}
+
 func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	outputRowCount := set.Relational().Stats.RowCount
@@ -1170,9 +1178,10 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	//
 	// The exception is if this is a streaming set operation, in which case there
 	// is no need to build a hash table. We can detect that this is a streaming
-	// operation by checking whether the ordering is defined in the set private.
+	// operation by checking whether the ordering is defined in the set private
+	// (see isStreamingSetOperator).
 	if set.Op() != opt.UnionAllOp && set.Op() != opt.LocalityOptimizedSearchOp &&
-		set.Private().(*memo.SetPrivate).Ordering.Any() {
+		!isStreamingSetOperator(set) {
 		leftRowCount := set.Child(0).(memo.RelExpr).Relational().Stats.RowCount
 		rightRowCount := set.Child(1).(memo.RelExpr).Relational().Stats.RowCount
 		cost += memo.Cost(leftRowCount+rightRowCount) * cpuCostFactor
@@ -1199,7 +1208,6 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 			panic(errors.AssertionFailedf("unhandled operator %s", set.Op()))
 		}
 	}
-
 	return cost
 }
 

@@ -3647,6 +3647,17 @@ exec-ddl
 CREATE TABLE abcd_check (a INT, b INT NOT NULL, c INT, d INT, CHECK (b IN (10, 20)), INDEX (a, b, c))
 ----
 
+exec-ddl
+ALTER TABLE abcd_check INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-05-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
 opt expect=GenerateLookupJoins
 SELECT * FROM small INNER JOIN abcd_check ON a=m
 ----

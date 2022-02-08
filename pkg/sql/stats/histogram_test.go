@@ -238,7 +238,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 				samples[i] = tree.NewDInt(tree.DInt(val))
 			}
 
-			h, err := EquiDepthHistogram(
+			h, _, err := EquiDepthHistogram(
 				evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets,
 			)
 			if err != nil {
@@ -273,7 +273,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 
 	t.Run("invalid-numRows", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(3)}
-		_, err := EquiDepthHistogram(
+		_, _, err := EquiDepthHistogram(
 			evalCtx, types.Int, samples, 2 /* numRows */, 2 /* distinctCount */, 10, /* maxBuckets */
 		)
 		if err == nil {
@@ -283,7 +283,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 
 	t.Run("nulls", func(t *testing.T) {
 		samples := tree.Datums{tree.NewDInt(1), tree.NewDInt(2), tree.DNull}
-		_, err := EquiDepthHistogram(
+		_, _, err := EquiDepthHistogram(
 			evalCtx, types.Int, samples, 100 /* numRows */, 3 /* distinctCount */, 10, /* maxBuckets */
 		)
 		if err == nil {
