@@ -826,13 +826,31 @@ func validatePositive(v int64) error {
 	return nil
 }
 
+// minSnapshotRate defines the minimum value that the rate limit for rebalance
+// and recovery snapshots can be configured to. Any value below this lower bound
+// is considered unsafe for use, as it can lead to excessively long-running
+// snapshots. The sender of Raft snapshots holds resources (e.g. LSM snapshots,
+// LSM iterators until #75824 is addressed) and blocks Raft log truncation, so
+// it is not safe to let a single snapshot run for an unlimited period of time.
+//
+// The value was chosen based on a maximum range size of 512mb and a desire to
+// prevent a single snapshot for running for more than 10 minutes. With a rate
+// limit of 1mb/s, a 512mb snapshot will take just under 9 minutes to send.
+const minSnapshotRate = 1 << 20 // 1mb/s
+
 // rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
 // This includes snapshots generated for upreplication or for rebalancing.
 var rebalanceSnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_rebalance.max_rate",
 	"the rate limit (bytes/sec) to use for rebalance and upreplication snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_PREEMPTIVE_SNAPSHOT_RATE", 8<<20),
-	validatePositive,
+	func(v int64) error {
+		if v < minSnapshotRate {
+			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
+				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
+		}
+		return nil
+	},
 ).WithPublic().WithSystemOnly()
 
 // recoverySnapshotRate is the rate at which Raft-initiated spanshots can be
@@ -845,7 +863,13 @@ var recoverySnapshotRate = settings.RegisterByteSizeSetting(
 	"kv.snapshot_recovery.max_rate",
 	"the rate limit (bytes/sec) to use for recovery snapshots",
 	envutil.EnvOrDefaultBytes("COCKROACH_RAFT_SNAPSHOT_RATE", 8<<20),
-	validatePositive,
+	func(v int64) error {
+		if v < minSnapshotRate {
+			return errors.Errorf("snapshot rate cannot be set to a value below %s: %s",
+				humanizeutil.IBytes(minSnapshotRate), humanizeutil.IBytes(v))
+		}
+		return nil
+	},
 ).WithPublic().WithSystemOnly()
 
 // snapshotSenderBatchSize is the size that key-value batches are allowed to
