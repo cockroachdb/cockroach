@@ -114,12 +114,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     name: val
     tableId: 107
-- [[ConstraintComment:{DescID: 107, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 107, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: t1_pkey
-    constraintType: PrimaryKey
+    constraintId: 1
     tableId: 107
 - [[DatabaseSchemaEntry:{DescID: 100, ReferencedDescID: 104}, ABSENT], PUBLIC]
   details:
