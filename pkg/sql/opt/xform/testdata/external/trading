@@ -613,52 +613,52 @@ project
  │    │    │    ├── limit hint: 1.00
  │    │    │    ├── union-all
  │    │    │    │    ├── columns: dealerid:82!null version:90!null
- │    │    │    │    ├── left columns: dealerid:60 version:68
- │    │    │    │    ├── right columns: dealerid:71 version:79
- │    │    │    │    ├── cardinality: [0 - 3]
- │    │    │    │    ├── stats: [rows=3]
+ │    │    │    │    ├── left columns: dealerid:38 version:46
+ │    │    │    │    ├── right columns: dealerid:49 version:57
+ │    │    │    │    ├── cardinality: [0 - 2]
+ │    │    │    │    ├── stats: [rows=2]
  │    │    │    │    ├── ordering: -90
  │    │    │    │    ├── limit hint: 1.00
- │    │    │    │    ├── union-all
- │    │    │    │    │    ├── columns: dealerid:60!null version:68!null
- │    │    │    │    │    ├── left columns: dealerid:38 version:46
- │    │    │    │    │    ├── right columns: dealerid:49 version:57
- │    │    │    │    │    ├── cardinality: [0 - 2]
- │    │    │    │    │    ├── stats: [rows=2]
- │    │    │    │    │    ├── ordering: -68
- │    │    │    │    │    ├── limit hint: 1.00
- │    │    │    │    │    ├── scan cardsinfo@cardsinfoversionindex,rev
- │    │    │    │    │    │    ├── columns: dealerid:38!null version:46!null
- │    │    │    │    │    │    ├── constraint: /38/46: [/1 - /1]
- │    │    │    │    │    │    ├── limit: 1(rev)
- │    │    │    │    │    │    ├── stats: [rows=1, distinct(38)=1, null(38)=0, avgsize(38)=4]
- │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    ├── fd: ()-->(38,46)
- │    │    │    │    │    │    └── limit hint: 1.00
- │    │    │    │    │    └── scan cardsinfo@cardsinfoversionindex,rev
- │    │    │    │    │         ├── columns: dealerid:49!null version:57!null
- │    │    │    │    │         ├── constraint: /49/57: [/2 - /2]
- │    │    │    │    │         ├── limit: 1(rev)
- │    │    │    │    │         ├── stats: [rows=1, distinct(49)=1, null(49)=0, avgsize(49)=4]
- │    │    │    │    │         ├── key: ()
- │    │    │    │    │         ├── fd: ()-->(49,57)
- │    │    │    │    │         └── limit hint: 1.00
+ │    │    │    │    ├── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │    │    │    ├── columns: dealerid:38!null version:46!null
+ │    │    │    │    │    ├── constraint: /38/46: [/1 - /1]
+ │    │    │    │    │    ├── limit: 1(rev)
+ │    │    │    │    │    ├── stats: [rows=1, distinct(38)=1, null(38)=0, avgsize(38)=4]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(38,46)
+ │    │    │    │    │    └── limit hint: 1.00
  │    │    │    │    └── scan cardsinfo@cardsinfoversionindex,rev
- │    │    │    │         ├── columns: dealerid:71!null version:79!null
- │    │    │    │         ├── constraint: /71/79: [/3 - /3]
+ │    │    │    │         ├── columns: dealerid:49!null version:57!null
+ │    │    │    │         ├── constraint: /49/57: [/2 - /2]
  │    │    │    │         ├── limit: 1(rev)
- │    │    │    │         ├── stats: [rows=1, distinct(71)=1, null(71)=0, avgsize(71)=4]
+ │    │    │    │         ├── stats: [rows=1, distinct(49)=1, null(49)=0, avgsize(49)=4]
  │    │    │    │         ├── key: ()
- │    │    │    │         ├── fd: ()-->(71,79)
+ │    │    │    │         ├── fd: ()-->(49,57)
  │    │    │    │         └── limit hint: 1.00
- │    │    │    └── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │    └── union-all
  │    │    │         ├── columns: dealerid:93!null version:101!null
- │    │    │         ├── constraint: /93/101: [/4 - /4]
- │    │    │         ├── limit: 1(rev)
- │    │    │         ├── stats: [rows=1, distinct(93)=1, null(93)=0, avgsize(93)=4]
- │    │    │         ├── key: ()
- │    │    │         ├── fd: ()-->(93,101)
- │    │    │         └── limit hint: 1.00
+ │    │    │         ├── left columns: dealerid:60 version:68
+ │    │    │         ├── right columns: dealerid:71 version:79
+ │    │    │         ├── cardinality: [0 - 2]
+ │    │    │         ├── stats: [rows=2]
+ │    │    │         ├── ordering: -101
+ │    │    │         ├── limit hint: 1.00
+ │    │    │         ├── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │         │    ├── columns: dealerid:60!null version:68!null
+ │    │    │         │    ├── constraint: /60/68: [/3 - /3]
+ │    │    │         │    ├── limit: 1(rev)
+ │    │    │         │    ├── stats: [rows=1, distinct(60)=1, null(60)=0, avgsize(60)=4]
+ │    │    │         │    ├── key: ()
+ │    │    │         │    ├── fd: ()-->(60,68)
+ │    │    │         │    └── limit hint: 1.00
+ │    │    │         └── scan cardsinfo@cardsinfoversionindex,rev
+ │    │    │              ├── columns: dealerid:71!null version:79!null
+ │    │    │              ├── constraint: /71/79: [/4 - /4]
+ │    │    │              ├── limit: 1(rev)
+ │    │    │              ├── stats: [rows=1, distinct(71)=1, null(71)=0, avgsize(71)=4]
+ │    │    │              ├── key: ()
+ │    │    │              ├── fd: ()-->(71,79)
+ │    │    │              └── limit hint: 1.00
  │    │    └── 1
  │    └── aggregations
  │         └── const-agg [as=max:36, outer=(17)]

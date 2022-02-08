@@ -176,6 +176,13 @@ type TableMeta struct {
 	// leaseholder preferred region which is different from the gateway region.
 	indexPartitionLocalities map[cat.IndexOrdinal]*partition.PrefixSorter
 
+	// checkConstraintsStats is a map from the current ColumnID statistics based
+	// on CHECK constraint values is based on back to the original ColumnStatistic
+	// entry that was built for a copy of this table. This is used to look up and
+	// reuse histogram data when a Scan is duplicated so this expensive processing
+	// is done at most once per table reference in a query.
+	checkConstraintsStats map[ColumnID]interface{}
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
@@ -212,6 +219,13 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr, len(from.partialIndexPredicates))
 		for idx, e := range from.partialIndexPredicates {
 			tm.partialIndexPredicates[idx] = copyScalarFn(e).(ScalarExpr)
+		}
+	}
+
+	if from.checkConstraintsStats != nil {
+		tm.checkConstraintsStats = make(map[ColumnID]interface{}, len(from.checkConstraintsStats))
+		for i := range from.checkConstraintsStats {
+			tm.checkConstraintsStats[i] = from.checkConstraintsStats[i]
 		}
 	}
 
@@ -310,6 +324,31 @@ func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarE
 		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
 	}
 	tm.partialIndexPredicates[ord] = pred
+}
+
+// AddCheckConstraintsStats adds a column, ColumnStatistic pair to the
+// checkConstraintsStats map. When the table is duplicated, the mapping from the
+// new check constraint ColumnIDs back to the original ColumnStatistic is
+// recorded so it can be reused.
+func (tm *TableMeta) AddCheckConstraintsStats(colID ColumnID, colStats interface{}) {
+	if tm.checkConstraintsStats == nil {
+		tm.checkConstraintsStats = make(map[ColumnID]interface{})
+	}
+	tm.checkConstraintsStats[colID] = colStats
+}
+
+// OrigCheckConstraintsStats looks up if statistics were ever created
+// based on a CHECK constraint on colID, and if so, returns the original
+// ColumnStatistic.
+func (tm *TableMeta) OrigCheckConstraintsStats(
+	colID ColumnID,
+) (origColumnStatistic interface{}, ok bool) {
+	if tm.checkConstraintsStats != nil {
+		if origColumnStatistic, ok = tm.checkConstraintsStats[colID]; ok {
+			return origColumnStatistic, true
+		}
+	}
+	return nil, false
 }
 
 // AddIndexPartitionLocality adds a PrefixSorter to the table's metadata for the

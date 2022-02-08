@@ -772,30 +772,20 @@ distribute
  ├── cardinality: [0 - 100001]
  ├── key: (3)
  ├── distribution: east
- ├── input distribution: east,west
+ ├── input distribution: central,east,west
  └── project
       ├── columns: a:3!null
       ├── cardinality: [0 - 100001]
       ├── key: (3)
-      └── select
+      └── scan abc_part@b_idx
            ├── columns: a:3!null b:4!null
+           ├── constraint: /1/4
+           │    ├── [/'central'/0 - /'central'/100000]
+           │    ├── [/'east'/0 - /'east'/100000]
+           │    └── [/'west'/0 - /'west'/100000]
            ├── cardinality: [0 - 100001]
            ├── key: (3)
-           ├── fd: (3)-->(4), (4)-->(3)
-           ├── index-join abc_part
-           │    ├── columns: a:3!null b:4
-           │    ├── key: (3)
-           │    ├── fd: (3)-->(4), (4)~~>(3)
-           │    └── scan abc_part@c_idx
-           │         ├── columns: a:3!null
-           │         ├── constraint: /1/2/5
-           │         │    ├── [/'central'/1 - /'central'/3]
-           │         │    ├── [/'east'/1 - /'east'/2]
-           │         │    ├── [/'east'/3 - /'east'/3]
-           │         │    └── [/'west'/1 - /'west'/3]
-           │         └── key: (3)
-           └── filters
-                └── (b:4 >= 0) AND (b:4 < 100001) [outer=(4), constraints=(/4: [/0 - /100000]; tight)]
+           └── fd: (3)-->(4), (4)-->(3)
 
 # The spans target all remote partitions.
 opt locality=(region=east) expect-not=GenerateLocalityOptimizedScan
@@ -1007,44 +997,34 @@ scan abc_part [as=a]
 opt locality=(region=east) expect=GenerateLocalityOptimizedScan
 SELECT * FROM abc_part a WHERE EXISTS (SELECT 1 FROM abc_part)
 ----
-distribute
+select
  ├── columns: r:1!null t:2!null a:3!null b:4 c:5 d:6
  ├── key: (3)
  ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
  ├── distribution: east
- ├── input distribution: east,west
- └── index-join abc_part
-      ├── columns: a.r:1!null a.t:2!null a.a:3!null a.b:4 a.c:5 a.d:6
-      ├── key: (3)
-      ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
-      └── select
-           ├── columns: a.r:1!null a.t:2!null a.a:3!null a.c:5
-           ├── key: (3)
-           ├── fd: (3)-->(1,2,5), (5)~~>(1-3)
-           ├── scan abc_part@c_idx [as=a]
-           │    ├── columns: a.r:1!null a.t:2!null a.a:3!null a.c:5
-           │    ├── constraint: /1/2/5
-           │    │    ├── [/'central'/1 - /'central'/3]
-           │    │    ├── [/'east'/1 - /'east'/2]
-           │    │    ├── [/'east'/3 - /'east'/3]
-           │    │    └── [/'west'/1 - /'west'/3]
-           │    ├── key: (3)
-           │    └── fd: (3)-->(1,2,5), (5)~~>(1-3)
-           └── filters
-                └── exists [subquery]
-                     └── locality-optimized-search
-                          ├── cardinality: [0 - 1]
-                          ├── key: ()
-                          ├── scan abc_part@b_idx
-                          │    ├── constraint: /18/21: [/'east' - /'east']
-                          │    ├── limit: 1
-                          │    └── key: ()
-                          └── scan abc_part@b_idx
-                               ├── constraint: /26/29
-                               │    ├── [/'central' - /'central']
-                               │    └── [/'west' - /'west']
-                               ├── limit: 1
-                               └── key: ()
+ ├── scan abc_part [as=a]
+ │    ├── columns: a.r:1!null a.t:2!null a.a:3!null a.b:4 a.c:5 a.d:6
+ │    ├── check constraint expressions
+ │    │    ├── a.r:1 IN ('central', 'east', 'west') [outer=(1), constraints=(/1: [/'central' - /'central'] [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    │    └── a.t:2 IN (1, 2, 3) [outer=(2), constraints=(/2: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(1,2,4-6), (4)~~>(1-3,5,6), (5)~~>(1-4,6)
+ │    └── distribution: east
+ └── filters
+      └── exists [subquery]
+           └── locality-optimized-search
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── scan abc_part@b_idx
+                │    ├── constraint: /18/21: [/'east' - /'east']
+                │    ├── limit: 1
+                │    └── key: ()
+                └── scan abc_part@b_idx
+                     ├── constraint: /26/29
+                     │    ├── [/'central' - /'central']
+                     │    └── [/'west' - /'west']
+                     ├── limit: 1
+                     └── key: ()
 
 # Partitioning without CHECK constraints
 exec-ddl

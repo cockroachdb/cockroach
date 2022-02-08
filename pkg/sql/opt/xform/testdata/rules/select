@@ -1435,38 +1435,20 @@ CREATE TABLE xyz (
 opt
 SELECT x, y  FROM xyz WHERE x > 5
 ----
-select
+scan xyz
  ├── columns: x:1!null y:2!null
+ ├── constraint: /1: [/6 - /9]
  ├── key: (1)
- ├── fd: (1)-->(2)
- ├── scan xyz@tertiary
- │    ├── columns: x:1!null y:2!null
- │    ├── constraint: /3/2/1
- │    │    ├── [/'first'/2/6 - /'first'/9/9]
- │    │    └── [/'second'/2/6 - /'second'/9/9]
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
- └── filters
-      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ └── fd: (1)-->(2)
 
-# TODO(ridwanmsharif): Confirm if this makes sense. I would've expected that the primary index
-#  would be used here. But it isn't the plan being picked. Curious.
 opt
 SELECT * FROM xyz WHERE x > 5
 ----
-select
+scan xyz
  ├── columns: x:1!null y:2!null z:3!null
+ ├── constraint: /1: [/6 - /9]
  ├── key: (1)
- ├── fd: (1)-->(2,3)
- ├── scan xyz@tertiary
- │    ├── columns: x:1!null y:2!null z:3!null
- │    ├── constraint: /3/2/1
- │    │    ├── [/'first'/2/6 - /'first'/9/9]
- │    │    └── [/'second'/2/6 - /'second'/9/9]
- │    ├── key: (1)
- │    └── fd: (1)-->(2,3)
- └── filters
-      └── x:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ └── fd: (1)-->(2,3)
 
 # Check constraint used only for the non nullable column. Constraints on x are ignored.
 exec-ddl

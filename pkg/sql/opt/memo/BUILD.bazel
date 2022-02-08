@@ -25,6 +25,7 @@ go_library(
     deps = [
         "//pkg/geo/geoindex",
         "//pkg/sql/catalog/colinfo",
+        "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/inverted",
         "//pkg/sql/opt",
         "//pkg/sql/opt/cat",
@@ -37,6 +38,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treewindow",
+        "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
