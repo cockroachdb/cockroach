@@ -48,15 +48,23 @@ new_state
 reset
 ----
 
-reset
-----
-
-# We cannot serialized prepared statements
+# Test serializing prepared statements.
 exec
 PREPARE stmt AS SELECT 1
 ----
 
-exec
-SELECT crdb_internal.serialize_session()
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
 ----
-pq: crdb_internal.serialize_session(): cannot serialize a session which has portals or prepared statements
+
+reset
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+query
+EXECUTE stmt
+----
+1

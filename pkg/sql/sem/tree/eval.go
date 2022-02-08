@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -3391,7 +3392,8 @@ type EvalSessionAccessor interface {
 // PreparedStatementState is a limited interface that exposes metadata about
 // prepared statements.
 type PreparedStatementState interface {
-	HasPrepared() bool
+	HasActivePortals() bool
+	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
 }
 
 // ClientNoticeSender is a limited interface to send notices to the

@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_cockroach_go_v2//crdb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
     ],
 )
