@@ -988,37 +988,33 @@ func (n *Node) batchInternal(
 	}
 
 	var br *roachpb.BatchResponse
-	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
-		var reqSp spanForRequest
-		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
-		// NB: wrapped to delay br evaluation to its value when returning.
-		defer func() { reqSp.finish(ctx, br) }()
-		if log.HasSpanOrEvent(ctx) {
-			log.Eventf(ctx, "node received request: %s", args.Summary())
-		}
+	var reqSp spanForRequest
+	// Shadow ctx from the outer function. Written like this to pass the linter.
+	ctx, reqSp = n.setupSpanForIncomingRPC(ctx, tenID, args)
+	// NB: wrapped to delay br evaluation to its value when returning.
+	defer func() { reqSp.finish(ctx, br) }()
+	if log.HasSpanOrEvent(ctx) {
+		log.Eventf(ctx, "node received request: %s", args.Summary())
+	}
 
-		tStart := timeutil.Now()
-		handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
-		defer n.admissionController.AdmittedKVWorkDone(handle)
-		if err != nil {
-			return err
-		}
-		var pErr *roachpb.Error
-		br, pErr = n.stores.Send(ctx, *args)
-		if pErr != nil {
-			br = &roachpb.BatchResponse{}
-			log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
-		}
-		if br.Error != nil {
-			panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
-		}
-		n.metrics.callComplete(timeutil.Since(tStart), pErr)
-		br.Error = pErr
-		return nil
-	}); err != nil {
+	tStart := timeutil.Now()
+	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
+	defer n.admissionController.AdmittedKVWorkDone(handle)
+	if err != nil {
 		return nil, err
 	}
+	var pErr *roachpb.Error
+	br, pErr = n.stores.Send(ctx, *args)
+	if pErr != nil {
+		br = &roachpb.BatchResponse{}
+		log.VErrEventf(ctx, 3, "error from stores.Send: %s", pErr)
+	}
+	if br.Error != nil {
+		panic(roachpb.ErrorUnexpectedlySet(n.stores, br))
+	}
+	n.metrics.callComplete(timeutil.Since(tStart), pErr)
+	br.Error = pErr
+
 	return br, nil
 }
 

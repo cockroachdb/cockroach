@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/util/grpcutil",
         "//pkg/util/tracing",
         "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//codes",
