@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -576,23 +577,23 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 		// It's not expected to have a span in the context since the gRPC server
 		// interceptor that generally opens spans exempts this particular RPC. Note
 		// that this method is not called for flows local to the gateway.
-		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+		return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 			tracing.WithParent(parentSpan),
 			tracing.WithServerSpanKind)
 	}
 
 	if !req.TraceInfo.Empty() {
-		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+		return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 			tracing.WithRemoteParentFromTraceInfo(&req.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
 	// For backwards compatibility with 21.2, if tracing info was passed as
 	// gRPC metadata, we use it.
-	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 	if err != nil {
 		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
-	return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+	return tr.StartSpanCtx(ctx, grpcinterceptor.SetupFlowMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind)
 }

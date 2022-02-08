@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1151,30 +1152,30 @@ func setupSpanForIncomingRPC(
 	needRecordingCollection := !localRequest
 	if localRequest {
 		// This is a local request which circumvented gRPC. Start a span now.
-		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, tracing.BatchMethodName, tracing.WithServerSpanKind)
+		ctx, newSpan = tracing.EnsureChildSpan(ctx, tr, grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else if parentSpan == nil {
 		// Non-local call. Tracing information comes from the request proto.
 		var remoteParent tracing.SpanMeta
 		if !ba.TraceInfo.Empty() {
-			ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 				tracing.WithRemoteParentFromTraceInfo(&ba.TraceInfo),
 				tracing.WithServerSpanKind)
 		} else {
 			// For backwards compatibility with 21.2, if tracing info was passed as
 			// gRPC metadata, we use it.
 			var err error
-			remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+			remoteParent, err = grpcinterceptor.ExtractSpanMetaFromGRPCCtx(ctx, tr)
 			if err != nil {
 				log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 			}
-			ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+			ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 				tracing.WithRemoteParentFromSpanMeta(remoteParent),
 				tracing.WithServerSpanKind)
 		}
 	} else {
 		// It's unexpected to find a span in the context for a non-local request.
 		// Let's create a span for the RPC anyway.
-		ctx, newSpan = tr.StartSpanCtx(ctx, tracing.BatchMethodName,
+		ctx, newSpan = tr.StartSpanCtx(ctx, grpcinterceptor.BatchMethodName,
 			tracing.WithParent(parentSpan),
 			tracing.WithServerSpanKind)
 	}

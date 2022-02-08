@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc"
@@ -434,12 +435,12 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 func (t *RaftTransport) DelegateRaftSnapshot(stream MultiRaft_DelegateRaftSnapshotServer) error {
 	errCh := make(chan error, 1)
 	taskCtx, cancel := t.stopper.WithCancelOnQuiesce(stream.Context())
-	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
+	remoteParent, err := grpcinterceptor.ExtractSpanMetaFromGRPCCtx(taskCtx, t.Tracer)
 	if err != nil {
 		log.Warningf(taskCtx, "error extracting tracing info from gRPC: %s", err)
 	}
 	taskCtx, span := t.Tracer.StartSpanCtx(
-		taskCtx, tracing.BatchMethodName,
+		taskCtx, grpcinterceptor.BatchMethodName,
 		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind,
 	)

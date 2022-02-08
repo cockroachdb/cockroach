@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -265,8 +266,8 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 	}
 
 	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
-		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
-		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
+		unaryInterceptor = append(unaryInterceptor, grpcinterceptor.ServerInterceptor(tracer))
+		streamInterceptor = append(streamInterceptor, grpcinterceptor.StreamServerInterceptor(tracer))
 	}
 
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
@@ -654,7 +655,7 @@ func makeInternalClientAdapter(
 		batchHandler: chainUnaryInterceptors(
 			&grpc.UnaryServerInfo{
 				Server:     server,
-				FullMethod: tracing.BatchMethodName,
+				FullMethod: grpcinterceptor.BatchMethodName,
 			},
 			unaryServerInterceptors,
 			func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -990,9 +991,9 @@ func (rpcCtx *Context) grpcDialOptions(
 		}
 
 		unaryInterceptors = append(unaryInterceptors,
-			tracing.ClientInterceptor(tracer, tagger, compatMode))
+			grpcinterceptor.ClientInterceptor(tracer, tagger, compatMode))
 		streamInterceptors = append(streamInterceptors,
-			tracing.StreamClientInterceptor(tracer, tagger))
+			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
 	}
 	if rpcCtx.Knobs.UnaryClientInterceptor != nil {
 		testingUnaryInterceptor := rpcCtx.Knobs.UnaryClientInterceptor(target, class)

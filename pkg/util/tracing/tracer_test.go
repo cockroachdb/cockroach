@@ -252,7 +252,7 @@ func TestSterileSpan(t *testing.T) {
 	`))
 
 	// Check that the meta of a sterile span doesn't get injected into carriers.
-	carrier := metadataCarrier{metadata.MD{}}
+	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(sp1.Meta(), carrier)
 	require.Len(t, carrier.MD, 0)
 }
@@ -267,7 +267,7 @@ func TestTracerInjectExtractNoop(t *testing.T) {
 	if !noop1.IsNoop() {
 		t.Fatalf("expected noop Span: %+v", noop1)
 	}
-	carrier := metadataCarrier{metadata.MD{}}
+	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(noop1.Meta(), carrier)
 	if len(carrier.MD) != 0 {
 		t.Errorf("noop Span has carrier: %+v", carrier)
@@ -297,7 +297,7 @@ func TestTracerInjectExtract(t *testing.T) {
 
 	s1 := tr.StartSpan("a", WithRecording(tracingpb.RecordingVerbose))
 
-	carrier := metadataCarrier{metadata.MD{}}
+	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(s1.Meta(), carrier)
 
 	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)
@@ -350,15 +350,15 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	tr1 := NewTracerWithOpt(context.Background(), WithTracingMode(TracingModeActiveSpansRegistry))
 	sp1 := tr1.StartSpan("tr1.root")
 	defer sp1.Finish()
-	carrier := metadataCarrier{MD: metadata.MD{}}
-	require.True(t, spanInclusionFuncForClient(sp1))
+	carrier := MetadataCarrier{MD: metadata.MD{}}
+	require.True(t, SpanInclusionFuncForClient(sp1))
 	tr1.InjectMetaInto(sp1.Meta(), carrier)
 	require.Equal(t, 3, carrier.Len(), "%+v", carrier) // trace id, span id, recording mode
 
 	tr2 := NewTracer()
 	meta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
-	require.True(t, spanInclusionFuncForServer(tr2, meta))
+	require.True(t, SpanInclusionFuncForServer(tr2, meta))
 	sp2 := tr2.StartSpan("tr2.child", WithRemoteParentFromSpanMeta(meta))
 	defer sp2.Finish()
 	require.NotZero(t, sp2.i.crdb.spanID)
@@ -382,7 +382,7 @@ func TestOtelTracer(t *testing.T) {
 	// Put something in the span.
 	s.Record("hello")
 
-	carrier := metadataCarrier{metadata.MD{}}
+	carrier := MetadataCarrier{metadata.MD{}}
 	tr.InjectMetaInto(s.Meta(), carrier)
 
 	// ExtractMetaFrom also extracts the embedded OpenTelemetry context.

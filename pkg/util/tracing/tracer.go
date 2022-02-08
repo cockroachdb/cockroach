@@ -45,6 +45,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
+	"google.golang.org/grpc/metadata"
 )
 
 const (
@@ -1369,7 +1370,7 @@ func (t *Tracer) ExtractMetaFrom(carrier Carrier) (SpanMeta, error) {
 		if err := c.ForEach(iterFn); err != nil {
 			return noopSpanMeta, err
 		}
-	case metadataCarrier:
+	case MetadataCarrier:
 		if err := c.ForEach(iterFn); err != nil {
 			return noopSpanMeta, err
 		}
@@ -1658,4 +1659,57 @@ func makeOtelSpan(
 
 	_ /* ctx */, sp := otelTr.Start(ctx, opName, opts...)
 	return sp
+}
+
+// MetadataCarrier is an implementation of the Carrier interface for gRPC
+// metadata.
+type MetadataCarrier struct {
+	metadata.MD
+}
+
+// Set implements the Carrier interface.
+func (w MetadataCarrier) Set(key, val string) {
+	// The GRPC HPACK implementation rejects any uppercase keys here.
+	//
+	// As such, since the HTTP_HEADERS format is case-insensitive anyway, we
+	// blindly lowercase the key.
+	key = strings.ToLower(key)
+	w.MD[key] = append(w.MD[key], val)
+}
+
+// ForEach implements the Carrier interface.
+func (w MetadataCarrier) ForEach(fn func(key, val string) error) error {
+	for k, vals := range w.MD {
+		for _, v := range vals {
+			if err := fn(k, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// SpanInclusionFuncForClient is used as a SpanInclusionFunc for the client-side
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
+// create a span.
+//
+// We use this to circumvent the interceptor's work when tracing is
+// disabled. Otherwise, the interceptor causes an increase in the
+// number of packets (even with an empty context!).
+//
+// See #17177.
+func SpanInclusionFuncForClient(parent *Span) bool {
+	return parent != nil && !parent.IsNoop()
+}
+
+// SpanInclusionFuncForServer is used as a SpanInclusionFunc for the server-side
+// of RPCs, deciding for which operations the gRPC tracing interceptor should
+// create a span.
+func SpanInclusionFuncForServer(t *Tracer, spanMeta SpanMeta) bool {
+	// If there is an incoming trace on the RPC (spanMeta) or the tracer is
+	// configured to always trace, return true. The second part is particularly
+	// useful for calls coming through the HTTP->RPC gateway (i.e. the AdminUI),
+	// where client is never tracing.
+	return !spanMeta.Empty() || t.AlwaysTrace()
 }
