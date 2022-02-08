@@ -1186,6 +1186,38 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 
+			// If we are modifying TTL, then make sure the schedules are created
+			// or dropped as appropriate.
+			if modify := m.AsModifyRowLevelTTL(); modify != nil {
+				if fn := sc.testingKnobs.RunBeforeModifyRowLevelTTL; fn != nil {
+					if err := fn(); err != nil {
+						return err
+					}
+				}
+				if m.Adding() {
+					scTable.RowLevelTTL = modify.RowLevelTTL()
+					j, err := createRowLevelTTLScheduledJob(
+						ctx,
+						sc.execCfg,
+						txn,
+						getOwnerOfDesc(scTable),
+						scTable.GetID(),
+						modify.RowLevelTTL(),
+					)
+					if err != nil {
+						return err
+					}
+					scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
+				} else if m.Dropped() {
+					if ttl := scTable.RowLevelTTL; ttl != nil {
+						if err := deleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
+							return err
+						}
+					}
+					scTable.RowLevelTTL = nil
+				}
+			}
+
 			if err := scTable.MakeMutationComplete(scTable.Mutations[m.MutationOrdinal()]); err != nil {
 				return err
 			}
@@ -1898,6 +1930,9 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeComputedColumnSwap is called just before the computed column swap is committed.
 	RunBeforeComputedColumnSwap func()
+
+	// RunBeforeModifyRowLevelTTL is called just before the modify row level TTL is committed.
+	RunBeforeModifyRowLevelTTL func() error
 
 	// RunBeforeIndexValidation is called just before starting the index validation,
 	// after setting the job status to validating.
