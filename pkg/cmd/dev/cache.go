@@ -256,7 +256,7 @@ func (d *dev) cleanCache(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(dir)
+	return os.RemoveAll(filepath.Join(dir, "cache"))
 }
 
 func (d *dev) getCacheBazelrcLine(ctx context.Context) (string, error) {
