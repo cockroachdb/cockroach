@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 )
 
@@ -118,7 +119,7 @@ func buildStatementBundle(
 	ie *InternalExecutor,
 	plan *planTop,
 	planString string,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) diagnosticsBundle {
 	if plan == nil {
@@ -176,7 +177,7 @@ type stmtBundleBuilder struct {
 	ie *InternalExecutor
 
 	plan         *planTop
-	trace        tracing.Recording
+	trace        tracingpb.Recording
 	placeholders *tree.PlaceholderInfo
 
 	z memzipper.Zipper
@@ -186,7 +187,7 @@ func makeStmtBundleBuilder(
 	db *kv.DB,
 	ie *InternalExecutor,
 	plan *planTop,
-	trace tracing.Recording,
+	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
 ) stmtBundleBuilder {
 	b := stmtBundleBuilder{db: db, ie: ie, plan: plan, trace: trace, placeholders: placeholders}

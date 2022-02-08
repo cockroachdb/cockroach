@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -47,7 +48,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 
 	// Annotate a context that has an open span.
 
-	sp1 := tracer.StartSpan("root", tracing.WithRecording(tracing.RecordingVerbose))
+	sp1 := tracer.StartSpan("root", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ctx1 := tracing.ContextWithSpan(context.Background(), sp1)
 	Event(ctx1, "a")
 
@@ -57,7 +58,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	Event(ctx1, "c")
 	sp2.Finish()
 
-	if err := tracing.CheckRecordedSpans(sp1.FinishAndGetRecording(tracing.RecordingVerbose), `
+	if err := tracing.CheckRecordedSpans(sp1.FinishAndGetRecording(tracingpb.RecordingVerbose), `
 		span: root
 			tags: _verbose=1
 			event: a

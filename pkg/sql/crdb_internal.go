@@ -1388,8 +1388,8 @@ CREATE TABLE crdb_internal.session_trace (
 // returns rows when accessed with an index constraint specifying the trace_id
 // for which inflight spans need to be aggregated from all nodes in the cluster.
 //
-// Each row in the virtual table corresponds to a single `tracing.Recording` on
-// a particular node. A `tracing.Recording` is the trace of a single operation
+// Each row in the virtual table corresponds to a single `tracingpb.Recording` on
+// a particular node. A `tracingpb.Recording` is the trace of a single operation
 // rooted at a root span on that node. Under the hood, the virtual table
 // contacts all "live" nodes in the cluster via the trace collector which
 // streams back a recording at a time.
@@ -1398,7 +1398,7 @@ CREATE TABLE crdb_internal.session_trace (
 // The virtual table also produces rows lazily, i.e. as and when they are
 // consumed by the consumer. Therefore, the memory overhead of querying this
 // table will be the size of all the `tracing.Recordings` of a particular
-// `trace_id` on a single node in the cluster. Each `tracing.Recording` has its
+// `trace_id` on a single node in the cluster. Each `tracingpb.Recording` has its
 // own memory protections via ring buffers, and so we do not expect this
 // overhead to grow in an unbounded manner.
 var crdbInternalClusterInflightTracesTable = virtualSchemaTable{
@@ -1489,7 +1489,7 @@ CREATE TABLE crdb_internal.node_inflight_trace_spans (
 				"only users with the admin role are allowed to read crdb_internal.node_inflight_trace_spans")
 		}
 		return p.ExecCfg().AmbientCtx.Tracer.VisitSpans(func(span tracing.RegistrySpan) error {
-			for _, rec := range span.GetFullRecording(tracing.RecordingVerbose) {
+			for _, rec := range span.GetFullRecording(tracingpb.RecordingVerbose) {
 				traceID := rec.TraceID
 				parentSpanID := rec.ParentSpanID
 				spanID := rec.SpanID

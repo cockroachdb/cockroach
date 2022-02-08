@@ -206,6 +206,7 @@ go_library(
         "//pkg/util/sysutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "//pkg/util/tracing/zipper",
         "//pkg/util/uuid",
         "//pkg/workload",

@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/logtags"
 	"github.com/gogo/protobuf/types"
 )
@@ -97,7 +98,7 @@ func BenchmarkSpan_GetRecording(b *testing.B) {
 	run := func(b *testing.B, sp *Span) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_ = sp.GetRecording(RecordingStructured)
+			_ = sp.GetRecording(tracingpb.RecordingStructured)
 		}
 	}
 
@@ -137,10 +138,10 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				var root *Span
 				if tc.withEventListener {
-					root = tr.StartSpan("foo", WithRecording(RecordingStructured),
+					root = tr.StartSpan("foo", WithRecording(tracingpb.RecordingStructured),
 						WithEventListeners(mockListener))
 				} else {
-					root = tr.StartSpan("foo", WithRecording(RecordingStructured))
+					root = tr.StartSpan("foo", WithRecording(tracingpb.RecordingStructured))
 				}
 
 				root.RecordStructured(ev)
@@ -149,7 +150,7 @@ func BenchmarkRecordingWithStructuredEvent(b *testing.B) {
 				child := tr.StartSpan("bar", WithParent(root))
 				child.RecordStructured(ev)
 				child.Finish()
-				_ = root.FinishAndGetRecording(RecordingStructured)
+				_ = root.FinishAndGetRecording(tracingpb.RecordingStructured)
 			}
 		})
 	}
