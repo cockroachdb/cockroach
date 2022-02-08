@@ -234,6 +234,12 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 		})
 	})
 
+	unaryInterceptor = append(unaryInterceptor, func(
+		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return handler(ctx, req)
+	})
+
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
 			tenant: tenantAuthorizer{
@@ -269,6 +275,11 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 		unaryInterceptor = append(unaryInterceptor, grpcinterceptor.ServerInterceptor(tracer))
 		streamInterceptor = append(streamInterceptor, grpcinterceptor.StreamServerInterceptor(tracer))
 	}
+	unaryInterceptor = append(unaryInterceptor, func(
+		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return handler(ctx, req)
+	})
 
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))

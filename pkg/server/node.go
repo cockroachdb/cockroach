@@ -1001,7 +1001,6 @@ func (n *Node) batchInternal(
 	handle, err := n.admissionController.AdmitKVWork(ctx, tenID, args)
 	defer n.admissionController.AdmittedKVWorkDone(handle)
 	if err != nil {
-		return nil, err
 	}
 	var pErr *roachpb.Error
 	br, pErr = n.stores.Send(ctx, *args)
