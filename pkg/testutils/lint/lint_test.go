@@ -2135,6 +2135,10 @@ func TestLint(t *testing.T) {
 			// This exception is for hash.go, which re-implements runtime.noescape
 			// for efficient hashing.
 			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
+			// This exception is for bytes.go where we incorrectly use
+			// reflect.SliceHeader in order to assert that it's layout hasn't
+			// changed.
+			stream.GrepNot(`pkg/col/coldata/bytes.go:[0-9:]+: possible misuse of reflect.SliceHeader`),
 			stream.GrepNot(`^#`), // comment line
 			// Roachpb's own error package takes ownership of error unwraps
 			// (by enforcing that errors can never been wrapped under a

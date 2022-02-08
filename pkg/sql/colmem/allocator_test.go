@@ -302,7 +302,7 @@ func TestSetAccountingHelper(t *testing.T) {
 				switch typ.Family() {
 				case types.BytesFamily:
 					// For Bytes, insert pretty large values.
-					v := make([]byte, rng.Intn(8*coldata.BytesInitialAllocationFactor))
+					v := make([]byte, rng.Intn(8*coldata.BytesMaxInlineLength))
 					_, _ = rng.Read(v)
 					batch.ColVec(vecIdx).Bytes().Set(rowIdx, v)
 				default:

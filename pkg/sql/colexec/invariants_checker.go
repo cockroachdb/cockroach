@@ -96,12 +96,6 @@ func (i *invariantsChecker) Next() coldata.Batch {
 	if n == 0 {
 		return b
 	}
-	for colIdx := 0; colIdx < b.Width(); colIdx++ {
-		v := b.ColVec(colIdx)
-		if v.IsBytesLike() {
-			coldata.AssertOffsetsAreNonDecreasing(v, n)
-		}
-	}
 	if sel := b.Selection(); sel != nil {
 		for i := 1; i < n; i++ {
 			if sel[i] <= sel[i-1] {
