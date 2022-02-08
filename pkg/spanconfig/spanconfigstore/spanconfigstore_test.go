@@ -65,9 +65,9 @@ func TestRandomized(t *testing.T) {
 		sp, conf, op := genRandomSpan(), getRandomConf(), getRandomOp()
 		switch op {
 		case "set":
-			return spanconfig.Addition(spanconfig.MakeSpanTarget(sp), conf)
+			return spanconfig.Addition(spanconfig.MakeTargetFromSpan(sp), conf)
 		case "del":
-			return spanconfig.Deletion(spanconfig.MakeSpanTarget(sp))
+			return spanconfig.Deletion(spanconfig.MakeTargetFromSpan(sp))
 		default:
 		}
 		t.Fatalf("unexpected op: %s", op)
@@ -86,7 +86,7 @@ func TestRandomized(t *testing.T) {
 			})
 			invalid := false
 			for i := 1; i < numUpdates; i++ {
-				if updates[i].Target.GetSpan().Overlaps(*updates[i-1].Target.GetSpan()) {
+				if updates[i].Target.GetSpan().Overlaps(updates[i-1].Target.GetSpan()) {
 					invalid = true
 				}
 			}
@@ -113,7 +113,7 @@ func TestRandomized(t *testing.T) {
 		_, _, err := store.apply(false /* dryrun */, updates...)
 		require.NoError(t, err)
 		for _, update := range updates {
-			if testSpan.Overlaps(*update.Target.GetSpan()) {
+			if testSpan.Overlaps(update.Target.GetSpan()) {
 				if update.Addition() {
 					expConfig, expFound = update.Config, true
 				} else {
@@ -128,7 +128,7 @@ func TestRandomized(t *testing.T) {
 			func(entry spanConfigEntry) error {
 				t.Fatalf("found unexpected entry: %s",
 					spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
-						Target: spanconfig.MakeSpanTarget(entry.span),
+						Target: spanconfig.MakeTargetFromSpan(entry.span),
 						Config: entry.config,
 					}))
 				return nil
@@ -141,7 +141,7 @@ func TestRandomized(t *testing.T) {
 				if !foundEntry.isEmpty() {
 					t.Fatalf("expected single overlapping entry, found second: %s",
 						spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
-							Target: spanconfig.MakeSpanTarget(entry.span),
+							Target: spanconfig.MakeTargetFromSpan(entry.span),
 							Config: entry.config,
 						}))
 				}

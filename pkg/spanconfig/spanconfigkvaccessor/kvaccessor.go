@@ -433,8 +433,8 @@ func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Reco
 				continue
 			}
 
-			curSpan := *targets[i].GetSpan()
-			prevSpan := *targets[i-1].GetSpan()
+			curSpan := targets[i].GetSpan()
+			prevSpan := targets[i-1].GetSpan()
 
 			if curSpan.Overlaps(prevSpan) {
 				return errors.AssertionFailedf("overlapping spans %s and %s in same list",
@@ -450,12 +450,11 @@ func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Reco
 // are invalid or have an empty end key.
 func validateSpanTargets(targets []spanconfig.Target) error {
 	for _, target := range targets {
-		sp := target.GetSpan()
-		if sp == nil {
+		if !target.IsSpanTarget() {
 			// Nothing to do.
 			continue
 		}
-		if err := validateSpans(*sp); err != nil {
+		if err := validateSpans(target.GetSpan()); err != nil {
 			return err
 		}
 	}
