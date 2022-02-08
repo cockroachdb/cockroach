@@ -113,6 +113,7 @@ exports_files([
 # gazelle:exclude **/zcgo_flags_*.go
 # gazelle:exclude **/*.og.go
 # gazelle:exclude **/*.eg.go
+# gazelle:exclude **/*.pb.go
 # gazelle:exclude **/*.pb.gw.go
 # gazelle:exclude **/*_interval_btree.go
 # gazelle:exclude **/*_interval_btree_test.go

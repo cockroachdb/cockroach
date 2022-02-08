@@ -68,13 +68,7 @@ func TransferLease(
 	// LeaseRejectedError before going through Raft.
 	prevLease, _ := cArgs.EvalCtx.GetLease()
 
-	// Forward the lease's start time to a current clock reading. At this
-	// point, we're holding latches across the entire range, we know that
-	// this time is greater than the timestamps at which any request was
-	// serviced by the leaseholder before it stopped serving requests (i.e.
-	// before the TransferLease request acquired latches).
 	newLease := args.Lease
-	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 	args.Lease = roachpb.Lease{} // prevent accidental use below
 
 	// If this check is removed at some point, the filtering of learners on the
@@ -103,6 +97,14 @@ func TransferLease(
 	// easier to just let the TransferLease be proposed under the wrong lease
 	// and be rejected with the correct error below Raft.
 	cArgs.EvalCtx.RevokeLease(ctx, args.PrevLease.Sequence)
+
+	// Forward the lease's start time to a current clock reading. At this
+	// point, we're holding latches across the entire range, we know that
+	// this time is greater than the timestamps at which any request was
+	// serviced by the leaseholder before it stopped serving requests (i.e.
+	// before the TransferLease request acquired latches and before the
+	// previous lease was revoked).
+	newLease.Start.Forward(cArgs.EvalCtx.Clock().NowAsClockTimestamp())
 
 	// Collect a read summary from the outgoing leaseholder to ship to the
 	// incoming leaseholder. This is used to instruct the new leaseholder on how

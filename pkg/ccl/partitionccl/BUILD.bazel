@@ -45,6 +45,7 @@ go_test(
         "//pkg/ccl/storageccl",
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
+        "//pkg/clusterversion",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/jobs",

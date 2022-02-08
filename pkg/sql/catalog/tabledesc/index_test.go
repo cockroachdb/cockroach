@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -366,7 +367,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	idx.StoreColumnNames = append([]string{}, name, name, name, name)
 	idx.KeySuffixColumnIDs = append([]descpb.ColumnID{}, id, id, id, id)
 	mut.Version++
-	require.NoError(t, validate.Self(mut))
+	require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, mut))
 
 	// Store the corrupted table descriptor.
 	err = db.Put(
@@ -399,7 +400,7 @@ func TestIndexStrictColumnIDs(t *testing.T) {
 	// considered invalid.
 	idx.Version = descpb.StrictIndexColumnIDGuaranteesVersion
 	expected = fmt.Sprintf(`relation "t" (%d): index "sec" has duplicates in KeySuffixColumnIDs: [2 2 2 2]`, mut.GetID())
-	require.EqualError(t, validate.Self(mut), expected)
+	require.EqualError(t, validate.Self(clusterversion.TestingClusterVersion, mut), expected)
 
 	_, err = conn.Exec(`ALTER TABLE d.t DROP COLUMN c2`)
 	require.NoError(t, err)

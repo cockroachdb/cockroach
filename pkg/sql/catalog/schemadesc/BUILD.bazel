@@ -36,6 +36,7 @@ go_test(
     srcs = ["schema_desc_test.go"],
     deps = [
         ":schemadesc",
+        "//pkg/clusterversion",
         "//pkg/security",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/dbdesc",
