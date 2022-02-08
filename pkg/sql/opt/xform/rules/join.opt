@@ -212,10 +212,12 @@
 # applies when the input is a Project that produces virtual computed columns.
 # See the GenerateLookupJoinsWithVirtualCols custom function for more details.
 #
-# TODO(mgartner): Generate lookup joins with virtual columns for semi- and
-# anti-joins. This may also be possible for left joins, but could be tricky.
+# This rule only matches when the join filters reference virtual columns. This
+# prevents creating a cycle in the memo when a combination of this rule and
+# HoistProjectFromInnerJoin/HoistProjectFromLeftJoin + GenerateLookupJoins
+# generate identical lookup joins.
 [GenerateLookupJoinsWithVirtualCols, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     $project:(Project
             (Scan $scanPrivate:*) &
@@ -229,7 +231,11 @@
             $projectedVirtualCols:(ProjectionCols $projections)
             $virtualCols
         )
-    $on:*
+    $on:* &
+        (ColsIntersect
+            $projectedVirtualCols
+            (FilterOuterCols $on)
+        )
     $private:*
 )
 =>
@@ -251,7 +257,7 @@
 # join. This is also necessary for generating lookup joins on partial indexes
 # with virtual columns.
 [GenerateLookupJoinsWithVirtualColsAndFilter, Explore]
-(InnerJoin
+(InnerJoin | LeftJoin | SemiJoin | AntiJoin
     $left:*
     $project:(Project
             (Select
@@ -270,7 +276,11 @@
             $projectedVirtualCols:(ProjectionCols $projections)
             $virtualCols
         )
-    $on:*
+    $on:* &
+        (ColsIntersect
+            $projectedVirtualCols
+            (FilterOuterCols $on)
+        )
     $private:*
 )
 =>
