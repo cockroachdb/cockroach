@@ -52,7 +52,12 @@ func mockPutter(p s3putter) func() {
 	return f
 }
 
-func TestMain(t *testing.T) {
+// NB: the function name TestMain is special as it is expected to be a function
+// which takes a *testing.M as a parameter. Somehow `go test` allows TestMain to
+// also work if passed a *testing.T, in which case it acts like a normal test
+// function. Bazel prohibits this, so give this test function a name which
+// doesn't collide with TestMain.
+func TestMainF(t *testing.T) {
 	if !slow {
 		skip.IgnoreLint(t, "only to be run manually via `./build/builder.sh go test -tags slow -timeout 1h -v ./pkg/cmd/publish-artifacts`")
 	}
