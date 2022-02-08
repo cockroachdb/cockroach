@@ -1395,6 +1395,117 @@ vectorized: true
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 
+# Test that queries with overlaps && operator use the inverted index
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[]
+│
+└── • index join
+      │ columns: (a, b)
+      │ estimated row count: 111 (missing stats)
+      │ table: e@e_pkey
+      │ key columns: a
+      │
+      └── • scan
+            columns: (a)
+            estimated row count: 111 (missing stats)
+            table: e@e_b_idx
+            spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[0,1,2]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[0,1,2]
+│
+└── • index join
+      │ columns: (a, b)
+      │ estimated row count: 111 (missing stats)
+      │ table: e@e_pkey
+      │ key columns: a
+      │
+      └── • project
+            │ columns: (a)
+            │ estimated row count: 111 (missing stats)
+            │
+            └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/3
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[NULL]::INT[]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[NULL]
+│
+└── • index join
+      │ columns: (a, b)
+      │ estimated row count: 111 (missing stats)
+      │ table: e@e_pkey
+      │ key columns: a
+      │
+      └── • scan
+            columns: (a)
+            estimated row count: 111 (missing stats)
+            table: e@e_b_idx
+            spans: /[]-/"D"
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM e WHERE b && ARRAY[0,1,NULL]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ columns: (a, b)
+│ estimated row count: 333 (missing stats)
+│ filter: b && ARRAY[0,1,NULL]
+│
+└── • index join
+      │ columns: (a, b)
+      │ estimated row count: 111 (missing stats)
+      │ table: e@e_pkey
+      │ key columns: a
+      │
+      └── • project
+            │ columns: (a)
+            │ estimated row count: 111 (missing stats)
+            │
+            └── • inverted filter
+            │ columns: (a, b_inverted_key)
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  columns: (a, b_inverted_key)
+                  estimated row count: 111 (missing stats)
+                  table: e@e_b_idx
+                  spans: /[]-/"D" /0-/2
+
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
 statement ok

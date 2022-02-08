@@ -148,6 +148,21 @@ func getInvertedExprForJSONOrArrayIndexForContainedBy(
 	return invertedExpr
 }
 
+// getInvertedExprForArrayIndexForOverlaps gets an inverted.Expression
+// that constrains an Array index according to the given constant.
+// This results in a span expression representing the union of all paths
+// through the Array. This function is only used when checking if an
+// indexed Array column overlaps (&&) with a constant.
+func getInvertedExprForArrayIndexForOverlaps(
+	evalCtx *tree.EvalContext, d tree.Datum,
+) inverted.Expression {
+	invertedExpr, err := rowenc.EncodeOverlapsInvertedIndexSpans(evalCtx, d)
+	if err != nil {
+		panic(err)
+	}
+	return invertedExpr
+}
+
 type jsonOrArrayInvertedExpr struct {
 	tree.ComparisonExpr
 
@@ -229,6 +244,8 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
 				case tree.Contains:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+				case tree.Overlaps:
+					invertedExpr = getInvertedExprForArrayIndexForOverlaps(evalCtx, d)
 				default:
 					return nil, fmt.Errorf("%s cannot be index-accelerated", t)
 				}
@@ -345,6 +362,8 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(evalCtx, fetch, t.Right)
 		}
+	case *memo.OverlapsExpr:
+		invertedExpr = getInvertedExprForArrayIndexForOverlaps(evalCtx, memo.ExtractConstDatum(t.Right))
 	}
 
 	if invertedExpr == nil {

@@ -223,7 +223,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(
-		"CREATE TABLE t (j JSON, a INT[], INVERTED INDEX (j), INVERTED INDEX (a))",
+		"CREATE TABLE t (j JSON, a INT[], str STRING[], INVERTED INDEX (j), INVERTED INDEX (a), INVERTED INDEX (str))",
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -704,6 +704,48 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			tight:            true,
 			unique:           false,
 			remainingFilters: "",
+		},
+		{
+			// Overlaps is supported for arrays.
+			filters:          "a && '{1}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}'",
+		},
+		{
+			// Overlaps with an empty array produces a unique inverted expression.
+			filters:          "a && '{}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "a && '{}'",
+		},
+		{
+			filters:          "a && '{1}' AND a && '{2}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' AND a && '{2}'",
+		},
+		{
+			filters:          "a && '{1}' AND str && '{hello}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' AND str && '{hello}'",
+		},
+		{
+			filters:          "a && '{1}' OR str && '{hello}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' OR str && '{hello}'",
 		},
 	}
 

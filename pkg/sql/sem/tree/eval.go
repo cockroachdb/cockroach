@@ -431,6 +431,23 @@ func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool,
 	return DBoolTrue, nil
 }
 
+// ArrayOverlaps return true if there is even one element common between the left and right arrays.
+func ArrayOverlaps(ctx *EvalContext, left, right *DArray) (*DBool, error) {
+	if !right.ParamTyp.Equivalent(left.ParamTyp) {
+		return DBoolFalse, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for _, leftElem := range left.Array {
+		for _, rightElem := range right.Array {
+			if leftElem != DNull && rightElem != DNull {
+				if leftElem.Compare(ctx, rightElem) == 0 {
+					return DBoolTrue, nil
+				}
+			}
+		}
+	}
+	return DBoolFalse, nil
+}
+
 // JSONExistsAny return true if any value in dArray is exist in the json
 func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
 	// TODO(justin): this can be optimized.
