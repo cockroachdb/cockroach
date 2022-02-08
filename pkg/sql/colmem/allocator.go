@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -99,9 +98,10 @@ func GetProportionalBatchMemSize(b coldata.Batch, length int64) int64 {
 		proportionalBatchMemSize = selVectorSize(selCapacity) * length / int64(selCapacity)
 	}
 	for _, vec := range b.ColVecs() {
-		if vec.IsBytesLike() {
+		switch vec.CanonicalTypeFamily() {
+		case types.BytesFamily, types.JsonFamily:
 			proportionalBatchMemSize += coldata.ProportionalSize(vec, length)
-		} else {
+		default:
 			proportionalBatchMemSize += getVecMemoryFootprint(vec) * length / int64(vec.Capacity())
 		}
 	}
@@ -262,11 +262,7 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 				b.ReplaceCol(a.NewMemColumn(t, desiredCapacity), colIdx)
 				return
 			}
-			if presentVec.IsBytesLike() {
-				// Flat bytes vector needs to be reset before the vector can be
-				// reused.
-				coldata.Reset(presentVec)
-			}
+			coldata.ResetIfBytesLike(presentVec)
 			return
 		}
 		// We have a vector with an unexpected type, so we panic.
@@ -406,17 +402,10 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 	// (excluding any Bytes vectors, those are tracked separately).
 	var acc int64
 	numBytesVectors := 0
-	// We will track Uuid vectors separately because they use smaller initial
-	// allocation factor.
-	numUUIDVectors := 0
 	for _, t := range vecTypes {
 		switch typeconv.TypeFamilyToCanonicalTypeFamily(t.Family()) {
-		case types.BytesFamily:
-			if t.Family() == types.UuidFamily {
-				numUUIDVectors++
-			} else {
-				numBytesVectors++
-			}
+		case types.BytesFamily, types.JsonFamily:
+			numBytesVectors++
 		case types.DecimalFamily:
 			// Similar to byte arrays, we can't tell how much space is used
 			// to hold the arbitrary precision decimal objects because they
@@ -425,8 +414,6 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			// contain any indirection and are stored entirely inline, so we
 			// use the flat struct size as an estimate.
 			acc += memsize.Decimal
-		case types.JsonFamily:
-			numBytesVectors++
 		case typeconv.DatumVecCanonicalTypeFamily:
 			// In datum vec we need to account for memory underlying the struct
 			// that is the implementation of tree.Datum interface (for example,
@@ -449,21 +436,12 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
 		}
 	}
-	// For byte arrays, we initially allocate a constant number of bytes (plus
-	// an int32 for the offset) for each row, so we use the sum of two values as
-	// the estimate. However, later, the exact memory footprint will be used:
-	// whenever a modification of Bytes takes place, the Allocator will measure
-	// the old footprint and the updated one and will update the memory account
-	// accordingly. We also account for the overhead and for the additional
-	// offset value that are needed for Bytes vectors (to be in line with
-	// coldata.Bytes.Size() method).
-	var bytesVectorsSize int64
-	// Add the overhead.
-	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * coldata.FlatBytesOverhead
-	// Add the data for both Bytes and Uuids.
-	bytesVectorsSize += int64(numBytesVectors*coldata.BytesInitialAllocationFactor+numUUIDVectors*uuid.Size) * int64(batchLength)
-	// Add the offsets.
-	bytesVectorsSize += int64(numBytesVectors+numUUIDVectors) * memsize.Int32 * int64(batchLength+1)
+	// For byte arrays, we initially allocate a constant number of bytes for
+	// each row (namely coldata.ElementSize). However, later, the exact memory
+	// footprint will be used: whenever a modification of Bytes takes place, the
+	// Allocator will measure the old footprint and the updated one and will
+	// update the memory account accordingly.
+	bytesVectorsSize := int64(numBytesVectors) * (coldata.FlatBytesOverhead + int64(batchLength)*coldata.ElementSize)
 	return acc*int64(batchLength) + bytesVectorsSize
 }
 

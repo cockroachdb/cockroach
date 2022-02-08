@@ -17,161 +17,185 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-// Bytes is a wrapper type for a two-dimensional byte slice ([][]byte).
-type Bytes struct {
-	// data is the slice of all bytes.
+// element describes a single []byte value. If a value doesn't exceed
+// BytesMaxInlineLength, then the whole value is stored within the element;
+// otherwise, the element points at a region in Bytes.buffer where the
+// non-inlined value is stored.
+//
+// If the value is inlined, then the layout of element is used as follows (SH is
+// the short for reflect.SliceHeader):
+//
+//            SH.Data   SH.Len SH.Cap padding
+//   element: xxxxxxxx | ................... | false | length
+//   Bytes.buffer: N/A
+//
+// where 8 x's represent reflect.SliceHeader.Data that is skipped and remains
+// nil, 19 dots describe the inlinable space followed by a single byte (boolean
+// 'false') indicating an inlined value followed by 4 bytes for the length.
+//
+// If the value is non-inlined, then the layout of element is used as follows:
+//
+//                    padding
+//   element: []byte |  xxx  | true | offset
+//   Bytes.buffer: xxxxxxxx | start .... | xxxxxxxx
+//
+// where first 24 bytes contain a valid byte slice with its Data field pointing
+// at start in Bytes.buffer. Then we have 3 bytes of unused padding followed by
+// a single byte (boolean 'true') indicating a non-inlined value followed by 4
+// bytes for the offset. The offset determines the position of 'start' within
+// Bytes.buffer.
+type element struct {
 	data []byte
-	// offsets contains the offsets for each []byte slice in data. Note that the
-	// last offset (similarly to Arrow format) will contain the full length of
-	// data. Note that we assume that offsets are non-decreasing, and with every
-	// access of this Bytes we will try to maintain this assumption.
-	offsets []int32
+	_    [paddingLength]byte
+	// We use 'nonInlined' rather than 'inlined' here so that zero value of
+	// element was valid (namely, it'll contain a non-inlined value with an
+	// empty []byte).
+	nonInlined     bool
+	lengthOrOffset int32
+}
 
-	// maxSetLength specifies the number of elements set by the user of this
-	// struct. This enables us to disallow unordered sets (which would require
-	// data movement). Also, this helps us maintain the assumption of
-	// non-decreasing offsets.
-	maxSetLength int
+// ElementSize is the size of element object. It is expected to be 32.
+const ElementSize = int64(unsafe.Sizeof(element{}))
 
+// paddingLength is the number of bytes that are not assigned to any particular
+// field in element and are such that ElementSize is exactly 32.
+const paddingLength = 3
+
+// lenOffsetInSliceHeader is the offset of Len field in reflect.SliceHeader
+// relative to the start of the struct.
+const lenOffsetInSliceHeader = unsafe.Sizeof(uintptr(0))
+
+// BytesMaxInlineLength is the maximum length of a []byte that can be inlined
+// within element.
+const BytesMaxInlineLength = int(2*unsafe.Sizeof(int(0))) + paddingLength
+
+// TODO: somehow assert that Len and Cap come after Data in reflect.SliceHeader.
+func init() {
+	if ElementSize != 32 {
+		panic(errors.AssertionFailedf("unexpectedly the size of element is %d and not 32", ElementSize))
+	}
+}
+
+// inlinedSlice returns 19 bytes of space within e that can be used for storing
+// a value inlined, as a slice.
+//gcassert:inline
+func (e *element) inlinedSlice() []byte {
+	// Take the pointer to the data, skip first 8 bytes (past
+	// reflect.SliceHeader.Data), convert the following 19 bytes into a pointer
+	// to [19]byte, and then make a slice out of it.
+	return (*(*[BytesMaxInlineLength]byte)(unsafe.Pointer(uintptr(unsafe.Pointer(&e.data)) + lenOffsetInSliceHeader)))[:]
+}
+
+//gcassert:inline
+func (e *element) get() []byte {
+	if !e.nonInlined {
+		return e.inlinedSlice()[:e.lengthOrOffset:BytesMaxInlineLength]
+	}
+	return e.data
+}
+
+//gcassert:inline
+func (e *element) len() int {
+	if !e.nonInlined {
+		return int(e.lengthOrOffset)
+	}
+	return len(e.data)
+}
+
+func (e *element) set(v []byte, b *Bytes) {
+	if len(v) <= BytesMaxInlineLength {
+		*e = element{lengthOrOffset: int32(len(v))}
+		copy(e.inlinedSlice(), v)
+	} else {
+		e.setNonInlined(v, b)
+	}
+}
+
+func (e *element) setNonInlined(v []byte, b *Bytes) {
+	// Check if we there was an old non-inlined value we can overwrite.
+	if e.nonInlined && cap(e.data) >= len(v) {
+		e.data = e.data[:len(v)]
+		copy(e.data, v)
+	} else {
+		oldBuffer := b.buffer
+		b.buffer = append(b.buffer, v...)
+		if cap(oldBuffer) != cap(b.buffer) && cap(oldBuffer) > 0 {
+			// The buffer has been reallocated, so we have to update old
+			// non-inlined elements. Set nonInlined to false so that e is
+			// skipped in the loop.
+			e.nonInlined = false
+			for i := 0; i < b.firstUnsetIdx; i++ {
+				if e := b.elements[i]; e.nonInlined {
+					e.data = b.buffer[e.lengthOrOffset : e.lengthOrOffset+int32(len(e.data)) : e.lengthOrOffset+int32(cap(e.data))]
+				}
+			}
+		}
+		e.data = b.buffer[len(oldBuffer) : len(oldBuffer)+len(v) : len(oldBuffer)+len(v)]
+		e.lengthOrOffset = int32(len(oldBuffer))
+		e.nonInlined = true
+	}
+}
+
+// Bytes is a vector that stores []byte values.
+type Bytes struct {
+	// elements contains all values stored in this Bytes vector.
+	elements []element
+	// buffer contains all values that couldn't be inlined within the
+	// corresponding elements.
+	buffer []byte
+	// firstUnsetIdx tracks the element with the smallest index that has not
+	// been set yet. In other words all elements start with this index are
+	// expected to contain a zero value.
+	firstUnsetIdx int
 	// isWindow indicates whether this Bytes is a "window" into another Bytes.
 	// If it is, no modifications are allowed (all of them will panic).
 	isWindow bool
 }
 
-// BytesInitialAllocationFactor is an estimate of how many bytes each []byte
-// slice takes up. It is used during the initialization of Bytes.
-const BytesInitialAllocationFactor = 64
-
-// NewBytes returns a Bytes struct with enough capacity for n zero-length
-// []byte values. It is legal to call Set on the returned Bytes at this point,
-// but Get is undefined until at least one element is Set.
-// BytesInitialAllocationFactor number of bytes are allocated initially for each
-// []byte element.
+// NewBytes returns a Bytes struct with enough capacity to store n []byte
+// values.
 func NewBytes(n int) *Bytes {
-	return NewBytesWithAvgLength(n, BytesInitialAllocationFactor)
-}
-
-// NewBytesWithAvgLength returns a Bytes struct with enough capacity for n
-// []byte values with the average length of avgElementLength. It is legal to
-// call Set on the returned Bytes at this point, but Get is undefined until at
-// least one element is Set.
-// - avgElementLength determines the average length of a single []byte element
-// that will be added to this Bytes.
-func NewBytesWithAvgLength(n int, avgElementLength int) *Bytes {
-	return &Bytes{
-		// Given that the []byte slices are of variable length, we multiply the
-		// number of elements by some constant factor.
-		// TODO(asubiotto): Make this tunable.
-		data:    make([]byte, 0, n*avgElementLength),
-		offsets: make([]int32, n+1),
-	}
-}
-
-// AssertOffsetsAreNonDecreasing asserts that all b.offsets[:n+1] are
-// non-decreasing.
-func (b *Bytes) AssertOffsetsAreNonDecreasing(n int) {
-	for j := 1; j <= n; j++ {
-		if b.offsets[j] < b.offsets[j-1] {
-			panic(errors.AssertionFailedf("unexpectedly found decreasing offsets: %v", b.offsets))
-		}
-	}
-}
-
-// UpdateOffsetsToBeNonDecreasing makes sure that b.offsets[:n+1] are
-// non-decreasing which is an invariant that we need to maintain. It must be
-// called by the colexecop.Operator that is modifying this Bytes before
-// returning it as an output. A convenient place for this is Batch.SetLength()
-// method - we assume that *always*, before returning a batch, the length is
-// set on it. UpdateOffsetsToBeNonDecreasing assumes that all offsets up to
-// b.maxSetLength are non-decreasing. Note that this method is a noop when
-// n <= b.maxSetLength.
-//gcassert:inline
-func (b *Bytes) UpdateOffsetsToBeNonDecreasing(n int) {
-	// Note that we're not checking whether this Bytes is a window because
-	// although this function might modify the "window" Bytes, it maintains the
-	// invariant that we need to have.
-	//
-	// Note that the offsets slice always has one more value than there are
-	// elements stored in data, because the index of the start of the first
-	// element must be stored (usually zero). The following is an example of what
-	// the offsets might look like for different values of maxSetLength (and a
-	// maximum length of 2 elements):
-	//   maxSetLength | offsets
-	//    0           | [0, 0, 0] // No elements.
-	//    1           | [0, 4, 0] // Set a 4-byte element at index 0 (1 element).
-	//    2           | [0, 4, 8] // Set a 4-byte element at index 1 (2 elements).
-	//
-	// This means that maxSetLength is also the index into offsets at which the
-	// end index for the max set element is stored. Therefore, the value at
-	// offsets[maxSetLength] should be used to back-fill offsets.
-	if n > b.maxSetLength {
-		offsets := b.offsets
-		prev := offsets[b.maxSetLength]
-		_ = offsets[b.maxSetLength+1]
-		_ = offsets[n]
-		for i := b.maxSetLength + 1; i <= n; i++ {
-			//gcassert:bce
-			offsets[i] = prev
-		}
-	}
+	return &Bytes{elements: make([]element, n)}
 }
 
 // Get returns the ith []byte in Bytes. Note that the returned byte slice is
 // unsafe for reuse if any write operation happens.
-// NOTE: if ith element was never set in any way, the behavior of Get is
-// undefined.
-//gcassert:inline
+//
+// Note this function call is mostly inlined except in a handful of very large
+// generated functions, so we can't add the gcassert directive for it.
 func (b *Bytes) Get(i int) []byte {
-	return b.data[b.offsets[i]:b.offsets[i+1]]
+	return b.elements[i].get()
 }
 
-// getAppendTo returns a byte slice that ith []byte value should be appended to.
-// This method will panic if i is less than maximum previously Set index.
-//gcassert:inline
-func (b *Bytes) getAppendTo(i int) []byte {
+// Set sets the ith []byte in Bytes.
+//
+// Note this function call is mostly inlined except in a handful of very large
+// generated functions, so we can't add the gcassert directive for it.
+func (b *Bytes) Set(i int, v []byte) {
 	if buildutil.CrdbTestBuild {
 		if b.isWindow {
-			panic("getAppendTo is called on a window into Bytes")
-		}
-		if i < b.maxSetLength-1 {
-			panic(
-				fmt.Sprintf(
-					"cannot overwrite value on flat Bytes: maxSetLength=%d, setIndex=%d, consider using Reset",
-					b.maxSetLength,
-					i,
-				),
-			)
+			panic("Set is called on a window into Bytes")
 		}
 	}
-	// We're maybe setting an element not right after the last already present
-	// element (i.e. there might be gaps in b.offsets). This is probably due to
-	// NULL values that are stored separately. In order to maintain the
-	// assumption of non-decreasing offsets, we need to backfill them.
-	b.UpdateOffsetsToBeNonDecreasing(i)
-	return b.data[:b.offsets[i]]
+	b.elements[i].set(v, b)
+	if i+1 > b.firstUnsetIdx {
+		b.firstUnsetIdx = i + 1
+	}
 }
 
-// Set sets the ith []byte in Bytes. Overwriting a value that is not at the end
-// of the Bytes is not allowed since it complicates memory movement to make/take
-// away necessary space in the flat buffer. Note that a nil value will be
-// "converted" into an empty byte slice.
-func (b *Bytes) Set(i int, v []byte) {
-	appendTo := b.getAppendTo(i)
-	b.data = append(appendTo, v...)
-	b.offsets[i+1] = int32(len(b.data))
-	b.maxSetLength = i + 1
-}
-
-// Window creates a "window" into the receiver. It behaves similarly to
-// Golang's slice, but the returned object is *not* allowed to be modified - it
-// is read-only. Window is a lightweight operation that doesn't involve copying
-// the underlying data.
+// Window creates a "window" into the receiver. It behaves similarly to Golang's
+// slice, but the returned object is *not* allowed to be modified - it is
+// read-only. If b is modified, then the returned object becomes invalid.
+//
+// Window is a lightweight operation that doesn't involve copying the underlying
+// data.
+// TODO(yuzefovich): consider renaming it to Slice and allowing modification of
+// "sliced" Bytes since we can now support semantics similar to Golang's slices.
 func (b *Bytes) Window(start, end int) *Bytes {
 	if start < 0 || start > end || end > b.Len() {
 		panic(
@@ -181,34 +205,15 @@ func (b *Bytes) Window(start, end int) *Bytes {
 			),
 		)
 	}
-	b.UpdateOffsetsToBeNonDecreasing(end)
-	data := b.data[:b.offsets[end]]
-	if end == 0 {
-		data = b.data[:0]
-	}
 	return &Bytes{
-		data: data,
-		// We use 'end+1' because of the extra offset to know the length of the
-		// last element of the newly created window.
-		offsets: b.offsets[start : end+1],
-		// maxSetLength is set only for pretty printing the Bytes.
-		maxSetLength: end - start,
-		isWindow:     true,
+		elements: b.elements[start:end],
+		isWindow: true,
 	}
 }
 
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive []byte values
 // from src into the receiver starting at destIdx. Similar to the copy builtin,
-// min(dest.Len(), src.Len()) values will be copied. Note that if the length of
-// the receiver is greater than the length of the source, bytes will have to be
-// physically moved. Consider the following example:
-// dest Bytes: "helloworld", offsets: []int32{0, 5}, lengths: []int32{5, 5}
-// src Bytes: "a", offsets: []int32{0}, lengths: []int32{1}
-// If we copy src into the beginning of dest, we will have to move "world" so
-// that the result is:
-// result Bytes: "aworld", offsets: []int32{0, 1}, lengths: []int32{1, 5}
-// Similarly, if "a", is instead "alongerstring", "world" would have to be
-// shifted right.
+// min(dest.Len(), src.Len()) values will be copied.
 func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if b.isWindow {
 		panic("CopySlice is called on a window into Bytes")
@@ -232,78 +237,34 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	if toCopy == 0 || b.Len() == 0 || destIdx == b.Len() {
 		return
 	}
-	b.UpdateOffsetsToBeNonDecreasing(destIdx)
 
 	if destIdx+toCopy > b.Len() {
 		// Reduce the number of elements to copy to what can fit into the
 		// destination.
 		toCopy = b.Len() - destIdx
-		srcEndIdx = srcStartIdx + toCopy
 	}
 
-	// It is possible that the last couple of elements to be copied from the
-	// source are actually NULL values in which case the corresponding offsets
-	// might remain zeroes. We want to be on the safe side, so we backfill the
-	// source offsets as well.
-	src.UpdateOffsetsToBeNonDecreasing(srcEndIdx)
-	srcDataToCopy := src.data[src.offsets[srcStartIdx]:src.offsets[srcEndIdx]]
-
-	var leftoverDestBytes []byte
-	if destIdx+toCopy < b.maxSetLength {
-		// There will still be elements left over after the last element to copy. We
-		// copy those elements into leftoverDestBytes to append after all elements
-		// have been copied.
-		leftoverDestBytesToCopy := b.data[b.offsets[destIdx+toCopy]:]
-		leftoverDestBytes = make([]byte, len(leftoverDestBytesToCopy))
-		copy(leftoverDestBytes, leftoverDestBytesToCopy)
+	if b == src && destIdx == srcStartIdx {
+		// No need to do anything.
+		return
 	}
 
-	newLength := destIdx + toCopy
-	if newLength > b.maxSetLength {
-		b.maxSetLength = newLength
-	}
-
-	destDataIdx := int32(0)
-	if destIdx != 0 {
-		// Note that due to our implementation of slicing, b.offsets[0] is not
-		// always 0, so we need this 'if'.
-		destDataIdx = b.offsets[destIdx]
-	}
-	translateBy := destDataIdx - src.offsets[srcStartIdx]
-
-	// Append the actual bytes, we use an append instead of a copy to ensure that
-	// b.data has enough capacity. Note that the "capacity" was checked
-	// beforehand, but the number of elements to copy does not correlate with the
-	// number of bytes.
-	if destIdx != 0 {
-		b.data = append(b.data[:b.offsets[destIdx]], srcDataToCopy...)
+	// If we're copying from the vector into itself and from the earlier part
+	// into the later part, we need to reverse the order (otherwise we would
+	// overwrite the later values before copying them, thus corrupting the
+	// vector).
+	if b == src && destIdx > srcStartIdx {
+		for i := toCopy - 1; i >= 0; i-- {
+			b.Set(destIdx+i, src.Get(srcStartIdx+i))
+		}
 	} else {
-		b.data = append(b.data[:0], srcDataToCopy...)
-	}
-	copy(b.offsets[destIdx:], src.offsets[srcStartIdx:srcEndIdx])
-
-	if translateBy != 0 {
-		destOffsets := b.offsets[destIdx : destIdx+toCopy]
-		for i := range destOffsets {
-			destOffsets[i] += translateBy
+		for i := 0; i < toCopy; i++ {
+			b.Set(destIdx+i, src.Get(srcStartIdx+i))
 		}
 	}
-
-	oldPrefixAndCopiedDataLen := b.offsets[destIdx] + int32(len(srcDataToCopy))
-	if leftoverDestBytes != nil {
-		dataToAppendTo := b.data[:oldPrefixAndCopiedDataLen]
-		// Append (to make sure we have the capacity for) the leftoverDestBytes to
-		// the end of the data we just copied.
-		b.data = append(dataToAppendTo, leftoverDestBytes...)
-		// The lengths for these elements are correct (they weren't overwritten),
-		// but the offsets need updating.
-		destOffsets := b.offsets[destIdx+toCopy+1:]
-		translateBy := int32(len(dataToAppendTo)) - b.offsets[destIdx+toCopy]
-		for i := range destOffsets {
-			destOffsets[i] += translateBy
-		}
+	if destIdx+toCopy > b.firstUnsetIdx {
+		b.firstUnsetIdx = destIdx + toCopy
 	}
-	b.offsets[destIdx+toCopy] = oldPrefixAndCopiedDataLen
 }
 
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx exclusive []byte
@@ -327,48 +288,55 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 			),
 		)
 	}
-	// NOTE: it is important that we do not update b.maxSetLength before we update
-	// the tail offsets. Also, since it is possible to have a self referencing
-	// source, we can update b.maxSetLength only after updating the offsets for
-	// the source below.
-	b.UpdateOffsetsToBeNonDecreasing(destIdx)
-	toAppend := srcEndIdx - srcStartIdx
-	if toAppend == 0 {
-		b.maxSetLength = destIdx
-		// We're simply slicing up to destIdx (exclusive).
-		if destIdx == b.Len() {
-			return
+	srcElementsToCopy := src.elements[srcStartIdx:srcEndIdx]
+	newLen := destIdx + srcEndIdx - srcStartIdx
+	// If the elements slice doesn't have enough capacity, then it's clearly
+	// must be reallocated.
+	//
+	// Additionally, when we're appending values from the vector into itself and
+	// there is an overlap between the source and the destination values such
+	// that the destination is in the middle of the source, we have to
+	// reallocate as well in order to not corrupt values we want to copy.
+	//
+	// Consider the following example:
+	//   src = b = {a b c}
+	//   destIdx = 1, srcStartIdx = 0, srcEndIdx = 2
+	// then we want the result as
+	//   b = {a a b}.
+	// However, if we naively set the destination's first element to the
+	// source's zeroth element, we will have
+	//   src = b = {a a c}
+	// at which point the value 'b' is lost forever, so the end result would be
+	//   b = {a a a}.
+	mustReallocate := cap(b.elements) < newLen || (b == src && srcEndIdx > destIdx)
+	if mustReallocate {
+		oldElements := b.elements
+		// Figure out the new capacity of the elements slice. We will be
+		// doubling the existing capacity until newLen elements can fit, unless
+		// currently elements slice is nil, in which case we use newLen as the
+		// new capacity.
+		newCap := cap(b.elements)
+		if newCap > 0 {
+			for newCap < newLen {
+				newCap *= 2
+			}
+		} else {
+			newCap = newLen
 		}
-		b.data = b.data[:b.offsets[destIdx]]
-		b.offsets = b.offsets[:destIdx+1]
-		return
+		b.elements = make([]element, newLen, newCap)
+		copy(b.elements[:destIdx], oldElements)
+	} else {
+		// We don't have to reallocate, so we can just reuse the old elements.
+		// First we need to zero out all elements past the new length and then
+		// we can set the new length accordingly (the elements will be set
+		// below).
+		b.zero(newLen)
+		b.elements = b.elements[:newLen]
 	}
-
-	// It is possible that the last couple of elements to be copied from the
-	// source are actually NULL values in which case the corresponding offsets
-	// might remain zeroes. We want to be on the safe side, so we backfill the
-	// source offsets as well.
-	src.UpdateOffsetsToBeNonDecreasing(srcEndIdx)
-	srcDataToAppend := src.data[src.offsets[srcStartIdx]:src.offsets[srcEndIdx]]
-	destDataIdx := b.offsets[destIdx]
-	b.maxSetLength = destIdx + toAppend
-
-	// Calculate the amount to translate offsets by before modifying any
-	// destination offsets since we might be appending from the same Bytes (and
-	// might be overwriting information).
-	translateBy := destDataIdx - src.offsets[srcStartIdx]
-	b.data = append(b.data[:destDataIdx], srcDataToAppend...)
-	b.offsets = append(b.offsets[:destIdx], src.offsets[srcStartIdx:srcEndIdx+1]...)
-	if translateBy == 0 {
-		// No offset translation needed.
-		return
-	}
-	// destOffsets is used to avoid having to recompute the target index on every
-	// iteration.
-	destOffsets := b.offsets[destIdx:]
-	// The lengths for these elements are correct, but the offsets need updating.
-	for i := range destOffsets {
-		destOffsets[i] += translateBy
+	b.firstUnsetIdx = destIdx
+	for i := 0; i < len(srcElementsToCopy); i++ {
+		b.elements[b.firstUnsetIdx].set(srcElementsToCopy[i].get(), b)
+		b.firstUnsetIdx++
 	}
 }
 
@@ -378,16 +346,15 @@ func (b *Bytes) AppendVal(v []byte) {
 	if b.isWindow {
 		panic("AppendVal is called on a window into Bytes")
 	}
-	b.UpdateOffsetsToBeNonDecreasing(b.Len())
-	b.data = append(b.data[:b.offsets[b.Len()]], v...)
-	b.offsets = append(b.offsets, int32(len(b.data)))
-	b.maxSetLength = b.Len()
+	b.elements = append(b.elements, element{})
+	b.elements[len(b.elements)-1].set(v, b)
+	b.firstUnsetIdx = len(b.elements)
 }
 
 // Len returns how many []byte values the receiver contains.
 //gcassert:inline
 func (b *Bytes) Len() int {
-	return len(b.offsets) - 1
+	return len(b.elements)
 }
 
 // FlatBytesOverhead is the overhead of Bytes in bytes.
@@ -398,27 +365,30 @@ func (b *Bytes) Size() int64 {
 	if b == nil {
 		return 0
 	}
-	return FlatBytesOverhead +
-		int64(cap(b.data)) +
-		int64(cap(b.offsets))*memsize.Int32
+	return FlatBytesOverhead + int64(cap(b.elements))*ElementSize + int64(cap(b.buffer))
 }
 
-// ProportionalSize returns the size of the receiver in bytes that is
-// attributed to only first n out of Len() elements.
+// ProportionalSize returns the size of the receiver in bytes that is attributed
+// to only first n out of Len() elements.
 func (b *Bytes) ProportionalSize(n int64) int64 {
 	if n == 0 {
 		return 0
 	}
-	// It is possible that we have a "window" into the vector that doesn't start
-	// from the offset of 0, so we have to look at the first actual offset.
-	return FlatBytesOverhead + int64(len(b.data[b.offsets[0]:b.offsets[n]])) + n*memsize.Int32
+	s := FlatBytesOverhead
+	for i := 0; i < int(n); i++ {
+		s += b.ElemSize(i)
+	}
+	return s
 }
 
 // ElemSize returns the size in bytes of the []byte elem at the given index.
 // Panics if passed an invalid element.
 //gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
-	return int64(b.offsets[idx+1] - b.offsets[idx])
+	if !b.elements[idx].nonInlined {
+		return ElementSize
+	}
+	return ElementSize + int64(cap(b.elements[idx].data))
 }
 
 // Abbreviated returns a uint64 slice where each uint64 represents the first
@@ -466,53 +436,39 @@ func abbreviate(bs []byte) uint64 {
 	return v << uint(8*(8-len(bs)))
 }
 
-// Reset resets the underlying Bytes for reuse.
-// TODO(asubiotto): Move towards removing Set in favor of AppendVal. At that
-// point we can truncate the offsets slice.
+var zeroElements = make([]element, MaxBatchSize)
+
+// zero zeroes out all elements in b starting from position startIdx until the
+// first unset element.
+//gcassert:inline
+func (b *Bytes) zero(startIdx int) {
+	for n := startIdx; n < b.firstUnsetIdx; {
+		n += copy(b.elements[n:b.firstUnsetIdx], zeroElements)
+	}
+}
+
+// Reset resets the underlying Bytes for reuse. It is a noop if b is a window
+// into another Bytes.
+//
+// Calling it is not required for correctness and is only an optimization.
+// Namely, this allows us to remove all "holes" (unused space) in b.buffer which
+// can occur when an old non-inlined element is overwritten by a new element
+// that is either fully-inlined or non-inlined but larger.
 func (b *Bytes) Reset() {
 	if b.isWindow {
-		panic("Reset is called on a window into Bytes")
-	}
-	b.data = b.data[:0]
-	b.maxSetLength = 0
-}
-
-// ResetForAppend is similar to Reset, but it also resets the offsets slice so
-// that future calls to AppendSlice or AppendVal will append starting from index
-// zero. TODO(drewk): once Set is removed, this can just be Reset.
-func (b *Bytes) ResetForAppend() {
-	b.Reset()
-	// The first offset indicates where the first element will start.
-	b.offsets = b.offsets[:1]
-}
-
-// Truncate truncates the underlying bytes to the given length. This allows Set
-// to be called at or beyond the given length. If the length of the bytes is
-// already less than or equal to the given length, Truncate is a no-op.
-func (b *Bytes) Truncate(length int) {
-	if b.isWindow {
-		panic("Truncate is called on a window into Bytes")
-	}
-	if length < 0 {
-		panic(fmt.Sprintf("length out of range: %d", length))
-	}
-	if length > b.Len() {
-		// This is a no-op.
 		return
 	}
-	// Ensure that calling Truncate with a length greater than maxSetLength does
-	// not invalidate the non-decreasing invariant.
-	b.UpdateOffsetsToBeNonDecreasing(length)
-	b.data = b.data[:b.offsets[length]]
-	b.maxSetLength = length
+	b.zero(0 /* startIdx */)
+	b.buffer = b.buffer[:0]
+	b.firstUnsetIdx = 0
 }
 
 // String is used for debugging purposes.
 func (b *Bytes) String() string {
 	var builder strings.Builder
-	for i := range b.offsets[:b.maxSetLength] {
+	for i := range b.elements {
 		builder.WriteString(
-			fmt.Sprintf("%d: %v\n", i, b.data[b.offsets[i]:b.offsets[i+1]]),
+			fmt.Sprintf("%d: %v\n", i, b.Get(i)),
 		)
 	}
 	return builder.String()
@@ -521,64 +477,36 @@ func (b *Bytes) String() string {
 // BytesFromArrowSerializationFormat takes an Arrow byte slice and accompanying
 // offsets and populates b.
 func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
-	b.data = data
-	b.offsets = offsets
-	b.maxSetLength = len(offsets) - 1
+	numElements := len(offsets) - 1
+	if cap(b.elements) < numElements {
+		b.elements = make([]element, numElements)
+	} else {
+		b.elements = b.elements[:numElements]
+	}
+	for i := 0; i < numElements; i++ {
+		b.Set(i, data[offsets[i]:offsets[i+1]])
+	}
 }
 
 // ToArrowSerializationFormat returns a bytes slice and offsets that are
 // Arrow-compatible. n is the number of elements to serialize.
 func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
-	if n == 0 {
-		return []byte{}, []int32{0}
+	// Calculate the size of the flat byte slice that will contain all elements.
+	var dataSize int
+	for _, e := range b.elements[:n] {
+		dataSize += e.len()
 	}
-	serializeStart := b.offsets[0]
-	serializeLength := b.offsets[n]
-	data := b.data[serializeStart:serializeLength]
-	offsets := b.offsets[:n+1]
-	if serializeStart > 0 {
-		// This can happen when the receiver is a window. We will have to ensure
-		// that offsets starts at index zero into the truncated version of b.data.
-		offsets = make([]int32, len(offsets))
-		for i := range offsets {
-			// This works because of the non-decreasing invariant imposed on the
-			// offsets.
-			offsets[i] = b.offsets[i] - serializeStart
-		}
+	data := make([]byte, 0, dataSize)
+	offsets := make([]int32, 1, n+1)
+	for _, e := range b.elements[:n] {
+		data = append(data, e.get()...)
+		offsets = append(offsets, int32(len(data)))
 	}
 	return data, offsets
 }
 
-// AssertOffsetsAreNonDecreasing calls the method of the same name on bytes-like
-// vectors, panicking if not bytes-like.
-func AssertOffsetsAreNonDecreasing(v Vec, n int) {
-	family := v.CanonicalTypeFamily()
-	switch family {
-	case types.BytesFamily:
-		v.Bytes().AssertOffsetsAreNonDecreasing(n)
-	case types.JsonFamily:
-		v.JSON().AssertOffsetsAreNonDecreasing(n)
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
-	}
-}
-
-// UpdateOffsetsToBeNonDecreasing calls the method of the same name on bytes-like
-// vectors, panicking if not bytes-like.
-func UpdateOffsetsToBeNonDecreasing(v Vec, n int) {
-	family := v.CanonicalTypeFamily()
-	switch family {
-	case types.BytesFamily:
-		v.Bytes().UpdateOffsetsToBeNonDecreasing(n)
-	case types.JsonFamily:
-		v.JSON().UpdateOffsetsToBeNonDecreasing(n)
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
-	}
-}
-
-// ProportionalSize calls the method of the same name on bytes-like
-// vectors, panicking if not bytes-like.
+// ProportionalSize calls the method of the same name on bytes-like vectors,
+// panicking if not bytes-like.
 func ProportionalSize(v Vec, length int64) int64 {
 	family := v.CanonicalTypeFamily()
 	switch family {
@@ -592,16 +520,12 @@ func ProportionalSize(v Vec, length int64) int64 {
 	return 0
 }
 
-// Reset calls the method of the same name on bytes-like
-// vectors, panicking if not bytes-like.
-func Reset(v Vec) {
-	family := v.CanonicalTypeFamily()
-	switch family {
+// ResetIfBytesLike calls Reset on v if it is bytes-like, noop otherwise.
+func ResetIfBytesLike(v Vec) {
+	switch v.CanonicalTypeFamily() {
 	case types.BytesFamily:
 		v.Bytes().Reset()
 	case types.JsonFamily:
 		v.JSON().Reset()
-	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unsupported type %s", family))
 	}
 }
