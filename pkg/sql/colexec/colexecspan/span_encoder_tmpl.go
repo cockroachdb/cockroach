@@ -124,10 +124,16 @@ var _ spanEncoder = &_OP_STRING{}
 // next implements the spanEncoder interface.
 func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.Bytes {
 	oldBytesSize := op.outputBytes.Size()
-	if op.outputBytes == nil {
+	if op.outputBytes == nil || op.outputBytes.Len() < endIdx-startIdx {
 		op.outputBytes = coldata.NewBytes(endIdx - startIdx)
+	} else {
+		// {{/*
+		//     Note that it is ok that op.outputBytes.Len() might be larger than
+		//     endIdx-startIdx - only the first elements will be set by the
+		//     spanEncoder and used by the ColSpanAssembler.
+		// */}}
+		op.outputBytes.Reset()
 	}
-	op.outputBytes.ResetForAppend()
 
 	vec := batch.ColVec(op.encodeColIdx)
 	col := vec.TemplateType()
@@ -137,11 +143,11 @@ func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.B
 		sel = sel[startIdx:endIdx]
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				encodeSpan(true, true)
 			}
 		} else {
-			for _, i := range sel {
+			for outIdx, i := range sel {
 				encodeSpan(true, false)
 			}
 		}
@@ -150,10 +156,12 @@ func (op *_OP_STRING) next(batch coldata.Batch, startIdx, endIdx int) *coldata.B
 		if vec.Nulls().MaybeHasNulls() {
 			nulls := vec.Nulls()
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				encodeSpan(false, true)
 			}
 		} else {
 			for i := startIdx; i < endIdx; i++ {
+				outIdx := i - startIdx
 				encodeSpan(false, false)
 			}
 		}
@@ -179,9 +187,9 @@ func encodeSpan(hasSel bool, hasNulls bool) {
 	if hasNulls {
 		if nulls.NullAt(i) {
 			// {{if .Asc}}
-			op.outputBytes.AppendVal(encoding.EncodeNullAscending(op.scratch))
+			op.outputBytes.Set(outIdx, encoding.EncodeNullAscending(op.scratch))
 			// {{else}}
-			op.outputBytes.AppendVal(encoding.EncodeNullDescending(op.scratch))
+			op.outputBytes.Set(outIdx, encoding.EncodeNullDescending(op.scratch))
 			// {{end}}
 			continue
 		}
@@ -193,5 +201,5 @@ func encodeSpan(hasSel bool, hasNulls bool) {
 	}
 	val := col.Get(i)
 	_ASSIGN_SPAN_ENCODING(op.scratch, val)
-	op.outputBytes.AppendVal(op.scratch)
+	op.outputBytes.Set(outIdx, op.scratch)
 }
