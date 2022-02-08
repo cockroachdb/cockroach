@@ -246,7 +246,8 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 // finalizeDropColumn finalizes the dropping of one or more columns. It should
 // only be called if queueDropColumn has been called at least once.
 func (n *dropIndexNode) finalizeDropColumn(params runParams, tableDesc *tabledesc.Mutable) error {
-	if err := tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
 	mutationID := tableDesc.ClusterVersion.NextMutationID

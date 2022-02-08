@@ -19,6 +19,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -108,13 +109,21 @@ func processDescriptorTable(
 // Examine runs a suite of consistency checks over system tables.
 func Examine(
 	ctx context.Context,
+	version clusterversion.ClusterVersion,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
 	verbose bool,
 	stdout io.Writer,
 ) (ok bool, err error) {
-	descOk, err := ExamineDescriptors(ctx, descTable, namespaceTable, jobsTable, verbose, stdout)
+	descOk, err := ExamineDescriptors(
+		ctx,
+		version,
+		descTable,
+		namespaceTable,
+		jobsTable,
+		verbose,
+		stdout)
 	if err != nil {
 		return false, err
 	}
@@ -128,6 +137,7 @@ func Examine(
 // ExamineDescriptors runs a suite of checks over the descriptor table.
 func ExamineDescriptors(
 	ctx context.Context,
+	version clusterversion.ClusterVersion,
 	descTable DescriptorTable,
 	namespaceTable NamespaceTable,
 	jobsTable JobsTable,
@@ -163,7 +173,7 @@ func ExamineDescriptors(
 	for _, row := range descTable {
 		id := descpb.ID(row.ID)
 		desc := descLookupFn(id)
-		ve := cb.ValidateWithRecover(ctx, desc)
+		ve := cb.ValidateWithRecover(ctx, version, desc)
 		for _, err := range ve {
 			problemsFound = true
 			descReport(stdout, desc, "%s", err)

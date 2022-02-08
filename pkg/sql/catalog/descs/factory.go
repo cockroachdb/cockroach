@@ -11,6 +11,8 @@
 package descs
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -59,18 +61,16 @@ func NewBareBonesCollectionFactory(
 
 // MakeCollection constructs a Collection for the purposes of embedding.
 func (cf *CollectionFactory) MakeCollection(
-	temporarySchemaProvider TemporarySchemaProvider,
+	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider,
 ) Collection {
-	return makeCollection(
-		cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
-		cf.virtualSchemas, temporarySchemaProvider,
-	)
+	return makeCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydratedTables, cf.systemDatabase,
+		cf.virtualSchemas, temporarySchemaProvider)
 }
 
 // NewCollection constructs a new Collection.
 func (cf *CollectionFactory) NewCollection(
-	temporarySchemaProvider TemporarySchemaProvider,
+	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider,
 ) *Collection {
-	c := cf.MakeCollection(temporarySchemaProvider)
+	c := cf.MakeCollection(ctx, temporarySchemaProvider)
 	return &c
 }

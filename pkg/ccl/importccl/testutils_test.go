@@ -61,6 +61,7 @@ func descForTable(
 		desc, err := sql.NewSequenceTableDesc(
 			ctx,
 			nil, /* planner */
+			settings,
 			name,
 			tree.SequenceOptions{},
 			parent,

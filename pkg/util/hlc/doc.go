@@ -31,10 +31,11 @@ There are currently three channels through which HLC timestamps are passed
 between nodes in a cluster:
 
  - Raft (unidirectional): proposers of Raft commands (i.e. leaseholders) attach
-   clock readings to these command, which are later consumed by followers when
-   commands are applied to their Raft state machine.
+   clock readings to some of these command (e.g. lease transfers, range merges),
+   which are later consumed by followers when commands are applied to their Raft
+   state machine.
 
-   Ref: (kvserverpb.ReplicatedEvalResult).WriteTimestamp.
+   Ref: (roachpb.Lease).Start.
    Ref: (roachpb.MergeTrigger).FreezeStart.
 
  - BatchRequest API (bidirectional): clients and servers of the KV BatchRequest
@@ -82,10 +83,9 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
    transfer from one replica of a range to another, the outgoing leaseholder
    revokes its lease before its expiration time and consults its clock to
    determine the start time of the next lease. It then proposes this new lease
-   through Raft (see the raft channel above) with a clock reading attached that
-   is >= the new lease's start time. Upon application of this Raft entry, the
-   incoming leaseholder forwards its HLC to this clock reading, transitively
-   ensuring that its clock is >= the new lease's start time.
+   through Raft (see the raft channel above). Upon application of this Raft
+   entry, the incoming leaseholder forwards its HLC to the start time of the
+   lease, ensuring that its clock is >= the new lease's start time.
 
    The invariant that a leaseholder's clock is always >= its lease's start time
    is used in a few places. First, it ensures that the leaseholder's clock
