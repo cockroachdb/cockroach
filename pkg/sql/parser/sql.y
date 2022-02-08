@@ -543,6 +543,12 @@ func (u *sqlSymUnion) dir() tree.Direction {
 func (u *sqlSymUnion) nullsOrder() tree.NullsOrder {
     return u.val.(tree.NullsOrder)
 }
+func (u *sqlSymUnion) alterBackupCmd() tree.AlterBackupCmd {
+    return u.val.(tree.AlterBackupCmd)
+}
+func (u *sqlSymUnion) alterBackupKMS() tree.AlterBackupKMS {
+    return u.val.(tree.AlterBackupKMS)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -822,12 +828,12 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
@@ -897,6 +903,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 
 %type <tree.Statement> alter_stmt
+%type <tree.Statement> alter_backup_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -1142,6 +1149,9 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Expr> alter_column_visible
 %type <tree.Direction> opt_asc_desc
 %type <tree.NullsOrder> opt_nulls_order
+
+%type <tree.AlterBackupCmd> alter_backup_cmd
+%type <tree.AlterBackupKMS> alter_backup_kms
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1541,6 +1551,7 @@ alter_ddl_stmt:
 | alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
+| alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -4294,6 +4305,49 @@ explain_option_list:
   {
     $$.val = append($1.strs(), $3)
   }
+
+// %Help: ALTER BACKUP - alter an existing backup's encryption keys
+// %Category: CCL
+// %Text:
+// ALTER BACKUP <location...>
+//        [ ADD NEW_KMS = <kms...> ]
+//        [ WITH OLD_KMS = <kms...> ]
+// Locations:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// KMS:
+//    "[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : add new kms keys to backup
+alter_backup_stmt:
+  ALTER BACKUP string_or_placeholder alter_backup_cmd
+  {
+		$$.val = &tree.AlterBackup {
+			Backup: 		$3.expr(),
+			Cmds:				$4.alterBackupCmds(),
+		}
+  }
+| ALTER BACKUP string_or_placeholder IN string_or_placeholder alter_backup_cmd
+	{
+		$$.val = &tree.AlterBackup {
+			Subdir: 		$3.expr(),
+			Backup: 		$5.expr(),
+			Cmds:				$6.alterBackupCmd(),
+		}
+	}
+
+alter_backup_cmd:
+	ADD alter_backup_kms:
+	{
+		$$.val = $2.alterBackupKMS()
+	}
+
+alter_backup_kms:
+	NEW_KMS '=' string_or_placeholder_opt_list WITH OLD_KMS '=' string_or_placeholder_opt_list
+	{
+		$$.val = &tree.AlterBackupKMS{
+			NewKMSURI:  $3.stringOrPlaceholderOptList(),
+			OldKMSURI:  $7.stringOrPlaceholderOptList(),
+		}
+	}
 
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
@@ -13542,6 +13596,7 @@ unreserved_keyword:
 | NAN
 | NEVER
 | NEW_DB_NAME
+| NEW_KMS
 | NEXT
 | NO
 | NORMAL
@@ -13566,6 +13621,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OIDS
+| OLD_KMS
 | OPERATOR
 | OPT
 | OPTION
