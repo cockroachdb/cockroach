@@ -97,6 +97,11 @@ func (e *element) get(b *Bytes) []byte {
 	if e.inlined {
 		return e.inlinedSlice()[:e.inlinedLength:BytesMaxInlineLength]
 	}
+	return e.getNonInlined(b)
+}
+
+//gcassert:inline
+func (e *element) getNonInlined(b *Bytes) []byte {
 	return b.buffer[e.header.bufferOffset : e.header.bufferOffset+e.header.len : e.header.bufferOffset+e.header.cap]
 }
 
@@ -117,10 +122,19 @@ func (e *element) set(v []byte, b *Bytes) {
 	}
 }
 
+// copy copies the value contained in other into the receiver.
+func (e *element) copy(other element, dest, src *Bytes) {
+	if other.inlined {
+		*e = other
+		return
+	}
+	e.setNonInlined(other.getNonInlined(src), dest)
+}
+
 func (e *element) setNonInlined(v []byte, b *Bytes) {
 	// Check if we there was an old non-inlined value we can overwrite.
 	if !e.inlined && e.header.cap >= len(v) {
-		copy(e.get(b)[:len(v)], v)
+		copy(e.getNonInlined(b)[:len(v)], v)
 		e.header.len = len(v)
 	} else {
 		*e = element{
@@ -199,6 +213,20 @@ func (b *Bytes) Window(start, end int) *Bytes {
 	}
 }
 
+// copy copies a single value from src at position srcIdx into position destIdx
+// of the receiver. It is faster than b.Set(destIdx, src.Get(srcIdx)).
+func (b *Bytes) copy(src *Bytes, destIdx, srcIdx int) {
+	if buildutil.CrdbTestBuild {
+		if b.isWindow {
+			panic("copy is called on a window into Bytes")
+		}
+	}
+	b.elements[destIdx].copy(src.elements[srcIdx], b, src)
+}
+
+// TODO(yuzefovich): unexport some of the methods (like CopySlice and
+// AppendSlice).
+
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive []byte values
 // from src into the receiver starting at destIdx. Similar to the copy builtin,
 // min(dest.Len(), src.Len()) values will be copied.
@@ -243,12 +271,44 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	// vector).
 	if b == src && destIdx > srcStartIdx {
 		for i := toCopy - 1; i >= 0; i-- {
-			b.Set(destIdx+i, src.Get(srcStartIdx+i))
+			b.elements[destIdx+i].copy(src.elements[srcStartIdx+i], b, src)
 		}
 	} else {
 		for i := 0; i < toCopy; i++ {
-			b.Set(destIdx+i, src.Get(srcStartIdx+i))
+			b.elements[destIdx+i].copy(src.elements[srcStartIdx+i], b, src)
 		}
+	}
+}
+
+// ensureLengthForAppend makes sure that b has enough elements to support newLen
+// as the new length of the vector for an append operation. Any elements past
+// newLen are guaranteed to be unset.
+func (b *Bytes) ensureLengthForAppend(destIdx, newLen int) {
+	if cap(b.elements) < newLen {
+		// If the elements slice doesn't have enough capacity, then it must be
+		// reallocated.
+		oldElements := b.elements
+		// Figure out the new capacity of the elements slice. We will be
+		// doubling the existing capacity until newLen elements can fit, unless
+		// currently elements slice is nil, in which case we use newLen as the
+		// new capacity.
+		newCap := cap(b.elements)
+		if newCap > 0 {
+			for newCap < newLen {
+				newCap *= 2
+			}
+		} else {
+			newCap = newLen
+		}
+		b.elements = make([]element, newLen, newCap)
+		copy(b.elements[:destIdx], oldElements)
+	} else {
+		// We don't have to reallocate, so we can just reuse the old elements.
+		// First we need to zero out all elements past the new length and then
+		// we can set the new length accordingly (the elements will be set
+		// below).
+		b.zero(newLen)
+		b.elements = b.elements[:newLen]
 	}
 }
 
@@ -278,39 +338,52 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 	}
 	srcElementsToCopy := src.elements[srcStartIdx:srcEndIdx]
 	newLen := destIdx + srcEndIdx - srcStartIdx
-	if cap(b.elements) < newLen {
-		// If the elements slice doesn't have enough capacity, then it must be
-		// reallocated.
-		oldElements := b.elements
-		// Figure out the new capacity of the elements slice. We will be
-		// doubling the existing capacity until newLen elements can fit, unless
-		// currently elements slice is nil, in which case we use newLen as the
-		// new capacity.
-		newCap := cap(b.elements)
-		if newCap > 0 {
-			for newCap < newLen {
-				newCap *= 2
-			}
-		} else {
-			newCap = newLen
-		}
-		b.elements = make([]element, newLen, newCap)
-		copy(b.elements[:destIdx], oldElements)
-	} else {
-		// We don't have to reallocate, so we can just reuse the old elements.
-		// First we need to zero out all elements past the new length and then
-		// we can set the new length accordingly (the elements will be set
-		// below).
-		b.zero(newLen)
-		b.elements = b.elements[:newLen]
-	}
+	b.ensureLengthForAppend(destIdx, newLen)
+	// Optimize appending of the new elements by copying all of them directly
+	// into the end of the elements slice. This way all inlined values become
+	// correctly set, and we only need to set the non-inlined values separately.
+	copy(b.elements[destIdx:], srcElementsToCopy)
 	for i := 0; i < len(srcElementsToCopy); i++ {
-		b.elements[destIdx+i].set(srcElementsToCopy[i].get(src), b)
+		if e := &b.elements[destIdx+i]; !e.inlined {
+			// This value is non-inlined, so at the moment it is pointing into
+			// the buffer of the source - we have to explicitly set it in order
+			// to copy the actual value's data into the buffer of b.
+			//
+			// First, unset the element so that we don't try to reuse the old
+			// element.data to write the new value into - we do want to append
+			// the new value to b.buffer.
+			*e = element{}
+			e.setNonInlined(srcElementsToCopy[i].getNonInlined(src), b)
+		}
+	}
+}
+
+// appendSliceWithSel appends all values specified in sel from the source into
+// the receiver starting at position destIdx.
+func (b *Bytes) appendSliceWithSel(src *Bytes, destIdx int, sel []int) {
+	if b == src && len(sel) != 0 {
+		panic("appendSliceWithSel when b == src is only supported when len(sel) == 0")
+	}
+	if b.isWindow {
+		panic("appendSliceWithSel is called on a window into Bytes")
+	}
+	if destIdx < 0 || destIdx > b.Len() {
+		panic(
+			fmt.Sprintf(
+				"dest index %d out of range (len=%d)", destIdx, b.Len(),
+			),
+		)
+	}
+	newLen := destIdx + len(sel)
+	b.ensureLengthForAppend(destIdx, newLen)
+	for i, srcIdx := range sel {
+		b.elements[destIdx+i].copy(src.elements[srcIdx], b, src)
 	}
 }
 
 // AppendVal appends the given []byte value to the end of the receiver. A nil
 // value will be "converted" into an empty byte slice.
+// TODO(yuzefovich): remove this method.
 func (b *Bytes) AppendVal(v []byte) {
 	if b.isWindow {
 		panic("AppendVal is called on a window into Bytes")

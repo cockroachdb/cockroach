@@ -70,6 +70,12 @@ func (js *JSONs) Window(start, end int) *JSONs {
 	}
 }
 
+// copy copies a single value from src at position srcIdx into position destIdx
+// of the receiver.
+func (js *JSONs) copy(src *JSONs, destIdx, srcIdx int) {
+	js.Bytes.copy(&src.Bytes, destIdx, srcIdx)
+}
+
 // CopySlice copies srcStartIdx inclusive and srcEndIdx exclusive []byte values
 // from src into the receiver starting at destIdx. See Bytes.CopySlice.
 func (js *JSONs) CopySlice(src *JSONs, destIdx, srcStartIdx, srcEndIdx int) {
@@ -82,20 +88,10 @@ func (js *JSONs) AppendSlice(src *JSONs, destIdx, srcStartIdx, srcEndIdx int) {
 	js.Bytes.AppendSlice(&src.Bytes, destIdx, srcStartIdx, srcEndIdx)
 }
 
-// AppendVal appends the given JSON value to the end of the receiver.
-func (js *JSONs) AppendVal(j json.JSON) {
-	if j == nil {
-		// A nil JSON indicates a NULL value in the column. We've got to insert a
-		// "zero value" which in this case means an empty byte slice.
-		js.Bytes.AppendVal(nil)
-		return
-	}
-	var err error
-	js.scratch, err = json.EncodeJSON(js.scratch[:0], j)
-	if err != nil {
-		colexecerror.ExpectedError(err)
-	}
-	js.Bytes.AppendVal(js.scratch)
+// appendSliceWithSel appends all values specified in sel from the source into
+// the receiver starting at position destIdx.
+func (js *JSONs) appendSliceWithSel(src *JSONs, destIdx int, sel []int) {
+	js.Bytes.appendSliceWithSel(&src.Bytes, destIdx, sel)
 }
 
 // String is used for debugging purposes.
