@@ -275,7 +275,7 @@ func showBackupPlanHook(
 			if err != nil {
 				return err
 			}
-			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
+			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
 			encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
 				Key: encryptionKey}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
@@ -285,8 +285,14 @@ func showBackupPlanHook(
 			}
 
 			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
-			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup([]string{kms},
-				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), env)
+			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+			for _, encFile := range opts {
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup([]string{kms},
+					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return err
 			}

@@ -400,6 +400,7 @@ alter_ddl_stmt ::=
 	| alter_type_stmt
 	| alter_default_privileges_stmt
 	| alter_changefeed_stmt
+	| alter_backup_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1028,6 +1029,7 @@ unreserved_keyword ::=
 	| 'NAN'
 	| 'NEVER'
 	| 'NEW_DB_NAME'
+	| 'NEW_KMS'
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
@@ -1052,6 +1054,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
+	| 'OLD_KMS'
 	| 'OPERATOR'
 	| 'OPT'
 	| 'OPTION'
@@ -1388,6 +1391,10 @@ alter_default_privileges_stmt ::=
 
 alter_changefeed_stmt ::=
 	'ALTER' 'CHANGEFEED' a_expr alter_changefeed_cmds
+
+alter_backup_stmt ::=
+	'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds
+	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder alter_backup_cmds
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -1886,6 +1893,9 @@ abbreviated_revoke_stmt ::=
 alter_changefeed_cmds ::=
 	( alter_changefeed_cmd ) ( ( alter_changefeed_cmd ) )*
 
+alter_backup_cmds ::=
+	( alter_backup_cmd ) ( ( alter_backup_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2369,6 +2379,9 @@ alter_changefeed_cmd ::=
 	'ADD' changefeed_targets
 	| 'DROP' changefeed_targets
 
+alter_backup_cmd ::=
+	'ADD' backup_kms
+
 role_option ::=
 	'CREATEROLE'
 	| 'NOCREATEROLE'
@@ -2727,6 +2740,9 @@ sequence_option_elem ::=
 	| 'START' signed_iconst64
 	| 'START' 'WITH' signed_iconst64
 	| 'VIRTUAL'
+
+backup_kms ::=
+	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
 password_clause ::=
 	'PASSWORD' string_or_placeholder
