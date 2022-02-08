@@ -10,6 +10,8 @@
 
 package settingswatcher
 
+import "github.com/cockroachdb/cockroach/pkg/settings"
+
 // OverridesMonitor is an interface through which the settings watcher can
 // receive setting overrides. Used for non-system tenants.
 //
@@ -22,7 +24,7 @@ type OverridesMonitor interface {
 	NotifyCh() <-chan struct{}
 
 	// Overrides retrieves the current set of setting overrides, as a map from
-	// setting key to RawValue. Any settings that are present must be set to the
-	// overridden value.
-	Overrides() map[string]RawValue
+	// setting key to EncodedValue. Any settings that are present must be set to
+	// the overridden value.
+	Overrides() map[string]settings.EncodedValue
 }
