@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -264,6 +265,18 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 		c.DistinctCount = epsilon
 	}
 
+}
+
+// CopyFromOther copies all fields of the other ColumnStatistic except Cols,
+// including the Histogram, into the receiver.
+func (c *ColumnStatistic) CopyFromOther(other *ColumnStatistic, evalCtx *tree.EvalContext) {
+	c.DistinctCount = other.DistinctCount
+	c.NullCount = other.NullCount
+	c.AvgSize = other.AvgSize
+	if other.Histogram != nil && c.Cols.Len() == 1 {
+		c.Histogram = &Histogram{}
+		c.Histogram.Init(evalCtx, c.Cols.SingleColumn(), other.Histogram.buckets)
+	}
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.
