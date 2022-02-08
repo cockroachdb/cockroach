@@ -305,9 +305,6 @@ func UpdateBatchState(batch coldata.Batch, length int, usesSel bool, sel []int) 
 	if usesSel {
 		copy(batch.Selection()[:length], sel[:length])
 	}
-	// Note: when usesSel is true, we have to set the length on the batch
-	// **after** setting the selection vector because we might use the values
-	// in the selection vector to maintain invariants (like for flat bytes).
 	batch.SetLength(length)
 }
 
