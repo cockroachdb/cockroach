@@ -62,7 +62,7 @@ func TestRecordingString(t *testing.T) {
 	// than the one we just assigned. Otherwise the sorting will be screwed up.
 	time.Sleep(10 * time.Millisecond)
 
-	carrier := metadataCarrier{MD: metadata.MD{}}
+	carrier := MetadataCarrier{MD: metadata.MD{}}
 	tr.InjectMetaInto(root.Meta(), carrier)
 
 	wireSpanMeta, err := tr2.ExtractMetaFrom(carrier)

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/petermattis/goid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/trace"
 )
@@ -675,6 +676,14 @@ func (sp *Span) reset(
 // The visitor is not allowed to hold on to children after it returns.
 func (sp *Span) visitOpenChildren(visitor func(sp *Span)) {
 	sp.i.crdb.visitOpenChildren(visitor)
+}
+
+// SetOtelStatus sets the status of the OpenTelemetry span (if any).
+func (sp *Span) SetOtelStatus(code codes.Code, msg string) {
+	if sp.i.otelSpan == nil {
+		return
+	}
+	sp.i.otelSpan.SetStatus(codes.Error, msg)
 }
 
 // spanRef represents a reference to a span. In addition to a simple *Span, a
