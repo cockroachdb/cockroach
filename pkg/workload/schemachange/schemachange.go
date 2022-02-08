@@ -218,6 +218,9 @@ func (s *schemaChange) Ops(
 		s.workers = append(s.workers, w)
 
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
+		ql.Close = func(ctx2 context.Context) {
+			pool.Close()
+		}
 	}
 	return ql, nil
 }
