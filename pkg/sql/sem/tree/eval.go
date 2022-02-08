@@ -3554,6 +3554,13 @@ type SQLStatsController interface {
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
+// CaptureIndexUsageStatsController is an interface embedded in EvalCtx which
+// can be used by the builtins to capture index usage statistics. This
+// interface is introduced to avoid circular dependency.
+type CaptureIndexUsageStatsController interface {
+	CreateCaptureIndexUsageStatsSchedule(ctx context.Context) error
+}
+
 // IndexUsageStatsController is an interface embedded in EvalCtx which can be
 // used by the builtins to reset index usage stats in the cluster. This interface
 // is introduced to avoid circular dependency.
@@ -3699,6 +3706,8 @@ type EvalContext struct {
 	SQLLivenessReader sqlliveness.Reader
 
 	SQLStatsController SQLStatsController
+
+	CaptureIndexUsageStatsController CaptureIndexUsageStatsController
 
 	IndexUsageStatsController IndexUsageStatsController
 

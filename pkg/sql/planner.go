@@ -434,11 +434,13 @@ func internalExtendedEvalCtx(
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController tree.SQLStatsController
+	var capturedIndexUsageStatsController tree.CaptureIndexUsageStatsController
 	var indexUsageStatsController tree.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
 			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
+			capturedIndexUsageStatsController = execCfg.InternalExecutor.s.captureIndexUsageStatsController
 			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
@@ -448,22 +450,24 @@ func internalExtendedEvalCtx(
 				Setting: execCfg.Settings,
 			})
 			sqlStatsController = &persistedsqlstats.Controller{}
+			capturedIndexUsageStatsController = CaptureIndexUsageStatsController{}
 			indexUsageStatsController = &idxusage.Controller{}
 		}
 	}
 	ret := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:                       txn,
-			SessionDataStack:          sds,
-			TxnReadOnly:               false,
-			TxnImplicit:               true,
-			Context:                   ctx,
-			Mon:                       plannerMon,
-			TestingKnobs:              evalContextTestingKnobs,
-			StmtTimestamp:             stmtTimestamp,
-			TxnTimestamp:              txnTimestamp,
-			SQLStatsController:        sqlStatsController,
-			IndexUsageStatsController: indexUsageStatsController,
+			Txn:                              txn,
+			SessionDataStack:                 sds,
+			TxnReadOnly:                      false,
+			TxnImplicit:                      true,
+			Context:                          ctx,
+			Mon:                              plannerMon,
+			TestingKnobs:                     evalContextTestingKnobs,
+			StmtTimestamp:                    stmtTimestamp,
+			TxnTimestamp:                     txnTimestamp,
+			SQLStatsController:               sqlStatsController,
+			CaptureIndexUsageStatsController: capturedIndexUsageStatsController,
+			IndexUsageStatsController:        indexUsageStatsController,
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,

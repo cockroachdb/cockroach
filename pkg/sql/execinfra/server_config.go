@@ -162,6 +162,9 @@ type ServerConfig struct {
 	// introduce dependency on the sql package.
 	SQLStatsController tree.SQLStatsController
 
+	// CaptureIndexUsageStatsController
+	CapturedIndexUsageStatsController tree.CaptureIndexUsageStatsController
+
 	// IndexUsageStatsController is an interface used to reset index usage stats without
 	// the need to introduce dependency on the sql package.
 	IndexUsageStatsController tree.IndexUsageStatsController

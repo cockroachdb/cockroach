@@ -12,13 +12,12 @@ package idxusage
 
 import (
 	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 )
 
 // Controller implements the index usage stats subsystem control plane. This exposes
 // administrative interfaces that can be consumed by other parts of the database
-// (e.g. status server, builtins) to control the behavior of index usage stas
+// (e.g. status server, builtins) to control the behavior of index usage stats
 // subsystem.
 type Controller struct {
 	statusServer serverpb.SQLStatusServer

@@ -6492,6 +6492,30 @@ table's zone configuration this will return NULL.`,
 		},
 	),
 
+	"crdb_internal.capture_index_usage_stats": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if evalCtx.CaptureIndexUsageStatsController == nil {
+					return nil, errors.AssertionFailedf("capture index usage stats controller not set")
+				}
+
+				ctx := evalCtx.Ctx()
+				if err := evalCtx.CaptureIndexUsageStatsController.CreateCaptureIndexUsageStatsSchedule(ctx); err != nil {
+
+					return tree.DNull, err
+				}
+				return tree.DBoolTrue, nil
+			},
+			Info:       "This function is used to start a job to capture index usage statistics.",
+			Volatility: tree.VolatilityVolatile,
+		},
+	),
+
 	"crdb_internal.revalidate_unique_constraints_in_all_tables": makeBuiltin(
 		tree.FunctionProperties{
 			Category: categorySystemInfo,

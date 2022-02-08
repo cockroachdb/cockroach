@@ -258,6 +258,10 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	// captureIndexUsageStatsController is the control-plane interface for index
+	// usage stats.
+	captureIndexUsageStatsController CaptureIndexUsageStatsController
+
 	// indexUsageStatsController is the control-plane interface for
 	// indexUsageStats.
 	indexUsageStatsController *idxusage.Controller
@@ -395,6 +399,8 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	captureIndexUsageStatsExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	s.captureIndexUsageStatsController = *NewCaptureIndexUsageStatsController(cfg.DB, &captureIndexUsageStatsExecutor, cfg.Settings)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 	return s
 }
@@ -2546,20 +2552,21 @@ func (ex *connExecutor) asOfClauseWithSessionDefault(expr tree.AsOfClause) tree.
 func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalContext, p *planner) {
 	*evalCtx = extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Planner:                   p,
-			PrivilegedAccessor:        p,
-			SessionAccessor:           p,
-			JobExecContext:            p,
-			ClientNoticeSender:        p,
-			Sequence:                  p,
-			Tenant:                    p,
-			Regions:                   p,
-			JoinTokenCreator:          p,
-			PreparedStatementState:    &ex.extraTxnState.prepStmtsNamespace,
-			SessionDataStack:          ex.sessionDataStack,
-			ReCache:                   ex.server.reCache,
-			SQLStatsController:        ex.server.sqlStatsController,
-			IndexUsageStatsController: ex.server.indexUsageStatsController,
+			Planner:                          p,
+			PrivilegedAccessor:               p,
+			SessionAccessor:                  p,
+			JobExecContext:                   p,
+			ClientNoticeSender:               p,
+			Sequence:                         p,
+			Tenant:                           p,
+			Regions:                          p,
+			JoinTokenCreator:                 p,
+			PreparedStatementState:           &ex.extraTxnState.prepStmtsNamespace,
+			SessionDataStack:                 ex.sessionDataStack,
+			ReCache:                          ex.server.reCache,
+			SQLStatsController:               ex.server.sqlStatsController,
+			CaptureIndexUsageStatsController: ex.server.captureIndexUsageStatsController,
+			IndexUsageStatsController:        ex.server.indexUsageStatsController,
 		},
 		Tracing:                &ex.sessionTracing,
 		MemMetrics:             &ex.memMetrics,
