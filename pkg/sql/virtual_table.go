@@ -34,7 +34,7 @@ import (
 type virtualTableGenerator func() (tree.Datums, error)
 
 // cleanupFunc is a function to cleanup resources created by the generator.
-type cleanupFunc func()
+type cleanupFunc func(ctx context.Context)
 
 // rowPusher is an interface for lazy generators to push rows into
 // and then suspend until the next row has been requested.
@@ -74,7 +74,7 @@ func setupGenerator(
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	cleanup = func() {
+	cleanup = func(context.Context) {
 		cancel()
 		wg.Wait()
 	}
@@ -167,12 +167,12 @@ func setupGenerator(
 type virtualTableNode struct {
 	columns    colinfo.ResultColumns
 	next       virtualTableGenerator
-	cleanup    func()
+	cleanup    func(ctx context.Context)
 	currentRow tree.Datums
 }
 
 func (p *planner) newVirtualTableNode(
-	columns colinfo.ResultColumns, next virtualTableGenerator, cleanup func(),
+	columns colinfo.ResultColumns, next virtualTableGenerator, cleanup func(ctx context.Context),
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,
@@ -200,7 +200,7 @@ func (n *virtualTableNode) Values() tree.Datums {
 
 func (n *virtualTableNode) Close(ctx context.Context) {
 	if n.cleanup != nil {
-		n.cleanup()
+		n.cleanup(ctx)
 	}
 }
 

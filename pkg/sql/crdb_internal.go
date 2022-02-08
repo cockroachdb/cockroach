@@ -751,7 +751,7 @@ CREATE TABLE crdb_internal.jobs (
 			return nil, nil, err
 		}
 
-		cleanup := func() {
+		cleanup := func(ctx context.Context) {
 			if err := it.Close(); err != nil {
 				// TODO(yuzefovich): this error should be propagated further up
 				// and not simply being logged. Fix it (#61123).

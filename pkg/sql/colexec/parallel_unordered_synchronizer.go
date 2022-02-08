@@ -216,7 +216,7 @@ func (s *ParallelUnorderedSynchronizer) init() {
 			span := s.tracingSpans[inputIdx]
 			defer func() {
 				if span != nil {
-					span.Finish()
+					defer span.Finish()
 				}
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)

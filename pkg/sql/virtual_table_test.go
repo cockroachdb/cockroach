@@ -48,7 +48,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.Equal(t, tree.Datums{tree.NewDInt(1)}, d)
 
 		// Check that we can safely cleanup in the middle of execution.
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test worker error", func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.NoError(t, err)
 		_, err = next()
 		require.Error(t, err)
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test no next", func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		}
 		_, cleanup, setupError := setupGenerator(ctx, worker, stopper)
 		require.NoError(t, setupError)
-		cleanup()
+		cleanup(ctx)
 	})
 
 	t.Run("test context cancellation", func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		if err != nil {
 			require.Equal(t, cancelchecker.QueryCanceledError, err)
 		}
-		cleanup()
+		cleanup(ctx)
 
 		// Test cancellation after asking for a row.
 		ctx, cancel = context.WithCancel(context.Background())
@@ -117,7 +117,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		cancel()
 		_, err = next()
 		require.Equal(t, cancelchecker.QueryCanceledError, err)
-		cleanup()
+		cleanup(ctx)
 
 		// Test cancellation after asking for all the rows.
 		ctx, cancel = context.WithCancel(context.Background())
@@ -128,7 +128,7 @@ func TestVirtualTableGenerators(t *testing.T) {
 		_, err = next()
 		require.NoError(t, err)
 		cancel()
-		cleanup()
+		cleanup(ctx)
 	})
 }
 
@@ -153,6 +153,6 @@ func BenchmarkVirtualTableGenerators(b *testing.B) {
 			_, err := next()
 			require.NoError(b, err)
 		}
-		cleanup()
+		cleanup(ctx)
 	})
 }
