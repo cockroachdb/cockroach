@@ -15,10 +15,15 @@ import (
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -81,6 +86,13 @@ const (
 	// the table statistics have an avgSize of 0 for a given column and not all
 	// columns are NULL.
 	defaultColSize = 4.0
+
+	// maxValuesForFullHistogramFromCheckConstraint is the maximum number of
+	// values from the spans a check constraint is allowed to have in order for a
+	// full histogram with one sample per value to be built. If the check
+	// constraint has more than this number of values, a histogram with samples of
+	// range boundaries will be built.
+	maxValuesForFullHistogramFromCheckConstraint = tabledesc.MaxBucketAllowed
 )
 
 // statisticsBuilder is responsible for building the statistics that are
@@ -591,7 +603,6 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
-
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -691,6 +702,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 		}
 	}
+	// Fake stats from check constraints are applicable even if there are
+	// no regular stats created for the table.
+	sb.buildStatsFromCheckConstraints(tabID, stats, invertedIndexCols)
 	sb.md.SetTableAnnotation(tabID, statsAnnID, stats)
 	return stats
 }
@@ -4203,4 +4217,154 @@ func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
 	sb.init(evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
+}
+
+// buildStatsFromCheckConstraints checks if there are any non-null CHECK
+// constraints which constrain indexes and builds a stats entry on the first
+// index column in each constrained index if stats don't already exist on that
+// column. In addition, if the optimizer_use_histograms session setting is on,
+// and the first index column is not invertable, and the number of rows in the
+// table is not less than the number of values found in the constraint, then an
+// EquiDepthHistogram is built with them using an even data distribution.
+func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
+	tabID opt.TableID, statistics *props.Statistics, invertedIndexCols map[int][]int,
+) {
+	if !statistics.Available { // msirek-temp
+		return
+	}
+	tabMeta := sb.md.TableMeta(tabID)
+	var firstColID opt.ColumnID
+
+	constraints := tabMeta.Constraints
+	if constraints == nil {
+		return
+	}
+	if constraints.Op() != opt.FiltersOp {
+		return
+	}
+	filters := *constraints.(*FiltersExpr)
+	// For each ANDed check constraint...
+	for i := 0; i < len(filters); i++ {
+		filter := filters[i]
+		// This must be some type of comparison operation, or an OR or AND
+		// expression. These operations have at least 2 children.
+		if filter.Condition.ChildCount() < 2 {
+			continue
+		}
+		if filter.ScalarProps().Constraints == nil {
+			continue
+		}
+		for j := 0; j < filter.ScalarProps().Constraints.Length(); j++ {
+			filterConstraint := filter.ScalarProps().Constraints.Constraint(j)
+			firstColID = filterConstraint.Columns.Get(0).ID()
+			cols := opt.MakeColSet(firstColID)
+			if _, ok := statistics.ColStats.Lookup(cols); ok {
+				// Stats already exist on this column, no need to manufacture any.
+				continue
+			}
+			dataType := tabMeta.Table.Column(tabID.ColumnOrdinal(firstColID)).DatumType()
+			invertedColOrds := invertedIndexCols[tabID.ColumnOrdinal(firstColID)]
+			numRows := int64(statistics.RowCount)
+			var hasNullValue, ok bool
+			var values tree.Datums
+			var distinctVals uint64
+			if distinctVals, ok = filterConstraint.CalculateMaxResults(sb.evalCtx, cols, cols); ok {
+				if len(invertedColOrds) == 0 {
+					// If the number of values is excessive, don't spend too much time building the histogram,
+					// as it may slow down the query.
+					// TODO(msirek): Consider bumping up this limit for tables with high RowCount, as they
+					//   may take longer to scan, and compared to scan costs, a slight increase in query
+					//   planning time may be worth it to get more detailed stats.
+					if distinctVals > maxValuesForFullHistogramFromCheckConstraint {
+						values, _ = filterConstraint.CollectFirstColumnBoundaryValues(sb.evalCtx)
+					} else {
+						values, hasNullValue, _ = filterConstraint.CollectFirstColumnValues(sb.evalCtx)
+					}
+				}
+			} else {
+				continue
+			}
+			numValues := len(values)
+			// Histograms on inverted columns are interpreted differently, so don't
+			// build one if the first index column is inverted.
+			// Also, histogram building errors out when the number of samples is
+			// greater than the number of rows, so just skip that case.
+			useHistogram := sb.evalCtx.SessionData().OptimizerUseHistograms && numValues > 0 &&
+				!hasNullValue && len(invertedColOrds) == 0 && int64(numValues) <= numRows
+			if !useHistogram {
+				if distinctVals > math.MaxInt32 {
+					continue
+				}
+				numValues = int(distinctVals)
+			}
+			var avgSize float64
+			var histogram []cat.HistogramBucket
+
+			distinctCount := max(float64(numValues), 1)
+			nullCount := float64(0)
+			if useHistogram {
+				// Each single-column prefix value from the Spans is a sample value.
+				// Give each sample value its own bucket, up to a maximum of 256
+				// buckets, with even distribution.
+				encodedHistogram, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+					dataType,
+					values, /* samples */
+					numRows,
+					int64(numValues), /* distinctCount */
+					256,              /* maxBuckets */
+				)
+				// This shouldn't error out, but if it does, let's not punish the user.
+				// Just build stats without the histogram in that case.
+				if err == nil {
+					avgSize = avgSizeFromEncodedHistogram(encodedHistogram)
+					histogram = unencodedBuckets
+				} else {
+					useHistogram = false
+					log.Infof(
+						sb.evalCtx.Ctx(), "histogram could not be generated from check constraint due to error: %v", err,
+					)
+				}
+			}
+			if avgSize == float64(0) {
+				avgSize = avgSizeFromDatums(values)
+			}
+
+			// Make the actual stats entry in statistics.ColStats that can be looked
+			// up via a ColSet.
+			if colStat, ok := statistics.ColStats.Add(cols); ok {
+				// colStat.Cols should already be set by the call to Add().
+				colStat.DistinctCount = distinctCount
+				colStat.NullCount = nullCount
+				colStat.AvgSize = avgSize
+				if useHistogram {
+					colStat.Histogram = &props.Histogram{}
+					colStat.Histogram.Init(sb.evalCtx, firstColID, histogram)
+				}
+				sb.finalizeFromRowCountAndDistinctCounts(colStat, statistics)
+			}
+		}
+	}
+}
+
+func avgSizeFromEncodedHistogram(encodedHistogram stats.HistogramData) float64 {
+	dataSize := 0
+	numValues := len(encodedHistogram.Buckets)
+	for j := range encodedHistogram.Buckets {
+		dataSize += len(encodedHistogram.Buckets[j].UpperBound)
+	}
+	return float64(dataSize / numValues)
+}
+
+func avgSizeFromDatums(values tree.Datums) float64 {
+	dataSize := 0
+	numValues := len(values)
+	for _, value := range values {
+		encoded, err := keyside.Encode(nil, value, encoding.Ascending)
+		if err != nil {
+			dataSize = int(defaultColSize) * numValues
+			break
+		}
+		dataSize += len(encoded)
+	}
+	return float64(dataSize / numValues)
 }
