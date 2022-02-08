@@ -812,7 +812,7 @@ locality-optimized-search
  ├── right columns: t.public.abc_part.r:13(string) t.public.abc_part.a:14(int) t.public.abc_part.b:15(int) t.public.abc_part.c:16(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.91, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
- ├── cost: 3.468444
+ ├── cost: 3.48706667
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── distribution: east
@@ -821,8 +821,8 @@ locality-optimized-search
  │    ├── columns: t.public.abc_part.r:7(string!null) t.public.abc_part.a:8(int!null) t.public.abc_part.b:9(int!null) t.public.abc_part.c:10(string!null)
  │    ├── constraint: /7/9/10: [/'east'/1/'foo' - /'east'/1/'foo']
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.9001, distinct(7)=0.9001, null(7)=0, avgsize(7)=4, distinct(9)=0.9001, null(9)=0, avgsize(9)=4, distinct(10)=0.9001, null(10)=0, avgsize(10)=4, distinct(7,9,10)=0.9001, null(7,9,10)=0, avgsize(7,9,10)=12]
- │    ├── cost: 1.724672
+ │    ├── stats: [rows=0.905, distinct(7)=0.905, null(7)=0, avgsize(7)=7, distinct(9)=0.905, null(9)=0, avgsize(9)=4, distinct(10)=0.905, null(10)=0, avgsize(10)=4, distinct(7,9,10)=0.905, null(7,9,10)=0, avgsize(7,9,10)=15]
+ │    ├── cost: 1.73398333
  │    ├── key: ()
  │    ├── fd: ()-->(7-10)
  │    └── prune: (7-10)
@@ -830,8 +830,8 @@ locality-optimized-search
       ├── columns: t.public.abc_part.r:13(string!null) t.public.abc_part.a:14(int!null) t.public.abc_part.b:15(int!null) t.public.abc_part.c:16(string!null)
       ├── constraint: /13/15/16: [/'west'/1/'foo' - /'west'/1/'foo']
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, avgsize(13)=4, distinct(15)=0.9001, null(15)=0, avgsize(15)=4, distinct(16)=0.9001, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.9001, null(13,15,16)=0, avgsize(13,15,16)=12]
-      ├── cost: 1.724672
+      ├── stats: [rows=0.905, distinct(13)=0.905, null(13)=0, avgsize(13)=7, distinct(15)=0.905, null(15)=0, avgsize(15)=4, distinct(16)=0.905, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.905, null(13,15,16)=0, avgsize(13,15,16)=15]
+      ├── cost: 1.73398333
       ├── key: ()
       ├── fd: ()-->(13-16)
       └── prune: (13-16)
@@ -850,7 +850,7 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │         └── a2.r:7 = 'west' [outer=(7), constraints=(/7: [/'west' - /'west']; tight), fd=()-->(7)]
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1e-10]
- ├── cost: 18.1443257
+ ├── cost: 20.2769107
  ├── key: ()
  ├── fd: ()-->(1-4)
  ├── distribution: east
@@ -861,8 +861,8 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │         ├── a1.a:2 = a2.b:9 [outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
  │    │         └── a2.r:7 = 'east' [outer=(7), constraints=(/7: [/'east' - /'east']; tight), fd=()-->(7)]
  │    ├── cardinality: [0 - 1]
- │    ├── stats: [rows=0.9009, distinct(1)=0.897389, null(1)=0, avgsize(1)=4, distinct(2)=0.9009, null(2)=0, avgsize(2)=4, distinct(3)=0.9009, null(3)=0, avgsize(3)=4, distinct(4)=0.9009, null(4)=0, avgsize(4)=4]
- │    ├── cost: 10.8432087
+ │    ├── stats: [rows=0.455, distinct(1)=0.422636, null(1)=0, avgsize(1)=7, distinct(2)=0.455, null(2)=0, avgsize(2)=4, distinct(3)=0.455, null(3)=0, avgsize(3)=4, distinct(4)=0.455, null(4)=0, avgsize(4)=4]
+ │    ├── cost: 14.6769627
  │    ├── key: ()
  │    ├── fd: ()-->(1-4)
  │    ├── distribution: east
@@ -871,8 +871,8 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    ├── left columns: a1.r:13 a1.a:14 a1.b:15 a1.c:16
  │    │    ├── right columns: a1.r:19 a1.a:20 a1.b:21 a1.c:22
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=0.91, distinct(1)=0.906283, null(1)=0, avgsize(1)=4, distinct(2)=0.91, null(2)=0, avgsize(2)=4, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
- │    │    ├── cost: 3.468444
+ │    │    ├── stats: [rows=0.91, distinct(1)=0.731367, null(1)=0, avgsize(1)=7, distinct(2)=0.91, null(2)=0, avgsize(2)=4, distinct(3)=0.91, null(3)=0, avgsize(3)=4, distinct(4)=0.91, null(4)=0, avgsize(4)=4, distinct(3,4)=0.91, null(3,4)=0, avgsize(3,4)=8]
+ │    │    ├── cost: 3.48706667
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1-4)
  │    │    ├── distribution: east
@@ -880,16 +880,16 @@ anti-join (lookup abc_part@bc_idx [as=a2])
  │    │    │    ├── columns: a1.r:13!null a1.a:14!null a1.b:15!null a1.c:16!null
  │    │    │    ├── constraint: /13/15/16: [/'east'/1/'foo' - /'east'/1/'foo']
  │    │    │    ├── cardinality: [0 - 1]
- │    │    │    ├── stats: [rows=0.9001, distinct(13)=0.9001, null(13)=0, avgsize(13)=4, distinct(15)=0.9001, null(15)=0, avgsize(15)=4, distinct(16)=0.9001, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.9001, null(13,15,16)=0, avgsize(13,15,16)=12]
- │    │    │    ├── cost: 1.724672
+ │    │    │    ├── stats: [rows=0.905, distinct(13)=0.905, null(13)=0, avgsize(13)=7, distinct(15)=0.905, null(15)=0, avgsize(15)=4, distinct(16)=0.905, null(16)=0, avgsize(16)=4, distinct(13,15,16)=0.905, null(13,15,16)=0, avgsize(13,15,16)=15]
+ │    │    │    ├── cost: 1.73398333
  │    │    │    ├── key: ()
  │    │    │    └── fd: ()-->(13-16)
  │    │    └── scan abc_part@bc_idx [as=a1]
  │    │         ├── columns: a1.r:19!null a1.a:20!null a1.b:21!null a1.c:22!null
  │    │         ├── constraint: /19/21/22: [/'west'/1/'foo' - /'west'/1/'foo']
  │    │         ├── cardinality: [0 - 1]
- │    │         ├── stats: [rows=0.9001, distinct(19)=0.9001, null(19)=0, avgsize(19)=4, distinct(21)=0.9001, null(21)=0, avgsize(21)=4, distinct(22)=0.9001, null(22)=0, avgsize(22)=4, distinct(19,21,22)=0.9001, null(19,21,22)=0, avgsize(19,21,22)=12]
- │    │         ├── cost: 1.724672
+ │    │         ├── stats: [rows=0.905, distinct(19)=0.905, null(19)=0, avgsize(19)=7, distinct(21)=0.905, null(21)=0, avgsize(21)=4, distinct(22)=0.905, null(22)=0, avgsize(22)=4, distinct(19,21,22)=0.905, null(19,21,22)=0, avgsize(19,21,22)=15]
+ │    │         ├── cost: 1.73398333
  │    │         ├── key: ()
  │    │         └── fd: ()-->(19-22)
  │    └── filters (true)
