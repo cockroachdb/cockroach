@@ -433,7 +433,10 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lG9r2zAQxt_vU4h705Sp2LLz1zDI1ngsI0s6J7CNzQQlPopZanmSPFZCvvuwHZa4xKqTwt4YydLv7rm7B21B_dqAB_7Xu8nb8ZS0RuP5Yv55ck3m_sS_XRBO3gezT4RLyR-Xmq_Ilw9-4JPWigx_ZLbtIrnast3VNZkFpMXJG8Ly5cgPyLtvhAOFREQ45Q-owPsODCg4QMGFkEIqxRqVEjI_2hYXx9Ef8GwKcZJmuvytY71B8EDICCVGQCFCzeNNEW_IXkO4CymshUTwDren4kakVr9yO9xREJneRw4pKM3vEbzOjtZkPxF4FCsdJ2ttDZ4qAQqzUqNHyl2mi1Vd3m4lLzPnXfDVBgPkEUqLVVP_m82QS7mMk99A4VZssodEecUI5inPlxazLXaTf51aTc45muZCapSWe2omp8O754T_KOJkX3HHUHG5WqY_8fHQdDqsr7FdEeE077vdWMWh_ZSsjidg2bWy2KWynAvt4BR2cJrb4RlNezu0L7XDM-GP7ND9P3Z42ePTa_T42Oc8PgGqVCQKG0YOKWB0j2UpSmRyjXdSrIs05XZWcMWPCJUuT1m5GSflUS7wGGZm2DbTjpF2zbBrhNtmuG2Eq7LZU7hjhAdmuGuEe2bZPSPcN8P9l8genNWwcPfqbwAAAP__u_mycw==
 
-# The split disjunction rule allows us to use the index for this query.
+# The split disjunction rule allows us to use the index for this query,
+# though due to costing, it might not get picked.
+# TODO(msirek): Add latency or locality costing which may help favor index
+#               access which is 100% local.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a
@@ -441,33 +444,15 @@ SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a
 distribution: full
 vectorized: true
 ·
-• distinct
-│ distinct on: a
-│ order key: a
+• filter
+│ filter: ((b @> ARRAY[1]) OR (b @> ARRAY[2])) OR (a = 1)
 │
-└── • union all
-    │
-    ├── • index join
-    │   │ table: array_tab@array_tab_pkey
-    │   │
-    │   └── • sort
-    │       │ order: +a
-    │       │
-    │       └── • inverted filter
-    │           │ inverted column: b_inverted_key
-    │           │ num spans: 1
-    │           │
-    │           └── • scan
-    │                 missing stats
-    │                 table: array_tab@arr_inv
-    │                 spans: 1 span
-    │
-    └── • scan
-          missing stats
-          table: array_tab@array_tab_pkey
-          spans: [/1 - /1]
+└── • scan
+      missing stats
+      table: array_tab@array_tab_pkey
+      spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lGFP2z4Qxt__P8Xp3gD6GyVOSoFIk7pB0DoxylqkbVor5DYnFC3Yme0gEMp3n5J0sLDGbZm0N1Xs85Pnd_c0fkTzI8MI4y-X52-HF7B7OpxcTT6d78EkPo9PrkDA2Xj0EYTW4uHaijl8fh-PY9jdncNgWvh-SLDzyMudPRiNobUZlDt7za6AN8Crx9N4DO--gkCGUiV0IW7JYPQNOTIMkGGIM4a5VgsyRumq9FgfHCb3GPkMU5kXttm2qc0IIyyk0glpSpBhQlakWVWflTOGC6UJo-ejp6mxqVxY76B1FgeV_aiwEQw4zkqGqrBLnxlDY8UNYdQrWQfLCqeJ0pa013_p83_n6w-2ef0HlcoxiYS0d9i2eIpp8PR0nX-nh-cG2SDohOh3Qjx7r5r2srMVpBdqX-Xe0YtsVrsfbjOCpyyPV2XZMNZ5rk_2qOXL3b5XYp7RcvbcMfvrVN4hwxOVFbfSRCAYzJHhJBfVyuO-x_er37ATK9gGayjvSFtKztLMkibthW22X_X4PtegJAx4BKZiAWOFttEUp9OA8ykCyWS5CqcInXRhiy7YfGj-xn_Yztl5ficWfy1W8PosgzrLYPMs12D9kWXvn2a55sMbk8mVNLTRJ-1XdwIlN9TcIUYVekGXWi1qm2Y5qnX1RkLGNlXeLIayKVWAv4u5Uxy4xYFTHLbE_KU4dIp7bueeu2ffrT5wqvtucd8p9t1NH_7NxI6c4mM39vFW2LPyv58BAAD__xZl2q8=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUmFr2zAQ_b5fcdyXOKASy_kyBINkrcsMWdIpga10pij2Ucxcy5NkWDH-78NW8eqNetu3u_fund_5qUX7vUSB8Zeb3TbZQ3CVHE_HT7slHONdfHkCBdfy8BGUMerp3qkzfP4QyxiC4Aybr00YrgkWLe8WSzhImIBRt1h6VME74H15FUt4fwsKGVY6p716JIviDjkyXGPKsDY6I2u16eF2GEryHyhChkVVN66HU4aZNoSiRVe4klDgXl_oehUhw5ycKsphrGOoG_dLZJ16IBTrjr1YzOcXn9S5JEkqJ7MKJ-tx_CObsbqvv9ETMrzUZfNYWQGKwRkZHmvVdxf4mif-P56ui9KRIbPiU0MeFxAEm2iMYSvl9vaOCyGS_elt6vP4g49G_nmA94k9g0tkeGicgA1_9YBocsBf0pJka11Z-qe4wi5lSPkD-RdhdWMyujE6Gz7j28OgG4CcrPPs2jdJ5ane4EsxnxVH8-JoVhz-Jk67Nz8DAAD__6EYECM=
 
 # We cannot use the index for this query.
 query T

@@ -16,9 +16,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -591,7 +595,6 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 	}
 
 	tab := sb.md.Table(tabID)
-
 	// Create a mapping from table column ordinals to inverted index column
 	// ordinals. This allows us to do a fast lookup while iterating over all
 	// stats from a statistic's column to any associated inverted columns.
@@ -691,6 +694,9 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 		}
 	}
+	// Fake stats from check constraints are applicable even if there are
+	// no regular stats created for the table.
+	sb.BuildStatsFromCheckConstraints(tabID, stats, invertedIndexCols)
 	sb.md.SetTableAnnotation(tabID, statsAnnID, stats)
 	return stats
 }
@@ -4203,4 +4209,133 @@ func RequestColStat(evalCtx *tree.EvalContext, e RelExpr, cols opt.ColSet) {
 	var sb statisticsBuilder
 	sb.init(evalCtx, e.Memo().Metadata())
 	sb.colStat(cols, e)
+}
+
+// BuildStatsFromCheckConstraints checks if there are any IN expressions in the
+// non-null CHECK constraints and builds a stats entry from them if stats don't
+// already exist on the IN list column. In addition, if any table stats already
+// exist, the optimizer_use_histograms session setting is on, and the IN list
+// column is not invertable, then an EquiDepthHistogram is built for the IN list
+// values with an even data distribution.
+func (sb *statisticsBuilder) BuildStatsFromCheckConstraints(
+	tabID opt.TableID, statistics *props.Statistics, invertedIndexCols map[int][]int,
+) {
+	tabMeta := sb.md.TableMeta(tabID)
+	constraints := tabMeta.Constraints
+	if constraints == nil {
+		return
+	}
+	if constraints.Op() != opt.FiltersOp {
+		return
+	}
+	filters := *constraints.(*FiltersExpr)
+	// For each ANDed check constraint...
+	for i := 0; i < len(filters); i++ {
+		inExpr, ok := filters[i].Condition.(*InExpr)
+		if !ok {
+			continue
+		}
+		// It must be of the form "column IN (const_1, const_2, const_3, ...).
+		column, ok := inExpr.Left.(*VariableExpr)
+		if !ok {
+			continue
+		}
+		tuples, ok := inExpr.Right.(*TupleExpr)
+		if !ok {
+			continue
+		}
+		colID := column.Col
+		var cols opt.ColSet
+		cols.Add(colID)
+		if _, ok := statistics.ColStats.Lookup(cols); ok {
+			// Stats already exist on this column, no need to manufacture any.
+			continue
+		}
+		dataType := column.DataType()
+		numValues := len(tuples.Elems)
+		values := make(tree.Datums, numValues)
+		for j := range tuples.Elems {
+			if !opt.IsConstValueOp(tuples.Elems[j]) {
+				// How would we handle non-constant values?
+				continue
+			}
+			datum := ExtractConstDatum(tuples.Elems[j])
+			values[j] = datum
+		}
+		invertedColOrds := invertedIndexCols[tabID.ColumnOrdinal(colID)]
+		numRows := int64(statistics.RowCount)
+
+		// If no table stats exist, it may mean we're dealing with a system table,
+		// in which case we want to minimize CPU overhead and memory pressure, since
+		// system tables may be accessed very often. So, skip building of the
+		// histogram in this case, even though the overhead may not be much. Also,
+		// histograms on inverted columns are interpreted differently, so don't
+		// build one if the IN list column is inverted.
+		// Also, histogram building errors out when the number samples is greater
+		// than the number of rows, so just skip that case.
+		skipHistogram := !sb.evalCtx.SessionData().OptimizerUseHistograms ||
+			!statistics.Available || len(invertedColOrds) != 0 || int64(numValues) > numRows
+		var distinctCount, nullCount, avgSize float64
+		var histogram []cat.HistogramBucket
+
+		if !skipHistogram {
+			// Each value from the IN list is a sample value.
+			// Give each sample value its own bucket with even distribution.
+			encodedHistogram, unencodedBuckets, err := stats.EquiDepthHistogram(sb.evalCtx,
+				dataType,
+				values, /* samples */
+				numRows,
+				int64(numValues), /* distinctCount */
+				numValues,        /* maxBuckets */
+			)
+			// This shouldn't error out, but if it does, let's not punish the user.
+			// Just build stats without the histogram in that case.
+			if err != nil {
+				skipHistogram = true
+			} else {
+				dataSize := 0
+				// Count the number of bytes in the encoded IN list values, then take the
+				// average down below.
+				for j := range encodedHistogram.Buckets {
+					dataSize += len(encodedHistogram.Buckets[j].UpperBound)
+				}
+				rowCount := uint64(statistics.RowCount)
+				if rowCount < 1 {
+					rowCount = 1
+				}
+
+				histogram = unencodedBuckets
+				distinctCount = max(float64(numValues), 1)
+				nullCount = float64(0)
+				avgSize = float64(dataSize / numValues)
+			}
+		}
+		if skipHistogram {
+			dataSize := 0
+			for _, value := range values {
+				encoded, err := keyside.Encode(nil, value, encoding.Ascending)
+				if err != nil {
+					dataSize = int(defaultColSize) * len(values)
+					break
+				}
+				dataSize += len(encoded)
+			}
+			distinctCount = max(float64(numValues), 1)
+			nullCount = float64(0)
+			avgSize = float64(dataSize / numValues)
+		}
+		// Make the actual stats entry in statistics.ColStats that can be looked up
+		// via a ColSet.
+		if colStat, ok := statistics.ColStats.Add(cols); ok {
+			// colStat.Cols should already be set by the call to Add().
+			colStat.DistinctCount = distinctCount
+			colStat.NullCount = nullCount
+			colStat.AvgSize = avgSize
+			if !skipHistogram {
+				colStat.Histogram = &props.Histogram{}
+				colStat.Histogram.Init(sb.evalCtx, colID, histogram)
+			}
+			sb.finalizeFromRowCountAndDistinctCounts(colStat, statistics)
+		}
+	}
 }

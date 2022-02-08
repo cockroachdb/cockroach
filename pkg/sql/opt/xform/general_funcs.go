@@ -11,6 +11,9 @@
 package xform
 
 import (
+	"container/list"
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
@@ -347,7 +350,6 @@ func (c *CustomFuncs) findConstantFilterCols(
 // returned. This is beneficial in cases where an ordering is required on a
 // suffix of the index columns, and constraining the first column(s) allows the
 // scan to provide that ordering.
-// TODO(drewk): handle inverted scans.
 func (c *CustomFuncs) splitScanIntoUnionScans(
 	ordering props.OrderingChoice,
 	scan memo.RelExpr,
@@ -356,9 +358,56 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 	limit int,
 	keyPrefixLength int,
 ) (_ memo.RelExpr, ok bool) {
-	const maxScanCount = 16
-	const threshold = 4
+	return c.splitScanIntoUnionScansOrSelects(ordering, scan, sp, cons, limit, keyPrefixLength, nil /* filters */)
+}
 
+// splitScanIntoUnionScansOrSelects tries to find a UnionAll of Scan operators,
+// (with an optional hard limit), or UnionAll of Selects from Scans that each
+// scan over a single key from the original Scan's constraints. The UnionAll is
+// returned if the scans/selects can provide the given ordering, and if the
+// statistics suggest that splitting them could be beneficial. If no such
+// UnionAll of Scans/Selects can be found, ok=false is returned. This is
+// beneficial in cases where an ordering is required on a suffix of the index
+// columns, and constraining the first column(s) allows the scan to provide that
+// ordering.
+// TODO(drewk): handle inverted scans.
+func (c *CustomFuncs) splitScanIntoUnionScansOrSelects(
+	ordering props.OrderingChoice,
+	scan memo.RelExpr,
+	sp *memo.ScanPrivate,
+	cons *constraint.Constraint,
+	limit int,
+	keyPrefixLength int,
+	filters memo.FiltersExpr,
+) (_ memo.RelExpr, ok bool) {
+	// Hash index bucket count may be higher than 16, especially in large table
+	// cases. Pick a default maxScanCount sufficiently high to avoid disabling
+	// this optimization for such indexes with high bucket count, but not so high
+	// that we might plan thousands of Scans. If IN list check constraints on the
+	// first index column exist, use that to find the number for maxScanCount.
+	// TODO(msirek): Is there a more efficient way to represent this plan when #
+	//   of scans is high, for example, introduce new operation types like
+	//   "SkipScanExpr", "SkipSelectExpr", "LooseScanExpr", "LooseSelectExpr" (see
+	//   https://wiki.postgresql.org/wiki/Loose_indexscan and
+	//   https://github.com/cockroachdb/cockroach/pull/38216), or maybe just set
+	//   new read modes in the pre-existing ScanExpr and SelectExpr?
+	//   This would allow us to represent order-preserving skip scans without the
+	//   need for large UNION ALL expressions.
+	//
+	// TODO(msirek): We may want to lift this max entirely at some point.
+	maxScanCount := 256
+	if cons.Columns.Count() == 0 {
+		return
+	}
+	firstColID := opt.ColumnID(cons.Columns.Get(0))
+	// The number of allowed values from the check constraints may surpass
+	// maxScanCount. Find this number so we don't inadvertently disable this
+	// optimization.
+	if checkConstraintValues, ok := c.numAllowedValues(firstColID, sp.Table); ok {
+		if maxScanCount < checkConstraintValues {
+			maxScanCount = checkConstraintValues
+		}
+	}
 	keyCtx := constraint.MakeKeyContext(&cons.Columns, c.e.evalCtx)
 	spans := cons.Spans
 
@@ -389,13 +438,16 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 		// We will construct at most maxScanCount new Scans.
 		scanCount = maxScanCount
 	}
-
+	rowCount := scan.Relational().Stats.RowCount
+	nLogN := rowCount * math.Log2(rowCount)
 	if limit > 0 {
 		if scan.Relational().Stats.Available &&
-			float64(scanCount*limit*threshold) >= scan.Relational().Stats.RowCount {
+			float64(scanCount*randIOCostFactor+limit*seqIOCostFactor) >= nLogN {
 			// Splitting the Scan may not be worth the overhead. Creating a sequence of
 			// Scans and Unions is expensive, so we only want to create the plan if it
-			// is likely to be used.
+			// is likely to be used. This rewrite is competing against a plan with a
+			// sort, which is approximately O(N log N), so use that as a rough costing
+			// threshold.
 			return nil, false
 		}
 	}
@@ -408,14 +460,19 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 		return nil, false
 	}
 	newHardLimit := memo.MakeScanLimit(int64(limit), reverse)
+	// With a filter we might have to scan all rows before reaching the LIMIT.
+	if !filters.IsTrue() {
+		newHardLimit = 0
+	}
 
-	// makeNewUnion extends the UnionAll tree rooted at 'last' to include
-	// 'newScan'. The ColumnIDs of the original Scan are used by the resulting
-	// expression.
-	makeNewUnion := func(last, newScan memo.RelExpr, outCols opt.ColList) memo.RelExpr {
-		return c.e.f.ConstructUnionAll(last, newScan, &memo.SetPrivate{
-			LeftCols:  last.Relational().OutputCols.ToList(),
-			RightCols: newScan.Relational().OutputCols.ToList(),
+	// makeNewUnion builds a UnionAll tree node with 'left' and 'right' child
+	// nodes, which may be scans, selects or previously-built UnionAllExprs. The
+	// ColumnIDs of the original Scan are used by the resulting expression, but it
+	// is up to the caller to set this via outCols.
+	makeNewUnion := func(left, right memo.RelExpr, outCols opt.ColList) memo.RelExpr {
+		return c.e.f.ConstructUnionAll(left, right, &memo.SetPrivate{
+			LeftCols:  left.Relational().OutputCols.ToList(),
+			RightCols: right.Relational().OutputCols.ToList(),
 			OutCols:   outCols,
 		})
 	}
@@ -426,6 +483,8 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 	// UnionAll tree.
 	var noLimitSpans constraint.Spans
 	var last memo.RelExpr
+	queue := list.New()
+	queueLength := 0
 	for i, n := 0, spans.Count(); i < n; i++ {
 		if i >= budgetExceededIndex {
 			// The Scan budget has been reached; no additional Scans can be created.
@@ -440,28 +499,43 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 			continue
 		}
 		for j, m := 0, singleKeySpans.Count(); j < m; j++ {
-			if last == nil {
-				// This is the first limited Scan, so no UnionAll necessary.
-				last = c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
-				continue
-			}
 			// Construct a new Scan for each span.
-			newScan := c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
-
-			// Add the scan to the union tree. If it is the final union in the
-			// tree, use the original scan's columns as the union's out columns.
-			// Otherwise, create new output column IDs for the union.
-			var outCols opt.ColList
-			finalUnion := i == n-1 && j == m-1 && noLimitSpans.Count() == 0
-			if finalUnion {
-				outCols = sp.Cols.ToList()
-			} else {
-				_, cols := c.DuplicateColumnIDs(sp.Table, sp.Cols)
-				outCols = cols.ToList()
+			newScanOrSelect := c.makeNewScan(sp, cons.Columns, newHardLimit, singleKeySpans.Get(j))
+			if !filters.IsTrue() {
+				newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, filters, limit)
 			}
-			last = makeNewUnion(last, newScan, outCols)
+			queue.PushBack(newScanOrSelect)
+			queueLength++
 		}
 	}
+	var outCols opt.ColList
+	oddNumScans := (queueLength % 2) != 0
+
+	// Make the UNION ALLs as a balanced binary tree. This performs better for
+	// large numbers of spans than a left-deep tree.
+	for queue.Len() > 1 {
+		left := queue.Front()
+		queue.Remove(left)
+		right := queue.Front()
+		queue.Remove(right)
+		if oddNumScans &&
+			(left.Value.(memo.RelExpr).Op() == opt.UnionAllOp ||
+				right.Value.(memo.RelExpr).Op() == opt.UnionAllOp) {
+			// Not necessary, but keep spans with lower values in the left subtree.
+			left, right = right, left
+		}
+		if noLimitSpans.Count() == 0 && queue.Len() == 0 {
+			outCols = sp.Cols.ToList()
+		} else {
+			_, cols := c.DuplicateColumnIDs(sp.Table, sp.Cols)
+			outCols = cols.ToList()
+		}
+		queue.PushBack(makeNewUnion(left.Value.(memo.RelExpr), right.Value.(memo.RelExpr), outCols))
+	}
+	lastElem := queue.Front()
+	last = lastElem.Value.(memo.RelExpr)
+	queue.Remove(lastElem)
+
 	if noLimitSpans.Count() == spans.Count() {
 		// Expect to generate at least one new limited single-key Scan. This could
 		// happen if a valid key count could be obtained for at least span, but no
@@ -480,8 +554,71 @@ func (c *CustomFuncs) splitScanIntoUnionScans(
 		Columns: sp.Constraint.Columns.RemapColumns(sp.Table, newScanPrivate.Table),
 		Spans:   noLimitSpans,
 	})
-	newScan := c.e.f.ConstructScan(newScanPrivate)
-	return makeNewUnion(last, newScan, sp.Cols.ToList()), true
+	newScanOrSelect := c.e.f.ConstructScan(newScanPrivate)
+	if !filters.IsTrue() {
+		newScanOrSelect = c.wrapScanInLimitedSelect(newScanOrSelect, sp, filters, limit)
+	}
+	return makeNewUnion(last, newScanOrSelect, sp.Cols.ToList()), true
+}
+
+// numAllowedValues returns the number of allowed values for a column with a
+// given columnID by checking if there is a IN list CHECK constraint defined on
+// it and returning the IN list size. If not found, (0, false) is returned.
+func (c *CustomFuncs) numAllowedValues(
+	columnID opt.ColumnID, tabID opt.TableID,
+) (numValues int, ok bool) {
+	tabMeta := c.e.f.Metadata().TableMeta(tabID)
+	constraints := tabMeta.Constraints
+	if constraints == nil {
+		return 0, false
+	}
+	if constraints.Op() != opt.FiltersOp {
+		return 0, false
+	}
+	filters := *constraints.(*memo.FiltersExpr)
+	// For each ANDed check constraint...
+	for i := 0; i < len(filters); i++ {
+		inExpr, ok := filters[i].Condition.(*memo.InExpr)
+		if !ok {
+			continue
+		}
+		// It must be of the form "column IN (const_1, const_2, const_3, ...).
+		column, ok := inExpr.Left.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		tuples, ok := inExpr.Right.(*memo.TupleExpr)
+		if !ok {
+			continue
+		}
+		colID := column.Col
+		if colID != columnID {
+			continue
+		}
+		numValues = len(tuples.Elems)
+		return numValues, true
+	}
+	return 0, false
+}
+
+// wrapScanInLimitedSelect wraps "scan" in a SelectExpr with filters mapped from
+// the originalScanPrivate columns to the columns in scan. If limit is non-zero,
+// the SelectExpr is wrapped in a LimitExpr with that limit.
+func (c *CustomFuncs) wrapScanInLimitedSelect(
+	scan memo.RelExpr, originalScanPrivate *memo.ScanPrivate, filters memo.FiltersExpr, limit int,
+) (limitedSelect memo.RelExpr) {
+	limitedSelect =
+		c.e.f.ConstructSelect(scan,
+			c.MapFilterCols(filters, originalScanPrivate.Cols,
+				c.OutputCols(scan)))
+	if limit != 0 {
+		limitedSelect = c.e.f.ConstructLimit(
+			limitedSelect,
+			c.IntConst(tree.NewDInt(tree.DInt(limit))),
+			c.EmptyOrdering(),
+		)
+	}
+	return limitedSelect
 }
 
 // indexHasOrderingSequence returns whether the Scan can provide a given
