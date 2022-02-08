@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -254,7 +255,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	histogramCollectionEnabled := stats.HistogramClusterMode.Get(&dsp.st.SV)
 	for i := 0; i < len(reqStats); i++ {
 		histogram := details.ColumnStats[i].HasHistogram && histogramCollectionEnabled
-		var histogramMaxBuckets uint32 = defaultHistogramBuckets
+		var histogramMaxBuckets uint32 = props.DefaultHistogramBuckets
 		if details.ColumnStats[i].HistogramMaxBuckets > 0 {
 			histogramMaxBuckets = details.ColumnStats[i].HistogramMaxBuckets
 		}
