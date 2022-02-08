@@ -140,15 +140,16 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 					return
 
 				case <-dsp.cancelFlowsCoordinator.workerWait:
-					req, nodeID := dsp.cancelFlowsCoordinator.getFlowsToCancel()
+					req, sqlInstanceID := dsp.cancelFlowsCoordinator.getFlowsToCancel()
 					if req == nil {
 						// There are no flows to cancel at the moment. This
 						// shouldn't really happen.
 						log.VEventf(parentCtx, 2, "worker %d woke up but didn't find any flows to cancel", workerID)
 						continue
 					}
-					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), nodeID)
-					conn, err := dsp.nodeDialer.Dial(parentCtx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), sqlInstanceID)
+					// TODO: Double check that we only ever cancel flows on SQL nodes/pods here.
+					conn, err := dsp.podNodeDialer.Dial(parentCtx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
 					if err != nil {
 						// We failed to dial the node, so we give up given that
 						// our cancellation is best effort. It is possible that

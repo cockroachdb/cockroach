@@ -205,7 +205,7 @@ func (f *vectorizedFlow) Setup(
 		f.GetWaitGroup(),
 		f.GetRowSyncFlowConsumer(),
 		f.GetBatchSyncFlowConsumer(),
-		flowCtx.Cfg.NodeDialer,
+		flowCtx.Cfg.PodNodeDialer,
 		f.GetID(),
 		diskQueueCfg,
 		f.countingSemaphore,
