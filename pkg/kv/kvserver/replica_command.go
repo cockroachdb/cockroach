@@ -2908,7 +2908,7 @@ func (s *Store) relocateOne(
 		}
 		candidateStoreList := makeStoreList(candidateDescs)
 
-		targetStore, _ := s.allocator.allocateTargetFromList(
+		additionTarget, _ = s.allocator.allocateTargetFromList(
 			ctx,
 			candidateStoreList,
 			conf,
@@ -2921,16 +2921,11 @@ func (s *Store) relocateOne(
 			true, /* allowMultipleReplsPerNode */
 			args.targetType,
 		)
-		if targetStore == nil {
+		if roachpb.Empty(additionTarget) {
 			return nil, nil, fmt.Errorf(
 				"none of the remaining %ss %v are legal additions to %v",
 				args.targetType, args.targetsToAdd(), desc.Replicas(),
 			)
-		}
-
-		additionTarget = roachpb.ReplicationTarget{
-			NodeID:  targetStore.Node.NodeID,
-			StoreID: targetStore.StoreID,
 		}
 
 		// Pretend the new replica is already there so that the removal logic below
@@ -2984,7 +2979,7 @@ func (s *Store) relocateOne(
 		targetStore, _, err := s.allocator.removeTarget(
 			ctx,
 			conf,
-			s.allocator.storeListForCandidates(args.targetsToRemove()),
+			s.allocator.storeListForTargets(args.targetsToRemove()),
 			existingVoters,
 			existingNonVoters,
 			args.targetType,
