@@ -679,15 +679,18 @@ BLAH3
 BLAH4
 BLAH5
 
-# Verify that the current set of role settings
-query OTT colnames
-SELECT database_id, role_name, settings FROM system.database_role_settings ORDER BY 1, 2
+# Verify that the current set of role settings.
+# Note that the NULL name corresponds the ALL DATABASES configurations.
+query TTT colnames
+SELECT name, role_name, settings
+  FROM system.database_role_settings
+  LEFT JOIN system.namespace AS ns ON database_id = ns.id;
 ----
-database_id  role_name      settings
-0            ·              {application_name=d}
-0            test_set_role  {application_name=a,custom_option.setting=e}
-183          ·              {application_name=c}
-183          test_set_role  {application_name=b}
+name  role_name      settings
+NULL  ·              {application_name=d}
+NULL  test_set_role  {application_name=a,custom_option.setting=e}
+db1   ·              {application_name=c}
+db1   test_set_role  {application_name=b}
 
 statement error schema "sc1" is not empty and CASCADE was not specified
 DROP SCHEMA db1.sc1
