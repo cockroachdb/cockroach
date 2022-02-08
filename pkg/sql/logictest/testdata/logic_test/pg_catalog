@@ -4117,6 +4117,7 @@ max_index_keys                                        32                  NULL  
 node_id                                               1                   NULL      NULL        NULL        string
 null_ordered_last                                     off                 NULL      NULL        NULL        string
 on_update_rehome_row_enabled                          on                  NULL      NULL        NULL        string
+opt_split_scan_limit                                  2048                NULL      NULL        NULL        string
 optimizer_use_histograms                              on                  NULL      NULL        NULL        string
 optimizer_use_multicol_stats                          on                  NULL      NULL        NULL        string
 override_multi_region_zone_config                     off                 NULL      NULL        NULL        string
@@ -4232,6 +4233,7 @@ max_index_keys                                        32                  NULL  
 node_id                                               1                   NULL  user     NULL      1                   1
 null_ordered_last                                     off                 NULL  user     NULL      off                 off
 on_update_rehome_row_enabled                          on                  NULL  user     NULL      on                  on
+opt_split_scan_limit                                  2048                NULL  user     NULL      2048                2048
 optimizer_use_histograms                              on                  NULL  user     NULL      on                  on
 optimizer_use_multicol_stats                          on                  NULL  user     NULL      on                  on
 override_multi_region_zone_config                     off                 NULL  user     NULL      off                 off
@@ -4342,6 +4344,7 @@ max_index_keys                                        NULL    NULL     NULL     
 node_id                                               NULL    NULL     NULL     NULL        NULL
 null_ordered_last                                     NULL    NULL     NULL     NULL        NULL
 on_update_rehome_row_enabled                          NULL    NULL     NULL     NULL        NULL
+opt_split_scan_limit                                  NULL    NULL     NULL     NULL        NULL
 optimizer                                             NULL    NULL     NULL     NULL        NULL
 optimizer_use_histograms                              NULL    NULL     NULL     NULL        NULL
 optimizer_use_multicol_stats                          NULL    NULL     NULL     NULL        NULL

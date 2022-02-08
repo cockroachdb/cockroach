@@ -466,6 +466,20 @@ func (md *Metadata) DuplicateTable(
 		}
 	}
 
+	var checkConstraintsStats map[ColumnID]interface{}
+	if len(tabMeta.checkConstraintsStats) > 0 {
+		checkConstraintsStats =
+			make(map[ColumnID]interface{},
+				len(tabMeta.checkConstraintsStats))
+		for i := range tabMeta.checkConstraintsStats {
+			if dstCol, ok := colMap.Get(int(i)); ok {
+				checkConstraintsStats[ColumnID(dstCol)] = tabMeta.checkConstraintsStats[i]
+			} else {
+				panic(errors.AssertionFailedf("remapping of check constraint stats column failed"))
+			}
+		}
+	}
+
 	md.tables = append(md.tables, TableMeta{
 		MetaID:                   newTabID,
 		Table:                    tabMeta.Table,
@@ -475,6 +489,7 @@ func (md *Metadata) DuplicateTable(
 		ComputedCols:             computedCols,
 		partialIndexPredicates:   partialIndexPredicates,
 		indexPartitionLocalities: tabMeta.indexPartitionLocalities,
+		checkConstraintsStats:    checkConstraintsStats,
 	})
 
 	return newTabID
