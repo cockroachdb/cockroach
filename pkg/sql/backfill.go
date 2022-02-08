@@ -266,7 +266,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				}
 			} else if mvRefresh := m.AsMaterializedViewRefresh(); mvRefresh != nil {
 				viewToRefresh = mvRefresh
-			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil {
+			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsModifyRowLevelTTL() != nil {
 				// The backfiller doesn't need to do anything here.
 			} else {
 				return errors.AssertionFailedf("unsupported mutation: %+v", m)
@@ -280,7 +280,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 				// no-op. Handled in (*schemaChanger).done by queueing an index gc job.
 			} else if c := m.AsConstraint(); c != nil {
 				constraintsToDrop = append(constraintsToDrop, c)
-			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil {
+			} else if m.AsPrimaryKeySwap() != nil || m.AsComputedColumnSwap() != nil || m.AsMaterializedViewRefresh() != nil || m.AsModifyRowLevelTTL() != nil {
 				// The backfiller doesn't need to do anything here.
 			} else {
 				return errors.AssertionFailedf("unsupported mutation: %+v", m)
@@ -1962,7 +1962,7 @@ func runSchemaChangesInTxn(
 		immutDesc := tabledesc.NewBuilder(tableDesc.TableDesc()).BuildImmutableTable()
 
 		if m.Adding() {
-			if m.AsPrimaryKeySwap() != nil {
+			if m.AsPrimaryKeySwap() != nil || m.AsModifyRowLevelTTL() != nil {
 				// Don't need to do anything here, as the call to MakeMutationComplete
 				// will perform the steps for this operation.
 			} else if m.AsComputedColumnSwap() != nil {
