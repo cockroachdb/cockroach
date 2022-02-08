@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/scheduledloggingjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -258,6 +259,8 @@ type Server struct {
 	// sqlStatsController is the control-plane interface for sqlStats.
 	sqlStatsController *persistedsqlstats.Controller
 
+	scheduledLoggingJobsController scheduledloggingjobs.Controller
+
 	// indexUsageStatsController is the control-plane interface for
 	// indexUsageStats.
 	indexUsageStatsController *idxusage.Controller
@@ -395,6 +398,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
+	// Create internal executor because cfg.InternalExecutor is nil.
+	scheduledLoggingJobsInternalExecutor := MakeInternalExecutor(context.Background(), s, MemoryMetrics{}, cfg.Settings)
+	s.scheduledLoggingJobsController = scheduledloggingjobs.NewLoggingJobController(cfg.DB, &scheduledLoggingJobsInternalExecutor, cfg.Settings)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
 	return s
 }
@@ -478,6 +484,8 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.reportedStats.Start(ctx, stopper)
 
 	s.txnIDCache.Start(ctx, stopper)
+
+	s.scheduledLoggingJobsController.Start(ctx)
 }
 
 // GetSQLStatsController returns the persistedsqlstats.Controller for current

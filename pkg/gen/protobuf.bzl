@@ -41,6 +41,7 @@ PROTOBUF_SRCS = [
   "//pkg/sql/pgwire/pgerror:pgerror_go_proto",
   "//pkg/sql/protoreflect/test:protoreflecttest_go_proto",
   "//pkg/sql/rowenc/rowencpb:rowencpb_go_proto",
+  "//pkg/sql/scheduledloggingjobs:scheduledloggingjobs_go_proto",
   "//pkg/sql/schemachanger/scpb:scpb_go_proto",
   "//pkg/sql/sessiondatapb:sessiondatapb_go_proto",
   "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_go_proto",
