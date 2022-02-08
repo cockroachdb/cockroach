@@ -139,7 +139,7 @@ func (s *SettingsWatcher) Start(ctx context.Context) error {
 
 		// Set up a worker to watch the monitor.
 		if err := s.stopper.RunAsyncTask(ctx, "setting-overrides", func(ctx context.Context) {
-			overridesCh := s.overridesMonitor.NotifyCh()
+			overridesCh := s.overridesMonitor.RegisterOverridesChannel()
 			for {
 				select {
 				case <-overridesCh:
@@ -354,4 +354,9 @@ func (s *SettingsWatcher) resetUpdater() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.updater = s.settings.MakeUpdater()
+}
+
+// SetTestingKnobs is used by tests to set testing knobs.
+func (s *SettingsWatcher) SetTestingKnobs(knobs *rangefeedcache.TestingKnobs) {
+	s.testingWatcherKnobs = knobs
 }
