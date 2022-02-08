@@ -49,7 +49,9 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	timeout := 10 * time.Minute
 	// Run 10 minute iterations of TLP in a loop for about the entire test,
 	// giving 5 minutes at the end to allow the test to shut down cleanly.
-	until := time.After(t.Spec().(*registry.TestSpec).Timeout - 5*time.Minute)
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, t.Spec().(*registry.TestSpec).Timeout-5*time.Minute)
+	defer cancel()
 	done := ctx.Done()
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
@@ -60,8 +62,6 @@ func runTLP(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for i := 0; ; i++ {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 		select {
-		case <-until:
-			return
 		case <-done:
 			return
 		default:
