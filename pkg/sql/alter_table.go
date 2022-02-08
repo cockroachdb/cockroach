@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1777,6 +1778,7 @@ func handleTTLStorageParamChange(
 	case before == nil && after == nil:
 		// Do not have to do anything here.
 	case before != nil && after != nil:
+		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
 			env := JobSchedulerEnv(params.ExecCfg())
 			s, err := jobs.LoadScheduledJob(
@@ -1793,6 +1795,40 @@ func handleTTLStorageParamChange(
 				return err
 			}
 			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+				return err
+			}
+		}
+		// Update default expression on automated column if required.
+		if before.DurationExpr != after.DurationExpr {
+			col, err := tableDesc.FindColumnWithName(colinfo.TTLDefaultExpirationColumnName)
+			if err != nil {
+				return err
+			}
+			intervalExpr, err := parser.ParseExpr(after.DurationExpr)
+			if err != nil {
+				return errors.Wrapf(err, "unexpected expression for TTL duration")
+			}
+			newExpr := rowLevelTTLAutomaticColumnExpr(intervalExpr)
+
+			if err := updateNonComputedColExpr(
+				params,
+				tableDesc,
+				col,
+				newExpr,
+				&col.ColumnDesc().DefaultExpr,
+				"TTL DEFAULT",
+			); err != nil {
+				return err
+			}
+
+			if err := updateNonComputedColExpr(
+				params,
+				tableDesc,
+				col,
+				newExpr,
+				&col.ColumnDesc().OnUpdateExpr,
+				"TTL UPDATE",
+			); err != nil {
 				return err
 			}
 		}
