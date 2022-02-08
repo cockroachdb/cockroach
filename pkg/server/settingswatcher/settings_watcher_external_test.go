@@ -57,7 +57,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		"cluster.organization":                                   {"foobar", "bazbax"},
 		// Include a system-only setting to verify that we don't try to change its
 		// value (which would cause a panic in test builds).
-		systemOnlySetting: {1024, 2048},
+		systemOnlySetting: {2 << 20, 4 << 20},
 	}
 	fakeTenant := roachpb.MakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
