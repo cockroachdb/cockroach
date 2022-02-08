@@ -283,7 +283,7 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 			EndKey: keys.TableDataMax,
 		})
 		if f.knobs.ConfigureScratchRange {
-			target.EndKey = keys.ScratchRangeMax
+			target.GetSpan().EndKey = keys.ScratchRangeMax
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.

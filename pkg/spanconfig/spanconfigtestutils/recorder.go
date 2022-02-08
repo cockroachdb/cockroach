@@ -98,8 +98,8 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 		if mi.batchIdx != mj.batchIdx { // sort by batch/ts order
 			return mi.batchIdx < mj.batchIdx
 		}
-		if !mi.update.Target.Key.Equal(mj.update.Target.Key) { // sort by key order
-			return mi.update.Target.Key.Compare(mj.update.Target.Key) < 0
+		if !mi.update.Target.Equal(mj.update.Target) { // sort by target order
+			return mi.update.Target.Less(mj.update.Target)
 		}
 
 		return mi.update.Deletion() // sort deletes before upserts
