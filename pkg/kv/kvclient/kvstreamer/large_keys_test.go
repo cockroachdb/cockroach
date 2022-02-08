@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
@@ -55,13 +55,13 @@ func TestLargeKeys(t *testing.T) {
 	}
 
 	rng, _ := randutil.NewTestRand()
-	recCh := make(chan tracing.Recording, 1)
+	recCh := make(chan tracingpb.Recording, 1)
 	// We want to capture the trace of the query so that we can count how many
 	// KV requests the Streamer issued.
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
-				WithStatementTrace: func(trace tracing.Recording, stmt string) {
+				WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 					for _, tc := range testCases {
 						if tc.query == stmt {
 							recCh <- trace

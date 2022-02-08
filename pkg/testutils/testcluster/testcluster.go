@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -150,7 +151,7 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 			var buf strings.Builder
 			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
 			for _, sp := range sps {
-				fmt.Fprintln(&buf, sp.GetFullRecording(tracing.RecordingVerbose))
+				fmt.Fprintln(&buf, sp.GetFullRecording(tracingpb.RecordingVerbose))
 				fmt.Fprintln(&buf)
 			}
 			return errors.Newf("%s", buf.String())

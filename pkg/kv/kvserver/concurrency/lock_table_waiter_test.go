@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -933,7 +934,7 @@ func BenchmarkTxnCache(b *testing.B) {
 
 func TestContentionEventTracer(t *testing.T) {
 	tr := tracing.NewTracer()
-	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracing.RecordingVerbose))
+	ctx, sp := tr.StartSpanCtx(context.Background(), "foo", tracing.WithRecording(tracingpb.RecordingVerbose))
 	defer sp.Finish()
 	clock := hlc.NewClock(hlc.UnixNano, 0 /* maxOffset */)
 
@@ -952,7 +953,7 @@ func TestContentionEventTracer(t *testing.T) {
 	require.Zero(t, h.tag.mu.lockWait)
 	require.NotZero(t, h.tag.mu.waitStart)
 	require.Empty(t, events)
-	rec := sp.GetRecording(tracing.RecordingVerbose)
+	rec := sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Contains(t, rec[0].Tags, tagNumLocks)
 	require.Equal(t, "1", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
@@ -998,7 +999,7 @@ func TestContentionEventTracer(t *testing.T) {
 	})
 	require.Len(t, events, 3)
 	require.Less(t, lockWaitBefore, h.tag.mu.lockWait)
-	rec = sp.GetRecording(tracing.RecordingVerbose)
+	rec = sp.GetRecording(tracingpb.RecordingVerbose)
 	require.Equal(t, "3", rec[0].Tags[tagNumLocks])
 	require.Contains(t, rec[0].Tags, tagWaited)
 	require.NotContains(t, rec[0].Tags, tagWaitKey)

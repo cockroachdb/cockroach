@@ -80,7 +80,7 @@ type spanOptions struct {
 	// that case, spanOptions.recordingType() returns recordingTypeOpt below. If
 	// not set, recordingType() looks at the parent.
 	recordingTypeExplicit bool
-	recordingTypeOpt      RecordingType
+	recordingTypeOpt      tracingpb.RecordingType
 }
 
 func (opts *spanOptions) parentTraceID() tracingpb.TraceID {
@@ -101,12 +101,12 @@ func (opts *spanOptions) parentSpanID() tracingpb.SpanID {
 	return 0
 }
 
-func (opts *spanOptions) recordingType() RecordingType {
+func (opts *spanOptions) recordingType() tracingpb.RecordingType {
 	if opts.recordingTypeExplicit {
 		return opts.recordingTypeOpt
 	}
 
-	recordingType := RecordingOff
+	recordingType := tracingpb.RecordingOff
 	if !opts.Parent.empty() && !opts.Parent.IsNoop() {
 		recordingType = opts.Parent.i.crdb.recordingType()
 	} else if !opts.RemoteParent.Empty() {
@@ -369,22 +369,22 @@ func (forceRealSpanOption) apply(opts spanOptions) spanOptions {
 }
 
 type recordingSpanOption struct {
-	recType RecordingType
+	recType tracingpb.RecordingType
 }
 
-var structuredRecordingSingleton = SpanOption(recordingSpanOption{recType: RecordingStructured})
-var verboseRecordingSingleton = SpanOption(recordingSpanOption{recType: RecordingVerbose})
+var structuredRecordingSingleton = SpanOption(recordingSpanOption{recType: tracingpb.RecordingStructured})
+var verboseRecordingSingleton = SpanOption(recordingSpanOption{recType: tracingpb.RecordingVerbose})
 
 // WithRecording configures the span to record in the given mode.
 //
 // The recording mode can be changed later with SetVerbose().
-func WithRecording(recType RecordingType) SpanOption {
+func WithRecording(recType tracingpb.RecordingType) SpanOption {
 	switch recType {
-	case RecordingStructured:
+	case tracingpb.RecordingStructured:
 		return structuredRecordingSingleton
-	case RecordingVerbose:
+	case tracingpb.RecordingVerbose:
 		return verboseRecordingSingleton
-	case RecordingOff:
+	case tracingpb.RecordingOff:
 		panic("invalid recording option: RecordingOff")
 	default:
 		recCpy := recType // copy excaping to the heap

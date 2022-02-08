@@ -4588,11 +4588,11 @@ value if you rely on the HLC for accuracy.`,
 					return tree.DBoolFalse, nil
 				}
 
-				var recType tracing.RecordingType
+				var recType tracingpb.RecordingType
 				if verbosity {
-					recType = tracing.RecordingVerbose
+					recType = tracingpb.RecordingVerbose
 				} else {
-					recType = tracing.RecordingOff
+					recType = tracingpb.RecordingOff
 				}
 				rootSpan.SetRecordingType(recType)
 				return tree.DBoolTrue, nil
@@ -6889,7 +6889,7 @@ store housing the range on the node it's run from. One of 'mvccGC', 'merge', 'sp
 				shouldReturnTrace := bool(tree.MustBeDBool(args[3]))
 
 				var foundRepl bool
-				var rec tracing.Recording
+				var rec tracingpb.Recording
 				if err := ctx.KVStoresIterator.ForEachStore(func(store kvserverbase.Store) error {
 					var err error
 					rec, err = store.Enqueue(ctx.Context, queue, rangeID, skipShouldQueue)

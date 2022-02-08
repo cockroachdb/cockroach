@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1086,7 +1087,7 @@ type spanForRequest struct {
 // finish finishes the span. If the span was recording and br is not nil, the
 // recording is written to br.CollectedSpans.
 func (sp *spanForRequest) finish(ctx context.Context, br *roachpb.BatchResponse) {
-	var rec tracing.Recording
+	var rec tracingpb.Recording
 	// If we don't have a response, there's nothing to attach a trace to.
 	// Nothing more for us to do.
 	sp.needRecording = sp.needRecording && br != nil

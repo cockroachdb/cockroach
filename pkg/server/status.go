@@ -72,7 +72,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -716,7 +715,7 @@ func (s *statusServer) Allocator(
 					if !rep.OwnsValidLease(ctx, store.Clock().NowAsClockTimestamp()) {
 						return true // continue.
 					}
-					var allocatorSpans tracing.Recording
+					var allocatorSpans tracingpb.Recording
 					allocatorSpans, err = store.AllocatorDryRun(ctx, rep)
 					if err != nil {
 						return false // break and bubble up the error.

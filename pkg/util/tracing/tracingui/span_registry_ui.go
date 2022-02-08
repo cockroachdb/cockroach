@@ -27,7 +27,7 @@ func ProcessSnapshot(
 	snapshot tracing.SpansSnapshot, registry *tracing.SpanRegistry,
 ) *ProcessedSnapshot {
 	// Build a map of current spans.
-	currentSpans := make(map[tracingpb.SpanID]tracing.RecordingType, 1000)
+	currentSpans := make(map[tracingpb.SpanID]tracingpb.RecordingType, 1000)
 	registry.VisitSpans(func(sp tracing.RegistrySpan) {
 		currentSpans[sp.SpanID()] = sp.RecordingType()
 	})
@@ -118,7 +118,7 @@ type processedSpan struct {
 	Current bool
 	// CurrentRecordingMode indicates the spans's current recording mode. The
 	// field is not set if Current == false.
-	CurrentRecordingMode tracing.RecordingType
+	CurrentRecordingMode tracingpb.RecordingType
 }
 
 // ProcessedTag is a span tag that was processed and expanded by processTag.

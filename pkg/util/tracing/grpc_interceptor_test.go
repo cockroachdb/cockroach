@@ -63,7 +63,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			return nil, errors.New("no span in ctx")
 		}
 		sp.RecordStructured(newTestStructured(magicValue))
-		recs := sp.GetRecording(tracing.RecordingVerbose)
+		recs := sp.GetRecording(tracingpb.RecordingVerbose)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)
 		}
@@ -246,7 +246,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			c := grpcutils.NewGRPCTestClient(conn)
 			require.NoError(t, err)
 
-			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracing.RecordingVerbose))
+			ctx, sp := tr.StartSpanCtx(bgCtx, "root", tracing.WithRecording(tracingpb.RecordingVerbose))
 			recAny, err := tc.do(ctx, c)
 			require.NoError(t, err)
 			var rec tracingpb.RecordedSpan
@@ -254,7 +254,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			require.Len(t, rec.StructuredRecords, 1)
 			sp.ImportRemoteSpans([]tracingpb.RecordedSpan{rec})
 			var n int
-			finalRecs := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+			finalRecs := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 			for _, rec := range finalRecs {
 				n += len(rec.StructuredRecords)
 				// Remove all of the _unfinished tags. These crop up because
@@ -286,7 +286,7 @@ func TestGRPCInterceptors(t *testing.T) {
 			// immediate) in the ctx cancellation subtest.
 			testutils.SucceedsSoon(t, func() error {
 				return tr.VisitSpans(func(sp tracing.RegistrySpan) error {
-					rec := sp.GetFullRecording(tracing.RecordingVerbose)[0]
+					rec := sp.GetFullRecording(tracingpb.RecordingVerbose)[0]
 					return errors.Newf("leaked span: %s %s", rec.Operation, rec.Tags)
 				})
 			})

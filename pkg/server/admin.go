@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingui"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -3632,7 +3633,7 @@ func (s *adminServer) GetTrace(
 	if err != nil {
 		return nil, err
 	}
-	var recording tracing.Recording
+	var recording tracingpb.Recording
 	var snapshotID tracing.SnapshotID
 
 	traceID := req.TraceID
@@ -3661,7 +3662,7 @@ func (s *adminServer) GetTrace(
 		}
 		traceStillExists = true
 		if recording == nil {
-			recording = sp.GetFullRecording(tracing.RecordingVerbose)
+			recording = sp.GetFullRecording(tracingpb.RecordingVerbose)
 		}
 		return iterutil.StopIteration()
 	}); err != nil {
@@ -3693,7 +3694,7 @@ func (s *adminServer) SetTraceRecordingType(
 			return nil
 		}
 		// NB: The recording type propagates to the children, recursively.
-		sp.SetRecordingType(tracing.RecordingTypeFromProto(req.RecordingMode))
+		sp.SetRecordingType(tracingpb.RecordingTypeFromProto(req.RecordingMode))
 		return nil
 	})
 	return &serverpb.SetTraceRecordingTypeResponse{}, nil

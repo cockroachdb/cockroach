@@ -23,7 +23,7 @@ import (
 
 // FindMsgInRecording returns the index of the first Span containing msg in its
 // logs, or -1 if no Span is found.
-func FindMsgInRecording(recording Recording, msg string) int {
+func FindMsgInRecording(recording tracingpb.Recording, msg string) int {
 	for i, sp := range recording {
 		if LogsContainMsg(sp, msg) {
 			return i
@@ -73,7 +73,7 @@ func CountLogMessages(sp tracingpb.RecordedSpan, msg string) int {
 // Note: this test function is in this file because it needs to be used by
 // both tests in the tracing package and tests outside of it, and the function
 // itself depends on tracing.
-func CheckRecordedSpans(rec Recording, expected string) error {
+func CheckRecordedSpans(rec tracingpb.Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
@@ -169,7 +169,7 @@ func CheckRecordedSpans(rec Recording, expected string) error {
 //           t.Fatal(err)
 //       }
 //
-func CheckRecording(rec Recording, expected string) error {
+func CheckRecording(rec tracingpb.Recording, expected string) error {
 	normalize := func(rec string) string {
 		// normalize the string form of a recording for ease of comparison.
 		//
