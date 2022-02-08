@@ -197,26 +197,23 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 6
     tableId: 109
     typeId: 108
-- [[ConstraintComment:{DescID: 109, ConstraintType: FK, Name: fk_customers}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 109, ConstraintID: 1}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: fk_customers
-    constraintType: FK
+    constraintId: 1
     tableId: 109
-- [[ConstraintComment:{DescID: 109, ConstraintType: FK, Name: fk_orders}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 109, ConstraintID: 2}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: fk_orders
-    constraintType: FK
+    constraintId: 2
     tableId: 109
-- [[ConstraintComment:{DescID: 109, ConstraintType: PrimaryKey, Name: shipments_pkey}, ABSENT], PUBLIC]
+- [[ConstraintComment:{DescID: 109, ConstraintID: 3}, ABSENT], PUBLIC]
   details:
     comment: TODO(fqazi) Comments are not currently fetched from system.comments when
       doing decomposition
-    constraintName: shipments_pkey
-    constraintType: PrimaryKey
+    constraintId: 3
     tableId: 109
 - [[DefaultExpression:{DescID: 109, ColumnID: 1}, ABSENT], PUBLIC]
   details:

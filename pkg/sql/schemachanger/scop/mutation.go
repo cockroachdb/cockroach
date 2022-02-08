@@ -406,9 +406,8 @@ type RemoveColumnComment struct {
 // constraint.
 type RemoveConstraintComment struct {
 	mutationOp
-	TableID        descpb.ID
-	ConstraintType scpb.ConstraintType
-	ConstraintName string
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
 }
 
 // RemoveDatabaseRoleSettings is used to delete a role setting for a database.

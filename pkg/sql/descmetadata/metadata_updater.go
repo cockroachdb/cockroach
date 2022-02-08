@@ -152,33 +152,16 @@ func (mu metadataUpdater) oidFromConstraint(
 
 // UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) UpsertConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
-	comment string,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
 ) error {
-	oid := mu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
-	// Constraint was not found.
-	if oid == nil {
-		return nil
-	}
-	return mu.UpsertDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType, comment)
+	return mu.UpsertDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType, comment)
 }
 
 // DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteConstraintComment(
-	desc catalog.TableDescriptor,
-	schemaName string,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
-	oid := mu.oidFromConstraint(desc, schemaName, constraintName, constraintType)
-	// Constraint was not found.
-	if oid == nil {
-		return nil
-	}
-	return mu.DeleteDescriptorComment(int64(oid.DInt), 0, keys.ConstraintCommentType)
+	return mu.DeleteDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType)
 }
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
