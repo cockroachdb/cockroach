@@ -96,16 +96,6 @@ func (c ConstraintsConjunction) String() string {
 	return sb.String()
 }
 
-// Equal compares two span config entries.
-func (s *SpanConfigEntry) Equal(o SpanConfigEntry) bool {
-	return s.Span.Equal(o.Span) && s.Config.Equal(o.Config)
-}
-
-// Empty returns true if the span config entry is empty.
-func (s *SpanConfigEntry) Empty() bool {
-	return s.Equal(SpanConfigEntry{})
-}
-
 // TestingDefaultSpanConfig exports the default span config for testing purposes.
 func TestingDefaultSpanConfig() SpanConfig {
 	return SpanConfig{
