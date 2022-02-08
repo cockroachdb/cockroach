@@ -24,6 +24,7 @@ type MutationOp interface {
 type MutationVisitor interface {
 	NotImplemented(context.Context, NotImplemented) error
 	MakeAddedIndexDeleteOnly(context.Context, MakeAddedIndexDeleteOnly) error
+	SetAddedIndexPartialPredicate(context.Context, SetAddedIndexPartialPredicate) error
 	MakeAddedIndexDeleteAndWriteOnly(context.Context, MakeAddedIndexDeleteAndWriteOnly) error
 	MakeAddedSecondaryIndexPublic(context.Context, MakeAddedSecondaryIndexPublic) error
 	MakeAddedPrimaryIndexPublic(context.Context, MakeAddedPrimaryIndexPublic) error
@@ -34,34 +35,42 @@ type MutationVisitor interface {
 	MarkDescriptorAsDroppedSynthetically(context.Context, MarkDescriptorAsDroppedSynthetically) error
 	MarkDescriptorAsDropped(context.Context, MarkDescriptorAsDropped) error
 	DrainDescriptorName(context.Context, DrainDescriptorName) error
-	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
-	RemoveColumnSequenceReferences(context.Context, RemoveColumnSequenceReferences) error
-	AddTypeBackRef(context.Context, AddTypeBackRef) error
-	RemoveRelationDependedOnBy(context.Context, RemoveRelationDependedOnBy) error
-	RemoveTypeBackRef(context.Context, RemoveTypeBackRef) error
 	MakeAddedColumnDeleteAndWriteOnly(context.Context, MakeAddedColumnDeleteAndWriteOnly) error
 	MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(context.Context, MakeDroppedNonPrimaryIndexDeleteAndWriteOnly) error
 	MakeDroppedIndexDeleteOnly(context.Context, MakeDroppedIndexDeleteOnly) error
+	RemoveDroppedIndexPartialPredicate(context.Context, RemoveDroppedIndexPartialPredicate) error
 	MakeIndexAbsent(context.Context, MakeIndexAbsent) error
 	MakeAddedColumnDeleteOnly(context.Context, MakeAddedColumnDeleteOnly) error
+	SetAddedColumnType(context.Context, SetAddedColumnType) error
 	MakeColumnPublic(context.Context, MakeColumnPublic) error
 	MakeDroppedColumnDeleteAndWriteOnly(context.Context, MakeDroppedColumnDeleteAndWriteOnly) error
 	MakeDroppedColumnDeleteOnly(context.Context, MakeDroppedColumnDeleteOnly) error
+	RemoveDroppedColumnType(context.Context, RemoveDroppedColumnType) error
 	MakeColumnAbsent(context.Context, MakeColumnAbsent) error
-	AddCheckConstraint(context.Context, AddCheckConstraint) error
-	AddColumnFamily(context.Context, AddColumnFamily) error
-	DropForeignKeyRef(context.Context, DropForeignKeyRef) error
-	RemoveSequenceOwnedBy(context.Context, RemoveSequenceOwnedBy) error
+	RemoveOwnerBackReferenceInSequence(context.Context, RemoveOwnerBackReferenceInSequence) error
+	RemoveSequenceOwner(context.Context, RemoveSequenceOwner) error
+	RemoveCheckConstraint(context.Context, RemoveCheckConstraint) error
+	RemoveForeignKeyConstraint(context.Context, RemoveForeignKeyConstraint) error
+	RemoveForeignKeyBackReference(context.Context, RemoveForeignKeyBackReference) error
+	RemoveSchemaParent(context.Context, RemoveSchemaParent) error
 	AddIndexPartitionInfo(context.Context, AddIndexPartitionInfo) error
 	LogEvent(context.Context, LogEvent) error
+	AddColumnFamily(context.Context, AddColumnFamily) error
+	AddColumnDefaultExpression(context.Context, AddColumnDefaultExpression) error
+	RemoveColumnDefaultExpression(context.Context, RemoveColumnDefaultExpression) error
+	AddColumnOnUpdateExpression(context.Context, AddColumnOnUpdateExpression) error
+	RemoveColumnOnUpdateExpression(context.Context, RemoveColumnOnUpdateExpression) error
+	UpdateTableBackReferencesInTypes(context.Context, UpdateTableBackReferencesInTypes) error
+	RemoveBackReferenceInTypes(context.Context, RemoveBackReferenceInTypes) error
+	UpdateBackReferencesInSequences(context.Context, UpdateBackReferencesInSequences) error
+	RemoveViewBackReferencesInRelations(context.Context, RemoveViewBackReferencesInRelations) error
 	SetColumnName(context.Context, SetColumnName) error
 	SetIndexName(context.Context, SetIndexName) error
 	DeleteDescriptor(context.Context, DeleteDescriptor) error
-	DeleteDatabaseSchemaEntry(context.Context, DeleteDatabaseSchemaEntry) error
-	RemoveJobReference(context.Context, RemoveJobReference) error
-	AddJobReference(context.Context, AddJobReference) error
-	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
+	RemoveJobStateFromDescriptor(context.Context, RemoveJobStateFromDescriptor) error
+	SetJobStateOnDescriptor(context.Context, SetJobStateOnDescriptor) error
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
+	CreateSchemaChangerJob(context.Context, CreateSchemaChangerJob) error
 	RemoveTableComment(context.Context, RemoveTableComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
 	RemoveSchemaComment(context.Context, RemoveSchemaComment) error
@@ -69,6 +78,7 @@ type MutationVisitor interface {
 	RemoveColumnComment(context.Context, RemoveColumnComment) error
 	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
+	DeleteSchedule(context.Context, DeleteSchedule) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -79,6 +89,11 @@ func (op NotImplemented) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op MakeAddedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedIndexDeleteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetAddedIndexPartialPredicate) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetAddedIndexPartialPredicate(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -132,31 +147,6 @@ func (op DrainDescriptorName) Visit(ctx context.Context, v MutationVisitor) erro
 }
 
 // Visit is part of the MutationOp interface.
-func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveColumnDefaultExpression(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op RemoveColumnSequenceReferences) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveColumnSequenceReferences(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op AddTypeBackRef) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.AddTypeBackRef(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op RemoveRelationDependedOnBy) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveRelationDependedOnBy(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op RemoveTypeBackRef) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveTypeBackRef(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
 func (op MakeAddedColumnDeleteAndWriteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedColumnDeleteAndWriteOnly(ctx, op)
 }
@@ -172,6 +162,11 @@ func (op MakeDroppedIndexDeleteOnly) Visit(ctx context.Context, v MutationVisito
 }
 
 // Visit is part of the MutationOp interface.
+func (op RemoveDroppedIndexPartialPredicate) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveDroppedIndexPartialPredicate(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op MakeIndexAbsent) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeIndexAbsent(ctx, op)
 }
@@ -179,6 +174,11 @@ func (op MakeIndexAbsent) Visit(ctx context.Context, v MutationVisitor) error {
 // Visit is part of the MutationOp interface.
 func (op MakeAddedColumnDeleteOnly) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeAddedColumnDeleteOnly(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op SetAddedColumnType) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetAddedColumnType(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -197,28 +197,43 @@ func (op MakeDroppedColumnDeleteOnly) Visit(ctx context.Context, v MutationVisit
 }
 
 // Visit is part of the MutationOp interface.
+func (op RemoveDroppedColumnType) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveDroppedColumnType(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
 func (op MakeColumnAbsent) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.MakeColumnAbsent(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op AddCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.AddCheckConstraint(ctx, op)
+func (op RemoveOwnerBackReferenceInSequence) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveOwnerBackReferenceInSequence(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.AddColumnFamily(ctx, op)
+func (op RemoveSequenceOwner) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSequenceOwner(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op DropForeignKeyRef) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.DropForeignKeyRef(ctx, op)
+func (op RemoveCheckConstraint) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveCheckConstraint(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op RemoveSequenceOwnedBy) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveSequenceOwnedBy(ctx, op)
+func (op RemoveForeignKeyConstraint) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveForeignKeyConstraint(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveForeignKeyBackReference) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveForeignKeyBackReference(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveSchemaParent) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveSchemaParent(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -229,6 +244,51 @@ func (op AddIndexPartitionInfo) Visit(ctx context.Context, v MutationVisitor) er
 // Visit is part of the MutationOp interface.
 func (op LogEvent) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.LogEvent(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddColumnFamily) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddColumnFamily(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddColumnDefaultExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveColumnDefaultExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnDefaultExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op AddColumnOnUpdateExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.AddColumnOnUpdateExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveColumnOnUpdateExpression) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveColumnOnUpdateExpression(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpdateTableBackReferencesInTypes) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateTableBackReferencesInTypes(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveBackReferenceInTypes) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveBackReferenceInTypes(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op UpdateBackReferencesInSequences) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.UpdateBackReferencesInSequences(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op RemoveViewBackReferencesInRelations) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveViewBackReferencesInRelations(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -247,28 +307,23 @@ func (op DeleteDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
 }
 
 // Visit is part of the MutationOp interface.
-func (op DeleteDatabaseSchemaEntry) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.DeleteDatabaseSchemaEntry(ctx, op)
+func (op RemoveJobStateFromDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveJobStateFromDescriptor(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op RemoveJobReference) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveJobReference(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op AddJobReference) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.AddJobReference(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateDeclarativeSchemaChangerJob(ctx, op)
+func (op SetJobStateOnDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetJobStateOnDescriptor(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
 func (op UpdateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpdateSchemaChangerJob(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateSchemaChangerJob(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
@@ -304,4 +359,9 @@ func (op RemoveConstraintComment) Visit(ctx context.Context, v MutationVisitor) 
 // Visit is part of the MutationOp interface.
 func (op RemoveDatabaseRoleSettings) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveDatabaseRoleSettings(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DeleteSchedule) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DeleteSchedule(ctx, op)
 }

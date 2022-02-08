@@ -29,6 +29,8 @@ go_library(
         "//pkg/sql/rowenc/keyside",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/util/bitarray",
@@ -49,7 +51,23 @@ go_library(
 
 go_test(
     name = "randgen_test",
-    srcs = ["mutator_test.go"],
+    srcs = [
+        "main_test.go",
+        "mutator_test.go",
+        "schema_test.go",
+    ],
     embed = [":randgen"],
-    deps = ["//pkg/util/randutil"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/sem/tree",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )

@@ -24,6 +24,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/security",
         "//pkg/security/sessionrevival",
+        "//pkg/server/serverpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -39,6 +40,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/sql/pgwire/pgwirecancel",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqltelemetry",
@@ -72,6 +74,8 @@ go_library(
         "@com_github_lib_pq//oid",
         "@com_github_xdg_go_scram//:scram",
         "@io_opentelemetry_go_otel//attribute",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -139,6 +143,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//stdstrings",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_lib_pq//:pq",

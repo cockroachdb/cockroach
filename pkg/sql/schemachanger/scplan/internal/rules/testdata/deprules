@@ -1,0 +1,768 @@
+deprules
+----
+- name: view drops before the types, views and tables it depends on
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.View'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.View', '*scpb.Table']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = DROPPED
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - view-depends-on(*scpb.View, scpb.Element)($from, $to)
+- name: alias type drops before the types it depends on
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.AliasType'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = DROPPED
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - alias-type-depends-on(*scpb.AliasType, scpb.Element)($from, $to)
+- name: array type drops right before its element enum type
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.AliasType'
+    - $to[Type] = '*scpb.EnumType'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = DROPPED
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - join-array-type-with-element-type(*scpb.AliasType, *scpb.EnumType)($from, $to)
+- name: schema dropped before parent database
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SchemaParent'
+    - $to[Type] = '*scpb.Database'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: object dropped before parent schema
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ObjectParent'
+    - $to[Type] = '*scpb.Schema'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: secondary region locality removed before dropping multi-region enum type
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.TableLocalitySecondaryRegion'
+    - $to[Type] = '*scpb.EnumType'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: check constraint removed before dropping dependent types and sequences
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.CheckConstraint'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - check-constraint-depends-on(*scpb.CheckConstraint, scpb.Element)($from, $to)
+- name: FK removed before dropping dependent table
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ForeignKeyConstraint'
+    - $to[Type] = '*scpb.Table'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: index partial predicate removed before dropping dependent types
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SecondaryIndexPartial'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - index-partial-depends-on(*scpb.SecondaryIndexPartial, scpb.Element)($from, $to)
+- name: column type removed before dropping dependent types
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnType'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - column-type-depends-on(*scpb.ColumnType, scpb.Element)($from, $to)
+- name: column DEFAULT removed before dropping dependent types and sequences
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnDefaultExpression'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - column-default-depends-on(*scpb.ColumnDefaultExpression, scpb.Element)($from, $to)
+- name: column ON UPDATE removed before dropping dependent types and sequences
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnOnUpdateExpression'
+    - $to[Type] IN ['*scpb.AliasType', '*scpb.EnumType', '*scpb.Sequence']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - column-on-update-depends-on(*scpb.ColumnOnUpdateExpression, scpb.Element)($from, $to)
+- name: sequence ownership removed before dropping sequence
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SequenceOwner'
+    - $to[Type] = '*scpb.Sequence'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: database region config removed before dropping multi-region enum type
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.DatabaseRegionConfig'
+    - $to[Type] = '*scpb.EnumType'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[ReferencedDescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+    - $to[DescID] = $joined-from-ref-desc-id-with-to-desc-id-var
+- name: dependent element removal before descriptor drop
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.ColumnFamily', '*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint', '*scpb.TableComment', '*scpb.TableLocalityGlobal', '*scpb.TableLocalityPrimaryRegion', '*scpb.TableLocalitySecondaryRegion', '*scpb.TableLocalityRegionalByRow', '*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment', '*scpb.SequenceOwner', '*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment', '*scpb.ConstraintName', '*scpb.ConstraintComment', '*scpb.Namespace', '*scpb.Owner', '*scpb.UserPrivileges', '*scpb.DatabaseRoleSetting', '*scpb.DatabaseRegionConfig', '*scpb.DatabaseComment', '*scpb.SchemaParent', '*scpb.SchemaComment', '*scpb.ObjectParent']
+    - $to[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = DROPPED
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+- name: dependent element removal right after descriptor removal
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.Table', '*scpb.View']
+    - $to[Type] IN ['*scpb.Column', '*scpb.PrimaryIndex', '*scpb.SecondaryIndex', '*scpb.RowLevelTTL']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+- name: primary index swap
+  from: old-index-node
+  kind: SameStagePrecedence
+  to: new-index-node
+  query:
+    - $new-index[Type] = '*scpb.PrimaryIndex'
+    - $old-index[Type] = '*scpb.PrimaryIndex'
+    - $new-index[DescID] = $table-id
+    - $old-index[DescID] = $table-id
+    - new-primary-index-depends-on-old(*scpb.PrimaryIndex, *scpb.PrimaryIndex)($new-index, $old-index)
+    - $new-index-target[Type] = '*scpb.Target'
+    - $new-index-target[Element] = $new-index
+    - $new-index-node[Type] = '*screl.Node'
+    - $new-index-node[Target] = $new-index-target
+    - $new-index-target[TargetStatus] = PUBLIC
+    - $new-index-node[CurrentStatus] = PUBLIC
+    - $old-index-target[Type] = '*scpb.Target'
+    - $old-index-target[Element] = $old-index
+    - $old-index-node[Type] = '*screl.Node'
+    - $old-index-node[Target] = $old-index-target
+    - $old-index-target[TargetStatus] = ABSENT
+    - $old-index-node[CurrentStatus] = VALIDATED
+- name: index existence precedes index dependents
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.IndexComment']
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: partial predicate set right after secondary index existence
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SecondaryIndex'
+    - $to[Type] = '*scpb.SecondaryIndexPartial'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: dependents existence precedes writes to index
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.IndexPartitioning', '*scpb.IndexComment']
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = WRITE_ONLY
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: index named right before index becomes public
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.IndexName'
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: dependents removed after index no longer public
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $to[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = VALIDATED
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: dependents removed before index
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning', '*scpb.SecondaryIndexPartial', '*scpb.IndexComment']
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+- name: column type set right after column existence
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $to[Type] = '*scpb.ColumnType'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column existence precedes column dependents
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $to[Type] IN ['*scpb.ColumnName', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression', '*scpb.ColumnComment']
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: DEFAULT or ON UPDATE existence precedes writes to column
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $to[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = WRITE_ONLY
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column named right before column becomes public
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnName'
+    - $to[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column dependents exist before column becomes public
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnComment'
+    - $to[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = PUBLIC
+    - $to-node[CurrentStatus] = PUBLIC
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column dependents removed after column no longer public
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $to[Type] IN ['*scpb.ColumnType', '*scpb.ColumnName', '*scpb.ColumnComment']
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = WRITE_ONLY
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column type dependents removed right before column type
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.SequenceOwner', '*scpb.ColumnDefaultExpression', '*scpb.ColumnOnUpdateExpression']
+    - $to[Type] = '*scpb.ColumnType'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: dependents removed before column
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] IN ['*scpb.ColumnName', '*scpb.ColumnComment', '*scpb.ColumnType']
+    - $to[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+- name: column type removed right before column when not dropping relation
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.ColumnType'
+    - $to[Type] = '*scpb.Column'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[ColumnID] = $ColumnID-join-var
+    - $to[ColumnID] = $ColumnID-join-var
+    - parent-relation-is-not-dropped(*scpb.ColumnType, *scpb.Column)($from, $to)
+- name: partial predicate removed right before secondary index when not dropping relation
+  from: from-node
+  kind: SameStagePrecedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.SecondaryIndexPartial'
+    - $to[Type] = '*scpb.SecondaryIndex'
+    - $from-target[TargetStatus] = ABSENT
+    - $to-target[TargetStatus] = ABSENT
+    - $from-node[CurrentStatus] = ABSENT
+    - $to-node[CurrentStatus] = ABSENT
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - $from[IndexID] = $IndexID-join-var
+    - $to[IndexID] = $IndexID-join-var
+    - parent-relation-is-not-dropped(*scpb.SecondaryIndexPartial, *scpb.SecondaryIndex)($from, $to)
+- name: column depends on primary index
+  from: index-node
+  kind: Precedence
+  to: column-node
+  query:
+    - $status IN [WRITE_ONLY, PUBLIC]
+    - $target-status = PUBLIC
+    - $column[Type] = '*scpb.Column'
+    - $index[Type] = '*scpb.PrimaryIndex'
+    - $column[DescID] = $table-id
+    - $index[DescID] = $table-id
+    - column-featured-in-index(*scpb.Column, scpb.Element)($column, $index)
+    - $column-target[TargetStatus] = $target-status
+    - $index-target[TargetStatus] = $target-status
+    - $column-node[CurrentStatus] = $status
+    - $index-node[CurrentStatus] = $status
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*screl.Node'
+    - $column-node[Target] = $column-target
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*screl.Node'
+    - $index-node[Target] = $index-target
+- name: column existence precedes index existence
+  from: from-node
+  kind: Precedence
+  to: to-node
+  query:
+    - $from[Type] = '*scpb.Column'
+    - $to[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $from-target[TargetStatus] = PUBLIC
+    - $to-target[TargetStatus] = PUBLIC
+    - $from-node[CurrentStatus] = DELETE_ONLY
+    - $to-node[CurrentStatus] = DELETE_ONLY
+    - $from-target[Type] = '*scpb.Target'
+    - $from-target[Element] = $from
+    - $from-node[Type] = '*screl.Node'
+    - $from-node[Target] = $from-target
+    - $to-target[Type] = '*scpb.Target'
+    - $to-target[Element] = $to
+    - $to-node[Type] = '*screl.Node'
+    - $to-node[Target] = $to-target
+    - $from[DescID] = $DescID-join-var
+    - $to[DescID] = $DescID-join-var
+    - column-featured-in-index(*scpb.Column, scpb.Element)($from, $to)

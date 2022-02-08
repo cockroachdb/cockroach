@@ -275,9 +275,11 @@ func showBackupPlanHook(
 			if err != nil {
 				return err
 			}
-			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts.Salt)
-			encryption = &jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_Passphrase,
-				Key: encryptionKey}
+			encryptionKey := storageccl.GenerateKey([]byte(passphrase), opts[0].Salt)
+			encryption = &jobspb.BackupEncryptionOptions{
+				Mode: jobspb.EncryptionMode_Passphrase,
+				Key:  encryptionKey,
+			}
 		} else if kms, ok := opts[backupOptEncKMS]; ok {
 			opts, err := readEncryptionOptions(ctx, store)
 			if err != nil {
@@ -285,14 +287,21 @@ func showBackupPlanHook(
 			}
 
 			env := &backupKMSEnv{p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig}
-			defaultKMSInfo, err := validateKMSURIsAgainstFullBackup([]string{kms},
-				newEncryptedDataKeyMapFromProtoMap(opts.EncryptedDataKeyByKMSMasterKeyID), env)
+			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
+			for _, encFile := range opts {
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup([]string{kms},
+					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), env)
+				if err == nil {
+					break
+				}
+			}
 			if err != nil {
 				return err
 			}
 			encryption = &jobspb.BackupEncryptionOptions{
 				Mode:    jobspb.EncryptionMode_KMS,
-				KMSInfo: defaultKMSInfo}
+				KMSInfo: defaultKMSInfo,
+			}
 		}
 		var incPaths []string
 		incStore := store
@@ -404,7 +413,7 @@ func backupShowerDefault(
 						}
 					}
 				}
-				descSizes := make(map[descpb.ID]RowCount)
+				descSizes := make(map[descpb.ID]roachpb.RowCount)
 				for _, file := range manifest.Files {
 					// TODO(dan): This assumes each file in the backup only
 					// contains data from a single table, which is usually but
@@ -416,7 +425,7 @@ func backupShowerDefault(
 						continue
 					}
 					s := descSizes[descpb.ID(tableID)]
-					s.add(file.EntryCounts)
+					s.Add(file.EntryCounts)
 					descSizes[descpb.ID(tableID)] = s
 				}
 				backupType := tree.NewDString("full")

@@ -71,7 +71,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	// Txn1 is in the pending state but is expired.
 	txn1 := newTransaction("txn1", key, 1, clock)
 	txn1.ReadTimestamp.WallTime -= int64(100 * time.Second)
-	txn1.LastHeartbeat = txn1.ReadTimestamp.UnsafeToClockTimestamp().ToTimestamp()
+	txn1.LastHeartbeat = txn1.ReadTimestamp
 	// Txn2 is in the staging state and is not old enough to have expired so the
 	// code ought to send nothing.
 	txn2 := newTransaction("txn2", key, 1, clock)

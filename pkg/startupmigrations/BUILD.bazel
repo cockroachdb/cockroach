@@ -45,7 +45,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cli/exit",
-        "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",

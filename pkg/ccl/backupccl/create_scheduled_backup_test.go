@@ -97,6 +97,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 	require.NotNil(t, th.cfg)
 	th.sqlDB = sqlutils.MakeSQLRunner(db)
 	th.server = s
+	th.sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '1MiB'`)
 
 	return th, func() {
 		dirCleanupFn()
@@ -420,13 +421,13 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			},
 		},
 		{
-			name:  "full-cluster-remote-incremental-storage",
-			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH incremental_storage = 'nodelocal://1/incremental' RECURRING '@hourly'",
+			name:  "full-cluster-remote-incremental-location",
+			query: "CREATE SCHEDULE FOR BACKUP INTO 'nodelocal://0/backup' WITH incremental_location = 'nodelocal://1/incremental' RECURRING '@hourly'",
 			user:  enterpriseUser,
 			expectedSchedules: []expectedSchedule{
 				{
 					nameRe:     "BACKUP .*",
-					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_storage = 'nodelocal://1/incremental'",
+					backupStmt: "BACKUP INTO LATEST IN 'nodelocal://0/backup' WITH detached, incremental_location = 'nodelocal://1/incremental'",
 					period:     time.Hour,
 					paused:     true,
 				},
@@ -800,7 +801,7 @@ INSERT INTO t1 values (-1), (10), (-100);
 				}
 
 				// Verify backup.
-				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestFileName))
+				latest, err := ioutil.ReadFile(path.Join(th.iodir, "backup", testName, latestHistoryDirectory+"/"+latestFileName))
 				require.NoError(t, err)
 				backedUp := th.sqlDB.QueryStr(t,
 					`SELECT database_name, object_name FROM [SHOW BACKUP $1] WHERE object_type='table' ORDER BY database_name, object_name`,

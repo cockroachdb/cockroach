@@ -68,13 +68,13 @@ func getCombinedStatementStats(
 	startTime := getTimeFromSeconds(req.Start)
 	endTime := getTimeFromSeconds(req.End)
 	limit := SQLStatsResponseMax.Get(&settings.SV)
-	whereClause, args := getFilterAndParams(startTime, endTime, limit, testingKnobs)
-	statements, err := collectCombinedStatements(ctx, ie, whereClause, args)
+	whereClause, orderAndLimit, args := getQueryClausesAndArgs(startTime, endTime, limit, testingKnobs)
+	statements, err := collectCombinedStatements(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args)
+	transactions, err := collectCombinedTransactions(ctx, ie, whereClause, args, orderAndLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -89,15 +89,18 @@ func getCombinedStatementStats(
 	return response, nil
 }
 
-func getFilterAndParams(
+// getQueryClausesAndArgs returns:
+// - where clause (filtering by name and aggregates_ts when defined)
+// - order and limit clause
+// - args that will replace the clauses above
+func getQueryClausesAndArgs(
 	start, end *time.Time, limit int64, testingKnobs *sqlstats.TestingKnobs,
-) (string, []interface{}) {
-	var args []interface{}
+) (whereClause string, orderAndLimitClause string, args []interface{}) {
 	var buffer strings.Builder
 	buffer.WriteString(testingKnobs.GetAOSTClause())
 
 	// Filter out internal statements by app name.
-	buffer.WriteString(" WHERE app_name NOT LIKE '$ internal%'")
+	buffer.WriteString(fmt.Sprintf(" WHERE app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
 
 	if start != nil {
 		buffer.WriteString(" AND aggregated_ts >= $1")
@@ -109,17 +112,18 @@ func getFilterAndParams(
 		args = append(args, *end)
 	}
 
-	// Retrieve the top rows ordered by aggregation time and service latency.
-	buffer.WriteString(fmt.Sprintf(`
-ORDER BY aggregated_ts DESC,(statistics -> 'statistics' -> 'svcLat' ->> 'mean')::float DESC
-LIMIT $%d`, len(args)+1))
+	orderAndLimitClause = fmt.Sprintf(` ORDER BY aggregated_ts DESC LIMIT $%d`, len(args)+1)
 	args = append(args, limit)
 
-	return buffer.String(), args
+	return buffer.String(), orderAndLimitClause, args
 }
 
 func collectCombinedStatements(
-	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	whereClause string,
+	qargs []interface{},
+	orderAndLimit string,
 ) ([]serverpb.StatementsResponse_CollectedStatementStatistics, error) {
 
 	query := fmt.Sprintf(
@@ -127,13 +131,19 @@ func collectCombinedStatements(
 				fingerprint_id,
 				transaction_fingerprint_id,
 				app_name,
-				aggregated_ts,
+				max(aggregated_ts) as aggregated_ts,
 				metadata,
-				statistics,
-				sampled_plan,
-        aggregation_interval
-			FROM crdb_internal.statement_statistics
-			%s`, whereClause)
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+				max(sampled_plan) AS sampled_plan,
+				aggregation_interval
+		FROM crdb_internal.statement_statistics %s
+		GROUP BY
+				fingerprint_id,
+				transaction_fingerprint_id,
+				app_name,
+				metadata,
+				aggregation_interval
+		%s`, whereClause, orderAndLimit)
 
 	const expectedNumDatums = 8
 
@@ -224,19 +234,28 @@ func collectCombinedStatements(
 }
 
 func collectCombinedTransactions(
-	ctx context.Context, ie *sql.InternalExecutor, whereClause string, qargs []interface{},
+	ctx context.Context,
+	ie *sql.InternalExecutor,
+	whereClause string,
+	qargs []interface{},
+	orderAndLimit string,
 ) ([]serverpb.StatementsResponse_ExtendedCollectedTransactionStatistics, error) {
 
 	query := fmt.Sprintf(
 		`SELECT
 				app_name,
-				aggregated_ts,
+				max(aggregated_ts) as aggregated_ts,
 				fingerprint_id,
 				metadata,
-				statistics,
+				crdb_internal.merge_transaction_stats(array_agg(statistics)) AS statistics,
 				aggregation_interval
-			FROM crdb_internal.transaction_statistics
-			%s`, whereClause)
+			FROM crdb_internal.transaction_statistics %s
+			GROUP BY
+				app_name,
+				fingerprint_id,
+				metadata,
+				aggregation_interval
+			%s`, whereClause, orderAndLimit)
 
 	const expectedNumDatums = 6
 

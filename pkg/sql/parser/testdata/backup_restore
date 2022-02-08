@@ -47,12 +47,12 @@ BACKUP TABLE foo INTO LATEST IN '_' -- literals removed
 BACKUP TABLE _ INTO LATEST IN 'bar' -- identifiers removed
 
 parse
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_storage = 'baz'
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_location = 'baz'
 ----
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_storage = 'baz'
-BACKUP TABLE (foo) INTO LATEST IN ('bar') WITH incremental_storage = ('baz') -- fully parenthesized
-BACKUP TABLE foo INTO LATEST IN '_' WITH incremental_storage = '_' -- literals removed
-BACKUP TABLE _ INTO LATEST IN 'bar' WITH incremental_storage = 'baz' -- identifiers removed
+BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_location = 'baz'
+BACKUP TABLE (foo) INTO LATEST IN ('bar') WITH incremental_location = ('baz') -- fully parenthesized
+BACKUP TABLE foo INTO LATEST IN '_' WITH incremental_location = '_' -- literals removed
+BACKUP TABLE _ INTO LATEST IN 'bar' WITH incremental_location = 'baz' -- identifiers removed
 
 parse
 BACKUP TABLE foo INTO 'subdir' IN 'bar'
@@ -487,12 +487,12 @@ RESTORE DATABASE foo FROM '_' WITH new_db_name = '_' -- literals removed
 RESTORE DATABASE _ FROM 'bar' WITH new_db_name = 'baz' -- identifiers removed
 
 parse
-RESTORE DATABASE foo FROM 'bar' IN LATEST WITH incremental_storage = 'baz'
+RESTORE DATABASE foo FROM 'bar' IN LATEST WITH incremental_location = 'baz'
 ----
-RESTORE DATABASE foo FROM 'bar' IN 'latest' WITH incremental_storage = 'baz' -- normalized!
-RESTORE DATABASE foo FROM ('bar') IN ('latest') WITH incremental_storage = ('baz') -- fully parenthesized
-RESTORE DATABASE foo FROM '_' IN '_' WITH incremental_storage = '_' -- literals removed
-RESTORE DATABASE _ FROM 'bar' IN 'latest' WITH incremental_storage = 'baz' -- identifiers removed
+RESTORE DATABASE foo FROM 'bar' IN 'latest' WITH incremental_location = 'baz' -- normalized!
+RESTORE DATABASE foo FROM ('bar') IN ('latest') WITH incremental_location = ('baz') -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN '_' WITH incremental_location = '_' -- literals removed
+RESTORE DATABASE _ FROM 'bar' IN 'latest' WITH incremental_location = 'baz' -- identifiers removed
 
 parse
 RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'
@@ -664,6 +664,14 @@ RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1'
 RESTORE TENANT 36 FROM (($1), ($2)) AS OF SYSTEM TIME ('1') -- fully parenthesized
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '_' -- literals removed
 RESTORE TENANT 36 FROM ($1, $2) AS OF SYSTEM TIME '1' -- identifiers removed
+
+parse
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
+----
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5'
+RESTORE TENANT 36 FROM (($1), ($2)) WITH tenant = ('5') -- fully parenthesized
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '_' -- literals removed
+RESTORE TENANT 36 FROM ($1, $2) WITH tenant = '5' -- identifiers removed
 
 parse
 RESTORE TENANT 123 FROM REPLICATION STREAM FROM 'bar'

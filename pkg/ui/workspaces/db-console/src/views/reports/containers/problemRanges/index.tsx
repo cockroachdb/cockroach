@@ -46,6 +46,7 @@ function ProblemRangeList(props: {
   name: string;
   problems: NodeProblems$Properties[];
   extract: (p: NodeProblems$Properties) => Long[];
+  description?: string;
 }) {
   const ids = _.chain(props.problems)
     .filter(problem => _.isEmpty(problem.error_message))
@@ -61,6 +62,9 @@ function ProblemRangeList(props: {
   return (
     <div>
       <h2 className="base-heading">{props.name}</h2>
+      {props.description && (
+        <div className="problems-description">{props.description}</div>
+      )}
       <div className="problems-list">
         {_.map(ids, id => {
           return (
@@ -179,9 +183,10 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           extract={problem => problem.no_raft_leader_range_ids}
         />
         <ProblemRangeList
-          name="Invalid Lease"
+          name="Expired Lease"
           problems={problems}
           extract={problem => problem.no_lease_range_ids}
+          description="Note that having expired leases is unlikely to be a problem. They can occur after node restarts and will clear on its own in up to 24 hours."
         />
         <ProblemRangeList
           name="Raft Leader but not Lease Holder"
@@ -202,6 +207,11 @@ export class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           name="Quiescent equals ticking"
           problems={problems}
           extract={problem => problem.quiescent_equals_ticking_range_ids}
+        />
+        <ProblemRangeList
+          name="Circuit breaker error"
+          problems={problems}
+          extract={problem => problem.circuit_breaker_error_range_ids}
         />
       </div>
     );

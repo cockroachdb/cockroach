@@ -1,7 +1,4 @@
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX i (x), INDEX i2 (z))
 
 statement ok
@@ -193,7 +190,7 @@ CREATE TABLE t (
   UNIQUE INDEX i4 (z), -- will be rewritten.
   UNIQUE INDEX i5 (w) STORING (y), -- will be rewritten.
   INVERTED INDEX i6 (v), -- will be rewritten.
-  INDEX i7 (z) USING HASH WITH BUCKET_COUNT = 4, -- will be rewritten.
+  INDEX i7 (z) USING HASH WITH (bucket_count=4), -- will be rewritten.
   FAMILY (x, y, z, w, v)
 );
 INSERT INTO t VALUES (1, 2, 3, 4, '{}');
@@ -217,7 +214,7 @@ t  CREATE TABLE public.t (
    UNIQUE INDEX i4 (z ASC),
    UNIQUE INDEX i5 (w ASC) STORING (y),
    INVERTED INDEX i6 (v),
-   INDEX i7 (z ASC) USING HASH WITH BUCKET_COUNT = 4,
+   INDEX i7 (z ASC) USING HASH WITH (bucket_count=4),
    FAMILY fam_0_x_y_z_w_v (x, y, z, w, v)
 )
 
@@ -229,13 +226,13 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 ----
 4   i3
 9   t_pkey
-10  t_x_key
-11  i1
-12  i2
-13  i4
-14  i5
-15  i6
-16  i7
+11  t_x_key
+13  i1
+15  i2
+17  i4
+19  i5
+21  i6
+23  i7
 
 # Make sure that each index can index join against the new primary key;
 
@@ -349,11 +346,11 @@ CREATE TABLE t (
   x INT PRIMARY KEY,
   y INT NOT NULL,
   z INT,
-  INDEX i1 (z) USING HASH WITH BUCKET_COUNT = 5,
+  INDEX i1 (z) USING HASH WITH (bucket_count=5),
   FAMILY (x, y, z)
 );
 INSERT INTO t VALUES (1, 2, 3);
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT = 10
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=10)
 
 query TT
 SHOW CREATE t
@@ -364,9 +361,9 @@ t  CREATE TABLE public.t (
    z INT8 NULL,
    crdb_internal_z_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(z)), 5:::INT8)) VIRTUAL,
    crdb_internal_y_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 10:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 10,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=10),
    UNIQUE INDEX t_x_key (x ASC),
-   INDEX i1 (z ASC) USING HASH WITH BUCKET_COUNT = 5,
+   INDEX i1 (z ASC) USING HASH WITH (bucket_count=5),
    FAMILY fam_0_x_y_z (x, y, z)
 )
 
@@ -384,8 +381,8 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_x_key
-5  i1
+5  t_x_key
+7  i1
 
 query III
 SELECT * FROM t@t_pkey
@@ -406,7 +403,7 @@ SELECT * FROM t@i1
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (
-  x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=5,
+  x INT PRIMARY KEY USING HASH WITH (bucket_count=5),
   y INT NOT NULL,
   z INT,
   INDEX i (z),
@@ -424,7 +421,7 @@ t  CREATE TABLE public.t (
    y INT8 NOT NULL,
    z INT8 NULL,
    CONSTRAINT t_pkey PRIMARY KEY (y ASC),
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 5,
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=5),
    INDEX i (z ASC),
    FAMILY fam_0_x_y_z (x, y, z)
 )
@@ -450,8 +447,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC),
-   FAMILY "primary" (rowid, rowid_1)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
 )
 
 statement ok
@@ -463,8 +459,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (rowid, rowid_1)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
@@ -535,14 +530,13 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC)
 )
 
 statement ok
 DROP TABLE IF EXISTS t;
 CREATE TABLE t (x INT NOT NULL);
-ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH BUCKET_COUNT=4
+ALTER TABLE t ADD PRIMARY KEY (x) USING HASH WITH (bucket_count=4)
 
 query TT
 SHOW CREATE t
@@ -551,8 +545,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 4,
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -566,8 +559,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT my_pk PRIMARY KEY (x ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT my_pk PRIMARY KEY (x ASC)
 )
 
 statement ok
@@ -844,7 +836,7 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_y_idx
+5  t_y_idx
 
 # Repeat the above test using ALTER PRIMARY KEY.
 
@@ -881,7 +873,7 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_y_idx
+5  t_y_idx
 
 # Test when multiple indexes get created and destroyed.
 statement ok
@@ -925,17 +917,17 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 5  t_pkey
-6  i1
-7  i2
-8  i3
+7  i1
+9  i2
+11 i3
 
 # Regression for #45889.
 # Primary key changes on a hash sharded index that just change the bucket
 # count shouldn't cause the old primary key to be copied.
 statement ok
 DROP TABLE IF EXISTS t CASCADE;
-CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2);
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH BUCKET_COUNT=3
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (x) USING HASH WITH (bucket_count=3)
 
 query TT
 SHOW CREATE t
@@ -944,16 +936,15 @@ t  CREATE TABLE public.t (
    crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH BUCKET_COUNT = 3,
-   FAMILY "primary" (x)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
 )
 
 # Changes on a hash sharded index that change the columns will cause the old
 # primary key to be copied.
 statement ok
 DROP TABLE t;
-CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 2, y INT NOT NULL, FAMILY (x, y));
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH BUCKET_COUNT=2
+CREATE TABLE t (x INT PRIMARY KEY USING HASH WITH (bucket_count=2), y INT NOT NULL, FAMILY (x, y));
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y) USING HASH WITH (bucket_count=2)
 
 query TT
 SHOW CREATE t
@@ -963,8 +954,8 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    y INT8 NOT NULL,
    crdb_internal_y_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(y)), 2:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH BUCKET_COUNT = 2,
-   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH BUCKET_COUNT = 2,
+   CONSTRAINT t_pkey PRIMARY KEY (y ASC) USING HASH WITH (bucket_count=2),
+   UNIQUE INDEX t_x_key (x ASC) USING HASH WITH (bucket_count=2),
    FAMILY fam_0_x_y (x, y)
 )
 
@@ -1096,7 +1087,7 @@ t1_id_id2_key  id2    ASC
 t1_id_key      id     ASC
 
 statement ok
-alter table t1 alter primary key using columns(id) USING HASH WITH BUCKET_COUNT = 10
+alter table t1 alter primary key using columns(id) USING HASH WITH (bucket_count=10)
 
 query TTT
 select index_name,column_name,direction from [show indexes from t1];
@@ -1149,7 +1140,7 @@ SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
 t_pkey  i  ASC
 
 statement ok
-ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH BUCKET_COUNT = 2
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (i) USING HASH WITH (bucket_count=2)
 
 query TTT
 SELECT index_name,column_name,direction FROM [SHOW INDEXES FROM t]
@@ -1236,13 +1227,12 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1273,14 +1263,13 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
-    UNIQUE INDEX t_k_key (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+   UNIQUE INDEX t_k_key (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1318,15 +1307,14 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-    UNIQUE INDEX t_b_k_key (b ASC, k ASC),
-    UNIQUE INDEX t_k_key (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+   UNIQUE INDEX t_b_k_key (b ASC, k ASC),
+   UNIQUE INDEX t_k_key (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1385,8 +1373,9 @@ ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) WITH (bucket_count=
 statement error pq: "bucket_count" storage parameter and "BUCKET_COUNT" cannot be set at the same time
 ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5);
 
+# Make sure old BUCKET_COUNT syntax still works
 statement ok
-ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH (bucket_count=5);
+ALTER TABLE t_test_param ALTER PRIMARY KEY USING COLUMNS (b) USING HASH WITH BUCKET_COUNT = 5;
 
 query T
 SELECT @2 FROM [SHOW CREATE TABLE t_test_param]
@@ -1395,7 +1384,42 @@ CREATE TABLE public.t_test_param (
    a INT8 NOT NULL,
    b INT8 NOT NULL,
    crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
-   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH BUCKET_COUNT = 5,
+   CONSTRAINT t_test_param_pkey PRIMARY KEY (b ASC) USING HASH WITH (bucket_count=5),
    UNIQUE INDEX t_test_param_a_key (a ASC),
    FAMILY fam_0_a_b (a, b)
 )
+
+subtest pkey-comment-drop
+
+# Create a table with a primary key and add a comment on it.
+statement ok
+CREATE TABLE pkey_comment (a INT8, b INT8, c INT8, CONSTRAINT pkey PRIMARY KEY (a, b));
+COMMENT ON INDEX pkey IS 'idx';
+COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
+CREATE UNIQUE INDEX i2 ON pkey_comment(c);
+COMMENT ON INDEX i2 IS 'idx2';
+COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
+
+
+# Comment should exist inside the create statement, so filter it out
+query T
+SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
+
+
+# Altering the primary key should clean up the comment.
+statement ok
+ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
+
+
+# No comment exists inside the CREATE statement
+query T
+SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
+----
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'

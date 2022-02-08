@@ -1,6 +1,6 @@
 debug doctor examine zipdir testdata/doctor/debugzip
 ----
-debug doctor examine zipdir testdata/doctor/debugzip
+debug doctor examine zipdir testdata/doctor/debugzip 21.1-52
 WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.
 Examining 37 descriptors and 42 namespace entries...
   ParentID  52, ParentSchemaID 29: relation "users" (53): referenced database ID 52: referenced descriptor not found

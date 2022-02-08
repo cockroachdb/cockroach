@@ -2417,7 +2417,9 @@ type DTimestamp struct {
 func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, pgerror.Newf(
+			pgcode.InvalidTimeZoneDisplacementValue,
+			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
 	}
 	return &DTimestamp{Time: ret}, nil
 }
@@ -2699,7 +2701,9 @@ type DTimestampTZ struct {
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, pgerror.Newf(
+			pgcode.InvalidTimeZoneDisplacementValue,
+			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
 	}
 	return &DTimestampTZ{Time: ret}, nil
 }
@@ -5645,4 +5649,92 @@ func MaxDistinctCount(evalCtx *EvalContext, first, last Datum) (_ int64, ok bool
 		return 0, false
 	}
 	return delta + 1, true
+}
+
+// ParseDatumPath parses a span key string like "/1/2/3".
+// Only NULL and a subset of types are currently supported.
+func ParseDatumPath(evalCtx *EvalContext, str string, typs []types.Family) []Datum {
+	var res []Datum
+	for i, valStr := range ParsePath(str) {
+		if i >= len(typs) {
+			panic(errors.AssertionFailedf("invalid types"))
+		}
+
+		if valStr == "NULL" {
+			res = append(res, DNull)
+			continue
+		}
+		var val Datum
+		var err error
+		switch typs[i] {
+		case types.BoolFamily:
+			val, err = ParseDBool(valStr)
+		case types.IntFamily:
+			val, err = ParseDInt(valStr)
+		case types.FloatFamily:
+			val, err = ParseDFloat(valStr)
+		case types.DecimalFamily:
+			val, err = ParseDDecimal(valStr)
+		case types.DateFamily:
+			val, _, err = ParseDDate(evalCtx, valStr)
+		case types.TimestampFamily:
+			val, _, err = ParseDTimestamp(evalCtx, valStr, time.Microsecond)
+		case types.TimestampTZFamily:
+			val, _, err = ParseDTimestampTZ(evalCtx, valStr, time.Microsecond)
+		case types.StringFamily:
+			val = NewDString(valStr)
+		case types.BytesFamily:
+			val = NewDBytes(DBytes(valStr))
+		case types.OidFamily:
+			dInt, err := ParseDInt(valStr)
+			if err == nil {
+				val = NewDOid(*dInt)
+			}
+		case types.UuidFamily:
+			val, err = ParseDUuidFromString(valStr)
+		case types.INetFamily:
+			val, err = ParseDIPAddrFromINetString(valStr)
+		case types.TimeFamily:
+			val, _, err = ParseDTime(evalCtx, valStr, time.Microsecond)
+		case types.TimeTZFamily:
+			val, _, err = ParseDTimeTZ(evalCtx, valStr, time.Microsecond)
+		default:
+			panic(errors.AssertionFailedf("type %s not supported", typs[i].String()))
+		}
+		if err != nil {
+			panic(err)
+		}
+		res = append(res, val)
+	}
+	return res
+}
+
+// ParsePath splits a string of the form "/foo/bar" into strings ["foo", "bar"].
+// An empty string is allowed, otherwise the string must start with /.
+func ParsePath(str string) []string {
+	if str == "" {
+		return nil
+	}
+	if str[0] != '/' {
+		panic(str)
+	}
+	return strings.Split(str, "/")[1:]
+}
+
+// InferTypes takes a list of strings produced by ParsePath and returns a slice
+// of datum types inferred from the strings. Type DInt will be used if possible,
+// otherwise DString. For example, a vals slice ["1", "foo"] will give a types
+// slice [Dint, DString].
+func InferTypes(vals []string) []types.Family {
+	// Infer the datum types and populate typs accordingly.
+	typs := make([]types.Family, len(vals))
+	for i := 0; i < len(vals); i++ {
+		typ := types.IntFamily
+		_, err := ParseDInt(vals[i])
+		if err != nil {
+			typ = types.StringFamily
+		}
+		typs[i] = typ
+	}
+	return typs
 }

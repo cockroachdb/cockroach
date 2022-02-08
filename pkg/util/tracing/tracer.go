@@ -164,7 +164,7 @@ var ZipkinCollector = settings.RegisterValidatedStringSetting(
 
 // enableTracingByDefault controls whether Tracers configured with
 // WithTracingMode(TracingModeFromEnv) generally create spans or not.
-var enableTracingByDefault = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", false) || buildutil.CrdbTestBuild
+var enableTracingByDefault = envutil.EnvOrDefaultBool("COCKROACH_REAL_SPANS", true)
 
 // panicOnUseAfterFinish, if set, causes use of a span after Finish() to panic
 // if detected.
@@ -182,8 +182,7 @@ var debugUseAfterFinish = envutil.EnvOrDefaultBool("COCKROACH_DEBUG_SPAN_USE_AFT
 // the span mutexes end up being reused and locked repeatedly in random order on
 // the same goroutine. This erroneously looks like a potential deadlock to the
 // detector.
-var reuseSpans = (buildutil.CrdbTestBuild && !syncutil.DeadlockEnabled) ||
-	envutil.EnvOrDefaultBool("COCKROACH_REUSE_TRACING_SPANS", false)
+var reuseSpans = !syncutil.DeadlockEnabled && envutil.EnvOrDefaultBool("COCKROACH_REUSE_TRACING_SPANS", true)
 
 // detectSpanRefLeaks enables the detection of Span reference leaks - i.e.
 // failures to decrement a Span's reference count. If detection is enabled, such
@@ -418,16 +417,26 @@ func (r *SpanRegistry) getSpanByID(id tracingpb.SpanID) RegistrySpan {
 // VisitSpans calls the visitor callback for every local root span in the
 // registry. Iterations stops when the visitor returns an error. If that error
 // is iterutils.StopIteration(), then VisitSpans() returns nil.
+//
+// The callback should not hold on to the span after it returns.
 func (r *SpanRegistry) VisitSpans(visitor func(span RegistrySpan) error) error {
+	// Take a snapshot of the registry and release the lock.
 	r.mu.Lock()
-	sl := make([]*crdbSpan, 0, len(r.mu.m))
+	spans := make([]spanRef, 0, len(r.mu.m))
 	for _, sp := range r.mu.m {
-		sl = append(sl, sp)
+		// We'll keep the spans alive while we're visiting them below.
+		spans = append(spans, makeSpanRef(sp.sp))
 	}
 	r.mu.Unlock()
 
-	for _, sp := range sl {
-		if err := visitor(sp); err != nil {
+	defer func() {
+		for i := range spans {
+			spans[i].release()
+		}
+	}()
+
+	for _, sp := range spans {
+		if err := visitor(sp.Span.i.crdb); err != nil {
 			if iterutil.Done(err) {
 				return nil
 			}
@@ -543,6 +552,7 @@ func NewTracer() *Tracer {
 			c := &h.crdbSpan
 			*c = crdbSpan{
 				tracer: t,
+				sp:     sp,
 			}
 			sp.i.crdb = c
 			return h
@@ -1112,6 +1122,8 @@ child operation: %s, tracer created at:
 
 	s.i.crdb.enableRecording(opts.recordingType())
 
+	s.i.crdb.parentSpanID = opts.parentSpanID()
+
 	var localRoot bool
 	{
 		// If a parent is specified, link the newly created Span to the parent.
@@ -1139,7 +1151,6 @@ child operation: %s, tracer created at:
 				added := parent.addChildLocked(s, !opts.ParentDoesNotCollectRecording)
 				if added {
 					localRoot = false
-					s.i.crdb.parentSpanID = opts.parentSpanID()
 					// We take over the reference in opts.Parent. The child will release
 					// it once when it nils out s.i.crdb.mu.parent (i.e. when either the
 					// parent of the child finish). Note that some methods on opts cannot
@@ -1342,9 +1353,10 @@ type RegistrySpan interface {
 	// span registry, we want as much information as possible to be included.
 	GetFullRecording(recType RecordingType) Recording
 
-	// SetVerbose sets the verbosity of the span appropriately and
-	// recurses on its children.
-	SetVerbose(to bool)
+	// SetRecordingType sets the recording mode of the span and its children,
+	// recursively. Setting it to RecordingOff disables further recording.
+	// Everything recorded so far remains in memory.
+	SetRecordingType(to RecordingType)
 }
 
 var _ RegistrySpan = &crdbSpan{}
@@ -1354,8 +1366,11 @@ func (t *Tracer) GetActiveSpanByID(spanID tracingpb.SpanID) RegistrySpan {
 	return t.activeSpansRegistry.getSpanByID(spanID)
 }
 
-// VisitSpans invokes the visitor with all active Spans. The function will
-// gracefully exit if the visitor returns iterutil.StopIteration().
+// VisitSpans calls the visitor callback for every local root span in the
+// registry. Iterations stops when the visitor returns an error. If that error
+// is iterutils.StopIteration(), then VisitSpans() returns nil.
+//
+// The callback should not hold on to the span after it returns.
 func (t *Tracer) VisitSpans(visitor func(span RegistrySpan) error) error {
 	return t.activeSpansRegistry.VisitSpans(visitor)
 }
@@ -1452,7 +1467,7 @@ func ForkSpan(ctx context.Context, opName string) (context.Context, *Span) {
 // creates a root span.
 func EnsureForkSpan(ctx context.Context, tr *Tracer, opName string) (context.Context, *Span) {
 	sp := SpanFromContext(ctx)
-	var opts []SpanOption
+	opts := make([]SpanOption, 0, 3)
 	// If there's a span in ctx, we use it as a parent.
 	if sp != nil {
 		tr = sp.Tracer()
@@ -1492,27 +1507,13 @@ func ChildSpan(ctx context.Context, opName string) (context.Context, *Span) {
 func EnsureChildSpan(
 	ctx context.Context, tr *Tracer, name string, os ...SpanOption,
 ) (context.Context, *Span) {
-	slp := optsPool.Get().(*[]SpanOption)
-	*slp = append(*slp, WithParent(SpanFromContext(ctx)))
-	*slp = append(*slp, os...)
-	ctx, sp := tr.StartSpanCtx(ctx, name, *slp...)
-	// Clear and zero-length the slice. Note that we have to clear
-	// explicitly or the options will continue to be referenced by
-	// the slice.
-	for i := range *slp {
-		(*slp)[i] = nil
-	}
-	*slp = (*slp)[0:0:cap(*slp)]
-	optsPool.Put(slp)
+	// NB: Making the capacity dynamic, based on len(os), makes this allocate.
+	// With a fixed length, it doesn't allocate.
+	opts := make([]SpanOption, 0, 3)
+	opts = append(opts, WithParent(SpanFromContext(ctx)))
+	opts = append(opts, os...)
+	ctx, sp := tr.StartSpanCtx(ctx, name, opts...)
 	return ctx, sp
-}
-
-var optsPool = sync.Pool{
-	New: func() interface{} {
-		// It is unusual to pass more than 5 SpanOptions.
-		sl := make([]SpanOption, 0, 5)
-		return &sl
-	},
 }
 
 // ContextWithRecordingSpan returns a context with an embedded trace Span. The
@@ -1533,7 +1534,7 @@ func ContextWithRecordingSpan(
 			if rec != nil {
 				return rec
 			}
-			rec = sp.FinishAndGetRecording(RecordingVerbose)
+			rec = sp.FinishAndGetConfiguredRecording()
 			return rec
 		}
 }

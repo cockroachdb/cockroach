@@ -11,8 +11,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/jobs",
+        "//pkg/jobs/jobsprotectedts",
         "//pkg/kv",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/spanconfig",
@@ -20,6 +22,7 @@ go_library(
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/sql",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/distsql",
@@ -29,6 +32,7 @@ go_library(
         "//pkg/testutils/testcluster",
         "//pkg/util/hlc",
         "//pkg/util/syncutil",
+        "//pkg/util/uuid",
         "@com_github_stretchr_testify//require",
     ],
 )

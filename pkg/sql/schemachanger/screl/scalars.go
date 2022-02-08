@@ -12,13 +12,13 @@ package screl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/errors"
 )
 
 // GetDescID retrieves the descriptor ID from the element.
-func GetDescID(e scpb.Element) descpb.ID {
+func GetDescID(e scpb.Element) catid.DescID {
 	id, err := Schema.GetAttribute(DescID, e)
 	if err != nil {
 		// Note that this is safe because we have a unit test that ensures that
@@ -27,18 +27,41 @@ func GetDescID(e scpb.Element) descpb.ID {
 			err, "failed to retrieve descriptor ID for %T", e,
 		))
 	}
-	return id.(descpb.ID)
+	return id.(catid.DescID)
 }
 
-// GetDescIDs returns the descriptor IDs referenced in the state's elements.
-func GetDescIDs(s scpb.TargetState) descpb.IDs {
-	descIDSet := catalog.MakeDescriptorIDSet()
+// AllTargetDescIDs returns all the descriptor IDs referenced in the
+// target state's elements. This is a superset of the IDs of the descriptors
+// affected by the schema change.
+func AllTargetDescIDs(s scpb.TargetState) (ids catalog.DescriptorIDSet) {
 	for i := range s.Targets {
-		// Depending on the element type either a single descriptor ID
-		// will exist or multiple (i.e. foreign keys).
-		if id := GetDescID(s.Targets[i].Element()); id != descpb.InvalidID {
-			descIDSet.Add(id)
+		e := s.Targets[i].Element()
+		// Handle special cases to tighten this superset a bit.
+		switch te := e.(type) {
+		case *scpb.Namespace:
+			// Ignore the parent database and schema in the namespace element:
+			// - the parent schema of an object has no back-references to it,
+			// - the parent database has back-references to a schema, but these
+			//   will be captured by the scpb.SchemaParent target.
+			ids.Add(te.DescriptorID)
+		case *scpb.ObjectParent:
+			// Ignore the parent schema, it won't have back-references.
+			ids.Add(te.ObjectID)
+		default:
+			AllDescIDs(e).ForEach(ids.Add)
 		}
 	}
-	return descIDSet.Ordered()
+	return ids
+}
+
+// AllDescIDs returns all the IDs referenced by an element.
+func AllDescIDs(e scpb.Element) (ids catalog.DescriptorIDSet) {
+	if e == nil {
+		return ids
+	}
+	_ = WalkDescIDs(e, func(id *catid.DescID) error {
+		ids.Add(*id)
+		return nil
+	})
+	return ids
 }

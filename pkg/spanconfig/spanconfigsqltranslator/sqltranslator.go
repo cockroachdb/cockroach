@@ -56,18 +56,18 @@ func New(
 
 // Translate is part of the spanconfig.SQLTranslator interface.
 func (s *SQLTranslator) Translate(
-	ctx context.Context, ids descpb.IDs,
-) ([]roachpb.SpanConfigEntry, hlc.Timestamp, error) {
-	var entries []roachpb.SpanConfigEntry
+	ctx context.Context, ids descpb.IDs, generateSystemSpanConfigurations bool,
+) ([]spanconfig.Record, hlc.Timestamp, error) {
+	var records []spanconfig.Record
 	// txn used to translate the IDs, so that we can get its commit timestamp
 	// later.
 	var translateTxn *kv.Txn
 	if err := sql.DescsTxn(ctx, s.execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		// We're in a retryable closure, so clear any entries from previous
+		// We're in a retryable closure, so clear any records from previous
 		// attempts.
-		entries = entries[:0]
+		records = records[:0]
 
 		// Construct an in-memory view of the system.protected_ts_records table to
 		// populate the protected timestamp field on the emitted span configs.
@@ -82,7 +82,14 @@ func (s *SQLTranslator) Translate(
 		if err != nil {
 			return errors.Wrap(err, "failed to get protected timestamp state")
 		}
-		ptsStateReader := newProtectedTimestampStateReader(ctx, ptsState)
+		ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
+
+		if generateSystemSpanConfigurations {
+			records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
+			if err != nil {
+				return errors.Wrap(err, "failed to generate SystemTarget records")
+			}
+		}
 
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also
@@ -102,27 +109,27 @@ func (s *SQLTranslator) Translate(
 			}
 		}
 
-		pseudoTableEntries, err := s.maybeGeneratePseudoTableEntries(ctx, txn, ids)
+		pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, txn, ids)
 		if err != nil {
 			return err
 		}
-		entries = append(entries, pseudoTableEntries...)
+		records = append(records, pseudoTableRecords...)
 
-		scratchRangeEntry, err := s.maybeGenerateScratchRangeEntry(ctx, txn, ids)
+		scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, txn, ids)
 		if err != nil {
 			return err
 		}
-		if !scratchRangeEntry.Empty() {
-			entries = append(entries, scratchRangeEntry)
+		if !scratchRangeRecord.IsEmpty() {
+			records = append(records, scratchRangeRecord)
 		}
 
 		// For every unique leaf ID, generate span configurations.
 		for _, leafID := range leafIDs {
-			translatedEntries, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol, ptsStateReader)
+			translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, txn, descsCol, ptsStateReader)
 			if err != nil {
 				return err
 			}
-			entries = append(entries, translatedEntries...)
+			records = append(records, translatedRecords...)
 		}
 		translateTxn = txn
 		return nil
@@ -130,7 +137,7 @@ func (s *SQLTranslator) Translate(
 		return nil, hlc.Timestamp{}, err
 	}
 
-	return entries, translateTxn.CommitTimestamp(), nil
+	return records, translateTxn.CommitTimestamp(), nil
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
@@ -145,6 +152,55 @@ var descLookupFlags = tree.CommonLookupFlags{
 	AvoidLeased: true,
 }
 
+// generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs
+// that apply to spanconfig.SystemTargets.
+func (s *SQLTranslator) generateSystemSpanConfigRecords(
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+) ([]spanconfig.Record, error) {
+	tenantPrefix := s.codec.TenantPrefix()
+	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]spanconfig.Record, 0)
+
+	// Aggregate cluster target protections for the tenant.
+	clusterProtections := ptsStateReader.GetProtectionPoliciesForCluster()
+	if len(clusterProtections) != 0 {
+		var systemTarget spanconfig.SystemTarget
+		var err error
+		if sourceTenantID == roachpb.SystemTenantID {
+			systemTarget = spanconfig.MakeEntireKeyspaceTarget()
+		} else {
+			systemTarget, err = spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, sourceTenantID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		clusterSystemRecord := spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
+			Config: roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{ProtectionPolicies: clusterProtections}}}
+		records = append(records, clusterSystemRecord)
+	}
+
+	// Aggregate tenant target protections.
+	tenantProtections := ptsStateReader.GetProtectionPoliciesForTenants()
+	for _, protection := range tenantProtections {
+		tenantProtection := protection
+		systemTarget, err := spanconfig.MakeTenantKeyspaceTarget(sourceTenantID, tenantProtection.GetTenantID())
+		if err != nil {
+			return nil, err
+		}
+		tenantSystemRecord := spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
+			Config: roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{
+				ProtectionPolicies: tenantProtection.GetTenantProtections()}},
+		}
+		records = append(records, tenantSystemRecord)
+	}
+	return records, nil
+}
+
 // generateSpanConfigurations generates the span configurations for the given
 // ID. The ID must belong to an object that has a span configuration associated
 // with it, i.e, it should either belong to a table or a named zone.
@@ -153,8 +209,8 @@ func (s *SQLTranslator) generateSpanConfigurations(
 	id descpb.ID,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-	ptsStateReader *protectedTimestampStateReader,
-) (entries []roachpb.SpanConfigEntry, err error) {
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+) (_ []spanconfig.Record, err error) {
 	if zonepb.IsNamedZoneID(id) {
 		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
 	}
@@ -184,7 +240,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 // zone and generates the span configurations for it.
 func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 	ctx context.Context, txn *kv.Txn, id descpb.ID,
-) ([]roachpb.SpanConfigEntry, error) {
+) ([]spanconfig.Record, error) {
 	name, ok := zonepb.NamedZonesByID[uint32(id)]
 	if !ok {
 		return nil, errors.AssertionFailedf("id %d does not belong to a named zone", id)
@@ -209,6 +265,10 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		// Add spans for the system range without the timeseries and
 		// liveness ranges, which are individually captured above.
 		//
+		// We also don't apply configurations over the SystemSpanConfigSpan; spans
+		// carved from this range have no data, instead, associated configurations
+		// for these spans have special meaning in `system.span_configurations`.
+		//
 		// Note that the NodeLivenessSpan sorts before the rest of the system
 		// keyspace, so the first span here starts at the end of the
 		// NodeLivenessSpan.
@@ -218,7 +278,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		})
 		spans = append(spans, roachpb.Span{
 			Key:    keys.TimeseriesSpan.EndKey,
-			EndKey: keys.SystemMax,
+			EndKey: keys.SystemSpanConfigSpan.Key,
 		})
 	case zonepb.TenantsZoneName: // nothing to do.
 	default:
@@ -230,14 +290,14 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, err
 	}
 	spanConfig := zoneConfig.AsSpanConfig()
-	var entries []roachpb.SpanConfigEntry
+	var records []spanconfig.Record
 	for _, span := range spans {
-		entries = append(entries, roachpb.SpanConfigEntry{
-			Span:   span,
+		records = append(records, spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSpan(span),
 			Config: spanConfig,
 		})
 	}
-	return entries, nil
+	return records, nil
 }
 
 // generateSpanConfigurationsForTable generates the span configurations
@@ -247,8 +307,8 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	ctx context.Context,
 	txn *kv.Txn,
 	desc catalog.Descriptor,
-	ptsStateReader *protectedTimestampStateReader,
-) ([]roachpb.SpanConfigEntry, error) {
+	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+) ([]spanconfig.Record, error) {
 	if desc.DescriptorType() != catalog.Table {
 		return nil, errors.AssertionFailedf(
 			"expected table descriptor, but got descriptor of type %s", desc.DescriptorType(),
@@ -275,10 +335,14 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	// Set the ProtectionPolicies on the table's SpanConfig to include protected
 	// timestamps that apply to the table, and its parent database.
 	tableSpanConfig.GCPolicy.ProtectionPolicies = append(
-		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetID()),
-		ptsStateReader.getProtectionPoliciesForSchemaObject(desc.GetParentID())...)
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetID()),
+		ptsStateReader.GetProtectionPoliciesForSchemaObject(desc.GetParentID())...)
 
-	entries := make([]roachpb.SpanConfigEntry, 0)
+	// Set whether the table's row data has been marked to be excluded from
+	// backups.
+	tableSpanConfig.ExcludeDataFromBackup = desc.(catalog.TableDescriptor).GetExcludeDataFromBackup()
+
+	records := make([]spanconfig.Record, 0)
 	if desc.GetID() == keys.DescriptorTableID {
 		// We have some special handling for `system.descriptor` on account of
 		// it being the first non-empty table in every tenant's keyspace.
@@ -289,11 +353,11 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// there's no data within [/Tenant/<id>/ - /Tenant/<id>/Table/3),
 			// but looking at range boundaries, it's slightly less confusing
 			// this way.
-			entries = append(entries, roachpb.SpanConfigEntry{
-				Span: roachpb.Span{
+			records = append(records, spanconfig.Record{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    s.codec.TenantPrefix(),
 					EndKey: tableEndKey,
-				},
+				}),
 				Config: tableSpanConfig,
 			})
 		} else {
@@ -306,16 +370,16 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 			// somewhat useful for understandability reasons and reducing the
 			// (tiny) re-splitting costs when switching between the two
 			// subsystems.
-			entries = append(entries, roachpb.SpanConfigEntry{
-				Span: roachpb.Span{
+			records = append(records, spanconfig.Record{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    keys.SystemConfigSpan.Key,
 					EndKey: tableEndKey,
-				},
+				}),
 				Config: tableSpanConfig,
 			})
 		}
 
-		return entries, nil
+		return records, nil
 
 		// TODO(irfansharif): There's an attack vector here that we haven't
 		// addressed satisfactorily. By splitting only on start keys of span
@@ -369,9 +433,9 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		// If there is a "hole" in the spans covered by the subzones array we fill
 		// it using the parent zone configuration.
 		if !prevEndKey.Equal(span.Key) {
-			entries = append(entries,
-				roachpb.SpanConfigEntry{
-					Span:   roachpb.Span{Key: prevEndKey, EndKey: span.Key},
+			records = append(records,
+				spanconfig.Record{
+					Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: prevEndKey, EndKey: span.Key}),
 					Config: tableSpanConfig,
 				},
 			)
@@ -379,16 +443,17 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 
 		// Add an entry for the subzone.
 		subzoneSpanConfig := zone.Subzones[zone.SubzoneSpans[i].SubzoneIndex].Config.AsSpanConfig()
-		// Copy the ProtectionPolicies that apply to the table's SpanConfig onto its
+		// Copy relevant fields that apply to the table's SpanConfig onto its
 		// SubzoneSpanConfig.
 		subzoneSpanConfig.GCPolicy.ProtectionPolicies = tableSpanConfig.GCPolicy.ProtectionPolicies[:]
+		subzoneSpanConfig.ExcludeDataFromBackup = tableSpanConfig.ExcludeDataFromBackup
 		if isSystemDesc { // same as above
 			subzoneSpanConfig.RangefeedEnabled = true
 			subzoneSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
 		}
-		entries = append(entries,
-			roachpb.SpanConfigEntry{
-				Span:   roachpb.Span{Key: span.Key, EndKey: span.EndKey},
+		records = append(records,
+			spanconfig.Record{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: span.Key, EndKey: span.EndKey}),
 				Config: subzoneSpanConfig,
 			},
 		)
@@ -399,14 +464,14 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 	// If the last subzone span doesn't cover the entire table's keyspace then
 	// we cover the remaining key range with the table's zone configuration.
 	if !prevEndKey.Equal(tableEndKey) {
-		entries = append(entries,
-			roachpb.SpanConfigEntry{
-				Span:   roachpb.Span{Key: prevEndKey, EndKey: tableEndKey},
+		records = append(records,
+			spanconfig.Record{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: prevEndKey, EndKey: tableEndKey}),
 				Config: tableSpanConfig,
 			},
 		)
 	}
-	return entries, nil
+	return records, nil
 }
 
 // findDescendantLeafIDs finds all leaf IDs below the given ID in the zone
@@ -527,11 +592,11 @@ func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
 	return descendantIDs, nil
 }
 
-// maybeGeneratePseudoTableEntries generates span configs for
+// maybeGeneratePseudoTableRecords generates span configs for
 // pseudo table ID key spans, if applicable.
-func (s *SQLTranslator) maybeGeneratePseudoTableEntries(
+func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
-) ([]roachpb.SpanConfigEntry, error) {
+) ([]spanconfig.Record, error) {
 	if !s.codec.ForSystemTenant() {
 		return nil, nil
 	}
@@ -567,30 +632,30 @@ func (s *SQLTranslator) maybeGeneratePseudoTableEntries(
 			return nil, err
 		}
 		tableSpanConfig := zone.AsSpanConfig()
-		var entries []roachpb.SpanConfigEntry
+		var records []spanconfig.Record
 		for _, pseudoTableID := range keys.PseudoTableIDs {
 			tableStartKey := s.codec.TablePrefix(pseudoTableID)
 			tableEndKey := tableStartKey.PrefixEnd()
-			entries = append(entries, roachpb.SpanConfigEntry{
-				Span: roachpb.Span{
+			records = append(records, spanconfig.Record{
+				Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 					Key:    tableStartKey,
 					EndKey: tableEndKey,
-				},
+				}),
 				Config: tableSpanConfig,
 			})
 		}
 
-		return entries, nil
+		return records, nil
 	}
 
 	return nil, nil
 }
 
-func (s *SQLTranslator) maybeGenerateScratchRangeEntry(
+func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
-) (roachpb.SpanConfigEntry, error) {
+) (spanconfig.Record, error) {
 	if !s.knobs.ConfigureScratchRange || !s.codec.ForSystemTenant() {
-		return roachpb.SpanConfigEntry{}, nil // nothing to do
+		return spanconfig.Record{}, nil // nothing to do
 	}
 
 	for _, id := range ids {
@@ -600,17 +665,17 @@ func (s *SQLTranslator) maybeGenerateScratchRangeEntry(
 
 		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.RootNamespaceID)
 		if err != nil {
-			return roachpb.SpanConfigEntry{}, err
+			return spanconfig.Record{}, err
 		}
 
-		return roachpb.SpanConfigEntry{
-			Span: roachpb.Span{
+		return spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 				Key:    keys.ScratchRangeMin,
 				EndKey: keys.ScratchRangeMax,
-			},
+			}),
 			Config: zone.AsSpanConfig(),
 		}, nil
 	}
 
-	return roachpb.SpanConfigEntry{}, nil
+	return spanconfig.Record{}, nil
 }

@@ -290,8 +290,6 @@ func newZigzagJoiner(
 
 	leftColumnTypes := catalog.ColumnTypes(tables[0].PublicColumns())
 	rightColumnTypes := catalog.ColumnTypes(tables[1].PublicColumns())
-	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
-	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
 		z, /* self */
 		flowCtx,
@@ -300,8 +298,6 @@ func newZigzagJoiner(
 		rightColumnTypes,
 		spec.Type,
 		spec.OnExpr,
-		leftEqCols,
-		rightEqCols,
 		false, /* outputContinuationColumn */
 		post,
 		output,
@@ -411,7 +407,7 @@ type zigzagJoinerInfo struct {
 	// fixedValues.
 	endKey roachpb.Key
 
-	spanBuilder *span.Builder
+	spanBuilder span.Builder
 }
 
 // Setup the curInfo struct for the current z.side, which specifies the side
@@ -479,7 +475,7 @@ func (z *zigzagJoiner) setupInfo(
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	info.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
+	info.spanBuilder.Init(flowCtx.EvalCtx, flowCtx.Codec(), info.table, info.index)
 
 	// Setup the Fetcher.
 	fetcher, err := makeRowFetcherLegacy(
@@ -495,7 +491,6 @@ func (z *zigzagJoiner) setupInfo(
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		false, /* withSystemColumns */
-		nil,   /* virtualColumn */
 	)
 	if err != nil {
 		return err
@@ -524,9 +519,6 @@ func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
 			z.infos[i].fetcher.Close(z.Ctx)
-			if sb := z.infos[i].spanBuilder; sb != nil {
-				sb.Release()
-			}
 		}
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
@@ -666,7 +658,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
-	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums, len(neededDatums))
+	s, _, err := info.spanBuilder.SpanFromEncDatums(neededDatums)
 	return s, err
 }
 

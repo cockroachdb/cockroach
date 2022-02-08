@@ -1,9 +1,6 @@
-statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
 # Tests for creating a hash sharded primary key
 statement ok 
-CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10)
+CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH (bucket_count=10))
 
 query TT
 SHOW CREATE TABLE sharded_primary
@@ -11,24 +8,23 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                  crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                  a INT8 NOT NULL,
-                 CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 FAMILY "primary" (a)
+                 CONSTRAINT sharded_primary_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
 )
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got -1
-CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=-1)
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got -1
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=-1))
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got 1099511627776
-CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=1099511627776)
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got 999999999
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=999999999))
 
-statement error pgcode 22023 BUCKET_COUNT must be a 32-bit integer greater than 1, got 1
-CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=1)
+statement error pgcode 22023 hash sharded index bucket count must be in range \[2, 2048\], got 1
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=1))
 
 statement error expected BUCKET_COUNT expression to have type int, but '2.32' has type decimal
-CREATE TABLE fractional_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=2.32)
+CREATE TABLE fractional_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=2.32))
 
 statement error variable sub-expressions are not allowed in BUCKET_COUNT
-CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=(SELECT 1))
+CREATE TABLE invalid_bucket_count (k INT PRIMARY KEY USING HASH WITH (bucket_count=(SELECT 1)))
 
 # Ensure that this is round-tripable
 statement ok
@@ -37,7 +33,7 @@ DROP TABLE sharded_primary
 statement ok
 CREATE TABLE sharded_primary (
                 a INT8 NOT NULL,
-                CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
+                CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
                 FAMILY "primary" (a)
 )
 
@@ -47,8 +43,7 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 FAMILY "primary" (a)
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
 )
 
 query TTT colnames
@@ -59,7 +54,7 @@ WHERE tablename = 'sharded_primary'
 ORDER BY 1, 2, 3
 ----
 tablename        indexname  indexdef
-sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH BUCKET_COUNT = 10
+sharded_primary  primary    CREATE UNIQUE INDEX "primary" ON test.public.sharded_primary USING btree (a ASC) USING HASH WITH (bucket_count=10)
 
 query TTB
 SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM sharded_primary]
@@ -89,7 +84,7 @@ statement ok
 CREATE TABLE specific_family (
     a INT,
     b INT,
-    INDEX (b) USING HASH WITH BUCKET_COUNT=10,
+    INDEX (b) USING HASH WITH (bucket_count=10),
     FAMILY "a_family" (a),
     FAMILY "b_family" (b)
 )
@@ -103,14 +98,14 @@ specific_family  CREATE TABLE public.specific_family (
                  crdb_internal_b_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 10:::INT8)) VIRTUAL,
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT specific_family_pkey PRIMARY KEY (rowid ASC),
-                 INDEX specific_family_b_idx (b ASC) USING HASH WITH BUCKET_COUNT = 10,
+                 INDEX specific_family_b_idx (b ASC) USING HASH WITH (bucket_count=10),
                  FAMILY a_family (a, rowid),
                  FAMILY b_family (b)
 )
 
 # Tests for secondary sharded indexes
 statement ok
-CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH (bucket_count=4))
 
 query TT
 SHOW CREATE TABLE sharded_secondary
@@ -120,8 +115,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -130,7 +124,7 @@ DROP TABLE sharded_secondary
 statement ok
 CREATE TABLE sharded_secondary (
                         a INT8 NULL,
-                        INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
+                        INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4),
                         FAMILY "primary" (a, rowid)
 )
 
@@ -142,8 +136,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_crdb_internal_a_shard_4_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -158,7 +151,7 @@ CREATE TABLE sharded_secondary (
 )
 
 statement ok
-CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 10
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH (bucket_count=10)
 
 statement ok
 INSERT INTO sharded_secondary values (1), (2), (1)
@@ -171,8 +164,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
 )
 
 statement ok
@@ -180,7 +172,7 @@ INSERT INTO sharded_secondary values (3), (2), (1)
 
 # Test multiple indexes on the same column set
 statement ok
-CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 4
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH (bucket_count=4)
 
 query TT
 SHOW CREATE TABLE sharded_secondary
@@ -191,9 +183,8 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                    crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 # Drop a sharded index and ensure that the shard column is dropped with it.
@@ -208,8 +199,7 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -222,14 +212,13 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                    a INT8 NULL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                   CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   FAMILY "primary" (a, rowid)
+                   CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Ensure that the shard column cannot be used in the same txn if its dropped along with
 # the sharded index.
 statement ok
-CREATE INDEX idx on sharded_secondary (a) USING HASH WITH BUCKET_COUNT = 3
+CREATE INDEX idx on sharded_secondary (a) USING HASH WITH (bucket_count=3)
 
 statement ok
 BEGIN
@@ -251,13 +240,13 @@ DROP INDEX sharded_secondary@idx
 
 # Ensure that multiple (> 2) identical indexes can be created.
 statement ok
-CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH (bucket_count=10)
 
 statement ok
-CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH (bucket_count=10)
 
 statement ok
-CREATE INDEX ON sharded_secondary (a) USING HASH WITH BUCKET_COUNT=10
+CREATE INDEX ON sharded_secondary (a) USING HASH WITH (bucket_count=10)
 
 query TT
 SHOW CREATE TABLE sharded_secondary
@@ -267,10 +256,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                    crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                    CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                   INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                   FAMILY "primary" (a, rowid)
+                   INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10),
+                   INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10)
 )
 
 
@@ -281,7 +269,7 @@ SELECT count(*) FROM sharded_secondary
 6
 
 statement ok
-CREATE INDEX ON sharded_primary (a) USING HASH WITH BUCKET_COUNT = 4;
+CREATE INDEX ON sharded_primary (a) USING HASH WITH (bucket_count=4);
 
 query TT
 SHOW CREATE TABLE sharded_primary
@@ -290,9 +278,8 @@ sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                  crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 INDEX sharded_primary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-                 FAMILY "primary" (a)
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                 INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -307,12 +294,11 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 FAMILY "primary" (a)
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10)
 )
 
 statement ok
-CREATE INDEX on sharded_primary (a) USING HASH WITH BUCKET_COUNT=10;
+CREATE INDEX on sharded_primary (a) USING HASH WITH (bucket_count=10);
 
 query TT
 SHOW CREATE TABLE sharded_primary
@@ -320,9 +306,8 @@ SHOW CREATE TABLE sharded_primary
 sharded_primary  CREATE TABLE public.sharded_primary (
                  a INT8 NOT NULL,
                  crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
-                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 INDEX sharded_primary_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 10,
-                 FAMILY "primary" (a)
+                 CONSTRAINT "primary" PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=10),
+                 INDEX sharded_primary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
 )
 
 statement ok
@@ -336,7 +321,7 @@ statement ok
 DROP TABLE sharded_secondary
 
 statement ok
-CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH BUCKET_COUNT=12)
+CREATE TABLE sharded_secondary (a INT8, INDEX (a) USING HASH WITH (bucket_count=12))
 
 # Ensure that hash sharded indexes can be created on columns that are added in the same
 # statement, just like non-sharded indexes.
@@ -347,7 +332,7 @@ statement ok
 ALTER TABLE sharded_secondary ADD COLUMN b INT
 
 statement ok
-CREATE INDEX ON sharded_secondary (a, b) USING HASH WITH BUCKET_COUNT=12
+CREATE INDEX ON sharded_secondary (a, b) USING HASH WITH (bucket_count=12)
 
 statement ok
 COMMIT TRANSACTION
@@ -357,15 +342,15 @@ statement ok
 ALTER TABLE sharded_secondary ADD COLUMN c INT AS (mod(a, 100)) STORED
 
 statement error cannot create a sharded index on a computed column
-CREATE INDEX ON sharded_secondary (a, c) USING HASH WITH BUCKET_COUNT=12;
+CREATE INDEX ON sharded_secondary (a, c) USING HASH WITH (bucket_count=12);
 
-# Ensure that sharded indexes cannot be created on computed columns 
+# Ensure that sharded indexes cannot be created on computed columns
 # in the same txn
 statement error cannot create a sharded index on a computed column
 CREATE TABLE shard_on_computed_column (
     a INT,
     b INT AS (a % 5) STORED,
-    INDEX (b) USING HASH WITH BUCKET_COUNT=10
+    INDEX (b) USING HASH WITH (bucket_count=10)
 )
 
 statement ok
@@ -375,7 +360,7 @@ statement ok
 ALTER TABLE sharded_secondary ADD COLUMN d INT AS (mod(a, 100)) STORED
 
 statement error cannot create a sharded index on a computed column
-CREATE INDEX ON sharded_secondary (a, d) USING HASH WITH BUCKET_COUNT=12;
+CREATE INDEX ON sharded_secondary (a, d) USING HASH WITH (bucket_count=12);
 
 statement ok
 ROLLBACK TRANSACTION
@@ -384,7 +369,7 @@ ROLLBACK TRANSACTION
 statement ok
 CREATE TABLE column_used_on_unsharded (
     a INT,
-    INDEX foo (a) USING HASH WITH BUCKET_COUNT=10
+    INDEX foo (a) USING HASH WITH (bucket_count=10)
 )
 
 statement ok
@@ -401,8 +386,7 @@ column_used_on_unsharded  CREATE TABLE public.column_used_on_unsharded (
                           crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                           CONSTRAINT column_used_on_unsharded_pkey PRIMARY KEY (rowid ASC),
-                          INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
-                          FAMILY "primary" (a, rowid)
+                          INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
 )
 
 statement ok
@@ -411,7 +395,7 @@ DROP INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx
 statement ok
 CREATE TABLE column_used_on_unsharded_create_table (
     a INT,
-    INDEX foo (a) USING HASH WITH BUCKET_COUNT=10,
+    INDEX foo (a) USING HASH WITH (bucket_count=10),
     INDEX (crdb_internal_a_shard_10)
 )
 
@@ -426,8 +410,7 @@ column_used_on_unsharded_create_table  CREATE TABLE public.column_used_on_unshar
                                        crdb_internal_a_shard_10 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 10:::INT8)) VIRTUAL,
                                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                        CONSTRAINT column_used_on_unsharded_create_table_pkey PRIMARY KEY (rowid ASC),
-                                       INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
-                                       FAMILY "primary" (a, rowid)
+                                       INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
 )
 
 statement ok
@@ -436,34 +419,16 @@ DROP INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx
 statement ok
 DROP TABLE sharded_primary
 
-statement ok
-SET experimental_enable_hash_sharded_indexes = false
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE TABLE disabled (k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10)
-
-statement ok
-CREATE TABLE disabled_secondary (k INT, v BYTES)
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE INDEX failure on disabled_secondary (k) USING HASH WITH BUCKET_COUNT = 12
-
-statement error pq: hash sharded indexes require the experimental_enable_hash_sharded_indexes session variable
-CREATE TABLE disabled (k INT, INDEX (k) USING HASH WITH BUCKET_COUNT = 10)
-
 # Ensure everything works with weird column names
 statement ok
-SET experimental_enable_hash_sharded_indexes = true
-
-statement ok
 CREATE TABLE weird_names (
-    "I am a column with spaces" INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 12,
+    "I am a column with spaces" INT PRIMARY KEY USING HASH WITH (bucket_count=12),
     "'quotes' in the column's name" INT,
     FAMILY "primary" ("I am a column with spaces", "'quotes' in the column's name")
     )
 
 statement ok
-CREATE INDEX foo on weird_names ("'quotes' in the column's name") USING HASH WITH BUCKET_COUNT = 4
+CREATE INDEX foo on weird_names ("'quotes' in the column's name") USING HASH WITH (bucket_count=4)
 
 statement ok
 INSERT INTO weird_names VALUES (1, 2)
@@ -481,9 +446,8 @@ weird_names  CREATE TABLE public.weird_names (
              "I am a column with spaces" INT8 NOT NULL,
              "'quotes' in the column's name" INT8 NULL,
              "crdb_internal_'quotes' in the column's name_shard_4" INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes("'quotes' in the column's name")), 4:::INT8)) VIRTUAL,
-             CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH BUCKET_COUNT = 12,
-             INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH BUCKET_COUNT = 4,
-             FAMILY "primary" ("I am a column with spaces", "'quotes' in the column's name")
+             CONSTRAINT weird_names_pkey PRIMARY KEY ("I am a column with spaces" ASC) USING HASH WITH (bucket_count=12),
+             INDEX foo ("'quotes' in the column's name" ASC) USING HASH WITH (bucket_count=4)
 )
 
 subtest column_does_not_exist
@@ -492,7 +456,7 @@ statement ok
 CREATE TABLE t0();
 
 statement error column "c0" does not exist
-CREATE INDEX ON t0 (c0) USING HASH WITH BUCKET_COUNT = 8;
+CREATE INDEX ON t0 (c0) USING HASH WITH (bucket_count=8);
 
 statement ok
 DROP TABLE t0;
@@ -508,7 +472,7 @@ statement ok
 begin; ALTER TABLE create_idx_drop_column DROP COLUMN c1;
 
 statement error column "c1" does not exist
-CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1) USING HASH WITH BUCKET_COUNT = 8;
+CREATE INDEX idx_create_idx_drop_column ON create_idx_drop_column (c1) USING HASH WITH (bucket_count=8);
 
 statement ok
 ROLLBACK;
@@ -523,7 +487,7 @@ statement ok
 CREATE TABLE sharded_index_with_nulls (
      a INT8 PRIMARY KEY,
      b INT8,
-     INDEX (b) USING HASH WITH BUCKET_COUNT = 8
+     INDEX (b) USING HASH WITH (bucket_count=8)
 )
 
 statement ok
@@ -540,8 +504,8 @@ CREATE TABLE rename_column (
     c0 INT,
     c1 INT,
     c2 INT,
-    PRIMARY KEY (c0, c1) USING HASH WITH BUCKET_COUNT = 8,
-    INDEX (c2) USING HASH WITH BUCKET_COUNT = 8,
+    PRIMARY KEY (c0, c1) USING HASH WITH (bucket_count=8),
+    INDEX (c2) USING HASH WITH (bucket_count=8),
     FAMILY "primary" (c0, c1, c2)
 );
 
@@ -557,9 +521,8 @@ rename_column  CREATE TABLE public.rename_column (
                c2 INT8 NULL,
                crdb_internal_c0_c1_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c0, c1)), 8:::INT8)) VIRTUAL,
                crdb_internal_c2_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c2)), 8:::INT8)) VIRTUAL,
-               CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               FAMILY "primary" (c0, c1, c2)
+               CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+               INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
 )
 
 statement ok
@@ -581,9 +544,8 @@ rename_column  CREATE TABLE public.rename_column (
                c3 INT8 NULL,
                crdb_internal_c1_c2_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c1, c2)), 8:::INT8)) VIRTUAL,
                crdb_internal_c3_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c3)), 8:::INT8)) VIRTUAL,
-               CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               FAMILY "primary" (c1, c2, c3)
+               CONSTRAINT rename_column_pkey PRIMARY KEY (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8),
+               INDEX rename_column_c2_idx (c3 ASC) USING HASH WITH (bucket_count=8)
 )
 
 query III
@@ -604,9 +566,8 @@ rename_column  CREATE TABLE public.rename_column (
                c2 INT8 NULL,
                crdb_internal_c0_c1_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c0, c1)), 8:::INT8)) VIRTUAL,
                crdb_internal_c2_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c2)), 8:::INT8)) VIRTUAL,
-               CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH BUCKET_COUNT = 8,
-               FAMILY "primary" (c0, c1, c2)
+               CONSTRAINT rename_column_pkey PRIMARY KEY (c0 ASC, c1 ASC) USING HASH WITH (bucket_count=8),
+               INDEX rename_column_c2_idx (c2 ASC) USING HASH WITH (bucket_count=8)
 )
 
 query III
@@ -634,10 +595,10 @@ CREATE TABLE IF NOT EXISTS drop_earlier_hash_column (
 );
 
 statement ok
-CREATE INDEX h1 ON drop_earlier_hash_column(j) USING HASH WITH BUCKET_COUNT = 8
+CREATE INDEX h1 ON drop_earlier_hash_column(j) USING HASH WITH (bucket_count=8)
 
 statement ok
-CREATE INDEX h2 ON drop_earlier_hash_column(k) USING HASH WITH BUCKET_COUNT = 8
+CREATE INDEX h2 ON drop_earlier_hash_column(k) USING HASH WITH (bucket_count=8)
 
 statement ok
 DROP INDEX h1
@@ -645,14 +606,16 @@ DROP INDEX h1
 subtest test_table_indexes
 
 statement ok
-CREATE TABLE poor_t (a INT PRIMARY KEY, b INT, INDEX t_idx_b (b) USING HASH WITH BUCKET_COUNT = 8)
+CREATE TABLE poor_t (a INT PRIMARY KEY, b INT, INDEX t_idx_b (b) USING HASH WITH (bucket_count=8))
 
 query ITITTBBB colnames
-SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name = 'poor_t'
+SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded
+  FROM crdb_internal.table_indexes
+ WHERE descriptor_name = 'poor_t'
 ----
 descriptor_id  descriptor_name  index_id  index_name   index_type  is_unique  is_inverted  is_sharded
-130            poor_t           1         poor_t_pkey  primary     true       false        false
-130            poor_t           2         t_idx_b      secondary   false      false        true
+127            poor_t           1         poor_t_pkey  primary     true       false        false
+127            poor_t           2         t_idx_b      secondary   false      false        true
 
 statement ok
 DROP TABLE poor_t
@@ -667,7 +630,7 @@ DROP TABLE IF EXISTS parent
 
 statement ok
 CREATE TABLE parent (
-    id INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+    id INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 );
 
 statement ok
@@ -701,7 +664,7 @@ CREATE TABLE parent (
 );
 
 statement ok
-CREATE UNIQUE INDEX t_idx_oid ON parent(oid) USING HASH WITH BUCKET_COUNT = 8
+CREATE UNIQUE INDEX t_idx_oid ON parent(oid) USING HASH WITH (bucket_count=8)
 
 statement ok
 CREATE TABLE child (
@@ -731,7 +694,7 @@ statement ok
 CREATE TABLE parent (
     a INT NOT NULL,
     b INT NOT NULL,
-    PRIMARY KEY (a, b) USING HASH WITH BUCKET_COUNT = 8
+    PRIMARY KEY (a, b) USING HASH WITH (bucket_count=8)
 );
 
 statement ok
@@ -765,7 +728,7 @@ CREATE TABLE parent (
 );
 
 statement ok
-CREATE UNIQUE INDEX t_idx_a_b ON parent(a, b) USING HASH WITH BUCKET_COUNT = 8
+CREATE UNIQUE INDEX t_idx_a_b ON parent(a, b) USING HASH WITH (bucket_count=8)
 
 
 statement ok
@@ -793,7 +756,7 @@ DROP TABLE IF EXISTS t
 
 statement ok
 CREATE TABLE t (
-    a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8
+    a INT PRIMARY KEY USING HASH WITH (bucket_count=8)
 );
 
 let $create_statement
@@ -809,10 +772,9 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
-    crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
-    a INT8 NOT NULL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
-    FAMILY "primary" (a)
+   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 )
 
 # Make sure user defined constraint is used if it's equivalent to the shard
@@ -824,7 +786,7 @@ statement ok
 CREATE TABLE public.t (
     crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
     a INT8 NOT NULL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
+    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8),
     FAMILY "primary" (a),
     CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
 )
@@ -833,17 +795,15 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t]
 ----
 CREATE TABLE public.t (
-    crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
-    a INT8 NOT NULL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
-    FAMILY "primary" (a),
-    CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
+   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8),
+   CONSTRAINT check_crdb_internal_a_shard_8 CHECK (crdb_internal_a_shard_8 IN (0:::INT8, 1:::INT8, 2:::INT8, 3:::INT8, 4:::INT8, 5:::INT8, 6:::INT8, 7:::INT8))
 )
 
 subtest test_hash_index_presplit
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = on;
 CREATE TABLE t_hash_pre_split (
   a INT PRIMARY KEY,
   b INT
@@ -860,7 +820,7 @@ AND r.split_enforced_until IS NOT NULL;
 ----
 
 statement ok
-CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH BUCKET_COUNT = 8;
+CREATE INDEX t_hash_pre_split_idx_b ON t_hash_pre_split (b) USING HASH WITH (bucket_count=8);
 
 skipif config 3node-tenant
 query TITTT colnames,retry
@@ -872,51 +832,28 @@ AND t.state = 'PUBLIC'
 AND r.split_enforced_until IS NOT NULL;
 ----
 name              table_id  index_name              start_pretty    end_pretty
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2    /Table/142/2/0
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/0  /Table/142/2/1
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/1  /Table/142/2/2
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/2  /Table/142/2/3
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/3  /Table/142/2/4
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/4  /Table/142/2/5
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/5  /Table/142/2/6
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/6  /Table/142/2/7
-t_hash_pre_split  142       t_hash_pre_split_idx_b  /Table/142/2/7  /Max
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2    /Table/139/2/0
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/0  /Table/139/2/1
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/1  /Table/139/2/2
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/2  /Table/139/2/3
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/3  /Table/139/2/4
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/4  /Table/139/2/5
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/5  /Table/139/2/6
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/6  /Table/139/2/7
+t_hash_pre_split  139       t_hash_pre_split_idx_b  /Table/139/2/7  /Max
 
 subtest test_default_bucket_count
 
 statement ok
-CREATE TABLE t_default_bucket_8 (
+CREATE TABLE t_default_bucket_16 (
   a INT PRIMARY KEY USING HASH,
   b INT,
   c INT,
-  INDEX idx_t_default_bucket_8_b (b) USING HASH,
-  INDEX idx_t_default_bucket_8_c (c) USING HASH WITH BUCKET_COUNT = 4,
+  INDEX idx_t_default_bucket_16_b (b) USING HASH,
+  INDEX idx_t_default_bucket_16_c (c) USING HASH WITH (bucket_count=4),
   FAMILY fam_0_a (a),
   FAMILY fam_1_c_b (c, b)
 );
-
-query T
-SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_8]
-----
-CREATE TABLE public.t_default_bucket_8 (
-   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
-   a INT8 NOT NULL,
-   b INT8 NULL,
-   c INT8 NULL,
-   crdb_internal_b_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 8:::INT8)) VIRTUAL,
-   crdb_internal_c_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 4:::INT8)) VIRTUAL,
-   CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 8,
-   INDEX idx_t_default_bucket_8_b (b ASC) USING HASH WITH BUCKET_COUNT = 8,
-   INDEX idx_t_default_bucket_8_c (c ASC) USING HASH WITH BUCKET_COUNT = 4,
-   FAMILY fam_0_a (a),
-   FAMILY fam_1_c_b (c, b)
-)
-
-statement ok
-SET CLUSTER SETTING sql.defaults.default_hash_sharded_index_bucket_count = 16
-
-statement ok
-CREATE TABLE t_default_bucket_16 (a INT PRIMARY KEY USING HASH);
 
 query T
 SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_16]
@@ -924,8 +861,30 @@ SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_16]
 CREATE TABLE public.t_default_bucket_16 (
    crdb_internal_a_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
    a INT8 NOT NULL,
-   CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 16,
-   FAMILY "primary" (a)
+   b INT8 NULL,
+   c INT8 NULL,
+   crdb_internal_b_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 16:::INT8)) VIRTUAL,
+   crdb_internal_c_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 4:::INT8)) VIRTUAL,
+   CONSTRAINT t_default_bucket_16_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+   INDEX idx_t_default_bucket_16_b (b ASC) USING HASH WITH (bucket_count=16),
+   INDEX idx_t_default_bucket_16_c (c ASC) USING HASH WITH (bucket_count=4),
+   FAMILY fam_0_a (a),
+   FAMILY fam_1_c_b (c, b)
+)
+
+statement ok
+SET CLUSTER SETTING sql.defaults.default_hash_sharded_index_bucket_count = 8
+
+statement ok
+CREATE TABLE t_default_bucket_8 (a INT PRIMARY KEY USING HASH);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_default_bucket_8]
+----
+CREATE TABLE public.t_default_bucket_8 (
+   crdb_internal_a_shard_8 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 8:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   CONSTRAINT t_default_bucket_8_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=8)
 )
 
 # Make sure that uniqueness is guaranteed with hash index.
@@ -943,7 +902,7 @@ CREATE TABLE t (
 )
 
 statement ok
-CREATE UNIQUE INDEX t_uniq_idx_y_z ON t(y, z) USING HASH WITH BUCKET_COUNT = 8
+CREATE UNIQUE INDEX t_uniq_idx_y_z ON t(y, z) USING HASH WITH (bucket_count=8)
 
 statement ok
 INSERT INTO t (x, y, z) VALUES (1, 11, 111) ON CONFLICT (y, z) DO UPDATE SET duped = true
@@ -999,7 +958,7 @@ DROP TABLE IF EXISTS t
 
 statement ok
 CREATE TABLE t (
-    x INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 8,
+    x INT PRIMARY KEY USING HASH WITH (bucket_count=8),
     duped BOOL DEFAULT false
 )
 

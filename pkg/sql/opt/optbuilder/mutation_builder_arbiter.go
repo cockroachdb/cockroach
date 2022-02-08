@@ -85,7 +85,11 @@ func (mb *mutationBuilder) findArbiters(onConflict *tree.OnConflict) arbiterSet 
 			}
 		}
 		// Found nothing, we have to return an error.
-		panic(pgerror.Newf(pgcode.UndefinedObject, "constraint %q for table %q does not exist", onConflict.Constraint, mb.tab.Name()))
+		panic(pgerror.Newf(
+			pgcode.UndefinedObject,
+			"constraint %q for table %q does not exist",
+			onConflict.Constraint, mb.tab.Name(),
+		))
 	}
 	// We have to infer an arbiter set.
 	var ords util.FastIntSet
@@ -111,11 +115,13 @@ func partialIndexArbiterError(onConflict *tree.OnConflict, tableName tree.Name) 
 	return errors.WithHint(
 		pgerror.Newf(
 			pgcode.WrongObjectType,
-			"unique constraint %q for table %q is partial, so cannot be used as an arbiter via the ON CONSTRAINT syntax",
+			"unique constraint %q for table %q is partial, "+
+				"so it cannot be used as an arbiter via the ON CONSTRAINT syntax",
 			onConflict.Constraint,
 			tableName,
 		),
-		"use the ON CONFLICT (columns...) WHERE <predicate> form to select this partial unique constraint as an arbiter",
+		"use the ON CONFLICT (columns...) WHERE <predicate> form "+
+			"to select this partial unique constraint as an arbiter",
 	)
 }
 
@@ -148,11 +154,12 @@ func partialIndexArbiterError(onConflict *tree.OnConflict, tableName tree.Name) 
 func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 	conflictOrds util.FastIntSet, arbiterPredicate tree.Expr,
 ) arbiterSet {
-	arbiters := makeArbiterSet(mb)
-
 	// If conflictOrds is empty, then all unique indexes and unique without
 	// index constraints are arbiters.
 	if conflictOrds.Empty() {
+		// Use a minArbiterSet which automatically removes arbiter indexes that
+		// are made redundant by arbiter unique constraints.
+		arbiters := makeMinArbiterSet(mb)
 		for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
 			if mb.tab.Index(idx).IsUnique() {
 				arbiters.AddIndex(idx)
@@ -163,9 +170,10 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 				arbiters.AddUniqueConstraint(uc)
 			}
 		}
-		return arbiters
+		return arbiters.ArbiterSet()
 	}
 
+	arbiters := makeArbiterSet(mb)
 	h := &mb.arbiterPredicateHelper
 	h.init(mb, arbiterPredicate)
 	for idx, idxCount := 0, mb.tab.IndexCount(); idx < idxCount; idx++ {
@@ -214,10 +222,6 @@ func (mb *mutationBuilder) inferArbitersFromConflictOrds(
 		uniqueConstraint := mb.tab.Unique(uc)
 		if !uniqueConstraint.WithoutIndex() {
 			// Unique constraints with an index were handled above.
-			continue
-		}
-
-		if uniqueConstraint.ColumnCount() != conflictOrds.Len() {
 			continue
 		}
 
@@ -283,10 +287,9 @@ func (mb *mutationBuilder) buildAntiJoinForDoNothingArbiter(
 	fetchScope := mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       false,
-			includeSystem:          false,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: false,
+			includeSystem:    false,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -369,10 +372,9 @@ func (mb *mutationBuilder) buildLeftJoinForUpsertArbiter(
 	mb.fetchScope = mb.b.buildScan(
 		mb.b.addTable(mb.tab, &mb.alias),
 		tableOrdinals(mb.tab, columnKinds{
-			includeMutations:       true,
-			includeSystem:          true,
-			includeInverted:        false,
-			includeVirtualComputed: true,
+			includeMutations: true,
+			includeSystem:    true,
+			includeInverted:  false,
 		}),
 		nil, /* indexFlags */
 		noRowLocking,
@@ -577,10 +579,9 @@ func (h *arbiterPredicateHelper) tableScope() *scope {
 	if h.tableScopeLazy == nil {
 		h.tableScopeLazy = h.mb.b.buildScan(
 			h.tabMeta, tableOrdinals(h.tabMeta.Table, columnKinds{
-				includeMutations:       false,
-				includeSystem:          false,
-				includeInverted:        false,
-				includeVirtualComputed: true,
+				includeMutations: false,
+				includeSystem:    false,
+				includeInverted:  false,
 			}),
 			nil, /* indexFlags */
 			noRowLocking,

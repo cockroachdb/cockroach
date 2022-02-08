@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -32,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -114,13 +118,17 @@ func (t *tenantStatusServer) ListSessions(
 	ctx = t.AnnotateCtx(ctx)
 
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker already
+		// returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	response := &serverpb.ListSessionsResponse{}
+	response := &serverpb.ListSessionsResponse{
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+	}
 	nodeStatement := func(ctx context.Context, client interface{}, instanceID base.SQLInstanceID) (interface{}, error) {
 		statusClient := client.(serverpb.StatusClient)
 		localResponse, err := statusClient.ListLocalSessions(ctx, req)
@@ -129,7 +137,10 @@ func (t *tenantStatusServer) ListSessions(
 				instanceID,
 				err)
 		}
-		return localResponse, err
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return localResponse, nil
 	}
 	if err := t.iteratePods(ctx, "sessions for nodes",
 		t.dialCallback,
@@ -149,7 +160,7 @@ func (t *tenantStatusServer) ListSessions(
 				})
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 	return response, nil
 }
@@ -159,6 +170,8 @@ func (t *tenantStatusServer) ListLocalSessions(
 ) (*serverpb.ListSessionsResponse, error) {
 	sessions, err := t.getLocalSessions(ctx, request)
 	if err != nil {
+		// NB: not using serverError() here since the getLocalSessions
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
@@ -166,7 +179,10 @@ func (t *tenantStatusServer) ListLocalSessions(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+	return &serverpb.ListSessionsResponse{
+		Sessions:              sessions,
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+	}, nil
 }
 
 func (t *tenantStatusServer) CancelQuery(
@@ -178,6 +194,8 @@ func (t *tenantStatusServer) CancelQuery(
 	// Check permissions early to avoid fan-out to all nodes.
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
@@ -205,7 +223,7 @@ func (t *tenantStatusServer) CancelQuery(
 			distinctErrorMessages[err.Error()] = struct{}{}
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 
 	if !response.Canceled {
@@ -224,6 +242,8 @@ func (t *tenantStatusServer) CancelLocalQuery(
 ) (*serverpb.CancelQueryResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	var (
@@ -237,6 +257,64 @@ func (t *tenantStatusServer) CancelLocalQuery(
 	return output, nil
 }
 
+// CancelQueryByKey responds to a pgwire query cancellation request, and cancels
+// the target query's associated context and sets a cancellation flag. This
+// endpoint is rate-limited by a semaphore.
+func (t *tenantStatusServer) CancelQueryByKey(
+	ctx context.Context, req *serverpb.CancelQueryByKeyRequest,
+) (resp *serverpb.CancelQueryByKeyResponse, retErr error) {
+	// We are interpreting the `NodeID` in the request as an `InstanceID` since
+	// we are executing in the context of a tenant.
+	local := req.SQLInstanceID == t.sqlServer.SQLInstanceID()
+	resp = &serverpb.CancelQueryByKeyResponse{}
+
+	// Acquiring the semaphore here helps protect both the source and destination
+	// nodes. The source node is protected against an attacker causing too much
+	// inter-node network traffic by spamming cancel requests. The destination
+	// node is protected so that if an attacker spams all the nodes in the cluster
+	// with requests that all go to the same node, this semaphore will prevent
+	// them from having too many guesses.
+	// More concretely, suppose we have a 100-node cluster. If we limit the
+	// ingress only, then each node is limited to processing X requests per
+	// second. But if an attacker crafts the CancelRequests to all target the
+	// same SQLInstance, then that one instance would have to process 100*X
+	// requests per second.
+	alloc, err := pgwirecancel.CancelSemaphore.TryAcquire(ctx, 1)
+	if err != nil {
+		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
+	}
+	defer func() {
+		// If we acquired the semaphore but the cancellation request failed, then
+		// hold on to the semaphore for longer. This helps mitigate a DoS attack
+		// of random cancellation requests.
+		if err != nil || (resp != nil && !resp.Canceled) {
+			time.Sleep(1 * time.Second)
+		}
+		alloc.Release()
+	}()
+
+	if local {
+		resp.Canceled, err = t.sessionRegistry.CancelQueryByKey(req.CancelQueryKey)
+		if err != nil {
+			resp.Error = err.Error()
+		}
+		return resp, nil
+	}
+
+	// This request needs to be forwarded to another node.
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, req.SQLInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	statusClient, err := t.dialPod(ctx, req.SQLInstanceID, instance.InstanceAddr)
+	if err != nil {
+		return nil, err
+	}
+	return statusClient.CancelQueryByKey(ctx, req)
+}
+
 func (t *tenantStatusServer) CancelSession(
 	ctx context.Context, request *serverpb.CancelSessionRequest,
 ) (*serverpb.CancelSessionResponse, error) {
@@ -246,6 +324,8 @@ func (t *tenantStatusServer) CancelSession(
 	// Check permissions early to avoid fan-out to all nodes.
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
@@ -274,7 +354,7 @@ func (t *tenantStatusServer) CancelSession(
 			distinctErrorMessages[err.Error()] = struct{}{}
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 
 	if !response.Canceled {
@@ -293,6 +373,8 @@ func (t *tenantStatusServer) CancelLocalSession(
 ) (*serverpb.CancelSessionResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	return t.sessionRegistry.CancelSession(request.SessionID)
@@ -306,6 +388,8 @@ func (t *tenantStatusServer) ListContentionEvents(
 
 	// Check permissions early to avoid fan-out to all nodes.
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
@@ -707,23 +791,71 @@ func (t *tenantStatusServer) ListLocalDistSQLFlows(
 }
 
 // Profile implements the profiling endpoint by delegating the request
-// to the local handler. No facility for requesting profiles from
-// remote nodes is facilitated at this time. Requests for nodes other
-// than "local" will return an error.
+// to the local handler. If the requested node_id is not the same as
+// the current instance ID, it performs an RPC call to fetch the profile
+// data for the requested SQL instance.
 func (t *tenantStatusServer) Profile(
 	ctx context.Context, request *serverpb.ProfileRequest,
 ) (*serverpb.JSONResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
 
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
 	if t.sqlServer.SQLInstanceID() == 0 {
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	if request.NodeId != "local" {
-		return nil, status.Errorf(codes.Unimplemented, "profiling arbitrary tenants is unsupported")
+	instanceID, local, err := t.parseInstanceID(request.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Profile(ctx, request)
 	}
 	return profileLocal(ctx, request, t.st)
+}
+
+func (t *tenantStatusServer) Stacks(
+	ctx context.Context, request *serverpb.StacksRequest,
+) (*serverpb.JSONResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
+		return nil, err
+	}
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	instanceID, local, err := t.parseInstanceID(request.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Stacks(ctx, request)
+	}
+	return stacksLocal(request)
 }
 
 func (t *tenantStatusServer) IndexUsageStatistics(
@@ -885,4 +1017,134 @@ func (t *tenantStatusServer) TableIndexStats(
 
 	return getTableIndexUsageStats(ctx, req, t.sqlServer.pgServer.SQLServer.GetLocalIndexStatistics(),
 		t.sqlServer.internalExecutor)
+}
+
+// Details returns information for a given instance ID such as
+// the instance address and build info.
+func (t *tenantStatusServer) Details(
+	ctx context.Context, req *serverpb.DetailsRequest,
+) (*serverpb.DetailsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Details(ctx, req)
+	}
+	localInstance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, t.sqlServer.SQLInstanceID())
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "local instance unavailable")
+	}
+	resp := &serverpb.DetailsResponse{
+		NodeID:     roachpb.NodeID(instanceID),
+		BuildInfo:  build.GetInfo(),
+		SQLAddress: util.MakeUnresolvedAddr("tcp", localInstance.InstanceAddr),
+	}
+
+	return resp, nil
+}
+
+func (t *tenantStatusServer) NodesList(
+	ctx context.Context, req *serverpb.NodesListRequest,
+) (*serverpb.NodesListResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	// The node list contains details about the network addresses which are admin-only.
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+	instances, err := t.sqlServer.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var resp serverpb.NodesListResponse
+	for _, instance := range instances {
+		// For SQL only servers, the (RPC) Address and SQL address is the same.
+		// TODO(#76175): We should split the instance address into SQL and RPC addresses.
+		nodeDetails := serverpb.NodeDetails{
+			NodeID:     int32(instance.InstanceID),
+			Address:    util.MakeUnresolvedAddr("tcp", instance.InstanceAddr),
+			SQLAddress: util.MakeUnresolvedAddr("tcp", instance.InstanceAddr),
+		}
+		resp.Nodes = append(resp.Nodes, nodeDetails)
+	}
+	return &resp, err
+}
+
+func (t *tenantStatusServer) TxnIDResolution(
+	ctx context.Context, req *serverpb.TxnIDResolutionRequest,
+) (*serverpb.TxnIDResolutionResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.CoordinatorID)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if local {
+		return t.localTxnIDResolution(req), nil
+	}
+
+	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	statusClient, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	return statusClient.TxnIDResolution(ctx, req)
+}
+
+// GetFiles returns a list of files of type defined in the request.
+func (t *tenantStatusServer) GetFiles(
+	ctx context.Context, req *serverpb.GetFilesRequest,
+) (*serverpb.GetFilesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.GetFiles(ctx, req)
+	}
+
+	return getLocalFiles(req, t.sqlServer.cfg.HeapProfileDirName, t.sqlServer.cfg.GoroutineDumpDirName)
 }

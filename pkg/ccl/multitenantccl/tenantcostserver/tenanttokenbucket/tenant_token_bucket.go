@@ -12,10 +12,12 @@
 package tenanttokenbucket
 
 import (
+	"context"
 	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // State of the distributed token bucket.
@@ -53,13 +55,18 @@ func (s *State) Update(since time.Duration) {
 
 // Request processes a request for more tokens and updates the State
 // accordingly.
-func (s *State) Request(req *roachpb.TokenBucketRequest) roachpb.TokenBucketResponse {
+func (s *State) Request(
+	ctx context.Context, req *roachpb.TokenBucketRequest,
+) roachpb.TokenBucketResponse {
 	var res roachpb.TokenBucketResponse
 
 	// Calculate the fallback rate.
 	res.FallbackRate = s.RURefillRate
 	if s.RUCurrent > 0 {
 		res.FallbackRate += s.RUCurrent / fallbackRateTimeFrame.Seconds()
+	}
+	if log.V(1) {
+		log.Infof(ctx, "token bucket request (tenant=%d requested=%g current=%g)", req.TenantID, req.RequestedRU, s.RUCurrent)
 	}
 
 	needed := req.RequestedRU
@@ -70,6 +77,9 @@ func (s *State) Request(req *roachpb.TokenBucketRequest) roachpb.TokenBucketResp
 	if s.RUCurrent >= needed {
 		s.RUCurrent -= needed
 		res.GrantedRU = needed
+		if log.V(1) {
+			log.Infof(ctx, "request granted (tenant=%d remaining=%g)", req.TenantID, s.RUCurrent)
+		}
 		return res
 	}
 
@@ -111,6 +121,9 @@ func (s *State) Request(req *roachpb.TokenBucketRequest) roachpb.TokenBucketResp
 	s.RUCurrent -= grantedTokens
 	res.GrantedRU = grantedTokens
 	res.TrickleDuration = duration
+	if log.V(1) {
+		log.Infof(ctx, "request granted over time (tenant=%d granted=%g trickle=%s)", req.TenantID, res.GrantedRU, res.TrickleDuration)
+	}
 	return res
 }
 
@@ -141,6 +154,8 @@ func (s *State) Request(req *roachpb.TokenBucketRequest) roachpb.TokenBucketResp
 //  - currentConsumedRequestUnits is the current total number of consumed RUs.
 //
 func (s *State) Reconfigure(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,
 	maxBurstRU float64,
@@ -154,4 +169,8 @@ func (s *State) Reconfigure(
 	s.RUCurrent = availableRU
 	s.RURefillRate = refillRate
 	s.RUBurstLimit = maxBurstRU
+	log.Infof(
+		ctx, "token bucket for tenant %s reconfigured: available=%g refill-rate=%g burst-limit=%g",
+		tenantID.String(), s.RUCurrent, s.RURefillRate, s.RUBurstLimit,
+	)
 }

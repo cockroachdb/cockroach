@@ -236,3 +236,35 @@ func TestManagerCheckJobConditions(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval = '25m'`)
 	_ = checkInterceptCountGreaterThan(currentCount) // the job check interval setting triggers a check
 }
+
+// TestReconciliationJobIsIdle ensures that the reconciliation job, when
+// resumed, is marked as idle.
+func TestReconciliationJobIsIdle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var jobID jobspb.JobID
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				SpanConfig: &spanconfig.TestingKnobs{
+					ManagerCreatedJobInterceptor: func(jobI interface{}) {
+						jobID = jobI.(*jobs.Job).ID()
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	jobRegistry := tc.Server(0).JobRegistry().(*jobs.Registry)
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == jobspb.JobID(0) {
+			return errors.New("waiting for reconciliation job to be started")
+		}
+		if !jobRegistry.TestingIsJobIdle(jobID) {
+			return errors.New("expected reconciliation job to be idle")
+		}
+		return nil
+	})
+}

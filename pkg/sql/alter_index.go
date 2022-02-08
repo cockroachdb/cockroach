@@ -85,6 +85,12 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					"cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning",
 				)
 			}
+			if n.index.IsSharded() {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot set explicit partitioning with ALTER INDEX PARTITION BY on a hash sharded index",
+				)
+			}
 			allowImplicitPartitioning := params.p.EvalContext().SessionData().ImplicitColumnPartitioningEnabled ||
 				n.tableDesc.IsLocalityRegionalByRow()
 			alteredIndexDesc := n.index.IndexDescDeepCopy()
@@ -136,7 +142,8 @@ func (n *alterIndexNode) startExec(params runParams) error {
 
 	}
 
-	if err := n.tableDesc.AllocateIDs(params.ctx); err != nil {
+	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
 		return err
 	}
 

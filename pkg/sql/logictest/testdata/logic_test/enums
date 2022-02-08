@@ -1,3 +1,10 @@
+# Temporary disable declarative schema changer, since something shifts
+# the timing below to increase likelihood of transaction retries. Since we
+# are executing a select a result set is already sent to the client, so an
+# automatic retry isn't possible.
+statement ok
+SET use_declarative_schema_changer = 'off';
+
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -375,8 +382,7 @@ t1  CREATE TABLE public.t1 (
     x public.greeting NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-    INDEX i (x ASC),
-    FAMILY "primary" (x, rowid)
+    INDEX i (x ASC)
 )
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
@@ -388,8 +394,7 @@ CREATE TABLE public.t1 (
    x public.greeting NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-   INDEX i (x ASC),
-   FAMILY "primary" (x, rowid)
+   INDEX i (x ASC)
 )
 
 # Test that the implicit array type has been created, and that we can use it.
@@ -585,7 +590,6 @@ enum_checks  CREATE TABLE public.enum_checks (
              x public.greeting NULL,
              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
              CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
-             FAMILY "primary" (x, rowid),
              CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
              CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
 )

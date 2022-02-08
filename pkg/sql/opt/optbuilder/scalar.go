@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -217,7 +219,7 @@ func (b *Builder) buildScalar(
 		left := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
 		right := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
 		out = b.constructBinary(
-			tree.MakeBinaryOperator(t.Operator.Symbol),
+			treebin.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),
 			b.buildScalar(right, inScope, nil, nil, colRefs),
 			t.ResolvedType(),
@@ -233,18 +235,43 @@ func (b *Builder) buildScalar(
 			input = memo.TrueSingleton
 		}
 
+		// validateCastToValType panics if tree.ReType with the given source
+		// type would create an invalid cast to valType.
+		validateCastToValType := func(src *types.T) {
+			if valType.Family() == types.AnyFamily || src.Identical(valType) {
+				// If valType's family is AnyFamily or src is identical to
+				// valType, then tree.Retype will not create a cast expression.
+				return
+			}
+			if tree.ValidCast(src, valType, tree.CastContextExplicit) {
+				// TODO(#75103): For legacy reasons, we check for a valid cast
+				// in the most permissive context, CastContextExplicit. To be
+				// consistent with Postgres, we should check for a valid cast in
+				// the most restrictive context, CastContextImplicit.
+				return
+			}
+			panic(pgerror.Newf(
+				pgcode.DatatypeMismatch,
+				"CASE types %s and %s cannot be matched", src, valType,
+			))
+		}
+
 		whens := make(memo.ScalarListExpr, 0, len(t.Whens)+1)
 		for i := range t.Whens {
 			condExpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(condExpr, inScope, nil, nil, colRefs)
-			valExpr := tree.ReType(t.Whens[i].Val.(tree.TypedExpr), valType)
+			valExpr := t.Whens[i].Val.(tree.TypedExpr)
+			validateCastToValType(valExpr.ResolvedType())
+			valExpr = tree.ReType(valExpr, valType)
 			val := b.buildScalar(valExpr, inScope, nil, nil, colRefs)
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
 		var orElse opt.ScalarExpr
 		if t.Else != nil {
-			elseExpr := tree.ReType(t.Else.(tree.TypedExpr), valType)
+			elseExpr := t.Else.(tree.TypedExpr)
+			validateCastToValType(elseExpr.ResolvedType())
+			elseExpr = tree.ReType(elseExpr, valType)
 			orElse = b.buildScalar(elseExpr, inScope, nil, nil, colRefs)
 		} else {
 			orElse = b.factory.ConstructNull(valType)
@@ -447,7 +474,7 @@ func (b *Builder) buildScalar(
 }
 
 func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
-	return t.Operator.Symbol == tree.Any || t.Operator.Symbol == tree.All || t.Operator.Symbol == tree.Some
+	return t.Operator.Symbol == treecmp.Any || t.Operator.Symbol == treecmp.All || t.Operator.Symbol == treecmp.Some
 }
 
 func (b *Builder) buildAnyScalar(
@@ -458,12 +485,12 @@ func (b *Builder) buildAnyScalar(
 
 	subop := opt.ComparisonOpMap[t.SubOperator.Symbol]
 
-	if t.Operator.Symbol == tree.All {
+	if t.Operator.Symbol == treecmp.All {
 		subop = opt.NegateOpMap[subop]
 	}
 
 	out := b.factory.ConstructAnyScalar(left, right, subop)
-	if t.Operator.Symbol == tree.All {
+	if t.Operator.Symbol == treecmp.All {
 		out = b.factory.ConstructNot(out)
 	}
 	return out
@@ -654,35 +681,35 @@ func (b *Builder) constructComparison(
 	cmp *tree.ComparisonExpr, left, right opt.ScalarExpr,
 ) opt.ScalarExpr {
 	switch cmp.Operator.Symbol {
-	case tree.EQ:
+	case treecmp.EQ:
 		return b.factory.ConstructEq(left, right)
-	case tree.LT:
+	case treecmp.LT:
 		return b.factory.ConstructLt(left, right)
-	case tree.GT:
+	case treecmp.GT:
 		return b.factory.ConstructGt(left, right)
-	case tree.LE:
+	case treecmp.LE:
 		return b.factory.ConstructLe(left, right)
-	case tree.GE:
+	case treecmp.GE:
 		return b.factory.ConstructGe(left, right)
-	case tree.NE:
+	case treecmp.NE:
 		return b.factory.ConstructNe(left, right)
-	case tree.In:
+	case treecmp.In:
 		return b.factory.ConstructIn(left, right)
-	case tree.NotIn:
+	case treecmp.NotIn:
 		return b.factory.ConstructNotIn(left, right)
-	case tree.Like:
+	case treecmp.Like:
 		return b.factory.ConstructLike(left, right)
-	case tree.NotLike:
+	case treecmp.NotLike:
 		return b.factory.ConstructNotLike(left, right)
-	case tree.ILike:
+	case treecmp.ILike:
 		return b.factory.ConstructILike(left, right)
-	case tree.NotILike:
+	case treecmp.NotILike:
 		return b.factory.ConstructNotILike(left, right)
-	case tree.SimilarTo:
+	case treecmp.SimilarTo:
 		return b.factory.ConstructSimilarTo(left, right)
-	case tree.NotSimilarTo:
+	case treecmp.NotSimilarTo:
 		return b.factory.ConstructNotSimilarTo(left, right)
-	case tree.RegMatch:
+	case treecmp.RegMatch:
 		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
@@ -691,27 +718,27 @@ func (b *Builder) constructComparison(
 			return b.factory.ConstructBBoxCovers(left, right)
 		}
 		return b.factory.ConstructRegMatch(left, right)
-	case tree.NotRegMatch:
+	case treecmp.NotRegMatch:
 		return b.factory.ConstructNotRegMatch(left, right)
-	case tree.RegIMatch:
+	case treecmp.RegIMatch:
 		return b.factory.ConstructRegIMatch(left, right)
-	case tree.NotRegIMatch:
+	case treecmp.NotRegIMatch:
 		return b.factory.ConstructNotRegIMatch(left, right)
-	case tree.IsDistinctFrom:
+	case treecmp.IsDistinctFrom:
 		return b.factory.ConstructIsNot(left, right)
-	case tree.IsNotDistinctFrom:
+	case treecmp.IsNotDistinctFrom:
 		return b.factory.ConstructIs(left, right)
-	case tree.Contains:
+	case treecmp.Contains:
 		return b.factory.ConstructContains(left, right)
-	case tree.ContainedBy:
+	case treecmp.ContainedBy:
 		return b.factory.ConstructContainedBy(left, right)
-	case tree.JSONExists:
+	case treecmp.JSONExists:
 		return b.factory.ConstructJsonExists(left, right)
-	case tree.JSONAllExists:
+	case treecmp.JSONAllExists:
 		return b.factory.ConstructJsonAllExists(left, right)
-	case tree.JSONSomeExists:
+	case treecmp.JSONSomeExists:
 		return b.factory.ConstructJsonSomeExists(left, right)
-	case tree.Overlaps:
+	case treecmp.Overlaps:
 		leftFam, rightFam := cmp.Fn.LeftType.Family(), cmp.Fn.RightType.Family()
 		if (leftFam == types.GeometryFamily || leftFam == types.Box2DFamily) &&
 			(rightFam == types.GeometryFamily || rightFam == types.Box2DFamily) {
@@ -725,42 +752,42 @@ func (b *Builder) constructComparison(
 }
 
 func (b *Builder) constructBinary(
-	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
+	bin treebin.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch bin.Symbol {
-	case tree.Bitand:
+	case treebin.Bitand:
 		return b.factory.ConstructBitand(left, right)
-	case tree.Bitor:
+	case treebin.Bitor:
 		return b.factory.ConstructBitor(left, right)
-	case tree.Bitxor:
+	case treebin.Bitxor:
 		return b.factory.ConstructBitxor(left, right)
-	case tree.Plus:
+	case treebin.Plus:
 		return b.factory.ConstructPlus(left, right)
-	case tree.Minus:
+	case treebin.Minus:
 		return b.factory.ConstructMinus(left, right)
-	case tree.Mult:
+	case treebin.Mult:
 		return b.factory.ConstructMult(left, right)
-	case tree.Div:
+	case treebin.Div:
 		return b.factory.ConstructDiv(left, right)
-	case tree.FloorDiv:
+	case treebin.FloorDiv:
 		return b.factory.ConstructFloorDiv(left, right)
-	case tree.Mod:
+	case treebin.Mod:
 		return b.factory.ConstructMod(left, right)
-	case tree.Pow:
+	case treebin.Pow:
 		return b.factory.ConstructPow(left, right)
-	case tree.Concat:
+	case treebin.Concat:
 		return b.factory.ConstructConcat(left, right)
-	case tree.LShift:
+	case treebin.LShift:
 		return b.factory.ConstructLShift(left, right)
-	case tree.RShift:
+	case treebin.RShift:
 		return b.factory.ConstructRShift(left, right)
-	case tree.JSONFetchText:
+	case treebin.JSONFetchText:
 		return b.factory.ConstructFetchText(left, right)
-	case tree.JSONFetchVal:
+	case treebin.JSONFetchVal:
 		return b.factory.ConstructFetchVal(left, right)
-	case tree.JSONFetchValPath:
+	case treebin.JSONFetchValPath:
 		return b.factory.ConstructFetchValPath(left, right)
-	case tree.JSONFetchTextPath:
+	case treebin.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))

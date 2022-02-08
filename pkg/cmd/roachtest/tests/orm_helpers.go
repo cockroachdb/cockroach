@@ -35,11 +35,11 @@ func alterZoneConfigAndClusterSettings(
 	defer db.Close()
 
 	for _, cmd := range []string{
-		`ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 5;`,
-		`ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 5;`,
-		`ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 5;`,
-		`ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 5;`,
-		`ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 5;`,
+		`ALTER RANGE default CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER TABLE system.public.jobs CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE system CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
+		`ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = 1, gc.ttlseconds = 30;`,
 
 		`SET CLUSTER SETTING kv.range_merge.queue_interval = '50ms'`,
 		`SET CLUSTER SETTING kv.raft_log.disable_synchronization_unsafe = 'true'`,
@@ -48,7 +48,6 @@ func alterZoneConfigAndClusterSettings(
 		`SET CLUSTER SETTING jobs.retention_time = '15s';`,
 		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`,
 		`SET CLUSTER SETTING kv.range_split.by_load_merge_delay = '5s';`,
-		`SET CLUSTER SETTING sql.catalog.unsafe_skip_system_config_trigger.enabled = true;`,
 
 		// Enable experimental features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,

@@ -166,7 +166,7 @@ type invertedJoiner struct {
 		seenMatch bool
 	}
 
-	spanBuilder           *span.Builder
+	spanBuilder           span.Builder
 	outputContinuationCol bool
 
 	scanStats execinfra.ScanStats
@@ -322,7 +322,7 @@ func newInvertedJoiner(
 		flowCtx, ij.desc, int(spec.IndexIdx), false, /* reverse */
 		allIndexCols, flowCtx.EvalCtx.Mon, &ij.alloc,
 		descpb.ScanLockingStrength_FOR_NONE, descpb.ScanLockingWaitPolicy_BLOCK,
-		false /* withSystemColumns */, nil, /* virtualColumn */
+		false, /* withSystemColumns */
 	)
 	if err != nil {
 		return nil, err
@@ -337,8 +337,7 @@ func newInvertedJoiner(
 		ij.fetcher = fetcher
 	}
 
-	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
-	ij.spanBuilder.SetNeededColumns(allIndexCols)
+	ij.spanBuilder.Init(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()
@@ -459,11 +458,10 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 				// new roachpb.Key. Many rows will share the same prefix or
 				// encode to the same length roachpb.Key. We can optimize this
 				// by reusing a pre-allocated key.
-				prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+				keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
+				prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 					ij.indexRow[:len(ij.prefixEqualityCols)],
-					ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-					ij.index.IndexDesc().KeyColumnDirections,
-					ij.index,
+					keyCols,
 					&ij.alloc,
 					nil, /* keyPrefix */
 				)
@@ -549,15 +547,14 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 		encInvertedVal := scannedRow[idx].EncodedBytes()
 		var encFullVal []byte
 		if len(ij.prefixEqualityCols) > 0 {
-			// TODO(mgartner): MakeKeyFromEncDatums will allocate and grow a
+			// TODO(mgartner): MakeKeyFromEncDatumsDeprecated will allocate and grow a
 			// new roachpb.Key. Many rows will share the same prefix or
 			// encode to the same length roachpb.Key. We can optimize this
 			// by reusing a pre-allocated key.
-			prefixKey, _, _, err := rowenc.MakeKeyFromEncDatums(
+			keyCols := ij.desc.IndexFetchSpecKeyAndSuffixColumns(ij.index)
+			prefixKey, _, err := rowenc.MakeKeyFromEncDatums(
 				ij.indexRow[:len(ij.prefixEqualityCols)],
-				ij.indexRowTypes[:len(ij.prefixEqualityCols)],
-				ij.index.IndexDesc().KeyColumnDirections,
-				ij.index,
+				keyCols,
 				&ij.alloc,
 				nil, /* keyPrefix */
 			)
@@ -771,9 +768,6 @@ func (ij *invertedJoiner) close() {
 		ij.MemMonitor.Stop(ij.Ctx)
 		if ij.diskMonitor != nil {
 			ij.diskMonitor.Stop(ij.Ctx)
-		}
-		if ij.spanBuilder != nil {
-			ij.spanBuilder.Release()
 		}
 	}
 }

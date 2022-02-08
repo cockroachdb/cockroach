@@ -904,7 +904,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
-		} else if key == gossip.KeySystemConfig {
+		} else if key == gossip.KeyDeprecatedSystemConfig {
 			if debugCtx.printSystemConfig {
 				var config config.SystemConfigEntries
 				if err := protoutil.Unmarshal(bytes, &config); err != nil {
@@ -1700,6 +1700,14 @@ func init() {
 	f.Var(&debugTimeSeriesDumpOpts.format, "format", "output format (text, csv, tsv, raw)")
 	f.Var(&debugTimeSeriesDumpOpts.from, "from", "oldest timestamp to include (inclusive)")
 	f.Var(&debugTimeSeriesDumpOpts.to, "to", "newest timestamp to include (inclusive)")
+
+	f = debugSendKVBatchCmd.Flags()
+	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
+		"which format to use for the trace output (off, text, jaeger)")
+	f.BoolVar(&debugSendKVBatchContext.keepCollectedSpans, "keep-collected-spans", debugSendKVBatchContext.keepCollectedSpans,
+		"whether to keep the CollectedSpans field on the response, to learn about how traces work")
+	f.StringVar(&debugSendKVBatchContext.traceFile, "trace-output", debugSendKVBatchContext.traceFile,
+		"the output file to use for the trace. If left empty, output to stderr.")
 }
 
 func initPebbleCmds(cmd *cobra.Command) {

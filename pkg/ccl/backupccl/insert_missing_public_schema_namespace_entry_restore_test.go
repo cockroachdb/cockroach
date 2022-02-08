@@ -37,7 +37,7 @@ func TestInsertMissingPublicSchemaNamespaceEntry(t *testing.T) {
 			ExternalIODir: dir,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.InsertPublicSchemaNamespaceEntryOnRestore - 1),
 				},
 			},

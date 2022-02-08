@@ -1,9 +1,12 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfig",
     srcs = [
+        "protectedts_state_reader.go",
         "spanconfig.go",
+        "systemtarget.go",
+        "target.go",
         "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig",
@@ -12,9 +15,35 @@ go_library(
         "//pkg/base",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
+        "//pkg/util/encoding",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "spanconfig_test",
+    srcs = [
+        "protectedts_state_reader_test.go",
+        "target_test.go",
+    ],
+    embed = [":spanconfig"],
+    deps = [
+        "//pkg/jobs/jobsprotectedts",
+        "//pkg/keys",
+        "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//require",
     ],
 )

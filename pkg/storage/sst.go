@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -182,8 +183,8 @@ func CheckSSTConflicts(
 		// If the existing key has a timestamp at or above the SST key, return a
 		// WriteTooOldError. Normally this could cause a transactional request to be
 		// automatically retried after a read refresh, which we would only want to
-		// do if AddSSTable had WriteAtRequestTimestamp set, but AddSSTable cannot
-		// be used in transactions so we don't need to check.
+		// do if AddSSTable had SSTTimestampToRequestTimestamp set, but AddSSTable
+		// cannot be used in transactions so we don't need to check.
 		if sstKey.Timestamp.LessEq(extKey.Timestamp) {
 			return enginepb.MVCCStats{}, roachpb.NewWriteTooOldError(
 				sstKey.Timestamp, extKey.Timestamp.Next(), sstKey.Key)
@@ -220,15 +221,23 @@ func CheckSSTConflicts(
 	return statsDiff, nil
 }
 
-// UpdateSSTTimestamps replaces all MVCC timestamp in the provided SST with the
-// given timestamp. All keys must have a non-zero timestamp, otherwise an error
-// is returned to protect against accidental inclusion of intents or inline
-// values. Tombstones are also rejected opportunistically, since we're iterating
-// over the entire SST anyway.
-func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([]byte, error) {
+// UpdateSSTTimestamps replaces all MVCC timestamp in the provided SST to the
+// given timestamp. All keys must already have the given "from" timestamp.
+func UpdateSSTTimestamps(
+	ctx context.Context, st *cluster.Settings, sst []byte, from, to hlc.Timestamp, concurrency int,
+) ([]byte, error) {
+	if from.IsEmpty() {
+		return nil, errors.Errorf("from timestamp not given")
+	}
+	if to.IsEmpty() {
+		return nil, errors.Errorf("to timestamp not given")
+	}
+
 	sstOut := &MemFile{}
 	sstOut.Buffer.Grow(len(sst))
-	if concurrency > 0 && !from.IsEmpty() {
+
+	// Fancy optimized Pebble SST rewriter.
+	if concurrency > 0 {
 		defaults := DefaultPebbleOptions()
 		opts := defaults.MakeReaderOptions()
 		if fp := defaults.Levels[0].FilterPolicy; fp != nil && len(opts.Filters) == 0 {
@@ -237,15 +246,18 @@ func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([
 		if _, err := sstable.RewriteKeySuffixes(sst,
 			opts,
 			sstOut,
-			MakeIngestionWriterOptions(),
-			encodeMVCCTimestampSuffix(from), encodeMVCCTimestampSuffix(to),
+			MakeIngestionWriterOptions(ctx, st),
+			EncodeMVCCTimestampSuffix(from),
+			EncodeMVCCTimestampSuffix(to),
 			concurrency,
 		); err != nil {
 			return nil, err
 		}
 		return sstOut.Bytes(), nil
 	}
-	writer := MakeIngestionSSTWriter(sstOut)
+
+	// Naïve read/write loop.
+	writer := MakeIngestionSSTWriter(ctx, st, sstOut)
 	defer writer.Close()
 
 	iter, err := NewMemSSTIterator(sst, false)
@@ -260,11 +272,10 @@ func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([
 		} else if !ok {
 			break
 		}
-		if iter.UnsafeKey().Timestamp.IsEmpty() {
-			return nil, errors.New("inline values or intents are not supported")
-		}
-		if len(iter.UnsafeValue()) == 0 {
-			return nil, errors.New("SST values cannot be tombstones")
+		key := iter.UnsafeKey()
+		if key.Timestamp != from {
+			return nil, errors.Errorf("unexpected timestamp %s (expected %s) for key %s",
+				key.Timestamp, from, key.Key)
 		}
 		err = writer.PutMVCC(MVCCKey{Key: iter.UnsafeKey().Key, Timestamp: to}, iter.UnsafeValue())
 		if err != nil {

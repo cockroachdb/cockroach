@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -139,10 +140,17 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.
-func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+// qualityOfService is the QoSLevel level to use in admission control, whose
+// value also corresponds exactly with the admission.WorkPriority to use.
+func NewTxnWithSteppingEnabled(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	qualityOfService sessiondatapb.QoSLevel,
+) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
 	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(admission.NormalPri),
+		Priority:   int32(qualityOfService),
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     roachpb.AdmissionHeader_FROM_SQL,
 	}
@@ -386,16 +394,16 @@ func (txn *Txn) RequiredFrontier() hlc.Timestamp {
 	return txn.mu.sender.RequiredFrontier()
 }
 
-// SetSystemConfigTrigger sets the system db trigger to true on this transaction.
+// DeprecatedSetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest. Note that this method takes a boolean
 // argument indicating whether this transaction is intended for the system
 // tenant. Only transactions for the system tenant need to set the system config
 // trigger which is used to gossip updates to the system config to KV servers.
 // The KV servers need access to an up-to-date system config in order to
 // determine split points and zone configurations.
-func (txn *Txn) SetSystemConfigTrigger(forSystemTenant bool) error {
+func (txn *Txn) DeprecatedSetSystemConfigTrigger(forSystemTenant bool) error {
 	if txn.typ != RootTxn {
-		return errors.AssertionFailedf("SetSystemConfigTrigger() called on leaf txn")
+		return errors.AssertionFailedf("DeprecatedSetSystemConfigTrigger() called on leaf txn")
 	}
 	if !forSystemTenant {
 		return nil
@@ -1012,24 +1020,32 @@ func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) 
 			break
 		}
 
-		txn.PrepareForRetry(ctx, err)
+		txn.PrepareForRetry(ctx)
 	}
 
 	return err
 }
 
-// PrepareForRetry needs to be called before an retry to perform some
-// book-keeping.
-//
-// TODO(andrei): I think this is called in the wrong place. See #18170.
-func (txn *Txn) PrepareForRetry(ctx context.Context, err error) {
-	if txn.typ != RootTxn {
-		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(err, "PrepareForRetry() called on leaf txn"), ctx))
-	}
-
+// PrepareForRetry needs to be called before a retry to perform some
+// book-keeping and clear errors when possible.
+func (txn *Txn) PrepareForRetry(ctx context.Context) {
+	// TODO(andrei): I think commit triggers are reset in the wrong place. See #18170.
 	txn.commitTriggers = nil
-	log.VEventf(ctx, 2, "automatically retrying transaction: %s because of error: %s",
-		txn.DebugName(), err)
+
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	retryErr := txn.mu.sender.GetTxnRetryableErr(ctx)
+	if retryErr == nil {
+		return
+	}
+	if txn.typ != RootTxn {
+		panic(errors.WithContextTags(errors.NewAssertionErrorWithWrappedErrf(
+			retryErr, "PrepareForRetry() called on leaf txn"), ctx))
+	}
+	log.VEventf(ctx, 2, "retrying transaction: %s because of a retryable error: %s",
+		txn.debugNameLocked(), retryErr)
+	txn.handleRetryableErrLocked(ctx, retryErr)
 }
 
 // IsRetryableErrMeantForTxn returns true if err is a retryable
@@ -1105,21 +1121,13 @@ func (txn *Txn) Send(
 				"requestTxnID: %s, retryErr.TxnID: %s. retryErr: %s",
 				requestTxnID, retryErr.TxnID, retryErr)
 		}
-		if txn.typ == RootTxn {
-			// On root senders, we bump the sender's identity upon retry errors.
-			txn.mu.Lock()
-			txn.handleErrIfRetryableLocked(ctx, retryErr)
-			txn.mu.Unlock()
-		}
 	}
 	return br, pErr
 }
 
-func (txn *Txn) handleErrIfRetryableLocked(ctx context.Context, err error) {
-	var retryErr *roachpb.TransactionRetryWithProtoRefreshError
-	if !errors.As(err, &retryErr) {
-		return
-	}
+func (txn *Txn) handleRetryableErrLocked(
+	ctx context.Context, retryErr *roachpb.TransactionRetryWithProtoRefreshError,
+) {
 	txn.resetDeadlineLocked()
 	txn.replaceRootSenderIfTxnAbortedLocked(ctx, retryErr, retryErr.TxnID)
 }
@@ -1311,7 +1319,10 @@ func (txn *Txn) GetLeafTxnInputStateOrRejectClient(
 	defer txn.mu.Unlock()
 	tfs, err := txn.mu.sender.GetLeafTxnInputState(ctx, OnlyPending)
 	if err != nil {
-		txn.handleErrIfRetryableLocked(ctx, err)
+		var retryErr *roachpb.TransactionRetryWithProtoRefreshError
+		if errors.As(err, &retryErr) {
+			txn.handleRetryableErrLocked(ctx, retryErr)
+		}
 		return nil, err
 	}
 	return tfs, nil
@@ -1405,8 +1416,9 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 		return
 	}
 	if !retryErr.PrevTxnAborted() {
-		// We don't need a new transaction as a result of this error. Nothing more
-		// to do.
+		// We don't need a new transaction as a result of this error, but we may
+		// have a retryable error that should be cleared.
+		txn.mu.sender.ClearTxnRetryableErr(ctx)
 		return
 	}
 
@@ -1417,11 +1429,10 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 	// transaction, even once the proto is reset.
 	txn.recordPreviousTxnIDLocked(txn.mu.ID)
 	txn.mu.ID = newTxn.ID
-	// Create a new txn sender. We need to preserve the stepping mode,
-	// if any.
-	// prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
+	// Create a new txn sender. We need to preserve the stepping mode, if any.
+	prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
 	txn.mu.sender = txn.db.factory.RootTransactionalSender(newTxn, txn.mu.userPriority)
-	// txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
+	txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
@@ -1566,6 +1577,13 @@ func (txn *Txn) Step(ctx context.Context) error {
 	return txn.mu.sender.Step(ctx)
 }
 
+// SetReadSeqNum sets the read sequence number for this transaction.
+func (txn *Txn) SetReadSeqNum(seq enginepb.TxnSeq) error {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.SetReadSeqNum(seq)
+}
+
 // ConfigureStepping configures step-wise execution in the
 // transaction.
 func (txn *Txn) ConfigureStepping(ctx context.Context, mode SteppingMode) (prevMode SteppingMode) {
@@ -1652,7 +1670,7 @@ func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
 		// the transaction throughput by 10+%. In that experiment 40% of the
 		// BatchRequests evaluated by KV had been assigned high priority due to
 		// locking.
-		h.Priority = int32(admission.HighPri)
+		h.Priority = int32(admission.LockingPri)
 	}
 	return h
 }

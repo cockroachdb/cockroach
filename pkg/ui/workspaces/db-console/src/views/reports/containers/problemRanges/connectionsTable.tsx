@@ -48,7 +48,7 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: problem => problem.no_raft_leader_range_ids.length,
   },
   {
-    title: "Invalid Lease",
+    title: "Expired Lease",
     extract: problem => problem.no_lease_range_ids.length,
   },
   {
@@ -72,6 +72,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: problem => problem.raft_log_too_large_range_ids.length,
   },
   {
+    title: "Circuit breaker error",
+    extract: problem => problem.circuit_breaker_error_range_ids.length,
+  },
+  {
     title: "Total",
     extract: problem => {
       return (
@@ -82,7 +86,8 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.underreplicated_range_ids.length +
         problem.overreplicated_range_ids.length +
         problem.quiescent_equals_ticking_range_ids.length +
-        problem.raft_log_too_large_range_ids.length
+        problem.raft_log_too_large_range_ids.length +
+        problem.circuit_breaker_error_range_ids.length
       );
     },
   },

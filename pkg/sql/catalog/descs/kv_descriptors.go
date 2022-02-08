@@ -13,6 +13,7 @@ package descs
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -177,6 +178,7 @@ func (kd *kvDescriptors) lookupName(
 func (kd *kvDescriptors) getByName(
 	ctx context.Context,
 	txn *kv.Txn,
+	version clusterversion.ClusterVersion,
 	maybeDB catalog.DatabaseDescriptor,
 	parentID descpb.ID,
 	parentSchemaID descpb.ID,
@@ -186,7 +188,7 @@ func (kd *kvDescriptors) getByName(
 	if err != nil || descID == descpb.InvalidID {
 		return nil, err
 	}
-	descs, err := kd.getByIDs(ctx, txn, []descpb.ID{descID})
+	descs, err := kd.getByIDs(ctx, txn, version, []descpb.ID{descID})
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			// Having done the namespace lookup, the descriptor must exist.
@@ -210,7 +212,7 @@ func (kd *kvDescriptors) getByName(
 
 // getByIDs actually reads a batch of descriptors from the storage layer.
 func (kd *kvDescriptors) getByIDs(
-	ctx context.Context, txn *kv.Txn, ids []descpb.ID,
+	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion, ids []descpb.ID,
 ) ([]catalog.MutableDescriptor, error) {
 	ret := make([]catalog.MutableDescriptor, len(ids))
 	kvIDs := make([]descpb.ID, 0, len(ids))
@@ -235,18 +237,20 @@ func (kd *kvDescriptors) getByIDs(
 	if len(kvIDs) == 0 {
 		return ret, nil
 	}
-	kvDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, kvIDs, catalog.Any)
+	kvDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, version, kvIDs, catalog.Any)
 	if err != nil {
 		return nil, err
 	}
 	for j, desc := range kvDescs {
-		ret[indexes[j]] = desc.NewBuilder().BuildExistingMutable()
+		b := desc.NewBuilder()
+		b.RunPostDeserializationChanges()
+		ret[indexes[j]] = b.BuildExistingMutable()
 	}
 	return ret, nil
 }
 
 func (kd *kvDescriptors) getAllDescriptors(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion,
 ) (nstree.Catalog, error) {
 	if kd.allDescriptors.isUnset() {
 		c, err := catkv.GetCatalogUnvalidated(ctx, txn, kd.codec)
@@ -255,7 +259,7 @@ func (kd *kvDescriptors) getAllDescriptors(
 		}
 
 		descs := c.OrderedDescriptors()
-		ve := c.Validate(ctx, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, descs...)
+		ve := c.Validate(ctx, version, catalog.ValidationReadTelemetry, catalog.ValidationLevelCrossReferences, descs...)
 		if err := ve.CombinedError(); err != nil {
 			return nstree.Catalog{}, err
 		}
@@ -274,14 +278,14 @@ func (kd *kvDescriptors) getAllDescriptors(
 }
 
 func (kd *kvDescriptors) getAllDatabaseDescriptors(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, version clusterversion.ClusterVersion,
 ) ([]catalog.DatabaseDescriptor, error) {
 	if kd.allDatabaseDescriptors == nil {
 		c, err := catkv.GetAllDatabaseDescriptorIDs(ctx, txn, kd.codec)
 		if err != nil {
 			return nil, err
 		}
-		dbDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, c.OrderedDescriptorIDs(), catalog.Database)
+		dbDescs, err := catkv.MustGetDescriptorsByID(ctx, txn, kd.codec, version, c.OrderedDescriptorIDs(), catalog.Database)
 		if err != nil {
 			return nil, err
 		}

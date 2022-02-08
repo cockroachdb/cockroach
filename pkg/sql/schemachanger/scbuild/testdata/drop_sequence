@@ -5,15 +5,16 @@ CREATE SEQUENCE defaultdb.SQ1
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- [[Locality:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-- [[Namespace:{DescID: 104, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
     name: sq1
     schemaId: 101
+- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 104
+    parentSchemaId: 101
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
@@ -23,23 +24,22 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     sequenceId: 104
 - [[TableComment:{DescID: 104}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 104
-- [[UserPrivileges:{DescID: 104, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 104, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
-    username: public
-- [[UserPrivileges:{DescID: 104, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
-    username: root
+    userName: root
 
 create-table
 CREATE TABLE defaultdb.blog_posts (id INT PRIMARY KEY, val int DEFAULT nextval('defaultdb.sq1'), title text)
@@ -60,84 +60,117 @@ CREATE TABLE defaultdb.blog_posts3 (id INT PRIMARY KEY, val typ DEFAULT CAST(chr
 build
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- [[DefaultExprTypeReference:{DescID: 109, ColumnID: 2, ReferencedDescID: 107}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
-    tableId: 109
-    typeId: 107
-- [[DefaultExprTypeReference:{DescID: 109, ColumnID: 2, ReferencedDescID: 108}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    tableId: 109
-    typeId: 108
-- [[DefaultExpression:{DescID: 105, ColumnID: 2}, ABSENT], PUBLIC]
-  details:
-    columnId: 2
-    defaultExpr: nextval(104:::REGCLASS)
+    embeddedExpr:
+      expr: nextval(104:::REGCLASS)
+      usesSequenceIds:
+      - 104
     tableId: 105
-    usesSequenceIDs:
-    - 104
-- [[DefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
-    defaultExpr: nextval(104:::REGCLASS)
+    embeddedExpr:
+      expr: nextval(104:::REGCLASS)
+      usesSequenceIds:
+      - 104
     tableId: 106
-    usesSequenceIDs:
-    - 104
-- [[DefaultExpression:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
+- [[ColumnDefaultExpression:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
-    defaultExpr: CAST(chr(nextval(104:::REGCLASS)) AS @100107)
+    embeddedExpr:
+      expr: CAST(chr(nextval(104:::REGCLASS)) AS @100107)
+      usesSequenceIds:
+      - 104
+      usesTypeIds:
+      - 107
+      - 108
     tableId: 109
-    usesSequenceIDs:
-    - 104
-- [[Locality:{DescID: 104}, ABSENT], PUBLIC]
-  details:
-    descriptorId: 104
-- [[Namespace:{DescID: 104, Name: sq1}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   details:
     databaseId: 100
     descriptorId: 104
     name: sq1
     schemaId: 101
+- [[ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 104
+    parentSchemaId: 101
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     owner: root
-- [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC]
-  details:
-    columnID: 2
-    dependedOn: 105
-    tableId: 104
-- [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 106}, ABSENT], PUBLIC]
-  details:
-    columnID: 2
-    dependedOn: 106
-    tableId: 104
-- [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 109}, ABSENT], PUBLIC]
-  details:
-    columnID: 2
-    dependedOn: 109
-    tableId: 104
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]
   details:
     sequenceId: 104
 - [[TableComment:{DescID: 104}, ABSENT], PUBLIC]
   details:
-    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
-      doing decomposition
+    comment: __placeholder_comment__
     tableId: 104
-- [[UserPrivileges:{DescID: 104, Username: admin}, ABSENT], PUBLIC]
+- [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
-    username: admin
-- [[UserPrivileges:{DescID: 104, Username: public}, ABSENT], PUBLIC]
+    userName: admin
+- [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
-    username: public
-- [[UserPrivileges:{DescID: 104, Username: root}, ABSENT], PUBLIC]
+    userName: public
+- [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC]
   details:
     descriptorId: 104
     privileges: 2
-    username: root
+    userName: root
+
+create-table
+CREATE TABLE defaultdb.ownertbl (id INT NOT NULL)
+----
+
+create-sequence
+CREATE SEQUENCE defaultdb.ownedseq OWNED BY defaultdb.ownertbl.id
+----
+
+build
+DROP SEQUENCE defaultdb.ownedseq CASCADE
+----
+- [[Namespace:{DescID: 111, Name: ownedseq, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  details:
+    databaseId: 100
+    descriptorId: 111
+    name: ownedseq
+    schemaId: 101
+- [[ObjectParent:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC]
+  details:
+    objectId: 111
+    parentSchemaId: 101
+- [[Owner:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    owner: root
+- [[Sequence:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    sequenceId: 111
+- [[SequenceOwner:{DescID: 110, ColumnID: 1, ReferencedDescID: 111}, ABSENT], PUBLIC]
+  details:
+    columnId: 1
+    sequenceId: 111
+    tableId: 110
+- [[TableComment:{DescID: 111}, ABSENT], PUBLIC]
+  details:
+    comment: __placeholder_comment__
+    tableId: 111
+- [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    privileges: 2
+    userName: admin
+- [[UserPrivileges:{DescID: 111, Name: public}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    userName: public
+- [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC]
+  details:
+    descriptorId: 111
+    privileges: 2
+    userName: root

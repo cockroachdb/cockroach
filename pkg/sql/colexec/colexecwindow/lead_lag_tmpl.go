@@ -174,11 +174,11 @@ func (b *_OP_NAMEBase) Init(ctx context.Context) {
 	}
 }
 
-func (b *_OP_NAMEBase) Close() {
+func (b *_OP_NAMEBase) Close(ctx context.Context) {
 	if !b.CloserHelper.Close() {
 		return
 	}
-	b.buffer.Close(b.EnsureCtx())
+	b.buffer.Close(ctx)
 }
 
 // {{/*

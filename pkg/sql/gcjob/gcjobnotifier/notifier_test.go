@@ -46,8 +46,8 @@ func (t *testingProvider) setSystemConfig(cfg *config.SystemConfig) {
 	t.cfg = cfg
 }
 
-func (t *testingProvider) RegisterSystemConfigChannel() <-chan struct{} {
-	return t.ch
+func (t *testingProvider) RegisterSystemConfigChannel() (<-chan struct{}, func()) {
+	return t.ch, func() {}
 }
 
 var _ config.SystemConfigProvider = (*testingProvider)(nil)

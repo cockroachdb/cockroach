@@ -272,7 +272,10 @@ func createTestStoreWithConfig(
 ) *Store {
 	store := createTestStoreWithoutStart(ctx, t, stopper, opts, cfg)
 	// Put an empty system config into gossip.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig,
+	//
+	// TODO(ajwerner): Remove this in 22.2. It's possible it can be removed
+	// already.
+	if err := store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig,
 		&config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -2091,6 +2094,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var intercept atomic.Value
+	intercept.Store(uuid.Nil)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {

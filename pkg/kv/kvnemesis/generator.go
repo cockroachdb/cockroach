@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -250,7 +251,8 @@ func NewDefaultConfig() GeneratorConfig {
 }
 
 // GeneratorDataTableID is the table ID that corresponds to GeneratorDataSpan.
-const GeneratorDataTableID = 50
+// This must be a table ID that is not used in a new cluster.
+var GeneratorDataTableID = bootstrap.TestingMinUserDescID()
 
 // GeneratorDataSpan returns a span that contains all of the operations created
 // by this Generator.

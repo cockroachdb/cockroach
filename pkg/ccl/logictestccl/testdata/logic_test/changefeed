@@ -8,7 +8,7 @@ SET CLUSTER SETTING kv.rangefeed.enabled = true
 
 user testuser
 
-statement error permission denied to create changefeed
+statement error current user must have a role WITH CONTROLCHANGEFEED
 CREATE CHANGEFEED FOR t
 
 user root
@@ -33,5 +33,5 @@ ALTER USER testuser NOCONTROLCHANGEFEED
 
 user testuser
 
-statement error permission denied to create changefeed
+statement error current user must have a role WITH CONTROLCHANGEFEED
 CREATE CHANGEFEED FOR t

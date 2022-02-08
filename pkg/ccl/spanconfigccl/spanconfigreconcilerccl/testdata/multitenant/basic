@@ -22,8 +22,9 @@ mutations
 state offset=47
 ----
 ...
-/Tenant/10{-"\x00"}                        range default
-/Tenant/11{-"\x00"}                        range default
+/Table/5{0-1}                              database system (host)
+/Tenant/10{-"\x00"}                        database system (tenant)
+/Tenant/11{-"\x00"}                        database system (tenant)
 
 # Start the reconciliation loop for the secondary tenant.
 reconcile tenant=10
@@ -70,6 +71,7 @@ upsert /Tenant/10/Table/4{6-7}             database system (tenant)
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Tenant/10{-/Table/4}                      database system (tenant)
 /Tenant/10/Table/{4-5}                     database system (tenant)
 /Tenant/10/Table/{5-6}                     database system (tenant)
@@ -104,7 +106,7 @@ state offset=47
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)
 /Tenant/10/Table/4{6-7}                    database system (tenant)
-/Tenant/11{-"\x00"}                        range default
+/Tenant/11{-"\x00"}                        database system (tenant)
 
 exec-sql tenant=10
 CREATE DATABASE db;
@@ -120,6 +122,7 @@ upsert /Tenant/10/Table/10{7-8}            range default
 state offset=81
 ----
 ...
+/Tenant/10/Table/4{6-7}                    database system (tenant)
 /Tenant/10/Table/10{6-7}                   range default
 /Tenant/10/Table/10{7-8}                   range default
-/Tenant/11{-"\x00"}                        range default
+/Tenant/11{-"\x00"}                        database system (tenant)

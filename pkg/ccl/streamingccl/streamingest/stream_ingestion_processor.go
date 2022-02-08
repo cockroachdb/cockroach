@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -88,6 +87,9 @@ type streamIngestionProcessor struct {
 	// client is a streaming client which provides a stream of events from a given
 	// address.
 	forceClientForTests streamclient.Client
+	// streamPartitionClients are a collection of streamclient.Client created for
+	// consuming multiple partitions from a stream.
+	streamPartitionClients []streamclient.Client
 
 	// Checkpoint events may need to be buffered if they arrive within the same
 	// minimumFlushInterval.
@@ -146,8 +148,10 @@ type partitionEvent struct {
 	partition string
 }
 
-var _ execinfra.Processor = &streamIngestionProcessor{}
-var _ execinfra.RowSource = &streamIngestionProcessor{}
+var (
+	_ execinfra.Processor = &streamIngestionProcessor{}
+	_ execinfra.RowSource = &streamIngestionProcessor{}
+)
 
 const streamIngestionProcessorName = "stream-ingestion-processor"
 
@@ -196,7 +200,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	db := sip.FlowCtx.Cfg.DB
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
+		func() int64 { return bulk.IngestFileSize(evalCtx.Settings) })
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return
@@ -220,6 +224,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	// Initialize the event streams.
 	subscriptions := make(map[string]streamclient.Subscription)
 	sip.cg = ctxgroup.WithContext(ctx)
+	sip.streamPartitionClients = make([]streamclient.Client, 0)
 	for i := range sip.spec.PartitionIds {
 		id := sip.spec.PartitionIds[i]
 		spec := streamclient.SubscriptionToken(sip.spec.PartitionSpecs[i])
@@ -229,11 +234,16 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 			streamClient = sip.forceClientForTests
 			log.Infof(ctx, "using testing client")
 		} else {
-			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
 			if err != nil {
-				sip.MoveToDraining(errors.Wrapf(err, "creating client for parition spec %q from %q", spec, addr))
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
 				return
 			}
+			streamClient, err = streamclient.NewStreamClient(streamingccl.StreamAddress(addr))
+			if err != nil {
+				sip.MoveToDraining(errors.Wrapf(err, "creating client for partition spec %q from %q", spec, addr))
+				return
+			}
+			sip.streamPartitionClients = append(sip.streamPartitionClients, streamClient)
 		}
 
 		sub, err := streamClient.Subscribe(ctx, streaming.StreamID(sip.spec.StreamID), spec, sip.spec.StartTime)
@@ -291,6 +301,11 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	return nil, sip.DrainHelper()
 }
 
+// MustBeStreaming implements the Processor interface.
+func (sip *streamIngestionProcessor) MustBeStreaming() bool {
+	return true
+}
+
 // ConsumerClosed is part of the RowSource interface.
 func (sip *streamIngestionProcessor) ConsumerClosed() {
 	sip.close()
@@ -301,6 +316,9 @@ func (sip *streamIngestionProcessor) close() {
 		return
 	}
 
+	for _, client := range sip.streamPartitionClients {
+		_ = client.Close()
+	}
 	if sip.batcher != nil {
 		sip.batcher.Close()
 	}

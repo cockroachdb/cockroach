@@ -11,290 +11,269 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
 func alterTableAddColumn(
-	b BuildCtx, table catalog.TableDescriptor, t *tree.AlterTableAddColumn, tn *tree.TableName,
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, t *tree.AlterTableAddColumn,
 ) {
+	b.IncrementSchemaChangeAlterCounter("table", "add_column")
 	d := t.ColumnDef
-
+	// Check column non-existence.
+	{
+		elts := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
+			IsExistenceOptional: true,
+			RequiredPrivilege:   privilege.CREATE,
+		})
+		_, _, col := scpb.FindColumn(elts)
+		if col != nil {
+			if t.IfNotExists {
+				return
+			}
+			panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), tn.Object()))
+		}
+	}
+	if d.IsSerial {
+		panic(scerrors.NotImplementedErrorf(d, "contains serial data type"))
+	}
 	if d.IsComputed() {
 		d.Computed.Expr = schemaexpr.MaybeRewriteComputedColumn(d.Computed.Expr, b.SessionData())
-	}
-
-	toType, err := tree.ResolveType(b, d.Type, b.CatalogReader())
-	onErrPanic(err)
-
-	version := b.ClusterSettings().Version.ActiveVersionOrEmpty(b)
-	supported := types.IsTypeSupportedInVersion(version, toType)
-	if !supported {
-		panic(pgerror.Newf(
-			pgcode.FeatureNotSupported,
-			"type %s is not supported until version upgrade is finalized",
-			toType.SQLString(),
-		))
-	}
-
-	// User defined columns are not supported, since we don't
-	// do type back references correctly.
-	if toType.UserDefined() {
-		panic(scerrors.NotImplementedErrorf(t, "user defined type in column"))
-	}
-
-	if d.IsSerial {
-		panic(scerrors.NotImplementedErrorf(t.ColumnDef, "contains serial data type"))
 	}
 	// Some of the building for the index exists below but end-to-end support is
 	// not complete so we return an error.
 	if d.Unique.IsUnique {
-		panic(scerrors.NotImplementedErrorf(t.ColumnDef, "contains unique constraint"))
+		panic(scerrors.NotImplementedErrorf(d, "contains unique constraint"))
 	}
 	cdd, err := tabledesc.MakeColumnDefDescs(b, d, b.SemaCtx(), b.EvalCtx())
-	onErrPanic(err)
-
-	col := cdd.ColumnDescriptor
-	colID := b.NextColumnID(table)
-	col.ID = colID
-
-	// If the new column has a DEFAULT or ON UPDATE expression that uses a
-	// sequence, add references between its descriptor and this column descriptor.
-	_ = cdd.ForEachTypedExpr(func(expr tree.TypedExpr) error {
-		maybeAddSequenceReferenceDependencies(b, table.GetID(), col, expr)
-		return nil
-	})
-
-	validateColumnName(b, table, d, col, t.IfNotExists)
-
-	familyID := descpb.FamilyID(0)
-	familyName := string(d.Family.Name)
-	// TODO(ajwerner,lucy-zhang): Figure out how to compute the default column ID
-	// for the family.
+	if err != nil {
+		panic(err)
+	}
+	desc := cdd.ColumnDescriptor
+	spec := addColumnSpec{
+		tbl: tbl,
+		col: &scpb.Column{
+			TableID:                 tbl.TableID,
+			ColumnID:                b.NextTableColumnID(tbl),
+			IsHidden:                desc.Hidden,
+			IsInaccessible:          desc.Inaccessible,
+			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
+			PgAttributeNum:          desc.PGAttributeNum,
+		},
+	}
+	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
+		spec.col.GeneratedAsIdentitySequenceOption = *ptr
+	}
+	spec.name = &scpb.ColumnName{
+		TableID:  tbl.TableID,
+		ColumnID: spec.col.ColumnID,
+		Name:     string(d.Name),
+	}
+	spec.colType = &scpb.ColumnType{
+		TableID:    tbl.TableID,
+		ColumnID:   spec.col.ColumnID,
+		IsNullable: desc.Nullable,
+		IsVirtual:  desc.Virtual,
+	}
+	if desc.IsComputed() {
+		expr, typ := b.ComputedColumnExpression(tbl, d)
+		spec.colType.ComputeExpr = b.WrapExpression(expr)
+		spec.colType.TypeT = typ
+	} else {
+		spec.colType.TypeT = b.ResolveTypeRef(d.Type)
+	}
 	if d.HasColumnFamily() {
-		familyID = findOrAddColumnFamily(
-			b, table, familyName, d.Family.Create, d.Family.IfNotExists,
-		)
-	} else if !d.IsVirtual() { // FIXME: Compute columns should not have families?
-		// TODO(ajwerner,lucy-zhang): Deal with adding the first column to the
-		// table.
-		fam := table.GetFamilies()[0]
-		familyID = fam.ID
-		familyName = fam.Name
-	}
-
-	if d.IsComputed() {
-		// TODO (lucy): This is not going to work when the computed column
-		// references columns created in the same transaction.
-		serializedExpr, _, err := schemaexpr.ValidateComputedColumnExpression(
-			b, table, d, tn, "computed column", b.SemaCtx(),
-		)
-		onErrPanic(err)
-		col.ComputeExpr = &serializedExpr
-	}
-
-	if toType.UserDefined() {
-		typeID, err := typedesc.UserDefinedTypeOIDToID(toType.Oid())
-		onErrPanic(err)
-		typeDesc := b.MustReadType(typeID)
-		// Only add a type reference node only if there isn't
-		// any existing reference inside this table. This makes
-		// it easier to handle drop columns and other operations,
-		// since those can for example only remove nodes.
-		found := false
-		for _, refID := range typeDesc.TypeDesc().GetReferencingDescriptorIDs() {
-			if refID == table.GetID() {
+		elts := b.QueryByID(tbl.TableID)
+		var found bool
+		scpb.ForEachColumnFamily(elts, func(_ scpb.Status, target scpb.TargetStatus, cf *scpb.ColumnFamily) {
+			if target == scpb.ToPublic && cf.Name == string(d.Family.Name) {
+				spec.colType.FamilyID = cf.FamilyID
 				found = true
-				break
 			}
-		}
+		})
 		if !found {
-			b.EnqueueAdd(&scpb.ColumnTypeReference{
-				TypeID:   typeDesc.GetID(),
-				ColumnID: col.ID,
-				TableID:  table.GetID(),
-			})
+			if !d.Family.Create {
+				panic(errors.Errorf("unknown family %q", d.Family.Name))
+			}
+			spec.fam = &scpb.ColumnFamily{
+				TableID:  tbl.TableID,
+				FamilyID: b.NextColumnFamilyID(tbl),
+				Name:     string(d.Family.Name),
+			}
+			spec.colType.FamilyID = spec.fam.FamilyID
+		} else if d.Family.Create && !d.Family.IfNotExists {
+			panic(errors.Errorf("family %q already exists", d.Family.Name))
 		}
 	}
-
-	b.EnqueueAdd(
-		columnDescToElement(table, *col, &familyName, &familyID),
-	)
-	b.EnqueueAdd(&scpb.ColumnName{
-		TableID:  table.GetID(),
-		ColumnID: col.ID,
-		Name:     col.Name,
-	})
-	// Virtual computed columns do not exist inside the primary index,
-	if !col.Virtual {
-		addOrUpdatePrimaryIndexTargetsForAddColumn(b, table, colID, col.Name)
+	if desc.HasDefault() {
+		spec.def = &scpb.ColumnDefaultExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   spec.col.ColumnID,
+			Expression: *b.WrapExpression(cdd.DefaultExpr),
+		}
+	}
+	if desc.HasOnUpdate() {
+		spec.onUpdate = &scpb.ColumnOnUpdateExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   spec.col.ColumnID,
+			Expression: *b.WrapExpression(cdd.OnUpdateExpr),
+		}
+	}
+	// Add secondary indexes for this column.
+	if newPrimary := addColumn(b, spec); newPrimary != nil {
 		if idx := cdd.PrimaryKeyOrUniqueIndexDescriptor; idx != nil {
-			idxID := b.NextIndexID(table)
-			idx.ID = idxID
-			secondaryIndex, secondaryIndexName := secondaryIndexElemFromDescriptor(idx, table)
-			b.EnqueueAdd(secondaryIndex)
-			b.EnqueueAdd(secondaryIndexName)
+			idx.ID = b.NextTableIndexID(tbl)
+			addSecondaryIndexTargetsForAddColumn(b, tbl, idx, newPrimary.SourceIndexID)
 		}
 	}
 }
 
-func validateColumnName(
-	b BuildCtx,
-	table catalog.TableDescriptor,
-	d *tree.ColumnTableDef,
-	col *descpb.ColumnDescriptor,
-	ifNotExists bool,
-) {
-	_, err := tabledesc.FindPublicColumnWithName(table, d.Name)
-	if err == nil {
-		if ifNotExists {
-			return
-		}
-		panic(sqlerrors.NewColumnAlreadyExistsError(string(d.Name), table.GetName()))
+type addColumnSpec struct {
+	tbl      *scpb.Table
+	col      *scpb.Column
+	fam      *scpb.ColumnFamily
+	name     *scpb.ColumnName
+	colType  *scpb.ColumnType
+	def      *scpb.ColumnDefaultExpression
+	onUpdate *scpb.ColumnOnUpdateExpression
+	comment  *scpb.ColumnComment
+}
+
+// addColumn is a helper function which adds column element targets and ensures
+// that the new column is backed by a primary index, which it returns.
+func addColumn(b BuildCtx, spec addColumnSpec) (backing *scpb.PrimaryIndex) {
+	b.Add(spec.col)
+	if spec.fam != nil {
+		b.Add(spec.fam)
 	}
-	scpb.ForEachColumnName(b, func(_, targetStatus scpb.Status, t *scpb.ColumnName) {
-		if t.TableID != table.GetID() || t.Name != d.Name.String() {
-			return
-		}
-		switch targetStatus {
-		case scpb.Status_PUBLIC:
-			panic(pgerror.Newf(pgcode.DuplicateColumn,
-				"duplicate: column %q in the middle of being added, not yet public",
-				col.Name))
-		case scpb.Status_ABSENT:
-			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"column %q being dropped, try again later", col.Name))
-		default:
-			panic(errors.AssertionFailedf("unknown target status %s", targetStatus.String()))
+	b.Add(spec.name)
+	b.Add(spec.colType)
+	if spec.def != nil {
+		b.Add(spec.def)
+	}
+	if spec.onUpdate != nil {
+		b.Add(spec.onUpdate)
+	}
+	if spec.comment != nil {
+		b.Add(spec.comment)
+	}
+	// Add or update primary index for non-virtual columns.
+	if spec.colType.IsVirtual {
+		return nil
+	}
+	// Check whether a target to add a new primary index already exists. If so,
+	// simply add the new column to its storing columns.
+	var existing, freshlyAdded *scpb.PrimaryIndex
+	publicTargets := b.QueryByID(spec.tbl.TableID).Filter(
+		func(_ scpb.Status, target scpb.TargetStatus, _ scpb.Element) bool {
+			return target == scpb.ToPublic
+		},
+	)
+	scpb.ForEachPrimaryIndex(publicTargets, func(status scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
+		existing = idx
+		if status == scpb.Status_ABSENT {
+			// TODO(postamar): does it matter that there could be more than one?
+			freshlyAdded = idx
 		}
 	})
-}
-
-func findOrAddColumnFamily(
-	b BuildCtx, table catalog.TableDescriptor, family string, create bool, ifNotExists bool,
-) descpb.FamilyID {
-	if len(family) > 0 {
-		for i := range table.GetFamilies() {
-			f := &table.GetFamilies()[i]
-			if f.Name == family {
-				if create && !ifNotExists {
-					panic(errors.Errorf("family %q already exists", family))
-				}
-				return f.ID
-			}
-		}
+	if freshlyAdded != nil {
+		// Exceptionally, we can edit the element directly here, by virtue of it
+		// currently being in the ABSENT state we know that it was introduced as a
+		// PUBLIC target by the current statement.
+		freshlyAdded.StoringColumnIDs = append(freshlyAdded.StoringColumnIDs, spec.col.ColumnID)
+		return freshlyAdded
 	}
-	// See if we're in the process of adding a column or dropping a column in this
-	// family.
-	//
-	// TODO(ajwerner): Decide what to do if the only column in a family of this
-	// name is being dropped and then if there is or isn't a create directive.
-	found := false
-	var familyID descpb.FamilyID
-	scpb.ForEachColumn(b, func(_, targetStatus scpb.Status, col *scpb.Column) {
-		if targetStatus == scpb.Status_PUBLIC && col.FamilyName == family {
-			if create && !ifNotExists {
-				panic(errors.Errorf("family %q already exists", family))
-			}
-			found = true
-			familyID = col.FamilyID
+	// Otherwise, create a new primary index target and swap it with the existing
+	// primary index.
+	if existing == nil {
+		// TODO(postamar): can this even be possible?
+		panic(pgerror.Newf(pgcode.NoPrimaryKey, "missing active primary key"))
+	}
+	// Drop all existing primary index elements.
+	b.Drop(existing)
+	var existingName *scpb.IndexName
+	var existingPartitioning *scpb.IndexPartitioning
+	scpb.ForEachIndexName(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, name *scpb.IndexName) {
+		if name.IndexID == existing.IndexID {
+			existingName = name
 		}
 	})
-	if found {
-		return familyID
+	scpb.ForEachIndexPartitioning(publicTargets, func(_ scpb.Status, _ scpb.TargetStatus, part *scpb.IndexPartitioning) {
+		if part.IndexID == existing.IndexID {
+			existingPartitioning = part
+		}
+	})
+	if existingPartitioning != nil {
+		b.Drop(existingPartitioning)
 	}
-	if !create {
-		panic(errors.Errorf("unknown family %q", family))
+	if existingName != nil {
+		b.Drop(existingName)
 	}
-	return b.NextColumnFamilyID(table)
+	// Create the new primary index element and its dependents.
+	replacement := protoutil.Clone(existing).(*scpb.PrimaryIndex)
+	replacement.IndexID = b.NextTableIndexID(spec.tbl)
+	replacement.SourceIndexID = existing.IndexID
+	replacement.StoringColumnIDs = append(replacement.StoringColumnIDs, spec.col.ColumnID)
+	b.Add(replacement)
+	if existingName != nil {
+		updatedName := protoutil.Clone(existingName).(*scpb.IndexName)
+		updatedName.IndexID = replacement.IndexID
+		b.Add(updatedName)
+	}
+	if existingPartitioning != nil {
+		updatedPartitioning := protoutil.Clone(existingPartitioning).(*scpb.IndexPartitioning)
+		updatedPartitioning.IndexID = replacement.IndexID
+		b.Add(updatedPartitioning)
+	}
+	return replacement
 }
 
-func maybeAddSequenceReferenceDependencies(
-	b BuildCtx, tableID descpb.ID, col *descpb.ColumnDescriptor, defaultExpr tree.TypedExpr,
+func addSecondaryIndexTargetsForAddColumn(
+	b BuildCtx, tbl *scpb.Table, desc *descpb.IndexDescriptor, sourceID catid.IndexID,
 ) {
-	seqIdentifiers, err := seqexpr.GetUsedSequences(defaultExpr)
-	onErrPanic(err)
-
-	seqNameToID := make(map[string]int64)
-	for _, seqIdentifier := range seqIdentifiers {
-		var seq catalog.TableDescriptor
-		if seqIdentifier.IsByID() {
-			seq = b.MustReadTable(descpb.ID(seqIdentifier.SeqID))
-		} else {
-			parsedSeqName, err := parser.ParseTableName(seqIdentifier.SeqName)
-			onErrPanic(err)
-			_, seq = b.CatalogReader().MayResolveTable(b, *parsedSeqName)
-			if seq == nil {
-				panic(errors.WithAssertionFailure(sqlerrors.NewUndefinedRelationError(parsedSeqName)))
-			}
-			seqNameToID[seqIdentifier.SeqName] = int64(seq.GetID())
-		}
-		col.UsesSequenceIds = append(col.UsesSequenceIds, seq.GetID())
-		b.EnqueueAdd(&scpb.SequenceDependency{
-			SequenceID: seq.GetID(),
-			TableID:    tableID,
-			ColumnID:   col.ID,
-		})
+	index := scpb.Index{
+		TableID:             tbl.TableID,
+		IndexID:             desc.ID,
+		KeyColumnIDs:        desc.KeyColumnIDs,
+		KeyColumnDirections: make([]scpb.Index_Direction, len(desc.KeyColumnIDs)),
+		KeySuffixColumnIDs:  desc.KeySuffixColumnIDs,
+		StoringColumnIDs:    desc.StoreColumnIDs,
+		CompositeColumnIDs:  desc.CompositeColumnIDs,
+		IsUnique:            desc.Unique,
+		IsInverted:          desc.Type == descpb.IndexDescriptor_INVERTED,
+		SourceIndexID:       sourceID,
 	}
-
-	if len(seqIdentifiers) > 0 {
-		newExpr, err := seqexpr.ReplaceSequenceNamesWithIDs(defaultExpr, seqNameToID)
-		onErrPanic(err)
-		s := tree.Serialize(newExpr)
-		col.DefaultExpr = &s
-	}
-}
-
-func addOrUpdatePrimaryIndexTargetsForAddColumn(
-	b BuildCtx, table catalog.TableDescriptor, colID descpb.ColumnID, colName string,
-) (idxID descpb.IndexID) {
-	// Check whether a target to add a PK already exists. If so, update its
-	// storing columns.
-	{
-		var latestAdded *scpb.PrimaryIndex
-		scpb.ForEachPrimaryIndex(b, func(_, targetStatus scpb.Status, idx *scpb.PrimaryIndex) {
-			if targetStatus == scpb.Status_PUBLIC && idx.TableID == table.GetID() {
-				latestAdded = idx
-			}
-		})
-		if latestAdded != nil {
-			latestAdded.StoringColumnIDs = append(latestAdded.StoringColumnIDs, colID)
-			return latestAdded.IndexID
+	for i, dir := range desc.KeyColumnDirections {
+		if dir == descpb.IndexDescriptor_DESC {
+			index.KeyColumnDirections[i] = scpb.Index_DESC
 		}
 	}
-
-	// Create a new primary index identical to the existing one except for its ID.
-	idxID = b.NextIndexID(table)
-	newIdx := table.GetPrimaryIndex().IndexDescDeepCopy()
-	newIdx.ID = idxID
-
-	if !table.GetPrimaryIndex().CollectKeyColumnIDs().Contains(colID) &&
-		!table.GetPrimaryIndex().CollectPrimaryStoredColumnIDs().Contains(colID) {
-		newIdx.StoreColumnIDs = append(newIdx.StoreColumnIDs, colID)
-		newIdx.StoreColumnNames = append(newIdx.StoreColumnNames, colName)
+	if desc.Sharded.IsSharded {
+		index.Sharding = &desc.Sharded
 	}
-
-	newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(&newIdx, table)
-	b.EnqueueAdd(newPrimaryIndex)
-	b.EnqueueAdd(newPrimaryIndexName)
-
-	// Drop the existing primary index.
-	oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(table.GetPrimaryIndex().IndexDesc(), table)
-	b.EnqueueDrop(oldPrimaryIndex)
-	b.EnqueueDrop(oldPrimaryIndexName)
-
-	return idxID
+	b.Add(&scpb.SecondaryIndex{Index: index})
+	b.Add(&scpb.IndexName{
+		TableID: tbl.TableID,
+		IndexID: index.IndexID,
+		Name:    desc.Name,
+	})
+	if p := &desc.Partitioning; len(p.List)+len(p.Range) > 0 {
+		b.Add(&scpb.IndexPartitioning{
+			TableID:                tbl.TableID,
+			IndexID:                index.IndexID,
+			PartitioningDescriptor: *protoutil.Clone(p).(*catpb.PartitioningDescriptor),
+		})
+	}
 }

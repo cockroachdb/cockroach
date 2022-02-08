@@ -2,20 +2,52 @@
 
 # Check SHOW KV TRACE FOR SESSION.
 
+let $trace_query
+SELECT $$
+  SELECT operation,
+         regexp_replace(
+      regexp_replace(
+        regexp_replace(
+          regexp_replace(
+            regexp_replace(
+              regexp_replace(
+                message,
+                'create_as_of_time:<[^>]+>',
+                'create_as_of_time:<...>'
+              ),
+              e'created_at_nanos:[1-9]\\d*',
+              'created_at_nanos:...',
+              'g'
+            ),
+            'mutationJobs:<[^>]*>',
+            'mutationJobs:<...>'
+          ),
+          e'drop_time:[1-9]\\d*',
+          'drop_time:...'
+        ),
+        'declarative_schema_changer_state:<[^>]*>',
+        'declarative_schema_changer_state:<...>'
+      ),
+      'metadata:<[^>]*>',
+      'metadata:<...>'
+         ) AS message
+    FROM [SHOW KV TRACE FOR SESSION]
+   WHERE message NOT LIKE '%Z/%'
+         AND operation NOT LIKE 'kv.DistSender: sending partial batch%'
+         AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
+         AND tag NOT LIKE '%intExec=%'
+         AND tag NOT LIKE '%scExec%'
+         AND tag NOT LIKE '%IndexBackfiller%'
+         AND operation != 'dist sender send';
+$$
+
 statement ok
 SET tracing = on,kv,results; CREATE DATABASE t; SET tracing = off
 
 # Check the KV trace; we need to remove the eventlog entry and
 # internal queries since the timestamp is non-deterministic.
 query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
 batch flow coordinator  CPut /NamespaceTable/30/1/106/0/"public"/4/1 -> 107
 batch flow coordinator  CPut /Table/3/1/107/2/1 -> schema:<name:"public" id:107 state:PUBLIC offline_reason:"" modification_time:<> version:1 parent_id:106 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:516 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"admin" version:2 > >
@@ -29,18 +61,10 @@ statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv(k INT PRIMARY KEY, v INT, FAMILY "primary" (k, v)); SET tracing = off
 
 query TT
-SELECT operation, regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
 batch flow coordinator  CPut /NamespaceTable/30/1/106/107/"kv"/4/1 -> 108
-batch flow coordinator  CPut /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false >
+batch flow coordinator  CPut /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 >
 sql query               rows affected: 0
 
 # We avoid using the full trace output, because that would make the
@@ -53,28 +77,16 @@ statement ok
 SET tracing = on,kv,results; CREATE UNIQUE INDEX woo ON t.kv(v); SET tracing = off
 
 query TT
-SELECT operation,
-       regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'mutationJobs:<[^>]*>', 'mutationJobs:<...>') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  /* since the transactions involved are multi-range, intent resolving is async and
-  sometimes there's still intents around */
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
-batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:2 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false >
+batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:2 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:4 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 > state:BACKFILLING direction:ADD mutation_id:1 rollback:false > mutations:<index:<name:"kv_v_crdb_internal_dpe_key" id:3 unique:true version:4 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:true created_at_nanos:... constraint_id:3 > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 >
 sql query               rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = off
 
 query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+$trace_query
 ----
 batch flow coordinator  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x89
@@ -87,8 +99,7 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (1,2); SET tracing = 
 
 query TT
 set tracing=off;
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+$trace_query
 ----
 batch flow coordinator  CPut /Table/108/1/1/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x89
@@ -99,8 +110,7 @@ SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = 
 
 query TT
 set tracing=off;
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+$trace_query
 ----
 batch flow coordinator  CPut /Table/108/1/2/0 -> /TUPLE/2:2:Int/2
 batch flow coordinator  InitPut /Table/108/2/2/0 -> /BYTES/0x8a
@@ -110,32 +120,17 @@ statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
 
 query TT
-SELECT operation, regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), '\d\d\d\d\d+', '...PK...') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
 batch flow coordinator  CPut /NamespaceTable/30/1/106/107/"kv2"/4/1 -> 109
-batch flow coordinator  CPut /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false >
+batch flow coordinator  CPut /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:1 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:ADD offline_reason:"" view_query:"" is_materialized_view:false drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 >
 sql query               rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; UPDATE t.kv2 SET v = v + 2; SET tracing = off
 
 query TT
-SELECT operation, message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%'
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
 colbatchscan            Scan /Table/109/{1-2}
 colbatchscan            fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
@@ -147,8 +142,7 @@ statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
 
 query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send'
+$trace_query
 ----
 batch flow coordinator  DelRange /Table/109/1 - /Table/109/2
 batch flow coordinator  fast path completed
@@ -158,27 +152,17 @@ statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv2; SET tracing = off
 
 query TT
-SELECT operation,
-       regexp_replace(regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'drop_job_id:[1-9]\d*', 'drop_job_id:...'), 'drop_time:\d+', 'drop_time:...') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
-batch flow coordinator  Del /NamespaceTable/30/1/106/107/"kv2"/4/1
-batch flow coordinator  Put /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:3 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false >
-sql query               rows affected: 0
+sql query       rows affected: 0
+commit sql txn  Put /Table/3/1/109/2/1 -> table:<name:"kv2" id:109 version:3 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"rowid" id:3 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false default_expr:"unique_rowid()" hidden:true inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"kv2_pkey" id:1 unique:true version:4 key_column_names:"rowid" key_column_directions:ASC store_column_names:"k" store_column_names:"v" key_column_ids:3 store_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:2 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:1 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false declarative_schema_changer_state:<...> > metadata:<...> target_status:ABSENT > targets:<element_proto:<owner:<descriptor_id:109 owner:"root" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:109 user_name:"admin" privileges:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:109 user_name:"public" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:109 user_name:"root" privileges:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<table:<table_id:109 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<object_parent:<object_id:109 parent_schema_id:107 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<table_comment:<table_id:109 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_family:<table_id:109 name:"primary" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column:<table_id:109 column_id:1 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_name:<table_id:109 column_id:1 name:"k" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_type:<table_id:109 column_id:1 embedded_type_t:<type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > > is_nullable:true is_relation_being_dropped:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_comment:<table_id:109 column_id:1 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column:<table_id:109 column_id:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_name:<table_id:109 column_id:2 name:"v" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_type:<table_id:109 column_id:2 embedded_type_t:<type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > > is_nullable:true is_relation_being_dropped:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_comment:<table_id:109 column_id:2 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column:<table_id:109 column_id:3 is_hidden:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_name:<table_id:109 column_id:3 name:"rowid" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_type:<table_id:109 column_id:3 embedded_type_t:<type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > > is_relation_being_dropped:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_default_expression:<table_id:109 column_id:3 embedded_expr:<expr:"unique_rowid()" > > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_comment:<table_id:109 column_id:3 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<primary_index:<embedded_index:<table_id:109 index_id:1 key_column_ids:3 key_column_directions:ASC storing_column_ids:1 storing_column_ids:2 is_unique:true > > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<index_name:<table_id:109 index_id:1 name:"kv2_pkey" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<index_comment:<table_id:109 index_id:1 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:DROPPED current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:WRITE_ONLY current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:WRITE_ONLY current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:WRITE_ONLY current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:VALIDATED current_statuses:ABSENT current_statuses:ABSENT target_ranks:0 target_ranks:1 target_ranks:2 target_ranks:3 target_ranks:4 target_ranks:5 target_ranks:6 target_ranks:7 target_ranks:8 target_ranks:9 target_ranks:10 target_ranks:11 target_ranks:12 target_ranks:13 target_ranks:14 target_ranks:15 target_ranks:16 target_ranks:17 target_ranks:18 target_ranks:19 target_ranks:20 target_ranks:21 target_ranks:22 target_ranks:23 target_ranks:24 relevant_statements:<statement:<statement:"DROP TABLE t.kv2" redacted_statement:"DROP TABLE \342\200\271t\342\200\272.public.\342\200\271kv2\342\200\272" statement_tag:"DROP TABLE" > > authorization:<user_name:"root" > > drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"TABLE t.public.kv" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:2 >
+commit sql txn  Del /NamespaceTable/30/1/106/107/"kv2"/4/1
 
 statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv; SET tracing = off
 
 query TT
-SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
- WHERE operation != 'dist sender send' AND operation != 'kv.DistSender: sending partial batch'
+$trace_query
 ----
 colbatchscan            Scan /Table/108/{1-2}
 colbatchscan            fetched: /kv/kv_pkey/1/v -> /2
@@ -191,39 +175,20 @@ statement ok
 SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE; SET tracing = off
 
 query TT
-SELECT operation,
-       regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'mutationJobs:<[^>]*>', 'mutationJobs:<...>') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  /* since the transactions involved are multi-range, intent resolving is async and
-  sometimes there's still intents around */
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
-batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:5 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:3 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> new_schema_change_job_id:0 drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false >
+batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:8 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > mutations:<index:<name:"woo" id:2 unique:true version:4 key_column_names:"v" key_column_directions:ASC key_column_ids:2 key_suffix_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:true encoding_type:0 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:2 > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC offline_reason:"" view_query:"" is_materialized_view:false mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 >
 sql query               rows affected: 0
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv; SET tracing = off
 
 query TT
-SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'create_as_of_time:<[^>]+>', 'create_as_of_time:<...>'), 'job_id:[1-9]\d*', 'job_id:...', 'g'), 'drop_time:\d+', 'drop_time:...', 'g') as message
-  FROM [SHOW KV TRACE FOR SESSION]
-WHERE message NOT LIKE '%Z/%' AND message NOT LIKE 'querying next range at%'
-  AND operation NOT LIKE 'kv.DistSender: sending partial batch%'  -- order of partial batches is not deterministic
-  AND message NOT SIMILAR TO '%(PushTxn|ResolveIntent|SystemConfigSpan)%'
-  AND tag NOT LIKE '%intExec=%'
-  AND tag NOT LIKE '%scExec%'
-  AND tag NOT LIKE '%IndexBackfiller%'
-  AND operation != 'dist sender send'
+$trace_query
 ----
-batch flow coordinator  Del /NamespaceTable/30/1/106/107/"kv"/4/1
-batch flow coordinator  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:8 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false > next_index_id:3 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:3 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false new_schema_change_job_id:0 drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false >
-sql query               rows affected: 0
+sql query       rows affected: 0
+commit sql txn  Put /Table/3/1/108/2/1 -> table:<name:"kv" id:108 version:11 modification_time:<> parent_id:106 unexposed_parent_schema_id:107 columns:<name:"k" id:1 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:false hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > columns:<name:"v" id:2 type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > nullable:true hidden:false inaccessible:false generated_as_identity_type:NOT_IDENTITY_COLUMN virtual:false pg_attribute_num:0 alter_column_type_in_progress:false system_column_kind:NONE > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"kv_pkey" id:1 unique:true version:4 key_column_names:"k" key_column_directions:ASC store_column_names:"v" key_column_ids:1 store_column_ids:2 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION match:SIMPLE > interleave:<> partitioning:<num_columns:0 num_implicit_columns:0 > type:FORWARD created_explicitly:false encoding_type:1 sharded:<is_sharded:false name:"" shard_buckets:0 > disabled:false geo_config:<> predicate:"" use_delete_preserving_encoding:false created_at_nanos:... constraint_id:1 > next_index_id:4 privileges:<users:<user_proto:"admin" privileges:2 with_grant_option:2 > users:<user_proto:"public" privileges:0 with_grant_option:0 > users:<user_proto:"root" privileges:2 with_grant_option:2 > owner_proto:"root" version:2 > next_mutation_id:3 format_version:3 state:DROP offline_reason:"" view_query:"" is_materialized_view:false declarative_schema_changer_state:<...> > metadata:<...> target_status:ABSENT > targets:<element_proto:<owner:<descriptor_id:108 owner:"root" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:108 user_name:"admin" privileges:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:108 user_name:"public" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<user_privileges:<descriptor_id:108 user_name:"root" privileges:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<table:<table_id:108 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<object_parent:<object_id:108 parent_schema_id:107 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<table_comment:<table_id:108 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_family:<table_id:108 name:"primary" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column:<table_id:108 column_id:1 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_name:<table_id:108 column_id:1 name:"k" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_type:<table_id:108 column_id:1 embedded_type_t:<type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > > is_relation_being_dropped:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_comment:<table_id:108 column_id:1 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column:<table_id:108 column_id:2 > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_name:<table_id:108 column_id:2 name:"v" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_type:<table_id:108 column_id:2 embedded_type_t:<type:<family: IntFamily width: 64 precision: 0 locale: "" visible_type: 0 oid: 20 time_precision_is_set: false > > is_nullable:true is_relation_being_dropped:true > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<column_comment:<table_id:108 column_id:2 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<primary_index:<embedded_index:<table_id:108 index_id:1 key_column_ids:1 key_column_directions:ASC storing_column_ids:2 is_unique:true > > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<index_name:<table_id:108 index_id:1 name:"kv_pkey" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > targets:<element_proto:<index_comment:<table_id:108 index_id:1 comment:"__placeholder_comment__" > > metadata:<sub_work_id:1 source_element_id:1 > target_status:ABSENT > current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:DROPPED current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:WRITE_ONLY current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:WRITE_ONLY current_statuses:ABSENT current_statuses:ABSENT current_statuses:ABSENT current_statuses:VALIDATED current_statuses:ABSENT current_statuses:ABSENT target_ranks:0 target_ranks:1 target_ranks:2 target_ranks:3 target_ranks:4 target_ranks:5 target_ranks:6 target_ranks:7 target_ranks:8 target_ranks:9 target_ranks:10 target_ranks:11 target_ranks:12 target_ranks:13 target_ranks:14 target_ranks:15 target_ranks:16 target_ranks:17 target_ranks:18 target_ranks:19 relevant_statements:<statement:<statement:"DROP TABLE t.kv" redacted_statement:"DROP TABLE \342\200\271t\342\200\272.public.\342\200\271kv\342\200\272" statement_tag:"DROP TABLE" > > authorization:<user_name:"root" > > drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:0 create_query:"" create_as_of_time:<...> temporary:false partition_all_by:false exclude_data_from_backup:false next_constraint_id:4 >
+commit sql txn  Del /NamespaceTable/30/1/106/107/"kv"/4/1
 
 # Check that session tracing does not inhibit the fast path for inserts &
 # friends (the path resulting in 1PC transactions).
@@ -241,7 +206,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r44: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r45: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 node received request: 1 CPut, 1 EndTxn
 
 # Check that we can run set tracing regardless of the current tracing state.
@@ -270,6 +235,12 @@ statement ok
 ROLLBACK
 
 subtest system_table_lookup
+
+# Read from the table once to remove any intents. This test can be flakey due
+# to the test encountering an intent on system.public.eventlog from previous
+# transactions.
+statement ok
+SELECT * FROM system.public.eventlog;
 
 # We use AOST to bypass the table cache.
 statement ok
@@ -317,9 +288,9 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r44: sending batch 1 CPut to (n1,s1):1
-dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
-dist sender send  r44: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r45: sending batch 1 CPut to (n1,s1):1
+dist sender send  r45: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r45: sending batch 2 CPut, 1 EndTxn to (n1,s1):1
 
 # Make another session trace.
 statement ok
@@ -348,9 +319,9 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r44: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
-dist sender send  r44: sending batch 5 CPut to (n1,s1):1
-dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r45: sending batch 4 CPut, 1 EndTxn to (n1,s1):1
+dist sender send  r45: sending batch 5 CPut to (n1,s1):1
+dist sender send  r45: sending batch 1 EndTxn to (n1,s1):1
 
 # make a table with some big strings in it.
 statement ok
@@ -369,11 +340,11 @@ WHERE message     LIKE '%r$rangeid: sending batch%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r44: sending batch 6 CPut to (n1,s1):1
-dist sender send  r44: sending batch 6 CPut to (n1,s1):1
-dist sender send  r44: sending batch 6 CPut to (n1,s1):1
-dist sender send  r44: sending batch 6 CPut to (n1,s1):1
-dist sender send  r44: sending batch 1 EndTxn to (n1,s1):1
+dist sender send  r45: sending batch 6 CPut to (n1,s1):1
+dist sender send  r45: sending batch 6 CPut to (n1,s1):1
+dist sender send  r45: sending batch 6 CPut to (n1,s1):1
+dist sender send  r45: sending batch 6 CPut to (n1,s1):1
+dist sender send  r45: sending batch 1 EndTxn to (n1,s1):1
 
 statement ok
 CREATE TABLE streamer (pk INT PRIMARY KEY, attribute INT, blob TEXT, INDEX(attribute), FAMILY (pk, attribute, blob));
@@ -402,4 +373,4 @@ WHERE message     LIKE '%r$rangeid: sending batch 42 Get%'
   AND message NOT LIKE '%PushTxn%'
   AND message NOT LIKE '%QueryTxn%'
 ----
-dist sender send  r44: sending batch 42 Get to (n1,s1):1
+dist sender send  r45: sending batch 42 Get to (n1,s1):1

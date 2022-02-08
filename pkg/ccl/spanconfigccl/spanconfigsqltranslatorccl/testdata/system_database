@@ -46,6 +46,7 @@ translate database=system
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)
 
 # Alter zone config fields on the database to ensure the effects cascade.
 exec-sql
@@ -96,6 +97,7 @@ translate database=system
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/4{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/4{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Alter a named range that maps to a pseudo table ID, ensuring that its effects
 # are independent.
@@ -109,7 +111,7 @@ full-translate
 /System/NodeLiveness{-Max}                 ttl_seconds=600 num_replicas=5
 /System/{NodeLivenessMax-tsd}              range system
 /System{/tsd-tse}                          range default
-/System{tse-/Max}                          range system
+/System{tse-/SystemSpanConfigKeys}         range system
 /Table/{SystemConfigSpan/Start-4}          ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{4-5}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/{5-6}                               ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
@@ -152,3 +154,4 @@ full-translate
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/4{6-7}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 /Table/4{7-8}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
+/Table/5{0-1}                              ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true

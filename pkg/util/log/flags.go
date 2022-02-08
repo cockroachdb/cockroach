@@ -375,6 +375,7 @@ func newFluentSinkInfo(c logconfig.FluentSinkConfig) (*sinkInfo, error) {
 
 func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	info := &sinkInfo{}
+
 	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
 		return nil, err
 	}

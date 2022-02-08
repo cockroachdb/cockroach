@@ -54,7 +54,7 @@ SHOW INDEXES FROM t
 ----
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 t           foo         false       1             b            ASC        false    false
-t           foo         false       2             a            ASC        false    true
+t           foo         false       2             a            ASC        true     true
 t           t_f_idx     true        1             f            ASC        false    false
 t           t_f_idx     true        2             a            ASC        false    true
 t           t_pkey      false       1             a            ASC        false    false
@@ -79,15 +79,20 @@ statement error pgcode 42703 column "dne" does not exist
 ALTER TABLE t ADD CONSTRAINT dne_unique UNIQUE (dne)
 
 # Test that rollback was successful
-query TTTTTR
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2)
+#
+# We ignore the job status because GC for temporary indexes used
+# during backfills may already running rather than waiting for the GC
+# TTL depending on the timing.
+query TTTR
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, fraction_completed::decimal(10,2)
 FROM crdb_internal.jobs
 WHERE job_type = 'SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
-LIMIT 2
+LIMIT 3
 ----
-SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00
-SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00
+SCHEMA CHANGE GC  GC for temporary index used during index backfill                           root  0.00
+SCHEMA CHANGE GC  GC for ROLLBACK of ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  0.00
+SCHEMA CHANGE     ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  0.00
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -816,8 +821,7 @@ show create table decomputed_column
 decomputed_column  CREATE TABLE public.decomputed_column (
                    a INT8 NOT NULL,
                    b INT8 NULL,
-                   CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC),
-                   FAMILY "primary" (a, b)
+                   CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
 )
 
 # Test for https://github.com/cockroachdb/cockroach/issues/26483
@@ -1154,8 +1158,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
 )
 
 # Test that only one index gets created when adding a column
@@ -1175,8 +1178,7 @@ t3  CREATE TABLE public.t3 (
     x INT8 NULL,
     CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t3_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    UNIQUE INDEX t3_x_key (x ASC)
 )
 
 # We allowed the foreign key validation code to look into the mutations
@@ -1211,8 +1213,7 @@ t1  CREATE TABLE public.t1 (
     x INT8 NOT NULL,
     x2 INT8 NULL,
     CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x),
-    FAMILY "primary" (x, x2)
+    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
 )
 
 statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
@@ -1237,8 +1238,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
 )
 
 # Test that we can also add a column and then an FK in the same txn.
@@ -1261,8 +1261,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    FAMILY "primary" (y, rowid, x)
+    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
 )
 
 # Test that we can add a column and an index to an FK in the same txn.
@@ -1289,8 +1288,7 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test the above on a table not created in the same txn.
@@ -1315,8 +1313,7 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test that an FK can use a newly created index.
@@ -1339,8 +1336,7 @@ t2  CREATE TABLE public.t2 (
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC),
-    FAMILY "primary" (x, rowid)
+    INDEX t2_x_idx (x ASC)
 )
 
 # Test when default column value leads to an FK violation.
@@ -1369,8 +1365,7 @@ t2  CREATE TABLE public.t2 (
     x INT8 NULL DEFAULT 1:::INT8,
     CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
     CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t2_x_key (x ASC),
-    FAMILY "primary" (y, rowid, x)
+    UNIQUE INDEX t2_x_key (x ASC)
 )
 
 # Regression 50069, computed exprs must only refer to columns inside the
@@ -1807,8 +1802,7 @@ SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
                a INT8 NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC),
-               FAMILY "primary" (a)
+               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
 )
 
 statement ok
@@ -1819,8 +1813,7 @@ SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
                a INT8 NOT VISIBLE NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC),
-               FAMILY "primary" (a)
+               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
 )
 
 subtest if_table_exists_already
@@ -1917,8 +1910,7 @@ t  CREATE TABLE public.t (
    b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
    c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC),
-   FAMILY "primary" (a, rowid, b, c)
+   UNIQUE INDEX t_a_key (a ASC)
 )
 
 statement ok
@@ -1981,8 +1973,7 @@ t  CREATE TABLE public.t (
    b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
    c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC),
-   FAMILY "primary" (a, rowid, b, c)
+   UNIQUE INDEX t_a_key (a ASC)
 )
 
 statement ok
@@ -2029,8 +2020,7 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
    id INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (id ASC),
-   FAMILY "primary" (id, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
 )
 
 # Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.

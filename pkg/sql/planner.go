@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/lib/pq/oid"
 )
 
 // extendedEvalContext extends tree.EvalContext with fields that are needed for
@@ -99,6 +100,8 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
+
+	statementPreparer statementPreparer
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -180,6 +183,8 @@ type planner struct {
 	execCfg *ExecutorConfig
 
 	preparedStatements preparedStatementsAccessor
+
+	sqlCursors sqlCursors
 
 	// avoidLeasedDescriptors, when true, instructs all code that
 	// accesses table/view descriptors to force reading the descriptors
@@ -325,7 +330,7 @@ func newInternalPlanner(
 	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(sds))
+		params.collection = execCfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sds))
 	}
 
 	var ts time.Time
@@ -805,6 +810,23 @@ func (p *planner) Ann() *tree.Annotations {
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
 }
+
+// statementPreparer is an interface used when deserializing a session in order
+// to prepare statements.
+type statementPreparer interface {
+	// addPreparedStmt creates a prepared statement with the given name and type
+	// hints, and returns it.
+	addPreparedStmt(
+		ctx context.Context,
+		name string,
+		stmt Statement,
+		placeholderHints tree.PlaceholderTypes,
+		rawTypeHints []oid.Oid,
+		origin PreparedStatementOrigin,
+	) (*PreparedStatement, error)
+}
+
+var _ statementPreparer = &connExecutor{}
 
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.

@@ -57,6 +57,7 @@ import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IDuration = google.protobuf.IDuration;
@@ -249,10 +250,6 @@ export class StatementsPage extends React.Component<
     if (this.props.onTimeScaleChange) {
       this.props.onTimeScaleChange(ts);
     }
-  };
-
-  resetTime = (): void => {
-    this.changeTimeScale(defaultTimeScaleSelected);
   };
 
   resetPagination = (): void => {
@@ -611,6 +608,12 @@ export class StatementsPage extends React.Component<
       ? []
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
+    const longLoadingMessage = isNil(this.props.statements) && (
+      <InlineAlert
+        intent="info"
+        title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+      />
+    );
 
     return (
       <div className={cx("root", "table-area")}>
@@ -644,11 +647,6 @@ export class StatementsPage extends React.Component<
               setTimeScale={this.changeTimeScale}
             />
           </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
-          </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <ClearStats resetSQLStats={resetSQLStats} tooltipType="statement" />
           </PageConfigItem>
@@ -664,6 +662,7 @@ export class StatementsPage extends React.Component<
             })
           }
         />
+        {longLoadingMessage}
         <ActivateStatementDiagnosticsModal
           ref={this.activateDiagnosticsRef}
           activate={onActivateStatementDiagnostics}

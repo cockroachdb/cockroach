@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,11 +31,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// makePreNodeZipRequests defines the zipRequests (API requests) that are to be
+// makePerNodeZipRequests defines the zipRequests (API requests) that are to be
 // performed once per node.
-func makePerNodeZipRequests(
-	prefix, id string, admin serverpb.AdminClient, status serverpb.StatusClient,
-) []zipRequest {
+func makePerNodeZipRequests(prefix, id string, status serverpb.StatusClient) []zipRequest {
 	return []zipRequest{
 		{
 			fn: func(ctx context.Context) (interface{}, error) {
@@ -94,7 +93,7 @@ var debugZipTablesPerNode = []string{
 // This is called first and in isolation, before other zip operations
 // possibly influence the nodes.
 func (zc *debugZipContext) collectCPUProfiles(
-	ctx context.Context, nodeList []statuspb.NodeStatus, livenessByNodeID nodeLivenesses,
+	ctx context.Context, ni nodesInfo, livenessByNodeID nodeLivenesses,
 ) error {
 	if zipCtx.cpuProfDuration <= 0 {
 		// Nothing to do; return early.
@@ -109,10 +108,16 @@ func (zc *debugZipContext) collectCPUProfiles(
 
 	zc.clusterPrinter.info("requesting CPU profiles")
 
+	if ni.nodesListResponse == nil {
+		return errors.AssertionFailedf("nodes list is empty; nothing to do")
+	}
+
+	nodeList := ni.nodesListResponse.Nodes
 	// NB: this takes care not to produce non-deterministic log output.
 	resps := make([]profData, len(nodeList))
 	for i := range nodeList {
-		if livenessByNodeID[nodeList[i].Desc.NodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+		nodeID := roachpb.NodeID(nodeList[i].NodeID)
+		if livenessByNodeID[nodeID] == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
 			continue
 		}
 		wg.Add(1)
@@ -127,7 +132,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 			var pd profData
 			err := contextutil.RunWithTimeout(ctx, "fetch cpu profile", zc.timeout+zipCtx.cpuProfDuration, func(ctx context.Context) error {
 				resp, err := zc.status.Profile(ctx, &serverpb.ProfileRequest{
-					NodeId:  fmt.Sprintf("%d", nodeList[i].Desc.NodeID),
+					NodeId:  fmt.Sprintf("%d", nodeID),
 					Type:    serverpb.ProfileRequest_CPU,
 					Seconds: secs,
 					Labels:  true,
@@ -153,7 +158,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 		if len(pd.data) == 0 && pd.err == nil {
 			continue // skipped node
 		}
-		nodeID := nodeList[i].Desc.NodeID
+		nodeID := nodeList[i].NodeID
 		prefix := fmt.Sprintf("%s/%s", nodesPrefix, fmt.Sprintf("%d", nodeID))
 		s := zc.clusterPrinter.start("profile for node %d", nodeID)
 		if err := zc.z.createRawOrError(s, prefix+"/cpu.pprof", pd.data, pd.err); err != nil {
@@ -164,25 +169,29 @@ func (zc *debugZipContext) collectCPUProfiles(
 }
 
 func (zc *debugZipContext) collectPerNodeData(
-	ctx context.Context, node statuspb.NodeStatus, livenessByNodeID nodeLivenesses,
+	ctx context.Context,
+	nodeDetails serverpb.NodeDetails,
+	nodeStatus *statuspb.NodeStatus,
+	livenessByNodeID nodeLivenesses,
 ) error {
-	nodeID := node.Desc.NodeID
+	nodeID := roachpb.NodeID(nodeDetails.NodeID)
 
-	liveness := livenessByNodeID[nodeID]
-	if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
-		// Decommissioned + process terminated. Let's not waste time
-		// on this node.
-		//
-		// NB: we still inspect DECOMMISSIONING nodes (marked as
-		// decommissioned but the process is still alive) to get a
-		// chance to collect their log files.
-		//
-		// NB: we still inspect DEAD nodes because even though they
-		// don't heartbeat their liveness record their process might
-		// still be up and willing to deliver some log files.
-		return nil
+	if livenessByNodeID != nil {
+		liveness := livenessByNodeID[nodeID]
+		if liveness == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			// Decommissioned + process terminated. Let's not waste time
+			// on this node.
+			//
+			// NB: we still inspect DECOMMISSIONING nodes (marked as
+			// decommissioned but the process is still alive) to get a
+			// chance to collect their log files.
+			//
+			// NB: we still inspect DEAD nodes because even though they
+			// don't heartbeat their liveness record their process might
+			// still be up and willing to deliver some log files.
+			return nil
+		}
 	}
-
 	nodePrinter := zipCtx.newZipReporter("node %d", nodeID)
 	id := fmt.Sprintf("%d", nodeID)
 	prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
@@ -194,9 +203,15 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 		return nil
 	}
-
-	if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", node); err != nil {
-		return err
+	if nodeStatus != nil {
+		// Use nodeStatus to populate the status.json file as it contains more data for a KV node.
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", *nodeStatus); err != nil {
+			return err
+		}
+	} else {
+		if err := zc.z.createJSON(nodePrinter.start("node status"), prefix+"/status.json", nodeDetails); err != nil {
+			return err
+		}
 	}
 
 	// Don't use sqlConn because that's only for is the node `debug
@@ -206,7 +221,10 @@ func (zc *debugZipContext) collectPerNodeData(
 	// not work and if it doesn't, we let the invalid curSQLConn get
 	// used anyway so that anything that does *not* need it will
 	// still happen.
-	sqlAddr := node.Desc.CheckedSQLAddress()
+	sqlAddr := nodeDetails.SQLAddress
+	if sqlAddr.IsEmpty() {
+		sqlAddr = nodeDetails.Address
+	}
 	curSQLConn := guessNodeURL(zc.firstNodeSQLConn.GetURL(), sqlAddr.AddressField)
 	nodePrinter.info("using SQL connection URL: %s", curSQLConn.GetURL())
 
@@ -220,7 +238,7 @@ func (zc *debugZipContext) collectPerNodeData(
 		}
 	}
 
-	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.admin, zc.status)
+	perNodeZipRequests := makePerNodeZipRequests(prefix, id, zc.status)
 
 	for _, r := range perNodeZipRequests {
 		if err := zc.runZipRequest(ctx, nodePrinter, r); err != nil {

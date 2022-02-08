@@ -11,6 +11,8 @@
 package scpb
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -20,6 +22,15 @@ import (
 type CurrentState struct {
 	TargetState
 	Current []Status
+
+	// InRollback captures whether the job is currently rolling back.
+	// This is important to ensure that the job can be moved to the proper
+	// failed state upon restore.
+	//
+	// Note, if this value is true, the targets have had their directions
+	// flipped already.
+	//
+	InRollback bool
 }
 
 // DeepCopy returns a deep copy of the receiver.
@@ -28,6 +39,25 @@ func (s CurrentState) DeepCopy() CurrentState {
 		TargetState: *protoutil.Clone(&s.TargetState).(*TargetState),
 		Current:     append(make([]Status, 0, len(s.Current)), s.Current...),
 	}
+}
+
+// Rollback idempotently marks the current state as InRollback. If the
+// CurrentState was not previously marked as InRollback, it reverses the
+// directions of all the targets.
+func (s *CurrentState) Rollback() {
+	if s.InRollback {
+		return
+	}
+	for i := range s.Targets {
+		t := &s.Targets[i]
+		switch t.TargetStatus {
+		case Status_ABSENT:
+			t.TargetStatus = Status_PUBLIC
+		default:
+			t.TargetStatus = Status_ABSENT
+		}
+	}
+	s.InRollback = true
 }
 
 // NumStatus is the number of values which Status may take on.
@@ -53,9 +83,9 @@ func (e *ElementProto) Element() Element {
 
 // MakeTarget constructs a new Target. The passed elem must be one of the oneOf
 // members of Element. If not, this call will panic.
-func MakeTarget(status Status, elem Element, metadata *TargetMetadata) Target {
+func MakeTarget(status TargetStatus, elem Element, metadata *TargetMetadata) Target {
 	t := Target{
-		TargetStatus: status,
+		TargetStatus: status.Status(),
 	}
 	if metadata != nil {
 		t.Metadata = *protoutil.Clone(metadata).(*TargetMetadata)
@@ -70,3 +100,88 @@ func MakeTarget(status Status, elem Element, metadata *TargetMetadata) Target {
 // This ID is dynamically allocated when any parent element is
 // created and has no relation to the descriptor ID.
 type SourceElementID uint32
+
+// Clone will make a deep copy of the DescriptorState.
+func (m *DescriptorState) Clone() *DescriptorState {
+	if m == nil {
+		return nil
+	}
+	return protoutil.Clone(m).(*DescriptorState)
+}
+
+// MakeCurrentStateFromDescriptors constructs a CurrentState object from a
+// slice of DescriptorState object from which the current state has been
+// decomposed.
+func MakeCurrentStateFromDescriptors(descriptorStates []*DescriptorState) (CurrentState, error) {
+	var s CurrentState
+	var targetRanks []uint32
+	var rollback bool
+	stmts := make(map[uint32]Statement)
+	for i, cs := range descriptorStates {
+		if i == 0 {
+			rollback = cs.InRollback
+		} else if rollback != cs.InRollback {
+			return CurrentState{}, errors.AssertionFailedf(
+				"job %d: conflicting rollback statuses between descriptors",
+				cs.JobID,
+			)
+		}
+		s.Current = append(s.Current, cs.CurrentStatuses...)
+		s.Targets = append(s.Targets, cs.Targets...)
+		targetRanks = append(targetRanks, cs.TargetRanks...)
+		for _, stmt := range cs.RelevantStatements {
+			if existing, ok := stmts[stmt.StatementRank]; ok {
+				if existing.Statement != stmt.Statement.Statement {
+					return CurrentState{}, errors.AssertionFailedf(
+						"job %d: statement %q does not match %q for rank %d",
+						cs.JobID,
+						existing.Statement,
+						stmt.Statement,
+						stmt.StatementRank,
+					)
+				}
+			}
+			stmts[stmt.StatementRank] = stmt.Statement
+		}
+		s.Authorization = cs.Authorization
+	}
+	sort.Sort(&stateAndRanks{CurrentState: &s, ranks: targetRanks})
+	var sr stmtsAndRanks
+	for rank, stmt := range stmts {
+		sr.stmts = append(sr.stmts, stmt)
+		sr.ranks = append(sr.ranks, rank)
+	}
+	sort.Sort(&sr)
+	s.Statements = sr.stmts
+	s.InRollback = rollback
+	return s, nil
+}
+
+type stateAndRanks struct {
+	*CurrentState
+	ranks []uint32
+}
+
+var _ sort.Interface = (*stateAndRanks)(nil)
+
+func (s *stateAndRanks) Len() int           { return len(s.Targets) }
+func (s *stateAndRanks) Less(i, j int) bool { return s.ranks[i] < s.ranks[j] }
+func (s *stateAndRanks) Swap(i, j int) {
+	s.ranks[i], s.ranks[j] = s.ranks[j], s.ranks[i]
+	s.Targets[i], s.Targets[j] = s.Targets[j], s.Targets[i]
+	s.Current[i], s.Current[j] = s.Current[j], s.Current[i]
+}
+
+type stmtsAndRanks struct {
+	stmts []Statement
+	ranks []uint32
+}
+
+func (s *stmtsAndRanks) Len() int           { return len(s.stmts) }
+func (s *stmtsAndRanks) Less(i, j int) bool { return s.ranks[i] < s.ranks[j] }
+func (s stmtsAndRanks) Swap(i, j int) {
+	s.ranks[i], s.ranks[j] = s.ranks[j], s.ranks[i]
+	s.stmts[i], s.stmts[j] = s.stmts[j], s.stmts[i]
+}
+
+var _ sort.Interface = (*stmtsAndRanks)(nil)

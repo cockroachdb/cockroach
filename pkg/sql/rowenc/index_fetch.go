@@ -11,12 +11,11 @@
 package rowenc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,12 +33,12 @@ func InitIndexFetchSpec(
 	index catalog.Index,
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
-	oldKeyAndSuffixCols := s.KeyAndSuffixColumns
 	oldFetchedCols := s.FetchedColumns
-	oldFamilies := s.FamilyDefaultColumns
 	*s = descpb.IndexFetchSpec{
-		TableName:           table.GetName(),
+		Version:             descpb.IndexFetchSpecVersionInitial,
 		TableID:             table.GetID(),
+		TableName:           table.GetName(),
+		IndexID:             index.GetID(),
 		IndexName:           index.GetName(),
 		IsSecondaryIndex:    !index.Primary(),
 		IsUniqueIndex:       index.IsUnique(),
@@ -47,78 +46,26 @@ func InitIndexFetchSpec(
 		NumKeySuffixColumns: uint32(index.NumKeySuffixColumns()),
 	}
 
-	indexID := index.GetID()
-	maxKeysPerRow, err := table.KeysPerRow(indexID)
-	if err != nil {
-		return err
-	}
+	maxKeysPerRow := table.IndexKeysPerRow(index)
 	s.MaxKeysPerRow = uint32(maxKeysPerRow)
-	s.KeyPrefixLength = uint32(len(MakeIndexKeyPrefix(codec, table.GetID(), indexID)))
+	s.KeyPrefixLength = uint32(len(codec.TenantPrefix()) +
+		encoding.EncodedLengthUvarintAscending(uint64(s.TableID)) +
+		encoding.EncodedLengthUvarintAscending(uint64(index.GetID())))
+
+	s.FamilyDefaultColumns = table.FamilyDefaultColumns()
 
 	families := table.GetFamilies()
 	for i := range families {
-		f := &families[i]
-		if f.DefaultColumnID != 0 {
-			if s.FamilyDefaultColumns == nil {
-				s.FamilyDefaultColumns = oldFamilies[:0]
-			}
-			s.FamilyDefaultColumns = append(s.FamilyDefaultColumns, descpb.IndexFetchSpec_FamilyDefaultColumn{
-				FamilyID:        f.ID,
-				DefaultColumnID: f.DefaultColumnID,
-			})
-		}
-		if f.ID > s.MaxFamilyID {
-			s.MaxFamilyID = f.ID
+		if id := families[i].ID; id > s.MaxFamilyID {
+			s.MaxFamilyID = id
 		}
 	}
 
-	indexCols := table.IndexColumns(index)
-	keyDirs := table.IndexFullColumnDirections(index)
-	compositeIDs := index.CollectCompositeColumnIDs()
+	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
 	if index.GetType() == descpb.IndexDescriptor_INVERTED {
 		invertedColumnID = index.InvertedColumnID()
-	}
-
-	mkCol := func(col catalog.Column, colID descpb.ColumnID) descpb.IndexFetchSpec_Column {
-		typ := col.GetType()
-		if colID == invertedColumnID {
-			typ = index.InvertedColumnKeyType()
-		}
-		return descpb.IndexFetchSpec_Column{
-			Name:          col.GetName(),
-			ColumnID:      colID,
-			Type:          typ,
-			IsNonNullable: !col.IsNullable() && col.Public(),
-		}
-	}
-
-	numKeyCols := index.NumKeyColumns() + index.NumKeySuffixColumns()
-	if cap(oldKeyAndSuffixCols) >= numKeyCols {
-		s.KeyAndSuffixColumns = oldKeyAndSuffixCols[:numKeyCols]
-	} else {
-		s.KeyAndSuffixColumns = make([]descpb.IndexFetchSpec_KeyColumn, numKeyCols)
-	}
-	for i := range s.KeyAndSuffixColumns {
-		col := indexCols[i]
-		if !col.Public() {
-			// Key columns must be public.
-			return fmt.Errorf("column %q (%d) is not public", col.GetName(), col.GetID())
-		}
-		colID := col.GetID()
-		dir := descpb.IndexDescriptor_ASC
-		// If this is a unique index, the suffix columns are not part of the full
-		// index columns and are always ascending.
-		if i < len(keyDirs) {
-			dir = keyDirs[i]
-		}
-		s.KeyAndSuffixColumns[i] = descpb.IndexFetchSpec_KeyColumn{
-			IndexFetchSpec_Column: mkCol(col, colID),
-			Direction:             dir,
-			IsComposite:           compositeIDs.Contains(colID),
-			IsInverted:            colID == invertedColumnID,
-		}
 	}
 
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
@@ -131,7 +78,16 @@ func InitIndexFetchSpec(
 		if err != nil {
 			return err
 		}
-		s.FetchedColumns[i] = mkCol(col, colID)
+		typ := col.GetType()
+		if colID == invertedColumnID {
+			typ = index.InvertedColumnKeyType()
+		}
+		s.FetchedColumns[i] = descpb.IndexFetchSpec_Column{
+			Name:          col.GetName(),
+			ColumnID:      colID,
+			Type:          typ,
+			IsNonNullable: !col.IsNullable() && col.Public(),
+		}
 	}
 
 	// In test builds, verify that we aren't trying to fetch columns that are not

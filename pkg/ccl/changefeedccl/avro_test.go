@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -71,12 +72,12 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	parentID := descpb.ID(bootstrap.TestingUserDescID(0))
 	tableID := descpb.ID(bootstrap.TestingUserDescID(1))
 	semaCtx := makeTestSemaCtx()
-	mutDesc, err := importccl.MakeTestingSimpleTableDescriptor(
-		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importccl.NoFKs, hlc.UnixNano())
+	mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
+		ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc, descbuilder.ValidateSelf(mutDesc)
+	return mutDesc, descbuilder.ValidateSelf(mutDesc, clusterversion.TestingClusterVersion)
 }
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {

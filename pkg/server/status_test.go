@@ -235,6 +235,7 @@ func TestHealthTelemetry(t *testing.T) {
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -250,9 +251,6 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 	if _, ok := data.Infos["node:1"]; !ok {
 		t.Errorf("no node 1 info returned: %v", data)
-	}
-	if _, ok := data.Infos["system-db"]; !ok {
-		t.Errorf("no system config info returned: %v", data)
 	}
 }
 
@@ -1198,7 +1196,7 @@ func TestRaftDebug(t *testing.T) {
 }
 
 // TestStatusVars verifies that prometheus metrics are available via the
-// /_status/vars endpoint.
+// /_status/vars and /_status/load endpoints.
 func TestStatusVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1209,6 +1207,11 @@ func TestStatusVars(t *testing.T) {
 		t.Fatal(err)
 	} else if !bytes.Contains(body, []byte("# TYPE sql_bytesout counter\nsql_bytesout")) {
 		t.Errorf("expected sql_bytesout, got: %s", body)
+	}
+	if body, err := getText(s, s.AdminURL()+statusPrefix+"load"); err != nil {
+		t.Fatal(err)
+	} else if !bytes.Contains(body, []byte("# TYPE sys_cpu_user_ns gauge\nsys_cpu_user_ns")) {
+		t.Errorf("expected sys_cpu_user_ns, got: %s", body)
 	}
 }
 
@@ -1989,9 +1992,8 @@ func TestStatusAPICombinedStatements(t *testing.T) {
 				continue
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.App, catconstants.InternalAppNamePrefix) {
-				// We ignore internal queries, these are not relevant for the
-				// validity of this test.
-				continue
+				// CombinedStatementStats should filter out internal queries.
+				t.Fatalf("unexpected internal query: %s", respStatement.Key.KeyData.Query)
 			}
 			if strings.HasPrefix(respStatement.Key.KeyData.Query, "ALTER USER") {
 				// Ignore the ALTER USER ... VIEWACTIVITY statement.
@@ -2885,4 +2887,67 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	err = postStatusJSONProtoWithAdminOption(testCluster.Server(1), "cancel_session/1", req, resp, false)
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "status: 403 Forbidden")
+}
+
+func TestStatusAPIListSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	serverProto := testCluster.Server(0)
+	serverSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	appName := "test_sessions_api"
+	serverSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
+
+	getSessionWithTestAppName := func(response *serverpb.ListSessionsResponse) *serverpb.Session {
+		require.NotEmpty(t, response.Sessions)
+		for _, s := range response.Sessions {
+			if s.ApplicationName == appName {
+				return &s
+			}
+		}
+		t.Errorf("expected to find session with app name %s", appName)
+		return nil
+	}
+
+	userNoAdmin := authenticatedUserNameNoAdmin()
+	var resp serverpb.ListSessionsResponse
+	// Non-admin without VIEWWACTIVITY or VIEWACTIVITYREDACTED should work and fetch user's own sessions.
+	err := getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+
+	// Grant VIEWACTIVITYREDACTED.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 1")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session := getSessionWithTestAppName(&resp)
+	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+
+	// Grant VIEWACTIVITY, VIEWACTIVITYREDACTED should take precedence.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 1, 1")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, appName, session.ApplicationName)
+	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, "SELECT _, _", session.LastActiveQueryNoConstants)
+
+	// Remove VIEWACTIVITYREDCATED. User should now see full query.
+	serverSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	serverSQL.Exec(t, "SELECT 2")
+	err = getStatusJSONProtoWithAdminOption(serverProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT 2", session.LastActiveQuery)
 }

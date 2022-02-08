@@ -17,9 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -45,7 +43,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -68,12 +66,13 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
-	{ // Ensure that no span config entries are found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
-		})
+	{ // Ensure that no span config records are found.
+		records, err := scKVAccessor.GetSpanConfigRecords(
+			ctx,
+			spanconfig.TestingEntireSpanConfigurationStateTargets(),
+		)
 		require.NoError(t, err)
-		require.Empty(t, entries)
+		require.Empty(t, records)
 	}
 
 	// Ensure that upgrade attempts without having reconciled simply fail.
@@ -91,11 +90,12 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
-		})
+		records, err := scKVAccessor.GetSpanConfigRecords(
+			ctx,
+			spanconfig.TestingEntireSpanConfigurationStateTargets(),
+		)
 		require.NoError(t, err)
-		require.NotEmpty(t, entries)
+		require.NotEmpty(t, records)
 	}
 }
 
@@ -121,7 +121,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -134,7 +134,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -153,12 +153,13 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true`)
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.checkpoint_interval = '100ms'`)
 
-	{ // Ensure that no span config entries are to be found.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
-		})
+	{ // Ensure that no span config records are to be found.
+		records, err := scKVAccessor.GetSpanConfigRecords(
+			ctx,
+			spanconfig.TestingEntireSpanConfigurationStateTargets(),
+		)
 		require.NoError(t, err)
-		require.Empty(t, entries)
+		require.Empty(t, records)
 	}
 
 	// Ensure that upgrade attempts without having reconciled simply fail.
@@ -176,11 +177,12 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	require.False(t, scReconciler.Checkpoint().IsEmpty())
 
 	{ // Ensure that the host tenant's span configs are installed.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
-		})
+		records, err := scKVAccessor.GetSpanConfigRecords(
+			ctx,
+			spanconfig.TestingEntireSpanConfigurationStateTargets(),
+		)
 		require.NoError(t, err)
-		require.NotEmpty(t, entries)
+		require.NotEmpty(t, records)
 	}
 }
 
@@ -197,7 +199,7 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigSubscription - 1,
 					),
@@ -220,11 +222,12 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 	tdb.Exec(t, `SET CLUSTER SETTING spanconfig.reconciliation_job.enabled = true`)
 
 	testutils.SucceedsSoon(t, func() error {
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			keys.EverythingSpan,
-		})
+		records, err := scKVAccessor.GetSpanConfigRecords(
+			ctx,
+			spanconfig.TestingEntireSpanConfigurationStateTargets(),
+		)
 		require.NoError(t, err)
-		if len(entries) == 0 {
+		if len(records) == 0 {
 			return fmt.Errorf("empty global span configuration state")
 		}
 		return nil

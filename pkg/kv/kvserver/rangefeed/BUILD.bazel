@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "rangefeed",
     srcs = [
+        "budget.go",
         "catchup_scan.go",
         "filter.go",
         "metrics.go",
@@ -19,10 +20,12 @@ go_library(
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/stop",
@@ -38,6 +41,7 @@ go_test(
     name = "rangefeed_test",
     size = "small",
     srcs = [
+        "budget_test.go",
         "catchup_scan_bench_test.go",
         "processor_test.go",
         "registry_test.go",
@@ -57,6 +61,7 @@ go_test(
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/stop",

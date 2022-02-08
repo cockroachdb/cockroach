@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration/migrations"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -35,8 +36,7 @@ func TestCreateSystemTable(t *testing.T) {
 
 	fakeTableSchema := `CREATE TABLE public.fake_table (
 	id UUID NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	FAMILY "primary" (id)
+	CONSTRAINT "primary" PRIMARY KEY (id ASC)
 )`
 	fakeTable := descpb.TableDescriptor{
 		Name:                    "fake_table",
@@ -67,7 +67,7 @@ func TestCreateSystemTable(t *testing.T) {
 			KeyColumnIDs: []descpb.ColumnID{1},
 		},
 		NextIndexID: 2,
-		Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+		Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 			privilege.ReadData,
 			security.NodeUserName(),
 		),
@@ -89,16 +89,18 @@ SELECT *
 			table.GetParentID(), table.GetParentSchemaID(), table.GetName())
 	}
 	require.Len(t, checkEntries(t), 0)
-	require.NoError(t,
-		migrations.CreateSystemTable(ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table))
+	require.NoError(t, migrations.CreateSystemTable(
+		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+	))
 	require.Len(t, checkEntries(t), 1)
 	sqlDB.CheckQueryResults(t,
 		"SELECT create_statement FROM [SHOW CREATE TABLE system.fake_table]",
 		[][]string{{fakeTableSchema}})
 
 	// Make sure it's idempotent.
-	require.NoError(t,
-		migrations.CreateSystemTable(ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table))
+	require.NoError(t, migrations.CreateSystemTable(
+		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+	))
 	require.Len(t, checkEntries(t), 1)
 
 }

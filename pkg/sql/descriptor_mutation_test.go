@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -86,7 +87,7 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	}
 	mt.tableDesc.Mutations = nil
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc, clusterversion.TestingClusterVersion); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -146,7 +147,7 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc); err != nil {
+	if err := descbuilder.ValidateSelf(mt.tableDesc, clusterversion.TestingClusterVersion); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -456,21 +457,21 @@ CREATE INDEX allidx ON t.test (k, v);
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{}}
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_DELETE_ONLY
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = descpb.DescriptorMutation_DROP
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
@@ -666,7 +667,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 	index := tableDesc.PublicNonPrimaryIndexes()[len(tableDesc.PublicNonPrimaryIndexes())-1]
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: index.IndexDesc()}}}
 	tableDesc.RemovePublicNonPrimaryIndex(index.Ordinal())
-	if err := descbuilder.ValidateSelf(tableDesc); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }
@@ -920,6 +921,8 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer server.Stopper().Stop(ctx)
 
 	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (a STRING PRIMARY KEY, b STRING, c STRING, INDEX foo (c));
 `); err != nil {
@@ -1134,6 +1137,7 @@ func TestTableMutationQueue(t *testing.T) {
 
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 `); err != nil {
@@ -1176,15 +1180,19 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 		state descpb.DescriptorMutation_State
 	}{
 		{"d", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"test_d_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+		{"test_d_key", 1, descpb.DescriptorMutation_BACKFILLING},
+		{"test_d_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
 		{"e", 1, descpb.DescriptorMutation_DELETE_ONLY},
-		{"test_e_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
+		{"test_e_key", 1, descpb.DescriptorMutation_BACKFILLING},
+		{"test_e_crdb_internal_dpe_key", 1, descpb.DescriptorMutation_DELETE_ONLY},
 		{"f", 1, descpb.DescriptorMutation_DELETE_ONLY},
 		// Second schema change.
 		{"g", 2, descpb.DescriptorMutation_DELETE_ONLY},
-		{"idx_f", 2, descpb.DescriptorMutation_DELETE_ONLY},
+		{"idx_f", 2, descpb.DescriptorMutation_BACKFILLING},
+		{"test_f_crdb_internal_dpe_key", 2, descpb.DescriptorMutation_DELETE_ONLY},
 		// Third.
-		{"idx_g", 3, descpb.DescriptorMutation_DELETE_ONLY},
+		{"idx_g", 3, descpb.DescriptorMutation_BACKFILLING},
+		{"test_g_crdb_internal_dpe_key", 3, descpb.DescriptorMutation_DELETE_ONLY},
 		// Drop mutations start off in the DELETE_AND_WRITE_ONLY state.
 		// UNIQUE column deletion gets split into two mutations with the same ID.
 		{"test_v_key", 4, descpb.DescriptorMutation_DELETE_AND_WRITE_ONLY},

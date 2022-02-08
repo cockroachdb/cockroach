@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Bump this counter to force rebuilding `dev` on all machines.
-DEV_VERSION=10
+DEV_VERSION=19
 
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 BINARY_DIR=$THIS_DIR/bin/dev-versions

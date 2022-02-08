@@ -598,18 +598,6 @@ func (*internalServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
-func (*internalServer) GetSystemSpanConfigs(
-	context.Context, *roachpb.GetSystemSpanConfigsRequest,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
-func (*internalServer) UpdateSystemSpanConfigs(
-	context.Context, *roachpb.UpdateSystemSpanConfigsRequest,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	panic("unimplemented")
-}
-
 func (*internalServer) TenantSettings(
 	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
 ) error {

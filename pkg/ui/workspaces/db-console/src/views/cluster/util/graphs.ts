@@ -541,7 +541,7 @@ export function configureUPlotLineChart(
   metrics: React.ReactElement<MetricProps>[],
   axis: React.ReactElement<AxisProps>,
   data: TSResponse,
-  setTimeRange: (startMillis: number, endMillis: number) => void,
+  setMetricsFixedWindow: (startMillis: number, endMillis: number) => void,
   getLatestXAxisDomain: () => AxisDomain,
   getLatestYAxisDomain: () => AxisDomain,
 ): uPlot.Options {
@@ -677,7 +677,7 @@ export function configureUPlotLineChart(
           // From what I understand, `self.select` contains the pixel edges
           // of the user's selection. Then I use the `posToIdx` to tell me
           // what the xAxis range is of the pixels.
-          setTimeRange(
+          setMetricsFixedWindow(
             self.data[0][self.posToIdx(self.select.left)],
             self.data[0][self.posToIdx(self.select.left + self.select.width)],
           );

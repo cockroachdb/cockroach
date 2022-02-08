@@ -511,7 +511,7 @@ func TestWithOnSSTable(t *testing.T) {
 	now.Logical = 0
 	ts := now.WallTime
 	sstKVs := []sstutil.KV{{"a", ts, "1"}, {"b", ts, "2"}, {"c", ts, "3"}, {"d", ts, "4"}, {"e", ts, "5"}}
-	sst, sstStart, sstEnd := sstutil.MakeSST(t, sstKVs)
+	sst, sstStart, sstEnd := sstutil.MakeSST(t, srv.ClusterSettings(), sstKVs)
 	_, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, now)
@@ -587,7 +587,7 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	ts := now.WallTime
 	sstKVs := []sstutil.KV{{"a", ts, "1"}, {"b", ts, "2"}, {"c", ts, "3"}, {"d", ts, "4"}, {"e", ts, "5"}}
 	expectKVs := []sstutil.KV{{"c", ts, "3"}, {"d", ts, "4"}}
-	sst, sstStart, sstEnd := sstutil.MakeSST(t, sstKVs)
+	sst, sstStart, sstEnd := sstutil.MakeSST(t, srv.ClusterSettings(), sstKVs)
 	_, pErr := db.AddSSTableAtBatchTimestamp(ctx, sstStart, sstEnd, sst,
 		false /* disallowConflicts */, false /* disallowShadowing */, hlc.Timestamp{}, nil, /* stats */
 		false /* ingestAsWrites */, now)

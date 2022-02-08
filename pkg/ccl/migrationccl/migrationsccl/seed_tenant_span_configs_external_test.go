@@ -38,7 +38,7 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.PreSeedTenantSpanConfigs,
 					),
@@ -70,12 +70,12 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 
 	{
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			spanconfig.MakeTargetFromSpan(tenantSpan),
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.PreSeedTenantSpanConfigs - 1,
 					),
@@ -106,7 +106,9 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 
 	tenantID := roachpb.MakeTenantID(10)
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	tenantSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()}
+	tenantTarget := spanconfig.MakeTargetFromSpan(
+		roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
+	)
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 	{
 		_, err := ts.StartTenant(ctx, base.TestTenantArgs{
@@ -123,12 +125,12 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	{ // Ensure that no span config entries are to be found
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+	{ // Ensure that no span config records are to be found
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			tenantTarget,
 		})
 		require.NoError(t, err)
-		require.Empty(t, entries)
+		require.Empty(t, records)
 	}
 
 	tdb.Exec(t,
@@ -136,18 +138,18 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 		clusterversion.ByKey(clusterversion.SeedTenantSpanConfigs).String(),
 	)
 
-	{ // Ensure that the tenant now has a span config entry.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+	{ // Ensure that the tenant now has a span config record.
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			tenantTarget,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
 // TestSeedTenantSpanConfigsWithExistingEntry tests that the migration ignores
-// tenants with existing span config entries.
+// tenants with existing span config records.
 func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -157,7 +159,7 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.PreSeedTenantSpanConfigs,
 					),
@@ -173,7 +175,9 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 
 	tenantID := roachpb.MakeTenantID(10)
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	tenantSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()}
+	tenantTarget := spanconfig.MakeTargetFromSpan(
+		roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
+	)
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
 	{
 		_, err := ts.StartTenant(ctx, base.TestTenantArgs{
@@ -190,13 +194,13 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	{ // Ensure that the tenant already has a span config entry.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+	{ // Ensure that the tenant already has a span config record.
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			tenantTarget,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 
 	// Ensure the cluster version bump goes through successfully.
@@ -205,12 +209,12 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		clusterversion.ByKey(clusterversion.SeedTenantSpanConfigs).String(),
 	)
 
-	{ // Ensure that the tenant's span config entry stay as it was.
-		entries, err := scKVAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+	{ // Ensure that the tenant's span config record stay as it was.
+		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			tenantTarget,
 		})
 		require.NoError(t, err)
-		require.Len(t, entries, 1)
-		require.Equal(t, entries[0].Span, tenantSeedSpan)
+		require.Len(t, records, 1)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }

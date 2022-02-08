@@ -96,14 +96,16 @@ func (c ConstraintsConjunction) String() string {
 	return sb.String()
 }
 
-// Equal compares two span config entries.
-func (s *SpanConfigEntry) Equal(o SpanConfigEntry) bool {
-	return s.Span.Equal(o.Span) && s.Config.Equal(o.Config)
-}
-
-// Empty returns true if the span config entry is empty.
-func (s *SpanConfigEntry) Empty() bool {
-	return s.Equal(SpanConfigEntry{})
+// String implements the stringer interface.
+func (p ProtectionPolicy) String() string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("{ts: %d", int(p.ProtectedTimestamp.WallTime)))
+	if p.IgnoreIfExcludedFromBackup {
+		sb.WriteString(fmt.Sprintf(",ignore_if_excluded_from_backup: %t",
+			p.IgnoreIfExcludedFromBackup))
+	}
+	sb.WriteString("}")
+	return sb.String()
 }
 
 // TestingDefaultSpanConfig exports the default span config for testing purposes.
@@ -116,6 +118,12 @@ func TestingDefaultSpanConfig() SpanConfig {
 		},
 		NumReplicas: 3,
 	}
+}
+
+// TestingDefaultSystemSpanConfiguration exports the default span config that
+// applies to spanconfig.SystemTargets for testing purposes.
+func TestingDefaultSystemSpanConfiguration() SpanConfig {
+	return SpanConfig{}
 }
 
 // TestingSystemSpanConfig exports the system span config for testing purposes.
@@ -136,4 +144,56 @@ func TestingDatabaseSystemSpanConfig(host bool) SpanConfig {
 	config.RangefeedEnabled = true
 	config.GCPolicy.IgnoreStrictEnforcement = true
 	return config
+}
+
+// IsEntireKeyspaceTarget returns true if the receiver targets the entire
+// keyspace.
+func (st SystemSpanConfigTarget) IsEntireKeyspaceTarget() bool {
+	return st.Type.GetEntireKeyspace() != nil
+}
+
+// IsSpecificTenantKeyspaceTarget returns true if the receiver targets a
+// specific tenant's keyspace.
+func (st SystemSpanConfigTarget) IsSpecificTenantKeyspaceTarget() bool {
+	return st.Type.GetSpecificTenantKeyspace() != nil
+}
+
+// IsAllTenantKeyspaceTargetsSetTarget returns true if the receiver target
+// encompasses all targets that have been set on specific tenant keyspaces
+// by the system target source.
+func (st SystemSpanConfigTarget) IsAllTenantKeyspaceTargetsSetTarget() bool {
+	return st.Type.GetAllTenantKeyspaceTargetsSet() != nil
+}
+
+// NewEntireKeyspaceTargetType returns a system span config target type that
+// targets the entire keyspace.
+func NewEntireKeyspaceTargetType() *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_EntireKeyspace{
+			EntireKeyspace: &SystemSpanConfigTarget_EntireKeyspace{},
+		},
+	}
+}
+
+// NewSpecificTenantKeyspaceTargetType returns a system span config target type
+// that the given tenant ID's keyspace.
+func NewSpecificTenantKeyspaceTargetType(tenantID TenantID) *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_SpecificTenantKeyspace{
+			SpecificTenantKeyspace: &SystemSpanConfigTarget_TenantKeyspace{
+				TenantID: tenantID,
+			},
+		},
+	}
+}
+
+// NewAllTenantKeyspaceTargetsSetTargetType returns a read-only system span
+// config target  type that encompasses all targets that have been set on
+// specific tenant keyspaces.
+func NewAllTenantKeyspaceTargetsSetTargetType() *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_AllTenantKeyspaceTargetsSet{
+			AllTenantKeyspaceTargetsSet: &SystemSpanConfigTarget_AllTenantKeyspaceTargetsSet{},
+		},
+	}
 }

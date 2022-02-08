@@ -66,19 +66,24 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullyQualifiedName", reflect.TypeOf((*MockCatalog)(nil).GetFullyQualifiedName), arg0, arg1)
 }
 
-// MustReadImmutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.Descriptor, error) {
+// MustReadImmutableDescriptors mocks base method.
+func (m *MockCatalog) MustReadImmutableDescriptors(arg0 context.Context, arg1 ...catid.DescID) ([]catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MustReadImmutableDescriptor", arg0, arg1)
-	ret0, _ := ret[0].(catalog.Descriptor)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MustReadImmutableDescriptors", varargs...)
+	ret0, _ := ret[0].([]catalog.Descriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// MustReadImmutableDescriptor indicates an expected call of MustReadImmutableDescriptor.
-func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptor(arg0, arg1 interface{}) *gomock.Call {
+// MustReadImmutableDescriptors indicates an expected call of MustReadImmutableDescriptors.
+func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptors(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadImmutableDescriptor", reflect.TypeOf((*MockCatalog)(nil).MustReadImmutableDescriptor), arg0, arg1)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadImmutableDescriptors", reflect.TypeOf((*MockCatalog)(nil).MustReadImmutableDescriptors), varargs...)
 }
 
 // MustReadMutableDescriptor mocks base method.
@@ -173,6 +178,20 @@ func (mr *MockDependenciesMockRecorder) Catalog() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Catalog", reflect.TypeOf((*MockDependencies)(nil).Catalog))
 }
 
+// Clock mocks base method.
+func (m *MockDependencies) Clock() scmutationexec.Clock {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Clock")
+	ret0, _ := ret[0].(scmutationexec.Clock)
+	return ret0
+}
+
+// Clock indicates an expected call of Clock.
+func (mr *MockDependenciesMockRecorder) Clock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clock", reflect.TypeOf((*MockDependencies)(nil).Clock))
+}
+
 // DescriptorMetadataUpdater mocks base method.
 func (m *MockDependencies) DescriptorMetadataUpdater(arg0 context.Context) scexec.DescriptorMetadataUpdater {
 	m.ctrl.T.Helper()
@@ -241,20 +260,6 @@ func (m *MockDependencies) IndexValidator() scexec.IndexValidator {
 func (mr *MockDependenciesMockRecorder) IndexValidator() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexValidator", reflect.TypeOf((*MockDependencies)(nil).IndexValidator))
-}
-
-// Partitioner mocks base method.
-func (m *MockDependencies) Partitioner() scmutationexec.Partitioner {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Partitioner")
-	ret0, _ := ret[0].(scmutationexec.Partitioner)
-	return ret0
-}
-
-// Partitioner indicates an expected call of Partitioner.
-func (mr *MockDependenciesMockRecorder) Partitioner() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitioner", reflect.TypeOf((*MockDependencies)(nil).Partitioner))
 }
 
 // PeriodicProgressFlusher mocks base method.

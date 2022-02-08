@@ -12,6 +12,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -164,6 +165,17 @@ type TableMeta struct {
 	// the map.
 	partialIndexPredicates map[cat.IndexOrdinal]ScalarExpr
 
+	// indexPartitionLocalities is a map from an index ordinal on the table to a
+	// *PrefixSorter representing the PARTITION BY LIST values of the index and
+	// whether each of those partitions is region-local with respect to the query
+	// being run. If an index is partitioned BY LIST, and has both local and
+	// remote partitions, it will have an entry in the map. Local partitions are
+	// those where all row ranges they own have a preferred region for leaseholder
+	// nodes the same as the gateway region of the current connection that is
+	// running the query. Remote partitions have at least one row range with a
+	// leaseholder preferred region which is different from the gateway region.
+	indexPartitionLocalities map[cat.IndexOrdinal]*partition.PrefixSorter
+
 	// anns annotates the table metadata with arbitrary data.
 	anns [maxTableAnnIDCount]interface{}
 }
@@ -202,6 +214,10 @@ func (tm *TableMeta) copyFrom(from *TableMeta, copyScalarFn func(Expr) Expr) {
 			tm.partialIndexPredicates[idx] = copyScalarFn(e).(ScalarExpr)
 		}
 	}
+
+	// This map has no ColumnID or TableID specific information in it, so it can
+	// be shared.
+	tm.indexPartitionLocalities = from.indexPartitionLocalities
 }
 
 // IndexColumns returns the set of table columns in the given index.
@@ -277,6 +293,16 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 	tm.ComputedCols[colID] = computedCol
 }
 
+// ComputedColExpr returns the computed expression for the given column, if it
+// is a computed column. If it is not a computed column, ok=false is returned.
+func (tm *TableMeta) ComputedColExpr(id ColumnID) (_ ScalarExpr, ok bool) {
+	if tm.ComputedCols == nil {
+		return nil, false
+	}
+	e, ok := tm.ComputedCols[id]
+	return e, ok
+}
+
 // AddPartialIndexPredicate adds a partial index predicate to the table's
 // metadata.
 func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
@@ -284,6 +310,34 @@ func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarE
 		tm.partialIndexPredicates = make(map[cat.IndexOrdinal]ScalarExpr)
 	}
 	tm.partialIndexPredicates[ord] = pred
+}
+
+// AddIndexPartitionLocality adds a PrefixSorter to the table's metadata for the
+// index with IndexOrdinal ord.
+func (tm *TableMeta) AddIndexPartitionLocality(ord cat.IndexOrdinal, ps *partition.PrefixSorter) {
+	if tm.indexPartitionLocalities == nil {
+		tm.indexPartitionLocalities = make(map[cat.IndexOrdinal]*partition.PrefixSorter)
+	}
+	tm.indexPartitionLocalities[ord] = ps
+}
+
+// IndexPartitionLocality returns the given index's PrefixSorter.
+func (tm *TableMeta) IndexPartitionLocality(
+	ord cat.IndexOrdinal, index cat.Index, evalCtx *tree.EvalContext,
+) (ps *partition.PrefixSorter, ok bool) {
+	ps, ok = tm.indexPartitionLocalities[ord]
+	if !ok {
+		if localPartitions, ok :=
+			partition.HasMixOfLocalAndRemotePartitions(evalCtx, index); ok {
+			ps = partition.GetSortedPrefixes(index, *localPartitions, evalCtx)
+		}
+		tm.AddIndexPartitionLocality(ord, ps)
+	}
+	// A nil ps means that the entry in the map for this index indicates that the
+	// index was not partitioned, or the index did not have a mix of local and
+	// remote partitions, so no PrefixSorter is built for it. We return ok=false
+	// to the caller to indicate no PrefixSorter is available for this index.
+	return ps, ps != nil
 }
 
 // PartialIndexPredicate returns the given index's predicate scalar expression,

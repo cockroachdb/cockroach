@@ -41,12 +41,18 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	ctx := cmd.Context()
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args, err := d.getDockerRunArgs(ctx, volume, true)
+	var tty bool
+	if len(extraArgs) == 0 {
+		tty = true
+	}
+	args, err := d.getDockerRunArgs(ctx, volume, tty)
 	args = append(args, extraArgs...)
 	if err != nil {
 		return err
 	}
-	logCommand("docker", args...)
+	if tty {
+		logCommand("docker", args...)
+	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
@@ -128,6 +134,7 @@ func (d *dev) getDockerRunArgs(
 	}
 	args = append(args, "-v", workspace+":/cockroach")
 	args = append(args, "--workdir=/cockroach")
+	args = append(args, "-v", filepath.Join(workspace, "build", "bazelutil", "empty.bazelrc")+":/cockroach/.bazelrc.user")
 	// Create the artifacts directory.
 	artifacts := filepath.Join(workspace, "artifacts")
 	err = d.os.MkdirAll(artifacts)

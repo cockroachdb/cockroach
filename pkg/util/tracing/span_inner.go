@@ -50,6 +50,13 @@ func (s *spanInner) TraceID() tracingpb.TraceID {
 	return s.crdb.TraceID()
 }
 
+func (s *spanInner) SpanID() tracingpb.SpanID {
+	if s.isNoop() {
+		return 0
+	}
+	return s.crdb.SpanID()
+}
+
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
 }
@@ -62,11 +69,11 @@ func (s *spanInner) RecordingType() RecordingType {
 	return s.crdb.recordingType()
 }
 
-func (s *spanInner) SetVerbose(to bool) {
+func (s *spanInner) SetRecordingType(to RecordingType) {
 	if s.isNoop() {
 		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
-	s.crdb.SetVerbose(to)
+	s.crdb.SetRecordingType(to)
 }
 
 // GetRecording returns the span's recording.

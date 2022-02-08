@@ -38,10 +38,11 @@ func init() {
 	RegisterReadWriteCommand(roachpb.AddSSTable, DefaultDeclareIsolatedKeys, EvalAddSSTable)
 }
 
-var addSSTableRewriteConcurrency = settings.RegisterIntSetting(
+// AddSSTableRewriteConcurrency sets the concurrency of a single SST rewrite.
+var AddSSTableRewriteConcurrency = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.bulk_io_write.sst_rewrite_concurrency.per_call",
-	"concurrency to use when rewriting a sstable timestamps by block, or 0 to use a loop",
+	"concurrency to use when rewriting sstable timestamps by block, or 0 to use a loop",
 	int64(util.ConstantWithMetamorphicTestRange("addsst-rewrite-concurrency", 0, 0, 16)),
 	settings.NonNegativeInt,
 )
@@ -56,6 +57,7 @@ func EvalAddSSTable(
 	ms := cArgs.Stats
 	start, end := storage.MVCCKey{Key: args.Key}, storage.MVCCKey{Key: args.EndKey}
 	sst := args.Data
+	sstToReqTS := args.SSTTimestampToRequestTimestamp
 
 	var span *tracing.Span
 	var err error
@@ -63,25 +65,24 @@ func EvalAddSSTable(
 	defer span.Finish()
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
 
-	// Under the race detector, scan the SST contents and make sure it satisfies
-	// the AddSSTable requirements. We do not always perform these checks
-	// otherwise, due to the cost.
+	// Under the race detector, check that the SST contents satisfy AddSSTable
+	// requirements. We don't always do this otherwise, due to the cost.
 	if util.RaceEnabled {
-		if err := assertSSTContents(sst, args.SSTTimestamp, args.MVCCStats); err != nil {
+		if err := assertSSTContents(sst, sstToReqTS, args.MVCCStats); err != nil {
 			return result.Result{}, err
 		}
 	}
 
-	// If requested, rewrite the SST's MVCC timestamps to the request timestamp.
-	// This ensures the writes comply with the timestamp cache and closed
-	// timestamp, i.e. by not writing to timestamps that have already been
-	// observed or closed.
-	if args.WriteAtRequestTimestamp &&
-		(args.SSTTimestamp.IsEmpty() || h.Timestamp != args.SSTTimestamp ||
-			util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)) {
+	// If requested and necessary, rewrite the SST's MVCC timestamps to the
+	// request timestamp. This ensures the writes comply with the timestamp cache
+	// and closed timestamp, i.e. by not writing to timestamps that have already
+	// been observed or closed.
+	if sstToReqTS.IsSet() && (h.Timestamp != sstToReqTS ||
+		util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)) {
+		st := cArgs.EvalCtx.ClusterSettings()
 		// TODO(dt): use a quotapool.
-		concurrency := int(addSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-		sst, err = storage.UpdateSSTTimestamps(sst, args.SSTTimestamp, h.Timestamp, concurrency)
+		conc := int(AddSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
+		sst, err = storage.UpdateSSTTimestamps(ctx, st, sst, sstToReqTS, h.Timestamp, conc)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 		}
@@ -223,7 +224,7 @@ func EvalAddSSTable(
 	ms.Add(stats)
 
 	var mvccHistoryMutation *kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation
-	if !args.WriteAtRequestTimestamp {
+	if sstToReqTS.IsEmpty() {
 		mvccHistoryMutation = &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
 			Spans: []roachpb.Span{{Key: start.Key, EndKey: end.Key}},
 		}
@@ -258,7 +259,7 @@ func EvalAddSSTable(
 			// write by not allowing writing below existing keys, and we want to
 			// retain parity with regular SST ingestion which does allow this. We
 			// therefore record these operations ourselves.
-			if args.WriteAtRequestTimestamp {
+			if sstToReqTS.IsSet() {
 				readWriter.LogLogicalOp(storage.MVCCWriteValueOpType, storage.MVCCLogicalOpDetails{
 					Key:       k.Key,
 					Timestamp: k.Timestamp,
@@ -284,7 +285,7 @@ func EvalAddSSTable(
 				Data:             sst,
 				CRC32:            util.CRC32(sst),
 				Span:             roachpb.Span{Key: start.Key, EndKey: end.Key},
-				AtWriteTimestamp: args.WriteAtRequestTimestamp,
+				AtWriteTimestamp: sstToReqTS.IsSet(),
 			},
 			MVCCHistoryMutation: mvccHistoryMutation,
 		},
@@ -322,9 +323,9 @@ func assertSSTContents(sst []byte, sstTimestamp hlc.Timestamp, stats *enginepb.M
 		if len(value) == 0 {
 			return errors.AssertionFailedf("SST contains tombstone for key %s", key)
 		}
-		if !sstTimestamp.IsEmpty() && key.Timestamp != sstTimestamp {
-			return errors.AssertionFailedf("SST has incorrect timestamp %s for SST key %s (expected %s)",
-				key.Timestamp, key.Key, sstTimestamp)
+		if sstTimestamp.IsSet() && key.Timestamp != sstTimestamp {
+			return errors.AssertionFailedf("SST has unexpected timestamp %s (expected %s) for key %s",
+				key.Timestamp, sstTimestamp, key.Key)
 		}
 		iter.Next()
 	}

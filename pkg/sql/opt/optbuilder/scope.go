@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1048,7 +1050,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.ComparisonExpr:
 		switch t.Operator.Symbol {
-		case tree.In, tree.NotIn, tree.Any, tree.Some, tree.All:
+		case treecmp.In, treecmp.NotIn, treecmp.Any, treecmp.Some, treecmp.All:
 			if sub, ok := t.Right.(*tree.Subquery); ok {
 				// Copy the Comparison expression so that the tree isn't mutated.
 				copy := *t
@@ -1410,11 +1412,11 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 	startBound, endBound := bounds.StartBound, bounds.EndBound
 	var requiredType *types.T
 	switch frame.Mode {
-	case tree.ROWS:
+	case treewindow.ROWS:
 		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
 		// and non-negativity will be checked later.
 		requiredType = types.Int
-	case tree.RANGE:
+	case treewindow.RANGE:
 		// In RANGE mode, offsets must be non-null and non-negative datums of a type
 		// dependent on the type of the ordering column. Non-nullity and
 		// non-negativity will be checked later.
@@ -1436,7 +1438,7 @@ func analyzeWindowFrame(s *scope, windowDef *tree.WindowDef) error {
 				requiredType = types.Interval
 			}
 		}
-	case tree.GROUPS:
+	case treewindow.GROUPS:
 		if len(windowDef.OrderBy) == 0 {
 			return pgerror.Newf(pgcode.Windowing, "GROUPS mode requires an ORDER BY clause")
 		}

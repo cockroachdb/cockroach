@@ -2,6 +2,10 @@
 # Zigzag join tests on non-inverted indexes.
 # ------------------------------------------------------------------------------
 
+# TODO(ssd): index id test dependency cleanup
+statement ok
+SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false
+
 statement ok
 CREATE TABLE a (n INT PRIMARY KEY, a INT, b INT, c STRING, INDEX a_idx(a), INDEX b_idx(b), INDEX bc_idx(b,c));
 INSERT INTO a SELECT a,a,a%3,'foo' FROM generate_series(1,10) AS g(a) ;

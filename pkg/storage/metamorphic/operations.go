@@ -721,7 +721,7 @@ func (i ingestOp) run(ctx context.Context) string {
 		return fmt.Sprintf("error = %s", err.Error())
 	}
 
-	sstWriter := storage.MakeIngestionSSTWriter(f)
+	sstWriter := storage.MakeIngestionSSTWriter(ctx, i.m.st, f)
 	for _, key := range i.keys {
 		_ = sstWriter.Put(key, []byte("ingested"))
 	}

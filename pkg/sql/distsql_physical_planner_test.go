@@ -525,7 +525,7 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	// Verify the plan (should include all 5 nodes).
 	r.CheckQueryResults(t,
 		"SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'",
-		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslF-Lm0AUxd_7KeRC2QRGHP_EdX3aZddSafZPY0oLiw_TOBVBHXdmhC0h372oLTFhM9q4j87cc8_5XYe7BfGSgw9RsAxu11pW_mLap9XjvfYc_Hha3oQP2uwujNbR1-Vc-1sj6mL2Kl5qwmky74plrH3_HKyCTr8MvwTaxV1GUk6KjxeAoGQJfSAFFeA_gwkILEBgAwIHECwgRlBxtqFCMN6UbFtBmLyCjxFkZVXL5jhGsGGcgr8Fmcmcgg9r8jOnK0oSyg0MCBIqSZa3NvK64llB-G9AcMvyuiiFr_3LDQiiijQnumFhiHcIWC33PkKSlIJv7tD4LDdpymlKJOPG4jBK9O1-dm3OT9pYJ2323euS8YR20fet4506iIn_L4l9kMQcP3zzrOEbFtYNZ-z8B-L0sN0p87fGU1vnUTtYN9yx1ANxetSXU6jt8dT2edQu1g1vLPVAnB61N4XaGU_tnEftYX0k8kCWHvLVe62XN2xWVFSsFPRozbzdGTfrhyYp7XaVYDXf0CfONq1N9_nY6tqDhArZ3ZrdR1h2V03AvthUiq0DsXksttTOA9a2Uu2oxc6U3Aul2FU7u1OcL5ViT-3sTXG-Uv8rPPBM1I_s2DveffgTAAD__0Xk6f0="}},
+		[][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyslG-Lm0AQxt_3U8hAuQQ2uBqT83x1x52l0tyfxpQWDinbOBWpcb3dFa6EfPeitsSEu9XGe-nuPPM8v3GZLcinDDwI_YV_vTLS_Cc3Pizvb41H_9vD4iq4M0Y3QbgKPy_Gxt8aWW5Gz_KpZALjcVOsIuPrR3_pN_pF8Mk3zm5Slgi2eX8GBHIe4x3boATvESwgYAOBKRBwgMAMIgKF4GuUkouqZFsLgvgZPEogzYtSVccRgTUXCN4WVKoyBA9W7EeGS2QxCpMCgRgVS7PaRl2q78Uv_A0ErnlWbnLpGf9iA4GwYNXJxLQpRDsCvFR7G6lYguBZO9I_ylWSCEyY4sKcHSYJv9yOLq3xqzb2qzb77mXORYxN9H3raKcPYtH_SzI9SGL1n711yuxNm05Mp-_4O9K0qOdDxm_3h7ZPgnboxJz3he5I04I-HwI97Q89PQl6Tiem2xe6I00L2h0C7fSHdk6CdumkJ3FHlBbxxVutlhdsligLnks8WjEvd6bV6sE4wWZPSV6KNT4Ivq5tms_7WlcfxChVc2s1H0HeXFUB22JLK7YPxNax2NY7d1hPtWpHL3aG5J5pxXO983yI87lW7Oqd3SHOF_p_RTueif6RHXtHu3d_AgAA___Fl-el"}},
 	)
 
 	// Stop node 5.
@@ -535,16 +535,14 @@ func TestDistSQLDeadHosts(t *testing.T) {
 
 	// The leaseholder for the last range should have moved to either node 2 or 3.
 	query := "SELECT info FROM [EXPLAIN (DISTSQL) SELECT sum(xsquared) FROM t] WHERE info LIKE 'Diagram%'"
-	exp2 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk19r2zAUxd_3KcSF0QQU_Ldu5qeW1mNm6Z_FGRsUP2jRnWewLVeSoSPkuw_bG0lKqzjJHi3dc8_vXPmuQD0VEEISzaLrBcmrn4J8nN_fksfo-8PsKr4jo5s4WSRfZmPyt0Y15ehZPTVMIh_3xTol3z5F86jXz-LPETm7yVkmWfn-DChUguMdK1FB-AgOUHCBggcUfEgp1FIsUSkh2-tVVxzzZwhtCnlVN7o9TikshUQIV6BzXSCEsGA_Cpwj4ygtGyhw1CwvOgt9Wcu8ZPI3ULgWRVNWKiT_mIFCUrP2ZGK5NqRrCqLRGx-lWYYQOms6nOUqyyRmTAtp-bsoydfb0aUzftPGfdNm072phOTYo29ap2szyPQwEG8HxBk-e-eo2VuuPbF8m7CKE4cI_QvlwKfYg7Y1gfNTnsIdPgH3uAn49sQKhv6Ae3C2UgenpPaGp_aOSx3YE2s6NPUenK3UF_9r7V6xmaOqRaXwxfq93tlu1xJ5hv0OK9HIJT5Isexs-s_7TtcdcFS6v3X6j7jqr1rAbbFjFLs7Yuel2DWKP5idPaPYN4v9U7DPjeLA7Byc4nxhFE_NztODnNP1uz8BAAD__8cZdFQ="}}
-	exp3 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk91q20AQhe_7FMtAiQ1r9BvF1VVColJR56eWSwtBF1vvVBVIWmV3BSnG714ktdgOyVq2e6mdOXO-OWJWoJ4KCCGJZtH1guTVT0E-zu9vyWP0_WF2Fd-R0U2cLJIvszH526OacvSsnhomkY_7Zp2Sb5-iedTrZ_HniJzd5CyTrHx_BhQqwfGOlaggfAQHKLhAwQMKPqQUaimWqJSQbXnVNcf8GUKbQl7VjW6fUwpLIRHCFehcFwghLNiPAufIOErLBgocNcuLzkJf1jIvmfwNFK5F0ZSVCsk_ZqCQ1Kx9mViuDemagmj0xkdpliGEzpoOZ7nKMokZ00Ja_i5K8vV2dOmM37Rx37TZTG8qITn26JvR6doMMj0MxNsBcYZn7xyVveXaE8sfGv8enK2tz0-J3x2-tXvc1r49sQKbsIoThwj9C-XABPagbSUQnJKANzwB77gEAntiTYf-9z04W1tf_K-ze8VmjqoWlcIX5_f6ZLs9S-QZ9jesRCOX-CDFsrPpP-87XffAUem-6vQfcdWXWsBtsWMUuzti56XYNYo_mJ09o9g3i_1TsM-N4sDsHJzifGEUT83O04Oc0_W7PwEAAP__wB10VA=="}}
+	exp2 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk29r2zAQxt_vU4iD0QQUbDmum_lVS-sxs_TP4owNihladPPMHMuVZOgI-e7D9kaS0ipuspeW7rnn95x8K9APBYSQRNPock7y8ock72e31-Q--no3vYhvyOAqTubJp-mQ_K3R9XLwqB9qrlAMu2KTki8folnU6afxx4icXOU8U3z59gQolFLgDV-ihvAeGFDwgMIYKPiQUqiUXKDWUjXXq7Y4Fo8QuhTysqpNc5xSWEiFEK7A5KZACGHOvxc4Qy5QOS5QEGh4XrQW5tx8q37hb6BwKYt6WeqQ_EMGCknFm5OR47mQrinI2mxstOEZQsjWtD_KRZYpzLiRyvF3SZLP14NzNnzRxnvRZtO9LqUS2KFvWqdrO8jkdSDjHRDWf_TskNE7njtyfJfwUhBGpPmJqudL7CHbGsDpMS_h9R-Ad9AAfHfkBH1_vz00W6GDY0KP-4ceHxQ6cEfOpG_oPTRboc_-1849YzNDXclS45Pde76z2-wkigy7BdayVgu8U3LR2nSft62uPRCoTXfLuo-47K4awG0xs4q9HTF7Kvas4nd257FV7NvF_jHYp1ZxYHcOjnE-s4ondufJq5zT9Zs_AQAA__9QI3J0"}}
+	exp3 := [][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk29r2zAQxt_vU4iD0QQUbDmum_lVS-sxs_TP4owNihladPPMHMuVZOgI-e7D9kaS0ipuspfW3XPP7x5zK9APBYSQRNPock7y8ock72e31-Q--no3vYhvyOAqTubJp-mQ_O3R9XLwqB9qrlAMu2aTki8folnU6afxx4icXOU8U3z59gQolFLgDV-ihvAeGFDwgMIYKPiQUqiUXKDWUjXlVdsci0cIXQp5WdWmeU4pLKRCCFdgclMghDDn3wucIReoHBcoCDQ8L1oLc26-Vb_wN1C4lEW9LHVI_iEDhaTizcvI8VxI1xRkbTY22vAMIWRr2h_lIssUZtxI5fi7JMnn68E5G75o471os5lel1IJ7NA3o9O1HWTyOpDxDgjrHz07JHrHc0eO3zf9PTRbS58ek77Xf2nvoKV9d-QELuGlIIxI8xNVzwD2kG0FEBwTwLh_AOODAgjckTPp-9f30Gwtffa_bu4ZmxnqSpYan9ze85Pd5iZRZNgdsJa1WuCdkovWpvu8bXXtg0BtuirrPuKyKzWA22JmFXs7YvZU7FnF7-zOY6vYt4v9Y7BPreLA7hwc43xmFU_szpNXOafrN38CAAD__0dtcnQ="}}
 
 	res := r.QueryStr(t, query)
-	if !reflect.DeepEqual(res, exp2) {
-		if !reflect.DeepEqual(res, exp3) {
-			t.Errorf("query '%s': expected:\neither\n%vor\n%v\ngot:\n%v\n",
-				query, sqlutils.MatrixToStr(exp2), sqlutils.MatrixToStr(exp3), sqlutils.MatrixToStr(res),
-			)
-		}
+	if !reflect.DeepEqual(res, exp2) && !reflect.DeepEqual(res, exp3) {
+		t.Errorf("query '%s': expected:\neither\n%vor\n%v\ngot:\n%v\n",
+			query, sqlutils.MatrixToStr(exp2), sqlutils.MatrixToStr(exp3), sqlutils.MatrixToStr(res),
+		)
 	}
 
 	// Stop node 4; note that no range had replicas on both 4 and 5.
@@ -616,14 +614,14 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	}
 
 	// Verify distribution.
-	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskVFrnEAQx9_7KZaBkruy4W6968s-JVwslV40VUMKQcLWnYqgu3Z3hZbD717UQmLI2Tvoo7Pzm__PmQPYnxVwSPy9v0tJqX5o8imObsmj_-1ufx2EZHETJGnydb8kf3ty3Sq3-LAc-1Rb24w8fPZjf6T3wRefXNyUojCifn8BFJSWGIoaLfBHYEDBg4xCY3SO1mrTlw9DUyB_AV9TKFXTur6cUci1QeAHcKWrEDik4nuFMQqJZrUGChKdKKthdK9y1ZiyFuY3UNjpqq2V5UAhaYSynFyuGGQdBd265wDrRIHAWUdPl7guCoOFcNqsvKnDLroP06c4ekgWy6NZ3tGs54hWaSPRoJzMz7p5m-3UJrm_fQrCdHHFjstsJjLs9O2zM7e_Ypcnbv8fEi_-d_Nft_9GVoy20criqyu8PXndXwdlgeMprW5NjndG50PM-BkN3FCQaN34ysaPQI1PveBLmM3C3gRmr2FvFv44n7yZhbfz8PYs7ax79ycAAP__nKh7zQ=="}})
+	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskVFr2zAQx9_3KcTBaDJUEjnZi55aUo-ZpXFnu3RQTNCsmzGzJU-SYSP4uw_bg9al8RLoi0HS_e7_890B7K8SOMT-1t8kpFA_NPkUhbfk0f92t70OdmR2E8RJ_HU7J_9qMt0oN_swH-pUU9mUPHz2I3-gt8EXn1zcFCI3onp_ARSUlrgTFVrgj8CAggcphdroDK3Vprs-9EWB_A18SaFQdeO665RCpg0CP4ArXInAIRHfS4xQSDSLJVCQ6ERR9q07lavus69_4h-gsNFlUynLgUJcC2U5uVwwSFsKunFPEdaJHIGzlp6ucZ3nBnPhtFl4Y4tNeL9L9lH4EM_mR7O8o1lPEY3SRqJBOeqfttM267FNfH-7D3bJ7Iodl1mNZNjp82dnz3_BLk-c_380nv3x6k3n_0pWhLbWyuKLPbzeedntB2WOwzKtbkyGd0ZnfcxwDHuuv5Bo3fDKhkOghqdO8DnMJmFvBLOXsDcJf5xOXk3C62l4fZZ22r77GwAA__-hBX17"}})
 
 	// Drain the second node and expect the query to be planned on only the
 	// first node.
 	distServer := tc.Server(1).DistSQLServer().(*distsql.ServerImpl)
 	distServer.Drain(ctx, 0 /* flowDrainWait */, nil /* reporter */)
 
-	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9LwzAUxd_9FOGCbJPI1j3mybFVLNZ1tpUJo0hsr6XQJjV_QCn97tJG0AkTfcy553fOIR3o1xoYJH7or1NSiRdJruPojhz8x124CrZkugmSNLkPZ-TTk0srzPRi5nzCNjoj-xs_9h0dBrc-mWwqXirenE-AgpAFbnmDGtgBPMgotErmqLVUg9SNhqB4A7agUInWmkHOKORSIbAOTGVqBAYpf64xRl6gmi-AQoGGV_UYO8y4alXVcPUOFNayto3QDCgkLReakUvIegrSmq94bXiJwLye_n3CqiwVltxINfeOF6yjh236FEf7ZDo72bX8T1eMupVC41HPqeRFn1HAokT3pVpaleNOyXyscc9o5EahQG3c1XOPQLjTMPA77P0KL3_AWX_2EQAA__8zCsBk"}})
+	expectPlan([][]string{{"Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkF9LwzAUxd_9FOGCbJPI1j3mybFVLNZ1tpUJo4zYXkuxTWr-gDL63aWNoBMm-hK4555zf4ccQL_WwCDxQ3-Zkko8S3IdR3dk5z9uwkWwJuNVkKTJfTghn55cWmHGFxPnE7bRGdne-LHv0mFw65PRquKl4s35CCgIWeCaN6iB7cCDjEKrZI5aS9VLh8EQFG_AZhQq0VrTyxmFXCoEdgBTmRqBQcqfaoyRF6imM6BQoOFVPZzta1z1z759wXegsJS1bYRmQCFpudCMXELWUZDWfAG04SUC8zr69xKLslRYciPV1DvusIwe1uk-jrbJeHKSNf8PK0bdSqHxiHPq8qzLKGBRovtULa3KcaNkPmDcGA25QShQG7f13BAIt-oLfg97v4bnP8JZd_YRAAD___rywTs="}})
 
 	// Verify correctness.
 	var res int
@@ -909,11 +907,12 @@ func TestPartitionSpans(t *testing.T) {
 						return true
 					},
 				},
+				codec: keys.SystemSQLCodec,
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-			}, nil /* planner */, nil /* txn */, true /* distribute */)
+			}, nil, nil, DistributionTypeSystemTenantOnly)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -1093,11 +1092,12 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						return true
 					},
 				},
+				codec: keys.SystemSQLCodec,
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-			}, nil /* planner */, nil /* txn */, true /* distribute */)
+			}, nil, nil, DistributionTypeSystemTenantOnly)
 			partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
@@ -1192,11 +1192,12 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				return true
 			},
 		},
+		codec: keys.SystemSQLCodec,
 	}
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 		EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-	}, nil /* planner */, nil /* txn */, true /* distribute */)
+	}, nil, nil, DistributionTypeSystemTenantOnly)
 	partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

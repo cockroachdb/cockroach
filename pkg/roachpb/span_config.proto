@@ -43,11 +43,24 @@ message GCPolicy {
 // applies over a given span.
 message ProtectionPolicy {
   option (gogoproto.equal) = true;
+  option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
   // ProtectedTimestamp is a timestamp above which GC should not run, regardless
   // of the GC TTL.
   util.hlc.Timestamp protected_timestamp = 1 [(gogoproto.nullable) = false];
+
+  // IgnoreIfExcludedFromBackup is set to true if the ProtectionPolicy can be
+  // ignored when making GC decisions on a span that has been marked to be
+  // excluded from backups i.e. the applied SpanConfig has
+  // `exclude_data_from_backup = true`.
+  //
+  // This field is currently only set to true when a protected timestamp record
+  // has been written by a backup schedule or job. This is to ensure that
+  // ProtectionPolicies written by non-backup users (CDC, streaming) on spans
+  // marked as `exclude_data_from_backup` are still respected when making GC
+  // decisions on the span.
+  bool ignore_if_excluded_from_backup = 2;
 }
 
 // Constraint constrains the stores that a replica can be stored on. It
@@ -164,118 +177,151 @@ message SpanConfig {
   // RangefeedEnabled determines whether rangefeeds are enabled over the
   // specific range.
   bool rangefeed_enabled = 10;
+
+  // ExcludeDataFromBackup specifies if the range has been marked to be excluded
+  // from a backup targeting the table represented by this keyspace. This
+  // information is used when ExportRequests issued by backups are being
+  // serviced in KV, to decide whether or not to send back any row data.
+  bool exclude_data_from_backup = 11;
+
+  // Next ID: 12
+}
+
+// SystemSpanConfigTarget specifies the target of system span configurations.
+// System targets are designed for a few different kinds of interactions. We
+// want the ability to:
+// 1. Allow the host tenant to set a system span configuration on the entire
+// keyspace.
+// 2. Allow the host tenant to set a system span configuration on a particular
+// tenant's keyspace.
+// 3. Allow secondary tenants to set system span configurations on their
+// keyspace.
+//
+// Additionally, we also want each tenant to be able to fetch all system span
+// configurations that it has installed. Ideally, we want to be able to do this
+// without knowing the tenantID of all other tenants that exist. We provide a
+// read-only system span config target type to achieve exactly this.
+message SystemSpanConfigTarget {
+  option (gogoproto.equal) = true;
+
+  // SourceTenantID is the ID of the tenant that specified the system span
+  // configuration.
+  TenantID source_tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
+
+  // TenantKeyspace is a target type that targets the keyspace of a specific
+  // tenant.
+  message TenantKeyspace {
+    option (gogoproto.equal) = true;
+
+    // TenantID is the ID of the tenant whose keyspace the the associated
+    // system span configuration applies to.
+    //
+    // Secondary tenants are only allowed to target their keyspace. The host
+    // tenant may use this field to target a specific secondary tenant's
+    // keyspace.
+    TenantID tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  };
+
+   // EntireKeyspace is a target type that targets the entire keyspace (all
+   // ranges, including those belonging to secondary tenants). Only the host
+   // tenant is allowed to target the entire keyspace.
+  message EntireKeyspace{
+    option (gogoproto.equal) = true;
+  };
+
+  // AllTenantKeyspacesTargetsSet is is a read-only system target type that
+  // encompasses all system targets that have been set by the source tenant on
+  // specific tenant's keyspaces.
+  message AllTenantKeyspaceTargetsSet{
+    option (gogoproto.equal) = true;
+  };
+
+  message Type {
+    option (gogoproto.equal) = true;
+
+    oneof type {
+      TenantKeyspace specific_tenant_keyspace = 1;
+      EntireKeyspace entire_keyspace = 2;
+      AllTenantKeyspaceTargetsSet all_tenant_keyspace_targets_set = 3;
+    }
+  }
+
+  // Type of the system target.
+  Type type = 2;
+}
+
+// SpanConfigTarget specifies the target of an associated span configuration.
+message SpanConfigTarget {
+  oneof union {
+    // Span is a keyspan that a span config is said to apply over.
+    Span span = 1;
+    // SystemSpanConfigTarget specifies the target of a system span
+    // configuration.
+    SystemSpanConfigTarget system_span_config_target = 2;
+  }
 }
 
 // SpanConfigEntry ties a span to its corresponding config.
 message SpanConfigEntry {
-  // Span is the keyspan the config is said to apply over.
-  Span span = 1 [(gogoproto.nullable) = false];
+  reserved 1;
 
-  // Config is the set of attributes that apply over the corresponding keyspan.
+  // Target specifies the target the config applies over.
+  SpanConfigTarget target = 3 [(gogoproto.nullable) = false];
+
+  // Config is the set of attributes that apply over the corresponding target.
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
-// SystemSpanConfig is a system installed configuration that may apply to
-// multiple spans.
-message SystemSpanConfig {
-  option (gogoproto.equal) = true;
-
-  // ProtectionPolicies is a list of policies which protect data from being
-  // GC-ed.
-  repeated ProtectionPolicy protection_policies = 1 [(gogoproto.nullable) = false];
-}
-
-// SystemSpanConfigTarget is used to specify the target of a SystemSpanConfig.
-message SystemSpanConfigTarget {
-   // TenantID indicates the tenant ID of the logical cluster being targeted.
-   // For secondary tenants this field is left unset. For the host we can use
-   // this field to protect a specific secondary tenant.
-   roachpb.TenantID tenant_id = 1 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = true];
-}
-
-
-// SystemSpanConfigEntry is a SystemSpanConfigTarget and its corresponding
-// SystemSpanConfig.
-message SystemSpanConfigEntry {
-  // SystemSpanConfigTarget represents the target over which the config is said
-  // to apply.
-  SystemSpanConfigTarget system_span_config_target = 1 [(gogoproto.nullable) = false];
-
-  // SystemSpanConfig is the config that applies.
-  SystemSpanConfig system_span_config = 2 [(gogoproto.nullable) = false];
-}
-
-// GetSpanConfigsRequest is used to fetch the span configurations over the
-// specified keyspans.
+// GetSpanConfigsRequest is used to fetch the span configurations and system
+// span configurations.
 message GetSpanConfigsRequest {
-  // Spans to request the configurations for. The spans listed here are not
-  // allowed to overlap with one another.
-  repeated Span spans = 1 [(gogoproto.nullable) = false];
+  reserved 1;
+
+  // Targets to request configurations for. The targets listed here are not
+  // allowed to be duplicated/overlap with one another.
+  repeated SpanConfigTarget targets = 2 [(gogoproto.nullable) = false];
 };
 
-// GetSpanConfigsResponse lists out the span configurations that overlap with
-// the requested spans.
+// GetSpanConfigsResponse lists out the span configurations and system span
+// configurations that have been requested.
 message GetSpanConfigsResponse {
   // SpanConfigEntries capture the span configurations over the requested spans.
   // The results for each Span in the matching GetSpanConfigsRequest are
   // flattened out into a single slice, and follow the same ordering. It's
   // possible for there to be no configurations for a given span; there'll
   // simply be no entries for it.
+  //
+  // Any system span configurations set by the tenant are also returned if
+  // requested.
   repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
 };
 
-// GetSystemSpanConfigsRequest is used to fetch all system span configurations
-// installed by the requesting tenant.
-message GetSystemSpanConfigsRequest {};
-
-// GetSystemSpanConfigsResponse lists out all system span configurations that
-// are installed by the requesting tenant.
-message GetSystemSpanConfigsResponse {
-  // SystemSpanConfigEntries captures the system span configurations that have
-  // been set by the tenant.
-  repeated SystemSpanConfigEntry system_span_config_entries = 1 [(gogoproto.nullable) = false];
-};
-
-// UpdateSpanConfigsRequest is used to update the span configurations over the
-// given spans.
+// UpdateSpanConfigsRequest is used to update the span configurations and system
+// span configurations over the given targets.
 //
-// This is a "targeted" API: the spans being deleted are expected to have been
-// present with the same bounds (same start/end key); the same is true for spans
-// being upserted with new configs. If bounds are mismatched, an error is
-// returned. If spans are being added, they're expected to not overlap with any
+// This is a "targeted" API: the targets being deleted are expected to have been
+// present exactly as specified. The same is true for targets being upserted with
+// new configs. If targets aren't present, an error is returned.
+//
+// Adding configurations that target a span are expected to not overlap with any
 // existing spans. When divvying up an existing span into multiple others,
 // callers are expected to delete the old and upsert the new ones. This can
-// happen as part of the same request; we delete the spans marked for deletion
-// before upserting whatever was requested.
+// happen as part of the same request, as we delete targets marked for deletion
+// before upserting what was requested.
 //
-// Spans are not allowed to overlap with other spans in the same list but can
-// across lists. This is necessary to support the delete+upsert semantics
-// described above.
+// Targets are not allowed to overlap with other targets in the same list. They
+// are, however, allowed to overlap across lists. This is necessary to support
+// the delete+upsert semantics described above.
 message UpdateSpanConfigsRequest {
-  // ToDelete captures the spans we want to delete configs for.
-  repeated Span to_delete = 1 [(gogoproto.nullable) = false];
+  reserved 1, 2;
 
-  // ToUpsert captures the spans we want to upsert and the configs we want to
-  // upsert with.
-  repeated SpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
+  // ToDelete captures the targets we want to delete configs for.
+  repeated SpanConfigTarget to_delete = 3 [(gogoproto.nullable) = false];
+
+  // ToUpsert captures the targets we want to upsert and the configs we want
+  // to upsert with.
+  repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
 };
 
 message UpdateSpanConfigsResponse { };
 
-// UpdateSystemSpanConfigsRequest is used to update system span configurations.
-
-// System span config targets being deleted are expected to have been present.
-// Targets are not allowed to be duplicated in the same list or across lists;
-// existing span configs should be updated by including in the upsert list
-// without deleting their targets first.
-message UpdateSystemSpanConfigsRequest {
-  // SystemSpanConfigsToDelete captures the targets of the system span
-  // configurations to delete.
-  repeated SystemSpanConfigTarget to_delete = 1 [(gogoproto.nullable) = false];
-
-  // SystemSpanConfigsToUpsert captures the system span configurations we want
-  // to upsert with.
-  repeated SystemSpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
-};
-
-message UpdateSystemSpanConfigsResponse {};

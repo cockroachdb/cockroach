@@ -114,6 +114,7 @@ func TestDropDatabase(t *testing.T) {
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
 INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
@@ -275,6 +276,7 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// Fix the column families so the key counts below don't change if the
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
 INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
@@ -489,7 +491,17 @@ func TestDropIndex(t *testing.T) {
 	})
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			Username:    security.RootUserName(),
+			Description: `GC for temporary index used during index backfill`,
+			DescriptorIDs: descpb.IDs{
+				tableDesc.GetID(),
+			},
+		}); err != nil {
+			return err
+		}
+
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -613,6 +625,8 @@ func TestDropTable(t *testing.T) {
 
 	tableSpan := tableDesc.TableSpan(keys.SystemSQLCodec)
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
+	_, err = sqlDB.Exec(`SET use_declarative_schema_changer = 'off';`)
+	require.NoError(t, err)
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
@@ -704,7 +718,8 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		tableSpan := descs[i].TableSpan(keys.SystemSQLCodec)
 		tests.CheckKeyCount(t, kvDB, tableSpan, numKeys)
-
+		_, err = sqlDB.Exec(`SET use_declarative_schema_changer = 'off';`)
+		require.NoError(t, err)
 		if _, err := sqlDB.Exec(fmt.Sprintf(`DROP TABLE t.%s`, tableName)); err != nil {
 			t.Fatal(err)
 		}
@@ -765,7 +780,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		// Ensure that the job is marked as succeeded.
 		testutils.SucceedsSoon(t, func() error {
-			return jobutils.VerifySystemJob(t, sqlRun, i, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			return jobutils.VerifySystemJob(t, sqlRun, (i*2)+1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{
@@ -804,9 +819,6 @@ func TestDropTableDeleteData(t *testing.T) {
 
 func writeTableDesc(ctx context.Context, db *kv.DB, tableDesc *tabledesc.Mutable) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
 		tableDesc.ModificationTime = txn.CommitTimestamp()
 		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID), tableDesc.DescriptorProto())
 	})
@@ -951,7 +963,9 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
 
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer = 'off';`)
+	require.NoError(t, err)
+	if _, err = sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1269,6 +1283,7 @@ func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 	_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.parent(k INT PRIMARY KEY);
 CREATE TABLE t.child(k INT PRIMARY KEY REFERENCES t.parent);
@@ -1320,8 +1335,9 @@ func TestDropPhysicalTableGC(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
-
-	_, err := sqlDB.Exec(`CREATE DATABASE test;`)
+	_, err := sqlDB.Exec(`SET use_declarative_schema_changer = 'off';`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE DATABASE test;`)
 	require.NoError(t, err)
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 

@@ -8,53 +8,55 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
     tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
@@ -62,54 +64,61 @@ ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    defaultExpr: 123:::INT8
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedExpr:
+      expr: 123:::INT8
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
     tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN j INT DEFAULT 123;
@@ -118,72 +127,87 @@ ALTER TABLE defaultdb.foo ADD COLUMN k INT DEFAULT 456;
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    defaultExpr: 123:::INT8
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
 - [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
-    defaultExpr: 456:::INT8
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 3
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- [[ColumnName:{DescID: 104, ColumnID: 2, Name: j}, PUBLIC], ABSENT]
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedExpr:
+      expr: 123:::INT8
+    tableId: 104
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    embeddedExpr:
+      expr: 456:::INT8
+    tableId: 104
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: j
     tableId: 104
-- [[ColumnName:{DescID: 104, ColumnID: 3, Name: k}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, Name: k, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     name: k
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
     tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    - 3
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      - 3
+      tableId: 104
 
 build
 ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
@@ -191,54 +215,57 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    computerExpr: i + 1:::INT8
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: a
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    computeExpr:
+      expr: i + 1:::INT8
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
     tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 
 create-table
 CREATE TABLE defaultdb.bar (j INT);
@@ -251,103 +278,107 @@ ALTER TABLE defaultdb.bar ADD COLUMN b INT;
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 2
     tableId: 104
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
 - [[Column:{DescID: 105, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
-    familyName: primary
-    nullable: true
-    pgAttributeNum: 3
     tableId: 105
-    type:
-      family: IntFamily
-      oid: 20
-      width: 64
-- [[ColumnName:{DescID: 104, ColumnID: 2, Name: a}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 104, Name: a, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
     name: a
     tableId: 104
-- [[ColumnName:{DescID: 105, ColumnID: 3, Name: b}, PUBLIC], ABSENT]
+- [[ColumnName:{DescID: 105, Name: b, ColumnID: 3}, PUBLIC], ABSENT]
   details:
     columnId: 3
     name: b
     tableId: 105
-- [[IndexName:{DescID: 104, IndexID: 1, Name: foo_pkey}, ABSENT], PUBLIC]
+- [[ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 2}, PUBLIC], ABSENT]
+  details:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 104
+- [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 3}, PUBLIC], ABSENT]
+  details:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    isNullable: true
+    tableId: 105
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 104, IndexID: 2, Name: foo_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 104, Name: foo_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: foo_pkey
     tableId: 104
-- [[IndexName:{DescID: 105, IndexID: 1, Name: bar_pkey}, ABSENT], PUBLIC]
+- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
     name: bar_pkey
     tableId: 105
-- [[IndexName:{DescID: 105, IndexID: 2, Name: bar_pkey}, PUBLIC], ABSENT]
+- [[IndexName:{DescID: 105, Name: bar_pkey, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
     name: bar_pkey
     tableId: 105
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 1
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 2
-    tableId: 104
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      sourceIndexId: 1
+      storingColumnIds:
+      - 2
+      tableId: 104
 - [[PrimaryIndex:{DescID: 105, IndexID: 1}, ABSENT], PUBLIC]
   details:
-    indexId: 1
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 2
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 1
-    tableId: 105
-    unique: true
+    embeddedIndex:
+      indexId: 1
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      storingColumnIds:
+      - 1
+      tableId: 105
 - [[PrimaryIndex:{DescID: 105, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    indexId: 2
-    keyColumnDirection:
-    - ASC
-    keyColumnIds:
-    - 2
-    shardedDescriptor: {}
-    sourceIndexId: 1
-    storingColumnIds:
-    - 1
-    - 3
-    tableId: 105
-    unique: true
+    embeddedIndex:
+      indexId: 2
+      isUnique: true
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      sourceIndexId: 1
+      storingColumnIds:
+      - 1
+      - 3
+      tableId: 105

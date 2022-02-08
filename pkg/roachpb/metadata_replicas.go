@@ -469,6 +469,11 @@ func (d ReplicaSet) ReplicationStatus(
 	return res
 }
 
+// Empty returns true if `target` is an empty replication target.
+func Empty(target ReplicationTarget) bool {
+	return target == ReplicationTarget{}
+}
+
 // ReplicationTargets returns a slice of ReplicationTargets corresponding to
 // each of the replicas in the set.
 func (d ReplicaSet) ReplicationTargets() (out []ReplicationTarget) {
@@ -525,15 +530,6 @@ func CheckCanReceiveLease(wouldbeLeaseholder ReplicaDescriptor, rngDesc *RangeDe
 	if !ok {
 		return errReplicaNotFound
 	} else if !repDesc.IsVoterNewConfig() {
-		// NB: there's no harm in transferring the lease to a VOTER_INCOMING.
-		// On the other hand, transferring to VOTER_OUTGOING would be a pretty bad
-		// idea since those voters are dropped when transitioning out of the joint
-		// config, which then amounts to removing the leaseholder without any
-		// safety precautions. This would either wedge the range or allow illegal
-		// reads to be served.
-		//
-		// Since the leaseholder can't remove itself and is a VOTER_FULL, we
-		// also know that in any configuration there's at least one VOTER_FULL.
 		return errReplicaCannotHoldLease
 	}
 	return nil

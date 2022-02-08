@@ -13,6 +13,7 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -23,30 +24,14 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteOnly{
-						TableID:                           this.TableID,
-						ColumnID:                          this.ColumnID,
-						FamilyName:                        this.FamilyName,
-						FamilyID:                          this.FamilyID,
-						ColumnType:                        this.Type,
-						Nullable:                          this.Nullable,
-						DefaultExpr:                       this.DefaultExpr,
-						OnUpdateExpr:                      this.OnUpdateExpr,
-						Hidden:                            this.Hidden,
-						Inaccessible:                      this.Inaccessible,
-						GeneratedAsIdentityType:           this.GeneratedAsIdentityType,
-						GeneratedAsIdentitySequenceOption: this.GeneratedAsIdentitySequenceOption,
-						UsesSequenceIds:                   this.UsesSequenceIds,
-						ComputerExpr:                      this.ComputerExpr,
-						PgAttributeNum:                    this.PgAttributeNum,
-						SystemColumnKind:                  this.SystemColumnKind,
-						Virtual:                           this.Virtual,
+						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
 				}),
 				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
 					return newLogEventOp(this, ts)
 				}),
 			),
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
 				minPhase(scop.PostCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteAndWriteOnly{
@@ -66,7 +51,8 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_DELETE_AND_WRITE_ONLY,
+			to(scpb.Status_WRITE_ONLY,
+				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeDroppedColumnDeleteAndWriteOnly{
 						TableID:  this.TableID,

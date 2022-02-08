@@ -320,10 +320,16 @@ Rows that have expired their TTL can be optionally removed from all SQL query
 results. Work for this is required at the optimizer layer. However, this is not
 planned to be implemented for the first iteration of TTL.
 
-## Foreign Keys to a TTL Table
-To avoid additional complexity in the initial implementation, foreign keys to
-TTL tables will not be permitted. More thought has to be put on ON
-DELETE/ON UPDATE CASCADEs before we can look at allowing this functionality.
+## Foreign Keys to/from TTL Tables
+To avoid additional complexity in the initial implementation, foreign keys (FK)
+to and from TTL tables will not be permitted due to complexities with the
+implementation which are complex to handle, for example:
+* When having a non-TTL table with a FK dependent on a TTL table with an
+  `ON UPDATE/DELETE CASCADE`, the non-TTL table need to hide any rows which
+  are linked to an expired TTL row.
+* When having a TTL table with an FK dependent on a non-TTL table,
+  `ON DELETE RESTRICT` should only block a delete on the non-TTL table
+  if the row has expired.
 
 ## Introspection
 The TTL definition for the table will appear in `SHOW CREATE TABLE`. The options

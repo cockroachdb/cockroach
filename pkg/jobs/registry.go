@@ -46,7 +46,8 @@ import (
 // adoptedJobs represents a the epoch and cancelation of a job id being run
 // by the registry.
 type adoptedJob struct {
-	sid sqlliveness.SessionID
+	sid    sqlliveness.SessionID
+	isIdle bool
 	// Calling the func will cancel the context the job was resumed with.
 	cancel context.CancelFunc
 }
@@ -1122,6 +1123,9 @@ func (r *Registry) stepThroughStateMachine(
 			defer jm.CurrentlyRunning.Dec(1)
 			err = resumer.Resume(resumeCtx, execCtx)
 		}()
+
+		r.MarkIdle(job, false)
+
 		if err == nil {
 			jm.ResumeCompleted.Inc(1)
 			return r.stepThroughStateMachine(ctx, execCtx, resumer, job, StatusSucceeded, nil)
@@ -1137,7 +1141,10 @@ func (r *Registry) stepThroughStateMachine(
 		}
 
 		if errors.Is(err, errPauseSelfSentinel) {
-			return r.PauseRequested(ctx, nil, job.ID(), err.Error())
+			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
+				return err
+			}
+			return errPauseSelfSentinel
 		}
 		// TODO(spaskob): enforce a limit on retries.
 
@@ -1282,6 +1289,28 @@ func (r *Registry) adoptionDisabled(ctx context.Context) bool {
 	return false
 }
 
+// MarkIdle marks a currently adopted job as Idle.
+// A single job should not toggle its idleness more than twice per-minute as it
+// is logged and may write to persisted job state in the future.
+func (r *Registry) MarkIdle(job *Job, isIdle bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if aj, ok := r.mu.adoptedJobs[job.ID()]; ok {
+		payload := job.Payload()
+		jobType := payload.Type()
+		jm := r.metrics.JobMetrics[jobType]
+		if aj.isIdle != isIdle {
+			log.Infof(r.serverCtx, "%s job %d: toggling idleness to %+v", jobType, job.ID(), isIdle)
+			if isIdle {
+				jm.CurrentlyIdle.Inc(1)
+			} else {
+				jm.CurrentlyIdle.Dec(1)
+			}
+			aj.isIdle = isIdle
+		}
+	}
+}
+
 func (r *Registry) cancelAllAdoptedJobs() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1395,4 +1424,12 @@ func (r *Registry) CheckPausepoint(name string) error {
 		}
 	}
 	return nil
+}
+
+// TestingIsJobIdle returns true if the job is adopted and currently idle.
+func (r *Registry) TestingIsJobIdle(jobID jobspb.JobID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	adoptedJob := r.mu.adoptedJobs[jobID]
+	return adoptedJob != nil && adoptedJob.isIdle
 }

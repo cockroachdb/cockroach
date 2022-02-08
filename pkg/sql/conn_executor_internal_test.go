@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -280,11 +281,13 @@ func startConnExecutor(
 	defer tempEngine.Close()
 	ambientCtx := log.MakeTestingAmbientCtxWithNewTracer()
 	cfg := &ExecutorConfig{
-		AmbientCtx:      ambientCtx,
-		Settings:        st,
-		Clock:           clock,
-		DB:              db,
-		SystemConfig:    config.EmptySystemConfigProvider{},
+		AmbientCtx: ambientCtx,
+		Settings:   st,
+		Clock:      clock,
+		DB:         db,
+		SystemConfig: config.NewConstantSystemConfigProvider(
+			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
+		),
 		SessionRegistry: NewSessionRegistry(),
 		NodeInfo: NodeInfo{
 			NodeID:    nodeID,
@@ -313,6 +316,9 @@ func startConnExecutor(
 			stopper,
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
 			nil, /* nodeDialer */
+			nil, /* podNodeDialer */
+			keys.SystemSQLCodec,
+			nil, /* sqlInstanceProvider */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},

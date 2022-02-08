@@ -16,13 +16,13 @@ import (
 	"math"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -96,19 +96,28 @@ func TestStoreRangeLease(t *testing.T) {
 }
 
 // TestStoreGossipSystemData verifies that the system-config and node-liveness
-// data is gossiped at startup.
+// data is gossiped at startup in the mixed version state.
+//
+// TODO(ajwerner): Delete this test in 22.2.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	zcfg := zonepb.DefaultZoneConfig()
+	version := clusterversion.ByKey(clusterversion.DisableSystemConfigGossipTrigger - 1)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		version, version, false, /* initializeVersion */
+	)
 	serverArgs := base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
 			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride: &zcfg,
+				DefaultZoneConfigOverride:      &zcfg,
+				BinaryVersionOverride:          version,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
 			},
 		},
 	}
@@ -128,7 +137,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	}
 
 	getSystemConfig := func(s *kvserver.Store) *config.SystemConfig {
-		systemConfig := s.Gossip().GetSystemConfig()
+		systemConfig := s.Gossip().DeprecatedGetSystemConfig()
 		return systemConfig
 	}
 	getNodeLiveness := func(s *kvserver.Store) livenesspb.Liveness {
@@ -159,7 +168,9 @@ func TestStoreGossipSystemData(t *testing.T) {
 // re-gossiped on lease transfer even if it hasn't changed. This helps prevent
 // situations where a previous leaseholder can restart and not receive the
 // system config because it was the original source of it within the gossip
-// network.
+// network. This test only applies in the mixed version state.
+//
+// TODO(ajwerner): Remove this test in 22.2.
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -168,6 +179,19 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numStores,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue: true,
+					},
+					Server: &server.TestingKnobs{
+						BinaryVersionOverride: clusterversion.ByKey(
+							clusterversion.DisableSystemConfigGossipTrigger - 1,
+						),
+						DisableAutomaticVersionUpgrade: make(chan struct{}),
+					},
+				},
+			},
 		},
 	)
 	defer tc.Stopper().Stop(context.Background())
@@ -177,7 +201,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 
 	initialStoreIdx := -1
 	for i := range tc.Servers {
-		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			initialStoreIdx = i
 		}
 	}
@@ -190,10 +214,10 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 		t.Fatalf("Unexpected error %v", err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			return errors.New("system config still most recently gossiped by original leaseholder")
 		}
-		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			return errors.New("system config not most recently gossiped by new leaseholder")
 		}
 		return nil
@@ -569,6 +593,182 @@ func TestLeasePreferencesRebalance(t *testing.T) {
 	})
 }
 
+// Tests that when leaseholder is relocated, the lease can be transferred directly to a new node.
+// This verifies https://github.com/cockroachdb/cockroach/issues/67740
+func TestLeaseholderRelocatePreferred(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testLeaseholderRelocateInternal(t, "us")
+}
+
+// Tests that when leaseholder is relocated, the lease will transfer to a node in a preferred
+// location, even if another node is being added.
+// This verifies https://github.com/cockroachdb/cockroach/issues/67740
+func TestLeaseholderRelocateNonPreferred(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testLeaseholderRelocateInternal(t, "eu")
+}
+
+// Tests that when leaseholder is relocated, the lease will transfer to some node,
+// even if nodes in the preferred region aren't available.
+// This verifies https://github.com/cockroachdb/cockroach/issues/67740
+func TestLeaseholderRelocateNonExistent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testLeaseholderRelocateInternal(t, "au")
+}
+
+// Tests that when leaseholder is relocated, the lease can be transferred directly to new node
+func testLeaseholderRelocateInternal(t *testing.T, preferredRegion string) {
+	stickyRegistry := server.NewStickyInMemEnginesRegistry()
+	defer stickyRegistry.CloseAllStickyInMemEngines()
+	ctx := context.Background()
+	manualClock := hlc.NewHybridManualClock()
+	zcfg := zonepb.DefaultZoneConfig()
+	zcfg.LeasePreferences = []zonepb.LeasePreference{
+		{
+			Constraints: []zonepb.Constraint{
+				{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: preferredRegion},
+			},
+		},
+	}
+
+	serverArgs := make(map[int]base.TestServerArgs)
+	locality := func(region string) roachpb.Locality {
+		return roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: region},
+			},
+		}
+	}
+	localities := []roachpb.Locality{
+		locality("eu"),
+		locality("eu"),
+		locality("us"),
+		locality("us"),
+		locality("au"),
+	}
+
+	const numNodes = 4
+	for i := 0; i < numNodes; i++ {
+		serverArgs[i] = base.TestServerArgs{
+			Locality: localities[i],
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					ClockSource:               manualClock.UnixNano,
+					DefaultZoneConfigOverride: &zcfg,
+					StickyEngineRegistry:      stickyRegistry,
+				},
+			},
+			StoreSpecs: []base.StoreSpec{
+				{
+					InMemory:               true,
+					StickyInMemoryEngineID: strconv.FormatInt(int64(i), 10),
+				},
+			},
+		}
+	}
+	tc := testcluster.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode:   base.ReplicationManual,
+			ServerArgsPerNode: serverArgs,
+		})
+	defer tc.Stopper().Stop(ctx)
+
+	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+
+	// We start with having the range under test on (1,2,3).
+	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2)...)
+
+	// Make sure the lease is on 3
+	tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(2))
+
+	// Check that the lease moved to 3.
+	leaseHolder, err := tc.FindRangeLeaseHolder(rhsDesc, nil)
+	require.NoError(t, err)
+	require.Equal(t, tc.Target(2), leaseHolder)
+
+	gossipLiveness(t, tc)
+
+	testutils.SucceedsSoon(t, func() error {
+		// Relocate range 3 -> 4.
+		err = tc.Servers[2].DB().
+			AdminRelocateRange(
+				context.Background(), rhsDesc.StartKey.AsRawKey(),
+				tc.Targets(0, 1, 3), nil, false)
+		if err != nil {
+			require.True(t, kvserver.IsTransientLeaseholderError(err), "%v", err)
+			return err
+		}
+		leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+		if err != nil {
+			return err
+		}
+		if leaseHolder.Equal(tc.Target(2)) {
+			return errors.Errorf("Leaseholder didn't move.")
+		}
+		return nil
+	})
+
+	// The only node with "au" locality is down, the lease can move anywhere.
+	if preferredRegion == "au" {
+		return
+	}
+
+	// Make sure lease moved to the preferred region, if .
+	leaseHolder, err = tc.FindRangeLeaseHolder(rhsDesc, nil)
+	require.NoError(t, err)
+	require.Equal(t, locality(preferredRegion),
+		localities[leaseHolder.NodeID-1])
+
+	var leaseholderNodeId int
+	if preferredRegion == "us" {
+		require.Equal(t, tc.Target(3).NodeID,
+			leaseHolder.NodeID)
+		leaseholderNodeId = 3
+	} else {
+		if leaseHolder.NodeID == tc.Target(0).NodeID {
+			leaseholderNodeId = 0
+		} else {
+			require.Equal(t, tc.Target(1).NodeID,
+				leaseHolder.NodeID)
+			leaseholderNodeId = 1
+		}
+	}
+
+	// Double check that lease moved directly.
+	repl := tc.GetFirstStoreFromServer(t, leaseholderNodeId).
+		LookupReplica(roachpb.RKey(rhsDesc.StartKey.AsRawKey()))
+	history := repl.GetLeaseHistory()
+	require.Equal(t, leaseHolder.NodeID,
+		history[len(history)-1].Replica.NodeID)
+	require.Equal(t, tc.Target(2).NodeID,
+		history[len(history)-2].Replica.NodeID)
+}
+
+func gossipLiveness(t *testing.T, tc *testcluster.TestCluster) {
+	for i := range tc.Servers {
+		testutils.SucceedsSoon(t, tc.Servers[i].HeartbeatNodeLiveness)
+	}
+	// Make sure that all store pools have seen liveness heartbeats from everyone.
+	testutils.SucceedsSoon(t, func() error {
+		for i := range tc.Servers {
+			for j := range tc.Servers {
+				live, err := tc.GetFirstStoreFromServer(t, i).GetStoreConfig().
+					StorePool.IsLive(tc.Target(j).StoreID)
+				if err != nil {
+					return err
+				}
+				if !live {
+					return errors.Errorf("Server %d is suspect on server %d", j, i)
+				}
+			}
+		}
+		return nil
+	})
+}
+
 // This test replicates the behavior observed in
 // https://github.com/cockroachdb/cockroach/issues/62485. We verify that
 // when a dc with the leaseholder is lost, a node in a dc that does not have the
@@ -691,29 +891,10 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		return nil
 	})
 
-	_, processError, enqueueError := tc.GetFirstStoreFromServer(t, 0).
+	_, _, enqueueError := tc.GetFirstStoreFromServer(t, 0).
 		ManuallyEnqueue(ctx, "replicate", repl, true)
+
 	require.NoError(t, enqueueError)
-	if processError != nil {
-		log.Infof(ctx, "a US replica stole lease, manually moving it to the EU.")
-		if !strings.Contains(processError.Error(), "does not have the range lease") {
-			t.Fatal(processError)
-		}
-		// The us replica ended up stealing the lease, so we need to manually
-		// transfer the lease and then do another run through the replicate queue
-		// to move it to the us.
-		tc.TransferRangeLeaseOrFatal(t, *repl.Desc(), tc.Target(0))
-		testutils.SucceedsSoon(t, func() error {
-			if !repl.OwnsValidLease(ctx, tc.Servers[0].Clock().NowAsClockTimestamp()) {
-				return errors.Errorf("Expected lease to transfer to server 0")
-			}
-			return nil
-		})
-		_, processError, enqueueError = tc.GetFirstStoreFromServer(t, 0).
-			ManuallyEnqueue(ctx, "replicate", repl, true)
-		require.NoError(t, enqueueError)
-		require.NoError(t, processError)
-	}
 
 	var newLeaseHolder roachpb.ReplicationTarget
 	testutils.SucceedsSoon(t, func() error {
@@ -722,22 +903,26 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 		return err
 	})
 
+	// Check that the leaseholder is in the US
 	srv, err := tc.FindMemberServer(newLeaseHolder.StoreID)
 	require.NoError(t, err)
 	region, ok := srv.Locality().Find("region")
 	require.True(t, ok)
 	require.Equal(t, "us", region)
-	require.Equal(t, 3, len(repl.Desc().Replicas().Voters().VoterDescriptors()))
+
 	// Validate that we upreplicated outside of SF.
-	for _, replDesc := range repl.Desc().Replicas().Voters().VoterDescriptors() {
+	replicas := repl.Desc().Replicas().Voters().VoterDescriptors()
+	require.Equal(t, 3, len(replicas))
+	for _, replDesc := range replicas {
 		serv, err := tc.FindMemberServer(replDesc.StoreID)
 		require.NoError(t, err)
 		dc, ok := serv.Locality().Find("dc")
 		require.True(t, ok)
 		require.NotEqual(t, "sf", dc)
 	}
-	history := repl.GetLeaseHistory()
+
 	// make sure we see the eu node as a lease holder in the second to last position.
+	history := repl.GetLeaseHistory()
 	require.Equal(t, tc.Target(0).NodeID, history[len(history)-2].Replica.NodeID)
 }
 
@@ -816,7 +1001,7 @@ func TestLeasesDontThrashWhenNodeBecomesSuspect(t *testing.T) {
 
 	_, rhsDesc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
 	tc.AddVotersOrFatal(t, rhsDesc.StartKey.AsRawKey(), tc.Targets(1, 2, 3)...)
-	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0), tc.Target(1))
+	tc.RemoveLeaseHolderOrFatal(t, rhsDesc, tc.Target(0))
 
 	startKeys := make([]roachpb.Key, 20)
 	startKeys[0] = rhsDesc.StartKey.AsRawKey()

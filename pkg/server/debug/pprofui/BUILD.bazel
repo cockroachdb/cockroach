@@ -35,6 +35,7 @@ go_test(
         "//pkg/build/bazel",
         "//pkg/server/serverpb",
         "//pkg/testutils",
+        "//pkg/testutils/skip",
         "@com_github_stretchr_testify//require",
     ],
 )

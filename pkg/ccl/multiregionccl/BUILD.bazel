@@ -33,6 +33,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":multiregionccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/ccl",
@@ -41,6 +42,7 @@ go_test(
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",

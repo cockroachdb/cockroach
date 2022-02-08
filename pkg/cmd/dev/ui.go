@@ -175,10 +175,9 @@ Replaces 'make ui-watch'.`,
 			}
 
 			// Wait for OS signals to cancel if we're not in test-mode
-			if !isTesting {
+			if !d.exec.IsDryrun() {
 				<-ctx.Done()
 			}
-
 			return nil
 		},
 	}

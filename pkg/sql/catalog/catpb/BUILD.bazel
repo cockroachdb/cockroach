@@ -1,10 +1,14 @@
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
+load("//build:STRINGER.bzl", "stringer")
 
 proto_library(
     name = "catpb_proto",
-    srcs = ["catalog.proto"],
+    srcs = [
+        "catalog.proto",
+        "privilege.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
@@ -16,22 +20,56 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb",
     proto = ":catpb_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/sql/sem/catid",  # keep
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
 
 go_library(
     name = "catpb",
     srcs = [
         "constraint.go",
+        "default_privilege.go",
         "doc.go",
+        "expression.go",
+        "job_id.go",
         "multiregion.go",
+        "privilege.go",
+        ":gen-privilegedescversion-stringer",  # keep
     ],
     embed = [":catpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
+)
+
+go_test(
+    name = "catpb_test",
+    srcs = ["privilege_test.go"],
+    deps = [
+        ":catpb",
+        "//pkg/keys",
+        "//pkg/security",
+        "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/privilege",
+        "//pkg/sql/sem/catid",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+    ],
+)
+
+stringer(
+    name = "gen-privilegedescversion-stringer",
+    src = "privilege.go",
+    typ = "PrivilegeDescVersion",
 )

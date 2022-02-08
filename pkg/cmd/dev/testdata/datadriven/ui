@@ -1,0 +1,44 @@
+exec
+dev ui watch
+----
+bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000
+
+exec
+dev ui watch --oss
+----
+bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --mode development --env.WEBPACK_SERVE --env.dist=oss --env.target=http://localhost:8080 --port 3000
+
+exec
+dev ui watch --secure
+----
+bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 3000 --https
+
+exec
+dev ui watch --db http://example.crdb.io:4848
+----
+bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://example.crdb.io:4848 --port 3000
+
+exec
+dev ui watch --port 12345
+----
+bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client //pkg/ui/workspaces/db-console/ccl/src/js:crdb-protobuf-client-ccl
+which yarn
+bazel info workspace --color=no
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/cluster-ui build:watch
+yarn --silent --cwd crdb-checkout/pkg/ui/workspaces/db-console webpack-dev-server --config webpack.app.js --mode development --env.WEBPACK_SERVE --env.dist=ccl --env.target=http://localhost:8080 --port 12345

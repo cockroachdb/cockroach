@@ -46,7 +46,9 @@
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-experience
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
+/pkg/sql/ttl                 @cockroachdb/sql-experience
 
+/pkg/ccl/schemachangerccl/   @cockroachdb/sql-schema
 /pkg/sql/catalog/            @cockroachdb/sql-schema
 /pkg/sql/catalog/multiregion @cockroachdb/multiregion
 /pkg/sql/doctor/             @cockroachdb/sql-schema
@@ -93,7 +95,8 @@
 /pkg/ccl/streamingccl/streamingest @cockroachdb/bulk-prs
 
 /pkg/ccl/backupccl/          @cockroachdb/bulk-prs
-/pkg/ccl/importccl/          @cockroachdb/bulk-prs
+/pkg/sql/importer/           @cockroachdb/bulk-prs
+/pkg/ccl/importerccl/        @cockroachdb/bulk-prs
 /pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/ccl/storageccl/         @cockroachdb/bulk-prs
 /pkg/cloud/                  @cockroachdb/bulk-prs
@@ -177,6 +180,7 @@
 /pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
 /pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
 /pkg/cmd/reduce/             @cockroachdb/sql-queries
+/pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
 /pkg/cmd/roachprod/          @cockroachdb/dev-inf
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng
@@ -229,6 +233,7 @@
 /pkg/roachpb/dep_test.go     @cockroachdb/dev-inf
 /pkg/roachpb/error*          @cockroachdb/kv-prs
 /pkg/roachpb/gen             @cockroachdb/dev-inf
+/pkg/roachpb/gen.bzl         @cockroachdb/dev-inf
 /pkg/roachpb/app*            @cockroachdb/sql-observability
 /pkg/roachpb/index*          @cockroachdb/sql-observability
 /pkg/roachpb/internal*       @cockroachdb/kv-prs

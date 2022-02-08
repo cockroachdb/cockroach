@@ -1,0 +1,58 @@
+exec
+dev testlogic
+----
+bazel test --test_env=GOTRACEBACK=all //pkg/sql/logictest:logictest_test --test_filter TestLogic/// --test_output errors
+bazel test --test_env=GOTRACEBACK=all //pkg/ccl/logictestccl:logictestccl_test --test_filter 'Test(CCL|Tenant)Logic///' --test_output errors
+bazel test --test_env=GOTRACEBACK=all //pkg/sql/opt/exec/execbuilder:execbuilder_test --test_filter TestExecBuild/// --test_output errors
+
+exec
+dev testlogic ccl
+----
+bazel test --test_env=GOTRACEBACK=all //pkg/ccl/logictestccl:logictestccl_test --test_filter 'Test(CCL|Tenant)Logic///' --test_output errors
+
+exec
+dev testlogic ccl opt
+----
+bazel test --test_env=GOTRACEBACK=all //pkg/ccl/logictestccl:logictestccl_test --test_filter 'Test(CCL|Tenant)Logic///' --test_output errors
+bazel test --test_env=GOTRACEBACK=all //pkg/sql/opt/exec/execbuilder:execbuilder_test --test_filter TestExecBuild/// --test_output errors
+
+exec
+dev testlogic base --ignore-cache 
+----
+bazel test --test_env=GOTRACEBACK=all --nocache_test_results //pkg/sql/logictest:logictest_test --test_filter TestLogic/// --test_output errors
+
+exec
+dev testlogic base --show-sql
+----
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql //pkg/sql/logictest:logictest_test --test_filter TestLogic/// --test_output errors
+
+exec
+dev testlogic base --files=prepare|fk --subtests=20042 --config=local
+----
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_arg -config --test_arg local //pkg/sql/logictest:logictest_test --test_filter 'TestLogic/^local$/^prepare|fk$/20042' --test_output errors
+
+exec
+dev testlogic base --files=auto_span_config_reconciliation --config=local -v --show-logs --timeout=50s --rewrite
+----
+bazel info workspace --color=no
+bazel test --test_env=GOTRACEBACK=all --test_arg -test.v --test_arg -show-logs --test_arg -show-sql --test_arg -config --test_arg local --test_env=COCKROACH_WORKSPACE=crdb-checkout --test_arg -rewrite --sandbox_writable_path=crdb-checkout/pkg/sql/logictest --test_timeout=50 //pkg/sql/logictest:logictest_test --test_filter 'TestLogic/^local$/^auto_span_config_reconciliation$/' --test_output all
+
+exec
+dev testlogic base --files=auto_span_config_reconciliation --config=local --rewrite --stress
+----
+err: cannot combine --stress and --rewrite
+
+exec
+dev testlogic base --files=auto_span_config_reconciliation --config=local --count 5
+----
+bazel test --test_env=GOTRACEBACK=all --test_arg -test.count=5 --test_arg -show-sql --test_arg -config --test_arg local //pkg/sql/logictest:logictest_test --test_filter 'TestLogic/^local$/^auto_span_config_reconciliation$/' --test_output errors
+
+exec
+dev testlogic base --files=auto_span_config_reconciliation --stress
+----
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=86400 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' ' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed
+
+exec
+dev testlogic base --files=auto_span_config_reconciliation --stress --timeout 1m --cpus 8
+----
+bazel test --test_env=GOTRACEBACK=all --local_cpu_resources=8 --test_arg -show-sql --test_sharding_strategy=disabled --test_timeout=120 --run_under '@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts '"'"'XML_OUTPUT_FILE=dev merge-test-xmls'"'"' -maxtime=1m0s -p=8' //pkg/sql/logictest:logictest_test --test_filter 'TestLogic//^auto_span_config_reconciliation$/' --test_output streamed

@@ -46,7 +46,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	raft "go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
@@ -399,7 +399,7 @@ func createTestAllocatorWithKnobs(
 
 // checkReplExists checks whether the given `repl` exists on any of the
 // `stores`.
-func checkReplExists(repl roachpb.ReplicaDescriptor, stores []roachpb.StoreID) (found bool) {
+func checkReplExists(repl roachpb.ReplicationTarget, stores []roachpb.StoreID) (found bool) {
 	for _, storeID := range stores {
 		if repl.StoreID == storeID {
 			found = true
@@ -503,7 +503,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
-	if result.Node.NodeID != 1 || result.StoreID != 1 {
+	if result.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
 	}
 }
@@ -520,7 +520,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		simpleSpanConfig,
 		nil /* existingVoters */, nil, /* existingNonVoters */
 	)
-	if result != nil {
+	if !roachpb.Empty(result) {
 		t.Errorf("expected nil result: %+v", result)
 	}
 	if err == nil {
@@ -548,17 +548,17 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		ctx,
 		multiDCConfigSSD,
 		[]roachpb.ReplicaDescriptor{{
-			NodeID:  result1.Node.NodeID,
+			NodeID:  result1.NodeID,
 			StoreID: result1.StoreID,
 		}}, nil, /* existingNonVoters */
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %+v", err)
 	}
-	ids := []int{int(result1.Node.NodeID), int(result2.Node.NodeID)}
+	ids := []int{int(result1.NodeID), int(result2.NodeID)}
 	sort.Ints(ids)
 	if expected := []int{1, 2}; !reflect.DeepEqual(ids, expected) {
-		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.Node, result2.Node)
+		t.Errorf("Expected nodes %+v: %+v vs %+v", expected, result1.NodeID, result2.NodeID)
 	}
 	// Verify that no result is forthcoming if we already have a replica.
 	result3, _, err := a.AllocateVoter(
@@ -566,11 +566,11 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		multiDCConfigSSD,
 		[]roachpb.ReplicaDescriptor{
 			{
-				NodeID:  result1.Node.NodeID,
+				NodeID:  result1.NodeID,
 				StoreID: result1.StoreID,
 			},
 			{
-				NodeID:  result2.Node.NodeID,
+				NodeID:  result2.NodeID,
 				StoreID: result2.StoreID,
 			},
 		}, nil, /* existingNonVoters */
@@ -711,7 +711,7 @@ func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 			result, _, err := a.AllocateVoter(
 				ctx, emptySpanConfig(), tc.existing, nil,
 			)
-			if e, a := tc.expectTargetAllocate, result != nil; e != a {
+			if e, a := tc.expectTargetAllocate, !roachpb.Empty(result); e != a {
 				t.Errorf(
 					"AllocateVoter(%v) got target %v, err %v; expectTarget=%v",
 					tc.existing, result, err, tc.expectTargetAllocate,
@@ -1465,7 +1465,7 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
 		var rangeUsageInfo RangeUsageInfo
-		options := qpsScorerOptions{
+		options := &qpsScorerOptions{
 			qpsPerReplica:         100,
 			qpsRebalanceThreshold: 0.2,
 		}
@@ -1574,7 +1574,7 @@ func TestAllocatorRemoveBasedOnQPS(t *testing.T) {
 		stopper, g, _, a, _ := createTestAllocator(ctx, 10, false /* deterministic */)
 		defer stopper.Stop(ctx)
 		gossiputil.NewStoreGossiper(g).GossipStores(subtest.testStores, t)
-		options := qpsScorerOptions{
+		options := &qpsScorerOptions{
 			qpsRebalanceThreshold: 0.1,
 		}
 		remove, _, err := a.RemoveVoter(
@@ -2209,7 +2209,8 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 			nil,
 			rangeUsageInfo,
 			storeFilterThrottled,
-			a.scorerOptions())
+			a.scorerOptions(),
+		)
 		var resultID roachpb.StoreID
 		if ok {
 			resultID = result.StoreID
@@ -4075,7 +4076,8 @@ func TestAllocatorRebalanceNonVoters(t *testing.T) {
 			defer stopper.Stop(ctx)
 			sg := gossiputil.NewStoreGossiper(g)
 			sg.GossipStores(test.stores, t)
-			add, remove, _, ok := a.RebalanceNonVoter(ctx,
+			add, remove, _, ok := a.RebalanceNonVoter(
+				ctx,
 				test.conf,
 				nil,
 				test.existingVoters,
@@ -5108,17 +5110,17 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	// the unknown node 99 in evenlyBalanced to verify that requests from
 	// unknown localities don't affect the algorithm.
 	evenlyBalanced := newReplicaStats(clock, localityFn)
-	evenlyBalanced.record(1)
-	evenlyBalanced.record(2)
-	evenlyBalanced.record(3)
+	evenlyBalanced.recordCount(1, 1)
+	evenlyBalanced.recordCount(1, 2)
+	evenlyBalanced.recordCount(1, 3)
 	imbalanced1 := newReplicaStats(clock, localityFn)
 	imbalanced2 := newReplicaStats(clock, localityFn)
 	imbalanced3 := newReplicaStats(clock, localityFn)
 	for i := 0; i < 100*int(MinLeaseTransferStatsDuration.Seconds()); i++ {
-		evenlyBalanced.record(99)
-		imbalanced1.record(1)
-		imbalanced2.record(2)
-		imbalanced3.record(3)
+		evenlyBalanced.recordCount(1, 99)
+		imbalanced1.recordCount(1, 1)
+		imbalanced2.recordCount(1, 2)
+		imbalanced3.recordCount(1, 3)
 	}
 
 	manual.Increment(int64(MinLeaseTransferStatsDuration))
@@ -5426,7 +5428,7 @@ func TestAllocatorRemoveTargetBasedOnCapacity(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a, e1, e2 := targetRepl, replicas[1], replicas[2]; a != e1 && a != e2 {
+		if a, e1, e2 := targetRepl, replicas[1], replicas[2]; a.StoreID != e1.StoreID && a.StoreID != e2.StoreID {
 			t.Fatalf("%d: RemoveVoter did not select either expected replica; expected %v or %v, got %v",
 				i, e1, e2, a)
 		}
@@ -6987,7 +6989,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to perform allocation: %+v", err)
 	}
-	if result.Node.NodeID != 1 || result.StoreID != 1 {
+	if result.NodeID != 1 || result.StoreID != 1 {
 		t.Errorf("expected NodeID 1 and StoreID 1: %+v", result)
 	}
 
@@ -7204,6 +7206,79 @@ func TestSimulateFilterUnremovableReplicas(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAllocatorRebalanceWithScatter tests that when `scatter` is set to true,
+// the allocator will produce rebalance opportunities even when it normally
+// wouldn't.
+func TestAllocatorRebalanceWithScatter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, _, a, _ := createTestAllocator(ctx, 10 /* numNodes */, true /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 2,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: 3,
+			},
+			Capacity: roachpb.StoreCapacity{
+				RangeCount: 1000,
+			},
+		},
+	}
+
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	var rangeUsageInfo RangeUsageInfo
+
+	// Ensure that we wouldn't normally rebalance when all stores have the same
+	// replica count.
+	_, _, _, ok := a.RebalanceVoter(
+		ctx,
+		emptySpanConfig(),
+		nil,
+		replicas(1),
+		nil,
+		rangeUsageInfo,
+		storeFilterThrottled,
+		a.scorerOptions(),
+	)
+	require.False(t, ok)
+
+	// Ensure that we would produce a rebalance target when running with scatter.
+	_, _, _, ok = a.RebalanceVoter(
+		ctx,
+		emptySpanConfig(),
+		nil,
+		replicas(1),
+		nil,
+		rangeUsageInfo,
+		storeFilterThrottled,
+		a.scorerOptionsForScatter(),
+	)
+	require.True(t, ok)
 }
 
 // TestAllocatorRebalanceAway verifies that when a replica is on a node with a
@@ -7632,7 +7707,7 @@ func qpsBasedRebalanceFn(
 ) {
 	avgQPS := candidate.Capacity.QueriesPerSecond / float64(candidate.Capacity.RangeCount)
 	jitteredQPS := avgQPS * (1 + alloc.randGen.Float64())
-	opts := qpsScorerOptions{
+	opts := &qpsScorerOptions{
 		qpsPerReplica:         jitteredQPS,
 		qpsRebalanceThreshold: 0.2,
 	}

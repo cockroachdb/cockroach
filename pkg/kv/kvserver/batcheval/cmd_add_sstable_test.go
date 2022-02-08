@@ -48,21 +48,20 @@ func TestEvalAddSSTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const defaultReqTS = 10 // request sent with this timestamp by default
-	const intentTS = 100    // values with this timestamp are written as intents
+	const intentTS = 100 // values with this timestamp are written as intents
 
-	// These are run with IngestAsWrites both disabled and enabled.
-	// nolint:composites
+	// These are run with IngestAsWrites both disabled and enabled, and
+	// kv.bulk_io_write.sst_rewrite_concurrency.per_call of 0 and 8.
 	testcases := map[string]struct {
 		data           []sstutil.KV
 		sst            []sstutil.KV
-		sstTimestamp   int64 // SSTTimestamp set to given timestamp
-		atReqTS        int64 // WriteAtRequestTimestamp with given timestamp
+		reqTS          int64
+		toReqTS        int64 // SSTTimestampToRequestTimestamp with given SST timestamp
 		noConflict     bool  // DisallowConflicts
 		noShadow       bool  // DisallowShadowing
 		noShadowBelow  int64 // DisallowShadowingBelow
 		expect         []sstutil.KV
-		expectErr      interface{} // error type, substring, or true (any error)
+		expectErr      interface{} // error type, substring, substring slice, or true (any)
 		expectErrRace  interface{}
 		expectStatsEst bool // expect MVCCStats.ContainsEstimates, don't check stats
 	}{
@@ -89,13 +88,19 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:       []sstutil.KV{{"a", 1, "sst"}, {"c", 1, "sst"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
-		"blind writes tombstones": { // unfortunately, for performance
+		"blind ignores intent outside span": {
+			data:           []sstutil.KV{{"b", intentTS, "b0"}},
+			sst:            []sstutil.KV{{"c", 1, "sst"}, {"d", 1, "sst"}},
+			expect:         []sstutil.KV{{"b", intentTS, "b0"}, {"c", 1, "sst"}, {"d", 1, "sst"}},
+			expectStatsEst: true,
+		},
+		"blind writes tombstones unless race": { // unfortunately, for performance
 			sst:            []sstutil.KV{{"a", 1, ""}},
 			expect:         []sstutil.KV{{"a", 1, ""}},
 			expectStatsEst: true,
 			expectErrRace:  `SST contains tombstone for key "a"/0.000000001,0`,
 		},
-		"blind writes SST inline values": { // unfortunately, for performance
+		"blind writes SST inline values unless race": { // unfortunately, for performance
 			sst:            []sstutil.KV{{"a", 0, "inline"}},
 			expect:         []sstutil.KV{{"a", 0, "inline"}},
 			expectStatsEst: true,
@@ -108,96 +113,123 @@ func TestEvalAddSSTable(t *testing.T) {
 			expectStatsEst: true,
 		},
 
-		// WriteAtRequestTimestamp
-		"WriteAtRequestTimestamp sets timestamp": {
-			atReqTS:        10,
-			sst:            []sstutil.KV{{"a", 1, "a1"}, {"b", 3, "b3"}},
-			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b3"}},
+		// SSTTimestampToRequestTimestamp
+		"SSTTimestampToRequestTimestamp rewrites timestamp": {
+			reqTS:          10,
+			toReqTS:        1,
+			sst:            []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}},
+			expect:         []sstutil.KV{{"a", 10, "a1"}, {"b", 10, "b1"}},
 			expectStatsEst: true,
 		},
-		"WriteAtRequestTimestamp rejects tombstones": {
-			atReqTS:       10,
-			sst:           []sstutil.KV{{"a", 1, ""}},
-			expectErr:     "SST values cannot be tombstones",
-			expectErrRace: `SST contains tombstone for key "a"/0.000000001,0`,
+		"SSTTimestampToRequestTimestamp writes tombstones unless race": { // unfortunately, for performance
+			reqTS:          10,
+			toReqTS:        1,
+			sst:            []sstutil.KV{{"a", 1, ""}},
+			expect:         []sstutil.KV{{"a", 10, ""}},
+			expectErrRace:  `SST contains tombstone for key "a"/0.000000001,0`,
+			expectStatsEst: true,
 		},
-		"WriteAtRequestTimestamp rejects inline values": {
-			atReqTS:       10,
-			sst:           []sstutil.KV{{"a", 0, "inline"}},
-			expectErr:     "inline values or intents are not supported",
-			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
+		"SSTTimestampToRequestTimestamp rejects incorrect SST timestamp": {
+			reqTS:   10,
+			toReqTS: 1,
+			sst:     []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}, {"c", 2, "c2"}},
+			expectErr: []string{
+				`unexpected timestamp 0.000000002,0 (expected 0.000000001,0) for key "c"`,
+				`key has suffix "\x00\x00\x00\x00\x00\x00\x00\x02\t", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
+			},
 		},
-		"WriteAtRequestTimestamp writes below and replaces": {
-			atReqTS:        5,
+		"SSTTimestampToRequestTimestamp rejects incorrect 0 SST timestamp": {
+			reqTS:   10,
+			toReqTS: 1,
+			sst:     []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}, {"c", 0, "c0"}},
+			expectErr: []string{
+				`unexpected timestamp 0,0 (expected 0.000000001,0) for key "c"`,
+				`key has suffix "", expected "\x00\x00\x00\x00\x00\x00\x00\x01\t"`,
+			},
+			expectErrRace: `SST contains inline value or intent for key "c"/0,0`,
+		},
+		"SSTTimestampToRequestTimestamp writes below and replaces": {
+			reqTS:          5,
+			toReqTS:        1,
 			data:           []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
 			sst:            []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
 			expect:         []sstutil.KV{{"a", 5, "sst"}, {"b", 7, "b7"}, {"b", 5, "sst"}},
 			expectStatsEst: true,
 		},
-		"WriteAtRequestTimestamp returns WriteIntentError for intents": {
-			atReqTS:   10,
+		"SSTTimestampToRequestTimestamp returns WriteIntentError for intents": {
+			reqTS:     10,
+			toReqTS:   1,
 			data:      []sstutil.KV{{"a", intentTS, "intent"}},
 			sst:       []sstutil.KV{{"a", 1, "a@1"}},
 			expectErr: &roachpb.WriteIntentError{},
 		},
-		"WriteAtRequestTimestamp errors with DisallowConflicts below existing": {
-			atReqTS:    5,
+		"SSTTimestampToRequestTimestamp errors with DisallowConflicts below existing": {
+			reqTS:      5,
+			toReqTS:    10,
 			noConflict: true,
 			data:       []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
 			sst:        []sstutil.KV{{"a", 10, "sst"}, {"b", 10, "sst"}},
 			expectErr:  &roachpb.WriteTooOldError{},
 		},
-		"WriteAtRequestTimestamp succeeds with DisallowConflicts above existing": {
-			atReqTS:    8,
+		"SSTTimestampToRequestTimestamp succeeds with DisallowConflicts above existing": {
+			reqTS:      8,
+			toReqTS:    1,
 			noConflict: true,
 			data:       []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
 			sst:        []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
 			expect:     []sstutil.KV{{"a", 8, "sst"}, {"a", 5, "a5"}, {"b", 8, "sst"}, {"b", 7, "b7"}},
 		},
-		"WriteAtRequestTimestamp errors with DisallowShadowing below existing": {
-			atReqTS:   5,
+		"SSTTimestampToRequestTimestamp errors with DisallowShadowing below existing": {
+			reqTS:     5,
+			toReqTS:   10,
 			noShadow:  true,
 			data:      []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
 			sst:       []sstutil.KV{{"a", 10, "sst"}, {"b", 10, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
-		"WriteAtRequestTimestamp errors with DisallowShadowing above existing": {
-			atReqTS:   8,
+		"SSTTimestampToRequestTimestamp errors with DisallowShadowing above existing": {
+			reqTS:     8,
+			toReqTS:   1,
 			noShadow:  true,
 			data:      []sstutil.KV{{"a", 5, "a5"}, {"b", 7, "b7"}},
 			sst:       []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
 			expectErr: `ingested key collides with an existing one: "a"`,
 		},
-		"WriteAtRequestTimestamp succeeds with DisallowShadowing above tombstones": {
-			atReqTS:  8,
+		"SSTTimestampToRequestTimestamp succeeds with DisallowShadowing above tombstones": {
+			reqTS:    8,
+			toReqTS:  1,
 			noShadow: true,
 			data:     []sstutil.KV{{"a", 5, ""}, {"b", 7, ""}},
 			sst:      []sstutil.KV{{"a", 1, "sst"}, {"b", 1, "sst"}},
 			expect:   []sstutil.KV{{"a", 8, "sst"}, {"a", 5, ""}, {"b", 8, "sst"}, {"b", 7, ""}},
 		},
-		"WriteAtRequestTimestamp succeeds with DisallowShadowing and idempotent writes": {
-			atReqTS:  5,
+		"SSTTimestampToRequestTimestamp succeeds with DisallowShadowing and idempotent writes": {
+			reqTS:    5,
+			toReqTS:  1,
 			noShadow: true,
 			data:     []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
 			sst:      []sstutil.KV{{"a", 1, "a5"}, {"b", 1, "b5"}},
 			expect:   []sstutil.KV{{"a", 5, "a5"}, {"b", 5, "b5"}},
 		},
-		"WriteAtRequestTimestamp errors with DisallowShadowingBelow equal value above existing below limit": {
-			atReqTS:       7,
+		"SSTTimestampToRequestTimestamp errors with DisallowShadowingBelow equal value above existing below limit": {
+			reqTS:         7,
+			toReqTS:       10,
 			noShadowBelow: 5,
 			data:          []sstutil.KV{{"a", 3, "a3"}},
 			sst:           []sstutil.KV{{"a", 10, "a3"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
-		"WriteAtRequestTimestamp errors with DisallowShadowingBelow errors above existing above limit": {
-			atReqTS:       7,
+		"SSTTimestampToRequestTimestamp errors with DisallowShadowingBelow errors above existing above limit": {
+			reqTS:         7,
+			toReqTS:       10,
 			noShadowBelow: 5,
 			data:          []sstutil.KV{{"a", 6, "a6"}},
 			sst:           []sstutil.KV{{"a", 10, "sst"}},
 			expectErr:     `ingested key collides with an existing one: "a"`,
 		},
-		"WriteAtRequestTimestamp allows DisallowShadowingBelow equal value above existing above limit": {
-			atReqTS:       7,
+		"SSTTimestampToRequestTimestamp allows DisallowShadowingBelow equal value above existing above limit": {
+			reqTS:         7,
+			toReqTS:       10,
 			noShadowBelow: 5,
 			data:          []sstutil.KV{{"a", 6, "a6"}},
 			sst:           []sstutil.KV{{"a", 10, "a6"}},
@@ -612,158 +644,148 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:           []sstutil.KV{{"a", 7, "a8"}},
 			expectErr:     &roachpb.WriteTooOldError{},
 		},
-
-		// SSTTimestamp
-		"SSTTimestamp works with WriteAtRequestTimestamp": {
-			atReqTS:        7,
-			data:           []sstutil.KV{{"a", 6, "a6"}},
-			sst:            []sstutil.KV{{"a", 7, "a7"}},
-			sstTimestamp:   7,
-			expect:         []sstutil.KV{{"a", 7, "a7"}, {"a", 6, "a6"}},
-			expectStatsEst: true,
-		},
-		/* Disabled due to nondeterminism under metamorphic tests. SSTTimestamp will
-		 * shortly be removed anyway.
-		"SSTTimestamp doesn't rewrite with incorrect timestamp, but errors under race": {
-			atReqTS:        8,
-			data:           []sstutil.KV{{"a", 6, "a6"}},
-			sst:            []sstutil.KV{{"a", 7, "a7"}},
-			sstTimestamp:   8,
-			expect:         []sstutil.KV{{"a", 7, "a7"}, {"a", 6, "a6"}},
-			expectErrRace:  `incorrect timestamp 0.000000007,0 for SST key "a" (expected 0.000000008,0)`,
-			expectStatsEst: true,
-		},*/
 	}
 	testutils.RunTrueAndFalse(t, "IngestAsWrites", func(t *testing.T, ingestAsWrites bool) {
-		for name, tc := range testcases {
-			t.Run(name, func(t *testing.T) {
-				st := cluster.MakeTestingClusterSettings()
-				ctx := context.Background()
+		testutils.RunValues(t, "RewriteConcurrency", []interface{}{0, 8}, func(t *testing.T, c interface{}) {
+			for name, tc := range testcases {
+				t.Run(name, func(t *testing.T) {
+					ctx := context.Background()
+					st := cluster.MakeTestingClusterSettings()
+					batcheval.AddSSTableRewriteConcurrency.Override(ctx, &st.SV, int64(c.(int)))
 
-				dir := t.TempDir()
-				engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")))
-				require.NoError(t, err)
-				defer engine.Close()
-
-				// Write initial data.
-				intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
-				b := engine.NewBatch()
-				for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
-					kv := tc.data[i]
-					var txn *roachpb.Transaction
-					if kv.WallTimestamp == intentTS {
-						txn = &intentTxn
-					}
-					require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
-				}
-				require.NoError(t, b.Commit(false))
-				stats := engineStats(t, engine)
-
-				// Build and add SST.
-				sst, start, end := sstutil.MakeSST(t, tc.sst)
-				reqTS := hlc.Timestamp{WallTime: defaultReqTS}
-				if tc.atReqTS != 0 {
-					reqTS.WallTime = tc.atReqTS
-				}
-				resp := &roachpb.AddSSTableResponse{}
-				result, err := batcheval.EvalAddSSTable(ctx, engine, batcheval.CommandArgs{
-					EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
-					Stats:   stats,
-					Header: roachpb.Header{
-						Timestamp: reqTS,
-					},
-					Args: &roachpb.AddSSTableRequest{
-						RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
-						Data:                    sst,
-						MVCCStats:               sstutil.ComputeStats(t, sst),
-						DisallowConflicts:       tc.noConflict,
-						DisallowShadowing:       tc.noShadow,
-						DisallowShadowingBelow:  hlc.Timestamp{WallTime: tc.noShadowBelow},
-						WriteAtRequestTimestamp: tc.atReqTS != 0,
-						SSTTimestamp:            hlc.Timestamp{WallTime: tc.sstTimestamp},
-						IngestAsWrites:          ingestAsWrites,
-					},
-				}, resp)
-
-				expectErr := tc.expectErr
-				if tc.expectErrRace != nil && util.RaceEnabled {
-					expectErr = tc.expectErrRace
-				}
-				if expectErr != nil {
-					require.Error(t, err)
-					if b, ok := expectErr.(bool); ok && b {
-						// any error is fine
-					} else if expectMsg, ok := expectErr.(string); ok {
-						require.Contains(t, err.Error(), expectMsg)
-					} else if e, ok := expectErr.(error); ok {
-						require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
-					} else {
-						require.Fail(t, "invalid expectErr", "expectErr=%v", expectErr)
-					}
-					return
-				}
-				require.NoError(t, err)
-
-				if ingestAsWrites {
-					require.Nil(t, result.Replicated.AddSSTable)
-				} else {
-					require.NotNil(t, result.Replicated.AddSSTable)
-					sstPath := filepath.Join(dir, "sst")
-					require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
-					require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
-				}
-
-				// Scan resulting data from engine.
-				iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
-					EndKey:       keys.MaxKey,
-					StartTime:    hlc.MinTimestamp,
-					EndTime:      hlc.MaxTimestamp,
-					IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
-					InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
-				})
-				defer iter.Close()
-				iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
-				scan := []sstutil.KV{}
-				for {
-					ok, err := iter.Valid()
+					dir := t.TempDir()
+					engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
 					require.NoError(t, err)
-					if !ok {
-						break
+					defer engine.Close()
+
+					// Write initial data.
+					intentTxn := roachpb.MakeTransaction("intentTxn", nil, 0, hlc.Timestamp{WallTime: intentTS}, 0, 1)
+					b := engine.NewBatch()
+					for i := len(tc.data) - 1; i >= 0; i-- { // reverse, older timestamps first
+						kv := tc.data[i]
+						var txn *roachpb.Transaction
+						if kv.WallTimestamp == intentTS {
+							txn = &intentTxn
+						}
+						require.NoError(t, storage.MVCCPut(ctx, b, nil, kv.Key(), kv.Timestamp(), kv.Value(), txn))
 					}
-					key := string(iter.Key().Key)
-					ts := iter.Key().Timestamp.WallTime
-					var value []byte
-					if iter.Key().IsValue() {
-						if len(iter.Value()) > 0 {
-							value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+					require.NoError(t, b.Commit(false))
+					stats := engineStats(t, engine, 0)
+
+					// Build and add SST.
+					if tc.toReqTS != 0 && tc.reqTS == 0 && tc.expectErr == nil {
+						t.Fatal("can't set toReqTS without reqTS")
+					}
+					sst, start, end := sstutil.MakeSST(t, st, tc.sst)
+					resp := &roachpb.AddSSTableResponse{}
+					result, err := batcheval.EvalAddSSTable(ctx, engine, batcheval.CommandArgs{
+						EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
+						Stats:   stats,
+						Header: roachpb.Header{
+							Timestamp: hlc.Timestamp{WallTime: tc.reqTS},
+						},
+						Args: &roachpb.AddSSTableRequest{
+							RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
+							Data:                           sst,
+							MVCCStats:                      sstutil.ComputeStats(t, sst),
+							DisallowConflicts:              tc.noConflict,
+							DisallowShadowing:              tc.noShadow,
+							DisallowShadowingBelow:         hlc.Timestamp{WallTime: tc.noShadowBelow},
+							SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: tc.toReqTS},
+							IngestAsWrites:                 ingestAsWrites,
+						},
+					}, resp)
+
+					expectErr := tc.expectErr
+					if tc.expectErrRace != nil && util.RaceEnabled {
+						expectErr = tc.expectErrRace
+					}
+					if expectErr != nil {
+						require.Error(t, err)
+						if b, ok := expectErr.(bool); ok && b {
+							// any error is fine
+						} else if expectMsg, ok := expectErr.(string); ok {
+							require.Contains(t, err.Error(), expectMsg)
+						} else if expectMsgs, ok := expectErr.([]string); ok {
+							var found bool
+							for _, msg := range expectMsgs {
+								if strings.Contains(err.Error(), msg) {
+									found = true
+									break
+								}
+							}
+							if !found {
+								t.Fatalf("%q does not contain any of %q", err, expectMsgs)
+							}
+						} else if e, ok := expectErr.(error); ok {
+							require.True(t, errors.HasType(err, e), "expected %T, got %v", e, err)
+						} else {
+							require.Fail(t, "invalid expectErr", "expectErr=%v", expectErr)
+						}
+						return
+					}
+					require.NoError(t, err)
+
+					if ingestAsWrites {
+						require.Nil(t, result.Replicated.AddSSTable)
+					} else {
+						require.NotNil(t, result.Replicated.AddSSTable)
+						sstPath := filepath.Join(dir, "sst")
+						require.NoError(t, engine.WriteFile(sstPath, result.Replicated.AddSSTable.Data))
+						require.NoError(t, engine.IngestExternalFiles(ctx, []string{sstPath}))
+					}
+
+					// Scan resulting data from engine.
+					iter := storage.NewMVCCIncrementalIterator(engine, storage.MVCCIncrementalIterOptions{
+						EndKey:       keys.MaxKey,
+						StartTime:    hlc.MinTimestamp,
+						EndTime:      hlc.MaxTimestamp,
+						IntentPolicy: storage.MVCCIncrementalIterIntentPolicyEmit,
+						InlinePolicy: storage.MVCCIncrementalIterInlinePolicyEmit,
+					})
+					defer iter.Close()
+					iter.SeekGE(storage.MVCCKey{Key: keys.SystemPrefix})
+					scan := []sstutil.KV{}
+					for {
+						ok, err := iter.Valid()
+						require.NoError(t, err)
+						if !ok {
+							break
+						}
+						key := string(iter.Key().Key)
+						ts := iter.Key().Timestamp.WallTime
+						var value []byte
+						if iter.Key().IsValue() {
+							if len(iter.Value()) > 0 {
+								value, err = roachpb.Value{RawBytes: iter.Value()}.GetBytes()
+								require.NoError(t, err)
+							}
+						} else {
+							var meta enginepb.MVCCMetadata
+							require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
+							if meta.RawBytes == nil {
+								// Skip intent metadata records (value emitted separately).
+								iter.Next()
+								continue
+							}
+							value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
 							require.NoError(t, err)
 						}
-					} else {
-						var meta enginepb.MVCCMetadata
-						require.NoError(t, protoutil.Unmarshal(iter.UnsafeValue(), &meta))
-						if meta.RawBytes == nil {
-							// Skip intent metadata records (value emitted separately).
-							iter.Next()
-							continue
-						}
-						value, err = roachpb.Value{RawBytes: meta.RawBytes}.GetBytes()
-						require.NoError(t, err)
+						scan = append(scan, sstutil.KV{key, ts, string(value)})
+						iter.Next()
 					}
-					scan = append(scan, sstutil.KV{key, ts, string(value)})
-					iter.Next()
-				}
-				require.Equal(t, tc.expect, scan)
+					require.Equal(t, tc.expect, scan)
 
-				// Check that stats were updated correctly.
-				if tc.expectStatsEst {
-					require.True(t, stats.ContainsEstimates > 0, "expected stats to be estimated")
-				} else {
-					require.False(t, stats.ContainsEstimates > 0, "found estimated stats")
-					stats.LastUpdateNanos = 0 // avoid spurious diffs
-					require.Equal(t, stats, engineStats(t, engine))
-				}
-			})
-		}
+					// Check that stats were updated correctly.
+					if tc.expectStatsEst {
+						require.True(t, stats.ContainsEstimates > 0, "expected stats to be estimated")
+					} else {
+						require.False(t, stats.ContainsEstimates > 0, "found estimated stats")
+						require.Equal(t, stats, engineStats(t, engine, stats.LastUpdateNanos))
+					}
+				})
+			}
+		})
 	})
 }
 
@@ -777,8 +799,8 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 
 	testcases := map[string]struct {
 		sst                   []sstutil.KV
-		atReqTS               bool // WriteAtRequestTimestamp
-		asWrites              bool // IngestAsWrites
+		toReqTS               int64 // SSTTimestampToRequestTimestamp
+		asWrites              bool  // IngestAsWrites
 		expectHistoryMutation bool
 		expectLogicalOps      []enginepb.MVCCLogicalOp
 	}{
@@ -787,9 +809,9 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			expectHistoryMutation: true,
 			expectLogicalOps:      nil,
 		},
-		"WriteAtRequestTimestamp alone": {
+		"SSTTimestampToRequestTimestamp alone": {
 			sst:                   []sstutil.KV{{"a", 1, "a1"}},
-			atReqTS:               true,
+			toReqTS:               1,
 			expectHistoryMutation: false,
 			expectLogicalOps:      nil,
 		},
@@ -799,10 +821,10 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			expectHistoryMutation: true,
 			expectLogicalOps:      nil,
 		},
-		"IngestAsWrites and WriteAtRequestTimestamp": {
-			sst:                   []sstutil.KV{{"a", 1, "a1"}, {"b", 2, "b2"}},
+		"IngestAsWrites and SSTTimestampToRequestTimestamp": {
+			sst:                   []sstutil.KV{{"a", 1, "a1"}, {"b", 1, "b1"}},
 			asWrites:              true,
-			atReqTS:               true,
+			toReqTS:               1,
 			expectHistoryMutation: false,
 			expectLogicalOps: []enginepb.MVCCLogicalOp{
 				// NOTE: Value is populated by the rangefeed processor, not MVCC, so it
@@ -823,7 +845,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
 
 			// Build and add SST.
-			sst, start, end := sstutil.MakeSST(t, tc.sst)
+			sst, start, end := sstutil.MakeSST(t, st, tc.sst)
 			result, err := batcheval.EvalAddSSTable(ctx, opLogger, batcheval.CommandArgs{
 				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
 				Header: roachpb.Header{
@@ -831,11 +853,11 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 				},
 				Stats: &enginepb.MVCCStats{},
 				Args: &roachpb.AddSSTableRequest{
-					RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
-					Data:                    sst,
-					MVCCStats:               sstutil.ComputeStats(t, sst),
-					WriteAtRequestTimestamp: tc.atReqTS,
-					IngestAsWrites:          tc.asWrites,
+					RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
+					Data:                           sst,
+					MVCCStats:                      sstutil.ComputeStats(t, sst),
+					SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: tc.toReqTS},
+					IngestAsWrites:                 tc.asWrites,
 				},
 			}, &roachpb.AddSSTableResponse{})
 			require.NoError(t, err)
@@ -845,7 +867,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			} else {
 				require.NotNil(t, result.Replicated.AddSSTable)
 				require.Equal(t, roachpb.Span{Key: start, EndKey: end}, result.Replicated.AddSSTable.Span)
-				require.Equal(t, tc.atReqTS, result.Replicated.AddSSTable.AtWriteTimestamp)
+				require.Equal(t, tc.toReqTS != 0, result.Replicated.AddSSTable.AtWriteTimestamp)
 			}
 			if tc.expectHistoryMutation {
 				require.Equal(t, &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
@@ -902,9 +924,10 @@ func runTestDBAddSSTable(
 	var allowShadowingBelow hlc.Timestamp
 	var nilStats *enginepb.MVCCStats
 	var noTS hlc.Timestamp
+	cs := cluster.MakeTestingClusterSettings()
 
 	{
-		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bb", 2, "1"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
 		err := db.AddSSTable(
@@ -946,7 +969,7 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bb", 1, "2"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 1, "2"}})
 		require.NoError(t, db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 		r, err := db.Get(ctx, "bb")
@@ -960,7 +983,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bc", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bc", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -996,7 +1019,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"bd", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bd", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -1032,7 +1055,7 @@ func runTestDBAddSSTable(
 		value.InitChecksum([]byte("foo"))
 
 		sstFile := &storage.MemFile{}
-		w := storage.MakeBackupSSTWriter(sstFile)
+		w := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
@@ -1054,7 +1077,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext()
 
 	dir := t.TempDir()
-	engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")))
+	engine, err := storage.Open(ctx, storage.Filesystem(filepath.Join(dir, "db")), storage.Settings(st))
 	require.NoError(t, err)
 	defer engine.Close()
 
@@ -1072,7 +1095,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
 	}
 
-	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{
+	sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{
 		{"a", 4, "aaaaaa"}, // mvcc-shadowed by existing delete.
 		{"a", 2, "aa"},     // mvcc-shadowed within SST.
 		{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
@@ -1096,7 +1119,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
 	// stats. Make sure recomputing from scratch gets the same answer as
 	// applying the diff to the stats
-	statsBefore := engineStats(t, engine)
+	statsBefore := engineStats(t, engine, 0)
 	ts := hlc.Timestamp{WallTime: 7}
 	cArgs := batcheval.CommandArgs{
 		EvalCtx: evalCtx,
@@ -1120,11 +1143,10 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	statsEvaled.Add(*cArgs.Stats)
 	statsEvaled.Add(statsDelta)
 	statsEvaled.ContainsEstimates = 0
-	statsEvaled.LastUpdateNanos = 0
-	require.Equal(t, engineStats(t, engine), statsEvaled)
+	require.Equal(t, engineStats(t, engine, statsEvaled.LastUpdateNanos), statsEvaled)
 
 	// Check stats for a single KV.
-	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
 	cArgs = batcheval.CommandArgs{
 		EvalCtx: evalCtx,
 		Header:  roachpb.Header{Timestamp: ts},
@@ -1188,7 +1210,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		{"c", 2, "bb"},
 		{"h", 6, "hh"},
 	}
-	sst, start, end := sstutil.MakeSST(t, kvs)
+	sst, start, end := sstutil.MakeSST(t, st, kvs)
 
 	// Accumulate stats across SST ingestion.
 	commandStats := enginepb.MVCCStats{}
@@ -1219,7 +1241,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the second SST. Both the KVs are perfectly shadowing and should
 	// not contribute to the stats.
-	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
 	})
@@ -1238,7 +1260,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the third SST. Two of the three KVs are perfectly shadowing, but
 	// there is one valid KV which should contribute to the stats.
-	sst, start, end = sstutil.MakeSST(t, []sstutil.KV{
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"e", 2, "ee"},
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
@@ -1287,7 +1309,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{
+	sst, start, end := sstutil.MakeSST(t, s.ClusterSettings(), []sstutil.KV{
 		{"a", 1, "1"},
 		{"b", 1, "2"},
 		{"c", 1, "3"},
@@ -1310,9 +1332,9 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	require.Contains(t, err.Error(), "TransactionRetryWithProtoRefreshError: TransactionAbortedError")
 }
 
-// TestAddSSTableWriteAtRequestTimestampRespectsTSCache checks that AddSSTable
-// with WriteAtRequestTimestamp respects the timestamp cache.
-func TestAddSSTableWriteAtRequestTimestampRespectsTSCache(t *testing.T) {
+// TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache checks that AddSSTable
+// with SSTTimestampToRequestTimestamp respects the timestamp cache.
+func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1329,12 +1351,12 @@ func TestAddSSTableWriteAtRequestTimestampRespectsTSCache(t *testing.T) {
 	txnTS := txn.CommitTimestamp()
 
 	// Add an SST writing below the previous write.
-	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, s.ClusterSettings(), []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
-		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
-		Data:                    sst,
-		MVCCStats:               sstutil.ComputeStats(t, sst),
-		WriteAtRequestTimestamp: true,
+		RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
+		Data:                           sst,
+		MVCCStats:                      sstutil.ComputeStats(t, sst),
+		SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: 1},
 	}
 	ba := roachpb.BatchRequest{
 		Header: roachpb.Header{Timestamp: txnTS.Prev()},
@@ -1363,9 +1385,9 @@ func TestAddSSTableWriteAtRequestTimestampRespectsTSCache(t *testing.T) {
 	require.Equal(t, "sst", string(kv.ValueBytes()))
 }
 
-// TestAddSSTableWriteAtRequestTimestampRespectsClosedTS checks that AddSSTable
-// with WriteAtRequestTimestamp respects the closed timestamp.
-func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
+// TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS checks that AddSSTable
+// with SSTTimestampToRequestTimestamp respects the closed timestamp.
+func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1389,12 +1411,12 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
-	sst, start, end := sstutil.MakeSST(t, []sstutil.KV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, store.ClusterSettings(), []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
-		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
-		Data:                    sst,
-		MVCCStats:               sstutil.ComputeStats(t, sst),
-		WriteAtRequestTimestamp: true,
+		RequestHeader:                  roachpb.RequestHeader{Key: start, EndKey: end},
+		Data:                           sst,
+		MVCCStats:                      sstutil.ComputeStats(t, sst),
+		SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: 1},
 	}
 	ba := roachpb.BatchRequest{
 		Header: roachpb.Header{Timestamp: reqTS},
@@ -1417,7 +1439,7 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 }
 
 // engineStats computes the MVCC stats for the given engine.
-func engineStats(t *testing.T, engine storage.Engine) *enginepb.MVCCStats {
+func engineStats(t *testing.T, engine storage.Engine, nowNanos int64) *enginepb.MVCCStats {
 	t.Helper()
 
 	iter := engine.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
@@ -1427,7 +1449,7 @@ func engineStats(t *testing.T, engine storage.Engine) *enginepb.MVCCStats {
 	defer iter.Close()
 	// We don't care about nowNanos, because the SST can't contain intents or
 	// tombstones and all existing intents will be resolved.
-	stats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, 0)
+	stats, err := storage.ComputeStatsForRange(iter, keys.LocalMax, keys.MaxKey, nowNanos)
 	require.NoError(t, err)
 	return &stats
 }

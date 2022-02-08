@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -148,6 +149,21 @@ func getInvertedExprForJSONOrArrayIndexForContainedBy(
 	return invertedExpr
 }
 
+// getInvertedExprForArrayIndexForOverlaps gets an inverted.Expression
+// that constrains an Array index according to the given constant.
+// This results in a span expression representing the union of all paths
+// through the Array. This function is only used when checking if an
+// indexed Array column overlaps (&&) with a constant.
+func getInvertedExprForArrayIndexForOverlaps(
+	evalCtx *tree.EvalContext, d tree.Datum,
+) inverted.Expression {
+	invertedExpr, err := rowenc.EncodeOverlapsInvertedIndexSpans(evalCtx, d)
+	if err != nil {
+		panic(err)
+	}
+	return invertedExpr
+}
+
 type jsonOrArrayInvertedExpr struct {
 	tree.ComparisonExpr
 
@@ -225,10 +241,12 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				var invertedExpr inverted.Expression
 				switch t.Operator.Symbol {
-				case tree.ContainedBy:
+				case treecmp.ContainedBy:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(evalCtx, d)
-				case tree.Contains:
+				case treecmp.Contains:
 					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(evalCtx, d)
+				case treecmp.Overlaps:
+					invertedExpr = getInvertedExprForArrayIndexForOverlaps(evalCtx, d)
 				default:
 					return nil, fmt.Errorf("%s cannot be index-accelerated", t)
 				}
@@ -277,10 +295,10 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 				return nil, nil
 			}
 			switch t.Operator.Symbol {
-			case tree.Contains:
+			case treecmp.Contains:
 				return getInvertedExprForJSONOrArrayIndexForContaining(g.evalCtx, d), nil
 
-			case tree.ContainedBy:
+			case treecmp.ContainedBy:
 				return getInvertedExprForJSONOrArrayIndexForContainedBy(g.evalCtx, d), nil
 
 			default:
@@ -345,6 +363,8 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		if fetch, ok := t.Left.(*memo.FetchValExpr); ok {
 			invertedExpr = j.extractJSONFetchValEqCondition(evalCtx, fetch, t.Right)
 		}
+	case *memo.OverlapsExpr:
+		invertedExpr = j.extractArrayOverlapsCondition(evalCtx, t.Left, t.Right)
 	}
 
 	if invertedExpr == nil {
@@ -361,6 +381,31 @@ func (j *jsonOrArrayFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	// We do not currently support pre-filtering for JSON and Array indexes, so
 	// the returned pre-filter state is nil.
 	return invertedExpr, remainingFilters, nil
+}
+
+// extractArrayOverlapsCondition extracts an InvertedExpression
+// representing an inverted filter over the planner's inverted index, based
+// on the given left and right expression arguments. Returns an empty
+// InvertedExpression if no inverted filter could be extracted.
+func (j *jsonOrArrayFilterPlanner) extractArrayOverlapsCondition(
+	evalCtx *tree.EvalContext, left, right opt.ScalarExpr,
+) inverted.Expression {
+	var constantVal opt.ScalarExpr
+	if isIndexColumn(j.tabID, j.index, left, j.computedColumns) && memo.CanExtractConstDatum(right) {
+		// When the first argument is a variable or expression corresponding to the
+		// index column and the second argument is a constant, we can generate an
+		// inverted expression with the constant value picked from right.
+		constantVal = right
+	} else if isIndexColumn(j.tabID, j.index, right, j.computedColumns) && memo.CanExtractConstDatum(left) {
+		// When the second argument is a variable or expression corresponding to
+		// the index column and the first argument is a constant, we can generate an
+		// inverted expression with the constant value picked from left.
+		constantVal = left
+	} else {
+		// If none of the conditions are met, we cannot create an InvertedExpression.
+		return inverted.NonInvertedColExpression{}
+	}
+	return getInvertedExprForArrayIndexForOverlaps(evalCtx, memo.ExtractConstDatum(constantVal))
 }
 
 // extractJSONOrArrayContainsCondition extracts an InvertedExpression

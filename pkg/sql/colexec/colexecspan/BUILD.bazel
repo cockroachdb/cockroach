@@ -4,6 +4,7 @@ load("//pkg/sql/colexecop:EXECGEN.bzl", "eg_go_filegroup", "gen_eg_go_rules")
 go_library(
     name = "colexecspan",
     srcs = [
+        "span_assembler.go",
         ":gen-exec",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecspan",  # keep
@@ -50,6 +51,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/colconv",
@@ -72,7 +74,6 @@ go_test(
 
 # Map between target name and relevant template.
 targets = [
-    ("span_assembler.eg.go", "span_assembler_tmpl.go"),
     ("span_encoder.eg.go", "span_encoder_tmpl.go"),
 ]
 

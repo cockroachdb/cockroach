@@ -15,13 +15,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/errors"
@@ -103,22 +103,10 @@ func newTableReader(
 	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
-	tableDesc := flowCtx.TableDescriptor(&spec.Table)
-
-	cols := make([]catalog.Column, len(spec.ColumnIDs))
-	for i, colID := range spec.ColumnIDs {
-		if spec.InvertedColumn != nil && colID == spec.InvertedColumn.ID {
-			cols[i] = tabledesc.FindInvertedColumn(tableDesc, spec.InvertedColumn)
-		} else {
-			var err error
-			cols[i], err = tableDesc.FindColumnWithID(colID)
-			if err != nil {
-				return nil, err
-			}
-		}
+	resultTypes := make([]*types.T, len(spec.FetchSpec.FetchedColumns))
+	for i := range resultTypes {
+		resultTypes[i] = spec.FetchSpec.FetchedColumns[i].Type
 	}
-
-	resultTypes := catalog.ColumnTypes(cols)
 
 	tr.ignoreMisplannedRanges = flowCtx.Local
 	if err := tr.Init(
@@ -141,18 +129,17 @@ func newTableReader(
 		return nil, err
 	}
 
-	fetcher, err := makeRowFetcher(
-		flowCtx,
-		tableDesc,
-		int(spec.IndexIdx),
-		cols,
+	var fetcher row.Fetcher
+	if err := fetcher.Init(
+		flowCtx.EvalCtx.Context,
 		spec.Reverse,
-		flowCtx.EvalCtx.Mon,
-		&tr.alloc,
 		spec.LockingStrength,
 		spec.LockingWaitPolicy,
-	)
-	if err != nil {
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		&tr.alloc,
+		flowCtx.EvalCtx.Mon,
+		&spec.FetchSpec,
+	); err != nil {
 		return nil, err
 	}
 
@@ -164,10 +151,10 @@ func newTableReader(
 	}
 
 	if execinfra.ShouldCollectStats(flowCtx.EvalCtx.Ctx(), flowCtx) {
-		tr.fetcher = newRowFetcherStatCollector(fetcher)
+		tr.fetcher = newRowFetcherStatCollector(&fetcher)
 		tr.ExecStatsForTrace = tr.execStatsForTrace
 	} else {
-		tr.fetcher = fetcher
+		tr.fetcher = &fetcher
 	}
 
 	return tr, nil
@@ -215,6 +202,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.Spans,
 			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			tr.EvalCtx.QualityOfService(),
 		)
 	}
 	tr.scanStarted = true

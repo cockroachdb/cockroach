@@ -75,6 +75,7 @@ eexpect " ->"
 send "\\p\r"
 eexpect "select\r\n*->"
 interrupt
+eexpect root@
 end_test
 
 start_test "Test that a dangling table creation can be committed, and that other non-DDL, non-DML statements can be issued in the same txn. (#15283)"
@@ -111,7 +112,7 @@ end_test
 
 
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv

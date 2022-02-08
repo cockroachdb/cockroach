@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -410,13 +411,15 @@ func (ds *ServerImpl) setupFlow(
 	// localState.Txn. Otherwise, we create a txn based on the request's
 	// LeafTxnInputState.
 	useLeaf := false
-	for _, proc := range req.Flow.Processors {
-		if jr := proc.Core.JoinReader; jr != nil {
-			if !jr.MaintainOrdering && jr.IsIndexJoin() {
-				// Index joins when ordering doesn't have to be maintained are
-				// executed via the Streamer API that has concurrency.
-				useLeaf = true
-				break
+	if req.LeafTxnInputState != nil && row.CanUseStreamer(ctx, ds.Settings) {
+		for _, proc := range req.Flow.Processors {
+			if jr := proc.Core.JoinReader; jr != nil {
+				if !jr.MaintainOrdering && jr.IsIndexJoin() {
+					// Index joins when ordering doesn't have to be maintained
+					// are executed via the Streamer API that has concurrency.
+					useLeaf = true
+					break
+				}
 			}
 		}
 	}
@@ -485,7 +488,7 @@ func (ds *ServerImpl) newFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack))
 		flowCtx.IsDescriptorsCleanupRequired = true
 	}
 	return flowCtx
@@ -524,7 +527,6 @@ type LocalState struct {
 	IsLocal bool
 
 	// HasConcurrency indicates whether the local flow uses multiple goroutines.
-	// It is set only if IsLocal is true.
 	HasConcurrency bool
 
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
@@ -591,20 +593,19 @@ func (ds *ServerImpl) setupSpanForIncomingRPC(
 			tracing.WithServerSpanKind)
 	}
 
-	var remoteParent tracing.SpanMeta
 	if !req.TraceInfo.Empty() {
-		remoteParent = tracing.SpanMetaFromProto(req.TraceInfo)
-	} else {
-		// For backwards compatibility with 21.2, if tracing info was passed as
-		// gRPC metadata, we use it.
-		var err error
-		remoteParent, err = tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
-		if err != nil {
-			log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
-		}
+		return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
+			tracing.WithRemoteParentFromTraceInfo(&req.TraceInfo),
+			tracing.WithServerSpanKind)
+	}
+	// For backwards compatibility with 21.2, if tracing info was passed as
+	// gRPC metadata, we use it.
+	remoteParent, err := tracing.ExtractSpanMetaFromGRPCCtx(ctx, tr)
+	if err != nil {
+		log.Warningf(ctx, "error extracting tracing info from gRPC: %s", err)
 	}
 	return tr.StartSpanCtx(ctx, tracing.SetupFlowMethodName,
-		tracing.WithRemoteParent(remoteParent),
+		tracing.WithRemoteParentFromSpanMeta(remoteParent),
 		tracing.WithServerSpanKind)
 }
 

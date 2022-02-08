@@ -25,14 +25,15 @@ go_library(
         "//pkg/sql/schemachanger/scexec/scmutationexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
-        "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sessiondata",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_sync//errgroup",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -68,7 +69,8 @@ go_test(
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
-        "//pkg/sql/schemachanger/scexec/scmutationexec",
+        # scmutationexec is required to build the generated output of mock_scexec
+        "//pkg/sql/schemachanger/scexec/scmutationexec",  # keep
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catid",  # keep
@@ -85,6 +87,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/randutil",
+        "//pkg/util/timeutil",
         "@com_github_golang_mock//gomock",
         "@com_github_stretchr_testify//require",
     ],
@@ -106,4 +109,8 @@ gomock(
     ],
     library = ":scexec",
     package = "scexec_test",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

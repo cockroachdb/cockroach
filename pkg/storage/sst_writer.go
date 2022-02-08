@@ -15,7 +15,9 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -54,19 +56,31 @@ func (noopSyncCloser) Close() error {
 
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable).
-func MakeIngestionWriterOptions() sstable.WriterOptions {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
-	// TODO(sumeer): we should use BlockPropertyCollectors here if the cluster
-	// version permits (which is also reflected in the store's roachpb.Version
-	// and pebble.FormatMajorVersion).
-	opts.BlockPropertyCollectors = nil
+func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstable.WriterOptions {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
+	format := sstable.TableFormatRocksDBv2
+	// Cases are ordered from newer to older versions.
+	switch {
+	case cs.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties):
+		format = sstable.TableFormatPebblev1 // Block properties.
+	}
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
+	if format < sstable.TableFormatPebblev1 {
+		// Block properties aren't available at this version. Disable collection.
+		opts.BlockPropertyCollectors = nil
+	}
 	opts.MergerName = "nullptr"
 	return opts
 }
 
 // MakeBackupSSTWriter creates a new SSTWriter tailored for backup SSTs which
 // are typically only ever iterated in their entirety.
-func MakeBackupSSTWriter(f io.Writer) SSTWriter {
+func MakeBackupSSTWriter(_ context.Context, _ *cluster.Settings, f io.Writer) SSTWriter {
+	// By default, take a conservative approach and assume we don't have newer
+	// table features available. Upgrade to an appropriate version only if the
+	// cluster supports it.
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
 	// Don't need BlockPropertyCollectors for backups.
 	opts.BlockPropertyCollectors = nil
@@ -86,8 +100,13 @@ func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
-func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
-	return SSTWriter{fw: sstable.NewWriter(f, MakeIngestionWriterOptions()), f: f}
+func MakeIngestionSSTWriter(
+	ctx context.Context, cs *cluster.Settings, f writeCloseSyncer,
+) SSTWriter {
+	return SSTWriter{
+		fw: sstable.NewWriter(f, MakeIngestionWriterOptions(ctx, cs)),
+		f:  f,
+	}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,

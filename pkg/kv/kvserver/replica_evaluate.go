@@ -16,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -245,12 +245,13 @@ func evaluateBatch(
 		// If a unittest filter was installed, check for an injected error; otherwise, continue.
 		if filter := rec.EvalKnobs().TestingEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
-				Ctx:   ctx,
-				CmdID: idKey,
-				Index: index,
-				Sid:   rec.StoreID(),
-				Req:   args,
-				Hdr:   baHeader,
+				Ctx:     ctx,
+				CmdID:   idKey,
+				Index:   index,
+				Sid:     rec.StoreID(),
+				Req:     args,
+				Version: rec.ClusterSettings().Version.ActiveVersionOrEmpty(ctx).Version,
+				Hdr:     baHeader,
 			}
 			if pErr := filter(filterArgs); pErr != nil {
 				if pErr.GetTxn() == nil {
@@ -518,8 +519,16 @@ func evaluateCommand(
 // for transactional requests, retrying is possible if the transaction had not
 // performed any prior reads that need refreshing.
 //
+// This function is called both below and above latching, which is indicated by
+// the concurrency guard argument. The concurrency guard, if not nil, indicates
+// that the caller is holding latches and cannot adjust its timestamp beyond the
+// limits of what is protected by those latches. If the concurrency guard is
+// nil, the caller indicates that it is not holding latches and can therefore
+// more freely adjust its timestamp because it will re-acquire latches at
+// whatever timestamp the batch is bumped to.
+//
 // deadline, if not nil, specifies the highest timestamp (exclusive) at which
-// the request can be evaluated. If ba is a transactional request, then dealine
+// the request can be evaluated. If ba is a transactional request, then deadline
 // cannot be specified; a transaction's deadline comes from it's EndTxn request.
 //
 // If true is returned, ba and ba.Txn will have been updated with the new
@@ -529,7 +538,7 @@ func canDoServersideRetry(
 	pErr *roachpb.Error,
 	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
-	latchSpans *spanset.SpanSet,
+	g *concurrency.Guard,
 	deadline *hlc.Timestamp,
 ) bool {
 	if ba.Txn != nil {
@@ -548,17 +557,6 @@ func canDoServersideRetry(
 	var newTimestamp hlc.Timestamp
 	if ba.Txn != nil {
 		if pErr != nil {
-			// TODO(nvanbenschoten): This is intentionally not allowing server-side
-			// refreshes of ReadWithinUncertaintyIntervalErrors for now, even though
-			// that is the eventual goal here. Lifting that limitation will likely
-			// need to be accompanied by an above-latching retry loop, because read
-			// latches will usually prevent below-latch retries of
-			// ReadWithinUncertaintyIntervalErrors. See the comment in
-			// tryBumpBatchTimestamp.
-			if _, ok := pErr.GetDetail().(*roachpb.ReadWithinUncertaintyIntervalError); ok {
-				return false
-			}
-
 			var ok bool
 			ok, newTimestamp = roachpb.TransactionRefreshTimestamp(pErr)
 			if !ok {
@@ -576,7 +574,11 @@ func canDoServersideRetry(
 		}
 		switch tErr := pErr.GetDetail().(type) {
 		case *roachpb.WriteTooOldError:
-			newTimestamp = tErr.ActualTimestamp
+			newTimestamp = tErr.RetryTimestamp()
+
+		case *roachpb.ReadWithinUncertaintyIntervalError:
+			newTimestamp = tErr.RetryTimestamp()
+
 		default:
 			return false
 		}
@@ -585,5 +587,5 @@ func canDoServersideRetry(
 	if batcheval.IsEndTxnExceedingDeadline(newTimestamp, deadline) {
 		return false
 	}
-	return tryBumpBatchTimestamp(ctx, ba, newTimestamp, latchSpans)
+	return tryBumpBatchTimestamp(ctx, ba, g, newTimestamp)
 }

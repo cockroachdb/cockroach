@@ -1,6 +1,6 @@
 debug doctor zipdir --verbose
 ----
-debug doctor zipdir testdata/doctor/debugzip --verbose
+debug doctor zipdir testdata/doctor/debugzip 21.11-52 --verbose
 reading testdata/doctor/debugzip/system.descriptor.txt
 reading testdata/doctor/debugzip/system.namespace.txt
 WARNING: errors occurred during the production of system.jobs.txt, contents may be missing or incomplete.

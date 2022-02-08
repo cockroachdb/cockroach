@@ -13,6 +13,7 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -85,8 +87,9 @@ func declareKeysExport(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
-	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+	DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeGCThresholdKey(header.RangeID)})
 }
 
@@ -109,6 +112,17 @@ func evalExport(
 		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
 	}
 	evalExportSpan.RecordStructured(&evalExportTrace)
+
+	// Table's marked to be excluded from backup are expected to be configured
+	// with a short GC TTL. Additionally, backup excludes such table's from being
+	// protected from GC when writing ProtectedTimestamp records. The
+	// ExportRequest is likely to find its target data has been GC'ed at this
+	// point, and so if the range being exported is part of such a table, we do
+	// not want to send back any row data to be backed up.
+	if cArgs.EvalCtx.ExcludeDataFromBackup() {
+		log.Infof(ctx, "[%s, %s) is part of a table excluded from backup, returning empty ExportResponse", args.Key, args.EndKey)
+		return result.Result{}, nil
+	}
 
 	if !args.ReturnSST {
 		return result.Result{}, errors.New("ReturnSST is required")

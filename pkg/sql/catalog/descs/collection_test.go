@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,7 +60,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 
 	db := s0.DB()
 	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(nil /* TemporarySchemaProvider */)
+		NewCollection(ctx, nil /* TemporarySchemaProvider */)
 
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
@@ -98,13 +100,15 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
+				ConstraintID:        1,
 			},
-			Privileges:     descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
-			NextColumnID:   2,
-			NextFamilyID:   1,
-			NextIndexID:    2,
-			NextMutationID: 1,
-			FormatVersion:  descpb.InterleavedFormatVersion,
+			Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			NextColumnID:     2,
+			NextConstraintID: 2,
+			NextFamilyID:     1,
+			NextIndexID:      2,
+			NextMutationID:   1,
+			FormatVersion:    descpb.InterleavedFormatVersion,
 		}).BuildCreatedMutableTable()
 		b := txn.NewBatch()
 
@@ -516,4 +520,80 @@ CREATE TABLE test.schema.t(x INT);
 	// privilege validation error.
 	_, err = db.Query("GRANT USAGE ON SCHEMA test.schema TO testuser;")
 	require.NoError(t, err)
+}
+
+// TestCollectionPreservesPostDeserializationChanges ensures that when
+// descriptors are retrieved from the collection and in need of post-
+// deserialization changes, that the fact that those changes happened
+// is preserved in both the mutable and immutable forms of the descriptor.
+func TestCollectionPreservesPostDeserializationChanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE DATABASE db")
+	tdb.Exec(t, "CREATE SCHEMA db.sc")
+	tdb.Exec(t, "CREATE TYPE db.sc.typ AS ENUM ('a')")
+	tdb.Exec(t, "CREATE TABLE db.sc.tab (c db.sc.typ)")
+	var dbID, scID, typID, tabID descpb.ID
+	const q = "SELECT id FROM system.namespace WHERE name = $1"
+	tdb.QueryRow(t, q, "db").Scan(&dbID)
+	tdb.QueryRow(t, q, "sc").Scan(&scID)
+	tdb.QueryRow(t, q, "typ").Scan(&typID)
+	tdb.QueryRow(t, q, "tab").Scan(&tabID)
+
+	// Make some bespoke modifications to each of the descriptors to make sure
+	// they'd need post-deserialization changes.
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+	) error {
+		descs, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		if err != nil {
+			return err
+		}
+		// Remove the grant option, this will ensure we get some
+		// post-deserialization changes. These grant options should always exist
+		// for admin and root.
+		b := txn.NewBatch()
+		for _, d := range descs {
+			p := d.GetPrivileges()
+			for i := range p.Users {
+				p.Users[i].WithGrantOption = 0
+			}
+			if err := col.WriteDescToBatch(ctx, false, d, b); err != nil {
+				return err
+			}
+		}
+		return txn.Run(ctx, b)
+	}))
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, col *descs.Collection,
+	) error {
+		immuts, err := col.GetImmutableDescriptorsByID(ctx, txn, tree.CommonLookupFlags{
+			Required: true,
+		}, dbID, scID, typID, tabID)
+		if err != nil {
+			return err
+		}
+		for _, d := range immuts {
+			assert.True(t, d.GetPostDeserializationChanges().
+				Contains(catalog.UpgradedPrivileges))
+		}
+
+		muts, err := col.GetMutableDescriptorsByID(ctx, txn, dbID, scID, typID, tabID)
+		if err != nil {
+			return err
+		}
+		for _, d := range muts {
+			assert.True(t, d.GetPostDeserializationChanges().
+				Contains(catalog.UpgradedPrivileges))
+		}
+
+		return nil
+	}))
 }

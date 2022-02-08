@@ -16,9 +16,9 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/changefeedccl/cdctest",
-        "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
         "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/ccl/streamingccl/streampb",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -65,6 +65,7 @@ go_test(
         "stream_ingestion_job_test.go",
         "stream_ingestion_processor_test.go",
         "stream_ingestion_test.go",
+        "stream_replication_e2e_test.go",
     ],
     embed = [":streamingest"],
     deps = [

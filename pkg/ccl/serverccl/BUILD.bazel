@@ -9,7 +9,7 @@ go_library(
 
 go_test(
     name = "serverccl_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "admin_test.go",
         "main_test.go",
@@ -36,6 +36,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/distsql",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
@@ -43,6 +44,7 @@ go_test(
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_elastic_gosigar//:gosigar",

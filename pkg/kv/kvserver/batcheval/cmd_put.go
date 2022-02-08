@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -29,12 +30,13 @@ func declareKeysPut(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
 	args := req.(*roachpb.PutRequest)
 	if args.Inline {
-		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans)
+		DefaultDeclareKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	} else {
-		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans)
+		DefaultDeclareIsolatedKeys(rs, header, req, latchSpans, lockSpans, maxOffset)
 	}
 }
 

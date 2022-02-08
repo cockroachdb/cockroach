@@ -41,7 +41,7 @@ func (p *planner) FormatAstAsRedactableString(
 ) redact.RedactableString {
 	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
 		statement,
-		annotations)
+		annotations, tree.FmtSimple)
 }
 
 // SchemaChange provides the planNode for the new schema changer.
@@ -60,6 +60,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := scdeps.NewBuilderDependencies(
+		p.ExecCfg().ClusterID(),
 		p.ExecCfg().Codec,
 		p.Txn(),
 		p.Descriptors(),
@@ -147,7 +148,15 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 	p := params.p
 	scs := p.ExtendedEvalContext().SchemaChangerState
 	runDeps := newSchemaChangerTxnRunDependencies(
-		p.SessionData(), p.User(), p.ExecCfg(), p.Txn(), p.Descriptors(), p.EvalContext(), scs.jobID, scs.stmts,
+		p.SessionData(),
+		p.User(),
+		p.ExecCfg(),
+		p.Txn(),
+		p.Descriptors(),
+		p.EvalContext(),
+		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		scs.jobID,
+		scs.stmts,
 	)
 	after, jobID, err := scrun.RunStatementPhase(
 		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
@@ -167,6 +176,7 @@ func newSchemaChangerTxnRunDependencies(
 	txn *kv.Txn,
 	descriptors *descs.Collection,
 	evalContext *tree.EvalContext,
+	kvTrace bool,
 	schemaChangerJobID jobspb.JobID,
 	stmts []string,
 ) scexec.Dependencies {
@@ -184,9 +194,10 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
-		scdeps.NewPartitioner(execCfg.Settings, evalContext),
+		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
+		kvTrace,
 		schemaChangerJobID,
 		stmts,
 	)

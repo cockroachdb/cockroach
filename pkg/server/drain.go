@@ -16,10 +16,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -31,7 +34,7 @@ var (
 	queryWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.query_wait",
-		"the server will wait for at least this amount of time for active queries to finish "+
+		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
@@ -40,8 +43,7 @@ var (
 	drainWait = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.shutdown.drain_wait",
-		"the amount of time a server waits in an unready state before proceeding with the rest "+
-			"of the shutdown process "+
+		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		0*time.Second,
@@ -70,48 +72,58 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// Connect to the target node.
 		client, err := s.dialNode(ctx, nodeID)
 		if err != nil {
-			return err
+			return serverError(ctx, err)
 		}
-		// Retrieve the stream interface to the target node.
-		drainClient, err := client.Drain(ctx, req)
-		if err != nil {
-			return err
-		}
-		// Forward all the responses from the remote server,
-		// to our client.
-		for {
-			// Receive one response message from the target node.
-			resp, err := drainClient.Recv()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				if grpcutil.IsClosedConnection(err) {
-					// If the drain request contained Shutdown==true, it's
-					// possible for the RPC connection to the target node to be
-					// shut down before a DrainResponse and EOF is
-					// received. This is not truly an error.
-					break
-				}
-
-				return err
-			}
-			// Forward the response from the target node to our remote
-			// client.
-			if err := stream.Send(resp); err != nil {
-				return err
-			}
-		}
-		return nil
+		return delegateDrain(ctx, req, client, stream)
 	}
 
-	doDrain := req.DoDrain
+	return s.server.drain.handleDrain(ctx, req, stream)
+}
 
-	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
+type drainServer struct {
+	stopper      *stop.Stopper
+	grpc         *grpcServer
+	sqlServer    *SQLServer
+	drainSleepFn func(time.Duration)
+
+	kvServer struct {
+		nodeLiveness *liveness.NodeLiveness
+		node         *Node
+	}
+}
+
+// newDrainServer constructs a drainServer suitable for any kind of server.
+func newDrainServer(
+	cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer, sqlServer *SQLServer,
+) *drainServer {
+	var drainSleepFn = time.Sleep
+	if cfg.TestingKnobs.Server != nil {
+		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
+			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
+		}
+	}
+	return &drainServer{
+		stopper:      stopper,
+		grpc:         grpc,
+		sqlServer:    sqlServer,
+		drainSleepFn: drainSleepFn,
+	}
+}
+
+// setNode configures the drainServer to also support KV node shutdown.
+func (s *drainServer) setNode(node *Node, nodeLiveness *liveness.NodeLiveness) {
+	s.kvServer.node = node
+	s.kvServer.nodeLiveness = nodeLiveness
+}
+
+func (s *drainServer) handleDrain(
+	ctx context.Context, req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer,
+) error {
+	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", req.DoDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
-	if doDrain {
-		remaining, info, err := s.server.Drain(ctx, req.Verbose)
+	if req.DoDrain {
+		remaining, info, err := s.runDrain(ctx, req.Verbose)
 		if err != nil {
 			log.Ops.Errorf(ctx, "drain failed: %v", err)
 			return err
@@ -119,7 +131,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		res.DrainRemainingIndicator = remaining
 		res.DrainRemainingDescription = info.StripMarkers()
 	}
-	if s.server.isDraining() {
+	if s.isDraining() {
 		res.IsDraining = true
 	}
 
@@ -127,8 +139,14 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return err
 	}
 
+	return s.maybeShutdownAfterDrain(ctx, req)
+}
+
+func (s *drainServer) maybeShutdownAfterDrain(
+	ctx context.Context, req *serverpb.DrainRequest,
+) error {
 	if !req.Shutdown {
-		if doDrain {
+		if req.DoDrain {
 			// The condition "if doDrain" is because we don't need an info
 			// message for just a probe.
 			log.Ops.Infof(ctx, "drain request completed without server shutdown")
@@ -141,12 +159,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// first seems more reasonable since grpc.Stop closes the listener right
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
-		s.server.grpc.Stop()
-		s.server.stopper.Stop(ctx)
+		s.grpc.Stop()
+		s.stopper.Stop(ctx)
 	}()
 
 	select {
-	case <-s.server.stopper.IsStopped():
+	case <-s.stopper.IsStopped():
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -170,7 +188,53 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 	}
 }
 
-// Drain idempotently activates the draining mode.
+// delegateDrain forwards a drain request to another node.
+// 'client' is where the request should be forwarded to.
+// 'stream' is where the request came from, and where the response should go.
+func delegateDrain(
+	ctx context.Context,
+	req *serverpb.DrainRequest,
+	client serverpb.AdminClient,
+	stream serverpb.Admin_DrainServer,
+) error {
+	// Retrieve the stream interface to the target node.
+	drainClient, err := client.Drain(ctx, req)
+	if err != nil {
+		return err
+	}
+	// Forward all the responses from the remote server,
+	// to our client.
+	for {
+		// Receive one response message from the target node.
+		resp, err := drainClient.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if grpcutil.IsClosedConnection(err) {
+				// If the drain request contained Shutdown==true, it's
+				// possible for the RPC connection to the target node to be
+				// shut down before a DrainResponse and EOF is
+				// received. This is not truly an error.
+				break
+			}
+
+			return err
+		}
+		// Forward the response from the target node to our remote
+		// client.
+		if err := stream.Send(resp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runDrain idempotently activates the draining mode.
+// Note: this represents ONE round of draining. This code is iterated on
+// indefinitely until all range leases have been drained.
+// This iteration can be found here: pkg/cli/start.go, pkg/cli/quit.go.
+//
 // Note: new code should not be taught to use this method
 // directly. Use the Drain() RPC instead with a suitably crafted
 // DrainRequest.
@@ -181,11 +245,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 //
 // The reporter function, if non-nil, is called for each
 // packet of load shed away from the server during the drain.
-//
-// TODO(knz): This method is currently exported for use by the
-// shutdown code in cli/start.go; however, this is a mis-design. The
-// start code should use the Drain() RPC like quit does.
-func (s *Server) Drain(
+func (s *drainServer) runDrain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	reports := make(map[redact.SafeString]int)
@@ -213,54 +273,67 @@ func (s *Server) Drain(
 		}
 	}()
 
-	if err = s.doDrain(ctx, reporter, verbose); err != nil {
+	if err = s.drainInner(ctx, reporter, verbose); err != nil {
 		return 0, "", err
 	}
 
 	return
 }
 
-func (s *Server) doDrain(
+func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
-	// First drain all clients and SQL leases.
+	// Drain the SQL layer.
+	// Drains all SQL connections, distributed SQL execution flows, and SQL table leases.
 	if err = s.drainClients(ctx, reporter); err != nil {
 		return err
 	}
-	// Finally, mark the node as draining in liveness and drain the
-	// range leases.
+	// Mark the node as draining in liveness and drain all range leases.
 	return s.drainNode(ctx, reporter, verbose)
 }
 
-// isDraining returns true if either clients are being drained
-// or one of the stores on the node is not accepting replicas.
-func (s *Server) isDraining() bool {
-	return s.sqlServer.pgServer.IsDraining() || s.node.IsDraining()
+// isDraining returns true if either SQL client connections are being drained
+// or if one of the stores on the node is not accepting replicas.
+func (s *drainServer) isDraining() bool {
+	return s.sqlServer.pgServer.IsDraining() || (s.kvServer.node != nil && s.kvServer.node.IsDraining())
 }
 
 // drainClients starts draining the SQL layer.
-func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.SafeString)) error {
+func (s *drainServer) drainClients(
+	ctx context.Context, reporter func(int, redact.SafeString),
+) error {
 	shouldDelayDraining := !s.isDraining()
-	// Mark the server as draining in a way that probes to
-	// /health?ready=1 will notice.
+
+	// Set the gRPC mode of the node to "draining" and mark the node as "not ready".
+	// Probes to /health?ready=1 will now notice the change in the node's readiness.
 	s.grpc.setMode(modeDraining)
-	s.sqlServer.acceptingClients.Set(false)
-	// Wait for drainUnreadyWait. This will fail load balancer checks and
-	// delay draining so that client traffic can move off this node.
+	s.sqlServer.isReady.Set(false)
+
+	// Wait the duration of drainWait.
+	// This will fail load balancer checks and delay draining so that client
+	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
-		s.drainSleepFn(drainWait.Get(&s.st.SV))
+		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
-	// Disable incoming SQL clients up to the queryWait timeout.
-	queryMaxWait := queryWait.Get(&s.st.SV)
+	// Drain all SQL connections.
+	// The queryWait duration is a timeout for waiting on clients
+	// to self-disconnect. If the timeout is reached, any remaining connections
+	// will be closed.
+	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
-	// Stop ongoing SQL execution up to the queryWait timeout.
+
+	// Drain all distributed SQL execution flows.
+	// The queryWait duration is used to wait on currently running flows to finish.
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
 
-	// Drain the SQL leases. This must be done after the pgServer has
+	// Flush in-memory SQL stats into the statement stats system table.
+	s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
+
+	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.
 	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
 
@@ -270,11 +343,17 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
-func (s *Server) drainNode(
+func (s *drainServer) drainNode(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
-	if err = s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
+	if s.kvServer.node == nil {
+		// No KV subsystem. Nothing to do.
+		return nil
+	}
+	// Set the node's liveness status to "draining".
+	if err = s.kvServer.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
 	}
-	return s.node.SetDraining(true /* drain */, reporter, verbose)
+	// Mark the stores of the node as "draining" and drain all range leases.
+	return s.kvServer.node.SetDraining(true /* drain */, reporter, verbose)
 }

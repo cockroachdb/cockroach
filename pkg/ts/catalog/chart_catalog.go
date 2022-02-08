@@ -567,6 +567,20 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Rangefeed Memory Allocations",
+				Metrics: []string{
+					"kv.rangefeed.budget_allocation_failed",
+					"kv.rangefeed.budget_allocation_blocked",
+				},
+			},
+			{
+				Title: "Memory Usage",
+				Metrics: []string{
+					"kv.rangefeed.mem_shared",
+					"kv.rangefeed.mem_system",
+				},
+			},
+			{
 				Title: "Snapshots",
 				Metrics: []string{
 					"range.snapshots.generated",
@@ -1004,10 +1018,24 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Lock Hold Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_hold_duration_nanos",
+					"kv.concurrency.max_lock_hold_duration_nanos",
+				},
+			},
+			{
 				Title: "Waiters",
 				Metrics: []string{
 					"kv.concurrency.lock_wait_queue_waiters",
 					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+				},
+			},
+			{
+				Title: "Lock Wait Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_wait_duration_nanos",
+					"kv.concurrency.max_lock_wait_duration_nanos",
 				},
 			},
 		},
@@ -1938,6 +1966,37 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{SQLLayer, "Row-Level TTL"}},
+		Charts: []chartDescription{
+			{
+				Title: "Jobs Running",
+				Metrics: []string{
+					"jobs.row_level_ttl.currently_running",
+					"jobs.row_level_ttl.currently_idle",
+				},
+			},
+			{
+				Title: "Jobs Statistics",
+				Metrics: []string{
+					"jobs.row_level_ttl.fail_or_cancel_completed",
+					"jobs.row_level_ttl.fail_or_cancel_failed",
+					"jobs.row_level_ttl.fail_or_cancel_retry_error",
+					"jobs.row_level_ttl.resume_completed",
+					"jobs.row_level_ttl.resume_failed",
+					"jobs.row_level_ttl.resume_retry_error",
+				},
+			},
+			{
+				Title: "Scheduled Jobs Statistics",
+				Metrics: []string{
+					"schedules.scheduled-row-level-ttl-executor.succeeded",
+					"schedules.scheduled-row-level-ttl-executor.started",
+					"schedules.scheduled-row-level-ttl-executor.failed",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
 		Charts: []chartDescription{
 			{
@@ -2132,6 +2191,14 @@ var charts = []sectionDescription{
 				AxisLabel: "Transactions",
 			},
 			{
+				Title: "Active Statements",
+				Metrics: []string{
+					"sql.statements.active",
+					"sql.statements.active.internal",
+				},
+				AxisLabel: "Active Statements",
+			},
+			{
 				Title: "Full Table Index Scans",
 				Metrics: []string{
 					"sql.full.scan.count",
@@ -2169,6 +2236,15 @@ var charts = []sectionDescription{
 					"sql.txn.latency.internal",
 				},
 				AxisLabel: "Latency",
+			},
+			{
+				Title: "Cancel Requests (Postgres Protocol)",
+				Metrics: []string{
+					"sql.pgwire_cancel.total",
+					"sql.pgwire_cancel.ignored",
+					"sql.pgwire_cancel.successful",
+				},
+				AxisLabel: "Count",
 			},
 		},
 	},
@@ -2318,6 +2394,41 @@ var charts = []sectionDescription{
 					"sql.restart_savepoint.release.started.count.internal",
 					"sql.restart_savepoint.rollback.started.count.internal",
 				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{SQLLayer, "SQL", "Row Level TTL"}},
+		Charts: []chartDescription{
+			{
+				Title: "Active Range Deletes",
+				Metrics: []string{
+					"jobs.row_level_ttl.num_active_ranges",
+				},
+				AxisLabel: "Num Running",
+			},
+			{
+				Title: "Processing Count",
+				Metrics: []string{
+					"jobs.row_level_ttl.rows_selected",
+					"jobs.row_level_ttl.rows_deleted",
+				},
+				AxisLabel: "Count",
+			},
+			{
+				Title: "Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.select_duration",
+					"jobs.row_level_ttl.delete_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
+			},
+			{
+				Title: "Net Processing Latency",
+				Metrics: []string{
+					"jobs.row_level_ttl.range_total_duration",
+				},
+				AxisLabel: "Latency (nanoseconds)",
 			},
 		},
 	},
@@ -2662,6 +2773,26 @@ var charts = []sectionDescription{
 					"jobs.auto_span_config_reconciliation.currently_running",
 					"jobs.auto_sql_stats_compaction.currently_running",
 					"jobs.stream_replication.currently_running",
+				},
+			},
+			{
+				Title: "Currently Idle",
+				Metrics: []string{
+					"jobs.auto_create_stats.currently_idle",
+					"jobs.auto_span_config_reconciliation.currently_idle",
+					"jobs.auto_sql_stats_compaction.currently_idle",
+					"jobs.backup.currently_idle",
+					"jobs.changefeed.currently_idle",
+					"jobs.create_stats.currently_idle",
+					"jobs.import.currently_idle",
+					"jobs.migration.currently_idle",
+					"jobs.new_schema_change.currently_idle",
+					"jobs.restore.currently_idle",
+					"jobs.schema_change.currently_idle",
+					"jobs.schema_change_gc.currently_idle",
+					"jobs.stream_ingestion.currently_idle",
+					"jobs.stream_replication.currently_idle",
+					"jobs.typedesc_schema_change.currently_idle",
 				},
 			},
 			{

@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -384,7 +383,7 @@ func (p *planner) initiateDropTable(
 	// Exit early with an error if the table is undergoing a declarative schema
 	// change, before we try to get job IDs and update job statuses later. See
 	// createOrUpdateSchemaChangeJob.
-	if tableDesc.NewSchemaChangeJobID != 0 {
+	if tableDesc.GetDeclarativeSchemaChangerState() != nil {
 		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"cannot perform a schema change on table %q while it is undergoing a declarative schema change",
 			tableDesc.GetName(),
@@ -460,7 +459,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 	ctx context.Context, tableDesc *tabledesc.Mutable,
 ) error {
 	for _, mj := range tableDesc.MutationJobs {
-		jobID := jobspb.JobID(mj.JobID)
+		jobID := mj.JobID
 		// Jobs are only added in the cache during the transaction and are created
 		// in a batch only when the transaction commits. So, if a job's record exists
 		// in the cache, we can simply delete that record from cache because the

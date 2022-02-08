@@ -14,6 +14,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -56,6 +57,12 @@ func init() {
 	ctx := context.Background()
 	ctx = logtags.AddTag(ctx, "kafka-producer", nil)
 	sarama.Logger = &kafkaLogAdapter{ctx: ctx}
+
+	// Sarama should not be rejecting messages based on some arbitrary limits.
+	// This sink already manages its resource usage.  Sarama should attempt to deliver
+	// messages, no matter their size.  Of course, the downstream kafka may reject
+	// those messages, but this rejection should not be done locally.
+	sarama.MaxRequestSize = math.MaxInt32
 }
 
 // kafkaClient is a small interface restricting the functionality in sarama.Client
@@ -408,18 +415,18 @@ func (p *changefeedPartitioner) Partition(
 }
 
 func makeTopicsMap(
-	prefix string, name string, targets jobspb.ChangefeedTargets,
+	prefix string, name string, targets []jobspb.ChangefeedTargetSpecification,
 ) map[descpb.ID]string {
 	topics := make(map[descpb.ID]string)
 	useSingleName := name != ""
 	if useSingleName {
 		name = prefix + SQLNameToKafkaName(name)
 	}
-	for id, t := range targets {
+	for _, t := range targets {
 		if useSingleName {
-			topics[id] = name
+			topics[t.TableID] = name
 		} else {
-			topics[id] = prefix + SQLNameToKafkaName(t.StatementTimeName)
+			topics[t.TableID] = prefix + SQLNameToKafkaName(t.StatementTimeName)
 		}
 	}
 	return topics
@@ -442,6 +449,12 @@ func (j *jsonDuration) UnmarshalJSON(b []byte) error {
 
 // Apply configures provided kafka configuration struct based on this config.
 func (c *saramaConfig) Apply(kafka *sarama.Config) error {
+	// Sarama limits the size of each message to be MaxMessageSize (1MB) bytes.
+	// This is silly;  This sink already manages its memory, and therefore, if we
+	// had enough resources to ingest and process this message, then sarama shouldn't
+	// get in a way.  Set this limit to be just a bit under maximum request size.
+	kafka.Producer.MaxMessageBytes = int(sarama.MaxRequestSize - 1)
+
 	kafka.Producer.Flush.Bytes = c.Flush.Bytes
 	kafka.Producer.Flush.Messages = c.Flush.Messages
 	kafka.Producer.Flush.Frequency = time.Duration(c.Flush.Frequency)
@@ -636,7 +649,7 @@ func buildKafkaConfig(u sinkURL, opts map[string]string) (*sarama.Config, error)
 func makeKafkaSink(
 	ctx context.Context,
 	u sinkURL,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	opts map[string]string,
 	m *sliMetrics,
 ) (Sink, error) {

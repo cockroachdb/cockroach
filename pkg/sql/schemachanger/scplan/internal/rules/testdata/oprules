@@ -1,0 +1,128 @@
+oprules
+----
+- name: skip column removal ops on relation drop
+  from: column-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $column[Type] = '*scpb.Column'
+    - $relation[DescID] = $relation-id
+    - $column[DescID] = $relation-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-node[Type] = '*screl.Node'
+    - $column-node[Target] = $column-target
+    - $column-target[TargetStatus] = ABSENT
+    - $column-node[CurrentStatus] IN [PUBLIC, WRITE_ONLY]
+- name: skip column dependents removal ops on relation drop
+  from: column-dep-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $column[Type] = '*scpb.Column'
+    - $column-dep[Type] = '*scpb.ColumnName'
+    - $relation[DescID] = $relation-id
+    - $column[DescID] = $relation-id
+    - $column-dep[DescID] = $relation-id
+    - $column[ColumnID] = $column-id
+    - $column-dep[ColumnID] = $column-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $column-target[Type] = '*scpb.Target'
+    - $column-target[Element] = $column
+    - $column-target[TargetStatus] = ABSENT
+    - $column-dep-target[Type] = '*scpb.Target'
+    - $column-dep-target[Element] = $column-dep
+    - $column-dep-node[Type] = '*screl.Node'
+    - $column-dep-node[Target] = $column-dep-target
+    - $column-dep-target[TargetStatus] = ABSENT
+- name: skip index removal ops on relation drop
+  from: index-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $relation[DescID] = $relation-id
+    - $index[DescID] = $relation-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-node[Type] = '*screl.Node'
+    - $index-node[Target] = $index-target
+    - $index-target[TargetStatus] = ABSENT
+- name: skip index dependents removal ops on relation drop
+  from: index-dep-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $index[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
+    - $index-dep[Type] IN ['*scpb.IndexName', '*scpb.IndexPartitioning']
+    - $relation[DescID] = $relation-id
+    - $index[DescID] = $relation-id
+    - $index-dep[DescID] = $relation-id
+    - $index[IndexID] = $index-id
+    - $index-dep[IndexID] = $index-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $index-target[Type] = '*scpb.Target'
+    - $index-target[Element] = $index
+    - $index-target[TargetStatus] = ABSENT
+    - $index-dep-target[Type] = '*scpb.Target'
+    - $index-dep-target[Element] = $index-dep
+    - $index-dep-node[Type] = '*screl.Node'
+    - $index-dep-node[Target] = $index-dep-target
+    - $index-dep-target[TargetStatus] = ABSENT
+- name: skip constraint removal ops on relation drop
+  from: constraint-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $relation[DescID] = $relation-id
+    - $constraint[DescID] = $relation-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $constraint-target[Type] = '*scpb.Target'
+    - $constraint-target[Element] = $constraint
+    - $constraint-node[Type] = '*screl.Node'
+    - $constraint-node[Target] = $constraint-target
+    - $constraint-target[TargetStatus] = ABSENT
+- name: skip constraint dependents removal ops on relation drop
+  from: constraint-dep-node
+  query:
+    - $relation[Type] IN ['*scpb.Table', '*scpb.View']
+    - $constraint[Type] IN ['*scpb.UniqueWithoutIndexConstraint', '*scpb.CheckConstraint', '*scpb.ForeignKeyConstraint']
+    - $constraint-dep[Type] = '*scpb.ConstraintName'
+    - $relation[DescID] = $relation-id
+    - $constraint[DescID] = $relation-id
+    - $constraint[ConstraintID] = $constraint-id
+    - $constraint-dep[ConstraintID] = $constraint-id
+    - $relation-target[Type] = '*scpb.Target'
+    - $relation-target[Element] = $relation
+    - $relation-target[TargetStatus] = ABSENT
+    - $constraint-target[Type] = '*scpb.Target'
+    - $constraint-target[Element] = $constraint
+    - $constraint-target[TargetStatus] = ABSENT
+    - $constraint-dep-target[Type] = '*scpb.Target'
+    - $constraint-dep-target[Element] = $constraint-dep
+    - $constraint-dep-node[Type] = '*screl.Node'
+    - $constraint-dep-node[Target] = $constraint-dep-target
+    - $constraint-dep-target[TargetStatus] = ABSENT
+- name: skip element removal ops on descriptor drop
+  from: dep-node
+  query:
+    - $desc[Type] IN ['*scpb.Database', '*scpb.Schema', '*scpb.Table', '*scpb.View', '*scpb.Sequence', '*scpb.AliasType', '*scpb.EnumType']
+    - $dep[Type] IN ['*scpb.ColumnFamily', '*scpb.Owner', '*scpb.UserPrivileges']
+    - $desc[DescID] = $desc-id
+    - $dep[DescID] = $desc-id
+    - $desc-target[Type] = '*scpb.Target'
+    - $desc-target[Element] = $desc
+    - $desc-target[TargetStatus] = ABSENT
+    - $dep-target[Type] = '*scpb.Target'
+    - $dep-target[Element] = $dep
+    - $dep-node[Type] = '*screl.Node'
+    - $dep-node[Target] = $dep-target
+    - $dep-target[TargetStatus] = ABSENT

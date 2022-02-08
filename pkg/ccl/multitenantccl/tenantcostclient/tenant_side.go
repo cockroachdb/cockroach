@@ -31,7 +31,7 @@ import (
 
 // TargetPeriodSetting is exported for testing purposes.
 var TargetPeriodSetting = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"tenant_cost_control_period",
 	"target duration between token bucket requests from tenants (requires restart)",
 	10*time.Second,
@@ -40,13 +40,13 @@ var TargetPeriodSetting = settings.RegisterDurationSetting(
 
 // CPUUsageAllowance is exported for testing purposes.
 var CPUUsageAllowance = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"tenant_cpu_usage_allowance",
 	"this much CPU usage per second is considered background usage and "+
 		"doesn't contribute to consumption; for example, if it is set to 10ms, "+
 		"that corresponds to 1% of a CPU",
 	10*time.Millisecond,
-	checkDurationInRange(0, 10*time.Millisecond),
+	checkDurationInRange(0, 1000*time.Millisecond),
 )
 
 // checkDurationInRange returns a function used to validate duration cluster
@@ -114,10 +114,7 @@ func newTenantSideCostController(
 	}
 	c.limiter.Init(timeSource, testInstr, c.lowRUNotifyChan)
 
-	// TODO(radu): these settings can currently be changed by the tenant (see
-	// #47918), which would made it very easy to evade cost control. For now, use
-	// the hardcoded default values.
-	c.costCfg = tenantcostmodel.DefaultConfig()
+	c.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
 	return c, nil
 }
 

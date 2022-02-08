@@ -167,7 +167,7 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 // Subscribe installs a callback that's invoked with whatever span may have seen
 // a config update.
-func (s *KVSubscriber) Subscribe(fn func(roachpb.Span)) {
+func (s *KVSubscriber) Subscribe(fn func(context.Context, roachpb.Span)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -230,7 +230,7 @@ func (s *KVSubscriber) handleCompleteUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 	for _, h := range handlers {
-		h.invoke(keys.EverythingSpan)
+		h.invoke(ctx, keys.EverythingSpan)
 	}
 }
 
@@ -248,21 +248,22 @@ func (s *KVSubscriber) handlePartialUpdate(
 	handlers := s.mu.handlers
 	s.mu.Unlock()
 
-	for _, h := range handlers {
+	for _, handler := range handlers {
 		for _, ev := range events {
-			h.invoke(ev.(*bufferEvent).Update.Span)
+			target := ev.(*bufferEvent).Update.Target
+			handler.invoke(ctx, target.KeyspaceTargeted())
 		}
 	}
 }
 
 type handler struct {
 	initialized bool // tracks whether we need to invoke with a [min,max) span first
-	fn          func(update roachpb.Span)
+	fn          func(ctx context.Context, update roachpb.Span)
 }
 
-func (h *handler) invoke(update roachpb.Span) {
+func (h *handler) invoke(ctx context.Context, update roachpb.Span) {
 	if !h.initialized {
-		h.fn(keys.EverythingSpan)
+		h.fn(ctx, keys.EverythingSpan)
 		h.initialized = true
 
 		if update.Equal(keys.EverythingSpan) {
@@ -270,7 +271,7 @@ func (h *handler) invoke(update roachpb.Span) {
 		}
 	}
 
-	h.fn(update)
+	h.fn(ctx, update)
 }
 
 type bufferEvent struct {

@@ -40,7 +40,7 @@ full-translate
 /System/NodeLiveness{-Max}                 range default
 /System/{NodeLivenessMax-tsd}              range default
 /System{/tsd-tse}                          range default
-/System{tse-/Max}                          range default
+/System{tse-/SystemSpanConfigKeys}         range default
 /Table/{SystemConfigSpan/Start-4}          database system (host)
 /Table/{4-5}                               database system (host)
 /Table/{5-6}                               database system (host)
@@ -83,3 +83,4 @@ full-translate
 /Table/4{5-6}                              ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 /Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)

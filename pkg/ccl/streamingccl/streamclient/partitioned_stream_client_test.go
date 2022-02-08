@@ -15,14 +15,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -50,7 +51,6 @@ func (f *subscriptionFeedSource) Close(ctx context.Context) {}
 func TestPartitionedStreamReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "partitionedStreamClient can't work under race")
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -136,7 +136,16 @@ INSERT INTO d.t2 VALUES (2);
 	}
 
 	// Ignore table t2 and only subscribe to the changes to table t1.
-	sub, err := client.Subscribe(ctx, id, encodeSpec("t1"), hlc.Timestamp{})
+	require.Equal(t, len(top), 1)
+	url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
+	require.NoError(t, err)
+	// Create a new stream client with the given partition address.
+	subClient, err := newPartitionedStreamClient(url)
+	defer func() {
+		require.NoError(t, subClient.Close())
+	}()
+	require.NoError(t, err)
+	sub, err := subClient.Subscribe(ctx, id, encodeSpec("t1"), hlc.Timestamp{})
 	require.NoError(t, err)
 
 	rf := streamingtest.MakeReplicationFeed(t, &subscriptionFeedSource{sub: sub})

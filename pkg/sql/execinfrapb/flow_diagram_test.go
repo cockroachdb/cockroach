@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // compareDiagrams verifies that two JSON strings decode to equal diagramData
@@ -47,14 +48,15 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
-	desc := &descpb.TableDescriptor{
-		Name:    "Table",
-		Indexes: []descpb.IndexDescriptor{{Name: "SomeIndex"}},
-	}
 	tr := TableReaderSpec{
-		Table:     *desc,
-		IndexIdx:  1,
-		ColumnIDs: []descpb.ColumnID{1, 2},
+		FetchSpec: descpb.IndexFetchSpec{
+			TableName: "Table",
+			IndexName: "SomeIndex",
+			FetchedColumns: []descpb.IndexFetchSpec_Column{
+				{Name: "a"},
+				{Name: "b"},
+			},
+		},
 	}
 
 	flows[1] = &FlowSpec{
@@ -110,7 +112,16 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 						{StreamID: 2},
 					},
 				}},
-				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{Table: *desc}},
+				Core: ProcessorCoreUnion{JoinReader: &JoinReaderSpec{
+					FetchSpec: descpb.IndexFetchSpec{
+						TableName: "Table",
+						IndexName: "primary",
+						FetchedColumns: []descpb.IndexFetchSpec_Column{
+							{Name: "x"},
+							{Name: "y"},
+						},
+					},
+				}},
 				Post: PostProcessSpec{
 					Projection:    true,
 					OutputColumns: []uint32{2},
@@ -138,10 +149,10 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		  "sql":"SOME SQL HERE",
 		  "nodeNames":["1","2","3"],
 		  "processors":[
-        {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["Table@SomeIndex","Columns: ?1?, ?2?"]},"outputs":[],"stage":1},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["Table@SomeIndex","Columns: ?1?, ?2?"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/2","details":["Table@SomeIndex","Columns: ?1?, ?2?"]},"outputs":[],"stage":1},
-				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["Table@primary","Out: @3"]},"outputs":[],"stage":2},
+        {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/2","details":["Table@SomeIndex","Columns: a, b"]},"outputs":[],"stage":1},
+				{"nodeIdx":2,"inputs":[{"title":"ordered","details":["@2+"]}],"core":{"title":"JoinReader/3","details":["Table@primary","Columns: x, y","Out: @3"]},"outputs":[],"stage":2},
 				{"nodeIdx":2,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}
 		  ],
 		  "edges":[
@@ -155,7 +166,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 
 	compareDiagrams(t, json, expected)
 
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFL80AQhu_frwjv9Vsw2XjaSwpSsKJWW2-Sw5odSiDZibsbqJT8d-lGaAutVIoeZ948M0-G3cC_N1BYzh-myfL5PrmdLqYQsGzoUbfkoV6RQUBCIEcp0DmuyHt222gTP5yZNVQqUNuuD9t2KVCxI6gNQh0agsKLfmtoQdqQu0ohYCjouonjYzRZcksza2gNgRtu-tZ6lRRZIZJCFigHAe7Dbr4PekVQ2SD2HLLzHbLfcpDnO8i_cNitZmfIkTlcOpH_UQ5HRO-4tl-e-THPztWtdh8QmPdBJZP8pJv8yX0W5Du2ng5WnpqcbsXJrGj8Uc-9q-jJcRWf41jOIxcbhnwY03wsZjZG8Xj7cHYJLC-B82_h6wM4Hcrh32cAAAD__wZXONY="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kkFLw0AQhe_-ivCuLphsPO2pIAUrarX1Jjlss0MJJDtxdwOVkv8u2QhtoZVK6XHm7ZvvzbBb-K8aCsv5yzRZvj8nj9PFFAKWDb3qhjzUJzIISAjkKARaxyV5z26QtvHhzGygUoHKtl0Y2oVAyY6gtghVqAkKH3pV04K0IXeXQsBQ0FUdx0dpsuSGZtbQBgIPXHeN9SrRIlmh6AW4C7vZPug1QWW92ONn5_Oza_Dl-Xx5bf4Oy86QI3MInMhbFP2RkE9c2d-M-bGMrasa7b73E25EMtTzLqhkkp_MKv9zqwX5lq2ngwinJqfDImTWNC7uuXMlvTku45ccy3n0xYYhH0Y1H4uZjVI85r45u8QsLzHnf5rvD8xpX_Q3PwEAAP__4nU76g=="
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, url.String())
 	}
@@ -166,17 +177,28 @@ func TestPlanDiagramJoin(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
-	descA := &descpb.TableDescriptor{Name: "TableA"}
-	descB := &descpb.TableDescriptor{Name: "TableB"}
-
 	trA := TableReaderSpec{
-		Table:     *descA,
-		ColumnIDs: []descpb.ColumnID{1, 2, 4},
+		FetchSpec: descpb.IndexFetchSpec{
+			TableName: "TableA",
+			IndexName: "primary",
+			FetchedColumns: []descpb.IndexFetchSpec_Column{
+				{Name: "a"},
+				{Name: "b"},
+				{Name: "d"},
+			},
+		},
 	}
 
 	trB := TableReaderSpec{
-		Table:     *descB,
-		ColumnIDs: []descpb.ColumnID{2, 3, 5},
+		FetchSpec: descpb.IndexFetchSpec{
+			TableName: "TableB",
+			IndexName: "primary",
+			FetchedColumns: []descpb.IndexFetchSpec_Column{
+				{Name: "b"},
+				{Name: "c"},
+				{Name: "e"},
+			},
+		},
 	}
 
 	hj := HashJoinerSpec{
@@ -357,14 +379,14 @@ func TestPlanDiagramJoin(t *testing.T) {
 		  "sql":"SOME SQL HERE",
 		  "nodeNames":["1","2","3","4"],
 			"processors":[
-			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["TableA@primary","Columns: ?1?, ?2?, ?4?"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
-				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["TableA@primary","Columns: ?1?, ?2?, ?4?"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
+			  {"nodeIdx":0,"inputs":[],"core":{"title":"TableReader/0","details":["TableA@primary","Columns: a, b, d"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
+				{"nodeIdx":1,"inputs":[],"core":{"title":"TableReader/1","details":["TableA@primary","Columns: a, b, d"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
 				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/2","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6","Out: @1,@2,@3,@4,@5,@6"]},"outputs":[],"stage":0},
 				{"nodeIdx":1,"inputs":[{"title":"unordered","details":[]}],"core":{"title":"No-op/3","details":[]},"outputs":[],"stage":0},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/4","details":["TableA@primary","Columns: ?1?, ?2?, ?4?","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
-				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/5","details":["TableB@primary","Columns: ?2?, ?3?, ?5?"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/4","details":["TableA@primary","Columns: a, b, d","Out: @1,@2,@4"]},"outputs":[{"title":"by hash","details":["@1,@2"]}],"stage":0},
+				{"nodeIdx":2,"inputs":[],"core":{"title":"TableReader/5","details":["TableB@primary","Columns: b, c, e"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
 				{"nodeIdx":2,"inputs":[{"title":"unordered","details":[]},{"title":"unordered","details":[]}],"core":{"title":"HashJoiner/6","details":["left(@1,@3)=right(@3,@2)","ON @1+@2\u003c@6"]},"outputs":[],"stage":0},
-				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader/7","details":["TableB@primary","Columns: ?2?, ?3?, ?5?"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
+				{"nodeIdx":3,"inputs":[],"core":{"title":"TableReader/7","details":["TableB@primary","Columns: b, c, e"]},"outputs":[{"title":"by hash","details":["@3,@2"]}],"stage":0},
 				{"nodeIdx":1,"inputs":[],"core":{"title":"Response","details":[]},"outputs":[],"stage":0}
 			],
 			"edges":[
@@ -386,4 +408,11 @@ func TestPlanDiagramJoin(t *testing.T) {
 	`
 
 	compareDiagrams(t, s, expected)
+}
+
+func TestProcessorsImplementDiagramCellType(t *testing.T) {
+	pcu := reflect.ValueOf(ProcessorCoreUnion{})
+	for i := 0; i < pcu.NumField(); i++ {
+		require.Implements(t, (*diagramCellType)(nil), pcu.Field(i).Interface())
+	}
 }

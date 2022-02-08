@@ -4,7 +4,6 @@ go_library(
     name = "streamclient",
     srcs = [
         "client.go",
-        "cockroach_sinkless_replication_client.go",
         "partitioned_stream_client.go",
         "random_stream_client.go",
     ],
@@ -19,6 +18,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/rowenc",
@@ -40,14 +40,12 @@ go_test(
     size = "small",
     srcs = [
         "client_test.go",
-        "cockroach_sinkless_replication_client_test.go",
         "main_test.go",
         "partitioned_stream_client_test.go",
     ],
     embed = [":streamclient"],
     deps = [
         "//pkg/base",
-        "//pkg/ccl/changefeedccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
@@ -63,7 +61,6 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/streaming",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/testutils/testcluster",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",

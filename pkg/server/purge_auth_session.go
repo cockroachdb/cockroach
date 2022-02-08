@@ -57,8 +57,8 @@ var (
 // startPurgeOldSessions runs an infinite loop in a goroutine
 // which regularly deletes old rows in the system.web_sessions table.
 func startPurgeOldSessions(ctx context.Context, s *authenticationServer) error {
-	return s.server.stopper.RunAsyncTask(ctx, "purge-old-sessions", func(context.Context) {
-		settingsValues := &s.server.st.SV
+	return s.sqlServer.stopper.RunAsyncTask(ctx, "purge-old-sessions", func(context.Context) {
+		settingsValues := &s.sqlServer.execCfg.Settings.SV
 		period := webSessionPurgePeriod.Get(settingsValues)
 
 		timer := timeutil.NewTimer()
@@ -70,7 +70,7 @@ func startPurgeOldSessions(ctx context.Context, s *authenticationServer) error {
 			case <-timer.C:
 				timer.Read = true
 				s.purgeOldSessions(ctx)
-			case <-s.server.stopper.ShouldQuiesce():
+			case <-s.sqlServer.stopper.ShouldQuiesce():
 				return
 			case <-ctx.Done():
 				return
@@ -108,9 +108,9 @@ ORDER BY random()
 LIMIT $2
 RETURNING 1
 `
-		settingsValues   = &s.server.st.SV
-		internalExecutor = s.server.sqlServer.internalExecutor
-		currTime         = s.server.clock.PhysicalTime()
+		settingsValues   = &s.sqlServer.execCfg.Settings.SV
+		internalExecutor = s.sqlServer.internalExecutor
+		currTime         = s.sqlServer.execCfg.Clock.PhysicalTime()
 
 		purgeTTL          = webSessionPurgeTTL.Get(settingsValues)
 		autoLogoutTimeout = webSessionAutoLogoutTimeout.Get(settingsValues)

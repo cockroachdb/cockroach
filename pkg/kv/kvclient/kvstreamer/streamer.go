@@ -12,6 +12,7 @@ package kvstreamer
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sort"
 	"sync"
@@ -32,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// TODO(yuzefovich): remove this once the Streamer is stabilized.
+const debug = false
 
 // OperationMode describes the mode of operation of the Streamer.
 type OperationMode int
@@ -71,12 +75,16 @@ type Result struct {
 	// The responses are to be considered immutable; the Streamer might hold on
 	// to the respective memory. Calling Result.Release() tells the Streamer
 	// that the response is no longer needed.
+	//
+	// GetResp is guaranteed to have nil IntentValue.
 	GetResp *roachpb.GetResponse
 	// ScanResp can contain a partial response to a ScanRequest (when Complete
 	// is false). In that case, there will be a further result with the
 	// continuation; that result will use the same Key. Notably, SQL rows will
 	// never be split across multiple results.
 	ScanResp struct {
+		// The response is always using BATCH_RESPONSE format (meaning that Rows
+		// field is always nil). IntentRows field is also nil.
 		*roachpb.ScanResponse
 		// If the Result represents a scan result, Complete indicates whether
 		// this is the last response for the respective scan, or if there are
@@ -215,10 +223,6 @@ type Streamer struct {
 
 	enqueueKeys []int
 
-	// waitForResults is used to block GetResults() call until some results are
-	// available.
-	waitForResults chan struct{}
-
 	mu struct {
 		// If the budget's mutex also needs to be locked, the budget's mutex
 		// must be acquired first.
@@ -261,6 +265,10 @@ type Streamer struct {
 		// by GetResults() to the caller which the caller hasn't processed yet.
 		numUnreleasedResults int
 
+		// hasResults is used by the client's goroutine to block until there are
+		// some results to be picked up.
+		hasResults *sync.Cond
+
 		// results are the results of already completed requests that haven't
 		// been returned by GetResults() yet.
 		results []Result
@@ -284,7 +292,7 @@ var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	"kv.streamer.concurrency_limit",
 	"maximum number of asynchronous requests by a single streamer",
 	max(128, int64(8*runtime.GOMAXPROCS(0))),
-	settings.NonNegativeInt,
+	settings.PositiveInt,
 )
 
 func max(a, b int64) int64 {
@@ -295,6 +303,8 @@ func max(a, b int64) int64 {
 }
 
 // NewStreamer creates a new Streamer.
+//
+// txn must be a LeafTxn.
 //
 // limitBytes determines the maximum amount of memory this Streamer is allowed
 // to use (i.e. it'll be used lazily, as needed). The more memory it has, the
@@ -315,12 +325,16 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 ) *Streamer {
+	if txn.Type() != kv.LeafTxn {
+		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
+	}
 	s := &Streamer{
 		distSender: distSender,
 		stopper:    stopper,
 		budget:     newBudget(acc, limitBytes),
 	}
 	s.mu.hasWork = sync.NewCond(&s.mu.Mutex)
+	s.mu.hasResults = sync.NewCond(&s.mu.Mutex)
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		txn:                    txn,
@@ -334,10 +348,6 @@ func NewStreamer(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
 	)
-	streamerConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
-		s.coordinator.asyncSem.UpdateCapacity(uint64(streamerConcurrencyLimit.Get(&st.SV)))
-	})
-	stopper.AddCloser(s.coordinator.asyncSem.Closer("stopper"))
 	return s
 }
 
@@ -362,7 +372,6 @@ func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
 	}
 	s.hints = hints
 	s.maxKeysPerRow = int32(maxKeysPerRow)
-	s.waitForResults = make(chan struct{}, 1)
 }
 
 // Enqueue dispatches multiple requests for execution. Results are delivered
@@ -398,7 +407,7 @@ func (s *Streamer) Enqueue(
 ) (retErr error) {
 	if !s.coordinatorStarted {
 		var coordinatorCtx context.Context
-		coordinatorCtx, s.coordinatorCtxCancel = context.WithCancel(ctx)
+		coordinatorCtx, s.coordinatorCtxCancel = s.stopper.WithCancelOnQuiesce(ctx)
 		s.waitGroup.Add(1)
 		if err := s.stopper.RunAsyncTaskEx(
 			coordinatorCtx,
@@ -549,7 +558,16 @@ func (s *Streamer) Enqueue(
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
-	s.mu.requestsToServe = requestsToServe
+	if debug {
+		fmt.Printf("enqueuing %s to serve\n", reqsToString(requestsToServe))
+	}
+	// Note that we do not just overwrite s.mu.requestsToServe because it is
+	// possible that the worker coordinator has not sliced off the issued
+	// requests yet. In other words, it is possible for a request to be issued,
+	// responded to, returned to the client before the deferred function in
+	// issueRequestsForAsyncProcessing is executed.
+	// TODO(yuzefovich): clean this up.
+	s.mu.requestsToServe = append(s.mu.requestsToServe, requestsToServe...)
 	s.mu.hasWork.Signal()
 	return nil
 }
@@ -583,45 +601,37 @@ func (s *Streamer) enqueueMemoryAccountingLocked(
 // result slice is returned once all enqueued requests have been responded to.
 func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 	s.mu.Lock()
-	results := s.mu.results
-	err := s.mu.err
-	s.mu.results = nil
-	allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
-	// Non-blockingly clear the waitForResults channel in case we've just picked
-	// up some results. We do so while holding the mutex so that new results
-	// aren't appended.
-	select {
-	case <-s.waitForResults:
-	default:
-	}
-	s.mu.Unlock()
-
-	if len(results) > 0 || allComplete || err != nil {
-		return results, err
-	}
-
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.waitForResults:
-		s.mu.Lock()
-		results = s.mu.results
-		err = s.mu.err
+	defer s.mu.Unlock()
+	for {
+		results := s.mu.results
 		s.mu.results = nil
-		s.mu.Unlock()
-		return results, err
-	}
-}
-
-// notifyGetResultsLocked non-blockingly sends a message on waitForResults
-// channel. This method should be called only while holding the lock of s.mu so
-// that other results couldn't be appended which would cause us to miss the
-// notification about that.
-func (s *Streamer) notifyGetResultsLocked() {
-	s.mu.AssertHeld()
-	select {
-	case s.waitForResults <- struct{}{}:
-	default:
+		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
+		if len(results) > 0 || allComplete || s.mu.err != nil {
+			if debug {
+				if len(results) > 0 {
+					fmt.Printf("returning %s to the client\n", resultsToString(results))
+				} else {
+					suffix := "all requests have been responded to"
+					if !allComplete {
+						suffix = fmt.Sprintf("%v", s.mu.err)
+					}
+					fmt.Printf("returning no results to the client because %s\n", suffix)
+				}
+			}
+			return results, s.mu.err
+		}
+		if debug {
+			fmt.Println("client blocking to wait for results")
+		}
+		s.mu.hasResults.Wait()
+		// Check whether the Streamer has been canceled or closed while we were
+		// waiting for the results.
+		if err := ctx.Err(); err != nil {
+			// No need to use setErrorLocked here because the current goroutine
+			// is the only one blocking on hasResults condition variable.
+			s.mu.err = err
+			return nil, err
+		}
 	}
 }
 
@@ -642,7 +652,7 @@ func (s *Streamer) setErrorLocked(err error) {
 	if s.mu.err == nil {
 		s.mu.err = err
 	}
-	s.notifyGetResultsLocked()
+	s.mu.hasResults.Signal()
 }
 
 // Close cancels all in-flight operations and releases all of the resources of
@@ -655,6 +665,11 @@ func (s *Streamer) Close() {
 		s.mu.done = true
 		// Unblock the coordinator in case it is waiting for more work.
 		s.mu.hasWork.Signal()
+		// Note that only the client's goroutine can be blocked waiting for the
+		// results, and Close() is called only by the same goroutine, so
+		// signaling hasResult condition variable isn't necessary. However, we
+		// choose to be safe and do it anyway.
+		s.mu.hasResults.Signal()
 		s.mu.Unlock()
 		// Unblock the coordinator in case it is waiting for the budget.
 		s.budget.mu.waitForBudget.Signal()
@@ -712,6 +727,11 @@ type singleRangeBatch struct {
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs.
 	reqsReservedBytes int64
+	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
+	// this singleRangeBatch should be sent with in order for the response to
+	// not be empty. Note that TargetBytes of at least minTargetBytes is
+	// necessary but might not be sufficient for the response to be non-empty.
+	minTargetBytes int64
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -730,6 +750,28 @@ func (r *singleRangeBatch) Less(i, j int) bool {
 	// TODO(yuzefovich): figure out whether it's worth extracting the keys when
 	// constructing singleRangeBatch object.
 	return r.reqs[i].GetInner().Header().Key.Compare(r.reqs[j].GetInner().Header().Key) < 0
+}
+
+func reqsToString(reqs []singleRangeBatch) string {
+	result := "requests for positions "
+	for i, r := range reqs {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%v", r.positions)
+	}
+	return result
+}
+
+func resultsToString(results []Result) string {
+	result := "results for positions "
+	for i, r := range results {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%d", r.position)
+	}
+	return result
 }
 
 type workerCoordinator struct {
@@ -767,24 +809,26 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			}
 		}
 
-		// At the moment, we're using a simple average which is suboptimal
-		// because it is not reactive enough to larger responses coming back
-		// later. As a result, we can have a degenerate behavior where many
-		// requests end up coming back empty. Furthermore, at the moment we're
-		// not incorporating the response size information from those empty
-		// requests.
-		//
-		// In order to work around this we'll just use a larger estimate for
-		// each response for now.
-		// TODO(yuzefovich): improve this.
-		avgResponseSize = 2 * avgResponseSize
-
-		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
+		// If we already have minTargetBytes set on the first request to be
+		// issued, then use that; otherwise, use the estimate.
+		atLeastBytes := requestsToServe[0].minTargetBytes
+		if atLeastBytes == 0 {
+			// TODO(yuzefovich): consider using a multiple of avgResponseSize
+			// here.
+			atLeastBytes = avgResponseSize
+		}
+		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes)
 		if shouldExit {
 			return
 		}
 
-		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, avgResponseSize)
+		// Now check how many requests we can issue.
+		maxNumRequestsToIssue, shouldExit := w.getMaxNumRequestsToIssue(ctx)
+		if shouldExit {
+			return
+		}
+
+		err := w.issueRequestsForAsyncProcessing(ctx, requestsToServe, maxNumRequestsToIssue, avgResponseSize)
 		if err != nil {
 			w.s.setError(err)
 			return
@@ -841,23 +885,28 @@ func (w *workerCoordinator) getRequestsLocked() (
 	return requestsToServe, avgResponseSize, shouldExit
 }
 
-// waitUntilEnoughBudget waits until there is enough budget to at least receive
-// one full response.
+// waitUntilEnoughBudget waits until atLeastBytes bytes is available in the
+// budget.
 //
 // A boolean that indicates whether the coordinator should exit is returned.
 func (w *workerCoordinator) waitUntilEnoughBudget(
-	ctx context.Context, avgResponseSize int64,
+	ctx context.Context, atLeastBytes int64,
 ) (shouldExit bool) {
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
-	// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
-	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < avgResponseSize {
+	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < atLeastBytes {
 		// There isn't enough budget at the moment. Check whether there are any
 		// requests in progress.
 		if w.s.getNumRequestsInProgress() == 0 {
 			// We have a degenerate case when a single row is expected to exceed
 			// the budget.
 			return false
+		}
+		if debug {
+			fmt.Printf(
+				"waiting for budget to free up: atLeastBytes %d, available %d\n",
+				atLeastBytes, w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
+			)
 		}
 		// We have to wait for some budget.release() calls.
 		w.s.budget.mu.waitForBudget.Wait()
@@ -871,6 +920,38 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 	return false
 }
 
+// getMaxNumRequestsToIssue returns the maximum number of new async requests the
+// worker coordinator can issue without exceeding streamerConcurrencyLimit
+// limit. It blocks until at least one request can be issued.
+//
+// This behavior is needed to ensure that the creation of a new async task in
+// performRequestAsync doesn't block on w.asyncSem. If it did block, then we
+// could get into a deadlock because the main goroutine of the worker
+// coordinator is holding the budget's mutex waiting for quota to open up while
+// all asynchronous requests that could free up that quota would block on
+// attempting to acquire the budget's mutex.
+//
+// A boolean that indicates whether the coordinator should exit is also
+// returned.
+func (w *workerCoordinator) getMaxNumRequestsToIssue(ctx context.Context) (_ int, shouldExit bool) {
+	// Since the worker coordinator goroutine is the only one acquiring quota
+	// from the semaphore, ApproximateQuota returns the precise quota at the
+	// moment.
+	q := w.asyncSem.ApproximateQuota()
+	if q > 0 {
+		return int(q), false
+	}
+	// The whole quota is currently used up, so we blockingly acquire a quota of
+	// 1.
+	alloc, err := w.asyncSem.Acquire(ctx, 1)
+	if err != nil {
+		w.s.setError(err)
+		return 0, true
+	}
+	alloc.Release()
+	return 1, false
+}
+
 // issueRequestsForAsyncProcessing iterates over the given requests and issues
 // them to be served asynchronously while there is enough budget available to
 // receive the responses. Once the budget is exhausted, no new requests are
@@ -878,12 +959,19 @@ func (w *workerCoordinator) waitUntilEnoughBudget(
 // progress (both requests in flight as well as unreleased results), and in that
 // scenario, a single request will be issued.
 //
+// maxNumRequestsToIssue specifies the maximum number of requests that can be
+// issued as part of this call. The caller guarantees that w.asyncSem has at
+// least that much quota available.
+//
 // It is assumed that requestsToServe is a prefix of w.s.mu.requestsToServe
 // (i.e. it is possible that some other requests have been appended to
 // w.s.mu.requestsToServe after requestsToServe have been grabbed). All issued
 // requests are removed from w.s.mu.requestToServe.
 func (w *workerCoordinator) issueRequestsForAsyncProcessing(
-	ctx context.Context, requestsToServe []singleRangeBatch, avgResponseSize int64,
+	ctx context.Context,
+	requestsToServe []singleRangeBatch,
+	maxNumRequestsToIssue int,
+	avgResponseSize int64,
 ) error {
 	var numRequestsIssued int
 	defer func() {
@@ -896,11 +984,29 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 
+	if debug {
+		fmt.Printf(
+			"picked up %s to serve, available budget %d, "+
+				"num requests in progress %d, average response size %d\n",
+			reqsToString(requestsToServe), w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
+			w.s.getNumRequestsInProgress(), avgResponseSize,
+		)
+	}
+
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
-	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
+	for numRequestsIssued < len(requestsToServe) && numRequestsIssued < maxNumRequestsToIssue && !budgetIsExhausted {
+		singleRangeReqs := requestsToServe[numRequestsIssued]
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
-		if availableBudget < avgResponseSize {
+		// minAcceptableBudget is the minimum TargetBytes limit with which it
+		// makes sense to issue this request (if we issue the request with
+		// smaller limit, then it's very likely to come back with an empty
+		// response).
+		minAcceptableBudget := singleRangeReqs.minTargetBytes
+		if minAcceptableBudget == 0 {
+			minAcceptableBudget = avgResponseSize
+		}
+		if availableBudget < minAcceptableBudget {
 			if !headOfLine {
 				// We don't have enough budget available to serve this request,
 				// and there are other requests in progress, so we'll wait for
@@ -917,7 +1023,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				availableBudget = 1
 			}
 		}
-		singleRangeReqs := requestsToServe[numRequestsIssued]
 		// Calculate what TargetBytes limit to use for the BatchRequest that
 		// will be issued based on singleRangeReqs. We use the estimate to guess
 		// how much memory the response will need, and we reserve this
@@ -928,6 +1033,12 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// get a very large single row in response which will exceed this
 		// limit).
 		targetBytes := int64(len(singleRangeReqs.reqs)) * avgResponseSize
+		// Make sure that targetBytes is sufficient to receive non-empty
+		// response. Our estimate might be an under-estimate when responses vary
+		// significantly in size.
+		if targetBytes < singleRangeReqs.minTargetBytes {
+			targetBytes = singleRangeReqs.minTargetBytes
+		}
 		if targetBytes > availableBudget {
 			// The estimate tells us that we don't have enough budget to receive
 			// the full response; however, in order to utilize the available
@@ -970,6 +1081,12 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// any more responses at the moment.
 			return err
 		}
+		if debug {
+			fmt.Printf(
+				"issuing an async request for positions %v, targetBytes=%d, headOfLine=%t\n",
+				singleRangeReqs.positions, targetBytes, headOfLine,
+			)
+		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
 		numRequestsIssued++
 		headOfLine = false
@@ -981,19 +1098,58 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 func (w *workerCoordinator) addRequest(req singleRangeBatch) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
+	if debug {
+		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", req.positions, req.minTargetBytes)
+	}
 	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
 	w.s.mu.hasWork.Signal()
 }
 
-func (w *workerCoordinator) asyncRequestCleanup() {
+// budgetMuAlreadyLocked must be true if the caller is currently holding the
+// budget's mutex.
+func (w *workerCoordinator) asyncRequestCleanup(budgetMuAlreadyLocked bool) {
+	if !budgetMuAlreadyLocked {
+		// Since we're decrementing the number of requests in flight, we want to
+		// make sure that the budget's mutex is locked, and it currently isn't.
+		// This is needed so that if we signal the budget in
+		// adjustNumRequestsInFlight, the worker coordinator doesn't miss the
+		// signal.
+		//
+		// If we don't do this, then it is possible for the worker coordinator
+		// to be blocked forever in waitUntilEnoughBudget. Namely, the following
+		// sequence of events is possible:
+		// 1. the worker coordinator checks that there are some requests in
+		//    progress, then it goes to sleep before waiting on waitForBudget
+		//    condition variable;
+		// 2. the last request in flight exits without creating any Results (so
+		//    that no Release() calls will happen in the future), it decrements
+		//    the number of requests in flight, signals waitForBudget condition
+		//    variable, but nobody is waiting on that, so no goroutine is woken
+		//    up;
+		// 3. the worker coordinator wakes up and starts waiting on the
+		//    condition variable, forever.
+		// Acquiring the budget's mutex makes sure that such sequence doesn't
+		// occur.
+		w.s.budget.mu.Lock()
+		defer w.s.budget.mu.Unlock()
+	} else {
+		w.s.budget.mu.AssertHeld()
+	}
 	w.s.adjustNumRequestsInFlight(-1 /* delta */)
 	w.s.waitGroup.Done()
 }
+
+// AsyncRequestOp is the operation name (in tracing) of all requests issued by
+// the Streamer asynchronously.
+const AsyncRequestOp = "streamer-lookup-async"
 
 // performRequestAsync dispatches the given single-range batch for evaluation
 // asynchronously. If the batch cannot be evaluated fully (due to exhausting its
 // memory limitBytes), the "resume" single-range batch will be added into
 // requestsToServe, and mainLoop will pick that up to process later.
+//
+// The caller is responsible for ensuring that there is enough quota in
+// w.asyncSem to spin up a new goroutine for this request.
 //
 // targetBytes specifies the memory budget that this single-range batch should
 // be issued with. targetBytes bytes have already been consumed from the budget,
@@ -1017,13 +1173,14 @@ func (w *workerCoordinator) performRequestAsync(
 	if err := w.s.stopper.RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName:   "streamer-lookup-async",
-			SpanOpt:    stop.ChildSpan,
-			Sem:        w.asyncSem,
-			WaitForSem: true,
+			TaskName: AsyncRequestOp,
+			SpanOpt:  stop.ChildSpan,
+			// Note that we don't wait for the semaphore since it's the caller's
+			// responsibility to ensure that a new goroutine can be spun up.
+			Sem: w.asyncSem,
 		},
 		func(ctx context.Context) {
-			defer w.asyncRequestCleanup()
+			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
 			var ba roachpb.BatchRequest
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
@@ -1132,14 +1289,16 @@ func (w *workerCoordinator) performRequestAsync(
 
 			// Finally, process the results and add the ResumeSpans to be
 			// processed as well.
-			w.processSingleRangeResults(
+			if err := w.processSingleRangeResults(
 				req, br, memoryFootprintBytes, resumeReqsMemUsage,
 				numIncompleteGets, numIncompleteScans,
-			)
+			); err != nil {
+				w.s.setError(err)
+			}
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
-		w.asyncRequestCleanup()
+		w.asyncRequestCleanup(true /* budgetMuAlreadyLocked */)
 		w.s.setError(err)
 	}
 }
@@ -1183,7 +1342,7 @@ func calculateFootprint(
 			}
 		case *roachpb.ScanRequest:
 			scan := reply.(*roachpb.ScanResponse)
-			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+			if len(scan.BatchResponses) > 0 {
 				memoryFootprintBytes += scanResponseSize(scan)
 			}
 			if scan.ResumeSpan != nil {
@@ -1214,7 +1373,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	memoryFootprintBytes int64,
 	resumeReqsMemUsage int64,
 	numIncompleteGets, numIncompleteScans int,
-) {
+) error {
 	numIncompleteRequests := numIncompleteGets + numIncompleteScans
 	var resumeReq singleRangeBatch
 	// We have to allocate the new slice for requests, but we can reuse the
@@ -1262,13 +1421,21 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newGet.union.Get = &newGet.req
 				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				if resumeReq.minTargetBytes == 0 {
+					resumeReq.minTargetBytes = get.ResumeNextBytes
+				}
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
+				if get.IntentValue != nil {
+					return errors.AssertionFailedf(
+						"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
+					)
+				}
 				result := Result{
 					GetResp: get,
-					// This currently only works because all requests
-					// are unique.
+					// This currently only works because all requests are
+					// unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
 					position:             req.positions[i],
 				}
@@ -1281,7 +1448,25 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 		case *roachpb.ScanRequest:
 			scan := reply.(*roachpb.ScanResponse)
-			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 {
+			if len(scan.Rows) > 0 {
+				return errors.AssertionFailedf(
+					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+				)
+			}
+			if len(scan.IntentRows) > 0 {
+				return errors.AssertionFailedf(
+					"unexpectedly got a ScanResponse with non-nil IntentRows",
+				)
+			}
+			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
+				// Only the second part of the conditional is true whenever we
+				// received an empty response for the Scan request (i.e. there
+				// was no data in the span to scan). In such a scenario we still
+				// create a Result with no data that the client will skip over
+				// (this approach makes it easier to support Scans that span
+				// multiple ranges and the last range has no data in it - we
+				// want to be able to set Complete field on such an empty
+				// Result).
 				result := Result{
 					// This currently only works because all requests
 					// are unique.
@@ -1303,10 +1488,14 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newScan := scans[0]
 				scans = scans[1:]
 				newScan.req.SetSpan(*scan.ResumeSpan)
+				newScan.req.ScanFormat = roachpb.BATCH_RESPONSE
 				newScan.req.KeyLocking = origRequest.KeyLocking
 				newScan.union.Scan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				if resumeReq.minTargetBytes == 0 {
+					resumeReq.minTargetBytes = scan.ResumeNextBytes
+				}
 				resumeReqIdx++
 			}
 		}
@@ -1321,12 +1510,30 @@ func (w *workerCoordinator) processSingleRangeResults(
 		}
 	}
 
-	// If we have any results, finalize them.
 	if len(results) > 0 {
 		w.finalizeSingleRangeResults(
-			results, memoryFootprintBytes, hasNonEmptyScanResponse,
-			numCompleteGetResponses,
+			results, memoryFootprintBytes, hasNonEmptyScanResponse, numCompleteGetResponses,
 		)
+	} else {
+		// We received an empty response.
+		if req.minTargetBytes != 0 {
+			// We previously have already received an empty response for this
+			// request, and minTargetBytes wasn't sufficient. Make sure that
+			// minTargetBytes on the resume request has increased.
+			if resumeReq.minTargetBytes <= req.minTargetBytes {
+				// Since ResumeNextBytes is populated on a best-effort basis, we
+				// cannot rely on it to make progress, so we make sure that if
+				// minTargetBytes hasn't increased for the resume request, we
+				// use the double of the original target.
+				resumeReq.minTargetBytes = 2 * req.minTargetBytes
+			}
+		}
+		if debug {
+			fmt.Printf(
+				"request for positions %v came back empty, original minTargetBytes=%d, "+
+					"resumeReq.minTargetBytes=%d\n", req.positions, req.minTargetBytes, resumeReq.minTargetBytes,
+			)
+		}
 	}
 
 	// If we have any incomplete requests, add them back into the work
@@ -1334,6 +1541,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 	if len(resumeReq.reqs) > 0 {
 		w.addRequest(resumeReq)
 	}
+
+	return nil
 }
 
 // finalizeSingleRangeResults "finalizes" the results of evaluation of a
@@ -1348,6 +1557,11 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	hasNonEmptyScanResponse bool,
 	numCompleteGetResponses int,
 ) {
+	if buildutil.CrdbTestBuild {
+		if len(results) == 0 {
+			panic(errors.AssertionFailedf("finalizeSingleRangeResults is called with no results"))
+		}
+	}
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
 
@@ -1361,14 +1575,14 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// the client as an atomic operation so that Complete is set to true only on
 	// the last partial scan response.
 	if hasNonEmptyScanResponse {
-		for _, r := range results {
-			if r.ScanResp.ScanResponse != nil {
-				if r.ScanResp.ResumeSpan == nil {
+		for i := range results {
+			if results[i].ScanResp.ScanResponse != nil {
+				if results[i].ScanResp.ResumeSpan == nil {
 					// The scan within the range is complete.
-					w.s.mu.numRangesLeftPerScanRequest[r.position]--
-					if w.s.mu.numRangesLeftPerScanRequest[r.position] == 0 {
+					w.s.mu.numRangesLeftPerScanRequest[results[i].position]--
+					if w.s.mu.numRangesLeftPerScanRequest[results[i].position] == 0 {
 						// The scan across all ranges is now complete too.
-						r.ScanResp.Complete = true
+						results[i].ScanResp.Complete = true
 						numCompleteResponses++
 					}
 				} else {
@@ -1376,7 +1590,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 					// confuse the user of the Streamer. Non-nil resume span was
 					// already included into resumeReq populated in
 					// performRequestAsync.
-					r.ScanResp.ResumeSpan = nil
+					results[i].ScanResp.ResumeSpan = nil
 				}
 			}
 		}
@@ -1389,9 +1603,11 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
 	w.s.mu.numUnreleasedResults += len(results)
-	// Store the results and non-blockingly notify the Streamer about them.
+	if debug {
+		fmt.Printf("created %s with total size %d\n", resultsToString(results), actualMemoryReservation)
+	}
 	w.s.mu.results = append(w.s.mu.results, results...)
-	w.s.notifyGetResultsLocked()
+	w.s.mu.hasResults.Signal()
 }
 
 var zeroIntSlice []int

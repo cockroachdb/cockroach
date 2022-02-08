@@ -13,6 +13,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/catalog/catpb",  # keep
+        "//pkg/sql/sem/catid",  # keep
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -26,7 +28,6 @@ go_proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/catid",  # keep
         "//pkg/sql/types",
         "@com_github_gogo_protobuf//gogoproto",
@@ -43,7 +44,6 @@ proto_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/catalog/catpb:catpb_proto",
-        "//pkg/sql/catalog/descpb:descpb_proto",
         "//pkg/sql/types:types_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
     ],
@@ -68,6 +68,10 @@ genrule(
     exec_tools = [
         ":element-generator",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_binary(
@@ -88,5 +92,9 @@ genrule(
        """,
     exec_tools = [
         ":element-uml-generator",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )

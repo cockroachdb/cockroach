@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -24,31 +25,31 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	testExprs := []struct {
-		op          ComparisonOperatorSymbol
+		op          treecmp.ComparisonOperatorSymbol
 		left, right string
 		cacheCount  int
 	}{
 		// Comparisons.
-		{EQ, `0`, `1`, 0},
-		{LT, `0`, `1`, 0},
+		{treecmp.EQ, `0`, `1`, 0},
+		{treecmp.LT, `0`, `1`, 0},
 		// LIKE and NOT LIKE
-		{Like, `TEST`, `T%T`, 1},
-		{NotLike, `TEST`, `%E%T`, 1},
+		{treecmp.Like, `TEST`, `T%T`, 1},
+		{treecmp.NotLike, `TEST`, `%E%T`, 1},
 		// ILIKE and NOT ILIKE
-		{ILike, `TEST`, `T%T`, 1},
-		{NotILike, `TEST`, `%E%T`, 1},
+		{treecmp.ILike, `TEST`, `T%T`, 1},
+		{treecmp.NotILike, `TEST`, `%E%T`, 1},
 		// SIMILAR TO and NOT SIMILAR TO
-		{SimilarTo, `abc`, `(b|c)%`, 1},
-		{NotSimilarTo, `abc`, `%(b|d)%`, 1},
+		{treecmp.SimilarTo, `abc`, `(b|c)%`, 1},
+		{treecmp.NotSimilarTo, `abc`, `%(b|d)%`, 1},
 		// ~, !~, ~*, and !~*
-		{RegMatch, `abc`, `(b|c).`, 1},
-		{NotRegMatch, `abc`, `(b|c).`, 1},
-		{RegIMatch, `abc`, `(b|c).`, 1},
-		{NotRegIMatch, `abc`, `(b|c).`, 1},
+		{treecmp.RegMatch, `abc`, `(b|c).`, 1},
+		{treecmp.NotRegMatch, `abc`, `(b|c).`, 1},
+		{treecmp.RegIMatch, `abc`, `(b|c).`, 1},
+		{treecmp.NotRegIMatch, `abc`, `(b|c).`, 1},
 	}
 	for _, d := range testExprs {
 		expr := &ComparisonExpr{
-			Operator: MakeComparisonOperator(d.op),
+			Operator: treecmp.MakeComparisonOperator(d.op),
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}

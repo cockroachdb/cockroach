@@ -15,6 +15,8 @@ option go_package = "scpb";
 import "sql/schemachanger/scpb/elements.proto";
 import "gogoproto/gogo.proto";
 
+option (gogoproto.equal_all) = true;
+
 message Target {
   ElementProto element_proto = 1 [(gogoproto.embed) = true, (gogoproto.nullable) = false];
   TargetMetadata metadata = 2 [(gogoproto.nullable) = false];
@@ -23,20 +25,37 @@ message Target {
 
 enum Status {
   UNKNOWN = 0;
+
+  // Target states are ABSENT, PUBLIC or TRANSIENT.
+  // These are the desired final end states of a schema change.
+  //
   ABSENT = 1;
-  DROPPED = 2;
-  DELETE_ONLY = 3;
-  DELETE_AND_WRITE_ONLY = 4;
-  BACKFILLED = 5;
-  VALIDATED = 6;
-  TXN_DROPPED = 7;
-  PUBLIC = 8;
+  PUBLIC = 2;
+  // TRANSIENT is like PUBLIC except the element is not expected to
+  // persist once the schema change involving it is complete.
+  TRANSIENT = 3;
+
+  // Intermediate states on the descriptor dropping path.
+  TXN_DROPPED = 4;
+  DROPPED = 5;
+
+  // Intermediate states on the column and index dropping and adding paths.
+  WRITE_ONLY = 6;
+  DELETE_ONLY = 7;
+
+  // Intermediate states on the index dropping and adding paths.
+  VALIDATED = 8;
+  MERGED = 9;
+  MERGE_ONLY = 10;
+  BACKFILLED = 11;
+  BACKFILL_ONLY = 12;
 }
 
 // TargetMetadata refers to the metadata for individual elements, where
 // some fields like statement_id are indexes into the the full declarative
 // schema changer State.
 message TargetMetadata {
+  option (gogoproto.equal) = true;
   // SubWorkID identifies the individual portions of a statement that this
   // target belongs too. For example, if multiple objects such as tables or
   // schemas are dropped in a single statement (i.e. such as DROP TABLE A, B)
@@ -50,6 +69,10 @@ message TargetMetadata {
   uint32 source_element_id = 2 [(gogoproto.customname) = "SourceElementID", (gogoproto.casttype) = "SourceElementID"];
   // StatementID refers to the statement that produced this element, where
   // the ID indexes into the State structure.
+  //
+  // TODO(ajwerner): Potentially multiple statements in a transaction affect
+  // the same target. We'll need to retain a set of ids to deal with that case.
+  // Fortunately making a field repeated is backwards compatible.
   uint32 statement_id = 3 [(gogoproto.customname) = "StatementID"];
 }
 
@@ -68,4 +91,72 @@ message Statement {
 message Authorization {
   string user_name = 1;
   string app_name = 2;
+}
+
+// DescriptorState contains the portion of a schema change state
+// corresponding to an individual descriptor. The combination of
+// these messages for all descriptors involved in a schema change produces the
+// current state of the entire schema change.
+message DescriptorState {
+
+  // JobID is the ID of the job responsible for this DescriptorState.
+  int64 job_id = 5 [
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
+
+  // Revertible captures whether the job is currently revertible.
+  // This is important to facilitate constructing the job in the appropriate
+  // way upon restore.
+  bool revertible = 7;
+
+  // InRollback captures whether the job is currently rolling back.
+  // This is important to ensure that the job can be moved to the proper
+  // failed state upon restore.
+  //
+  // Note, if this value is true, the targets have had their directions
+  // flipped already.
+  //
+  // TODO(ajwerner): Should we capture the error with which the job
+  // failed for a higher-fidelity restore?
+  //
+  // TODO(ajwerner): Do we need to track this state? In principle the
+  // answer seems like yes, and the reason is that if we've rolled back
+  // and have had the direction of the targets flipped, then we won't
+  // be able to know that and we might try to revert the revert, which
+  // would be confusing.
+  //
+  bool in_rollback = 8;
+
+  // Targets is the set of targets in the schema change belonging to this
+  // descriptor.
+  repeated Target targets = 1 [(gogoproto.nullable) = false];
+
+  // CurrentStatuses is parallel to Targets and stores the current status for
+  // those targets.
+  repeated Status current_statuses = 4;
+
+  // TargetRanks is parallel to Targets and stores the rank of the target in
+  // the complete schema change. These ranks are used to deterministically
+  // reconstruct the complete TargetState from a collection of DescriptorState
+  // messages.
+  repeated uint32 target_ranks = 6;
+
+  // Statement is a statement which is associated with one or more targets
+  // in the current DescriptorState.
+  message Statement {
+
+    // Statement is a statement that is relevant to one or more targets
+    // in this descriptor.
+    scpb.Statement statement = 1 [(gogoproto.nullable) = false];
+
+    // StatementRank is the rank of the statement in the transaction.
+    uint32 statement_rank = 2;
+  }
+
+  // RelevantStatements is the set of statements which are relevant to any of
+  // the targets. It is sorted internally by StatementRank.
+  repeated Statement relevant_statements = 2  [(gogoproto.nullable) = false];
+
+  // Authorization is information about the creator of the schema change.
+  Authorization authorization = 3 [(gogoproto.nullable) = false];
 }

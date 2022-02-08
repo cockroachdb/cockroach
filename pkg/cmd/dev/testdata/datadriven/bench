@@ -1,0 +1,25 @@
+exec
+dev bench pkg/spanconfig/...
+----
+bazel test pkg/spanconfig/...:all --test_arg -test.run=- --test_arg -test.bench=. --test_output errors
+
+exec
+dev bench pkg/sql/parser --filter=BenchmarkParse
+----
+bazel test pkg/sql/parser:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkParse --test_sharding_strategy=disabled --test_output errors
+
+exec
+dev bench pkg/bench -f=BenchmarkTracing/1node/scan/trace=off --count=2 --bench-time=10x --bench-mem
+----
+bazel test pkg/bench:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.count=2 --test_arg -test.benchtime=10x --test_arg -test.benchmem --test_output errors
+
+exec
+dev bench pkg/spanconfig/spanconfigkvsubscriber -f=BenchmarkSpanConfigDecoder --cpus=10 --ignore-cache -v --timeout=50s
+----
+bazel test --local_cpu_resources=10 --test_timeout=50 pkg/spanconfig/spanconfigkvsubscriber:all --nocache_test_results --test_arg -test.run=- --test_arg -test.bench=BenchmarkSpanConfigDecoder --test_sharding_strategy=disabled --test_arg -test.v --test_output all
+
+exec
+dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --test-args '-test.memprofile=mem.out -test.cpuprofile=cpu.out'
+----
+bazel info workspace --color=no
+bazel test pkg/bench:all --test_arg -test.run=- --test_arg -test.bench=BenchmarkTracing/1node/scan/trace=off --test_sharding_strategy=disabled --test_arg -test.outputdir=crdb-checkout --sandbox_writable_path=crdb-checkout --test_arg -test.memprofile=mem.out --test_arg -test.cpuprofile=cpu.out --test_output errors

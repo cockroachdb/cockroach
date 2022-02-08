@@ -103,6 +103,9 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 		g.Sub(progress.CompletedSpans...)
 		spansToDo = g.Slice()
 	}
+	if len(spansToDo) == 0 { // already done
+		return nil
+	}
 	now := ib.execCfg.DB.Clock().Now()
 	run, err := ib.plan(
 		ctx,
@@ -168,12 +171,12 @@ func (ib *IndexBackfillPlanner) plan(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		evalCtx = createSchemaChangeEvalCtx(ctx, ib.execCfg, nowTimestamp, descriptors)
-		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-			true /* distribute */)
+		planCtx = ib.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx,
+			nil /* planner */, txn, DistributionTypeSystemTenantOnly)
 		// TODO(ajwerner): Adopt util.ConstantWithMetamorphicTestRange for the
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
-		spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, chunkSize, indexesToBackfill)
+		spec, err := initIndexBackfillerSpec(*td.TableDesc(), writeAsOf, readAsOf, false /* writeAtRequestTimestamp */, chunkSize, indexesToBackfill)
 		if err != nil {
 			return err
 		}

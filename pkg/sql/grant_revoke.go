@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -57,7 +58,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 		targets:         n.Targets,
 		grantees:        grantees,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Grant(grantee, privileges, n.WithGrantOption)
 		},
 		grantOn:          grantOn,
@@ -88,7 +89,7 @@ func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) 
 		targets:         n.Targets,
 		grantees:        grantees,
 		desiredprivs:    n.Privileges,
-		changePrivilege: func(privDesc *descpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
+		changePrivilege: func(privDesc *catpb.PrivilegeDescriptor, privileges privilege.List, grantee security.SQLUsername) {
 			privDesc.Revoke(grantee, privileges, grantOn, n.GrantOptionFor)
 		},
 		grantOn:          grantOn,
@@ -102,7 +103,7 @@ type changePrivilegesNode struct {
 	targets         tree.TargetList
 	grantees        []security.SQLUsername
 	desiredprivs    privilege.List
-	changePrivilege func(*descpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
+	changePrivilege func(*catpb.PrivilegeDescriptor, privilege.List, security.SQLUsername)
 	grantOn         privilege.ObjectType
 
 	// granteesNameList is used for creating an AST node for alter default
@@ -219,10 +220,10 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
 					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
 				}
-				if grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant) {
+				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
 					if n.isGrant {
 						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
-					} else if !n.isGrant && !n.withGrantOption {
+					} else {
 						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
 					}
 				}

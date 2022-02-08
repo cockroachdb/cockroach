@@ -186,7 +186,7 @@ const (
 	// bundles when the query latency exceeds the user provided threshold.
 	AlterSystemStmtDiagReqs
 	// MVCCAddSSTable supports MVCC-compliant AddSSTable requests via the new
-	// WriteAtRequestTimestamp and DisallowConflicts parameters.
+	// SSTTimestampToRequestTimestamp and DisallowConflicts parameters.
 	MVCCAddSSTable
 	// InsertPublicSchemaNamespaceEntryOnRestore ensures all public schemas
 	// have an entry in system.namespace upon being restored.
@@ -263,6 +263,48 @@ const (
 	// PostAddRaftAppliedIndexTermMigration is used for asserting that
 	// RaftAppliedIndexTerm is populated.
 	PostAddRaftAppliedIndexTermMigration
+	// DontProposeWriteTimestampForLeaseTransfers stops setting the WriteTimestamp
+	// on lease transfer Raft proposals. New leaseholders now forward their clock
+	// directly to the new lease start time.
+	DontProposeWriteTimestampForLeaseTransfers
+	// TenantSettingsTable adds the system table for tracking tenant usage.
+	TenantSettingsTable
+	// EnablePebbleFormatVersionBlockProperties enables a new Pebble SSTable
+	// format version for block property collectors.
+	// NB: this cluster version is paired with PebbleFormatBlockPropertyCollector
+	// in a two-phase migration. The first cluster version acts as a gate for
+	// updating the format major version on all stores, while the second cluster
+	// version is used as a feature gate. A node in a cluster that sees the second
+	// version is guaranteed to have seen the first version, and therefore has an
+	// engine running at the required format major version, as do all other nodes
+	// in the cluster.
+	EnablePebbleFormatVersionBlockProperties
+	// DisableSystemConfigGossipTrigger is a follow-up to EnableSpanConfigStore
+	// to disable the data propagation mechanism it and the entire spanconfig
+	// infrastructure obviates.
+	DisableSystemConfigGossipTrigger
+	// MVCCIndexBackfiller supports MVCC-compliant index
+	// backfillers via a new BACKFILLING index state, delete
+	// preserving temporary indexes, and a post-backfill merging
+	// processing.
+	MVCCIndexBackfiller
+	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
+	// during joint configuration, including to VOTER_INCOMING replicas.
+	EnableLeaseHolderRemoval
+	// BackupResolutionInJob defaults to resolving backup destinations during the
+	// execution of a backup job rather than during planning.
+	BackupResolutionInJob
+	// LooselyCoupledRaftLogTruncation allows the cluster to reduce the coupling
+	// for raft log truncation, by allowing each replica to treat a truncation
+	// proposal as an upper bound on what should be truncated.
+	LooselyCoupledRaftLogTruncation
+	// ChangefeedIdleness is the version where changefeed aggregators forward
+	// idleness-related information alnog with resolved spans to the frontier
+	ChangefeedIdleness
+	// BackupDoesNotOverwriteLatestAndCheckpoint is the version where we
+	// stop overwriting the LATEST and checkpoint files during backup execution.
+	// Instead, it writes new files alongside the old in reserved subdirectories.
+	BackupDoesNotOverwriteLatestAndCheckpoint
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -407,7 +449,6 @@ var versionsSingleton = keyedVersions{
 		Key:     RemoveIncompatibleDatabasePrivileges,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 54},
 	},
-
 	{
 		Key:     AddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 56},
@@ -415,6 +456,49 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PostAddRaftAppliedIndexTermMigration,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 58},
+	},
+	{
+		Key:     DontProposeWriteTimestampForLeaseTransfers,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
+	},
+	{
+		Key:     TenantSettingsTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     EnablePebbleFormatVersionBlockProperties,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
+	},
+	{
+		Key:     DisableSystemConfigGossipTrigger,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 66},
+	},
+	{
+		Key:     MVCCIndexBackfiller,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
+	},
+	{
+		Key:     EnableLeaseHolderRemoval,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
+	},
+	// Internal: 72 was reverted (EnsurePebbleFormatVersionRangeKeys)
+	// Internal: 74 was reverted (EnablePebbleFormatVersionRangeKeys)
+	{
+		Key:     BackupResolutionInJob,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 76},
+	},
+	// Internal: 78 was reverted (ExperimentalMVCCRangeTombstones)
+	{
+		Key:     LooselyCoupledRaftLogTruncation,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
+	},
+	{
+		Key:     ChangefeedIdleness,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
+	},
+	{
+		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
 
 	// *************************************************

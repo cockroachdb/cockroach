@@ -40,18 +40,20 @@ import (
 // should use stmtFingerprintID (which is a hashed string of the fields below) as the
 // stmtKey.
 type stmtKey struct {
-	planKey
+	sampledPlanKey
+	planHash                 uint64
 	transactionFingerprintID roachpb.TransactionFingerprintID
 }
 
-type planKey struct {
+// sampledPlanKey is used by the Optimizer to determine if we should build a full EXPLAIN plan.
+type sampledPlanKey struct {
 	anonymizedStmt string
 	failed         bool
 	implicitTxn    bool
 	database       string
 }
 
-func (p planKey) size() int64 {
+func (p sampledPlanKey) size() int64 {
 	return int64(unsafe.Sizeof(p)) + int64(len(p.anonymizedStmt)) + int64(len(p.database))
 }
 
@@ -63,7 +65,7 @@ func (s stmtKey) String() string {
 }
 
 func (s stmtKey) size() int64 {
-	return s.planKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
+	return s.sampledPlanKey.size() + int64(unsafe.Sizeof(invalidStmtFingerprintID))
 }
 
 const invalidStmtFingerprintID = 0
@@ -110,7 +112,7 @@ type Container struct {
 		// in-memory dictionary in order to allow lookup for whether a plan has been
 		// sampled for a statement without needing to know the statement's
 		// transaction fingerprintID.
-		sampledPlanMetadataCache map[planKey]time.Time
+		sampledPlanMetadataCache map[sampledPlanKey]time.Time
 	}
 
 	txnCounts transactionCounts
@@ -147,7 +149,7 @@ func New(
 
 	s.mu.stmts = make(map[stmtKey]*stmtStats)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats)
-	s.mu.sampledPlanMetadataCache = make(map[planKey]time.Time)
+	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time)
 
 	s.atomic.uniqueStmtFingerprintCount = uniqueStmtFingerprintCount
 	s.atomic.uniqueTxnFingerprintCount = uniqueTxnFingerprintCount
@@ -250,12 +252,13 @@ func NewTempContainerFromExistingStmtStats(
 			return container, statistics[i:], nil
 		}
 		key := stmtKey{
-			planKey: planKey{
+			sampledPlanKey: sampledPlanKey{
 				anonymizedStmt: statistics[i].Key.KeyData.Query,
 				failed:         statistics[i].Key.KeyData.Failed,
 				implicitTxn:    statistics[i].Key.KeyData.ImplicitTxn,
 				database:       statistics[i].Key.KeyData.Database,
 			},
+			planHash:                 statistics[i].Key.KeyData.PlanHash,
 			transactionFingerprintID: statistics[i].Key.KeyData.TransactionFingerprintID,
 		}
 		stmtStats, _, throttled :=
@@ -472,6 +475,7 @@ func (s *Container) getStatsForStmt(
 	implicitTxn bool,
 	database string,
 	failed bool,
+	planHash uint64,
 	transactionFingerprintID roachpb.TransactionFingerprintID,
 	createIfNonexistent bool,
 ) (
@@ -484,12 +488,13 @@ func (s *Container) getStatsForStmt(
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
 	key = stmtKey{
-		planKey: planKey{
+		sampledPlanKey: sampledPlanKey{
 			anonymizedStmt: anonymizedStmt,
 			failed:         failed,
 			implicitTxn:    implicitTxn,
 			database:       database,
 		},
+		planHash:                 planHash,
 		transactionFingerprintID: transactionFingerprintID,
 	}
 
@@ -541,7 +546,7 @@ func (s *Container) getStatsForStmtWithKeyLocked(
 		stats = &stmtStats{}
 		stats.ID = stmtFingerprintID
 		s.mu.stmts[key] = stats
-		s.mu.sampledPlanMetadataCache[key.planKey] = s.getTimeNow()
+		s.mu.sampledPlanMetadataCache[key.sampledPlanKey] = s.getTimeNow()
 
 		return stats, true /* created */, false /* throttled */
 	}
@@ -623,7 +628,7 @@ func (s *Container) Clear(ctx context.Context) {
 	// large for the likely future workload.
 	s.mu.stmts = make(map[stmtKey]*stmtStats, len(s.mu.stmts)/2)
 	s.mu.txns = make(map[roachpb.TransactionFingerprintID]*txnStats, len(s.mu.txns)/2)
-	s.mu.sampledPlanMetadataCache = make(map[planKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
+	s.mu.sampledPlanMetadataCache = make(map[sampledPlanKey]time.Time, len(s.mu.sampledPlanMetadataCache)/2)
 }
 
 // Free frees the accounted resources from the Container. The Container is
@@ -657,12 +662,13 @@ func (s *Container) MergeApplicationStatementStats(
 				transformer(statistics)
 			}
 			key := stmtKey{
-				planKey: planKey{
+				sampledPlanKey: sampledPlanKey{
 					anonymizedStmt: statistics.Key.Query,
 					failed:         statistics.Key.Failed,
 					implicitTxn:    statistics.Key.ImplicitTxn,
 					database:       statistics.Key.Database,
 				},
+				planHash:                 statistics.Key.PlanHash,
 				transactionFingerprintID: statistics.Key.TransactionFingerprintID,
 			}
 
@@ -677,9 +683,9 @@ func (s *Container) MergeApplicationStatementStats(
 			defer stmtStats.mu.Unlock()
 
 			stmtStats.mergeStatsLocked(statistics)
-			planLastSampled := s.getLogicalPlanLastSampled(key.planKey)
+			planLastSampled := s.getLogicalPlanLastSampled(key.sampledPlanKey)
 			if planLastSampled.Before(stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp) {
-				s.setLogicalPlanLastSampled(key.planKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
+				s.setLogicalPlanLastSampled(key.sampledPlanKey, stmtStats.mu.data.SensitiveInfo.MostRecentPlanTimestamp)
 			}
 
 			return nil
@@ -876,7 +882,7 @@ func (s *transactionCounts) recordTransactionCounts(
 	}
 }
 
-func (s *Container) getLogicalPlanLastSampled(key planKey) time.Time {
+func (s *Container) getLogicalPlanLastSampled(key sampledPlanKey) time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -888,7 +894,7 @@ func (s *Container) getLogicalPlanLastSampled(key planKey) time.Time {
 	return lastSampled
 }
 
-func (s *Container) setLogicalPlanLastSampled(key planKey, time time.Time) {
+func (s *Container) setLogicalPlanLastSampled(key sampledPlanKey, time time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.sampledPlanMetadataCache[key] = time

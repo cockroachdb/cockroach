@@ -493,8 +493,8 @@ func (i *MVCCIncrementalIterator) UnsafeValue() []byte {
 
 // NextIgnoringTime returns the next key/value that would be encountered in a
 // non-incremental iteration by moving the underlying non-TBI iterator forward.
-// This method throws an error if it encounters an intent in the time range
-// (startTime, endTime] or sees an inline value.
+// Intents in the time range (startTime,EndTime] and inline values are handled
+// according to the iterator policy.
 func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	for {
 		i.iter.Next()
@@ -510,6 +510,34 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 		// (startTime, endTime] so we do not throw an error, and attempt to move to
 		// the next valid KV.
 		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+			continue
+		}
+
+		// We have a valid KV or an intent to emit.
+		return
+	}
+}
+
+// NextKeyIgnoringTime returns the next distinct key that would be encountered
+// in a non-incremental iteration by moving the underlying non-TBI iterator
+// forward. Intents in the time range (startTime,EndTime] and inline values are
+// handled according to the iterator policy.
+func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
+	i.iter.NextKey()
+	for {
+		if !i.checkValidAndSaveErr() {
+			return
+		}
+
+		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
+			return
+		}
+
+		// We have encountered an intent but it does not lie in the timestamp span
+		// (startTime, endTime] so we do not throw an error, and attempt to move to
+		// the next valid KV.
+		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+			i.Next()
 			continue
 		}
 

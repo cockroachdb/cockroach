@@ -61,9 +61,6 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	// avoid restarts.
 
 	payload := n.job.Payload()
-	progress := n.job.Progress()
-	newSchemaChangeProgress := progress.GetNewSchemaChange()
-	newSchemaChangeDetails := payload.GetNewSchemaChange()
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
 		execCfg.DB,
@@ -73,7 +70,6 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		func(txn *kv.Txn) scexec.EventLogger {
 			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
 		},
-		scdeps.NewPartitioner(execCfg.Settings, &execCtx.ExtendedEvalContext().EvalContext),
 		execCfg.JobRegistry,
 		n.job,
 		execCfg.Codec,
@@ -83,6 +79,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),
+		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 	)
 
 	return scrun.RunSchemaChangesInJob(
@@ -91,8 +88,7 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Settings,
 		deps,
 		n.job.ID(),
-		*newSchemaChangeDetails,
-		*newSchemaChangeProgress,
+		payload.DescriptorIDs,
 		n.rollback,
 	)
 }

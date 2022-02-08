@@ -308,6 +308,40 @@ message RegionsResponse {
   map<string, Region> regions = 1;
 }
 
+// NodesListRequest requests list of all nodes.
+// The nodes are KV nodes when the cluster is a single
+// tenant cluster or the host cluster in case of multi-tenant
+// clusters.
+// The nodes are SQL instances in case of multi-tenant
+// clusters.
+message NodesListRequest {}
+
+message NodeDetails {
+  // node_id is a unique identifier for the node. This corresponds
+  // to SQL instance ID for a tenant server and KV node id for
+  // for a KV server.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // address is the RPC address for a KV node. This will be set to
+  // null for a tenant server node.
+  util.UnresolvedAddr address = 2 [(gogoproto.nullable) = false];
+  // sql_address is the SQL address for a node.
+  util.UnresolvedAddr sql_address = 3 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "SQLAddress"];
+}
+
+// NodesListResponse contains a list of all nodes with their addresses.
+// The nodes are KV nodes when the cluster is a single
+// tenant cluster or the host cluster in case of multi-tenant
+// clusters.
+// The nodes are SQL instances in case of multi-tenant
+// clusters.
+message NodesListResponse {
+  // nodes contains a list of NodeDetails. Each individual node within
+  // the list is a SQL node in case of a tenant server and KV nodes in
+  // case of a KV server.
+  repeated NodeDetails nodes = 1 [(gogoproto.nullable) = false];
+}
+
 message NodeRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -355,6 +389,7 @@ message RangeProblems {
 
   // When the raft log is too large, it can be a symptom of other issues.
   bool raft_log_too_large = 7;
+  bool circuit_breaker_error = 9;
 }
 
 // RangeStatistics describes statistics reported by a range. For internal use
@@ -566,7 +601,8 @@ enum StacksType {
 
 message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
   StacksType type = 2;
 }
@@ -589,7 +625,8 @@ message File {
 
 message GetFilesRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
   // If list_only is true then the contents of the files will not be populated
   // in the response. Only filenames and sizes will be returned.
@@ -608,7 +645,8 @@ message GetFilesResponse {
 
 message ProfileRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
 
   enum Type {
@@ -715,6 +753,8 @@ message TxnInfo {
   bool is_historical = 12;
 
   string priority = 13;
+
+  string quality_of_service = 14;
 }
 
 // ActiveQuery represents a query in flight on some Session.
@@ -818,6 +858,9 @@ message ListSessionsResponse {
   repeated Session sessions = 1 [ (gogoproto.nullable) = false ];
   // Any errors that occurred during fan-out calls to other nodes.
   repeated ListSessionsError errors = 2 [ (gogoproto.nullable) = false ];
+  // If set and non-empty, indicates the prefix to application_name
+  // used for statements/queries issued internally by CockroachDB.
+  string internal_app_name_prefix = 3;
 }
 
 // Request object for issuing a query cancel request.
@@ -840,6 +883,30 @@ message CancelQueryRequest {
 
 // Response returned by target query's gateway node.
 message CancelQueryResponse {
+  // Whether the cancellation request succeeded and the query was canceled.
+  bool canceled = 1;
+  // Error message (accompanied with canceled = false).
+  string error = 2;
+}
+
+// Request object for issuing a pgwire query cancel request.
+message CancelQueryByKeyRequest {
+  // The SQLInstanceID of the gateway node for the query to be canceled.
+  int32 sql_instance_id = 1 [
+    (gogoproto.customname) = "SQLInstanceID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/base.SQLInstanceID"
+  ];
+
+  // The key that was generated during session initialization as
+  // part of the pgwire protocol.
+  uint64 cancel_query_key = 2 [
+    (gogoproto.customname) = "CancelQueryKey",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel.BackendKeyData"
+  ];
+}
+
+// Response returned by target query's gateway node for a pgwire cancel request.
+message CancelQueryByKeyResponse {
   // Whether the cancellation request succeeded and the query was canceled.
   bool canceled = 1;
   // Error message (accompanied with canceled = false).
@@ -1008,6 +1075,11 @@ message ProblemRangesResponse {
     repeated int64 raft_log_too_large_range_ids = 8 [
       (gogoproto.customname) = "RaftLogTooLargeRangeIDs",
       (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 circuit_breaker_error_range_ids = 10 [
+      (gogoproto.customname) = "CircuitBreakerErrorRangeIDs",
+      (gogoproto.casttype) = 
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
   }
@@ -1392,6 +1464,10 @@ message TableIndexStatsResponse {
     // create_statement is the SQL statement that would re-create the
     // current index if executed.
     string create_statement = 4;
+    // CreatedAt is an approximate timestamp at which the index was created.
+    // Note that it may not always be populated.
+    google.protobuf.Timestamp created_at = 5 [(gogoproto.stdtime) = true];
+
   }
 
   repeated ExtendedCollectedIndexUsageStatistics statistics = 1;
@@ -1418,6 +1494,24 @@ message UserSQLRolesResponse {
   repeated string roles = 1;
 }
 
+// Request object for issuing Transaction ID Resolution.
+message TxnIDResolutionRequest {
+  // coordinator_id is either the NodeID or SQLInstanceID depending on whether
+  // the transaction is executed on a system tenant or a regular tenant.
+  string coordinator_id = 1 [(gogoproto.customname) = "CoordinatorID"];
+
+  repeated bytes txnIDs = 2 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+}
+
+// Response object for issuing Transaction ID Resolution.
+message TxnIDResolutionResponse {
+  repeated cockroach.sql.contentionpb.ResolvedTxnID resolvedTxnIDs = 1 [
+    (gogoproto.nullable) = false];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1435,6 +1529,9 @@ service Status {
 
   // RegionsRequest retrieves all available regions.
   rpc Regions(RegionsRequest) returns (RegionsResponse) {}
+
+  // NodesList returns all available nodes with their addresses.
+  rpc NodesList(NodesListRequest) returns (NodesListResponse) {}
 
   // Nodes returns status info for all commissioned nodes. Decommissioned nodes
   // are not included, except in rare cases where the node doing the
@@ -1543,6 +1640,11 @@ service Status {
       body: "*"
     };
   }
+
+  // CancelQueryByKey cancels a SQL query given its pgwire BackendKeyData.
+  // It is invoked through the pgwire protocol, so it's not exposed as an
+  // HTTP endpoint.
+  rpc CancelQueryByKey(CancelQueryByKeyRequest) returns (CancelQueryByKeyResponse) {}
 
   // ListContentionEvents retrieves the contention events across the entire
   // cluster.
@@ -1802,4 +1904,20 @@ service Status {
       get: "/_status/sqlroles"
     };
   }
+
+  // TxnIDResolution is used by the contention event store to resolve
+  // transaction ID into transaction fingerprint IDs.
+  // This RPC does not have a corresponding HTTP endpoint on purpose, since
+  // DB Console should never directly query this endpoint.
+  //
+  // The API contract is the following:
+  // - if the server can resolve the transaction IDs in the RPC request, it will
+  //   be returned in the RPC response.
+  // - if the server is not able to resolve the transaction IDs, it will
+  //   instructs the transaction ID cache to drain its write buffer. (Since
+  //   transaction ID cache's write path is asynchronous, the transaction ID
+  //   requested by the client might not be available in the cache yet).
+  //   Client is responsible to perform retries if the requested transaction ID
+  //   is not returned in the RPC response.
+  rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
 }

@@ -1,7 +1,5 @@
 # Create a database with some tables and write protected timestamps on the
 # tables and database. Check that span configurations are as we expect.
-# TODO(adityamaru): Add tests with Cluster, Tenant target once the translator
-# has been taught to generate SystemSpanConfigs.
 
 exec-sql
 CREATE DATABASE db;
@@ -28,7 +26,7 @@ descs 106
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[1]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1}]
 /Table/10{7-8}                             num_replicas=7
 
 # Write a protected timestamp on db, so we should see it on both t1 and t2.
@@ -38,26 +36,75 @@ descs 104
 
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[1 2]
-/Table/10{7-8}                             num_replicas=7 pts=[2]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
+
+# Write a protected timestamp on the cluster.
+protect record-id=3 ts=3
+cluster
+----
+
+# Write a protected timestamp on some tenants.
+protect record-id=4 ts=4
+tenants 111,112,113
+----
+
+# Write another protected timestamp on a subset of the tenants.
+protect record-id=5 ts=3
+tenants 111,112
+----
+
+translate system-span-configurations
+----
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
+
+translate database=db
+----
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 1} {ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on table t1
 release record-id=1
 ----
 
+translate system-span-configurations
+----
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
+
 translate database=db
 ----
-/Table/10{6-7}                             num_replicas=7 num_voters=5 pts=[2]
-/Table/10{7-8}                             num_replicas=7 pts=[2]
+/Table/10{6-7}                             num_replicas=7 num_voters=5 protection_policies=[{ts: 2}]
+/Table/10{7-8}                             num_replicas=7 protection_policies=[{ts: 2}]
 
 # Release the protected timestamp on database db
 release record-id=2
 ----
 
+translate system-span-configurations
+----
+{entire-keyspace}                          protection_policies=[{ts: 3}]
+{source=1,target=111}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=112}                      protection_policies=[{ts: 3} {ts: 4}]
+{source=1,target=113}                      protection_policies=[{ts: 4}]
+
 translate database=db
 ----
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 /Table/10{7-8}                             num_replicas=7
+
+
+# Release the protected timestamp on the cluster and tenants.
+release record-id=3
+----
+
+release record-id=4
+----
 
 # Create an index on t1 to ensure that subzones also see protected timestamps.
 exec-sql
@@ -65,13 +112,18 @@ CREATE INDEX idx ON db.t1(id);
 ALTER INDEX db.t1@idx CONFIGURE ZONE USING gc.ttlseconds = 1;
 ----
 
-protect record-id=3 ts=3
+protect record-id=6 ts=6
 descs 106
 ----
 
+translate system-span-configurations
+----
+{source=1,target=111}                      protection_policies=[{ts: 3}]
+{source=1,target=112}                      protection_policies=[{ts: 3}]
+
 translate database=db
 ----
-/Table/106{-/2}                            num_replicas=7 num_voters=5 pts=[3]
-/Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 pts=[3]
-/Table/10{6/3-7}                           num_replicas=7 num_voters=5 pts=[3]
+/Table/106{-/2}                            num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/106/{2-3}                           ttl_seconds=1 num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
+/Table/10{6/3-7}                           num_replicas=7 num_voters=5 protection_policies=[{ts: 6}]
 /Table/10{7-8}                             num_replicas=7

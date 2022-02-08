@@ -96,13 +96,12 @@ statement ok
 DROP TABLE telemetry_test
 
 statement ok
-SET experimental_enable_hash_sharded_indexes = true;
 CREATE TABLE telemetry (
   x INT PRIMARY KEY,
   y INT,
   z JSONB,
   INVERTED INDEX (z),
-  INDEX (y) USING HASH WITH BUCKET_COUNT = 4
+  INDEX (y) USING HASH WITH (bucket_count=4)
 )
 
 query T rowsort
@@ -154,8 +153,7 @@ like_none  CREATE TABLE public.like_none (
            k INT8 NULL,
            t TIMESTAMPTZ NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT like_none_pkey PRIMARY KEY (rowid ASC),
-           FAMILY "primary" (a, b, c, h, j, k, t, rowid)
+           CONSTRAINT like_none_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -174,7 +172,6 @@ like_constraints  CREATE TABLE public.like_constraints (
                   t TIMESTAMPTZ NULL,
                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                   CONSTRAINT like_constraints_pkey PRIMARY KEY (rowid ASC),
-                  FAMILY "primary" (a, b, c, h, j, k, t, rowid),
                   CONSTRAINT check_a CHECK (a > 3:::INT8),
                   CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
                   CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -198,8 +195,7 @@ like_indexes  CREATE TABLE public.like_indexes (
               CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
               UNIQUE INDEX foo (b DESC, c ASC),
               INDEX like_table_c_idx (c ASC) STORING (j),
-              INVERTED INDEX like_table_j_idx (j),
-              FAMILY "primary" (a, b, c, h, j, k, t)
+              INVERTED INDEX like_table_j_idx (j)
 )
 
 # INCLUDING GENERATED adds "generated columns", aka stored columns.
@@ -218,8 +214,7 @@ like_generated  CREATE TABLE public.like_generated (
                 k INT8 NULL,
                 t TIMESTAMPTZ NULL,
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                CONSTRAINT like_generated_pkey PRIMARY KEY (rowid ASC),
-                FAMILY "primary" (a, b, c, h, j, k, t, rowid)
+                CONSTRAINT like_generated_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -237,8 +232,7 @@ like_defaults  CREATE TABLE public.like_defaults (
                k INT8 NULL,
                t TIMESTAMPTZ NULL DEFAULT current_timestamp():::TIMESTAMPTZ - '00:00:05':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT like_defaults_pkey PRIMARY KEY (rowid ASC),
-               FAMILY "primary" (a, b, c, h, j, k, t, rowid)
+               CONSTRAINT like_defaults_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -259,7 +253,6 @@ like_all  CREATE TABLE public.like_all (
           UNIQUE INDEX foo (b DESC, c ASC),
           INDEX like_table_c_idx (c ASC) STORING (j),
           INVERTED INDEX like_table_j_idx (j),
-          FAMILY "primary" (a, b, c, h, j, k, t),
           CONSTRAINT check_a CHECK (a > 3:::INT8),
           CONSTRAINT unique_k UNIQUE WITHOUT INDEX (k),
           CONSTRAINT unique_h UNIQUE WITHOUT INDEX (h),
@@ -285,8 +278,7 @@ like_mixed  CREATE TABLE public.like_mixed (
             CONSTRAINT like_table_pkey PRIMARY KEY (a ASC, b ASC),
             UNIQUE INDEX foo (b DESC, c ASC),
             INDEX like_table_c_idx (c ASC) STORING (j),
-            INVERTED INDEX like_table_j_idx (j),
-            FAMILY "primary" (a, b, c, h, j, k, t)
+            INVERTED INDEX like_table_j_idx (j)
 )
 
 statement ok
@@ -304,8 +296,7 @@ like_no_pk_rowid_hidden  CREATE TABLE public.like_no_pk_rowid_hidden (
                          a INT8 NULL,
                          b INT8 NULL,
                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                         CONSTRAINT like_no_pk_table_pkey PRIMARY KEY (rowid ASC),
-                         FAMILY "primary" (a, b, rowid)
+                         CONSTRAINT like_no_pk_table_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error duplicate column name
@@ -335,12 +326,11 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                       rowid INT8 NOT VISIBLE NOT NULL,
                       rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                       CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid_1 ASC),
-                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
-                      FAMILY "primary" (a, b, c, h, j, k, t, z, blah, rowid, rowid_1)
+                      INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC)
 )
 
 statement ok
-CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH BUCKET_COUNT=4)
+CREATE TABLE like_hash_base (a INT, INDEX (a) USING HASH WITH (bucket_count=4))
 
 statement ok
 CREATE TABLE like_hash (LIKE like_hash_base INCLUDING INDEXES)
@@ -353,8 +343,7 @@ like_hash  CREATE TABLE public.like_hash (
            crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
-           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-           FAMILY "primary" (a, crdb_internal_a_shard_4, rowid)
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -368,8 +357,7 @@ like_hash  CREATE TABLE public.like_hash (
            crdb_internal_a_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 4:::INT8)) VIRTUAL,
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT like_hash_base_pkey PRIMARY KEY (rowid ASC),
-           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH BUCKET_COUNT = 4,
-           FAMILY "primary" (a, rowid)
+           INDEX like_hash_base_a_idx (a ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -383,8 +371,7 @@ regression_67196_like  CREATE TABLE public.regression_67196_like (
                        pk INT8 NOT NULL,
                        hidden INT8 NOT VISIBLE NULL,
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT regression_67196_like_pkey PRIMARY KEY (rowid ASC),
-                       FAMILY "primary" (pk, hidden, rowid)
+                       CONSTRAINT regression_67196_like_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error unimplemented
@@ -842,12 +829,14 @@ CREATE TABLE t_bad_param (
   PRIMARY KEY (a) WITH (s2_max_level=20)
 ) AS SELECT * FROM t_source;
 
+subtest test_old_bucket_count_syntax
+
 statement ok
 CREATE TABLE t_good_hash_indexes_1 (
- a INT PRIMARY KEY USING HASH WITH (bucket_count=5),
+ a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 5,
  b INT,
  c INT,
- INDEX (b) USING HASH WITH (bucket_count=5),
+ INDEX (b) USING HASH WITH BUCKET_COUNT = 5,
  FAMILY "primary" (a, b, c)
 );
 
@@ -855,28 +844,26 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_1];
 ----
 CREATE TABLE public.t_good_hash_indexes_1 (
-  crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
-  a INT8 NOT NULL,
-  b INT8 NULL,
-  c INT8 NULL,
-  crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
-  CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 5,
-  INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH BUCKET_COUNT = 5,
-  FAMILY "primary" (a, b, c)
+   crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+   a INT8 NOT NULL,
+   b INT8 NULL,
+   c INT8 NULL,
+   crdb_internal_b_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(b)), 5:::INT8)) VIRTUAL,
+   CONSTRAINT t_good_hash_indexes_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5),
+   INDEX t_good_hash_indexes_1_b_idx (b ASC) USING HASH WITH (bucket_count=5)
 )
 
 statement ok
 CREATE TABLE t_good_hash_indexes_2 (
  a INT,
- PRIMARY KEY (a) USING HASH WITH (bucket_count=5)
+ PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5
 );
 
 query T
 SELECT @2 FROM [SHOW CREATE TABLE t_good_hash_indexes_2];
 ----
 CREATE TABLE public.t_good_hash_indexes_2 (
-    a INT8 NOT NULL,
-    crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
-    CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH BUCKET_COUNT = 5,
-    FAMILY "primary" (a)
+   a INT8 NOT NULL,
+   crdb_internal_a_shard_5 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 5:::INT8)) VIRTUAL,
+   CONSTRAINT t_good_hash_indexes_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=5)
 )

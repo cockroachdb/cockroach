@@ -11,7 +11,7 @@ upsert /{Min-System/NodeLiveness}          ttl_seconds=3600 num_replicas=5
 upsert /System/NodeLiveness{-Max}          ttl_seconds=600 num_replicas=5
 upsert /System/{NodeLivenessMax-tsd}       range system
 upsert /System{/tsd-tse}                   range default
-upsert /System{tse-/Max}                   range system
+upsert /System{tse-/SystemSpanConfigKeys}  range system
 upsert /Table/{SystemConfigSpan/Start-4}   database system (host)
 upsert /Table/{4-5}                        database system (host)
 upsert /Table/{5-6}                        database system (host)
@@ -54,6 +54,7 @@ upsert /Table/4{4-5}                       database system (host)
 upsert /Table/4{5-6}                       ttl_seconds=7200 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 upsert /Table/4{6-7}                       database system (host)
 upsert /Table/4{7-8}                       database system (host)
+upsert /Table/5{0-1}                       database system (host)
 
 exec-sql
 CREATE DATABASE db;
@@ -83,6 +84,7 @@ upsert /Table/10{7-8}                      num_replicas=7
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             num_replicas=7 num_voters=5
 /Table/10{7-8}                             num_replicas=7
 
@@ -170,6 +172,8 @@ delete /Table/4{6-7}
 upsert /Table/4{6-7}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 delete /Table/4{7-8}
 upsert /Table/4{7-8}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+delete /Table/5{0-1}
+upsert /Table/5{0-1}                       ttl_seconds=100 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
 
 state offset=5 limit=42
 ----

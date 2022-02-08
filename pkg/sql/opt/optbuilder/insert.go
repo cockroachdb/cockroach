@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -364,7 +365,10 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// If there are any implicit partitioning columns in the primary index,
 	// these columns will need to be fetched.
 	primaryIndex := mb.tab.Index(cat.PrimaryIndex)
-	if primaryIndex.ImplicitPartitioningColumnCount() > 0 {
+	// TODO(mgartner): It should be possible to perform an UPSERT fast path for a
+	// non-partitioned hash-sharded primary index, but this restriction disallows
+	// it.
+	if primaryIndex.ImplicitColumnCount() > 0 {
 		return true
 	}
 
@@ -802,7 +806,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			Type: whereClause.Type,
 			Expr: &tree.OrExpr{
 				Left: &tree.ComparisonExpr{
-					Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom),
+					Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom),
 					Left:     canaryCol,
 					Right:    tree.DNull,
 				},
@@ -861,7 +865,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	// Never update primary key columns. Implicit partitioning columns are not
 	// considered part of the primary key in this case.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
-	skipCols := conflictIndex.ImplicitPartitioningColumnCount()
+	skipCols := conflictIndex.ImplicitColumnCount()
 	for i, n := skipCols, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}

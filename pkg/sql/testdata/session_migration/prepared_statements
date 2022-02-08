@@ -1,0 +1,105 @@
+# This file contains tests for migrating prepared statements.
+
+wire_prepare s1
+SELECT 1
+----
+
+query
+EXECUTE s1
+----
+1
+
+exec
+CREATE TABLE t(a INT4, b TEXT, c DATE)
+----
+
+wire_prepare s2
+INSERT INTO t VALUES($1, $2, $3)
+----
+
+exec
+ALTER TABLE t RENAME TO t2
+----
+
+wire_prepare s3
+INSERT INTO t2 VALUES($1, $2, $3)
+----
+
+exec
+ALTER TABLE t2 DROP COLUMN c
+----
+
+wire_prepare s4
+INSERT INTO t2 VALUES($1, $2)
+----
+
+wire_exec s2 1 cat 2022-02-10
+----
+ERROR: relation "t" does not exist (SQLSTATE 42P01)
+
+wire_exec s3 1 cat 2022-02-10
+----
+ERROR: INSERT has more expressions than target columns, 3 expressions for 2 targets (SQLSTATE 42601)
+
+query
+SELECT * FROM t2
+----
+
+let $x
+SELECT encode(crdb_internal.serialize_session(), 'hex')
+----
+
+# Instead of closing the session, just tell the server to remove the prepared
+# statements. This way the client still keeps all the prepared statement
+# metadata.
+exec
+DEALLOCATE ALL
+----
+
+query
+EXECUTE s1
+----
+ERROR: prepared statement "s1" does not exist (SQLSTATE 26000)
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+
+wire_query s1
+----
+1
+
+query
+EXECUTE s1
+----
+1
+
+# The s2 and s3 statements should experience the same errors that they did
+# before the session migration.
+wire_exec s2 1 cat 2022-02-10
+----
+ERROR: relation "t" does not exist (SQLSTATE 42P01)
+
+wire_exec s3 1 cat 2022-02-10
+----
+ERROR: INSERT has more expressions than target columns, 3 expressions for 2 targets (SQLSTATE 42601)
+
+wire_exec s4 1 cat
+----
+
+query
+SELECT * FROM t2
+----
+1 cat
+
+reset
+----
+
+wire_prepare s2
+SELECT 1
+----
+
+exec
+SELECT crdb_internal.deserialize_session( decode('$x', 'hex') )
+----
+ERROR: crdb_internal.deserialize_session(): prepared statement "s2" already exists (SQLSTATE 42P05)

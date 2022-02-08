@@ -8,29 +8,24 @@ go_library(
     srcs = [
         "column.go",
         "constraint.go",
-        "default_privilege.go",
         "descriptor.go",
         "index.go",
         "index_fetch.go",
         "join_type.go",
         "locking.go",
-        "privilege.go",
         "structured.go",
         ":gen-formatversion-stringer",  # keep
-        ":gen-privilegedescversion-stringer",  # keep
     ],
     embed = [":descpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
-        "//pkg/security",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/privilege",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/catid",
         "//pkg/sql/sem/tree",
@@ -47,19 +42,8 @@ go_library(
 go_test(
     name = "descpb_test",
     size = "small",
-    srcs = [
-        "privilege_test.go",
-        "structured_test.go",
-    ],
+    srcs = ["structured_test.go"],
     embed = [":descpb"],
-    deps = [
-        "//pkg/keys",
-        "//pkg/security",
-        "//pkg/sql/catalog/bootstrap",
-        "//pkg/sql/privilege",
-        "//pkg/testutils",
-        "//pkg/util/leaktest",
-    ],
 )
 
 proto_library(
@@ -69,7 +53,6 @@ proto_library(
         "index_fetch.proto",
         "join_type.proto",
         "locking.proto",
-        "privilege.proto",
         "structured.proto",
         "tenant.proto",
     ],
@@ -79,6 +62,7 @@ proto_library(
         "//pkg/geo/geoindex:geoindex_proto",
         "//pkg/roachpb:roachpb_proto",
         "//pkg/sql/catalog/catpb:catpb_proto",
+        "//pkg/sql/schemachanger/scpb:scpb_proto",
         "//pkg/sql/types:types_proto",
         "//pkg/util/hlc:hlc_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
@@ -95,16 +79,11 @@ go_proto_library(
         "//pkg/geo/geoindex",
         "//pkg/roachpb",  # keep
         "//pkg/sql/catalog/catpb",
+        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/types",
         "//pkg/util/hlc",
         "@com_github_gogo_protobuf//gogoproto",
     ],
-)
-
-stringer(
-    name = "gen-privilegedescversion-stringer",
-    src = "privilege.go",
-    typ = "PrivilegeDescVersion",
 )
 
 stringer(

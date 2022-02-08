@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +66,8 @@ func trivialQuery(pgURL url.URL) error {
 
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
+//
+// TODO(knz): This test should also exercise SQL-only servers.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -104,7 +106,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			return s.(*server.TestServer).DrainClients(ctx)
+			return s.DrainClients(ctx)
 		}()
 	}()
 
@@ -565,7 +567,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "primary", false, 3, "isRole", "N/A", true, false),
 		}},
 		{"SHOW TABLES FROM system", []preparedQueryTest{
-			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(35),
+			baseTest.Results("public", "comments", "table", gosql.NullString{}, 0, gosql.NullString{}).Others(36),
 		}},
 		{"SHOW SCHEMAS FROM system", []preparedQueryTest{
 			baseTest.Results("crdb_internal", gosql.NullString{}).Others(4),
@@ -1276,8 +1278,11 @@ func TestPGPreparedExec(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	runTests := func(
-		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
-		) (gosql.Result, error)) {
+		t *testing.T,
+		query string,
+		tests []preparedExecTest,
+		execFunc func(...interface{}) (gosql.Result, error),
+	) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
@@ -1948,7 +1953,7 @@ func TestCancelRequest(t *testing.T) {
 		if _, err := fe.Receive(); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("unexpected: %v", err)
 		}
-		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+		if count := telemetry.GetRawFeatureCounts()["pgwire.cancel_request"]; count != 1 {
 			t.Fatalf("expected 1 cancel request, got %d", count)
 		}
 	})

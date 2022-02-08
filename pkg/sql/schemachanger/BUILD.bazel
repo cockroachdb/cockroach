@@ -1,5 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//visibility:public"],
+)
+
 go_test(
     name = "schemachanger_test",
     size = "medium",
@@ -8,7 +14,7 @@ go_test(
         "main_test.go",
         "schemachanger_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = [":testdata"],
     deps = [
         "//pkg/base",
         "//pkg/jobs",
@@ -21,16 +27,10 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
-        "//pkg/sql/parser",
-        "//pkg/sql/schemachanger/scbuild",
-        "//pkg/sql/schemachanger/scdeps/sctestdeps",
-        "//pkg/sql/schemachanger/scdeps/sctestutils",
         "//pkg/sql/schemachanger/scop",
-        "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/schemachanger/scrun",
-        "//pkg/sql/sessiondata",
-        "//pkg/sql/sessiondatapb",
+        "//pkg/sql/schemachanger/sctest",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
@@ -40,8 +40,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
-        "@com_github_cockroachdb_cockroach_go_v2//crdb",
-        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

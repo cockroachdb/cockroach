@@ -929,6 +929,11 @@
           },
           "x-go-name": "Errors"
         },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
+        },
         "sessions": {
           "description": "A list of sessions on this node or cluster.",
           "type": "array",
@@ -1022,6 +1027,10 @@
       "type": "object",
       "title": "RangeProblems describes issues reported by a range. For internal use only.",
       "properties": {
+        "circuit_breaker_error": {
+          "type": "boolean",
+          "x-go-name": "CircuitBreakerError"
+        },
         "leader_not_lease_holder": {
           "type": "boolean",
           "x-go-name": "LeaderNotLeaseHolder"
@@ -1274,6 +1283,12 @@
           "format": "int64",
           "x-go-name": "RangeCount"
         },
+        "stats_last_created_at": {
+          "description": "stats_last_created_at is the time at which statistics were last created.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "StatsLastCreatedAt"
+        },
         "zone_config": {
           "$ref": "#/definitions/ZoneConfig"
         },
@@ -1477,6 +1492,10 @@
         "priority": {
           "type": "string",
           "x-go-name": "Priority"
+        },
+        "quality_of_service": {
+          "type": "string",
+          "x-go-name": "QualityOfService"
         },
         "read_only": {
           "type": "boolean",
@@ -1809,6 +1828,11 @@
             "$ref": "#/definitions/ListSessionsError"
           },
           "x-go-name": "Errors"
+        },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
         },
         "next": {
           "description": "The continuation token, for use in the next paginated call in the `start`\nparameter.",

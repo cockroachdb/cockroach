@@ -117,7 +117,8 @@ func TestGranterBasic(t *testing.T) {
 			d.ScanArgs(t, "sql-leaf", &opts.SQLStatementLeafStartWorkSlots)
 			d.ScanArgs(t, "sql-root", &opts.SQLStatementRootStartWorkSlots)
 			opts.makeRequesterFunc = func(
-				workKind WorkKind, granter granter, _ *cluster.Settings, opts workQueueOptions) requester {
+				_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+				opts workQueueOptions) requester {
 				req := &testRequester{
 					workKind:   workKind,
 					granter:    granter,
@@ -243,7 +244,8 @@ func TestStoreCoordinators(t *testing.T) {
 	opts := Options{
 		Settings: settings,
 		makeRequesterFunc: func(
-			workKind WorkKind, granter granter, _ *cluster.Settings, opts workQueueOptions) requester {
+			_ log.AmbientContext, workKind WorkKind, granter granter, _ *cluster.Settings,
+			opts workQueueOptions) requester {
 			req := &testRequester{
 				workKind:   workKind,
 				granter:    granter,

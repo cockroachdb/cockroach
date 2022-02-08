@@ -17,10 +17,12 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -41,7 +43,8 @@ var validTableDesc = &descpb.Descriptor{
 			Columns: []descpb.ColumnDescriptor{
 				{Name: "col", ID: 1, Type: types.Int},
 			},
-			NextColumnID: 2,
+			NextColumnID:     2,
+			NextConstraintID: 2,
 			Families: []descpb.ColumnFamilyDescriptor{
 				{ID: 0, Name: "f", ColumnNames: []string{"col"}, ColumnIDs: []descpb.ColumnID{1}, DefaultColumnID: 1},
 			},
@@ -55,9 +58,10 @@ var validTableDesc = &descpb.Descriptor{
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				EncodingType:        descpb.PrimaryIndexEncoding,
+				ConstraintID:        1,
 			},
 			NextIndexID: 2,
-			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 				privilege.ReadWriteData, security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,
@@ -545,7 +549,13 @@ func TestExamineDescriptors(t *testing.T) {
 	for i, test := range tests {
 		var buf bytes.Buffer
 		valid, err := doctor.ExamineDescriptors(
-			context.Background(), test.descTable, test.namespaceTable, test.jobsTable, false, &buf)
+			context.Background(),
+			clusterversion.TestingClusterVersion,
+			test.descTable,
+			test.namespaceTable,
+			test.jobsTable,
+			false,
+			&buf)
 		msg := fmt.Sprintf("Test %d failed!", i+1)
 		if test.errStr != "" {
 			require.Containsf(t, err.Error(), test.errStr, msg)

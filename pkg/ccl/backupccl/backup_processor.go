@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -84,11 +85,17 @@ var (
 		128<<20,
 	).WithPublic()
 
+	defaultSmallFileBuffer = util.ConstantWithMetamorphicTestRange(
+		"backup-merge-file-buffer-size",
+		128<<20, /* defaultValue */
+		1<<20,   /* metamorphic min */
+		16<<20,  /* metamorphic max */
+	)
 	smallFileBuffer = settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
 		"bulkio.backup.merge_file_buffer_size",
 		"size limit used when buffering backup files before merging them",
-		16<<20,
+		int64(defaultSmallFileBuffer),
 		settings.NonNegativeInt,
 	)
 
@@ -96,7 +103,7 @@ var (
 		settings.TenantWritable,
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
-		false,
+		true,
 	)
 )
 
@@ -128,8 +135,10 @@ type backupDataProcessor struct {
 	memAcc *mon.BoundAccount
 }
 
-var _ execinfra.Processor = &backupDataProcessor{}
-var _ execinfra.RowSource = &backupDataProcessor{}
+var (
+	_ execinfra.Processor = &backupDataProcessor{}
+	_ execinfra.RowSource = &backupDataProcessor{}
+)
 
 func newBackupDataProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -175,6 +184,7 @@ func (bp *backupDataProcessor) Start(ctx context.Context) {
 		for range bp.progCh {
 		}
 	}
+	log.Infof(ctx, "starting backup data")
 	if err := bp.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
 		TaskName: "backup-worker",
 		SpanOpt:  stop.ChildSpan,
@@ -214,8 +224,9 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
-	bp.ProcessorBase.InternalClose()
-	bp.memAcc.Close(bp.Ctx)
+	if bp.InternalClose() {
+		bp.memAcc.Close(bp.Ctx)
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface. We have to override the
@@ -256,13 +267,17 @@ func runBackupProcessor(
 	todo := make(chan spanAndTime, totalSpans)
 	var spanIdx int
 	for _, s := range spec.IntroducedSpans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
-			end: spec.BackupStartTime}
+		todo <- spanAndTime{
+			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: hlc.Timestamp{},
+			end: spec.BackupStartTime,
+		}
 		spanIdx++
 	}
 	for _, s := range spec.Spans {
-		todo <- spanAndTime{spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
-			end: spec.BackupEndTime}
+		todo <- spanAndTime{
+			spanIdx: spanIdx, span: s, firstKeyTS: hlc.Timestamp{}, start: spec.BackupStartTime,
+			end: spec.BackupEndTime,
+		}
 		spanIdx++
 	}
 
@@ -435,13 +450,25 @@ func runBackupProcessor(
 							// TODO(dt): send a progress update to update job progress to note
 							// the intents being hit.
 							backupProcessorSpan.RecordStructured(&BackupExportTraceResponseEvent{
-								RetryableError: tracing.RedactAndTruncateError(intentErr)})
+								RetryableError: tracing.RedactAndTruncateError(intentErr),
+							})
 							continue
 						}
 						// TimeoutError improves the opaque `context deadline exceeded` error
 						// message so use that instead.
 						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
 							return errors.Wrap(exportRequestErr, "export request timeout")
+						}
+						// BatchTimestampBeforeGCError is returned if the ExportRequest
+						// attempts to read below the range's GC threshold.
+						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
+							// If the range we are exporting is marked to be excluded from
+							// backup, it is safe to ignore the error. It is likely that the
+							// table has been configured with a low GC TTL, and so the data
+							// the backup is targeting has already been gc'ed.
+							if batchTimestampBeforeGCError.DataExcludedFromBackup {
+								continue
+							}
 						}
 						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
@@ -486,7 +513,7 @@ func runBackupProcessor(
 					duration := respReceivedTime.Sub(reqSentTime)
 					exportResponseTraceEvent := &BackupExportTraceResponseEvent{
 						Duration:      duration.String(),
-						FileSummaries: make([]RowCount, 0),
+						FileSummaries: make([]roachpb.RowCount, 0),
 					}
 
 					if len(res.Files) > 1 {
@@ -582,7 +609,10 @@ type sstSink struct {
 	dest cloud.ExternalStorage
 	conf sstSinkConf
 
-	queue     []returnedSST
+	queue []returnedSST
+	// queueCap is the maximum byte size that the queue can grow to.
+	queueCap int64
+	// queueSize is the current byte size of the queue.
 	queueSize int
 
 	sst     storage.SSTWriter
@@ -616,12 +646,32 @@ func makeSSTSink(
 	s := &sstSink{conf: conf, dest: dest}
 	s.memAcc.ba = backupMem
 
-	// Reserve memory for the file buffer.
-	bufSize := smallFileBuffer.Get(s.conf.settings)
-	if err := s.memAcc.ba.Grow(ctx, bufSize); err != nil {
-		return nil, errors.Wrap(err, "failed to reserve memory for sstSink queue")
+	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
+	// upto a maximum of the `smallFileBuffer` cluster setting value. If we fail
+	// to grow the bound account at any stage, use the buffer size we arrived at
+	// prior to the error.
+	incrementSize := int64(32 << 20)
+	maxSize := smallFileBuffer.Get(s.conf.settings)
+	for {
+		if s.queueCap >= maxSize {
+			break
+		}
+
+		if incrementSize > maxSize-s.queueCap {
+			incrementSize = maxSize - s.queueCap
+		}
+
+		if err := s.memAcc.ba.Grow(ctx, incrementSize); err != nil {
+			log.Infof(ctx, "failed to grow file queue by %d bytes, running backup with queue size %d bytes: %+v", incrementSize, s.queueCap, err)
+			break
+		}
+		s.queueCap += incrementSize
 	}
-	s.memAcc.reservedBytes += bufSize
+	if s.queueCap == 0 {
+		return nil, errors.New("failed to reserve memory for sstSink queue")
+	}
+
+	s.memAcc.reservedBytes += s.queueCap
 	return s, nil
 }
 
@@ -653,7 +703,7 @@ func (s *sstSink) push(ctx context.Context, resp returnedSST) error {
 	s.queue = append(s.queue, resp)
 	s.queueSize += len(resp.sst)
 
-	if s.queueSize >= int(smallFileBuffer.Get(s.conf.settings)) {
+	if s.queueSize >= int(s.queueCap) {
 		sort.Slice(s.queue, func(i, j int) bool { return s.queue[i].f.Span.Key.Compare(s.queue[j].f.Span.Key) < 0 })
 
 		// Drain the first half.
@@ -743,7 +793,7 @@ func (s *sstSink) open(ctx context.Context) error {
 		}
 	}
 	s.out = w
-	s.sst = storage.MakeBackupSSTWriter(s.out)
+	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
 }
@@ -812,7 +862,7 @@ func (s *sstSink) write(ctx context.Context, resp returnedSST) error {
 		s.flushedFiles[l].EndTime.EqOrdering(resp.f.EndTime) &&
 		s.flushedFiles[l].StartTime.EqOrdering(resp.f.StartTime) {
 		s.flushedFiles[l].Span.EndKey = span.EndKey
-		s.flushedFiles[l].EntryCounts.add(resp.f.EntryCounts)
+		s.flushedFiles[l].EntryCounts.Add(resp.f.EntryCounts)
 		s.stats.spanGrows++
 	} else {
 		f := resp.f

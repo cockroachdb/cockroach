@@ -13,9 +13,8 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -27,7 +26,6 @@ import (
 type commentOnConstraintNode struct {
 	n               *tree.CommentOnConstraint
 	tableDesc       catalog.TableDescriptor
-	oid             *tree.DOid
 	metadataUpdater scexec.DescriptorMetadataUpdater
 }
 
@@ -36,6 +34,10 @@ type commentOnConstraintNode struct {
 func (p *planner) CommentOnConstraint(
 	ctx context.Context, n *tree.CommentOnConstraint,
 ) (planNode, error) {
+	// Block comments on constraint until cluster is updated.
+	if !p.ExecCfg().Settings.Version.IsActive(ctx, tabledesc.ConstraintIDsAddedToTableDescsVersion) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot comment on constraint")
+	}
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -69,12 +71,6 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	schema, err := params.p.Descriptors().GetImmutableSchemaByID(
-		params.ctx, params.extendedEvalCtx.Txn, n.tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
-	)
-	if err != nil {
-		return err
-	}
 
 	constraintName := string(n.n.Constraint)
 	constraint, ok := info[constraintName]
@@ -82,40 +78,21 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.UndefinedObject,
 			"constraint %q of relation %q does not exist", constraintName, n.tableDesc.GetName())
 	}
-
-	hasher := makeOidHasher()
-	switch kind := constraint.Kind; kind {
-	case descpb.ConstraintTypePK:
-		constraintDesc := constraint.Index
-		n.oid = hasher.PrimaryKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeFK:
-		constraintDesc := constraint.FK
-		n.oid = hasher.ForeignKeyConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeUnique:
-		constraintDesc := constraint.Index.ID
-		n.oid = hasher.UniqueConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-	case descpb.ConstraintTypeCheck:
-		constraintDesc := constraint.CheckConstraint
-		n.oid = hasher.CheckConstraintOid(n.tableDesc.GetParentID(), schema.GetName(), n.tableDesc.GetID(), constraintDesc)
-
-	}
 	// Setting the comment to NULL is the
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.oid.DInt),
-			0,
-			keys.ConstraintCommentType,
+		err := n.metadataUpdater.UpsertConstraintComment(
+			n.tableDesc.GetID(),
+			constraint.ConstraintID,
 			*n.n.Comment,
 		)
 		if err != nil {
 			return err
 		}
 	} else {
-		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.oid.DInt),
-			0,
-			keys.ConstraintCommentType,
+		err := n.metadataUpdater.DeleteConstraintComment(
+			n.tableDesc.GetID(),
+			constraint.ConstraintID,
 		)
 		if err != nil {
 			return err

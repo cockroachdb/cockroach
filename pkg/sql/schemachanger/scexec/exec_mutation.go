@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -34,13 +34,16 @@ import (
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.Partitioner())
+	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
 		}
 	}
 	b := deps.Catalog().NewCatalogChangeBatcher()
+	mvs.descriptorsToDelete.ForEach(func(id descpb.ID) {
+		mvs.checkedOutDescriptors.Remove(id)
+	})
 	err := mvs.checkedOutDescriptors.IterateByID(func(entry catalog.NameEntry) error {
 		return b.CreateOrUpdateDescriptor(ctx, entry.(catalog.MutableDescriptor))
 	})
@@ -58,39 +61,48 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	// are being dropped. This entry will be used to generate the GC jobs below.
 	for _, dbID := range mvs.dbGCJobs.Ordered() {
 		if _, ok := mvs.descriptorGCJobs[dbID]; !ok {
-			mvs.descriptorGCJobs[dbID] = nil
-		}
-	}
-	if len(mvs.descriptorGCJobs) > 0 ||
-		mvs.dbGCJobs.Len() > 0 {
-		for parentID := range mvs.descriptorGCJobs {
-			job := jobspb.SchemaChangeGCDetails{
-				Tables: mvs.descriptorGCJobs[parentID],
-			}
-			// Check if the database is also being cleaned up at the same time.
-			if mvs.dbGCJobs.Contains(parentID) {
-				job.ParentID = parentID
-			}
-			jobName := func() string {
-				if len(mvs.descriptorGCJobs[parentID]) == 1 &&
-					job.ParentID == descpb.InvalidID {
-					return fmt.Sprintf("dropping descriptor %d", mvs.descriptorGCJobs[parentID][0].ID)
-				}
-				var sb strings.Builder
-				sb.WriteString("dropping descriptors")
-				for _, table := range mvs.descriptorGCJobs[parentID] {
-					sb.WriteString(fmt.Sprintf(" %d", table.ID))
-				}
-				if job.ParentID != descpb.InvalidID {
-					sb.WriteString(fmt.Sprintf(" and parent database %d", job.ParentID))
-				}
-				return sb.String()
-			}
-			record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-			record.JobID = deps.TransactionalJobRegistry().MakeJobID()
-			if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
+			// Zone config should now be safe to remove versus waiting for the GC job.
+			if err := b.DeleteZoneConfig(ctx, dbID); err != nil {
 				return err
 			}
+		}
+	}
+	var dbIDs catalog.DescriptorIDSet
+	for dbID := range mvs.descriptorGCJobs {
+		dbIDs.Add(dbID)
+	}
+	for _, dbID := range dbIDs.Ordered() {
+		job := jobspb.SchemaChangeGCDetails{
+			Tables: mvs.descriptorGCJobs[dbID],
+		}
+		// Check if the database is also being cleaned up at the same time.
+		if mvs.dbGCJobs.Contains(dbID) {
+			job.ParentID = dbID
+		}
+		jobName := func() string {
+			var ids catalog.DescriptorIDSet
+			if job.ParentID != descpb.InvalidID {
+				ids.Add(job.ParentID)
+			}
+			for _, table := range mvs.descriptorGCJobs[dbID] {
+				ids.Add(table.ID)
+			}
+			var sb strings.Builder
+			if ids.Len() == 1 {
+				sb.WriteString("dropping descriptor")
+			} else {
+				sb.WriteString("dropping descriptors")
+			}
+			ids.ForEach(func(id descpb.ID) {
+				sb.WriteString(fmt.Sprintf(" %d", id))
+			})
+			return sb.String()
+		}
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+		record.JobID = deps.TransactionalJobRegistry().MakeJobID()
+		if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
+			return err
 		}
 	}
 	for tableID, indexes := range mvs.indexGCJobs {
@@ -138,15 +150,15 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-	commentUpdater := deps.DescriptorMetadataUpdater(ctx)
+	metadataUpdater := deps.DescriptorMetadataUpdater(ctx)
 	for _, comment := range mvs.commentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := commentUpdater.UpsertDescriptorComment(
+			if err := metadataUpdater.UpsertDescriptorComment(
 				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := commentUpdater.DeleteDescriptorComment(
+			if err := metadataUpdater.DeleteDescriptorComment(
 				comment.id, comment.subID, comment.commentType); err != nil {
 				return err
 			}
@@ -154,19 +166,19 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	}
 	for _, comment := range mvs.constraintCommentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := commentUpdater.UpsertConstraintComment(
-				comment.tbl, comment.schemaName, comment.constraintName, comment.constraintType, comment.comment); err != nil {
+			if err := metadataUpdater.UpsertConstraintComment(
+				comment.tblID, comment.constraintID, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := commentUpdater.DeleteConstraintComment(
-				comment.tbl, comment.schemaName, comment.constraintName, comment.constraintType); err != nil {
+			if err := metadataUpdater.DeleteConstraintComment(
+				comment.tblID, comment.constraintID); err != nil {
 				return err
 			}
 		}
 	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
-		err := commentUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.database)
+		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {
 			return err
 		}
@@ -181,13 +193,17 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			md jobs.JobMetadata, updateProgress func(*jobspb.Progress), setNonCancelable func(),
 		) error {
 			progress := *md.Progress
-			progress.GetNewSchemaChange().Current = update.current
 			updateProgress(&progress)
 			if !md.Payload.Noncancelable && update.isNonCancelable {
 				setNonCancelable()
 			}
 			return nil
 		}); err != nil {
+			return err
+		}
+	}
+	for _, scheduleID := range mvs.scheduleIDsToDelete {
+		if err := metadataUpdater.DeleteSchedule(ctx, scheduleID); err != nil {
 			return err
 		}
 	}
@@ -290,14 +306,13 @@ type mutationVisitorState struct {
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	eventsByStatement            map[uint32][]eventPayload
+	scheduleIDsToDelete          []int64
 }
 
 type constraintCommentToUpdate struct {
-	tbl            catalog.TableDescriptor
-	schemaName     string
-	constraintName string
-	constraintType scpb.ConstraintType
-	comment        string
+	tblID        catid.DescID
+	constraintID descpb.ConstraintID
+	comment      string
 }
 
 type commentToUpdate struct {
@@ -308,7 +323,7 @@ type commentToUpdate struct {
 }
 
 type databaseRoleSettingToDelete struct {
-	database catalog.DatabaseDescriptor
+	dbID catid.DescID
 }
 
 type eventPayload struct {
@@ -320,12 +335,11 @@ type eventPayload struct {
 }
 
 type schemaChangerJobUpdate struct {
-	current         []scpb.Status
 	isNonCancelable bool
 }
 
 func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
-	jobID jobspb.JobID, current []scpb.Status, isNonCancelable bool,
+	jobID jobspb.JobID, isNonCancelable bool,
 ) error {
 	if mvs.schemaChangerJobUpdates == nil {
 		mvs.schemaChangerJobUpdates = make(map[jobspb.JobID]schemaChangerJobUpdate)
@@ -333,7 +347,6 @@ func (mvs *mutationVisitorState) UpdateSchemaChangerJob(
 		return errors.AssertionFailedf("cannot update job %d more than once", jobID)
 	}
 	mvs.schemaChangerJobUpdates[jobID] = schemaChangerJobUpdate{
-		current:         current,
 		isNonCancelable: isNonCancelable,
 	}
 	return nil
@@ -351,6 +364,19 @@ func newMutationVisitorState(c Catalog) *mutationVisitorState {
 
 var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 
+func (mvs *mutationVisitorState) GetDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.Descriptor, error) {
+	if entry := mvs.checkedOutDescriptors.GetByID(id); entry != nil {
+		return entry.(catalog.Descriptor), nil
+	}
+	descs, err := mvs.c.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], nil
+}
+
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
@@ -365,6 +391,14 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 	mut.MaybeIncrementVersion()
 	mvs.checkedOutDescriptors.Upsert(mut)
 	return mut, nil
+}
+
+func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor {
+	entry := mvs.checkedOutDescriptors.GetByID(id)
+	if entry == nil {
+		return nil
+	}
+	return entry.(catalog.Descriptor)
 }
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
@@ -383,41 +417,32 @@ func (mvs *mutationVisitorState) DeleteComment(
 }
 
 func (mvs *mutationVisitorState) DeleteConstraintComment(
-	ctx context.Context,
-	tbl catalog.TableDescriptor,
-	constraintName string,
-	constraintType scpb.ConstraintType,
+	ctx context.Context, tblID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
-	schema, err := mvs.c.MustReadImmutableDescriptor(ctx, tbl.GetParentSchemaID())
-	if err != nil {
-		return err
-	}
 	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
 		constraintCommentToUpdate{
-			tbl:            tbl,
-			schemaName:     schema.GetName(),
-			constraintName: constraintName,
-			constraintType: constraintType,
+			tblID:        tblID,
+			constraintID: constraintID,
 		})
 	return nil
 }
 
 func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(
-	ctx context.Context, db catalog.DatabaseDescriptor,
+	ctx context.Context, dbID descpb.ID,
 ) error {
 	mvs.databaseRoleSettingsToDelete = append(mvs.databaseRoleSettingsToDelete,
 		databaseRoleSettingToDelete{
-			database: db,
+			dbID: dbID,
 		})
 	return nil
 }
 
+func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
+	mvs.scheduleIDsToDelete = append(mvs.scheduleIDsToDelete, scheduleID)
+}
+
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {
-	if _, ok := mvs.drainedNames[id]; !ok {
-		mvs.drainedNames[id] = []descpb.NameInfo{nameInfo}
-	} else {
-		mvs.drainedNames[id] = append(mvs.drainedNames[id], nameInfo)
-	}
+	mvs.drainedNames[id] = append(mvs.drainedNames[id], nameInfo)
 }
 
 func (mvs *mutationVisitorState) AddNewGCJobForTable(table catalog.TableDescriptor) {
@@ -444,33 +469,51 @@ func (mvs *mutationVisitorState) AddNewGCJobForIndex(
 }
 
 func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
-	jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status,
+	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptorIDs descpb.IDs,
 ) error {
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
-	stmts := make([]string, len(targetState.Statements))
-	for i, stmt := range targetState.Statements {
-		stmts[i] = stmt.Statement
+	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, auth, descriptorIDs)
+	return nil
+}
+
+// MakeDeclarativeSchemaChangeJobRecord is used to construct a declarative
+// schema change job. The state of the schema change is stored in the descriptors
+// themselves rather than the job state. During execution, the only state which
+// is stored in the job itself pertains to backfill progress.
+//
+// Note that there's no way to construct a job in the reverting state. If the
+// state of the schema change according to the descriptors is InRollback, then
+// at the outset of the job, an error will be returned to move the job into
+// the reverting state.
+func MakeDeclarativeSchemaChangeJobRecord(
+	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptorIDs descpb.IDs,
+) *jobs.Record {
+	stmtStrs := make([]string, len(stmts))
+	for i, stmt := range stmts {
+		stmtStrs[i] = stmt.Statement
 	}
-	mvs.schemaChangerJob = &jobs.Record{
+	rec := &jobs.Record{
 		JobID:       jobID,
 		Description: "schema change job", // TODO(ajwerner): use const
-		Statements:  stmts,
-		Username:    security.MakeSQLUsernameFromPreNormalizedString(targetState.Authorization.UserName),
+		Statements:  stmtStrs,
+		Username:    security.MakeSQLUsernameFromPreNormalizedString(auth.UserName),
 		// TODO(ajwerner): It may be better in the future to have the builder be
-		// responsible for determining this set of descriptors. As of the time of
-		// writing, the descriptors to be "locked," descriptors that need schema
-		// change jobs, and descriptors with schema change mutations all coincide.
+		// responsible for determining this set of descriptorIDs. As of the time of
+		// writing, the descriptorIDs to be "locked," descriptorIDs that need schema
+		// change jobs, and descriptorIDs with schema change mutations all coincide.
 		// But there are future schema changes to be implemented in the new schema
 		// changer (e.g., RENAME TABLE) for which this may no longer be true.
-		DescriptorIDs: screl.GetDescIDs(targetState),
-		Details:       jobspb.NewSchemaChangeDetails{TargetState: targetState},
-		Progress:      jobspb.NewSchemaChangeProgress{Current: current},
+		DescriptorIDs: descriptorIDs,
+		Details:       jobspb.NewSchemaChangeDetails{},
+		Progress:      jobspb.NewSchemaChangeProgress{},
+
+		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
 		RunningStatus: "",
-		NonCancelable: false,
+		NonCancelable: false, // TODO(ajwerner): Set this appropriately
 	}
-	return nil
+	return rec
 }
 
 // createGCJobRecord creates the job record for a GC job, setting some

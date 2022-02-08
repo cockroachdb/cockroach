@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
 )
@@ -60,6 +61,9 @@ func (a tenantAuthorizer) authorize(
 
 	case "/cockroach.roachpb.Internal/TokenBucket":
 		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
+
+	case "/cockroach.roachpb.Internal/TenantSettings":
+		return a.authTenantSettings(tenID, req.(*roachpb.TenantSettingsRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no restriction to usage of this endpoint by tenants
@@ -108,12 +112,6 @@ func (a tenantAuthorizer) authorize(
 
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
-
-	case "/cockroach.roachpb.Internal/UpdateSystemSpanConfigs":
-		return a.authUpdateSystemSpanConfigs(tenID, req.(*roachpb.UpdateSystemSpanConfigsRequest))
-
-	case "/cockroach.roachpb.Internal/GetSystemSpanConfigs":
-		return a.authTenant(tenID)
 
 	default:
 		return authErrorf("unknown method %q", fullMethod)
@@ -253,19 +251,28 @@ func (a tenantAuthorizer) authTokenBucket(
 	return nil
 }
 
+// authTenantSettings authorizes the provided tenant to invoke the
+// TenantSettings RPC with the provided args.
+func (a tenantAuthorizer) authTenantSettings(
+	tenID roachpb.TenantID, args *roachpb.TenantSettingsRequest,
+) error {
+	if !args.TenantID.IsSet() {
+		return authErrorf("tenant settings request with unspecified tenant not permitted")
+	}
+	if args.TenantID != tenID {
+		return authErrorf("tenant settings request for tenant %s not permitted", args.TenantID)
+	}
+	return nil
+}
+
 // authGetSpanConfigs authorizes the provided tenant to invoke the
 // GetSpanConfigs RPC with the provided args.
 func (a tenantAuthorizer) authGetSpanConfigs(
 	tenID roachpb.TenantID, args *roachpb.GetSpanConfigsRequest,
 ) error {
-	tenSpan := tenantPrefix(tenID)
-	for _, sp := range args.Spans {
-		rSpan, err := keys.SpanAddr(sp)
-		if err != nil {
-			return authError(err.Error())
-		}
-		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	for _, target := range args.Targets {
+		if err := validateSpanConfigTarget(tenID, target); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -276,8 +283,54 @@ func (a tenantAuthorizer) authGetSpanConfigs(
 func (a tenantAuthorizer) authUpdateSpanConfigs(
 	tenID roachpb.TenantID, args *roachpb.UpdateSpanConfigsRequest,
 ) error {
-	tenSpan := tenantPrefix(tenID)
-	validate := func(sp roachpb.Span) error {
+	for _, entry := range args.ToUpsert {
+		if err := validateSpanConfigTarget(tenID, entry.Target); err != nil {
+			return err
+		}
+	}
+	for _, target := range args.ToDelete {
+		if err := validateSpanConfigTarget(tenID, target); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validateSpanConfigTarget validates that the tenant is authorized to interact
+// with the supplied span config target. In particular, span targets must be
+// wholly contained within the tenant keyspace and system span config targets
+// must be well-formed.
+func validateSpanConfigTarget(
+	tenID roachpb.TenantID, spanConfigTarget roachpb.SpanConfigTarget,
+) error {
+	validateSystemTarget := func(target roachpb.SystemSpanConfigTarget) error {
+		if target.SourceTenantID != tenID {
+			return authErrorf("malformed source tenant field")
+		}
+
+		if tenID == roachpb.SystemTenantID {
+			// Nothing to validate, the system tenant is allowed to set system span
+			// configurations over secondary tenants, itself, and the entire cluster.
+			return nil
+		}
+
+		if target.IsEntireKeyspaceTarget() {
+			return authErrorf("secondary tenants cannot target the entire keyspace")
+		}
+
+		if target.IsSpecificTenantKeyspaceTarget() &&
+			target.Type.GetSpecificTenantKeyspace().TenantID != target.SourceTenantID {
+			return authErrorf(
+				"secondary tenants cannot interact with system span configurations of other tenants",
+			)
+		}
+
+		return nil
+	}
+
+	validateSpan := func(sp roachpb.Span) error {
+		tenSpan := tenantPrefix(tenID)
 		rSpan, err := keys.SpanAddr(sp)
 		if err != nil {
 			return authError(err.Error())
@@ -288,52 +341,14 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		return nil
 	}
 
-	for _, entry := range args.ToUpsert {
-		if err := validate(entry.Span); err != nil {
-			return err
-		}
+	switch spanConfigTarget.Union.(type) {
+	case *roachpb.SpanConfigTarget_Span:
+		return validateSpan(*spanConfigTarget.GetSpan())
+	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
+		return validateSystemTarget(*spanConfigTarget.GetSystemSpanConfigTarget())
+	default:
+		return errors.AssertionFailedf("unknown span config target type")
 	}
-	for _, span := range args.ToDelete {
-		if err := validate(span); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (a tenantAuthorizer) authUpdateSystemSpanConfigs(
-	tenID roachpb.TenantID, args *roachpb.UpdateSystemSpanConfigsRequest,
-) error {
-	if err := a.authTenant(tenID); err != nil {
-		return err
-	}
-
-	// The host tenant is allowed to target other secondary tenants, so we can
-	// skip validation checks below.
-	if tenID == roachpb.SystemTenantID {
-		return nil
-	}
-
-	// Ensure a secondary tenant isn't being targeted.
-	validate := func(target roachpb.SystemSpanConfigTarget) error {
-		if target.TenantID != nil {
-			return authError("secondary tenants cannot target tenants for system span configurations")
-		}
-		return nil
-	}
-
-	for _, target := range args.ToDelete {
-		if err := validate(target); err != nil {
-			return err
-		}
-	}
-	for _, entry := range args.ToUpsert {
-		if err := validate(entry.SystemSpanConfigTarget); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

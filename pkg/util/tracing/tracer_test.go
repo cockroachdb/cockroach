@@ -38,7 +38,7 @@ func TestStartSpanAlwaysTrace(t *testing.T) {
 	require.True(t, tr.AlwaysTrace())
 	nilMeta := tr.noopSpan.Meta()
 	require.True(t, nilMeta.Empty())
-	sp := tr.StartSpan("foo", WithRemoteParent(nilMeta))
+	sp := tr.StartSpan("foo", WithRemoteParentFromSpanMeta(nilMeta))
 	require.False(t, sp.IsVerbose()) // parent was not verbose, so neither is sp
 	require.False(t, sp.IsNoop())
 	sp.Finish()
@@ -63,7 +63,17 @@ func TestTracingOffRecording(t *testing.T) {
 }
 
 func TestTracerRecording(t *testing.T) {
-	tr := NewTracer()
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx, WithTracingMode(TracingModeActiveSpansRegistry))
+
+	// Check that a span that was not configured to record returns nil for its
+	// recording.
+	sNonRecording := tr.StartSpan("not recording")
+	require.Equal(t, RecordingOff, sNonRecording.RecordingType())
+	require.Nil(t, sNonRecording.GetConfiguredRecording())
+	require.Nil(t, sNonRecording.GetRecording(RecordingVerbose))
+	require.Nil(t, sNonRecording.GetRecording(RecordingStructured))
+	require.Nil(t, sNonRecording.FinishAndGetConfiguredRecording())
 
 	s1 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	if s1.IsNoop() {
@@ -84,24 +94,24 @@ func TestTracerRecording(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s1.SetVerbose(true)
+	s1.SetRecordingType(RecordingVerbose)
 	if err := CheckRecordedSpans(s1.GetRecording(RecordingVerbose), `
 		span: a
 			tags: _unfinished=1 _verbose=1
 	`); err != nil {
 		t.Fatal(err)
 	}
-	s1.SetVerbose(false)
+	s1.SetRecordingType(RecordingOff)
 
 	// Real parent --> real child.
-	real3 := tr.StartSpan("noop3", WithRemoteParent(s1.Meta()))
+	real3 := tr.StartSpan("noop3", WithRemoteParentFromSpanMeta(s1.Meta()))
 	if real3.IsNoop() {
 		t.Error("expected real child Span")
 	}
 	real3.Finish()
 
 	s1.Recordf("x=%d", 1)
-	s1.SetVerbose(true)
+	s1.SetRecordingType(RecordingVerbose)
 	s1.Recordf("x=%d", 2)
 	s2 := tr.StartSpan("b", WithParent(s1))
 	if !s2.IsVerbose() {
@@ -166,7 +176,7 @@ func TestTracerRecording(t *testing.T) {
 	s1.Finish()
 
 	s4 := tr.StartSpan("a", WithRecording(RecordingStructured))
-	s4.SetVerbose(false)
+	s4.SetRecordingType(RecordingOff)
 	s4.Recordf("x=%d", 100)
 	require.Nil(t, s4.GetRecording(RecordingStructured))
 	s4.Finish()
@@ -268,7 +278,7 @@ func TestTracerInjectExtractNoop(t *testing.T) {
 	if !wireSpanMeta.Empty() {
 		t.Errorf("expected no-op span meta: %v", wireSpanMeta)
 	}
-	noop2 := tr2.StartSpan("remote op", WithRemoteParent(wireSpanMeta))
+	noop2 := tr2.StartSpan("remote op", WithRemoteParentFromSpanMeta(wireSpanMeta))
 	if !noop2.IsNoop() {
 		t.Fatalf("expected noop Span: %+v", noop2)
 	}
@@ -292,7 +302,7 @@ func TestTracerInjectExtract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2 := tr2.StartSpan("remote op", WithRemoteParent(wireSpanMeta))
+	s2 := tr2.StartSpan("remote op", WithRemoteParentFromSpanMeta(wireSpanMeta))
 
 	// Compare TraceIDs
 	trace1 := s1.Meta().traceID
@@ -347,7 +357,7 @@ func TestTracer_PropagateNonRecordingRealSpanAcrossRPCBoundaries(t *testing.T) {
 	meta, err := tr2.ExtractMetaFrom(carrier)
 	require.NoError(t, err)
 	require.True(t, spanInclusionFuncForServer(tr2, meta))
-	sp2 := tr2.StartSpan("tr2.child", WithRemoteParent(meta))
+	sp2 := tr2.StartSpan("tr2.child", WithRemoteParentFromSpanMeta(meta))
 	defer sp2.Finish()
 	require.NotZero(t, sp2.i.crdb.spanID)
 }
@@ -379,7 +389,7 @@ func TestOtelTracer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sp2 := tr.StartSpan("child", WithRemoteParent(wireSpanMeta))
+	sp2 := tr.StartSpan("child", WithRemoteParentFromSpanMeta(wireSpanMeta))
 	defer sp2.Finish()
 
 	rs := sr.Started()
@@ -478,8 +488,8 @@ func TestTracer_VisitSpans(t *testing.T) {
 	child := tr1.StartSpan("root.child", WithParent(root))
 	require.Len(t, tr1.activeSpansRegistry.mu.m, 1)
 
-	childChild := tr2.StartSpan("root.child.remotechild", WithRemoteParent(child.Meta()))
-	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithRemoteParent(child.Meta()))
+	childChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromSpanMeta(child.Meta()))
+	childChildFinished := tr2.StartSpan("root.child.remotechilddone", WithRemoteParentFromSpanMeta(child.Meta()))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 2)
 	child.ImportRemoteSpans(childChildFinished.FinishAndGetRecording(RecordingVerbose))
 	require.Len(t, tr2.activeSpansRegistry.mu.m, 1)
@@ -511,7 +521,8 @@ func TestSpanRecordingFinished(t *testing.T) {
 	childChild := tr1.StartSpan("root.child.child", WithParent(child))
 
 	tr2 := NewTracer()
-	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParent(child.Meta()))
+	childTraceInfo := child.Meta().ToProto()
+	remoteChildChild := tr2.StartSpan("root.child.remotechild", WithRemoteParentFromTraceInfo(&childTraceInfo))
 	child.ImportRemoteSpans(remoteChildChild.GetRecording(RecordingVerbose))
 	remoteChildChild.Finish()
 

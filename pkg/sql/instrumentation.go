@@ -260,9 +260,9 @@ func (ih *instrumentationHelper) Finish(
 	// Note that in case of implicit transactions, the trace contains the auto-commit too.
 	var trace tracing.Recording
 	if ih.shouldFinishSpan {
-		trace = ih.sp.FinishAndGetRecording(ih.sp.RecordingType())
+		trace = ih.sp.FinishAndGetConfiguredRecording()
 	} else {
-		trace = ih.sp.GetRecording(ih.sp.RecordingType())
+		trace = ih.sp.GetConfiguredRecording()
 	}
 
 	if ih.withStatementTrace != nil {
@@ -296,6 +296,7 @@ func (ih *instrumentationHelper) Finish(
 			ImplicitTxn: ih.implicitTxn,
 			Database:    p.SessionData().Database,
 			Failed:      retErr != nil,
+			PlanHash:    ih.planGist.Hash(),
 		}
 		// We populate transaction fingerprint ID if this is an implicit transaction.
 		// See executor_statement_metrics.go:recordStatementSummary() for further

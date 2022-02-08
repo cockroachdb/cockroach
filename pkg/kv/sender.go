@@ -285,6 +285,9 @@ type TxnSender interface {
 	// The method is idempotent.
 	Step(context.Context) error
 
+	// SetReadSeqNum sets the read sequence point for the current transaction.
+	SetReadSeqNum(seq enginepb.TxnSeq) error
+
 	// ConfigureStepping sets the sequencing point behavior.
 	//
 	// Note that a Sender is initially in the non-stepping mode,
@@ -324,6 +327,15 @@ type TxnSender interface {
 	// violations where a future, causally dependent transaction may fail to
 	// observe the writes performed by this transaction.
 	DeferCommitWait(ctx context.Context) func(context.Context) error
+
+	// GetTxnRetryableErr returns an error if the TxnSender had a retryable error,
+	// otherwise nil. In this state Send() always fails with the same retryable
+	// error. ClearTxnRetryableErr can be called to clear this error and make
+	// TxnSender usable again.
+	GetTxnRetryableErr(ctx context.Context) *roachpb.TransactionRetryWithProtoRefreshError
+
+	// ClearTxnRetryableErr clears the retryable error, if any.
+	ClearTxnRetryableErr(ctx context.Context)
 }
 
 // SteppingMode is the argument type to ConfigureStepping.

@@ -87,7 +87,6 @@ func TestBasicBuiltinFunctions(t *testing.T) {
 }
 
 func benchmarkBuiltinFunctions(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)

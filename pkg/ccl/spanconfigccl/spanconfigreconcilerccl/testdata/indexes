@@ -21,6 +21,7 @@ upsert /Table/10{6-7}                      range default
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Table/10{6-7}                             range default
 
 exec-sql
@@ -34,14 +35,15 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
 # - any future indexes that may be added to this table (table's config)
 mutations
 ----
-delete /Table/10{6-7}
 upsert /Table/106{-/2}                     num_replicas=7
+delete /Table/10{6-7}
 upsert /Table/106/{2-3}                    num_replicas=7 num_voters=5
 upsert /Table/10{6/3-7}                    num_replicas=7
 
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Table/106{-/2}                            num_replicas=7
 /Table/106/{2-3}                           num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           num_replicas=7
@@ -65,6 +67,7 @@ upsert /Table/10{6/3-7}                    ttl_seconds=3600 num_replicas=7
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=7
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=7 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=7
@@ -78,6 +81,7 @@ ALTER TABLE db.t CONFIGURE ZONE USING num_replicas = 9
 state offset=47
 ----
 ...
+/Table/5{0-1}                              database system (host)
 /Table/106{-/2}                            ttl_seconds=3600 num_replicas=9
 /Table/106/{2-3}                           ttl_seconds=25 num_replicas=9 num_voters=5
 /Table/10{6/3-7}                           ttl_seconds=3600 num_replicas=9
@@ -105,3 +109,4 @@ state offset=46
 ----
 ...
 /Table/4{7-8}                              database system (host)
+/Table/5{0-1}                              database system (host)

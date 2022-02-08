@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/errors"
@@ -177,9 +177,9 @@ func CheckExportStore(
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer r.Close()
+			defer r.Close(ctx)
 
-			res, err := ioutil.ReadAll(r)
+			res, err := ioctx.ReadAll(ctx, r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -208,8 +208,8 @@ func CheckExportStore(
 		if err != nil {
 			t.Fatalf("Could not get reader for %s: %+v", testingFilename, err)
 		}
-		defer res.Close()
-		content, err := ioutil.ReadAll(res)
+		defer res.Close(ctx)
+		content, err := ioctx.ReadAll(ctx, res)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -226,14 +226,14 @@ func CheckExportStore(
 					t.Logf("read %d of file at %d", length, offset)
 					reader, size, err := s.ReadFileAt(ctx, testingFilename, offset)
 					require.NoError(t, err)
-					defer reader.Close()
+					defer reader.Close(ctx)
 					require.Equal(t, int64(len(testingContent)), size)
 					expected, got := make([]byte, length), make([]byte, length)
 					_, err = byteReader.Seek(offset, io.SeekStart)
 					require.NoError(t, err)
 
 					expectedN, expectedErr := io.ReadFull(byteReader, expected)
-					gotN, gotErr := io.ReadFull(reader, got)
+					gotN, gotErr := io.ReadFull(ioctx.ReaderCtxAdapter(ctx, reader), got)
 					require.Equal(t, expectedErr != nil, gotErr != nil, "%+v vs %+v", expectedErr, gotErr)
 					require.Equal(t, expectedN, gotN)
 					require.Equal(t, expected, got)
@@ -259,8 +259,8 @@ func CheckExportStore(
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer res.Close()
-		content, err := ioutil.ReadAll(res)
+		defer res.Close(ctx)
+		content, err := ioctx.ReadAll(ctx, res)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -284,8 +284,8 @@ func CheckExportStore(
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer res.Close()
-		content, err := ioutil.ReadAll(res)
+		defer res.Close(ctx)
+		content, err := ioctx.ReadAll(ctx, res)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -312,8 +312,8 @@ func CheckExportStore(
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer res.Close()
-		content, err := ioutil.ReadAll(res)
+		defer res.Close(ctx)
+		content, err := ioctx.ReadAll(ctx, res)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -542,8 +542,8 @@ func CheckAntagonisticRead(
 
 	stream, err := s.ReadFile(ctx, basename)
 	require.NoError(t, err)
-	defer stream.Close()
-	read, err := ioutil.ReadAll(stream)
+	defer stream.Close(ctx)
+	read, err := ioctx.ReadAll(ctx, stream)
 	require.NoError(t, err)
 	require.Equal(t, data, read)
 }

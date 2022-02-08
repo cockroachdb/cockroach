@@ -11,8 +11,67 @@ statement ok
 CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1";
 USE multi_region_test_db
 
+statement ok
+CREATE TABLE parent (
+  id INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN id BETWEEN 0 AND 99 THEN 'ap-southeast-2':::crdb_internal_region WHEN id BETWEEN 100 AND 199 THEN 'us-east-1':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE child (
+  id INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN id BETWEEN 0 AND 99 THEN 'ap-southeast-2':::crdb_internal_region WHEN id BETWEEN 100 AND 199 THEN 'us-east-1':::crdb_internal_region ELSE 'ca-central-1':::crdb_internal_region END) STORED,
+  p_id INT REFERENCES parent (id),
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW
+
+# A foreign key check only needs to search a single region for each insert row
+# if the region column is a computed column.
+query T retry
+EXPLAIN INSERT INTO child (id, p_id) VALUES (1, 10), (2, 150)
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • insert
+│   │ into: child(id, crdb_region, p_id)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ estimated row count: 2
+│           │
+│           └── • render
+│               │ estimated row count: 2
+│               │
+│               └── • values
+│                     size: 2 columns, 2 rows
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • lookup join (anti)
+            │ table: parent@parent_pkey
+            │ equality: (crdb_region_eq, p_id) = (crdb_region,id)
+            │ equality cols are key
+            │
+            └── • render
+                │ estimated row count: 2
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+
 # NB: This doesn't include the foreign key reference to warehouse since we
 # don't need the warehouse table for this test.
+# NB: The crdb_region columns have been changed from computed columns to columns
+# with default values since a foreign key check with a computed region column
+# would only require a lookup in a single region.
 statement ok
 CREATE TABLE district (
         d_id INT8 NOT NULL,
@@ -26,7 +85,7 @@ CREATE TABLE district (
         d_tax DECIMAL(4,4) NOT NULL,
         d_ytd DECIMAL(12,2) NOT NULL,
         d_next_o_id INT8 NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN d_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN d_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN d_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (d_w_id ASC, d_id ASC),
         FAMILY "primary" (d_id, d_w_id, d_name, d_street_1, d_street_2, d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id, crdb_region)
 ) LOCALITY REGIONAL BY ROW
@@ -54,7 +113,7 @@ CREATE TABLE customer (
         c_payment_cnt INT8 NOT NULL,
         c_delivery_cnt INT8 NOT NULL,
         c_data VARCHAR(500) NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN c_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN c_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN c_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (c_w_id ASC, c_d_id ASC, c_id ASC),
         CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
         INDEX customer_idx (c_w_id ASC, c_d_id ASC, c_last ASC, c_first ASC),
@@ -72,7 +131,7 @@ CREATE TABLE history (
         h_date TIMESTAMP NULL,
         h_amount DECIMAL(6,2) NULL,
         h_data VARCHAR(24) NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN h_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN h_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN h_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (h_w_id ASC, rowid ASC),
         CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES customer(c_w_id, c_d_id, c_id) NOT VALID,
         CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
@@ -306,7 +365,7 @@ vectorized: true
               table: orders@orders_pkey
               spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyskttO20AQhu_7FKO54aCNEh8gwRKSEU1pUBpoQtVK3QgZ7wS2dXbd3bXqCuWqz9b3qmxDwVGDBO2FrT3MP_N_v_YW7bcMIxx-Oh8fjSaw_Xo0u5i9H-_AbDgeHl-ANoLMpRQMcqOX-m4lU4KjWbO4_C7djS7cZV1wf7sLQtpUF8q1C5sqeDM9e9f0tnB6Npo03S18mI0mJ7B9P2sHPr4dTod_XMAhbB2EFF4Nwn5nsPAXnTBJ9zqDYOF19kNP7FMgFn2_v4UMlRY0SZZkMfqMIc4Z5kanZK021dFtXTASJUY9hlLlhauO5wxTbQijW3TSZYQRXiRXGU0pEWS6PWQoyCUyq9s2BHFu5DIxP5Dhsc6KpbJRKzeZ0kN8yHCWJ1VJl2PMscuR8_Ig5Lyk6nc1OOG8HCy6p79-cl4uPMF56Ql1WG36Wxy7PUiUAA-0uyGD8xVDXbgH-9Yl14SRt2IvQ_T-L2IF03sR5kY0fyPaA5ElI5MMClW7JNGCmq_-ksFEd3Te9dv0Y7mUDryNVnrPSflUS3UXctAe07z-RyGPtf5a5PBFSwVaRRBXgikpQSaC2GMQBwxiv_p2472N9oLn2JuSzbWytBbVJvA5QxLX1MRudWFSOjc6rcc027NaVx8Isq659ZvNSNVX9St9LPb-Rew_KQ5a4t66OHhSHK6J56tXvwMAAP__m3W5aQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9tO20wQx--_pxjNDQdtlPgACZaQjPhSGpQGmlC1UjeKjHcCW5Jdd3etpkK56rP1vSp7SUNQgwTthb2n-e_M72_PPdqvM0yw--myf9IbwO7_vdHV6H1_D0bdfvf0CrQRZCZSMCiMnuuHmcwJTkZ-Mvkm3a0u3aQOWJ3ug5A216Vym4E-Ct4ML975uy2cX_QG_nYLH0a9wRnsrnLtwce33WH3dxVwDDtHMcXXnbjd6EzDaSPO8oNGJ5oGjcM4EIcUiWk7bO8gQ6UFDbI5WUw-Y4xjhoXROVmrTbV1Xwf0xAKTFkOpitJV22OGuTaEyT066WaECV5l1zMaUibINFvIUJDL5Ky-1hOkfpgUd_QdGZ7qWTlXNtnwTua0thAZjoqsCmlyTDk2OXK-OIo5X1D1uu6ccb7oTJvnP39wvpgGgvNFINRxtWjvcGy2IFMCAtDulgyOlwx16dYI1mU3hEmwZK_DDP49ZgXUehXqVrxwK96aypKR2QxKVVdJYgNsvPyDDwPd0EUz3HSgL-fSQbC1lNZLnD7XUj0YHW2m8V2Q-mFldF_ru7KAL1oq0CqBNHrs_rotVw2HDIekBJkE0oBBGjFIw-rZTw-2AkQvARiSLbSy9MTMbdaMGZK4If9hrC5NTpdG53Uav7yodfWGIOv8aegXPVUf1f_yY3HwN-LwWXG0IW49FUfPiuMn4vHyv18BAAD__47ayRw=
 
 query T nodeidx=3
 USE multi_region_test_db; EXPLAIN (DISTSQL) SELECT
@@ -343,7 +402,7 @@ vectorized: true
                   table: orders@orders_pkey
                   spans: [/'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'ap-southeast-2'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727'] [/'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727' - /'us-east-1'/'94e4b847-8f2f-4ac5-83f1-641d6e3df727']
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysk9tu2zgQhu_3KYi5yW5AxzrFdgQEYJD1bh24dmoHaIHSMBRxnLC1SZWkWhWBr_psfa9CkpNUQWUgaS9skTPzc76fhzuwn9YQw_Dd5fhsNCF__zuaX83fjP8h8-F4eH5FtBFollJQkhm90fao-uwCMkVyNq8Hyy_S3ercLauC--whEdKmOleuWVhXkf9m09d1C0supqPJrgmZ3o-OpFppwnjueSHuKuvY21fD2fABj5ySg5MIo-tB1O8MVsGqEyXpcWcQrvxOL_JFD0Ox6gf9A6CgtMBJskEL8XuIYEEhMzpFa7UpQ3dVwUgUEHsUpMpyV4YXFFJtEOI7cNKtEWK4Sq7XOMNEoOl6QEGgS-S6WrYmZZmRm8R8BQrnep1vlI0bGypTpKR0AxTmWVKmuxwYhy4HzouTiPMCy7_rwf-cF4NV9-L7N86LlS84L3yhTstJ_4BD1yOJEsQn2t2igcWWgs7dI7p1yQ1C7G_py-z5f85eacR7kcVWW0GrrUc3Fo1M1iRXFSGKhqHF9hf-J7qjs27QdD6WG-mI34riPWeHR-ozGofiQkuFphs2W9UvgNWfZbmPSykKoA-yYZEZwnoPz4OVC0xzFxPmUxZQFlIWtZKGzyEtCXdXIWqhvL8KY60_5hn5oKUiWsWElYLphLB-E3SGSqCpWAk7poQF5e-Q9VqJo-cQz9BmWll8cs5tp7aggOIG6ztjdW5SvDQ6rdrU02mlqwICrauzQT0ZqSpVPa-fxf7viIO94rAh9p6Kw73iaL842is-fiJebP_6EQAA__9lwQ-e
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJysVN1uGjsQvj9PYc1NzolM2L8AWSmSoxzaElFIIVIr1Qht1kPiBuyt7W23irjqs_W9qt0lpBsVpKS9ANsz83m-b3bG92A_LyGG_ofL4dlgRP79fzC9mr4b_kem_WH__IpoI9DMpaAkM3ql7VG1bAwyRXI2rTfzr9Ld6tzNq4AH7yER0qY6V64ZWEeRV5Px2zqFJRfjwWiThIwfdkdSLTRhPPe8EDeRte39m_6kv6VHTsnBSYTRdS_qtnqLYNGKkvS41QsXfqsT-aKDoVh0g-4BUFBa4ChZoYX4I0Qwo5AZnaK12pSm-ypgIAqIPQpSZbkrzTMKqTYI8T046ZYIMVwl10ucYCLQtD2gINAlclldWzNl9TLP7vAbUDjXy3ylbNwoqkyRklIRUJhmSeluc2Ac2hw4L04izgss_657rzkveov2xY_vnBcLX3Be-EKdlofuAYe2RxIliE-0u0UDszUFnbtH-tYlNwixv6Yvk-j_XYmlGO9FMndKC3ZKe1Rk0chkSXJVMUTREDVb_6YGI93SWTtoqh_KlXTE30nFe06VB-oLGofiQkuFph02U9WTwOplXtZxLkUBdAvrF5khrLMdE1ZeMM5dTJhPWUBZSFm0k2n4HKYlw007RPtYbtphqPVdnpFPWiqiVUxYCRqPCOs2yW7b5vF1eXg3tp0zQSXQVJoIO6aEBeXvkHV2Koueo2yCNtPK4pN-2PV1ZxRQ3GDdW1bnJsVLo9MqTX0cV7jKINC62hvUh4GqXNUo_gr2_wQc7AWHDbD3FBzuBUf7wdFe8PET8Gz9z88AAAD__y7iIUk=
 
 # Regression test for #74890. Code should not panic due to distribution already
 # provided by input.

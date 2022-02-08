@@ -31,10 +31,11 @@ There are currently three channels through which HLC timestamps are passed
 between nodes in a cluster:
 
  - Raft (unidirectional): proposers of Raft commands (i.e. leaseholders) attach
-   clock readings to these command, which are later consumed by followers when
-   commands are applied to their Raft state machine.
+   clock readings to some of these command (e.g. lease transfers, range merges),
+   which are later consumed by followers when commands are applied to their Raft
+   state machine.
 
-   Ref: (kvserverpb.ReplicatedEvalResult).WriteTimestamp.
+   Ref: (roachpb.Lease).Start.
    Ref: (roachpb.MergeTrigger).FreezeStart.
 
  - BatchRequest API (bidirectional): clients and servers of the KV BatchRequest
@@ -82,10 +83,9 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
    transfer from one replica of a range to another, the outgoing leaseholder
    revokes its lease before its expiration time and consults its clock to
    determine the start time of the next lease. It then proposes this new lease
-   through Raft (see the raft channel above) with a clock reading attached that
-   is >= the new lease's start time. Upon application of this Raft entry, the
-   incoming leaseholder forwards its HLC to this clock reading, transitively
-   ensuring that its clock is >= the new lease's start time.
+   through Raft (see the raft channel above). Upon application of this Raft
+   entry, the incoming leaseholder forwards its HLC to the start time of the
+   lease, ensuring that its clock is >= the new lease's start time.
 
    The invariant that a leaseholder's clock is always >= its lease's start time
    is used in a few places. First, it ensures that the leaseholder's clock
@@ -96,6 +96,9 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
    new leaseholder was to transfer the lease away at some point in the future,
    this later lease's start time could be pulled from the local clock and be
    guaranteed to receive an even greater starting timestamp.
+
+   TODO(nvanbenschoten): the written_timestamp concept does not yet exist in
+   code. It will be introduced in the replacement to #72121.
 
  - Range merges (Raft + BatchRequest channels). During a merge of two ranges,
    the right-hand side of the merge passes a "frozen timestamp" clock reading
@@ -120,25 +123,19 @@ TODO(nvanbenschoten): Update the above on written timestamps after #72121.
    transaction can be used to make a claim about values that could not have been
    written yet at the time that the transaction first visited the node, and by
    extension, at the time that the transaction began. This allows the
-   transaction to avoid uncertainty restarts in some circumstances. For more,
-   see pkg/kv/kvserver/uncertainty/doc.go.
+   transaction to avoid uncertainty restarts in some circumstances.
 
- - Non-transactional requests (Raft + BatchRequest channels). Most KV operations
-   in CockroachDB are transactional and receive their read timestamps from their
-   gateway's HLC clock they are instantiated. They use an uncertainty interval
-   (see below) to avoid stale reads in the presence of clock skew.
+   A variant of this same mechanism applies to non-transactional requests that
+   defer their timestamp allocation to the leaseholder of their (single) range.
+   These requests do not collect observed timestamps directly, but they do
+   establish an uncertainty interval immediately upon receipt by their target
+   leaseholder, using a clock reading from the leaseholder's local HLC as the
+   local limit and this clock reading + the cluster's maximum clock skew as the
+   global limit. This limit can be used to make claims about values that could
+   not have been written yet at the time that the non-transaction request first
+   reached the leaseholder node.
 
-   The KV API also exposes the option to elide the transaction for requests
-   targeting a single range (which trivially applies to all point requests).
-   These requests do not carry a predetermined read timestamp; instead, this
-   timestamp is chosen from the HLC upon arrival at the leaseholder for the
-   range. Since the HLC clock always leads the timestamp if any write served
-   on the range, this will not result in stale reads, despite not using an
-   uncertainty interval for such requests.
-
-   TODO(nvanbenschoten): this mechanism is currently broken for future-time
-   writes. We either need to give non-transactional requests uncertainty
-   intervals or remove them. See https://github.com/cockroachdb/cockroach/issues/58459.
+   For more, see pkg/kv/kvserver/uncertainty/doc.go.
 
  - Transaction retry errors (BatchRequest and DistSQL channels).
    TODO(nvanbenschoten/andreimatei): is this a real case where passing a remote

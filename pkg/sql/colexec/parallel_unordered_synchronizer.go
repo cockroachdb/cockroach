@@ -63,7 +63,8 @@ const (
 type ParallelUnorderedSynchronizer struct {
 	colexecop.InitHelper
 
-	inputs []colexecargs.OpWithMetaInfo
+	inputs    []colexecargs.OpWithMetaInfo
+	inputCtxs []context.Context
 	// cancelLocalInput stores context cancellation functions for each of the
 	// inputs. The functions are populated only if LocalPlan is true.
 	cancelLocalInput []context.CancelFunc
@@ -139,6 +140,7 @@ func NewParallelUnorderedSynchronizer(
 	}
 	return &ParallelUnorderedSynchronizer{
 		inputs:            inputs,
+		inputCtxs:         make([]context.Context, len(inputs)),
 		cancelLocalInput:  make([]context.CancelFunc, len(inputs)),
 		tracingSpans:      make([]*tracing.Span, len(inputs)),
 		readNextBatch:     readNextBatch,
@@ -165,8 +167,7 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 		return
 	}
 	for i, input := range s.inputs {
-		var inputCtx context.Context
-		inputCtx, s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
+		s.inputCtxs[i], s.tracingSpans[i] = execinfra.ProcessorSpan(s.Ctx, fmt.Sprintf("parallel unordered sync input %d", i))
 		if s.LocalPlan {
 			// If there plan is local, there are no colrpc.Inboxes in this input
 			// tree, and the synchronizer can cancel the current work eagerly
@@ -177,9 +178,9 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 			// because canceling the context would break the gRPC stream and
 			// make it impossible to fetch the remote metadata. Furthermore, it
 			// will result in the remote flow cancellation.
-			inputCtx, s.cancelLocalInput[i] = context.WithCancel(inputCtx)
+			s.inputCtxs[i], s.cancelLocalInput[i] = context.WithCancel(s.inputCtxs[i])
 		}
-		input.Root.Init(inputCtx)
+		input.Root.Init(s.inputCtxs[i])
 		s.nextBatch[i] = func(inputOp colexecop.Operator, inputIdx int) func() {
 			return func() {
 				s.batches[inputIdx] = inputOp.Next()
@@ -215,14 +216,14 @@ func (s *ParallelUnorderedSynchronizer) init() {
 			span := s.tracingSpans[inputIdx]
 			defer func() {
 				if span != nil {
-					span.Finish()
+					defer span.Finish()
 				}
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
 					close(s.batchCh)
 				}
 				// We need to close all of the closers of this input before we
 				// notify the wait groups.
-				input.ToClose.CloseAndLogOnErr(s.Ctx, "parallel unordered synchronizer input")
+				input.ToClose.CloseAndLogOnErr(s.inputCtxs[inputIdx], "parallel unordered synchronizer input")
 				s.internalWaitGroup.Done()
 				s.externalWaitGroup.Done()
 			}()
@@ -460,7 +461,7 @@ func (s *ParallelUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetada
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (s *ParallelUnorderedSynchronizer) Close() error {
+func (s *ParallelUnorderedSynchronizer) Close(ctx context.Context) error {
 	if state := s.getState(); state != parallelUnorderedSynchronizerStateUninitialized {
 		// Input goroutines have been started and will take care of closing the
 		// closers from the corresponding input trees, so we don't need to do
@@ -483,7 +484,7 @@ func (s *ParallelUnorderedSynchronizer) Close() error {
 	}
 	var lastErr error
 	for _, input := range s.inputs {
-		if err := input.ToClose.Close(); err != nil {
+		if err := input.ToClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}

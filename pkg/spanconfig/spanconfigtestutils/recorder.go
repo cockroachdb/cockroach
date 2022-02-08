@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -48,18 +47,18 @@ type mutation struct {
 	batchIdx int
 }
 
-// GetSpanConfigEntriesFor is part of the KVAccessor interface.
-func (r *KVAccessorRecorder) GetSpanConfigEntriesFor(
-	ctx context.Context, spans []roachpb.Span,
-) ([]roachpb.SpanConfigEntry, error) {
-	return r.underlying.GetSpanConfigEntriesFor(ctx, spans)
+// GetSpanConfigRecords is part of the KVAccessor interface.
+func (r *KVAccessorRecorder) GetSpanConfigRecords(
+	ctx context.Context, targets []spanconfig.Target,
+) ([]spanconfig.Record, error) {
+	return r.underlying.GetSpanConfigRecords(ctx, targets)
 }
 
-// UpdateSpanConfigEntries is part of the KVAccessor interface.
-func (r *KVAccessorRecorder) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+// UpdateSpanConfigRecords is part of the KVAccessor interface.
+func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
-	if err := r.underlying.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+	if err := r.underlying.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 		return err
 	}
 
@@ -99,8 +98,8 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 		if mi.batchIdx != mj.batchIdx { // sort by batch/ts order
 			return mi.batchIdx < mj.batchIdx
 		}
-		if !mi.update.Span.Key.Equal(mj.update.Span.Key) { // sort by key order
-			return mi.update.Span.Key.Compare(mj.update.Span.Key) < 0
+		if !mi.update.Target.Equal(mj.update.Target) { // sort by target order
+			return mi.update.Target.Less(mj.update.Target)
 		}
 
 		return mi.update.Deletion() // sort deletes before upserts
@@ -112,10 +111,18 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 	var output strings.Builder
 	for _, m := range r.mu.mutations {
 		if m.update.Deletion() {
-			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Span))
+			output.WriteString(fmt.Sprintf("delete %s\n", m.update.Target))
 		} else {
-			output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Span,
-				PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
+			switch {
+			case m.update.Target.IsSpanTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
+					PrintSpanConfigDiffedAgainstDefaults(m.update.Config)))
+			case m.update.Target.IsSystemTarget():
+				output.WriteString(fmt.Sprintf("upsert %-35s %s\n", m.update.Target,
+					PrintSystemSpanConfigDiffedAgainstDefault(m.update.Config)))
+			default:
+				panic("unsupported target type")
+			}
 		}
 	}
 
@@ -125,18 +132,4 @@ func (r *KVAccessorRecorder) Recording(clear bool) string {
 	}
 
 	return output.String()
-}
-
-// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (r *KVAccessorRecorder) GetSystemSpanConfigEntries(
-	context.Context,
-) ([]roachpb.SystemSpanConfigEntry, error) {
-	panic("unimplemented")
-}
-
-// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (r *KVAccessorRecorder) UpdateSystemSpanConfigEntries(
-	context.Context, []roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry,
-) error {
-	panic("unimplemented")
 }

@@ -301,12 +301,7 @@ func doCreateBackupSchedules(
 		}
 	}
 
-	env := scheduledjobs.ProdJobSchedulerEnv
-	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.JobSchedulerEnv != nil {
-			env = knobs.JobSchedulerEnv
-		}
-	}
+	env := sql.JobSchedulerEnv(p.ExecCfg())
 
 	// Evaluate incremental and full recurrence.
 	incRecurrence, err := computeScheduleRecurrence(env.Now(), eval.recurrence)
@@ -560,16 +555,10 @@ func checkForExistingBackupsInCollection(
 	if err != nil {
 		return err
 	}
-	defaultStore, err := makeCloudFactory(ctx, collectionURI, p.User())
-	if err != nil {
-		return err
-	}
-	defer defaultStore.Close()
 
-	r, err := defaultStore.ReadFile(ctx, latestFileName)
+	_, err = readLatestFile(ctx, collectionURI, makeCloudFactory, p.User())
 	if err == nil {
 		// A full backup has already been taken to this location.
-		r.Close()
 		return errors.Newf("backups already created in %s; to ignore existing backups, "+
 			"the schedule can be created with the 'ignore_existing_backups' option",
 			collectionURI)
@@ -1000,6 +989,18 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 			return nil, err
 		}
 		backup.IncrementalFrom[i] = tree.NewDString(clean)
+	}
+
+	for i := range backup.Options.IncrementalStorage {
+		raw, ok := backup.Options.IncrementalStorage[i].(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
+		}
+		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+		backup.Options.IncrementalStorage[i] = tree.NewDString(clean)
 	}
 
 	for i := range backup.Options.EncryptionKMSURI {

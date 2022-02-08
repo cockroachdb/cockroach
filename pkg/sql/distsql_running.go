@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -140,15 +141,16 @@ func (dsp *DistSQLPlanner) initCancelingWorkers(initCtx context.Context) {
 					return
 
 				case <-dsp.cancelFlowsCoordinator.workerWait:
-					req, nodeID := dsp.cancelFlowsCoordinator.getFlowsToCancel()
+					req, sqlInstanceID := dsp.cancelFlowsCoordinator.getFlowsToCancel()
 					if req == nil {
 						// There are no flows to cancel at the moment. This
 						// shouldn't really happen.
 						log.VEventf(parentCtx, 2, "worker %d woke up but didn't find any flows to cancel", workerID)
 						continue
 					}
-					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), nodeID)
-					conn, err := dsp.nodeDialer.Dial(parentCtx, roachpb.NodeID(nodeID), rpc.DefaultClass)
+					log.VEventf(parentCtx, 2, "worker %d is canceling at most %d flows on node %d", workerID, len(req.FlowIDs), sqlInstanceID)
+					// TODO: Double check that we only ever cancel flows on SQL nodes/pods here.
+					conn, err := dsp.podNodeDialer.Dial(parentCtx, roachpb.NodeID(sqlInstanceID), rpc.DefaultClass)
 					if err != nil {
 						// We failed to dial the node, so we give up given that
 						// our cancellation is best effort. It is possible that
@@ -326,17 +328,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// Skip this node.
 			continue
 		}
-		if !evalCtx.Codec.ForSystemTenant() {
-			// A tenant server should never find itself distributing flows.
-			// NB: we wouldn't hit this in practice but if we did the actual
-			// error would be opaque.
-			return nil, nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
-		}
 		req := setupReq
 		req.Flow = *flowSpec
 		runReq := runnerRequest{
 			ctx:           ctx,
-			nodeDialer:    dsp.nodeDialer,
+			nodeDialer:    dsp.podNodeDialer,
 			flowReq:       &req,
 			sqlInstanceID: nodeID,
 			resultChan:    resultChan,
@@ -451,9 +447,21 @@ func (dsp *DistSQLPlanner) Run(
 				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
 			}
 		}
+	}
+	// Even if planCtx.isLocal is false (which is the case when we think it's
+	// worth distributing the query), we need to go through the processors to
+	// figure out whether any of them have concurrency.
+	//
+	// At the moment of writing, this is only relevant whenever the Streamer API
+	// might be used by some of the processors. The Streamer internally can have
+	// concurrency, so it expects to be given a LeafTxn. In order for that
+	// LeafTxn to be created later, during the flow setup, we need to populate
+	// leafInputState below, so we tell the localState that there is
+	// concurrency.
+	if row.CanUseStreamer(ctx, dsp.st) {
 		for _, proc := range plan.Processors {
-			if js := proc.Spec.Core.JoinReader; js != nil {
-				if !js.MaintainOrdering && js.IsIndexJoin() {
+			if jr := proc.Spec.Core.JoinReader; jr != nil {
+				if !jr.MaintainOrdering && jr.IsIndexJoin() {
 					// Index joins when ordering doesn't have to be maintained
 					// are executed via the Streamer API that has concurrency.
 					localState.HasConcurrency = true
@@ -989,7 +997,13 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 					r.contendedQueryMetric.Inc(1)
 					r.contendedQueryMetric = nil
 				}
-				r.contentionRegistry.AddContentionEvent(ev)
+				contentionEvent := contentionpb.ExtendedContentionEvent{
+					BlockingEvent: ev,
+				}
+				if r.txn != nil {
+					contentionEvent.WaitingTxnID = r.txn.ID()
+				}
+				r.contentionRegistry.AddContentionEvent(contentionEvent)
 			})
 		}
 	}
@@ -1237,7 +1251,12 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	distributeSubquery := getPlanDistribution(
 		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
 	).WillDistribute()
-	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
+	distribute := DistributionType(DistributionTypeNone)
+	if distributeSubquery {
+		distribute = DistributionTypeSystemTenantOnly
+	}
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
+		distribute)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
@@ -1579,7 +1598,12 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	distributePostquery := getPlanDistribution(
 		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
 	).WillDistribute()
-	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
+	distribute := DistributionType(DistributionTypeNone)
+	if distributePostquery {
+		distribute = DistributionTypeSystemTenantOnly
+	}
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
+		distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
 	if planner.instrumentation.ShouldSaveFlows() {

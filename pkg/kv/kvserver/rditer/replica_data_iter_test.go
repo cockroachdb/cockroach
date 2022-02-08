@@ -126,7 +126,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 ) {
 	t.Helper()
 	verify := func(t *testing.T, useSpanSet, reverse bool) {
-		readWriter := eng.NewReadOnly()
+		readWriter := eng.NewReadOnly(storage.StandardDurability)
 		defer readWriter.Close()
 		if useSpanSet {
 			var spans spanset.SpanSet
@@ -189,7 +189,7 @@ func verifyRDReplicatedOnlyMVCCIter(
 func verifyRDEngineIter(
 	t *testing.T, desc *roachpb.RangeDescriptor, eng storage.Engine, expectedKeys []storage.MVCCKey,
 ) {
-	readWriter := eng.NewReadOnly()
+	readWriter := eng.NewReadOnly(storage.StandardDurability)
 	defer readWriter.Close()
 	iter := NewReplicaEngineDataIterator(desc, readWriter, false)
 	defer iter.Close()

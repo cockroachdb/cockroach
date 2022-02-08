@@ -16,7 +16,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/alessio/shellescape"
@@ -201,39 +200,35 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		switch targetKind {
 		case "cmake":
 			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
-		case "genrule":
+		case "genrule", "batch_gen":
 			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
 		case "go_binary":
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
 		case "go_test":
 			ret.tests = append(ret.tests, fullTarget)
 		case "go_transition_test":
-			// Run cquery to get the hash of the config.
-			res, err := runBazelReturningStdout("cquery", fullTarget, "--output=label_kind")
+			// These tests have their own special testlogs directory.
+			// We can find it by finding the location of the binary
+			// and munging it a bit.
+			args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
+			args = append(args, configArgList()...)
+			runOutput, err := runBazelReturningStdout("run", args...)
 			if err != nil {
 				return buildInfo{}, err
 			}
-			configHash := strings.Fields(res)[3]
-			// The hash will start be surrounded with (), so trim those.
-			configHash = strings.TrimPrefix(configHash, "(")
-			configHash = strings.TrimSuffix(configHash, ")")
-			res, err = runBazelReturningStdout("config", configHash)
-			if err != nil {
-				return buildInfo{}, err
-			}
-			var testlogsDir string
-			for _, line := range strings.Split(res, "\n") {
-				if strings.Contains(line, "transition directory name fragment") {
-					fragmentLine := strings.Split(line, ":")
-					fragment := strings.TrimSpace(fragmentLine[1])
-					testlogsDir = filepath.Join(filepath.Dir(ret.testlogsDir)+"-"+fragment, filepath.Base(ret.testlogsDir))
-					break
+			var binLocation string
+			for _, line := range strings.Split(runOutput, "\n") {
+				if strings.HasPrefix(line, "/") {
+					// NB: We want the last line in the output that starts with /.
+					binLocation = strings.TrimSpace(line)
 				}
 			}
-			if testlogsDir == "" {
-				return buildInfo{}, errors.Newf("could not find transition directory name fragment for target %s", fullTarget)
-			}
-			ret.transitionTests[fullTarget] = testlogsDir
+			componentsBinLocation := strings.Split(binLocation, "/")
+			componentsTestlogs := strings.Split(testlogsDir, "/")
+			// The second to last component will be the one we need
+			// to replace (it's the output directory for the configuration).
+			componentsTestlogs[len(componentsTestlogs)-2] = componentsBinLocation[len(componentsTestlogs)-2]
+			ret.transitionTests[fullTarget] = strings.Join(componentsTestlogs, "/")
 		case "test_suite":
 			// Expand the list of tests from the test suite with another query.
 			allTests, err := runBazelReturningStdout("query", "tests("+fullTarget+")")

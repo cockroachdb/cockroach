@@ -21,6 +21,8 @@ stmt ::=
 	| nonpreparable_set_stmt
 	| transaction_stmt
 	| close_cursor_stmt
+	| declare_cursor_stmt
+	| fetch_cursor_stmt
 	| 
 
 preparable_stmt ::=
@@ -122,6 +124,13 @@ transaction_stmt ::=
 
 close_cursor_stmt ::=
 	'CLOSE' 'ALL'
+	| 'CLOSE' cursor_name
+
+declare_cursor_stmt ::=
+	'DECLARE' cursor_name opt_binary opt_sensitivity opt_scroll 'CURSOR' opt_hold 'FOR' select_stmt
+
+fetch_cursor_stmt ::=
+	'FETCH' fetch_specifier
 
 alter_stmt ::=
 	alter_ddl_stmt
@@ -188,6 +197,8 @@ restore_stmt ::=
 	| 'RESTORE' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
+	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_of_clause
 
 resume_stmt ::=
@@ -243,6 +254,7 @@ show_stmt ::=
 	| show_tables_stmt
 	| show_trace_stmt
 	| show_transactions_stmt
+	| show_transfer_stmt
 	| show_users_stmt
 	| show_zone_stmt
 	| show_full_scans_stmt
@@ -388,6 +400,40 @@ rollback_stmt ::=
 abort_stmt ::=
 	'ABORT' opt_abort_mod
 
+cursor_name ::=
+	name
+
+opt_binary ::=
+	'BINARY'
+	| 
+
+opt_sensitivity ::=
+	'INSENSITIVE'
+	| 'ASENSITIVE'
+	| 
+
+opt_scroll ::=
+	'SCROLL'
+	| 'NO' 'SCROLL'
+	| 
+
+opt_hold ::=
+	'WITH' 'HOLD'
+	| 'WITHOUT' 'HOLD'
+	| 
+
+fetch_specifier ::=
+	cursor_name
+	| from_or_in cursor_name
+	| next_prior opt_from_or_in cursor_name
+	| forward_backward opt_from_or_in cursor_name
+	| opt_forward_backward signed_iconst64 opt_from_or_in cursor_name
+	| opt_forward_backward 'ALL' opt_from_or_in cursor_name
+	| 'ABSOLUTE' signed_iconst64 opt_from_or_in cursor_name
+	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
+	| 'FIRST' opt_from_or_in cursor_name
+	| 'LAST' opt_from_or_in cursor_name
+
 alter_ddl_stmt ::=
 	alter_table_stmt
 	| alter_index_stmt
@@ -399,6 +445,8 @@ alter_ddl_stmt ::=
 	| alter_schema_stmt
 	| alter_type_stmt
 	| alter_default_privileges_stmt
+	| alter_changefeed_stmt
+	| alter_backup_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -778,6 +826,10 @@ show_transactions_stmt ::=
 	'SHOW' opt_cluster 'TRANSACTIONS'
 	| 'SHOW' 'ALL' opt_cluster 'TRANSACTIONS'
 
+show_transfer_stmt ::=
+	'SHOW' 'TRANSFER' 'STATE' 'WITH' 'SCONST'
+	| 'SHOW' 'TRANSFER' 'STATE'
+
 show_users_stmt ::=
 	'SHOW' 'USERS'
 
@@ -845,6 +897,7 @@ expr_list ::=
 
 unreserved_keyword ::=
 	'ABORT'
+	| 'ABSOLUTE'
 	| 'ACTION'
 	| 'ACCESS'
 	| 'ADD'
@@ -853,12 +906,14 @@ unreserved_keyword ::=
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'ALWAYS'
+	| 'ASENSITIVE'
 	| 'AT'
 	| 'ATTRIBUTE'
 	| 'AUTOMATIC'
 	| 'AVAILABILITY'
 	| 'BACKUP'
 	| 'BACKUPS'
+	| 'BACKWARD'
 	| 'BEFORE'
 	| 'BEGIN'
 	| 'BINARY'
@@ -879,6 +934,7 @@ unreserved_keyword ::=
 	| 'COMMITTED'
 	| 'COMPACT'
 	| 'COMPLETE'
+	| 'COMPLETIONS'
 	| 'CONFLICT'
 	| 'CONFIGURATION'
 	| 'CONFIGURATIONS'
@@ -943,6 +999,7 @@ unreserved_keyword ::=
 	| 'FORCE'
 	| 'FORCE_INDEX'
 	| 'FORCE_ZIGZAG'
+	| 'FORWARD'
 	| 'FUNCTION'
 	| 'FUNCTIONS'
 	| 'GENERATED'
@@ -960,6 +1017,7 @@ unreserved_keyword ::=
 	| 'HASH'
 	| 'HIGH'
 	| 'HISTOGRAM'
+	| 'HOLD'
 	| 'HOUR'
 	| 'IDENTITY'
 	| 'IMMEDIATE'
@@ -968,7 +1026,7 @@ unreserved_keyword ::=
 	| 'INCLUDING'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
-	| 'INCREMENTAL_STORAGE'
+	| 'INCREMENTAL_LOCATION'
 	| 'INDEXES'
 	| 'INHERITS'
 	| 'INJECT'
@@ -1027,6 +1085,7 @@ unreserved_keyword ::=
 	| 'NAN'
 	| 'NEVER'
 	| 'NEW_DB_NAME'
+	| 'NEW_KMS'
 	| 'NEXT'
 	| 'NO'
 	| 'NORMAL'
@@ -1045,12 +1104,15 @@ unreserved_keyword ::=
 	| 'NOSQLLOGIN'
 	| 'NOVIEWACTIVITY'
 	| 'NOVIEWACTIVITYREDACTED'
+	| 'NOVIEWCLUSTERSETTING'
 	| 'NOWAIT'
 	| 'NULLS'
 	| 'IGNORE_FOREIGN_KEYS'
+	| 'INSENSITIVE'
 	| 'OF'
 	| 'OFF'
 	| 'OIDS'
+	| 'OLD_KMS'
 	| 'OPERATOR'
 	| 'OPT'
 	| 'OPTION'
@@ -1080,6 +1142,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRESERVE'
+	| 'PRIOR'
 	| 'PRIORITY'
 	| 'PRIVILEGES'
 	| 'PUBLIC'
@@ -1099,6 +1162,7 @@ unreserved_keyword ::=
 	| 'REGIONAL'
 	| 'REGIONS'
 	| 'REINDEX'
+	| 'RELATIVE'
 	| 'RELEASE'
 	| 'RELOCATE'
 	| 'RENAME'
@@ -1123,6 +1187,7 @@ unreserved_keyword ::=
 	| 'RUNNING'
 	| 'SCHEDULE'
 	| 'SCHEDULES'
+	| 'SCROLL'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -1156,6 +1221,7 @@ unreserved_keyword ::=
 	| 'SQL'
 	| 'SQLLOGIN'
 	| 'START'
+	| 'STATE'
 	| 'STATEMENTS'
 	| 'STATISTICS'
 	| 'STDIN'
@@ -1182,6 +1248,7 @@ unreserved_keyword ::=
 	| 'TRACE'
 	| 'TRANSACTION'
 	| 'TRANSACTIONS'
+	| 'TRANSFER'
 	| 'TRIGGER'
 	| 'TRUNCATE'
 	| 'TRUSTED'
@@ -1192,6 +1259,7 @@ unreserved_keyword ::=
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
 	| 'UNLOGGED'
+	| 'UNSET'
 	| 'UNSPLIT'
 	| 'UNTIL'
 	| 'UPDATE'
@@ -1205,6 +1273,7 @@ unreserved_keyword ::=
 	| 'VIEW'
 	| 'VIEWACTIVITY'
 	| 'VIEWACTIVITYREDACTED'
+	| 'VIEWCLUSTERSETTING'
 	| 'VISIBLE'
 	| 'VOTERS'
 	| 'WITHIN'
@@ -1319,6 +1388,29 @@ opt_abort_mod ::=
 	| 'WORK'
 	| 
 
+from_or_in ::=
+	'FROM'
+	| 'IN'
+
+next_prior ::=
+	'NEXT'
+	| 'PRIOR'
+
+opt_from_or_in ::=
+	from_or_in
+	| 
+
+forward_backward ::=
+	'FORWARD'
+	| 'BACKWARD'
+
+opt_forward_backward ::=
+	forward_backward
+	| 
+
+signed_iconst64 ::=
+	signed_iconst
+
 alter_table_stmt ::=
 	alter_onetable_stmt
 	| alter_split_stmt
@@ -1384,6 +1476,13 @@ alter_default_privileges_stmt ::=
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' opt_for_roles opt_in_schemas abbreviated_revoke_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_grant_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_revoke_stmt
+
+alter_changefeed_stmt ::=
+	'ALTER' 'CHANGEFEED' a_expr alter_changefeed_cmds
+
+alter_backup_stmt ::=
+	'ALTER' 'BACKUP' string_or_placeholder alter_backup_cmds
+	| 'ALTER' 'BACKUP' string_or_placeholder 'IN' string_or_placeholder alter_backup_cmds
 
 role_or_group_or_user ::=
 	'ROLE'
@@ -1730,6 +1829,10 @@ opt_comma ::=
 	','
 	| 
 
+signed_iconst ::=
+	'ICONST'
+	| only_signed_iconst
+
 alter_onetable_stmt ::=
 	'ALTER' 'TABLE' relation_expr alter_table_cmds
 	| 'ALTER' 'TABLE' 'IF' 'EXISTS' relation_expr alter_table_cmds
@@ -1879,6 +1982,12 @@ abbreviated_revoke_stmt ::=
 	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 
+alter_changefeed_cmds ::=
+	( alter_changefeed_cmd ) ( ( alter_changefeed_cmd ) )*
+
+alter_backup_cmds ::=
+	( alter_backup_cmd ) ( ( alter_backup_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -1887,7 +1996,7 @@ backup_options ::=
 	| 'REVISION_HISTORY'
 	| 'DETACHED'
 	| 'KMS' '=' string_or_placeholder_opt_list
-	| 'INCREMENTAL_STORAGE' '=' string_or_placeholder_opt_list
+	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
 
 c_expr ::=
 	d_expr
@@ -2131,7 +2240,8 @@ restore_options ::=
 	| 'SKIP_LOCALITIES_CHECK'
 	| 'DEBUG_PAUSE_ON' '=' string_or_placeholder
 	| 'NEW_DB_NAME' '=' string_or_placeholder
-	| 'INCREMENTAL_STORAGE' '=' string_or_placeholder_opt_list
+	| 'INCREMENTAL_LOCATION' '=' string_or_placeholder_opt_list
+	| 'TENANT' '=' string_or_placeholder
 
 scrub_option_list ::=
 	( scrub_option ) ( ( ',' scrub_option ) )*
@@ -2308,6 +2418,10 @@ transaction_deferrable_mode ::=
 	'DEFERRABLE'
 	| 'NOT' 'DEFERRABLE'
 
+only_signed_iconst ::=
+	'+' 'ICONST'
+	| '-' 'ICONST'
+
 alter_table_cmds ::=
 	( alter_table_cmd ) ( ( ',' alter_table_cmd ) )*
 
@@ -2358,6 +2472,15 @@ alter_default_privileges_target_object ::=
 	| 'TYPES'
 	| 'SCHEMAS'
 
+alter_changefeed_cmd ::=
+	'ADD' changefeed_targets
+	| 'DROP' changefeed_targets
+	| 'SET' kv_option_list
+	| 'UNSET' name_list
+
+alter_backup_cmd ::=
+	'ADD' backup_kms
+
 role_option ::=
 	'CREATEROLE'
 	| 'NOCREATEROLE'
@@ -2381,6 +2504,8 @@ role_option ::=
 	| 'NOMODIFYCLUSTERSETTING'
 	| 'SQLLOGIN'
 	| 'NOSQLLOGIN'
+	| 'VIEWCLUSTERSETTING'
+	| 'NOVIEWCLUSTERSETTING'
 	| password_clause
 	| valid_until_clause
 
@@ -2463,10 +2588,6 @@ opt_equal ::=
 	'='
 	| 
 
-signed_iconst ::=
-	'ICONST'
-	| only_signed_iconst
-
 region_or_regions ::=
 	'REGIONS'
 
@@ -2525,10 +2646,6 @@ sortby ::=
 	a_expr opt_asc_desc opt_nulls_order
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
 	| 'INDEX' table_name '@' index_name opt_asc_desc
-
-only_signed_iconst ::=
-	'+' 'ICONST'
-	| '-' 'ICONST'
 
 only_signed_fconst ::=
 	'+' 'FCONST'
@@ -2716,6 +2833,9 @@ sequence_option_elem ::=
 	| 'START' signed_iconst64
 	| 'START' 'WITH' signed_iconst64
 	| 'VIRTUAL'
+
+backup_kms ::=
+	'NEW_KMS' '=' string_or_placeholder_opt_list 'WITH' 'OLD_KMS' '=' string_or_placeholder_opt_list
 
 password_clause ::=
 	'PASSWORD' string_or_placeholder
@@ -2992,9 +3112,6 @@ storage_parameter_key_list ::=
 
 partition_by_index ::=
 	partition_by
-
-signed_iconst64 ::=
-	signed_iconst
 
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra

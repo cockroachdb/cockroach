@@ -12,158 +12,77 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 // DropSchema implements DROP SCHEMA.
 func DropSchema(b BuildCtx, n *tree.DropSchema) {
+	var toCheckBackrefs []catid.DescID
 	for _, name := range n.Names {
-		db, sc := b.ResolveSchema(name, ResolveParams{
+		elts := b.ResolveSchema(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
+		_, _, sc := scpb.FindSchema(elts)
 		if sc == nil {
 			continue
 		}
-		dropSchema(b,
-			db, sc, n.DropBehavior, false /* databaseIsBeingDropped */)
+		if sc.IsVirtual || sc.IsPublic {
+			panic(pgerror.Newf(pgcode.InvalidSchemaName,
+				"cannot drop schema %q", simpleName(b, sc.SchemaID)))
+		}
+		if sc.IsTemporary {
+			panic(scerrors.NotImplementedErrorf(n, "dropping a temporary schema"))
+		}
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, sc.SchemaID)
+			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
+		} else if dropRestrictDescriptor(b, sc.SchemaID) {
+			toCheckBackrefs = append(toCheckBackrefs, sc.SchemaID)
+		}
 		b.IncrementSubWorkID()
+		b.IncrementSchemaChangeDropCounter("schema")
+		b.IncrementUserDefinedSchemaCounter(sqltelemetry.UserDefinedSchemaDrop)
 	}
-}
-
-func dropSchema(
-	b BuildCtx,
-	db catalog.DatabaseDescriptor,
-	sc catalog.SchemaDescriptor,
-	behavior tree.DropBehavior,
-	databaseIsBeingDropped bool,
-) (nodeAdded bool, dropIDs catalog.DescriptorIDSet) {
-	// Dropping virtual schemas is never allowed.
-	if sc.SchemaKind() == catalog.SchemaVirtual {
-		panic(pgerror.Newf(pgcode.InvalidSchemaName,
-			"cannot drop schema %q", sc.GetName))
-	}
-	// This code is used for cascaded drops for databases. So, it's valid for
-	// public schemas or temporary ones to be dropped here.
-	if !databaseIsBeingDropped &&
-		sc.GetName() == tree.PublicSchema {
-		panic(pgerror.Newf(pgcode.InvalidSchemaName, "cannot drop schema %q", sc.GetName()))
-	}
-	if !databaseIsBeingDropped &&
-		(sc.SchemaKind() == catalog.SchemaPublic ||
-			sc.SchemaKind() == catalog.SchemaTemporary) {
-		panic(pgerror.Newf(pgcode.InvalidSchemaName,
-			"cannot drop schema %q", sc.GetName))
-	}
-	if sc.SchemaKind() == catalog.SchemaTemporary {
-		panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary schema"))
-	}
-	descsThatNeedElements := catalog.DescriptorIDSet{}
-	_, objectIDs := b.CatalogReader().ReadObjectNamesAndIDs(b, db, sc)
-	for _, id := range objectIDs {
-		// For dependency tracking we will still track that these elements were
-		// children even if we didn't add the drop elements ourselves here.
-		dropIDs.Add(id)
-		// If the object is already dropped, then we don't need to create elements
-		// for them.
-		if !checkIfDescOrElementAreDropped(b, id) {
-			descsThatNeedElements.Add(id)
+	// Check if there are any back-references which would prevent a DROP RESTRICT.
+	for _, schemaID := range toCheckBackrefs {
+		if n.DropBehavior == tree.DropCascade {
+			// Special case to handle dropped types which aren't supported in CASCADE.
+			var objectIDs, typeIDs catalog.DescriptorIDSet
+			scpb.ForEachObjectParent(b.BackReferences(schemaID), func(_ scpb.Status, _ scpb.TargetStatus, op *scpb.ObjectParent) {
+				objectIDs.Add(op.ObjectID)
+			})
+			objectIDs.ForEach(func(id descpb.ID) {
+				elts := b.QueryByID(id)
+				if _, _, enum := scpb.FindEnumType(elts); enum != nil {
+					typeIDs.Add(enum.TypeID)
+				} else if _, _, alias := scpb.FindAliasType(elts); alias != nil {
+					typeIDs.Add(alias.TypeID)
+				}
+			})
+			typeIDs.ForEach(func(id descpb.ID) {
+				if dependentNames := dependentTypeNames(b, id); len(dependentNames) > 0 {
+					panic(unimplemented.NewWithIssueDetailf(51480, "DROP TYPE CASCADE is not yet supported",
+						"cannot drop type %q because other objects (%v) still depend on it",
+						qualifiedName(b, id), dependentNames))
+				}
+			})
+		} else {
+			backrefs := undroppedBackrefs(b, schemaID)
+			if backrefs.IsEmpty() {
+				continue
+			}
+			panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
+				"schema %q is not empty and CASCADE was not specified", simpleName(b, schemaID)))
 		}
 	}
-	if behavior != tree.DropCascade && !dropIDs.Empty() {
-		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
-			"schema %q is not empty and CASCADE was not specified", sc.GetName()))
-	}
-	{
-		c := b.WithNewSourceElementID()
-		var droppedTypes []catalog.TypeDescriptor
-		for _, id := range descsThatNeedElements.Ordered() {
-			desc := c.CatalogReader().MustReadDescriptor(b, id)
-			switch t := desc.(type) {
-			case catalog.TableDescriptor:
-				if t.IsView() {
-					dropView(c, t, behavior)
-				} else if t.IsSequence() {
-					dropSequence(c, t, behavior)
-				} else if t.IsTable() {
-					dropTable(c, t, behavior)
-				} else {
-					panic(errors.AssertionFailedf("table descriptor %q (%d) is neither table, sequence or view",
-						t.GetName(), t.GetID()))
-				}
-			case catalog.TypeDescriptor:
-				dropType(c, t, behavior)
-				droppedTypes = append(droppedTypes, t)
-			default:
-				panic(errors.AssertionFailedf("expected table or type descriptor, instead %q (%d) is %q",
-					t.GetName(), t.GetID(), t.DescriptorType()))
-			}
-		}
-		// For dropped types validate if any unsupported cascade is needed.
-		for _, typeDesc := range droppedTypes {
-			var dependentNames []*tree.TableName
-			for i := 0; i < typeDesc.NumReferencingDescriptors(); i++ {
-				id := typeDesc.GetReferencingDescriptorID(i)
-				foundDrop := false
-				b.ForEachElementStatus(func(status, targetStatus scpb.Status, elem scpb.Element) {
-					if targetStatus == scpb.Status_ABSENT && screl.GetDescID(elem) == id {
-						foundDrop = true
-					}
-				})
-				if !foundDrop && databaseIsBeingDropped {
-					tableDesc := b.MustReadTable(id)
-					if tableDesc.GetParentID() == sc.GetParentID() {
-						// Parent will clean up this object.
-						foundDrop = true
-					}
-				}
-				if !foundDrop {
-					name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(id), tree.ResolveAnyTableKind)
-					onErrPanic(err)
-					dependentNames = append(dependentNames, name)
-				}
-			}
-			if len(dependentNames) > 0 {
-				prefix := tree.ObjectNamePrefix{
-					CatalogName:     tree.Name(db.GetName()),
-					SchemaName:      tree.Name(sc.GetName()),
-					ExplicitSchema:  true,
-					ExplicitCatalog: true,
-				}
-				fqName := tree.MakeTypeNameWithPrefix(prefix, typeDesc.GetName())
-				panic(unimplemented.NewWithIssueDetailf(51480, "DROP TYPE CASCADE is not yet supported",
-					"cannot drop type %q because other objects (%v) still depend on it",
-					fqName.FQString(),
-					dependentNames))
-			}
-		}
-	}
-	switch sc.SchemaKind() {
-	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
-		return false, dropIDs
-	case catalog.SchemaUserDefined:
-		b.EnqueueDrop(&scpb.Schema{
-			SchemaID:         sc.GetID(),
-			DependentObjects: dropIDs.Ordered(),
-		})
-		b.EnqueueDrop(&scpb.DatabaseSchemaEntry{
-			DatabaseID: sc.GetParentID(),
-			SchemaID:   sc.GetID(),
-		})
-		b.EnqueueDrop(&scpb.SchemaComment{
-			SchemaID: sc.GetID(),
-			Comment:  scpb.PlaceHolderComment,
-		})
-		return true, dropIDs
-	}
-	panic(errors.AssertionFailedf("unexpected sc kind %q for sc %q (%d)",
-		sc.SchemaKind(), sc.GetName(), sc.GetID()))
 }

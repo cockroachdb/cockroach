@@ -170,9 +170,9 @@ func TestRestoreOldVersions(t *testing.T) {
 			err = os.Symlink(exportDir, filepath.Join(externalDir, "foo"))
 			require.NoError(t, err)
 
-			sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+			sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 			sqlDB.Exec(t, `DROP DATABASE db1;`)
-			sqlDB.Exec(t, `RESTORE DATABASE db1 FROM $1`, LocalFoo)
+			sqlDB.Exec(t, `RESTORE DATABASE db1 FROM $1`, localFoo)
 			sqlDB.CheckQueryResults(t,
 				`SELECT count(*) FROM [SHOW DATABASES] WHERE database_name = 'db1'`,
 				[][]string{{"1"}},
@@ -217,14 +217,14 @@ func TestRestoreOldVersions(t *testing.T) {
 			require.NoError(t, err)
 
 			// Expect this restore to fail.
-			sqlDB.ExpectErr(t, `type "t" has unknown ParentID 50`, `RESTORE DATABASE otherdb FROM $1`, LocalFoo)
+			sqlDB.ExpectErr(t, `type "t" has unknown ParentID 50`, `RESTORE DATABASE otherdb FROM $1`, localFoo)
 
 			// Expect that we don't crash and that we emit NULL for data that we
 			// cannot resolve (e.g. missing database descriptor, create_statement).
 			sqlDB.CheckQueryResults(t, `
 SELECT
   database_name, parent_schema_name, object_name, object_type, create_statement
-FROM [SHOW BACKUP SCHEMAS '`+LocalFoo+`' WITH privileges]
+FROM [SHOW BACKUP SCHEMAS '`+localFoo+`' WITH privileges]
 ORDER BY object_type, object_name`, [][]string{
 				{"NULL", "NULL", "otherdb", "database", "NULL"},
 				{"otherdb", "public", "tbl", "table", "NULL"},
@@ -303,7 +303,7 @@ func restoreOldVersionTestWithInterleave(exportDir string) func(t *testing.T) {
 		// Restore should now fail.
 		sqlDB.ExpectErr(t,
 			"pq: restoring interleaved tables is no longer allowed. table t3 was found to be interleaved",
-			`RESTORE test.* FROM $1`, LocalFoo)
+			`RESTORE test.* FROM $1`, localFoo)
 	}
 }
 
@@ -399,7 +399,7 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, LocalFoo).Scan(
+		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
 		const totalRows = 12
@@ -429,7 +429,7 @@ func restoreOldVersionTest(exportDir string) func(t *testing.T) {
 func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
@@ -437,7 +437,7 @@ func restoreV201ZoneconfigPrivilegeTest(exportDir string) func(t *testing.T) {
 		defer cleanup()
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
-		sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 		testDBGrants := [][]string{
 			{"test", "admin", "ALL", "true"},
 			{"test", "root", "ALL", "true"},
@@ -471,25 +471,25 @@ func restoreOldVersionFKRevTest(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(dir, "foo"))
 		require.NoError(t, err)
 		sqlDB.Exec(t, `CREATE DATABASE ts`)
-		sqlDB.Exec(t, `RESTORE test.rev_times FROM $1 WITH into_db = 'ts'`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE test.rev_times FROM $1 WITH into_db = 'ts'`, localFoo)
 		for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
 
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM $1 AS OF SYSTEM TIME %s`, ts[0]), LocalFoo)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
 			// Just rendering the constraints loads and validates schema.
 			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 			sqlDB.Exec(t, `DROP DATABASE test`)
 
 			// Restore a couple tables, including parent but not child_pk.
 			sqlDB.Exec(t, `CREATE DATABASE test`)
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM $1 AS OF SYSTEM TIME %s`, ts[0]), LocalFoo)
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), LocalFoo)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.circular FROM $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+			sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.parent, test.child FROM $1 AS OF SYSTEM TIME %s  WITH skip_missing_foreign_keys`, ts[0]), localFoo)
 			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 			sqlDB.Exec(t, `DROP DATABASE test`)
 
 			// Now do each table on its own with skip_missing_foreign_keys.
 			sqlDB.Exec(t, `CREATE DATABASE test`)
 			for _, name := range []string{"child_pk", "child", "circular", "parent"} {
-				sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), LocalFoo)
+				sqlDB.Exec(t, fmt.Sprintf(`RESTORE test.%s FROM $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
 			}
 			sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 			sqlDB.Exec(t, `DROP DATABASE test`)
@@ -516,7 +516,7 @@ func restoreOldVersionClusterTest(exportDir string) func(t *testing.T) {
 		require.NoError(t, err)
 
 		// Ensure that the restore succeeds.
-		sqlDB.Exec(t, `RESTORE FROM $1`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE FROM $1`, localFoo)
 
 		sqlDB.CheckQueryResults(t, "SHOW USERS", [][]string{
 			{"admin", "", "{}"},
@@ -802,7 +802,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
@@ -811,7 +811,7 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
 
 		var restoredDBID, publicSchemaID int
 		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='d' AND "parentID"=0`)
@@ -834,7 +834,7 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 		// previously had a synthetic public schema gets correctly restored into the
 		// descriptor backed public schema of database test.
 		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, localFoo)
 
 		row = sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='test' AND "parentID"=0`)
 		var parentDBID int
@@ -856,7 +856,7 @@ func restorePublicSchemaRemap(exportDir string) func(t *testing.T) {
 func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
@@ -865,7 +865,7 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: 1,
+							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 						},
 					},
@@ -874,7 +874,7 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
 
 		var restoredDBID int
 		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='d' AND "parentID"=0`)
@@ -893,7 +893,7 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 		// previously had a synthetic public schema gets correctly restored into the
 		// descriptor backed public schema of database test.
 		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, LocalFoo)
+		sqlDB.Exec(t, `RESTORE d.public.t FROM $1 WITH into_db = 'test'`, localFoo)
 
 		row = sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name='test' AND "parentID"=0`)
 		var parentDBID int
@@ -911,7 +911,7 @@ func restorePublicSchemaMixedVersion(exportDir string) func(t *testing.T) {
 func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
 		_, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
@@ -920,7 +920,7 @@ func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testin
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: 1,
+							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 						},
 					},
@@ -929,7 +929,7 @@ func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testin
 		err := os.Symlink(exportDir, filepath.Join(tmpDir, "foo"))
 		require.NoError(t, err)
 
-		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo))
+		sqlDB.Exec(t, fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo))
 
 		var dbID int
 		row := sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'd'`)
@@ -942,7 +942,7 @@ func restoreSyntheticPublicSchemaNamespaceEntry(exportDir string) func(t *testin
 func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) func(t *testing.T) {
 	return func(t *testing.T) {
 		const numAccounts = 1000
-		_, _, tmpDir, cleanupFn := BackupRestoreTestSetup(t, MultiNode, numAccounts, InitManualReplication)
+		_, _, tmpDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 		defer cleanupFn()
 
 		tc, sqlDB, cleanup := backupRestoreTestSetupEmpty(t, singleNode, tmpDir,
@@ -951,7 +951,7 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 					Knobs: base.TestingKnobs{
 						JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 						Server: &server.TestingKnobs{
-							DisableAutomaticVersionUpgrade: 1,
+							DisableAutomaticVersionUpgrade: make(chan struct{}),
 							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 						},
 					},
@@ -977,7 +977,7 @@ func restoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(exportDir string) f
 		sqlDB.Exec(t, "DROP DATABASE defaultdb")
 		sqlDB.Exec(t, "DROP DATABASE postgres")
 
-		restoreQuery := fmt.Sprintf("RESTORE DATABASE d FROM '%s'", LocalFoo)
+		restoreQuery := fmt.Sprintf("RESTORE DATABASE d FROM '%s'", localFoo)
 		sqlDB.ExpectErr(t, "boom", restoreQuery)
 
 		// We should have no non-system database with a public schema name space

@@ -19,7 +19,7 @@ import {
   TimeScaleDropdown,
 } from "./timeScaleDropdown";
 import { defaultTimeScaleOptions, findClosestTimeScale } from "./utils";
-import * as timewindow from "./timeScaleTypes";
+import * as timescale from "./timeScaleTypes";
 import moment from "moment";
 import { MemoryRouter } from "react-router";
 import TimeFrameControls from "./timeFrameControls";
@@ -51,7 +51,7 @@ describe("<TimeScaleDropdown>", function() {
   let currentWindow: TimeWindow;
 
   const setCurrentWindowFromTimeScale = (timeScale: TimeScale): void => {
-    const end = timeScale.windowEnd || moment.utc();
+    const end = timeScale.fixedWindowEnd || moment.utc();
     currentWindow = {
       start: moment(end).subtract(timeScale.windowSize),
       end,
@@ -69,11 +69,10 @@ describe("<TimeScaleDropdown>", function() {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers(new Date(2020, 5, 1, 9, 28, 30));
-    const timewindowState = new timewindow.TimeWindowState();
-    currentWindow = timewindowState.currentWindow;
-    setCurrentWindowFromTimeScale(timewindowState.scale);
+    const timeScaleState = new timescale.TimeScaleState();
+    setCurrentWindowFromTimeScale(timeScaleState.scale);
     state = {
-      currentScale: timewindowState.scale,
+      currentScale: timeScaleState.scale,
       setTimeScale: () => {},
     };
   });
@@ -91,10 +90,12 @@ describe("<TimeScaleDropdown>", function() {
   it("Past 10 minutes must be render", () => {
     const wrapper = makeTimeScaleDropdown(state);
     wrapper.setProps({ currentScale: state.currentScale });
-    assert.equal(
-      wrapper.props().currentScale,
-      defaultTimeScaleOptions["Past 10 Minutes"],
-    );
+    const expected: TimeScale = {
+      key: "Past 10 Minutes",
+      ...defaultTimeScaleOptions["Past 10 Minutes"],
+      fixedWindowEnd: false,
+    };
+    assert.deepEqual(wrapper.props().currentScale, expected);
   });
 
   it("getTimeRangeTitle must return title Past 10 Minutes", () => {
@@ -142,7 +143,7 @@ describe("<TimeScaleDropdown>", function() {
       };
       const currentScale = {
         ...state.currentScale,
-        windowEnd: window.end,
+        fixedWindowEnd: window.end,
         windowSize: moment.duration(
           window.end.diff(window.start, "seconds"),
           "seconds",
@@ -190,7 +191,7 @@ describe("<TimeScaleDropdown>", function() {
     };
     const currentTimeScale = {
       ...state.currentScale,
-      windowEnd: window.end,
+      fixedWindowEnd: window.end,
     };
     const arrows = generateDisabledArrows(window);
     const wrapper = makeTimeScaleDropdown({
@@ -204,11 +205,21 @@ describe("<TimeScaleDropdown>", function() {
 
 describe("timescale utils", (): void => {
   describe("findClosestTimeScale", () => {
-    it("should found correctly time scale", () => {
+    it("should find the correct time scale", () => {
+      // `seconds` != window size of any of the default options, `startSeconds` not specified.
       assert.deepEqual(findClosestTimeScale(defaultTimeScaleOptions, 15), {
         ...defaultTimeScaleOptions["Past 10 Minutes"],
         key: "Custom",
       });
+      // `seconds` != window size of any of the default options, `startSeconds` not specified.
+      assert.deepEqual(
+        findClosestTimeScale(
+          defaultTimeScaleOptions,
+          moment.duration(moment().daysInMonth() * 5, "days").asSeconds(),
+        ),
+        { ...defaultTimeScaleOptions["Past 2 Months"], key: "Custom" },
+      );
+      // `seconds` == window size of one of the default options, `startSeconds` not specified.
       assert.deepEqual(
         findClosestTimeScale(
           defaultTimeScaleOptions,
@@ -219,6 +230,7 @@ describe("timescale utils", (): void => {
           key: "Past 10 Minutes",
         },
       );
+      // `seconds` == window size of one of the default options, `startSeconds` not specified.
       assert.deepEqual(
         findClosestTimeScale(
           defaultTimeScaleOptions,
@@ -229,12 +241,28 @@ describe("timescale utils", (): void => {
           key: "Past 2 Weeks",
         },
       );
+      // `seconds` == window size of one of the default options, `startSeconds` is now.
       assert.deepEqual(
         findClosestTimeScale(
           defaultTimeScaleOptions,
-          moment.duration(moment().daysInMonth() * 5, "days").asSeconds(),
+          defaultTimeScaleOptions["Past 10 Minutes"].windowSize.asSeconds(),
+          moment().unix(),
         ),
-        { ...defaultTimeScaleOptions["Past 2 Months"], key: "Custom" },
+        {
+          ...defaultTimeScaleOptions["Past 10 Minutes"],
+          key: "Past 10 Minutes",
+        },
+      );
+      // `seconds` == window size of one of the default options, `startSeconds` is in the past.
+      assert.deepEqual(
+        findClosestTimeScale(
+          defaultTimeScaleOptions,
+          defaultTimeScaleOptions["Past 10 Minutes"].windowSize.asSeconds(),
+          moment()
+            .subtract(1, "day")
+            .unix(),
+        ),
+        { ...defaultTimeScaleOptions["Past 10 Minutes"], key: "Custom" },
       );
     });
   });

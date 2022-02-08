@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 )
 
 // CanUseStreamer returns whether the kvstreamer.Streamer API should be used.
@@ -38,17 +37,13 @@ var useStreamerEnabled = settings.RegisterBoolSetting(
 	"determines whether the usage of the Streamer API is allowed. "+
 		"Enabling this will increase the speed of lookup/index joins "+
 		"while adhering to memory limits.",
-	false,
+	true,
 )
 
 // TxnKVStreamer handles retrieval of key/values.
 type TxnKVStreamer struct {
 	streamer *kvstreamer.Streamer
 	spans    roachpb.Spans
-
-	// numOutstandingRequests tracks the number of requests that haven't been
-	// fully responded to yet.
-	numOutstandingRequests int
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -82,9 +77,8 @@ func NewTxnKVStreamer(
 		return nil, err
 	}
 	return &TxnKVStreamer{
-		streamer:               streamer,
-		spans:                  spans,
-		numOutstandingRequests: len(spans),
+		streamer: streamer,
+		spans:    spans,
 	}, nil
 }
 
@@ -96,11 +90,8 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 ) (skip bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
 	result := f.lastResultState.Result
 	if get := result.GetResp; get != nil {
-		if get.IntentValue != nil {
-			return false, nil, nil, errors.AssertionFailedf(
-				"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
-			)
-		}
+		// No need to check get.IntentValue since the Streamer guarantees that
+		// it is nil.
 		if get.Value == nil {
 			// Nothing found in this particular response, so we skip it.
 			f.releaseLastResult(ctx)
@@ -109,7 +100,6 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 		pos := result.EnqueueKeysSatisfied[f.lastResultState.numEmitted]
 		origSpan := f.spans[pos]
 		f.lastResultState.numEmitted++
-		f.numOutstandingRequests--
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
 		return false, f.getResponseScratch[:], nil, nil
 	}
@@ -118,19 +108,14 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 		batchResp, f.lastResultState.remainingBatches = scan.BatchResponses[0], scan.BatchResponses[1:]
 	}
 	if len(f.lastResultState.remainingBatches) == 0 {
-		f.processedScanResponse()
+		f.lastResultState.numEmitted++
 	}
-	return false, scan.Rows, batchResp, nil
-}
-
-// processedScanResponse updates the lastResultState before emitting the last
-// part of the ScanResponse. This method should be called for each request that
-// the ScanResponse satisfies.
-func (f *TxnKVStreamer) processedScanResponse() {
-	f.lastResultState.numEmitted++
-	if f.lastResultState.ScanResp.Complete {
-		f.numOutstandingRequests--
-	}
+	// We're consciously ignoring scan.Rows argument since the Streamer
+	// guarantees to always produce Scan responses using BATCH_RESPONSE format.
+	//
+	// Note that batchResp might be nil when the ScanResponse is empty, and the
+	// caller (the KVFetcher) will skip over it.
+	return false, nil, batchResp, nil
 }
 
 func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {
@@ -143,17 +128,11 @@ func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {
 func (f *TxnKVStreamer) nextBatch(
 	ctx context.Context,
 ) (ok bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
-	if f.numOutstandingRequests == 0 {
-		// All requests have already been responded to.
-		f.releaseLastResult(ctx)
-		return false, nil, nil, nil
-	}
-
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
 		batchResp, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0], f.lastResultState.remainingBatches[1:]
 		if len(f.lastResultState.remainingBatches) == 0 {
-			f.processedScanResponse()
+			f.lastResultState.numEmitted++
 		}
 		return true, nil, batchResp, nil
 	}
@@ -189,7 +168,7 @@ func (f *TxnKVStreamer) nextBatch(
 		if skip {
 			continue
 		}
-		return true, kvs, batchResp, nil
+		return true, kvs, batchResp, err
 	}
 
 	// Get more results from the streamer. This call will block until some

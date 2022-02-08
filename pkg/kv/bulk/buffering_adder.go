@@ -114,7 +114,7 @@ func MakeBulkAdder(
 			disallowShadowingBelow: opts.DisallowShadowingBelow,
 			splitAfter:             opts.SplitAndScatterAfter,
 			batchTS:                opts.BatchTimestamp,
-			writeAtBatchTS:         opts.WriteAtRequestTime,
+			writeAtBatchTS:         opts.WriteAtBatchTimestamp,
 		},
 		timestamp:           timestamp,
 		curBufferSize:       opts.MinBufferSize,

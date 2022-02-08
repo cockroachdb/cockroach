@@ -245,6 +245,10 @@ type Flags struct {
 
 	// QueryArgs are values for placeholders, used for assign-placeholders-*.
 	QueryArgs []string
+
+	// UseMultiColStats is the value for SessionData.OptimizerUseMultiColStats.
+	// It defaults to true in New.
+	UseMultiColStats bool
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -252,7 +256,7 @@ type Flags struct {
 func New(catalog cat.Catalog, sql string) *OptTester {
 	ctx := context.Background()
 	ot := &OptTester{
-		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit},
+		Flags:   Flags{JoinLimit: opt.DefaultJoinOrderLimit, UseMultiColStats: true},
 		catalog: catalog,
 		sql:     sql,
 		ctx:     ctx,
@@ -269,7 +273,6 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	ot.evalCtx.SessionData().Database = "defaultdb"
 	ot.evalCtx.SessionData().ZigzagJoinEnabled = true
 	ot.evalCtx.SessionData().OptimizerUseHistograms = true
-	ot.evalCtx.SessionData().OptimizerUseMultiColStats = true
 	ot.evalCtx.SessionData().LocalityOptimizedSearch = true
 	ot.evalCtx.SessionData().ReorderJoinsLimit = opt.DefaultJoinOrderLimit
 	ot.evalCtx.SessionData().InsertFastPath = true
@@ -362,6 +365,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds an expression directly from an opt-gen-like string (see
 //    exprgen.Build), applies normalization optimizations, and outputs the tree
 //    without any exploration optimizations applied to it.
+//
+//  - expropt
+//
+//    Builds an expression directly from an opt-gen-like string (see
+//    exprgen.Optimize), applies normalization and exploration optimizations,
+//    and outputs the tree.
 //
 //  - stats-quality [flags]
 //
@@ -511,6 +520,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	ot.evalCtx.SessionData().PreferLookupJoinsForFKs = ot.Flags.PreferLookupJoinsForFKs
 	ot.evalCtx.SessionData().PropagateInputOrdering = ot.Flags.PropagateInputOrdering
 	ot.evalCtx.SessionData().NullOrderedLast = ot.Flags.NullOrderedLast
+	ot.evalCtx.SessionData().OptimizerUseMultiColStats = ot.Flags.UseMultiColStats
 
 	ot.evalCtx.TestingKnobs.OptimizerCostPerturbation = ot.Flags.PerturbCost
 	ot.evalCtx.Locality = ot.Flags.Locality
@@ -692,6 +702,14 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "exprnorm":
 		e, err := ot.ExprNorm()
+		if err != nil {
+			return fmt.Sprintf("error: %s\n", err)
+		}
+		ot.postProcess(tb, d, e)
+		return ot.FormatExpr(e)
+
+	case "expropt":
+		e, err := ot.ExprOpt()
 		if err != nil {
 			return fmt.Sprintf("error: %s\n", err)
 		}
@@ -1050,6 +1068,16 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 	case "propagate-input-ordering":
 		f.PropagateInputOrdering = true
 
+	case "use-multi-col-stats":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("use-multi-col-stats requires a single argument")
+		}
+		b, err := strconv.ParseBool(arg.Vals[0])
+		if err != nil {
+			return errors.Wrap(err, "use-multi-col-stats")
+		}
+		f.UseMultiColStats = b
+
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
 	}
@@ -1220,6 +1248,10 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	var f norm.Factory
 	f.Init(&ot.evalCtx, ot.catalog)
 
+	if !ot.Flags.NoStableFolds {
+		f.FoldingControl().AllowStableFolds()
+	}
+
 	f.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		// exprgen.Build doesn't run optimization, so we don't need to explicitly
 		// disallow exploration rules here.
@@ -1231,6 +1263,27 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	})
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
+}
+
+// ExprOpt parses the input directly into an expression and runs normalization
+// and exploration; see exprgen.Optimize.
+func (ot *OptTester) ExprOpt() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	f := o.Factory()
+
+	if !ot.Flags.NoStableFolds {
+		f.FoldingControl().AllowStableFolds()
+	}
+
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+
+	f.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		ot.appliedRules.Add(int(ruleName))
+	})
+
+	return exprgen.Optimize(ot.catalog, o, ot.sql)
 }
 
 // RuleStats performs the optimization and returns statistics about how many

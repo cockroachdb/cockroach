@@ -22,11 +22,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,30 +45,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
-
-func TestMaxIngestBatchSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	testCases := []struct {
-		ingestBatchSize int64
-		maxCommandSize  int64
-		expected        int64
-	}{
-		{ingestBatchSize: 2 << 20, maxCommandSize: 64 << 20, expected: 2 << 20},
-		{ingestBatchSize: 128 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{ingestBatchSize: 64 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-		{ingestBatchSize: 63 << 20, maxCommandSize: 64 << 20, expected: 63 << 20},
-	}
-	for i, testCase := range testCases {
-		st := cluster.MakeTestingClusterSettings()
-		storageccl.IngestBatchSize.Override(ctx, &st.SV, testCase.ingestBatchSize)
-		kvserver.MaxCommandSize.Override(ctx, &st.SV, testCase.maxCommandSize)
-		if e, a := storageccl.MaxIngestBatchSize(st), testCase.expected; e != a {
-			t.Errorf("%d: expected max batch size %d, but got %d", i, e, a)
-		}
-	}
-}
 
 func slurpSSTablesLatestKey(
 	t *testing.T, dir string, paths []string, oldPrefix, newPrefix []byte,
@@ -172,7 +148,7 @@ func TestIngest(t *testing.T) {
 		// The test normally doesn't trigger the batching behavior, so lower
 		// the threshold to force it.
 		init := func(st *cluster.Settings) {
-			storageccl.IngestBatchSize.Override(ctx, &st.SV, 1)
+			bulk.IngestBatchSize.Override(ctx, &st.SV, 1)
 		}
 		runTestIngest(t, init)
 	})
@@ -201,11 +177,13 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		keySlice = append(keySlice, key)
 	}
 
+	ctx := context.Background()
+	cs := cluster.MakeTestingClusterSettings()
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
 		sstFile := &storage.MemFile{}
-		sst := storage.MakeBackupSSTWriter(sstFile)
+		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer sst.Close()
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
@@ -248,8 +226,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		},
 	}}
 
-	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: knobs, ExternalIODir: dir}
+	args := base.TestServerArgs{
+		Knobs:         knobs,
+		ExternalIODir: dir,
+		Settings:      cs,
+	}
 	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
 	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
 	// (which breaks the global-seqno rewrite used when the added sstable
@@ -260,18 +241,21 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 	init(s.ClusterSettings())
 
 	evalCtx := tree.EvalContext{Settings: s.ClusterSettings()}
-	flowCtx := execinfra.FlowCtx{Cfg: &execinfra.ServerConfig{DB: kvDB,
-		ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
-			return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
-				s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+	flowCtx := execinfra.FlowCtx{
+		Cfg: &execinfra.ServerConfig{
+			DB: kvDB,
+			ExternalStorage: func(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error) {
+				return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
+					s.ClusterSettings(), blobs.TestBlobServiceClient(s.ClusterSettings().ExternalIODir), nil, nil)
+			},
+			Settings: s.ClusterSettings(),
+			Codec:    keys.SystemSQLCodec,
 		},
-		Settings: s.ClusterSettings(),
-		Codec:    keys.SystemSQLCodec,
-	},
 		EvalCtx: &tree.EvalContext{
 			Codec:    keys.SystemSQLCodec,
 			Settings: s.ClusterSettings(),
-		}}
+		},
+	}
 
 	storage, err := cloud.ExternalStorageConfFromURI("nodelocal://0/foo", security.RootUserName())
 	if err != nil {
@@ -402,6 +386,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("%+v", err)
 			}
 			kvs := clientKVsToEngineKVs(clientKVs)
+			for i := range kvs {
+				if i < len(expectedKVs) {
+					expectedKVs[i].Key.Timestamp = kvs[i].Key.Timestamp
+				}
+			}
 
 			if !reflect.DeepEqual(kvs, expectedKVs) {
 				for i := 0; i < len(kvs) || i < len(expectedKVs); i++ {
@@ -433,7 +422,8 @@ func newTestingRestoreDataProcessor(
 			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
 				Ctx:     ctx,
 				EvalCtx: evalCtx,
-			}},
+			},
+		},
 		flowCtx: flowCtx,
 		spec:    spec,
 	}

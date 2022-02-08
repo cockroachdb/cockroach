@@ -16,7 +16,8 @@ import (
 	"bytes"
 	"math"
 
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/twpayne/go-geom"
 )
 
@@ -55,7 +56,8 @@ type MarshalOption func(o *marshalOptions) error
 func MarshalOptionPrecisionXY(p int64) MarshalOption {
 	return func(o *marshalOptions) error {
 		if p < -7 || p > 7 {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"XY precision must be between -7 and 7 inclusive",
 			)
 		}
@@ -68,7 +70,8 @@ func MarshalOptionPrecisionXY(p int64) MarshalOption {
 func MarshalOptionPrecisionZ(p int64) MarshalOption {
 	return func(o *marshalOptions) error {
 		if p < 0 || p > 7 {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"Z precision must not be negative or greater than 7",
 			)
 		}
@@ -82,7 +85,8 @@ func MarshalOptionPrecisionZ(p int64) MarshalOption {
 func MarshalOptionPrecisionM(p int64) MarshalOption {
 	return func(o *marshalOptions) error {
 		if p < 0 || p > 7 {
-			return errors.Newf(
+			return pgerror.Newf(
+				pgcode.InvalidParameterValue,
 				"M precision must not be negative or greater than 7",
 			)
 		}
@@ -215,7 +219,7 @@ func (m *marshaller) marshal(t geom.T) error {
 				}
 			}
 		default:
-			return errors.Newf("unknown TWKB type: %T", t)
+			return pgerror.Newf(pgcode.InvalidParameterValue, "unknown TWKB type: %T", t)
 		}
 	}
 	return nil
@@ -316,7 +320,7 @@ func typeAndPrecisionHeaderByte(t geom.T, o marshalOptions) (byte, error) {
 	case *geom.GeometryCollection:
 		typ = twkbTypeGeometryCollection
 	default:
-		return 0, errors.Newf("unknown TWKB type: %T", t)
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "unknown TWKB type: %T", t)
 	}
 
 	precisionZigZagged := zigzagInt8(o.precisionXY)

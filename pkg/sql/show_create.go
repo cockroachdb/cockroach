@@ -13,7 +13,6 @@ package sql
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -177,20 +176,7 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	var storageParams []string
-	if ttl := desc.GetRowLevelTTL(); ttl != nil {
-		storageParams = append(
-			storageParams,
-			`ttl = 'on'`,
-			`ttl_automatic_column = 'on'`,
-			fmt.Sprintf(`ttl_expire_after = %s`, ttl.DurationExpr),
-		)
-	}
-	if exclude := desc.GetExcludeDataFromBackup(); exclude {
-		storageParams = append(storageParams, `exclude_data_from_backup = true`)
-	}
-
-	if len(storageParams) > 0 {
+	if storageParams := desc.GetStorageParams(true /* spaceBetweenEqual */); len(storageParams) > 0 {
 		f.Buffer.WriteString(` WITH (`)
 		f.Buffer.WriteString(strings.Join(storageParams, ", "))
 		f.Buffer.WriteString(`)`)

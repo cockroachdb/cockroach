@@ -11,16 +11,138 @@ test
 ALTER TABLE db.public.tbl ADD COLUMN j INT NOT NULL DEFAULT 42
 ----
 checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.add_column
 begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 5 MutationType ops
+## PreCommitPhase stage 1 of 1 with 7 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [106]
 write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
 upsert descriptor #106
   ...
+     createAsOfTime:
+       wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - DELETE_ONLY
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
+  +          NULL DEFAULT ‹42›
+  +        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  +        statementTag: ALTER TABLE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    - 2
+  +    - 3
+  +    - 4
+  +    - 5
+  +    - 6
+  +    - 7
+  +    targets:
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: tbl_pkey
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 2
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 2
+  +          name: j
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        columnType:
+  +          columnId: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 2
+  +          embeddedExpr:
+  +            expr: 42:::INT8
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 2
+  +            isUnique: true
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            sourceIndexId: 1
+  +            storingColumnIds:
+  +            - 2
+  +            tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 2
+  +          name: tbl_pkey
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
+     families:
      - columnIds:
        - 1
   +    - 2
@@ -36,7 +158,6 @@ upsert descriptor #106
   +      defaultExpr: 42:::INT8
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -46,6 +167,7 @@ upsert descriptor #106
   +    state: DELETE_ONLY
   +  - direction: ADD
   +    index:
+  +      constraintId: 2
   +      createdExplicitly: true
   +      encodingType: 1
   +      foreignKey: {}
@@ -71,8 +193,9 @@ upsert descriptor #106
   +    state: DELETE_ONLY
      name: tbl
   -  nextColumnId: 2
-  +  newSchemaChangeJobId: "1"
+  -  nextConstraintId: 2
   +  nextColumnId: 3
+  +  nextConstraintId: 3
      nextFamilyId: 1
   -  nextIndexId: 2
   +  nextIndexId: 3
@@ -87,9 +210,23 @@ upsert descriptor #106
 commit transaction #1
 # begin PostCommitPhase
 begin transaction #2
-## PostCommitPhase stage 1 of 4 with 3 MutationType ops
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 4 with 4 MutationType ops
 update progress of schema change job #1
 upsert descriptor #106
+  ...
+       - PUBLIC
+       - PUBLIC
+  -    - DELETE_ONLY
+  +    - WRITE_ONLY
+       - ABSENT
+       - PUBLIC
+       - PUBLIC
+  -    - DELETE_ONLY
+  +    - WRITE_ONLY
+       - ABSENT
+       jobId: "1"
   ...
        direction: ADD
        mutationId: 1
@@ -103,23 +240,23 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
      name: tbl
-     newSchemaChangeJobId: "1"
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
-commit transaction #2
-begin transaction #3
-## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
-backfill indexes [2] from index #1 in table #106
 commit transaction #3
 begin transaction #4
-## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
-validate forward indexes [2] in table #106
+## PostCommitPhase stage 2 of 4 with 1 BackfillType ops
+backfill indexes [2] from index #1 in table #106
 commit transaction #4
 begin transaction #5
-## PostCommitPhase stage 4 of 4 with 7 MutationType ops
+## PostCommitPhase stage 3 of 4 with 1 ValidationType ops
+validate forward indexes [2] in table #106
+commit transaction #5
+begin transaction #6
+## PostCommitPhase stage 4 of 4 with 8 MutationType ops
 update progress of schema change job #1
 upsert descriptor #106
   ...
@@ -128,13 +265,29 @@ upsert descriptor #106
   +  - defaultExpr: 42:::INT8
   +    id: 2
   +    name: j
-  +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
   +      width: 64
      createAsOfTime:
        wallTime: "1"
+  ...
+       authorization: {}
+       currentStatuses:
+  +    - VALIDATED
+  +    - ABSENT
+       - PUBLIC
+       - PUBLIC
+  -    - WRITE_ONLY
+  -    - ABSENT
+       - PUBLIC
+       - PUBLIC
+  -    - WRITE_ONLY
+  -    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
+       jobId: "1"
+       relevantStatements:
   ...
        columnNames:
        - i
@@ -149,7 +302,6 @@ upsert descriptor #106
   -      defaultExpr: 42:::INT8
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
-  -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20
@@ -160,7 +312,10 @@ upsert descriptor #106
   -  - direction: ADD
   +  - direction: DROP
        index:
+  -      constraintId: 2
   -      createdExplicitly: true
+  +      constraintId: 1
+  +      createdAtNanos: "1640995200000000000"
          encodingType: 1
          foreignKey: {}
          geoConfig: {}
@@ -184,6 +339,9 @@ upsert descriptor #106
   ...
      parentId: 104
      primaryIndex:
+  -    constraintId: 1
+  -    createdAtNanos: "1640995200000000000"
+  +    constraintId: 2
   +    createdExplicitly: true
        encodingType: 1
        foreignKey: {}
@@ -206,37 +364,168 @@ upsert descriptor #106
      unexposedParentSchemaId: 105
   -  version: "3"
   +  version: "4"
-commit transaction #5
-begin transaction #6
-## PostCommitNonRevertiblePhase stage 1 of 2 with 2 MutationType ops
+commit transaction #6
+begin transaction #7
+## PostCommitNonRevertiblePhase stage 1 of 2 with 3 MutationType ops
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 upsert descriptor #106
+  ...
+       authorization: {}
+       currentStatuses:
+  -    - VALIDATED
+  +    - DELETE_ONLY
+       - ABSENT
+       - PUBLIC
   ...
          version: 4
        mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
   +    state: DELETE_ONLY
      name: tbl
-     newSchemaChangeJobId: "1"
+     nextColumnId: 3
   ...
        time: {}
      unexposedParentSchemaId: 105
   -  version: "4"
   +  version: "5"
-commit transaction #6
-begin transaction #7
+commit transaction #7
+begin transaction #8
 ## PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
 create job #2: "GC for dropping table 106 index 1"
   descriptor IDs: [106]
 update progress of schema change job #1
 upsert descriptor #106
   ...
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - DELETE_ONLY
+  -    - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT
+  -          NULL DEFAULT ‹42›
+  -        statement: ALTER TABLE db.public.tbl ADD COLUMN j INT8 NOT NULL DEFAULT 42
+  -        statementTag: ALTER TABLE
+  -    targetRanks:
+  -    - 0
+  -    - 1
+  -    - 2
+  -    - 3
+  -    - 4
+  -    - 5
+  -    - 6
+  -    - 7
+  -    targets:
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: tbl_pkey
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 2
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 2
+  -          name: j
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        columnType:
+  -          columnId: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 2
+  -          embeddedExpr:
+  -            expr: 42:::INT8
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 2
+  -            isUnique: true
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            sourceIndexId: 1
+  -            storingColumnIds:
+  -            - 2
+  -            tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 2
+  -          name: tbl_pkey
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
+     families:
+     - columnIds:
+  ...
      id: 106
      modificationTime: {}
   -  mutations:
   -  - direction: DROP
   -    index:
+  -      constraintId: 1
+  -      createdAtNanos: "1640995200000000000"
   -      encodingType: 1
   -      foreignKey: {}
   -      geoConfig: {}
@@ -257,13 +546,11 @@ upsert descriptor #106
   -    state: DELETE_ONLY
   +  mutations: []
      name: tbl
-  -  newSchemaChangeJobId: "1"
      nextColumnId: 3
-     nextFamilyId: 1
   ...
        time: {}
      unexposedParentSchemaId: 105
   -  version: "5"
   +  version: "6"
-commit transaction #7
+commit transaction #8
 # end PostCommitPhase

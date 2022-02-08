@@ -36,6 +36,8 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
+import { Moment } from "moment";
+import { formatDate } from "antd/es/date-picker/utils";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -101,6 +103,7 @@ export interface DatabaseDetailsPageDataTableDetails {
   userCount: number;
   roles: string[];
   grants: string[];
+  statsLastUpdated?: Moment;
 }
 
 export interface DatabaseDetailsPageDataTableStats {
@@ -350,6 +353,26 @@ export class DatabaseDetailsPage extends React.Component<
         name: "regions",
         showByDefault: this.props.showNodeRegionsColumn,
         hideIfTenant: true,
+      },
+      {
+        title: (
+          <Tooltip
+            placement="bottom"
+            title="The last time table statistics were created or updated."
+          >
+            Table Stats Last Updated (UTC)
+          </Tooltip>
+        ),
+        cell: table =>
+          !table.details.statsLastUpdated
+            ? "No table statistics found"
+            : formatDate(
+                table.details.statsLastUpdated,
+                "MMM DD, YYYY [at] h:mm A",
+              ),
+        sort: table => table.details.statsLastUpdated,
+        className: cx("database-table__col--table-stats"),
+        name: "tableStatsUpdated",
       },
     ];
   }

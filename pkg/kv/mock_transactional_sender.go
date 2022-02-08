@@ -196,6 +196,9 @@ func (m *MockTransactionalSender) Step(_ context.Context) error {
 	return nil
 }
 
+// SetReadSeqNum is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetReadSeqNum(_ enginepb.TxnSeq) error { return nil }
+
 // ConfigureStepping is part of the TxnSender interface.
 func (m *MockTransactionalSender) ConfigureStepping(context.Context, SteppingMode) SteppingMode {
 	// See Step() above.
@@ -215,6 +218,17 @@ func (m *MockTransactionalSender) ManualRefresh(ctx context.Context) error {
 // DeferCommitWait is part of the TxnSender interface.
 func (m *MockTransactionalSender) DeferCommitWait(ctx context.Context) func(context.Context) error {
 	panic("unimplemented")
+}
+
+// GetTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) GetTxnRetryableErr(
+	ctx context.Context,
+) *roachpb.TransactionRetryWithProtoRefreshError {
+	return nil
+}
+
+// ClearTxnRetryableErr is part of the TxnSender interface.
+func (m *MockTransactionalSender) ClearTxnRetryableErr(ctx context.Context) {
 }
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.

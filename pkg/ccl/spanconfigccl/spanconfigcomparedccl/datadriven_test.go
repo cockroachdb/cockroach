@@ -20,9 +20,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
@@ -106,14 +106,15 @@ func TestDataDriven(t *testing.T) {
 		{
 			tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 			tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+			tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 		}
 
 		spanConfigTestCluster := spanconfigtestcluster.NewHandle(t, tc, scKnobs, nil /* ptsKnobs */)
 		defer spanConfigTestCluster.Cleanup()
 
 		kvSubscriber := tc.Server(0).SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
-		underlyingGossip := tc.Server(0).GossipI().(*gossip.Gossip)
+		systemConfig := tc.Server(0).SystemConfigProvider().(*systemconfigwatcher.Cache)
 
 		systemTenant := spanConfigTestCluster.InitializeTenant(ctx, roachpb.SystemTenantID)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -142,7 +143,7 @@ func TestDataDriven(t *testing.T) {
 				//   configuration changes
 				testutils.SucceedsSoon(t, func() error {
 					for _, tenant := range spanConfigTestCluster.Tenants() {
-						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastExec()
+						lastCheckpoint, lastExec := tenant.LastCheckpoint(), tenant.TimestampAfterLastSQLChange()
 						if lastCheckpoint.IsEmpty() {
 							continue // reconciler wasn't started
 						}
@@ -161,15 +162,19 @@ func TestDataDriven(t *testing.T) {
 				// (i)  reconciliation processes;
 				// (ii) tenant initializations (where seed span configs are
 				//      installed).
-				now := systemTenant.Clock().Now()
-				testutils.SucceedsSoon(t, func() error {
-					lastUpdated := kvSubscriber.LastUpdated()
-					if lastUpdated.Less(now) {
-						return errors.Newf("kvsubscriber last updated timestamp (%s) lagging barrier timestamp (%s)",
-							lastUpdated.GoTime(), now.GoTime())
-					}
-					return nil
-				})
+				checkLastUpdated := func(t *testing.T, n string, c interface{ LastUpdated() hlc.Timestamp }) {
+					now := systemTenant.Clock().Now()
+					testutils.SucceedsSoon(t, func() error {
+						lastUpdated := c.LastUpdated()
+						if lastUpdated.Less(now) {
+							return errors.Newf("%s last updated timestamp (%s) lagging barrier timestamp (%s)",
+								n, lastUpdated.GoTime(), now.GoTime())
+						}
+						return nil
+					})
+				}
+				checkLastUpdated(t, "kvsubscriber", kvSubscriber)
+				checkLastUpdated(t, "systemconfigwatcher", systemConfig)
 
 				// As for the gossiped system config span, because we're using a
 				// single node cluster there's no additional timestamp
@@ -186,7 +191,7 @@ func TestDataDriven(t *testing.T) {
 			case "exec-sql":
 				// Run under an explicit transaction -- we rely on having a
 				// single timestamp for the statements (see
-				// tenant.TimestampAfterLastExec) for ordering guarantees.
+				// tenant.TimestampAfterLastSQLChange) for ordering guarantees.
 				tenant.Exec(fmt.Sprintf("BEGIN; %s; COMMIT;", d.Input))
 
 			case "query-sql":
@@ -221,7 +226,7 @@ func TestDataDriven(t *testing.T) {
 
 				var reader spanconfig.StoreReader
 				if version == "legacy" {
-					reader = underlyingGossip.GetSystemConfig()
+					reader = systemConfig.GetSystemConfig()
 				} else {
 					reader = kvSubscriber
 				}
@@ -230,7 +235,7 @@ func TestDataDriven(t *testing.T) {
 				return spanconfigtestutils.MaybeLimitAndOffset(t, d, "...", data)
 
 			case "diff":
-				var before, after spanconfig.StoreReader = underlyingGossip.GetSystemConfig(), kvSubscriber
+				var before, after spanconfig.StoreReader = systemConfig.GetSystemConfig(), kvSubscriber
 				diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 					A:        difflib.SplitLines(spanconfigtestutils.GetSplitPoints(ctx, t, before).String()),
 					B:        difflib.SplitLines(spanconfigtestutils.GetSplitPoints(ctx, t, after).String()),

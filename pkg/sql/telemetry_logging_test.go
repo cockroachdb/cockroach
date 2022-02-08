@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type stubTime struct {
@@ -105,12 +106,13 @@ func TestTelemetryLogging(t *testing.T) {
 	//		- statement type DML, enough time has elapsed
 
 	testData := []struct {
-		name                  string
-		query                 string
-		execTimestampsSeconds []float64 // Execute the query with the following timestamps.
-		expectedLogStatement  string
-		stubMaxEventFrequency int64
-		expectedSkipped       []int // Expected skipped query count per expected log line.
+		name                   string
+		query                  string
+		execTimestampsSeconds  []float64 // Execute the query with the following timestamps.
+		expectedLogStatement   string
+		stubMaxEventFrequency  int64
+		expectedSkipped        []int // Expected skipped query count per expected log line.
+		expectedUnredactedTags []string
 	}{
 		{
 			// Test case with statement that is not of type DML.
@@ -123,6 +125,7 @@ func TestTelemetryLogging(t *testing.T) {
 			`TRUNCATE TABLE`,
 			1,
 			[]int{0, 0, 0, 0},
+			[]string{"client"},
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -130,9 +133,10 @@ func TestTelemetryLogging(t *testing.T) {
 			"select-*-limit-1-query",
 			"SELECT * FROM t LIMIT 1;",
 			[]float64{3},
-			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹1›`,
+			`SELECT * FROM \"\".\"\".t LIMIT ‹1›`,
 			1,
 			[]int{0},
+			[]string{"client"},
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -141,9 +145,10 @@ func TestTelemetryLogging(t *testing.T) {
 			"select-*-limit-2-query",
 			"SELECT * FROM t LIMIT 2;",
 			[]float64{4, 4.1, 4.2, 5},
-			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹2›`,
+			`SELECT * FROM \"\".\"\".t LIMIT ‹2›`,
 			1,
 			[]int{0, 2},
+			[]string{"client"},
 		},
 		{
 			// Test case with statement that is of type DML.
@@ -151,9 +156,10 @@ func TestTelemetryLogging(t *testing.T) {
 			"select-*-limit-3-query",
 			"SELECT * FROM t LIMIT 3;",
 			[]float64{6, 6.01, 6.05, 6.06, 6.1, 6.2},
-			`SELECT * FROM ‹\"\"›.‹\"\"›.‹t› LIMIT ‹3›`,
+			`SELECT * FROM \"\".\"\".t LIMIT ‹3›`,
 			10,
 			[]int{0, 3, 0},
+			[]string{"client"},
 		},
 	}
 
@@ -219,6 +225,14 @@ func TestTelemetryLogging(t *testing.T) {
 				distRe := regexp.MustCompile("\"Distribution\":(\"full\"|\"local\")")
 				if !distRe.MatchString(e.Message) {
 					t.Errorf("expected to find Distribution but none was found")
+				}
+				for _, eTag := range tc.expectedUnredactedTags {
+					for _, tag := range strings.Split(e.Tags, ",") {
+						kv := strings.Split(tag, "=")
+						if kv[0] == eTag && strings.ContainsAny(kv[0], fmt.Sprintf("%s%s", redact.StartMarker(), redact.EndMarker())) {
+							t.Errorf("expected tag %s to be redacted within tags: %s", tag, e.Tags)
+						}
+					}
 				}
 			}
 		}

@@ -102,5 +102,8 @@ func (s *MemStorage) Get(id string, read func(io.Reader) error) error {
 			return read(bytes.NewReader(v.b))
 		}
 	}
-	return errors.Errorf("profile not found; it may have expired")
+	return errors.Errorf("profile not found; it may have expired, please regenerate the profile.\n" +
+		"To generate profile for a node, use the profile generation link from the Advanced Debug page.\n" +
+		"Attempting to generate a profile by modifying the node query parameter in the URL will not work.",
+	)
 }

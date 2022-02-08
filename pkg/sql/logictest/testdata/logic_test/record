@@ -36,12 +36,9 @@ SELECT (1, 'foo')::public.a, (1, 'foo')::test.public.a
 ----
 (1,foo) (1,foo)
 
-statement ok
-SET experimental_enable_hash_sharded_indexes=true
-
 # The tuple type doesn't contain implicit columns like rowid or hash columns.
 statement ok
-CREATE TABLE implicit_col(d INT, e TEXT, INDEX (e) USING HASH WITH BUCKET_COUNT = 8)
+CREATE TABLE implicit_col(d INT, e TEXT, INDEX (e) USING HASH WITH (bucket_count=8))
 
 query T
 SELECT (1, 'foo')::implicit_col

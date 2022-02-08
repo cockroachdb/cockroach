@@ -60,13 +60,18 @@ func runLsNodes(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
+	// TODO(knz): This can use a context deadline instead, now that
+	// query cancellation is supported.
 	if cliCtx.cmdTimeout != 0 {
-		if err := conn.Exec(fmt.Sprintf("SET statement_timeout=%d", cliCtx.cmdTimeout), nil); err != nil {
+		if err := conn.Exec(ctx,
+			"SET statement_timeout = $1", cliCtx.cmdTimeout.String()); err != nil {
 			return err
 		}
 	}
 
-	_, rows, err := sqlExecCtx.RunQuery(
+	_, rows, err := sqlExecCtx.RunQuery(ctx,
 		conn,
 		clisqlclient.MakeQuery(`SELECT node_id FROM crdb_internal.gossip_liveness
                WHERE membership = 'active' OR split_part(expiration,',',1)::decimal > now()::decimal`),
@@ -221,8 +226,13 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 		queriesToJoin = append(queriesToJoin, decommissionQuery)
 	}
 
+	ctx := context.Background()
+
+	// TODO(knz): This can use a context deadline instead, now that
+	// query cancellation is supported.
 	if cliCtx.cmdTimeout != 0 {
-		if err := conn.Exec(fmt.Sprintf("SET statement_timeout=%d", cliCtx.cmdTimeout), nil); err != nil {
+		if err := conn.Exec(ctx,
+			"SET statement_timeout = $1", cliCtx.cmdTimeout.String()); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -232,14 +242,14 @@ FROM crdb_internal.gossip_liveness LEFT JOIN crdb_internal.gossip_nodes USING (n
 	switch len(args) {
 	case 0:
 		query := clisqlclient.MakeQuery(queryString + " ORDER BY id")
-		return sqlExecCtx.RunQuery(conn, query, false)
+		return sqlExecCtx.RunQuery(ctx, conn, query, false)
 	case 1:
 		nodeID, err := strconv.Atoi(args[0])
 		if err != nil {
 			return nil, nil, errors.Errorf("could not parse node_id %s", args[0])
 		}
 		query := clisqlclient.MakeQuery(queryString+" WHERE id = $1", nodeID)
-		headers, rows, err := sqlExecCtx.RunQuery(conn, query, false)
+		headers, rows, err := sqlExecCtx.RunQuery(ctx, conn, query, false)
 		if err != nil {
 			return nil, nil, err
 		}

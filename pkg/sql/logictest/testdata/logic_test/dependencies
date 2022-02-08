@@ -42,13 +42,16 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 115            test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:0 oid:20 time_precision_is_set:false        false     unique_rowid()  true
 
 query ITITTBBB colnames
-SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
+  SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded
+    FROM crdb_internal.table_indexes
+   WHERE descriptor_name LIKE 'test_%'
+ORDER BY descriptor_id, index_id
 ----
 descriptor_id  descriptor_name  index_id  index_name            index_type  is_unique  is_inverted  is_sharded
 106            test_kv          1         test_kv_pkey          primary     true       false        false
 106            test_kv          2         test_v_idx            secondary   true       false        false
-106            test_kv          3         test_v_idx2           secondary   false      false        false
-106            test_kv          4         test_v_idx3           secondary   false      false        false
+106            test_kv          4         test_v_idx2           secondary   false      false        false
+106            test_kv          6         test_v_idx3           secondary   false      false        false
 107            test_kvr1        1         test_kvr1_pkey        primary     true       false        false
 108            test_kvr2        1         test_kvr2_pkey        primary     true       false        false
 108            test_kvr2        2         test_kvr2_v_key       secondary   true       false        false
@@ -69,13 +72,13 @@ descriptor_id  descriptor_name  index_id  index_name            column_type  col
 106            test_kv          1         test_kv_pkey          key          1          k            ASC               false
 106            test_kv          2         test_v_idx            extra        1          NULL         NULL              false
 106            test_kv          2         test_v_idx            key          2          v            ASC               false
-106            test_kv          3         test_v_idx2           extra        1          NULL         NULL              false
-106            test_kv          3         test_v_idx2           key          2          v            DESC              false
-106            test_kv          3         test_v_idx2           storing      3          NULL         NULL              false
-106            test_kv          4         test_v_idx3           composite    3          NULL         NULL              false
-106            test_kv          4         test_v_idx3           extra        1          NULL         NULL              false
-106            test_kv          4         test_v_idx3           key          3          w            ASC               false
-106            test_kv          4         test_v_idx3           storing      2          NULL         NULL              false
+106            test_kv          4         test_v_idx2           extra        1          NULL         NULL              false
+106            test_kv          4         test_v_idx2           key          2          v            DESC              false
+106            test_kv          4         test_v_idx2           storing      3          NULL         NULL              false
+106            test_kv          6         test_v_idx3           composite    3          NULL         NULL              false
+106            test_kv          6         test_v_idx3           extra        1          NULL         NULL              false
+106            test_kv          6         test_v_idx3           key          3          w            ASC               false
+106            test_kv          6         test_v_idx3           storing      2          NULL         NULL              false
 107            test_kvr1        1         test_kvr1_pkey        key          1          k            ASC               false
 108            test_kvr2        1         test_kvr2_pkey        key          3          rowid        ASC               false
 108            test_kvr2        2         test_kvr2_v_key       extra        3          NULL         NULL              false

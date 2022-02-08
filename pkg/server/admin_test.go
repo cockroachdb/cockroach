@@ -673,6 +673,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				"CREATE USER app",
 				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, tblName),
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, tblName),
+				fmt.Sprintf("CREATE STATISTICS test_stats FROM %s.%s", escDBName, tblName),
 			}
 			pgURL, cleanupGoDB := sqlutils.PGUrl(
 				t, s.ServingSQLAddr(), "StartServer" /* prefix */, url.User(security.RootUser))
@@ -776,6 +777,22 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 				if a, e := resp.CreateTableStatement, createStmt; a != e {
 					t.Fatalf("mismatched create table statement; expected %s, got %s", e, a)
+				}
+			}
+
+			// Verify statistics last updated.
+			{
+
+				showStatisticsForTableQuery := fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s.%s]", escDBName, tblName)
+
+				row := db.QueryRow(showStatisticsForTableQuery)
+				var createdTs time.Time
+				if err := row.Scan(&createdTs); err != nil {
+					t.Fatal(err)
+				}
+
+				if a, e := resp.StatsLastCreatedAt, createdTs; reflect.DeepEqual(a, e) {
+					t.Fatalf("mismatched statistics creation timestamp; expected %s, got %s", e, a)
 				}
 			}
 
@@ -1379,13 +1396,13 @@ func TestHealthAPI(t *testing.T) {
 	})
 
 	// Make the SQL listener appear unavailable. Verify that health fails after that.
-	ts.sqlServer.acceptingClients.Set(false)
+	ts.sqlServer.isReady.Set(false)
 	var resp serverpb.HealthResponse
 	err := getAdminJSONProto(s, "health?ready=1", &resp)
 	if err == nil {
 		t.Error("server appears ready even though SQL listener is not")
 	}
-	ts.sqlServer.acceptingClients.Set(true)
+	ts.sqlServer.isReady.Set(true)
 	err = getAdminJSONProto(s, "health?ready=1", &resp)
 	if err != nil {
 		t.Errorf("server not ready after SQL listener is ready again: %v", err)
@@ -2395,14 +2412,14 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.DataDistribution(ctx, &serverpb.DataDistributionRequest{})
 			return err
 		}},
-		{"Decommission", codes.Unknown, func(c serverpb.AdminClient) error {
+		{"Decommission", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.Decommission(ctx, &serverpb.DecommissionRequest{
 				NodeIDs:          []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			})
 			return err
 		}},
-		{"DecommissionStatus", codes.Unknown, func(c serverpb.AdminClient) error {
+		{"DecommissionStatus", codes.Internal, func(c serverpb.AdminClient) error {
 			_, err := c.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
 				NodeIDs: []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 			})

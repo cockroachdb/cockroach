@@ -56,12 +56,14 @@ message NotLeaseHolderError {
   optional roachpb.Lease lease = 4;
   optional int64 range_id = 3 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
-  // The range descriptor generation of the replica the error originated from.
-  // Used by the DistSender's RangeCache to determine whether the error was
-  // returned because the replica had a stale understanding of who the
-  // leaseholder is.
-  optional int64 descriptor_generation = 6 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "DescriptorGeneration", (gogoproto.casttype) = "RangeGeneration"];
+  // The range descriptor from the replica the error originated from.
+  // The generation of the descriptor is used by the DistSender's RangeCache to
+  // determine whether the error was returned because the replica had a stale
+  // understanding of who the leaseholder is.
+  // TOOD(arul): In the future we may want to update the RangeCache if the
+  // returned range descriptor is newer than what is in the RangeCache. This
+  // would help us avoid a cache eviction/descriptor lookup.
+  optional roachpb.RangeDescriptor range_desc = 6 [(gogoproto.nullable)=false];
   // If set, the Error() method will return this instead of composing its
   // regular spiel. Useful because we reuse this error when rejecting a command
   // because the lease under which its application was attempted is different
@@ -484,6 +486,10 @@ message IntegerOverflowError {
 message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Timestamp = 1 [(gogoproto.nullable) = false];
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
+  // DataExcludedFromBackup is set to true if the request is targeting a range
+  // that has been marked as excluded from a backup via
+  // `ALTER TABLE ... SET (exclude_data_from_backup = true)`.
+  optional bool data_excluded_from_backup = 3 [(gogoproto.nullable) = false];
 }
 
 // A MVCCHistoryMutationError indicates that MVCC history was unexpectedly

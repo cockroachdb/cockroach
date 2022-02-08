@@ -24,10 +24,11 @@ import (
 func executeValidateUniqueIndex(
 	ctx context.Context, deps Dependencies, op *scop.ValidateUniqueIndex,
 ) error {
-	desc, err := deps.Catalog().MustReadImmutableDescriptor(ctx, op.TableID)
+	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
+	desc := descs[0]
 	table, ok := desc.(catalog.TableDescriptor)
 	if !ok {
 		return catalog.WrapTableDescRefErr(desc.GetID(), catalog.NewDescriptorTypeError(desc))

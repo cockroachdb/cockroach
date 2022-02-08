@@ -53,6 +53,12 @@ fi
 
 bazel run //:gazelle
 
+if files_unchanged_from_upstream $(find ./pkg -name '*.proto') $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl') $(find ./docs -name 'BUILD.bazel') $(find ./docs -name '*.bzl') $(find ./pkg/gen/genbzl -name '*.go'); then
+  echo "Skipping //pkg/gen/genbzl (relevant files are unchanged from upstream)."
+else
+  bazel run pkg/gen/genbzl --run_under="cd $PWD && " -- --out-dir pkg/gen
+fi
+
 if files_unchanged_from_upstream $(find ./pkg -name BUILD.bazel) $(find ./pkg -name '*.bzl'); then
   echo "Skipping //pkg/cmd/generate-test-suites (relevant files are unchanged from upstream)."
 else

@@ -20,14 +20,22 @@ import (
 func (d *delegator) delegateShowClusterSettingList(
 	stmt *tree.ShowClusterSettingList,
 ) (tree.Statement, error) {
+	isAdmin, err := d.catalog.HasAdminRole(d.ctx)
+	if err != nil {
+		return nil, err
+	}
 	hasModify, err := d.catalog.HasRoleOption(d.ctx, roleoption.MODIFYCLUSTERSETTING)
 	if err != nil {
 		return nil, err
 	}
-	if !hasModify {
+	hasView, err := d.catalog.HasRoleOption(d.ctx, roleoption.VIEWCLUSTERSETTING)
+	if err != nil {
+		return nil, err
+	}
+	if !hasModify && !hasView && !isAdmin {
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"only users with the %s privilege are allowed to SHOW CLUSTER SETTINGS",
-			roleoption.MODIFYCLUSTERSETTING)
+			"only users with either %s or %s privileges are allowed to SHOW CLUSTER SETTINGS",
+			roleoption.MODIFYCLUSTERSETTING, roleoption.VIEWCLUSTERSETTING)
 	}
 	if stmt.All {
 		return parse(

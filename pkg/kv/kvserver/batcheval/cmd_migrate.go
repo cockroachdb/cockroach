@@ -12,6 +12,7 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -29,7 +30,11 @@ func init() {
 }
 
 func declareKeysMigrate(
-	rs ImmutableRangeState, _ *roachpb.Header, _ roachpb.Request, latchSpans, _ *spanset.SpanSet,
+	rs ImmutableRangeState,
+	_ *roachpb.Header,
+	_ roachpb.Request,
+	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	// TODO(irfansharif): This will eventually grow to capture the super set of
 	// all keys accessed by all migrations defined here. That could get

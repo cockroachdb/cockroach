@@ -63,7 +63,8 @@ func ColumnMutationFilter(m catalog.Mutation) bool {
 
 // IndexMutationFilter is a filter that allows mutations that add indexes.
 func IndexMutationFilter(m catalog.Mutation) bool {
-	return m.AsIndex() != nil && m.Adding()
+	idx := m.AsIndex()
+	return idx != nil && !idx.IsTemporaryIndexForBackfill() && m.Adding()
 }
 
 // ColumnBackfiller is capable of running a column backfill for all
@@ -78,7 +79,7 @@ type ColumnBackfiller struct {
 	evalCtx     *tree.EvalContext
 
 	fetcher     row.Fetcher
-	fetcherCols []catalog.Column
+	fetcherCols []descpb.ColumnID
 	colIdxMap   catalog.TableColMap
 	alloc       tree.DatumAlloc
 
@@ -132,15 +133,14 @@ func (cb *ColumnBackfiller) init(
 	// We need all the non-virtual columns.
 	for _, c := range desc.PublicColumns() {
 		if !c.IsVirtual() {
-			cb.fetcherCols = append(cb.fetcherCols, c)
+			cb.fetcherCols = append(cb.fetcherCols, c.GetID())
 		}
 	}
 
 	cb.colIdxMap = catalog.ColumnIDToOrdinalMap(desc.PublicColumns())
-	tableArgs := row.FetcherTableArgs{
-		Desc:    desc,
-		Index:   desc.GetPrimaryIndex(),
-		Columns: cb.fetcherCols,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, evalCtx.Codec, desc, desc.GetPrimaryIndex(), cb.fetcherCols); err != nil {
+		return err
 	}
 
 	// Create a bound account associated with the column backfiller.
@@ -152,14 +152,13 @@ func (cb *ColumnBackfiller) init(
 
 	return cb.fetcher.Init(
 		evalCtx.Context,
-		evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&cb.alloc,
 		cb.mon,
-		tableArgs,
+		&spec,
 	)
 }
 
@@ -819,10 +818,10 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	memUsedPerChunk += indexEntriesInChunkInitialBufferSize
 	entries := make([]rowenc.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
 
-	var fetcherCols []catalog.Column
+	var fetcherCols []descpb.ColumnID
 	for i, c := range ib.cols {
 		if ib.valNeededForCol.Contains(i) {
-			fetcherCols = append(fetcherCols, c)
+			fetcherCols = append(fetcherCols, c.GetID())
 		}
 	}
 	if ib.rowVals == nil {
@@ -840,22 +839,22 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// during the scan. Index entries in the new index are being
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
-	tableArgs := row.FetcherTableArgs{
-		Desc:    tableDesc,
-		Index:   tableDesc.GetPrimaryIndex(),
-		Columns: fetcherCols,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&spec, ib.evalCtx.Codec, tableDesc, tableDesc.GetPrimaryIndex(), fetcherCols,
+	); err != nil {
+		return nil, nil, 0, err
 	}
 	var fetcher row.Fetcher
 	if err := fetcher.Init(
 		ib.evalCtx.Context,
-		ib.evalCtx.Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&ib.alloc,
 		ib.mon,
-		tableArgs,
+		&spec,
 	); err != nil {
 		return nil, nil, 0, err
 	}

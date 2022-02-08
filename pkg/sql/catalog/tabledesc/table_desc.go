@@ -12,7 +12,9 @@
 package tabledesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,6 +27,10 @@ var _ catalog.TableDescriptor = (*immutable)(nil)
 var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
+
+// ConstraintIDsAddedToTableDescsVersion constraint IDs have been added to table
+// descriptors at this cluster version.
+const ConstraintIDsAddedToTableDescsVersion = clusterversion.RemoveIncompatibleDatabasePrivileges
 
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
@@ -39,7 +45,7 @@ type wrapper struct {
 	indexCache    *indexCache
 	columnCache   *columnCache
 
-	postDeserializationChanges PostDeserializationTableDescriptorChanges
+	changes catalog.PostDeserializationChanges
 }
 
 // IsUncommittedVersion implements the catalog.Descriptor interface.
@@ -49,18 +55,8 @@ func (*wrapper) IsUncommittedVersion() bool {
 
 // GetPostDeserializationChanges returns the set of changes which occurred to
 // this descriptor post deserialization.
-func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {
-	return desc.postDeserializationChanges
-}
-
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *wrapper) HasPostDeserializationChanges() bool {
-	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
-		desc.postDeserializationChanges.UpgradedFormatVersion ||
-		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
-		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges
+func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return desc.changes
 }
 
 // ActiveChecks implements the TableDescriptor interface.
@@ -108,7 +104,7 @@ func (desc *wrapper) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TableDesc())
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -123,10 +119,15 @@ func (desc *wrapper) IsTemporary() bool {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	if desc.IsUncommittedVersion() {
-		return NewBuilderForUncommittedVersion(desc.TableDesc()).BuildImmutable()
-	}
-	return NewBuilder(desc.TableDesc()).BuildImmutable()
+	return desc.NewBuilder().BuildImmutable()
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -177,7 +178,7 @@ func UpdateIndexPartitioning(
 	idx *descpb.IndexDescriptor,
 	isIndexPrimary bool,
 	newImplicitCols []catalog.Column,
-	newPartitioning descpb.PartitioningDescriptor,
+	newPartitioning catpb.PartitioningDescriptor,
 ) bool {
 	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
 	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
@@ -421,6 +422,21 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().system
 }
 
+// FamilyDefaultColumns implements the TableDescriptor interface.
+func (desc *wrapper) FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn {
+	return desc.getExistingOrNewColumnCache().familyDefaultColumns
+}
+
+// PublicColumnIDs implements the TableDescriptor interface.
+func (desc *wrapper) PublicColumnIDs() []descpb.ColumnID {
+	cols := desc.PublicColumns()
+	res := make([]descpb.ColumnID, len(cols))
+	for i, c := range cols {
+		res[i] = c.GetID()
+	}
+	return res
+}
+
 // IndexColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
@@ -477,6 +493,16 @@ func (desc *wrapper) IndexFullColumnDirections(
 func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
 		return ic.stored
+	}
+	return nil
+}
+
+// IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
+	idx catalog.Index,
+) []descpb.IndexFetchSpec_KeyColumn {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyAndSuffix
 	}
 	return nil
 }

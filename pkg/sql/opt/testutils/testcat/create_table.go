@@ -76,7 +76,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	tab := &Table{TabID: tc.nextStableID(), TabName: stmt.Table, Catalog: tc}
 
-	// Find the PK columns; we have to force these to be non-nullable.
+	// Find the PK columns.
 	pkCols := make(map[tree.Name]struct{})
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
@@ -100,7 +100,11 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		case *tree.ColumnTableDef:
 			if !isMutationColumn(def) {
 				if _, isPKCol := pkCols[def.Name]; isPKCol {
+					// Force PK columns to be non-nullable and non-virtual.
 					def.Nullable.Nullability = tree.NotNull
+					if def.Computed.Computed {
+						def.Computed.Virtual = false
+					}
 				}
 				tab.addColumn(def)
 			}
@@ -398,7 +402,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		// If no columns are specified, attempt to default to PK, ignoring implicit
 		// columns.
 		idx := targetTable.Index(cat.PrimaryIndex)
-		numImplicitCols := idx.ImplicitPartitioningColumnCount()
+		numImplicitCols := idx.ImplicitColumnCount()
 		referencedColNames = make(
 			tree.NameList,
 			0,
@@ -685,7 +689,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 }
 
 func (tt *Table) addIndex(def *tree.IndexTableDef, typ indexType) *Index {
-	return tt.addIndexWithVersion(def, typ, descpb.LatestNonPrimaryIndexDescriptorVersion)
+	return tt.addIndexWithVersion(def, typ, descpb.PrimaryIndexWithStoredColumnsVersion)
 }
 
 func (tt *Table) addIndexWithVersion(
@@ -714,7 +718,8 @@ func (tt *Table) addIndexWithVersion(
 		tt.deleteOnlyIdxCount++
 	}
 
-	// Add explicit columns and mark primary key columns as not null.
+	// Add explicit columns. Primary key columns definitions have already been
+	// updated to be non-nullable and non-virtual.
 	// Add the geoConfig if applicable.
 	idx.ExplicitColCount = len(def.Columns)
 	notNullIndex := true
@@ -1043,10 +1048,20 @@ func (ti *Index) addColumn(
 
 // columnForIndexElemExpr returns a VirtualComputed table column that can be
 // used as an index column when the index element is an expression. If an
-// existing VirtualComputed column with the same expression exists, it is
-// reused. Otherwise, a new column is added to the table.
+// existing, inaccessible, VirtualComputed column with the same expression
+// exists, it is reused. Otherwise, a new column is added to the table.
 func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 	exprStr := serializeTableDefExpr(expr)
+
+	// Find an existing, inaccessible, virtual computed column with the same
+	// expression.
+	for _, col := range tt.Columns {
+		if col.IsVirtualComputed() &&
+			col.Visibility() == cat.Inaccessible &&
+			col.ComputedExprStr() == exprStr {
+			return col
+		}
+	}
 
 	// Add a new virtual computed column with a unique name.
 	prefix := "crdb_internal_idx_expr"

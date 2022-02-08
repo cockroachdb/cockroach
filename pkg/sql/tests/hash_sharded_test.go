@@ -90,14 +90,11 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 	if _, err := db.Exec(`USE d`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`SET experimental_enable_hash_sharded_indexes = true`); err != nil {
-		t.Fatal(err)
-	}
 
 	t.Run("primary", func(t *testing.T) {
 		if _, err := db.Exec(`
 			CREATE TABLE kv_primary (
-				k INT PRIMARY KEY USING HASH WITH BUCKET_COUNT=5,
+				k INT PRIMARY KEY USING HASH WITH (bucket_count=5),
 				v BYTES
 			)
 		`); err != nil {
@@ -135,7 +132,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			CREATE TABLE kv_secondary (
 				k INT,
 				v BYTES,
-				INDEX sharded_secondary (k) USING HASH WITH BUCKET_COUNT = 12
+				INDEX sharded_secondary (k) USING HASH WITH (bucket_count=12)
 			)
 		`); err != nil {
 			t.Fatal(err)
@@ -155,7 +152,7 @@ func TestBasicHashShardedIndexes(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH BUCKET_COUNT = 12`); err != nil {
+		if _, err := db.Exec(`CREATE INDEX sharded_secondary2 ON kv_secondary2 (k) USING HASH WITH (bucket_count=12)`); err != nil {
 			t.Fatal(err)
 		}
 		tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `kv_secondary2`)

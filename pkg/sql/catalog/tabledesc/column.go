@@ -251,28 +251,30 @@ func (w column) HasGeneratedAsIdentitySequenceOption() bool {
 
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
-	all        []catalog.Column
-	public     []catalog.Column
-	writable   []catalog.Column
-	deletable  []catalog.Column
-	nonDrop    []catalog.Column
-	visible    []catalog.Column
-	accessible []catalog.Column
-	readable   []catalog.Column
-	withUDTs   []catalog.Column
-	system     []catalog.Column
-	index      []indexColumnCache
+	all                  []catalog.Column
+	public               []catalog.Column
+	writable             []catalog.Column
+	deletable            []catalog.Column
+	nonDrop              []catalog.Column
+	visible              []catalog.Column
+	accessible           []catalog.Column
+	readable             []catalog.Column
+	withUDTs             []catalog.Column
+	system               []catalog.Column
+	familyDefaultColumns []descpb.IndexFetchSpec_FamilyDefaultColumn
+	index                []indexColumnCache
 }
 
 type indexColumnCache struct {
-	all       []catalog.Column
-	allDirs   []descpb.IndexDescriptor_Direction
-	key       []catalog.Column
-	keyDirs   []descpb.IndexDescriptor_Direction
-	stored    []catalog.Column
-	keySuffix []catalog.Column
-	full      []catalog.Column
-	fullDirs  []descpb.IndexDescriptor_Direction
+	all          []catalog.Column
+	allDirs      []descpb.IndexDescriptor_Direction
+	key          []catalog.Column
+	keyDirs      []descpb.IndexDescriptor_Direction
+	stored       []catalog.Column
+	keySuffix    []catalog.Column
+	full         []catalog.Column
+	fullDirs     []descpb.IndexDescriptor_Direction
+	keyAndSuffix []descpb.IndexFetchSpec_KeyColumn
 }
 
 // newColumnCache returns a fresh fully-populated columnCache struct for the
@@ -336,6 +338,20 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 			lazyAllocAppendColumn(&c.withUDTs, col, numDeletable)
 		}
 	}
+
+	// Populate familyDefaultColumns.
+	for i := range desc.Families {
+		if f := &desc.Families[i]; f.DefaultColumnID != 0 {
+			if c.familyDefaultColumns == nil {
+				c.familyDefaultColumns = make([]descpb.IndexFetchSpec_FamilyDefaultColumn, 0, len(desc.Families)-i)
+			}
+			c.familyDefaultColumns = append(c.familyDefaultColumns, descpb.IndexFetchSpec_FamilyDefaultColumn{
+				FamilyID:        f.ID,
+				DefaultColumnID: f.DefaultColumnID,
+			})
+		}
+	}
+
 	// Populate the per-index column cache
 	c.index = make([]indexColumnCache, 0, 1+len(desc.Indexes)+len(mutations.indexes))
 	c.index = append(c.index, makeIndexColumnCache(&desc.PrimaryIndex, c.all))
@@ -372,6 +388,43 @@ func makeIndexColumnCache(idx *descpb.IndexDescriptor, all []catalog.Column) (ic
 	}
 	ic.full = ic.all[:nFull]
 	ic.fullDirs = ic.allDirs[:nFull]
+
+	// Populate keyAndSuffix. Note that this method can be called on an incomplete
+	// (mutable) descriptor (e.g. as part of initializing a new descriptor); this
+	// code needs to tolerate any descriptor state (like having no key columns, or
+	// having uninitialized column IDs).
+	var invertedColumnID descpb.ColumnID
+	if nKey > 0 && idx.Type == descpb.IndexDescriptor_INVERTED {
+		invertedColumnID = idx.InvertedColumnID()
+	}
+	var compositeIDs catalog.TableColSet
+	for _, colID := range idx.CompositeColumnIDs {
+		compositeIDs.Add(colID)
+	}
+	ic.keyAndSuffix = make([]descpb.IndexFetchSpec_KeyColumn, nKey+nKeySuffix)
+	for i := range ic.keyAndSuffix {
+		col := ic.all[i]
+		if col == nil {
+			ic.keyAndSuffix[i].Name = "invalid"
+			continue
+		}
+		colID := col.GetID()
+		typ := col.GetType()
+		if colID != 0 && colID == invertedColumnID {
+			typ = idx.InvertedColumnKeyType()
+		}
+		ic.keyAndSuffix[i] = descpb.IndexFetchSpec_KeyColumn{
+			IndexFetchSpec_Column: descpb.IndexFetchSpec_Column{
+				Name:          col.GetName(),
+				ColumnID:      colID,
+				Type:          typ,
+				IsNonNullable: !col.IsNullable(),
+			},
+			Direction:   ic.allDirs[i],
+			IsComposite: compositeIDs.Contains(colID),
+			IsInverted:  colID == invertedColumnID,
+		}
+	}
 	return ic
 }
 

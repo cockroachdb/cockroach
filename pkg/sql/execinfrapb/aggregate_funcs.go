@@ -65,4 +65,12 @@ const (
 	FinalRegrSxx            = AggregatorSpec_FINAL_REGR_SXX
 	FinalRegrSxy            = AggregatorSpec_FINAL_REGR_SXY
 	FinalRegrSyy            = AggregatorSpec_FINAL_REGR_SYY
+	FinalRegrAvgx           = AggregatorSpec_FINAL_REGR_AVGX
+	FinalRegrAvgy           = AggregatorSpec_FINAL_REGR_AVGY
+	FinalRegrIntercept      = AggregatorSpec_FINAL_REGR_INTERCEPT
+	FinalRegrR2             = AggregatorSpec_FINAL_REGR_R2
+	FinalRegrSlope          = AggregatorSpec_FINAL_REGR_SLOPE
+	FinalCovarSamp          = AggregatorSpec_FINAL_COVAR_SAMP
+	FinalCorr               = AggregatorSpec_FINAL_CORR
+	FinalSqrdiff            = AggregatorSpec_FINAL_SQRDIFF
 )

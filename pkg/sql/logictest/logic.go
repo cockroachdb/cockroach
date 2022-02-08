@@ -289,6 +289,10 @@ import (
 //    in the cluster with index N (note this is 0-indexed, while
 //    node IDs themselves are 1-indexed).
 //
+//    A "host-cluster-" prefix can be prepended to the user, which will force
+//    the user session to be against the host cluster (useful for multi-tenant
+//    configurations).
+//
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is
 //    postgresql, cockroachdb, or a config matching the currently
@@ -507,9 +511,6 @@ type testClusterConfig struct {
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	localities map[int]roachpb.Locality
-	// declarativeSchemaChanger determines if the declarative schema changer
-	// is enabled.
-	declarativeSchemaChanger bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -583,13 +584,6 @@ var logicTestConfigs = []testClusterConfig{
 		numNodes:            1,
 		overrideDistSQLMode: "off",
 		overrideAutoStats:   "false",
-	},
-	{
-		name:                     "local-declarative-schema",
-		numNodes:                 5,
-		overrideDistSQLMode:      "off",
-		overrideAutoStats:        "false",
-		declarativeSchemaChanger: true,
 	},
 	{
 		name:                "local-vec-off",
@@ -809,7 +803,6 @@ var (
 	defaultConfigName  = "default-configs"
 	defaultConfigNames = []string{
 		"local",
-		"local-declarative-schema",
 		"local-vec-off",
 		"local-spec-planning",
 		"fakedist",
@@ -1370,10 +1363,11 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 
 	addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
-	if len(t.tenantAddrs) > 0 {
+	if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
 		addr = t.tenantAddrs[nodeIdx]
 	}
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
+	pgUser := strings.TrimPrefix(user, "host-cluster-")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 	pgURL.Path = "test"
 	db := t.openDB(pgURL)
 
@@ -1392,7 +1386,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 	t.clients[user] = db
 	t.db = db
-	t.user = user
+	t.user = pgUser
 
 	return cleanupFunc
 }
@@ -1490,7 +1484,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 		if params.ServerArgs.Knobs.Server == nil {
 			params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
 		}
-		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = 1
+		params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade = make(chan struct{})
 	}
 	for _, opt := range opts {
 		opt.apply(&params.ServerArgs)
@@ -1675,14 +1669,6 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 			"SET CLUSTER SETTING sql.crdb_internal.table_row_statistics.as_of_time = '-1µs'",
 		); err != nil {
 			t.Fatal(err)
-		}
-
-		if cfg.declarativeSchemaChanger {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'on'",
-			); err != nil {
-				t.Fatal(err)
-			}
 		}
 	}
 

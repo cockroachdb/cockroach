@@ -385,8 +385,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
 CREATE TABLE public.regional_primary_region_table (
                                                 a INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (a, rowid)
+                                                CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -421,8 +420,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region
 CREATE TABLE public.regional_implicit_primary_region_table (
                                                 a INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (a, rowid)
+                                                CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
@@ -447,8 +445,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE "regional_us-east-1_table"]
 CREATE TABLE public."regional_us-east-1_table" (
                                              a INT8 NULL,
                                              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                             CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC),
-                                             FAMILY "primary" (a, rowid)
+                                             CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
@@ -476,8 +473,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE global_table]
 CREATE TABLE public.global_table (
                    a INT8 NULL,
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                   CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC),
-                   FAMILY "primary" (a, rowid)
+                   CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY GLOBAL
 
 query TT
@@ -1030,8 +1026,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE no_initial_region.t]
 CREATE TABLE public.t (
                                                 k INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (k, rowid)
+                                                CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
@@ -1457,8 +1452,7 @@ CREATE TABLE public.t_as (
                                                 i INT8 NULL,
                                                 crdb_region public.crdb_internal_region NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (i, crdb_region, rowid)
+                                                CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 
@@ -1485,8 +1479,7 @@ CREATE TABLE public.t_as (
                                            i INT8 NULL,
                                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
                                            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                           CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC),
-                                           FAMILY "primary" (i, crdb_region, rowid)
+                                           CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query TI colnames
@@ -1528,8 +1521,7 @@ create_statement
 CREATE TABLE public.t_as (
                                            i INT8 NOT NULL,
                                            crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                                           CONSTRAINT t_as_pkey PRIMARY KEY (i ASC),
-                                           FAMILY "primary" (i, crdb_region)
+                                           CONSTRAINT t_as_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query T colnames
@@ -1539,8 +1531,7 @@ create_statement
 CREATE TABLE public.t (
                             i INT8 NOT NULL,
                             crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
-                            CONSTRAINT t_pkey PRIMARY KEY (i ASC),
-                            FAMILY "primary" (i, crdb_region)
+                            CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 ) LOCALITY REGIONAL BY ROW
 
 # Declare victory, as this is the closest we can get.

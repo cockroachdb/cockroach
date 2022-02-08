@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
@@ -319,14 +320,18 @@ func TestUnsplitRanges(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          clusterversion.ByKey(tc.binaryVersion),
 		}
+		params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 		defer gcjob.SetSmallMaxGCIntervalForTest()()
 
 		s, sqlDB, kvDB := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
+
+		// Speed up how long it takes for the zone config changes to propagate.
+		sqltestutils.SetShortRangeFeedIntervals(t, sqlDB)
 
 		// Disable strict GC TTL enforcement because we're going to shove a zero-value
 		// TTL into the system with AddImmediateGCZoneConfig.

@@ -107,10 +107,14 @@ func (s *SerialUnorderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata
 }
 
 // Close is part of the colexecop.ClosableOperator interface.
-func (s *SerialUnorderedSynchronizer) Close() error {
+func (s *SerialUnorderedSynchronizer) Close(context.Context) error {
+	// Note that we're using the context of the synchronizer rather than the
+	// argument of Close() because the synchronizer derives its own tracing
+	// span.
+	ctx := s.EnsureCtx()
 	var lastErr error
 	for _, input := range s.inputs {
-		if err := input.ToClose.Close(); err != nil {
+		if err := input.ToClose.Close(ctx); err != nil {
 			lastErr = err
 		}
 	}

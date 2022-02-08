@@ -11,7 +11,6 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 	"regexp"
 	"strconv"
@@ -26,15 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certmgr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -230,8 +226,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
 		return clientErr
 	}
-	// This forwards the remote addr to the backend.
-	backendStartupMsg.Parameters["crdb:remote_addr"] = conn.RemoteAddr().String()
 
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
 	ctx = logtags.AddTag(ctx, "tenant", tenID)
@@ -275,153 +269,71 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		return err
 	}
 
-	var crdbConn net.Conn
-	var outgoingAddress string
-
-	// Repeatedly try to make a connection. Any failures are assumed to be
-	// transient unless the tenant cannot be found (e.g. because it was
-	// deleted). We will simply loop forever, or until the context is canceled
-	// (e.g. by client disconnect). This is preferable to terminating client
-	// connections, because in most cases those connections will simply be
-	// retried, further increasing load on the system.
-	retryOpts := retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
-		MaxBackoff:     5 * time.Second,
+	connector := &connector{
+		ClusterName: clusterName,
+		TenantID:    tenID,
+		RoutingRule: handler.RoutingRule,
+		StartupMsg:  backendStartupMsg,
+	}
+	if handler.directory != nil {
+		connector.Directory = handler.directory
 	}
 
-	outgoingAddressErr := log.Every(time.Minute)
-	backendDialErr := log.Every(time.Minute)
-	reportFailureErr := log.Every(time.Minute)
-	var outgoingAddressErrs, codeBackendDownErrs, reportFailureErrs int
-
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		// Get the DNS/IP address of the backend server to dial.
-		outgoingAddress, err = handler.outgoingAddress(ctx, clusterName, tenID)
-		if err != nil {
-			// Failure is assumed to be transient (and should be retried) except
-			// in case where the server was not found.
-			if status.Code(err) != codes.NotFound {
-				outgoingAddressErrs++
-				if outgoingAddressErr.ShouldLog() {
-					log.Ops.Errorf(ctx,
-						"outgoing address (%d errors skipped): %v",
-						outgoingAddressErrs,
-						err,
-					)
-					outgoingAddressErrs = 0
-				}
-				continue
-			}
-
-			// Remap error for external consumption.
-			log.Errorf(ctx, "could not retrieve outgoing address: %v", err.Error())
-			err = newErrorf(
-				codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
-			break
-		}
-
-		// NB: TLS options for the proxy are split into Insecure and
-		// SkipVerify. In insecure mode, tlsConf is expected to be nil. This
-		// will cause BackendDial to skip TLS entirely. If SkipVerify is true,
-		// tlsConf will be set to a non-nil config with InsecureSkipVerify set
-		// to true. InsecureSkipVerify will provide an encrypted connection but
-		// not verify that the connection recipient is a trusted party.
-		var tlsConf *tls.Config
-		if !handler.Insecure {
-			// Use an empty string as the default port as we only care about the
-			// correctly parsing the outgoingHost/IP here.
-			outgoingHost, _, err := addr.SplitHostPort(outgoingAddress, "")
-			if err != nil {
-				log.Errorf(ctx, "could not split outgoing address '%s' into host and port: %v", outgoingAddress, err.Error())
-				// Remap error for external consumption.
-				clientErr := newErrorf(
-					codeParamsRoutingFailed, "cluster %s-%d not found", clusterName, tenID.ToUint64())
-				updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
-				return clientErr
-			}
-
-			tlsConf = &tls.Config{
-				// Always set ServerName, if SkipVerify is true, it will be
-				// ignored. When SkipVerify is false, it is required to
-				// establish a TLS connection.
-				ServerName:         outgoingHost,
-				InsecureSkipVerify: handler.SkipVerify,
-			}
-		}
-
-		// Now actually dial the backend server.
-		crdbConn, err = BackendDial(backendStartupMsg, outgoingAddress, tlsConf)
-
-		// If we get a backend down error, retry the connection.
-		var codeErr *codeError
-		if err != nil && errors.As(err, &codeErr) && codeErr.code == codeBackendDown {
-			codeBackendDownErrs++
-			if backendDialErr.ShouldLog() {
-				log.Ops.Errorf(ctx,
-					"backend dial (%d errors skipped): %v",
-					codeBackendDownErrs,
-					err,
-				)
-				codeBackendDownErrs = 0
-			}
-
-			if handler.directory != nil {
-				// Report the failure to the directory so that it can refresh any
-				// stale information that may have caused the problem.
-				err = reportFailureToDirectory(ctx, tenID, outgoingAddress, handler.directory)
-				if err != nil {
-					reportFailureErrs++
-					if reportFailureErr.ShouldLog() {
-						log.Ops.Errorf(ctx,
-							"report failure (%d errors skipped): %v",
-							reportFailureErrs,
-							err,
-						)
-						reportFailureErrs = 0
-					}
-				}
-			}
-			continue
-		}
-		break
-	}
-
-	if err != nil {
-		updateMetricsAndSendErrToClient(err, conn, handler.metrics)
-		return err
+	// TLS options for the proxy are split into Insecure and SkipVerify.
+	// In insecure mode, TLSConfig is expected to be nil. This will cause the
+	// connector's dialer to skip TLS entirely. If SkipVerify is true,
+	// TLSConfig will be set to a non-nil config with InsecureSkipVerify set
+	// to true. InsecureSkipVerify will provide an encrypted connection but
+	// not verify that the connection recipient is a trusted party.
+	if !handler.Insecure {
+		connector.TLSConfig = &tls.Config{InsecureSkipVerify: handler.SkipVerify}
 	}
 
 	// Monitor for idle connection, if requested.
 	if handler.idleMonitor != nil {
-		crdbConn = handler.idleMonitor.DetectIdle(crdbConn, func() {
-			err := newErrorf(codeIdleDisconnect, "idle connection closed")
-			select {
-			case errConnection <- err: /* error reported */
-			default: /* the channel already contains an error */
-			}
-		})
+		connector.IdleMonitorWrapperFn = func(serverConn net.Conn) net.Conn {
+			return handler.idleMonitor.DetectIdle(serverConn, func() {
+				err := newErrorf(codeIdleDisconnect, "idle connection closed")
+				select {
+				case errConnection <- err: /* error reported */
+				default: /* the channel already contains an error */
+				}
+			})
+		}
 	}
 
-	defer func() { _ = crdbConn.Close() }()
-
-	// Perform user authentication.
-	if err := authenticate(conn, crdbConn, func(status throttler.AttemptStatus) error {
-		err := handler.throttleService.ReportAttempt(ctx, throttleTags, throttleTime, status)
-		if err != nil {
-			log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
-			return throttledError
+	crdbConn, sentToClient, err := connector.OpenTenantConnWithAuth(ctx, conn,
+		func(status throttler.AttemptStatus) error {
+			if err := handler.throttleService.ReportAttempt(
+				ctx, throttleTags, throttleTime, status,
+			); err != nil {
+				log.Errorf(ctx, "throttler refused connection after authentication: %v", err.Error())
+				return throttledError
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		log.Errorf(ctx, "could not connect to cluster: %v", err.Error())
+		if sentToClient {
+			handler.metrics.updateForError(err)
+		} else {
+			updateMetricsAndSendErrToClient(err, conn, handler.metrics)
 		}
-		return nil
-	}); err != nil {
-		handler.metrics.updateForError(err)
-		log.Ops.Errorf(ctx, "authenticate: %s", err)
 		return err
 	}
+	var f *forwarder
+	defer func() {
+		// Only close crdbConn if the forwarder hasn't been started. We want
+		// this here to ensure that we close the idle monitor wrapped
+		// connection. If the forwarder has been created, crdbConn is owned by
+		// the forwarder.
+		if f == nil {
+			_ = crdbConn.Close()
+		}
+	}()
 
 	handler.metrics.SuccessfulConnCount.Inc(1)
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	log.Infof(ctx, "new connection")
 	connBegin := timeutil.Now()
@@ -429,33 +341,32 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		log.Infof(ctx, "closing after %.2fs", timeutil.Since(connBegin).Seconds())
 	}()
 
-	// Copy all pgwire messages from frontend to backend connection until we
-	// encounter an error or shutdown signal.
-	go func() {
-		err := ConnectionCopy(crdbConn, conn)
-		select {
-		case errConnection <- err: /* error reported */
-		default: /* the channel already contains an error */
-		}
-	}()
+	// Pass ownership of crdbConn to the forwarder.
+	f = forward(ctx, conn, crdbConn)
+	defer f.Close()
 
+	// Block until an error is received, or when the stopper starts quiescing,
+	// whichever that happens first.
+	//
+	// TODO(jaylim-crl): We should handle all these errors properly, and
+	// propagate them back to the client if we're in a safe position to send.
+	// This PR https://github.com/cockroachdb/cockroach/pull/66205 removed error
+	// injections after connection handoff because there was a possibility of
+	// corrupted packets.
+	//
+	// TODO(jaylim-crl): It would be nice to have more consistency in how we
+	// manage background goroutines, communicate errors, etc.
 	select {
-	case err := <-errConnection:
+	case err := <-f.errChan: // From forwarder.
 		handler.metrics.updateForError(err)
 		return err
-	case <-ctx.Done():
-		err := ctx.Err()
-		if err != nil {
-			// The client connection expired.
-			codeErr := newErrorf(
-				codeExpiredClientConnection, "expired client conn: %v", err,
-			)
-			handler.metrics.updateForError(codeErr)
-			return codeErr
-		}
-		return nil
+	case err := <-errConnection: // From denyListWatcher or idleMonitor.
+		handler.metrics.updateForError(err)
+		return err
 	case <-handler.stopper.ShouldQuiesce():
-		return nil
+		err := context.Canceled
+		handler.metrics.updateForError(err)
+		return err
 	}
 }
 
@@ -478,40 +389,6 @@ func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher cha
 			}
 		}
 	}
-}
-
-// resolveTCPAddr indirection to allow test hooks.
-var resolveTCPAddr = net.ResolveTCPAddr
-
-// outgoingAddress resolves a tenant ID and a tenant cluster name to the address
-// of a backend pod.
-func (handler *proxyHandler) outgoingAddress(
-	ctx context.Context, name string, tenID roachpb.TenantID,
-) (string, error) {
-	// First try to lookup tenant in the directory (if available).
-	if handler.directory != nil {
-		addr, err := handler.directory.EnsureTenantAddr(ctx, tenID, name)
-		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return "", err
-			}
-			// Fallback to old resolution rule.
-		} else {
-			return addr, nil
-		}
-	}
-
-	// Derive DNS address and then try to resolve it. If it does not exist, then
-	// map to a GRPC NotFound error.
-	// TODO(andyk): Remove this once we've fully switched over to the directory.
-	addr := strings.ReplaceAll(
-		handler.RoutingRule, "{{clusterName}}", fmt.Sprintf("%s-%d", name, tenID.ToUint64()),
-	)
-	_, err := resolveTCPAddr("tcp", addr)
-	if err != nil {
-		return "", status.Error(codes.NotFound, err.Error())
-	}
-	return addr, nil
 }
 
 // incomingTLSConfig gets back the current TLS config for the incoming client
@@ -562,14 +439,6 @@ func (handler *proxyHandler) setupIncomingCert() error {
 	handler.incomingCert = cert
 
 	return nil
-}
-
-// reportFailureToDirectory is a hookable function that calls the given tenant
-// directory's ReportFailure method.
-var reportFailureToDirectory = func(
-	ctx context.Context, tenantID roachpb.TenantID, addr string, directory *tenant.Directory,
-) error {
-	return directory.ReportFailure(ctx, tenantID, addr)
 }
 
 // clusterNameAndTenantFromParams extracts the cluster name and tenant ID from

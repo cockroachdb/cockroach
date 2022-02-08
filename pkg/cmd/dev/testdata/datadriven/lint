@@ -1,0 +1,25 @@
+exec
+dev lint
+----
+bazel run --config=test //build/bazelutil:lint -- -test.v
+
+exec
+dev lint --short --timeout=5m
+----
+bazel run --config=test //build/bazelutil:lint -- -test.v -test.short -test.timeout 5m0s
+
+exec
+dev lint pkg/cmd/dev
+----
+export PKG=./pkg/cmd/dev
+bazel run --config=test //build/bazelutil:lint -- -test.v
+
+exec
+dev lint -f TestLowercaseFunctionNames --cpus 4
+----
+bazel run --config=test //build/bazelutil:lint --local_cpu_resources=4 -- -test.v -test.run Lint/TestLowercaseFunctionNames
+
+exec
+dev lint pkg/cmd/dev pkg/spanconfig
+----
+err: can only lint a single package (found pkg/cmd/dev, pkg/spanconfig)

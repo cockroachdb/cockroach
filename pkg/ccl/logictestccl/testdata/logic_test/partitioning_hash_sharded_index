@@ -1,0 +1,284 @@
+# LogicTest: 5node
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true;
+
+statement ok
+CREATE TABLE t_hashed (
+  a INT PRIMARY KEY,
+  b STRING,
+  c INT,
+  INDEX idx_t_hashed_b_c (b, c) USING HASH
+);
+
+statement error cannot set explicit partitioning with ALTER INDEX PARTITION BY on a hash sharded index
+ALTER INDEX idx_t_hashed_b_c PARTITION BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+);
+
+statement ok
+CREATE TABLE t_pk_hashed (
+  a STRING,
+  b INT,
+  PRIMARY KEY (a, b) USING HASH
+);
+
+statement error cannot set explicit partitioning with PARTITION BY on hash sharded primary key
+ALTER TABLE t_pk_hashed PARTITION BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+);
+
+statement ok
+CREATE TABLE t_partition_all (
+  a INT PRIMARY KEY,
+  b STRING NOT NULL,
+  c INT
+) PARTITION ALL BY LIST (b) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+CREATE INDEX ON t_partition_all (b, c) USING HASH;
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+CREATE UNIQUE INDEX ON t_partition_all (b, c) USING HASH;
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_partition_all ALTER PRIMARY KEY USING COLUMNS (b) USING HASH;
+
+statement error hash sharded indexes cannot be explicitly partitioned
+CREATE TABLE t_pk_hashed_bad (
+  a STRING PRIMARY KEY USING HASH,
+  b INT
+) PARTITION BY LIST (a) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+statement error hash sharded indexes cannot be explicitly partitioned
+CREATE TABLE t_pk_hashed_bad (
+  a STRING,
+  b INT,
+  PRIMARY KEY (a) USING HASH
+) PARTITION BY LIST (a) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+statement error hash sharded indexes cannot be explicitly partitioned
+CREATE TABLE t_idx_hashed_bad (
+  a INT PRIMARY KEY,
+  b STRING,
+  c INT,
+  INDEX (b, c) USING HASH PARTITION BY LIST (b) (
+    PARTITION us_west VALUES IN (('seattle')),
+    PARTITION us_east VALUES IN (('new york'))
+  )
+);
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
+CREATE TABLE t_idx_hashed_bad (
+  a INT PRIMARY KEY,
+  b STRING,
+  c INT,
+  INDEX (b, c) USING HASH
+) PARTITION ALL BY LIST (b) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+statement ok
+CREATE TABLE t_to_be_hashed (
+  a INT PRIMARY KEY,
+  b STRING NOT NULL,
+  c INT,
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE INDEX ON t_to_be_hashed (c) USING HASH;
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  crdb_internal_c_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE UNIQUE INDEX ON t_to_be_hashed (c) USING HASH;
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  crdb_internal_c_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  crdb_internal_c_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_to_be_hashed_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_c_key (c ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE TABLE t_idx_pk_hashed_1 (
+  a INT PRIMARY KEY USING HASH,
+  b STRING,
+  c INT,
+  INDEX (c) USING HASH,
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_1];
+----
+CREATE TABLE public.t_idx_pk_hashed_1 (
+  crdb_internal_a_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  crdb_internal_c_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_idx_pk_hashed_1_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_idx_pk_hashed_1_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+statement ok
+CREATE TABLE t_idx_pk_hashed_2 (
+  a INT,
+  b STRING,
+  c INT,
+  INDEX (c) USING HASH,
+  PRIMARY KEY (a) USING HASH,
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+   PARTITION us_west VALUES IN (('seattle')),
+   PARTITION us_east VALUES IN (('new york'))
+);
+
+query T
+SELECT @2 FROM [SHOW CREATE TABLE t_idx_pk_hashed_2];
+----
+CREATE TABLE public.t_idx_pk_hashed_2 (
+  a INT8 NOT NULL,
+  b STRING NOT NULL,
+  c INT8 NULL,
+  crdb_internal_c_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(c)), 16:::INT8)) VIRTUAL,
+  crdb_internal_a_shard_16 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(a)), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_idx_pk_hashed_2_pkey PRIMARY KEY (a ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_idx_pk_hashed_2_c_idx (c ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_a_b_c (a, b, c)
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+-- Warning: Partitioned table with no zone configurations.
+
+subtest test_presplit_with_partitioning
+
+statement ok
+CREATE TABLE t_presplit (
+  user_id INT PRIMARY KEY,
+  city STRING NOT NULL CHECK (city IN ('seattle', 'new york')),
+  member_id INT
+) PARTITION ALL BY LIST (city) (
+    PARTITION us_west VALUES IN (('seattle')),
+    PARTITION us_east VALUES IN (('new york'))
+);
+
+statement ok
+CREATE INDEX t_presplit_idx_member_id ON t_presplit (member_id) USING HASH WITH (bucket_count=8);
+
+skipif config 3node-tenant
+query TITTT colnames,retry
+SELECT t.name, r.table_id, r.index_name, r.start_pretty, r.end_pretty
+FROM crdb_internal.tables t
+JOIN crdb_internal.ranges r ON t.table_id = r.table_id
+WHERE t.name = 't_presplit'
+AND t.state = 'PUBLIC'
+AND r.split_enforced_until IS NOT NULL;
+----
+name        table_id  index_name                start_pretty               end_pretty
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2               /Table/116/2/"new york"/0
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/0  /Table/116/2/"new york"/1
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/1  /Table/116/2/"new york"/2
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/2  /Table/116/2/"new york"/3
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/3  /Table/116/2/"new york"/4
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/4  /Table/116/2/"new york"/5
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/5  /Table/116/2/"new york"/6
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/6  /Table/116/2/"new york"/7
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"new york"/7  /Table/116/2/"seattle"/0
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/0   /Table/116/2/"seattle"/1
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/1   /Table/116/2/"seattle"/2
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/2   /Table/116/2/"seattle"/3
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/3   /Table/116/2/"seattle"/4
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/4   /Table/116/2/"seattle"/5
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/5   /Table/116/2/"seattle"/6
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/6   /Table/116/2/"seattle"/7
+t_presplit  116       t_presplit_idx_member_id  /Table/116/2/"seattle"/7   /Max

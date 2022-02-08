@@ -58,7 +58,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 			KeyColumnNames:      []string{"c1"},
 			KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 			EncodingType:        descpb.PrimaryIndexEncoding,
-			Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+			Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 		},
 		Mutations: []descpb.DescriptorMutation{
 			{
@@ -71,7 +71,7 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 							descpb.IndexDescriptor_ASC,
 						},
 						EncodingType: descpb.PrimaryIndexEncoding,
-						Version:      descpb.LatestPrimaryIndexDescriptorVersion,
+						Version:      descpb.PrimaryIndexWithStoredColumnsVersion,
 						Sharded: catpb.ShardedDescriptor{
 							IsSharded:    true,
 							Name:         "c3",

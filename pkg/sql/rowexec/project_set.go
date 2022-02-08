@@ -285,13 +285,13 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) rowenc.EncDa
 }
 
 func (ps *projectSetProcessor) close() {
-	if ps.InternalClose() {
+	ps.InternalCloseEx(func() {
 		for _, gen := range ps.gens {
 			if gen != nil {
 				gen.Close(ps.Ctx)
 			}
 		}
-	}
+	})
 }
 
 // ConsumerClosed is part of the RowSource interface.

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -54,6 +55,15 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	testHelper := newTestTenantHelper(t, 3 /* tenantClusterSize */, knobs)
 	defer testHelper.cleanup(ctx, t)
+
+	for _, conn := range []*sqlutils.SQLRunner{
+		sqlutils.MakeSQLRunner(testHelper.hostCluster.ServerConn(0)),
+		testHelper.testCluster().tenantConn(0),
+	} {
+		conn.Exec(
+			t, "SET CLUSTER SETTING sql.contention.txn_id_cache.max_size = '10MB'",
+		)
+	}
 
 	t.Run("reset_sql_stats", func(t *testing.T) {
 		testResetSQLStatsRPCForTenant(ctx, t, testHelper)
@@ -81,6 +91,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("index_usage_stats", func(t *testing.T) {
 		testIndexUsageForTenants(t, testHelper)
+	})
+
+	t.Run("txn_id_resolution", func(t *testing.T) {
+		testTxnIDResolutionRPC(ctx, t, testHelper)
 	})
 }
 
@@ -508,7 +522,7 @@ WHERE
 }
 
 func testTableIndexStats(ctx context.Context, t *testing.T, testHelper *tenantTestHelper) {
-	getTableIndexStats := func(helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
+	getTableIndexStats := func(t *testing.T, helper *tenantTestHelper, db string) *serverpb.TableIndexStatsResponse {
 		// Get index usage stats using function call.
 		cluster := helper.testCluster()
 		status := cluster.tenantStatusSrv(randomServer)
@@ -519,6 +533,8 @@ func testTableIndexStats(ctx context.Context, t *testing.T, testHelper *tenantTe
 	}
 
 	cluster := testHelper.testCluster()
+
+	timePreCreate := timeutil.Now()
 
 	// Create table on a database.
 	cluster.tenantConn(0).Exec(t, `
@@ -555,21 +571,61 @@ FROM pg_catalog.pg_indexes
 WHERE tablename = 'test' AND indexname = $1`
 
 	// Get index usage stats and assert expected results.
-	resp := getTableIndexStats(testHelper, "test_db1")
-	require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
-	require.True(t, resp.Statistics[0].Statistics.Stats.LastRead.After(timePreRead))
-	indexName := resp.Statistics[0].IndexName
-	createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
-	print(createStmt)
-	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+	requireAfter := func(t *testing.T, a, b *time.Time) {
+		t.Helper()
+		require.NotNil(t, a)
+		require.NotNil(t, b)
+		require.Truef(t, a.After(*b), "%v is not after %v", a, b)
+	}
+	requireBetween := func(t *testing.T, before time.Time, ts *time.Time, after time.Time) {
+		t.Helper()
+		requireAfter(t, ts, &before)
+		requireAfter(t, &after, ts)
+	}
 
-	resp = getTableIndexStats(testHelper, "test_db2")
-	require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
-	require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
-	indexName = resp.Statistics[0].IndexName
-	cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
-	createStmt = cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
-	require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+	t.Run("validate read index", func(t *testing.T) {
+		resp := getTableIndexStats(t, testHelper, "test_db1")
+		require.Equal(t, uint64(1), resp.Statistics[0].Statistics.Stats.TotalReadCount)
+		requireAfter(t, &resp.Statistics[0].Statistics.Stats.LastRead, &timePreRead)
+		indexName := resp.Statistics[0].IndexName
+		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		print(createStmt)
+		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
+	})
+
+	t.Run("validate unread index", func(t *testing.T) {
+		resp := getTableIndexStats(t, testHelper, "test_db2")
+		require.Equal(t, uint64(0), resp.Statistics[0].Statistics.Stats.TotalReadCount)
+		require.Equal(t, resp.Statistics[0].Statistics.Stats.LastRead, time.Time{})
+		indexName := resp.Statistics[0].IndexName
+		cluster.tenantConn(0).Exec(t, `SET DATABASE=test_db2`)
+		createStmt := cluster.tenantConn(0).QueryStr(t, getCreateStmtQuery, indexName)[0][0]
+		require.Equal(t, resp.Statistics[0].CreateStatement, createStmt)
+		requireBetween(t, timePreCreate, resp.Statistics[0].CreatedAt, timePreRead)
+	})
+
+	// Test that a subsequent index creation has an appropriate timestamp.
+	t.Run("validate CreatedAt for new index", func(t *testing.T) {
+		timeBeforeCreateNewIndex := timeutil.Now()
+		cluster.tenantConn(0).Exec(t, `
+SET DATABASE=test_db2;
+CREATE INDEX idx2 ON test (b, a)`)
+		timeAfterCreateNewIndex := timeutil.Now()
+
+		resp := getTableIndexStats(t, testHelper, "test_db2")
+		var stat serverpb.TableIndexStatsResponse_ExtendedCollectedIndexUsageStatistics
+		var found bool
+		for _, idx := range resp.Statistics {
+			if found = idx.IndexName == "idx2"; found {
+				stat = *idx
+				break
+			}
+		}
+		require.True(t, found)
+		requireBetween(t,
+			timeBeforeCreateNewIndex, stat.CreatedAt, timeAfterCreateNewIndex)
+	})
 }
 
 func ensureExpectedStmtFingerprintExistsInRPCResponse(
@@ -844,4 +900,61 @@ func testTenantStatusCancelQuery(ctx context.Context, t *testing.T, helper *tena
 	httpPod1.PostJSON("/_status/cancel_query/0", &cancelQueryReq, &cancelQueryResp)
 	require.Equal(t, false, cancelQueryResp.Canceled)
 	require.Equal(t, fmt.Sprintf("query ID %s not found", query.ID), cancelQueryResp.Error)
+}
+
+// testTxnIDResolutionRPC tests the reachability of TxnIDResolution RPC. The
+// underlying implementation correctness is tested within
+// pkg/sql/contention/txnidcache.
+func testTxnIDResolutionRPC(ctx context.Context, t *testing.T, helper *tenantTestHelper) {
+	run := func(sqlConn *sqlutils.SQLRunner, status serverpb.SQLStatusServer, coordinatorNodeID int32) {
+		sqlConn.Exec(t, "SET application_name='test1'")
+
+		sqlConn.Exec(t, "BEGIN")
+		result := sqlConn.QueryStr(t, `
+		SELECT
+			id
+		FROM
+			crdb_internal.node_transactions
+		WHERE
+			application_name = 'test1'`)
+		require.Equal(t, 1 /* expected */, len(result),
+			"expected only one active txn, but there are %d active txns found", len(result))
+		txnID := uuid.FromStringOrNil(result[0][0])
+		require.False(t, uuid.Nil.Equal(txnID),
+			"expected a valid txnID, but %+v is found", result)
+		sqlConn.Exec(t, "COMMIT")
+
+		testutils.SucceedsWithin(t, func() error {
+			resp, err := status.TxnIDResolution(ctx, &serverpb.TxnIDResolutionRequest{
+				CoordinatorID: strconv.Itoa(int(coordinatorNodeID)),
+				TxnIDs:        []uuid.UUID{txnID},
+			})
+			require.NoError(t, err)
+			if len(resp.ResolvedTxnIDs) != 1 {
+				return errors.Newf("expected RPC response to have length of 1, but "+
+					"it is %d", len(resp.ResolvedTxnIDs))
+			}
+			require.Equal(t, txnID, resp.ResolvedTxnIDs[0].TxnID,
+				"expected to find txn %s on coordinator node %d, but it "+
+					"was not", txnID.String(), coordinatorNodeID)
+			require.NotEqual(t, roachpb.InvalidTransactionFingerprintID, resp.ResolvedTxnIDs[0].TxnFingerprintID)
+			return nil
+		}, 3*time.Second)
+	}
+
+	t.Run("regular_cluster", func(t *testing.T) {
+		status :=
+			helper.hostCluster.Server(0 /* idx */).StatusServer().(serverpb.SQLStatusServer)
+		sqlConn := helper.hostCluster.ServerConn(0 /* idx */)
+		run(sqlutils.MakeSQLRunner(sqlConn), status, 1 /* coordinatorNodeID */)
+	})
+
+	t.Run("tenant_cluster", func(t *testing.T) {
+		// Select a different tenant status server here so a pod-to-pod RPC will
+		// happen.
+		status :=
+			helper.testCluster().tenantStatusSrv(2 /* idx */)
+		sqlConn := helper.testCluster().tenantConn(0 /* idx */)
+		run(sqlConn, status, 1 /* coordinatorNodeID */)
+	})
 }

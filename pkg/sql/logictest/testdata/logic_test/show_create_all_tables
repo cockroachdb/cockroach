@@ -172,19 +172,16 @@ SHOW CREATE ALL TABLES
 create_statement
 CREATE TABLE public.b (
     i INT8 NOT NULL,
-    CONSTRAINT b_pkey PRIMARY KEY (i ASC),
-    FAMILY "primary" (i)
+    CONSTRAINT b_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.a (
     i INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (i, rowid)
+    CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE public.g (
     i INT8 NOT NULL,
-    CONSTRAINT g_pkey PRIMARY KEY (i ASC),
-    FAMILY "primary" (i)
+    CONSTRAINT g_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.f (
     i INT8 NOT NULL,
@@ -194,8 +191,7 @@ CREATE TABLE public.f (
 );
 CREATE TABLE public.e (
     i INT8 NOT NULL,
-    CONSTRAINT e_pkey PRIMARY KEY (i ASC),
-    FAMILY "primary" (i)
+    CONSTRAINT e_pkey PRIMARY KEY (i ASC)
 );
 CREATE TABLE public.d (
     i INT8 NOT NULL,
@@ -207,8 +203,7 @@ CREATE TABLE public.d (
 CREATE TABLE public.c (
                                                                                        i INT8 NULL,
                                                                                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                                                       CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-                                                                                       FAMILY "primary" (i, rowid)
+                                                                                       CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
@@ -285,8 +280,7 @@ SHOW CREATE ALL TABLES
 create_statement
 CREATE TABLE public.t (
     i INT8 NOT NULL,
-    CONSTRAINT pk_name PRIMARY KEY (i ASC),
-    FAMILY "primary" (i)
+    CONSTRAINT pk_name PRIMARY KEY (i ASC)
 );
 
 # Test that computed columns are shown correctly.
@@ -326,8 +320,7 @@ CREATE TABLE public.";" (
     ";" INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
     CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
-    INDEX ";_;_idx" (";" ASC),
-    FAMILY "primary" (";", rowid)
+    INDEX ";_;_idx" (";" ASC)
 );
 
 # Ensure quotes in comments are properly escaped, also that the object names
@@ -339,6 +332,8 @@ CREATE TABLE test_comment."t   t" ("x'" INT PRIMARY KEY);
 COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
 COMMENT ON INDEX test_comment."t   t"@"t   t_pkey" IS 'has '' more '' quotes';
 COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
+COMMENT ON CONSTRAINT "t   t_pkey" ON test_comment."t   t" IS 'new constraint comment';
+
 
 query T colnames
 SHOW CREATE ALL TABLES
@@ -346,12 +341,12 @@ SHOW CREATE ALL TABLES
 create_statement
 CREATE TABLE public."t   t" (
   "x'" INT8 NOT NULL,
-  CONSTRAINT "t   t_pkey" PRIMARY KEY ("x'" ASC),
-  FAMILY "primary" ("x'")
+  CONSTRAINT "t   t_pkey" PRIMARY KEY ("x'" ASC)
 );
 COMMENT ON TABLE public."t   t" IS e'has \' quotes';
 COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
 COMMENT ON INDEX public."t   t"@"t   t_pkey" IS e'has \' more \' quotes';
+COMMENT ON CONSTRAINT "t   t_pkey" ON public."t   t" IS 'new constraint comment';
 
 # Ensure schemas are shown correctly.
 statement ok
@@ -369,14 +364,12 @@ create_statement
 CREATE TABLE sc1.t (
     x INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 CREATE TABLE sc2.t (
     x INT8 NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
 # Ensure sequences are shown correctly.
@@ -405,8 +398,7 @@ create_statement
 CREATE TABLE public.t (
     x public.test NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
 
 # Test with column families.
