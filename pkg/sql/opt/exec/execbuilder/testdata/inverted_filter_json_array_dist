@@ -436,7 +436,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFFv2j4Uxd__n
 # The split disjunction rule allows us to use the index for this query.
 query T
 EXPLAIN (DISTSQL)
-SELECT a FROM array_tab WHERE b @> '{1}' OR b @> '{2}' OR a = 1 ORDER BY a
+SELECT a FROM array_tab WHERE b @> '{1}' OR a = 1 ORDER BY a
 ----
 distribution: full
 vectorized: true
@@ -453,21 +453,17 @@ vectorized: true
     │   └── • sort
     │       │ order: +a
     │       │
-    │       └── • inverted filter
-    │           │ inverted column: b_inverted_key
-    │           │ num spans: 1
-    │           │
-    │           └── • scan
-    │                 missing stats
-    │                 table: array_tab@arr_inv
-    │                 spans: 1 span
+    │       └── • scan
+    │             missing stats
+    │             table: array_tab@arr_inv
+    │             spans: 1 span
     │
     └── • scan
           missing stats
           table: array_tab@array_tab_pkey
           spans: [/1 - /1]
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlWFP2zwQx98_n-J0bwA9QYmdlkKkSd0gaJ0YZS3SNq0VcpsTRCtxZjsIhPrdpzRdS9rGoaia9qaKff7f_XL3j_uM-tcEAwy_XV2871zC_lmnf93_cnEA_fAiPL0GAee97mcQSomnGyNG8PVj2Athf38E7UHmeT7B3jOb7h1AtwelTT7dOyh2BbwDlj-ehT348B0EOpjIiC7FPWkMfiBDBzk66OPQwVTJMWktVR56nh3sRI8YeA7GSZqZYtvEZkIYYJZIFZGiCB2MyIh4kseH06GDY6kIg-XRs1ibOBkbt1k6i-28fDczAbQZDqcOyszM6wwd1EbcEgaNqVPBsqFSXypDyj1arfN_ZfrmNuk_yTjpkYhIua1yicWY2ounm_QnPaGDp3KS3Sc6AOHAqJLjaBuORUOPNzW0GMuGpi4TjJ7gTui7NfVsfHOiViXRMs8mC8zbbcNm3lbcS6bjnTNdykOZuoyXj9eZ8qTEwezTuhajCc1twyy2uYmThzW_ONhPRb5ymeeyw_zXr8Ti22B1kgdShqLzeGJIkXL9MtufePiYKpAJtFkAOmcBbYQywQAHA87YAIGSaL7yBwiVdH6Jjr--ad4bv7UXvXO9Siz2Viz-9lny2Sz562dZg7U2y8a_NMvFd3_y164rvtPriu38utpQrkc6lYmmlf_TzZm9HJiiWypeUMtMjelKyfGsTLHsznSzjYi0KaKsWHSSIpQDvhQzq5jbxdwq9u1if1XMXoobJTHbTsy4Xd2wcjft4qa93TVvfWRVt-zillXs2bmP7dw1Pjmxq70al9k9WkPO1ky6jVVq1HVeYXaTr5plOP3vdwAAAP__lx_dUQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lFFv2j4Uxd__n8K6L231d5XYgbZEmsRWMo2JQReQtmmLkCFWG43Gme1MQ4jvPpEgSCg4hLG9oCT2z_fc63NYgPoxAxe8zw-9190-uux0h6Phx94VGno9736EGHrrDz4gJiWbjzWboE_vPN9DlxPU_pbatsPRxYIsL67QwEeXDL1CZPXY8Xz05gtigCEWIe-zZ67A_QoEMFDA4ECAIZFiypUScrW0yDZ2w1_g2hiiOEl1_llHesbBBSFDLnkIGEKuWTTLzmuT_yFYBhimQnJwt7v74lokFqHl7YNUu6hNIFhiEKle1wgwKM0eObi3S1zQQQo69pQYscmM-5yFXFqkXGczrTaTchzFPwHDvZilz7Fys6EME7Z6tIhtkevVLz2oidbRNBRSc2k5-6a0_3inzvHvRRSvO24aOs6fxsl3Pi81jtHkoI5GHR2dSOkonmrrbrdRwDDIjbLnorcHTOboiamnF3TmpbWi5kFFp5pyI5vYtXRvNd2UNNHjDWqfeF0Fq1r2QVnkVFn0xNzQLDf0-NxUaFrnpnFqbiqOL-Tm5q_mhp7tr_O2tPtQdbvOFDb2b_2z1J5jHtvUkrOk1jZPyecqEbHiR84_wMDDR543qEQqp_xBimlWJn8dZFz2IeRK56vEyd-6cb62UlikiZGmZpga4YrKjhFumOHGLkyKcLMEk3owoWa6adRtm-Eb82VV0LdG-s48sjsj3DLDrT_STSo8Sio8-sKkdW67gq66bmI2-W7nwfK_3wEAAP__hKG25A==
 
 # We cannot use the index for this query.
 query T

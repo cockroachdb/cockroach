@@ -3042,6 +3042,10 @@ func (m *sessionDataMutator) SetQualityOfService(val sessiondatapb.QoSLevel) {
 	m.data.DefaultTxnQualityOfService = val.Validate()
 }
 
+func (m *sessionDataMutator) SetOptSplitScanLimit(val int32) {
+	m.data.OptSplitScanLimit = val
+}
+
 func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.data.EnableStreamReplication = val
 }
