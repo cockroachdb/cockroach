@@ -56,7 +56,7 @@ func ParseSpan(t *testing.T, sp string) roachpb.Span {
 // TODO(arul): Once we have system targets, we'll want to parse them here too
 // instead of just calling ParseSpan here.
 func ParseTarget(t *testing.T, target string) spanconfig.Target {
-	return spanconfig.MakeSpanTarget(ParseSpan(t, target))
+	return spanconfig.MakeTargetFromSpan(ParseSpan(t, target))
 }
 
 // ParseConfig is helper function that constructs a roachpb.SpanConfig that's
@@ -194,10 +194,10 @@ func PrintSpan(sp roachpb.Span) string {
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
 func PrintTarget(target spanconfig.Target) string {
-	if target.GetSpan() != nil {
-		return PrintSpan(*target.GetSpan())
+	if target.IsSpanTarget() {
+		return PrintSpan(target.GetSpan())
 	}
-	panic("targets other than span targets are unsupported")
+	panic("targets other than span targets are unsupported for now")
 }
 
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
