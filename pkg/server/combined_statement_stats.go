@@ -97,7 +97,7 @@ func getFilterAndParams(
 	buffer.WriteString(testingKnobs.GetAOSTClause())
 
 	// Filter out internal statements by app name.
-	buffer.WriteString(" WHERE app_name NOT LIKE '$ internal%'")
+	buffer.WriteString(fmt.Sprintf(" WHERE app_name NOT LIKE '%s%%'", catconstants.InternalAppNamePrefix))
 
 	if start != nil {
 		buffer.WriteString(" AND aggregated_ts >= $1")
