@@ -266,9 +266,7 @@ func (p *PrivilegeDescriptor) Grant(
 	if withGrantOption {
 		userPriv.WithGrantOption |= bits
 	}
-	if !privilege.ALL.IsSetIn(userPriv.Privileges) {
-		userPriv.Privileges |= bits
-	}
+	userPriv.Privileges |= bits
 }
 
 // Revoke removes privileges from this descriptor for a given list of users.
@@ -292,6 +290,9 @@ func (p *PrivilegeDescriptor) Revoke(
 			// TODO(marc): the grammar does not allow it, but we should
 			// check if other privileges are being specified and error out.
 			p.RemoveUser(user)
+		} else if privilege.ALL.IsSetIn(userPriv.Privileges) {
+			// fold sub-privileges into ALL
+			userPriv.Privileges = privilege.ALL.Mask()
 		}
 		return
 	}
@@ -331,7 +332,6 @@ func (p *PrivilegeDescriptor) Revoke(
 			p.RemoveUser(user)
 		}
 	}
-
 }
 
 // GrantPrivilegeToGrantOptions adjusts a user's grant option bits based on whether the GRANT or ALL

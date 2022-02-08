@@ -131,9 +131,9 @@ func TestPrivilege(t *testing.T) {
 		// Ensure revoking CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
 		// from a user with ALL privilege on a table leaves the user with no privileges.
 		{testUser,
-			privilege.List{privilege.ALL}, privilege.List{privilege.CREATE, privilege.DROP,
-				privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.UPDATE,
-				privilege.ZONECONFIG},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.SELECT, privilege.INSERT,
+				privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			[]descpb.UserPrivilege{
 				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -142,9 +142,9 @@ func TestPrivilege(t *testing.T) {
 		// Ensure revoking CONNECT, CREATE, DROP, GRANT, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
 		// from a user with ALL privilege on a database leaves the user with no privileges.
 		{testUser,
-			privilege.List{privilege.ALL}, privilege.List{privilege.CONNECT, privilege.CREATE,
-				privilege.DROP, privilege.GRANT, privilege.SELECT, privilege.INSERT, privilege.DELETE,
-				privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.ALL},
+			privilege.List{privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.GRANT, privilege.SELECT,
+				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG},
 			[]descpb.UserPrivilege{
 				{security.AdminRoleName(), []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -539,7 +539,7 @@ func TestGrantWithGrantOption(t *testing.T) {
 		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.SELECT, privilege.INSERT},
-			privilege.List{privilege.ALL},
+			privilege.List{privilege.ALL, privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.SELECT, privilege.INSERT}},
 		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.INSERT}, privilege.List{}, security.AdminRoleName()),
 			testUser, privilege.Table,

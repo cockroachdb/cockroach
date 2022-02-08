@@ -676,3 +676,57 @@ test           public       t1          admin      ALL             true
 test           public       t1          root       ALL             true
 test           public       t1          testuser   ALL             true
 test           public       t1          testuser2  ALL             true
+
+# non-ALL privileges should appear if ALL does not have grant option, but another privilege does
+user root
+
+statement ok
+CREATE TABLE grant_ordering_table (id INT PRIMARY KEY);
+CREATE USER grant_ordering_user
+
+statement ok
+GRANT ALL ON TABLE grant_ordering_table TO grant_ordering_user
+
+query TTTTTB colnames
+SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
+----
+database_name  schema_name  table_name            grantee              privilege_type  is_grantable
+test           public       grant_ordering_table  grant_ordering_user  ALL             true
+
+statement ok
+REVOKE GRANT OPTION FOR ALL ON TABLE grant_ordering_table FROM grant_ordering_user
+
+query TTTTTB colnames
+SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
+----
+database_name  schema_name  table_name            grantee              privilege_type  is_grantable
+test           public       grant_ordering_table  grant_ordering_user  ALL             false
+
+statement ok
+GRANT SELECT ON TABLE grant_ordering_table TO grant_ordering_user WITH GRANT OPTION
+
+query TTTTTB colnames
+SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
+----
+database_name  schema_name  table_name            grantee              privilege_type  is_grantable
+test           public       grant_ordering_table  grant_ordering_user  ALL             false
+test           public       grant_ordering_table  grant_ordering_user  SELECT          true
+
+statement ok
+REVOKE GRANT OPTION FOR ALL ON TABLE grant_ordering_table FROM grant_ordering_user
+
+query TTTTTB colnames
+SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
+----
+database_name  schema_name  table_name            grantee              privilege_type  is_grantable
+test           public       grant_ordering_table  grant_ordering_user  ALL             false
+
+# has the effect of granting WITH GRANT OPTION to ALL because of GRANT privilege via ALL
+statement ok
+GRANT UPDATE ON TABLE grant_ordering_table TO grant_ordering_user
+
+query TTTTTB colnames
+SHOW GRANTS ON grant_ordering_table FOR grant_ordering_user
+----
+database_name  schema_name  table_name            grantee              privilege_type  is_grantable
+test           public       grant_ordering_table  grant_ordering_user  ALL             true
