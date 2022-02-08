@@ -155,6 +155,30 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
 func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
+	srv, _ /* interceptors */ := NewServerEx(rpcCtx, opts...)
+	return srv
+}
+
+// ServerInterceptorInfo contains the serve interceptors that a server created
+// with NewServerEx() will run.
+type ServerInterceptorInfo struct {
+	// UnaryInterceptors lists the interceptors for regular (unary) RPCs.
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+	// UnaryAuthIdx is the position of the Auth interceptor withing
+	// UnaryInterceptors. -1 is the Auth interceptor is not present.
+	UnaryAuthIdx int
+	// StreamInterceptors lists the interceptors for streaming RPCs.
+	StreamInterceptors []grpc.StreamServerInterceptor
+	// StreamAuthIdx is the position of the Auth interceptor withing
+	// StreamInterceptors. -1 is the Auth interceptor is not present.
+	StreamAuthIdx int
+}
+
+// NewServerEx is like NewServer, but also returns the interceptors that have
+// been registered with gRPC for the server. These interceptors can be used
+// manually when bypassing gRPC to call into the server (like the
+// internalClientAdapter does).
+func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInterceptorInfo) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -195,6 +219,8 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 	// guards RPC endpoints for use after Stopper.Drain() by handling the RPC
 	// inside a stopper task.
 	var unaryInterceptor []grpc.UnaryServerInterceptor
+	authUnaryIdx := -1
+	authStreamIdx := -1
 	var streamInterceptor []grpc.StreamServerInterceptor
 	unaryInterceptor = append(unaryInterceptor, func(
 		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
@@ -215,6 +241,12 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		})
 	})
 
+	unaryInterceptor = append(unaryInterceptor, func(
+		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return handler(ctx, req)
+	})
+
 	if !rpcCtx.Config.Insecure {
 		a := kvAuth{
 			tenant: tenantAuthorizer{
@@ -222,7 +254,9 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 			},
 		}
 
+		authUnaryIdx = len(unaryInterceptor)
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
+		authStreamIdx = len(streamInterceptor)
 		streamInterceptor = append(streamInterceptor, a.AuthStream())
 	}
 
@@ -250,13 +284,23 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 		unaryInterceptor = append(unaryInterceptor, tracing.ServerInterceptor(tracer))
 		streamInterceptor = append(streamInterceptor, tracing.StreamServerInterceptor(tracer))
 	}
+	unaryInterceptor = append(unaryInterceptor, func(
+		ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return handler(ctx, req)
+	})
 
 	grpcOpts = append(grpcOpts, grpc.ChainUnaryInterceptor(unaryInterceptor...))
 	grpcOpts = append(grpcOpts, grpc.ChainStreamInterceptor(streamInterceptor...))
 
 	s := grpc.NewServer(grpcOpts...)
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
-	return s
+	return s, ServerInterceptorInfo{
+		UnaryInterceptors:  unaryInterceptor,
+		UnaryAuthIdx:       authUnaryIdx,
+		StreamInterceptors: streamInterceptor,
+		StreamAuthIdx:      authStreamIdx,
+	}
 }
 
 type heartbeatResult struct {
@@ -514,6 +558,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.masterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
 		waitQuiesce(rpcCtx.masterCtx)
 	}
+
 	return rpcCtx
 }
 
@@ -551,74 +596,269 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 	return nil
 }
 
+// internalClientAdapter is an implementation of roachpb.InternalClient that
+// bypasses gRPC, calling the wrapped local server directly.
 type internalClientAdapter struct {
-	server roachpb.InternalServer
+	server                   roachpb.InternalServer
+	serverStreamInterceptors serverStreamInterceptorsChain
+
+	// RPC handlers. Each handler is chained with the server-side gRPC
+	// interceptors and memoized.
+	batchHandler                   grpc.UnaryHandler
+	rangeLookupHandler             grpc.UnaryHandler
+	joinHandler                    grpc.UnaryHandler
+	resetQuorumHandler             grpc.UnaryHandler
+	tokenBucketHandler             grpc.UnaryHandler
+	getSpanConfigsHandler          grpc.UnaryHandler
+	updateSpanConfigsHandler       grpc.UnaryHandler
+	getSystemSpanConfigsHandler    grpc.UnaryHandler
+	updateSystemSpanConfigsHandler grpc.UnaryHandler
+}
+
+func newInternalClientAdapter(
+	server roachpb.InternalServer,
+	unaryServerInterceptors []grpc.UnaryServerInterceptor,
+	streamServerInterceptors []grpc.StreamServerInterceptor,
+) *internalClientAdapter {
+	a := &internalClientAdapter{
+		server:                   server,
+		serverStreamInterceptors: streamServerInterceptors,
+		batchHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: tracing.BatchMethodName,
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.Batch(ctx, req.(*roachpb.BatchRequest))
+			},
+			unaryServerInterceptors),
+		rangeLookupHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/RangeLookup",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.RangeLookup(ctx, req.(*roachpb.RangeLookupRequest))
+			},
+			unaryServerInterceptors),
+		joinHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/Join",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.Join(ctx, req.(*roachpb.JoinNodeRequest))
+			},
+			unaryServerInterceptors),
+		resetQuorumHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/ResetQuorum",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.ResetQuorum(ctx, req.(*roachpb.ResetQuorumRequest))
+			},
+			unaryServerInterceptors),
+		tokenBucketHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/TokenBucket",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.TokenBucket(ctx, req.(*roachpb.TokenBucketRequest))
+			},
+			unaryServerInterceptors),
+		getSpanConfigsHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/GetSpanConfigs",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.GetSpanConfigs(ctx, req.(*roachpb.GetSpanConfigsRequest))
+			},
+			unaryServerInterceptors),
+		updateSpanConfigsHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/UpdateSpanConfigs",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.UpdateSpanConfigs(ctx, req.(*roachpb.UpdateSpanConfigsRequest))
+			},
+			unaryServerInterceptors),
+		getSystemSpanConfigsHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/GetSystemSpanConfigs",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.GetSystemSpanConfigs(ctx, req.(*roachpb.GetSystemSpanConfigsRequest))
+			},
+			unaryServerInterceptors),
+		updateSystemSpanConfigsHandler: bindUnaryServerInterceptorsToHandler(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: "/cockroach.roachpb.Internal/UpdateSystemSpanConfigs",
+			},
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.UpdateSystemSpanConfigs(ctx, req.(*roachpb.UpdateSystemSpanConfigsRequest))
+			},
+			unaryServerInterceptors),
+	}
+
+	return a
+}
+
+var _ roachpb.InternalClient = &internalClientAdapter{}
+
+// bindUnaryServerInterceptorsToHandler takes a slice of interceptors and RPC handler and
+// returns a handler that runs all the interceptors and bottoms out by running
+// the input handler.
+//
+// This method does multiple allocations; its results should be memoized.
+func bindUnaryServerInterceptorsToHandler(
+	info *grpc.UnaryServerInfo, handler grpc.UnaryHandler, interceptors []grpc.UnaryServerInterceptor,
+) grpc.UnaryHandler {
+	if len(interceptors) == 0 {
+		return handler
+	}
+	i := 0
+	var callNextInterceptor grpc.UnaryHandler
+	callNextInterceptor = func(ctx context.Context, req interface{}) (interface{}, error) {
+		if i == len(interceptors)-1 {
+			return interceptors[i](ctx, req, info, handler)
+		}
+		i++
+		return interceptors[i-1](ctx, req, info, callNextInterceptor)
+	}
+	return callNextInterceptor
+}
+
+type serverStreamInterceptorsChain []grpc.StreamServerInterceptor
+
+// run runs all the interceptors and bottoms out by running handler.
+//
+// As opposed to the []UnaryServerInterceptor case, we cannot memoize the
+// chaining of interceptors with a handler because the handler is
+// request-specific: it needs to capture the request proto.
+func (c serverStreamInterceptorsChain) run(
+	srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+) error {
+	// state groups escaping variables into a single allocation.
+	var state struct {
+		i    int
+		next grpc.StreamHandler
+	}
+	state.next = func(srv interface{}, ss grpc.ServerStream) error {
+		if state.i == len(c)-1 {
+			return c[state.i](srv, ss, info, handler)
+		}
+		state.i++
+		return c[state.i-1](srv, ss, info, state.next)
+	}
+	return state.next(srv, ss)
 }
 
 // Batch implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) Batch(
+func (a *internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
 	// Mark this as originating locally, which is useful for the decision about
 	// memory allocation tracking.
 	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
-	return a.server.Batch(ctx, ba)
+	res, err := a.batchHandler(ctx, ba)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.BatchResponse), nil
 }
 
 // RangeLookup implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) RangeLookup(
+func (a *internalClientAdapter) RangeLookup(
 	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
 ) (*roachpb.RangeLookupResponse, error) {
-	return a.server.RangeLookup(ctx, rl)
+	res, err := a.rangeLookupHandler(ctx, rl)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.RangeLookupResponse), nil
 }
 
 // Join implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) Join(
+func (a *internalClientAdapter) Join(
 	ctx context.Context, req *roachpb.JoinNodeRequest, _ ...grpc.CallOption,
 ) (*roachpb.JoinNodeResponse, error) {
-	return a.server.Join(ctx, req)
+	res, err := a.joinHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.JoinNodeResponse), nil
 }
 
 // ResetQuorum is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) ResetQuorum(
+func (a *internalClientAdapter) ResetQuorum(
 	ctx context.Context, req *roachpb.ResetQuorumRequest, _ ...grpc.CallOption,
 ) (*roachpb.ResetQuorumResponse, error) {
-	return a.server.ResetQuorum(ctx, req)
+	res, err := a.resetQuorumHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.ResetQuorumResponse), nil
 }
 
 // TokenBucket is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) TokenBucket(
+func (a *internalClientAdapter) TokenBucket(
 	ctx context.Context, in *roachpb.TokenBucketRequest, opts ...grpc.CallOption,
 ) (*roachpb.TokenBucketResponse, error) {
-	return a.server.TokenBucket(ctx, in)
+	res, err := a.tokenBucketHandler(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.TokenBucketResponse), nil
 }
 
 // GetSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GetSpanConfigs(
+func (a *internalClientAdapter) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.GetSpanConfigsResponse, error) {
-	return a.server.GetSpanConfigs(ctx, req)
+	res, err := a.getSpanConfigsHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.GetSpanConfigsResponse), nil
 }
 
 // UpdateSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) UpdateSpanConfigs(
+func (a *internalClientAdapter) UpdateSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.UpdateSpanConfigsResponse, error) {
-	return a.server.UpdateSpanConfigs(ctx, req)
+	res, err := a.updateSpanConfigsHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.UpdateSpanConfigsResponse), nil
 }
 
 // GetSystemSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GetSystemSpanConfigs(
+func (a *internalClientAdapter) GetSystemSpanConfigs(
 	ctx context.Context, req *roachpb.GetSystemSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	return a.server.GetSystemSpanConfigs(ctx, req)
+	res, err := a.getSystemSpanConfigsHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.GetSystemSpanConfigsResponse), nil
 }
 
 // UpdateSystemSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) UpdateSystemSpanConfigs(
+func (a *internalClientAdapter) UpdateSystemSpanConfigs(
 	ctx context.Context, req *roachpb.UpdateSystemSpanConfigsRequest, _ ...grpc.CallOption,
 ) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	return a.server.UpdateSystemSpanConfigs(ctx, req)
+	res, err := a.updateSystemSpanConfigsHandler(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.UpdateSystemSpanConfigsResponse), nil
 }
 
 type respStreamClientAdapter struct {
@@ -699,7 +939,7 @@ var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
 var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 
 // RangeFeed implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) RangeFeed(
+func (a *internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -713,7 +953,17 @@ func (a internalClientAdapter) RangeFeed(
 	go func() {
 		defer cancel()
 		defer sp.Finish()
-		err := a.server.RangeFeed(args, rfAdapter)
+
+		info := &grpc.StreamServerInfo{
+			FullMethod:     "/cockroach.roachpb.Internal/RangeFeed",
+			IsClientStream: false,
+			IsServerStream: true,
+		}
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			return a.server.RangeFeed(args, rfAdapter)
+		}
+		err := a.serverStreamInterceptors.run(a.server, rfAdapter, info, handler)
+
 		if err == nil {
 			err = io.EOF
 		}
@@ -745,7 +995,7 @@ var _ roachpb.Internal_GossipSubscriptionClient = gossipSubscriptionClientAdapte
 var _ roachpb.Internal_GossipSubscriptionServer = gossipSubscriptionClientAdapter{}
 
 // GossipSubscription is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GossipSubscription(
+func (a *internalClientAdapter) GossipSubscription(
 	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_GossipSubscriptionClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -757,7 +1007,17 @@ func (a internalClientAdapter) GossipSubscription(
 	go func() {
 		defer cancel()
 		defer sp.Finish()
-		err := a.server.GossipSubscription(args, gsAdapter)
+
+		info := &grpc.StreamServerInfo{
+			FullMethod:     "/cockroach.roachpb.Internal/GossipSubscription",
+			IsClientStream: false,
+			IsServerStream: true,
+		}
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			return a.server.GossipSubscription(args, gsAdapter)
+		}
+		err := a.serverStreamInterceptors.run(a.server, gsAdapter, info, handler)
+
 		if err == nil {
 			err = io.EOF
 		}
@@ -789,37 +1049,61 @@ var _ roachpb.Internal_TenantSettingsClient = tenantSettingsClientAdapter{}
 var _ roachpb.Internal_TenantSettingsServer = tenantSettingsClientAdapter{}
 
 // TenantSettings is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) TenantSettings(
+func (a *internalClientAdapter) TenantSettings(
 	ctx context.Context, args *roachpb.TenantSettingsRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_TenantSettingsClient, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	gsAdapter := tenantSettingsClientAdapter{
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/TenantSettings")
+	tsAdapter := tenantSettingsClientAdapter{
 		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
 	}
 
 	go func() {
 		defer cancel()
-		err := a.server.TenantSettings(args, gsAdapter)
+		defer sp.Finish()
+
+		info := &grpc.StreamServerInfo{
+			FullMethod:     "/cockroach.roachpb.Internal/TenantSettings",
+			IsClientStream: false,
+			IsServerStream: true,
+		}
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			return a.server.TenantSettings(args, tsAdapter)
+		}
+		err := a.serverStreamInterceptors.run(a.server, tsAdapter, info, handler)
 		if err == nil {
 			err = io.EOF
 		}
-		gsAdapter.errC <- err
+		tsAdapter.errC <- err
 	}()
 
-	return gsAdapter, nil
+	return tsAdapter, nil
 }
-
-var _ roachpb.InternalClient = internalClientAdapter{}
 
 // IsLocal returns true if the given InternalClient is local.
 func IsLocal(iface roachpb.InternalClient) bool {
-	_, ok := iface.(internalClientAdapter)
+	_, ok := iface.(*internalClientAdapter)
 	return ok // internalClientAdapter is used for local connections.
 }
 
 // SetLocalInternalServer sets the context's local internal batch server.
-func (rpcCtx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	rpcCtx.localInternalClient = internalClientAdapter{internalServer}
+//
+// serverInterceptors lists the interceptors that will be run on RPCs done
+// through this local server.
+func (rpcCtx *Context) SetLocalInternalServer(
+	internalServer roachpb.InternalServer, serverInterceptors ServerInterceptorInfo,
+) {
+	// Remove the Auth interceptor. It doesn't work for local requests because
+	// there's no TLS info in the ctx.
+	unary := serverInterceptors.UnaryInterceptors
+	stream := serverInterceptors.StreamInterceptors
+	if idx := serverInterceptors.UnaryAuthIdx; idx != -1 {
+		unary = append(unary[:idx], unary[idx+1:]...)
+	}
+	if idx := serverInterceptors.StreamAuthIdx; idx != -1 {
+		stream = append(stream[:idx], stream[idx+1:]...)
+	}
+	rpcCtx.localInternalClient = newInternalClientAdapter(internalServer, unary, stream)
 }
 
 // removeConn removes the given connection from the pool. The supplied connKeys
