@@ -406,7 +406,7 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
     [[Column:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
     [[ColumnComment:{DescID: 106, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 106, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintComment:{DescID: 106, ConstraintType: PrimaryKey, Name: t1_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 106, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 106, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[TableComment:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
@@ -441,8 +441,7 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
       ColumnID: 3
       TableID: 106
     *scop.RemoveConstraintComment
-      ConstraintName: t1_pkey
-      ConstraintType: 4
+      ConstraintID: 1
       TableID: 106
     *scop.RemoveIndexComment
       IndexID: 1
