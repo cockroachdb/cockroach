@@ -126,9 +126,7 @@ func NewMemBatchWithCapacity(typs []*types.T, capacity int, factory ColumnFactor
 		col := &cols[i]
 		col.init(t, capacity, factory)
 		b.b[i] = col
-		if col.IsBytesLike() {
-			b.bytesVecIdxs.Add(i)
-		} else if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+		if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
 			b.datumVecIdxs.Add(i)
 		}
 	}
@@ -201,11 +199,6 @@ type MemBatch struct {
 	capacity int
 	// b is the slice of columns in this batch.
 	b []Vec
-	// bytesVecIdxs stores the indices of all vectors of Bytes type in b. Bytes
-	// vectors require special handling, so rather than iterating over all
-	// vectors and checking whether they are of Bytes type we store this slice
-	// separately.
-	bytesVecIdxs util.FastIntSet
 	// datumVecIdxs stores the indices of all datum-backed vectors in b.
 	datumVecIdxs util.FastIntSet
 	useSel       bool
@@ -257,27 +250,11 @@ func (m *MemBatch) SetSelection(b bool) {
 // SetLength implements the Batch interface.
 func (m *MemBatch) SetLength(length int) {
 	m.length = length
-	if length > 0 {
-		// In order to maintain the invariant of Bytes vectors we need to update
-		// offsets up to the element with the largest index that can be accessed
-		// by the batch.
-		maxIdx := length - 1
-		if m.useSel {
-			// Note that here we rely on the fact that selection vectors are
-			// increasing sequences.
-			maxIdx = m.sel[length-1]
-		}
-		for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-			UpdateOffsetsToBeNonDecreasing(m.b[i], maxIdx+1)
-		}
-	}
 }
 
 // AppendCol implements the Batch interface.
 func (m *MemBatch) AppendCol(col Vec) {
-	if col.IsBytesLike() {
-		m.bytesVecIdxs.Add(len(m.b))
-	} else if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
+	if col.CanonicalTypeFamily() == typeconv.DatumVecCanonicalTypeFamily {
 		m.datumVecIdxs.Add(len(m.b))
 	}
 	m.b = append(m.b, col)
@@ -318,11 +295,6 @@ func (m *MemBatch) Reset(typs []*types.T, length int, factory ColumnFactory) {
 	// since those will get reset in ResetInternalBatch anyway.
 	m.b = m.b[:len(typs)]
 	m.sel = m.sel[:length]
-	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-		if i >= len(typs) {
-			m.bytesVecIdxs.Remove(i)
-		}
-	}
 	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {
 		if i >= len(typs) {
 			m.datumVecIdxs.Remove(i)
@@ -339,10 +311,8 @@ func (m *MemBatch) ResetInternalBatch() int64 {
 	for _, v := range m.b {
 		if v.CanonicalTypeFamily() != types.UnknownFamily {
 			v.Nulls().UnsetNulls()
+			ResetIfBytesLike(v)
 		}
-	}
-	for i, ok := m.bytesVecIdxs.Next(0); ok; i, ok = m.bytesVecIdxs.Next(i + 1) {
-		Reset(m.b[i])
 	}
 	var released int64
 	for i, ok := m.datumVecIdxs.Next(0); ok; i, ok = m.datumVecIdxs.Next(i + 1) {

@@ -321,7 +321,7 @@ func TestRecordBatchSerializerDeserializeMemoryEstimate(t *testing.T) {
 	src := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	dest := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	bytesVec := src.ColVec(0).Bytes()
-	maxValueLen := coldata.BytesInitialAllocationFactor * 8
+	maxValueLen := coldata.BytesMaxInlineLength * 8
 	value := make([]byte, maxValueLen)
 	for i := 0; i < coldata.BatchSize(); i++ {
 		value = value[:rng.Intn(maxValueLen)]
