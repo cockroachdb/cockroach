@@ -313,6 +313,7 @@ go_test(
         "userfiletable_test.go",
         "workload_test.go",
         "zip_helpers_test.go",
+        "zip_tenant_test.go",
         "zip_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -320,6 +321,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/clicfg",
         "//pkg/cli/clierror",
         "//pkg/cli/clierrorplus",
