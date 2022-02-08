@@ -2730,7 +2730,7 @@ message TenantSettingsEvent {
   //  - the changed overrides since the last event for the precedence if
   //    Incremental is true (removed overrides have empty RawValue and ValueType
   //    fields).
-  repeated TenantSetting overrides = 3;
+  repeated TenantSetting overrides = 3 [(gogoproto.nullable) = false];
 
   // If non-nil, the other fields will be empty and this will be the final event
   // sent on the stream before it is terminated.

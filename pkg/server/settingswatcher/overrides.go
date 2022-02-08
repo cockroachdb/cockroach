@@ -19,9 +19,10 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 // Current() to retrieve the updated list of overrides when a message is
 // received.
 type OverridesMonitor interface {
-	// NotifyCh returns a channel that receives a message any time the current set
-	// of overrides changes.
-	NotifyCh() <-chan struct{}
+	// RegisterOverridesChannel returns a channel that receives a message
+	// any time the current set of overrides changes.
+	// The channel receives an initial event immediately.
+	RegisterOverridesChannel() <-chan struct{}
 
 	// Overrides retrieves the current set of setting overrides, as a map from
 	// setting key to EncodedValue. Any settings that are present must be set to
