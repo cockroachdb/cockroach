@@ -34,8 +34,10 @@ type bytesMethod int
 const (
 	set bytesMethod = iota
 	window
+	copyMethod
 	copySlice
 	appendSlice
+	appendSliceWithSel
 	appendVal
 )
 
@@ -45,10 +47,14 @@ func (m bytesMethod) String() string {
 		return "Set"
 	case window:
 		return "Window"
+	case copyMethod:
+		return "copy"
 	case copySlice:
 		return "CopySlice"
 	case appendSlice:
 		return "AppendSlice"
+	case appendSliceWithSel:
+		return "appendSliceWithSel"
 	case appendVal:
 		return "AppendVal"
 	default:
@@ -56,7 +62,7 @@ func (m bytesMethod) String() string {
 	}
 }
 
-var bytesMethods = []bytesMethod{set, window, copySlice, appendSlice, appendVal}
+var bytesMethods = []bytesMethod{set, window, copyMethod, copySlice, appendSlice, appendSliceWithSel, appendVal}
 
 // applyMethodsAndVerify applies the given methods on b1 and a reference
 // [][]byte implementation and checks if the results are equal. If
@@ -112,6 +118,12 @@ func applyMethodsAndVerify(
 					debugString, b1Window.String(), prettyByteSlice(b2Window))
 			}
 			continue
+		case copyMethod:
+			destIdx := rng.Intn(n)
+			srcIdx := rng.Intn(sourceN)
+			debugString += fmt.Sprintf("(%d, %d)", destIdx, srcIdx)
+			b1.copy(b1Source, destIdx, srcIdx)
+			b2[destIdx] = append([]byte(nil), b2Source[srcIdx]...)
 		case copySlice, appendSlice:
 			if m == appendSlice && selfReferencingSources {
 				// AppendSlice with selfReferencingSources is only supported
@@ -144,6 +156,35 @@ func applyMethodsAndVerify(
 			b2Slice := b2[destIdx : destIdx+numNewVals]
 			for i := range b2Slice {
 				b2Slice[i] = append([]byte(nil), b2Slice[i]...)
+			}
+		case appendSliceWithSel:
+			if selfReferencingSources {
+				// appendSliceWithSel with selfReferencingSources is only
+				// supported when srcStartIdx == srcEndIdx, so we skip this
+				// method to avoid whittling down our destination slice.
+				continue
+			}
+			// Generate a length-inclusive destIdx.
+			destIdx := rng.Intn(n + 1)
+			var sel []int
+			for i := 0; i < sourceN; i++ {
+				if rng.Float64() < 0.5 {
+					sel = append(sel, i)
+				}
+			}
+			// Make sure that the length never becomes zero.
+			if destIdx == 0 && len(sel) == 0 {
+				sel = []int{rng.Intn(sourceN)}
+			}
+			debugString += fmt.Sprintf("(%d, %v)", destIdx, sel)
+			b1.appendSliceWithSel(b1Source, destIdx, sel)
+			b2 = append([][]byte(nil), b2[:destIdx]...)
+			for _, srcIdx := range sel {
+				b2 = append(b2, append([]byte(nil), b2Source[srcIdx]...))
+			}
+			if selfReferencingSources {
+				b1Source = b1
+				b2Source = b2
 			}
 		case appendVal:
 			v := make([]byte, rng.Intn(testMaxElementLength))
