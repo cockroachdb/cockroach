@@ -1742,7 +1742,8 @@ func (t *T) InformationSchemaName() string {
 
 // SQLString returns the CockroachDB native SQL string that can be used to
 // reproduce the type via parsing the string as a type. It is used in error
-// messages and also to produce the output of SHOW CREATE.
+// messages
+//and also to produce the output of SHOW CREATE.
 func (t *T) SQLString() string {
 	switch t.Family() {
 	case BitFamily:
