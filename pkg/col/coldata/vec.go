@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Column is an interface that represents a raw array of a Go native type.
@@ -51,9 +50,6 @@ type Vec interface {
 	// CanonicalTypeFamily returns the canonical type family of data stored in
 	// this Vec.
 	CanonicalTypeFamily() types.Family
-	// IsBytesLike returns true if this data is stored with a flat bytes
-	// representation.
-	IsBytesLike() bool
 
 	// Bool returns a bool list.
 	Bool() Bools
@@ -94,10 +90,6 @@ type Vec interface {
 	// An optional Sel slice can also be provided to apply a filter on the source
 	// Vec.
 	// Refer to the SliceArgs comment for specifics and TestAppend for examples.
-	//
-	// NOTE: Append does *not* support the case of appending 0 values (i.e.
-	// the behavior of Append when args.SrcStartIdx == args.SrcEndIdx is
-	// undefined).
 	Append(SliceArgs)
 
 	// Copy uses SliceArgs to copy elements of a source Vec into this Vec. It is
@@ -166,9 +158,6 @@ func (cf *defaultColumnFactory) MakeColumn(t *types.T, length int) Column {
 	case types.BoolFamily:
 		return make(Bools, length)
 	case types.BytesFamily:
-		if t.Family() == types.UuidFamily {
-			return NewBytesWithAvgLength(length, uuid.Size)
-		}
 		return NewBytes(length)
 	case types.IntFamily:
 		switch t.Width() {
@@ -220,14 +209,6 @@ func (m *memColumn) Type() *types.T {
 
 func (m *memColumn) CanonicalTypeFamily() types.Family {
 	return m.canonicalTypeFamily
-}
-
-func (m *memColumn) IsBytesLike() bool {
-	switch m.canonicalTypeFamily {
-	case types.BytesFamily, types.JsonFamily:
-		return true
-	}
-	return false
 }
 
 func (m *memColumn) SetCol(col Column) {
