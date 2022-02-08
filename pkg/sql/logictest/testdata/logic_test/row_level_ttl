@@ -133,6 +133,47 @@ WHERE label = 'row-level-ttl-$table_id'
 ACTIVE  @daily  root
 
 statement ok
+ALTER TABLE tbl SET (ttl_job_cron = '@weekly')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                                                      id INT8 NOT NULL,
+                                                                                                                      text STRING NULL,
+                                                                                                                      crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                      CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                      FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@weekly')
+
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @weekly  root
+
+statement ok
+ALTER TABLE tbl RESET (ttl_job_cron)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                            id INT8 NOT NULL,
+                                                                                            text STRING NULL,
+                                                                                            crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                            CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                            FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root
+
+statement ok
 CREATE TABLE no_ttl_table ();
 ALTER TABLE no_ttl_table SET (ttl = 'off');
 ALTER TABLE no_ttl_table SET (ttl_automatic_column = 'off')
@@ -142,6 +183,9 @@ ALTER TABLE no_ttl_table SET (ttl_select_batch_size = 50)
 
 statement error "ttl_expire_after" must be set
 ALTER TABLE no_ttl_table SET (ttl_delete_batch_size = 50)
+
+statement error "ttl_expire_after" must be set
+ALTER TABLE no_ttl_table SET (ttl_job_cron = '@weekly')
 
 statement ok
 DROP TABLE tbl;

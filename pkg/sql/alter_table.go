@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -972,6 +973,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
+			var ttlBefore *descpb.TableDescriptor_RowLevelTTL
+			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
+				ttlBefore = protoutil.Clone(ttl).(*descpb.TableDescriptor_RowLevelTTL)
+			}
 			if err := paramparse.SetStorageParameters(
 				params.ctx,
 				params.p.SemaCtx(),
@@ -982,9 +987,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			// TODO(#75428): handle TTL side effects
+
+			if err := handleTTLStorageParamChange(params, ttlBefore, n.tableDesc.GetRowLevelTTL()); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableResetStorageParams:
+			var ttlBefore *descpb.TableDescriptor_RowLevelTTL
+			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
+				ttlBefore = protoutil.Clone(ttl).(*descpb.TableDescriptor_RowLevelTTL)
+			}
 			if err := paramparse.ResetStorageParameters(
 				params.ctx,
 				params.EvalContext(),
@@ -994,7 +1006,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			descriptorChanged = true
-			// TODO(#75428): handle TTL side effects
+
+			if err := handleTTLStorageParamChange(params, ttlBefore, n.tableDesc.GetRowLevelTTL()); err != nil {
+				return err
+			}
 
 		case *tree.AlterTableRenameColumn:
 			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, t.Column, t.NewName)
@@ -1744,6 +1759,39 @@ func (p *planner) updateFKBackReferenceName(
 		}
 	}
 	return errors.Errorf("missing backreference for foreign key %s", ref.Name)
+}
+
+func handleTTLStorageParamChange(
+	params runParams, before, after *descpb.TableDescriptor_RowLevelTTL,
+) error {
+	switch {
+	case before == nil && after == nil:
+		// Do not have to do anything here.
+	case before != nil && after != nil:
+		if before.DeletionCron != after.DeletionCron {
+			env := JobSchedulerEnv(params.ExecCfg())
+			s, err := jobs.LoadScheduledJob(
+				params.ctx,
+				env,
+				after.ScheduleID,
+				params.ExecCfg().InternalExecutor,
+				params.p.txn,
+			)
+			if err != nil {
+				return err
+			}
+			if err := s.SetSchedule(rowLevelTTLSchedule(after)); err != nil {
+				return err
+			}
+			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+				return err
+			}
+		}
+	default:
+		// TODO(#75428): handle adding or dropping TTL
+	}
+
+	return nil
 }
 
 // tryRemoveFKBackReferences determines whether the provided unique constraint
