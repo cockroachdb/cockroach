@@ -72,6 +72,7 @@ func newUnloadedReplica(
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
 		RangeID:        desc.RangeID,
+		replicaID:      replicaID,
 		creationTime:   timeutil.Now(),
 		store:          store,
 		abortSpan:      abortspan.New(desc.RangeID),
@@ -93,7 +94,6 @@ func newUnloadedReplica(
 	r.mu.stateLoader = stateloader.Make(desc.RangeID)
 	r.mu.quiescent = true
 	r.mu.conf = store.cfg.DefaultSpanConfig
-	r.mu.replicaID = replicaID
 	split.Init(&r.loadBasedSplitter, rand.Intn, func() float64 {
 		return float64(SplitByLoadQPSThreshold.Get(&store.cfg.Settings.SV))
 	}, func() time.Duration {
@@ -179,7 +179,7 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.mu.state.Desc != nil && r.isInitializedRLocked() {
 		log.Fatalf(ctx, "r%d: cannot reinitialize an initialized replica", desc.RangeID)
-	} else if r.mu.replicaID == 0 {
+	} else if r.replicaID == 0 {
 		// NB: This is just a defensive check as r.mu.replicaID should never be 0.
 		log.Fatalf(ctx, "r%d: cannot initialize replica without a replicaID", desc.RangeID)
 	}
@@ -204,15 +204,15 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 
 	// Ensure that we're not trying to load a replica with a different ID than
 	// was used to construct this Replica.
-	replicaID := r.mu.replicaID
+	replicaID := r.replicaID
 	if replicaDesc, found := r.mu.state.Desc.GetReplicaDescriptor(r.StoreID()); found {
 		replicaID = replicaDesc.ReplicaID
 	} else if desc.IsInitialized() {
 		log.Fatalf(ctx, "r%d: cannot initialize replica which is not in descriptor %v", desc.RangeID, desc)
 	}
-	if r.mu.replicaID != replicaID {
+	if r.replicaID != replicaID {
 		log.Fatalf(ctx, "attempting to initialize a replica which has ID %d with ID %d",
-			r.mu.replicaID, replicaID)
+			r.replicaID, replicaID)
 	}
 
 	r.setDescLockedRaftMuLocked(ctx, desc)
@@ -346,9 +346,9 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	//      store to exist on disk.
 	//   3) Various unit tests do not provide a valid descriptor.
 	replDesc, found := desc.GetReplicaDescriptor(r.StoreID())
-	if found && replDesc.ReplicaID != r.mu.replicaID {
+	if found && replDesc.ReplicaID != r.replicaID {
 		log.Fatalf(ctx, "attempted to change replica's ID from %d to %d",
-			r.mu.replicaID, replDesc.ReplicaID)
+			r.replicaID, replDesc.ReplicaID)
 	}
 
 	// Initialize the tenant. The must be the first time that the descriptor has
@@ -380,7 +380,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 		r.mu.lastReplicaAddedTime = time.Time{}
 	}
 
-	r.rangeStr.store(r.mu.replicaID, desc)
+	r.rangeStr.store(r.replicaID, desc)
 	r.connectionClass.set(rpc.ConnectionClassForKey(desc.StartKey))
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.mu.state.Desc = desc
