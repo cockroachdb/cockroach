@@ -25,6 +25,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Use double of the max inline length so that we get a mix of inlinable and
+// non-inlinable values.
+const testMaxElementLength = BytesMaxInlineLength * 2
+
 type bytesMethod int
 
 const (
@@ -86,13 +90,8 @@ func applyMethodsAndVerify(
 		debugString += m.String()
 		switch m {
 		case set:
-			// Can only Set starting from maxSetLength - 1 (or zero if maxSetLength is
-			// zero).
-			i := b1.maxSetLength - 1 + rng.Intn(b1.Len()-(b1.maxSetLength-1))
-			if i < 0 {
-				i = 0
-			}
-			new := make([]byte, rng.Intn(16))
+			i := rng.Intn(n)
+			new := make([]byte, rng.Intn(testMaxElementLength))
 			rng.Read(new)
 			debugString += fmt.Sprintf("(%d, %v)", i, new)
 			b1.Set(i, new)
@@ -106,9 +105,6 @@ func applyMethodsAndVerify(
 			debugString += fmt.Sprintf("(%d, %d)", start, end)
 			b1Window := b1.Window(start, end)
 			b2Window := b2[start:end]
-			// b1Window is not allowed to be modified, so we check explicitly whether
-			// it equals the reference, and we do not update b1 and b2.
-			b1Window.AssertOffsetsAreNonDecreasing(b1Window.Len())
 			debugString += fmt.Sprintf("\n%s\n", b1Window)
 			if err := verifyEqual(b1Window, b2Window); err != nil {
 				return errors.Wrapf(err,
@@ -150,7 +146,7 @@ func applyMethodsAndVerify(
 				b2Slice[i] = append([]byte(nil), b2Slice[i]...)
 			}
 		case appendVal:
-			v := make([]byte, 16)
+			v := make([]byte, rng.Intn(testMaxElementLength))
 			rng.Read(v)
 			debugString += fmt.Sprintf("(%v)", v)
 			b1.AppendVal(v)
@@ -162,12 +158,11 @@ func applyMethodsAndVerify(
 		default:
 			return errors.Errorf("unknown method name: %s", m)
 		}
-		b1.AssertOffsetsAreNonDecreasing(b1.Len())
 		debugString += fmt.Sprintf("\n%s\n", b1)
 		if err := verifyEqual(b1, b2); err != nil {
 			return errors.Wrapf(err,
-				"\ndebugString:\n%s\nflat (maxSetLength=%d):\n%s\nreference:\n%s",
-				debugString, b1.maxSetLength, b1.String(), prettyByteSlice(b2))
+				"\ndebugString:\n%s\nflat:\n%s\nreference:\n%s",
+				debugString, b1.String(), prettyByteSlice(b2))
 		}
 	}
 	return nil
@@ -205,16 +200,24 @@ func TestBytesRefImpl(t *testing.T) {
 		maxLength        = 16
 		nRuns            = 100
 	)
+	v := make([]byte, testMaxElementLength)
+	var flat *Bytes
 
 	for nRun := 0; nRun < nRuns; nRun++ {
 		n := 1 + rng.Intn(maxLength)
 
-		flat := NewBytes(n)
+		if flat != nil && cap(flat.elements) >= n && rng.Float64() < 0.5 {
+			// If the flat vector is large enough, reuse it with 50% chance.
+			flat.Reset()
+			flat.elements = flat.elements[:n]
+		} else {
+			flat = NewBytes(n)
+		}
 		reference := make([][]byte, n)
 		for i := 0; i < n; i++ {
-			v := make([]byte, rng.Intn(16))
+			v = v[:rng.Intn(testMaxElementLength)]
 			rng.Read(v)
-			flat.Set(i, append([]byte(nil), v...))
+			flat.Set(i, v)
 			reference[i] = append([]byte(nil), v...)
 		}
 
@@ -225,13 +228,13 @@ func TestBytesRefImpl(t *testing.T) {
 		selfReferencingSources := true
 		if rng.Float64() < 0.5 {
 			selfReferencingSources = false
-			sourceN := 1 + rng.Intn(maxLength)
+			sourceN := 1 + rng.Intn(testMaxElementLength)
 			flatSource = NewBytes(sourceN)
 			referenceSource = make([][]byte, sourceN)
 			for i := 0; i < sourceN; i++ {
-				v := make([]byte, rng.Intn(16))
+				v = v[:rng.Intn(testMaxElementLength)]
 				rng.Read(v)
-				flatSource.Set(i, append([]byte(nil), v...))
+				flatSource.Set(i, v)
 				referenceSource[i] = append([]byte(nil), v...)
 			}
 		}
@@ -262,29 +265,6 @@ func TestBytes(t *testing.T) {
 		b1.AppendVal(nil)
 		require.Equal(t, []byte{}, b1.Get(1))
 		require.Equal(t, 2, b1.Len())
-		// Verify that we cannot overwrite a value.
-		require.Panics(
-			t,
-			func() { b1.Set(0, []byte("not allowed")) },
-			"should be unable to overwrite value",
-		)
-
-		// However, it is legal to overwrite the last value.
-		b1.Set(1, []byte("ok"))
-
-		// If we Reset the Bytes, we can Set any index.
-		b1.Reset()
-		b1.Set(1, []byte("new usage"))
-		// But not an index before that.
-		require.Panics(
-			t,
-			func() { b1.Set(0, []byte("still not allowed")) },
-			"should be unable to overwrite value",
-		)
-
-		// Same with Reset.
-		b1.Reset()
-		b1.Set(1, []byte("reset new usage"))
 	})
 
 	t.Run("Append", func(t *testing.T) {
@@ -337,7 +317,6 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, 4, b.Len())
 		require.Equal(t, "zero", string(b.Get(0)))
 		require.Equal(t, "three", string(b.Get(3)))
-		b.AssertOffsetsAreNonDecreasing(b.Len())
 	})
 
 	t.Run("Copy", func(t *testing.T) {
@@ -368,8 +347,7 @@ func TestBytes(t *testing.T) {
 
 		// Set the length to 1 and follow it with testing a full overwrite of
 		// only one element.
-		b1.offsets = b1.offsets[:2]
-		b1.maxSetLength = 1
+		b1.elements = b1.elements[:1]
 		require.Equal(t, 1, b1.Len())
 		b1.CopySlice(b2, 0, 0, b2.Len())
 		require.Equal(t, 1, b1.Len())
@@ -428,33 +406,6 @@ func TestBytes(t *testing.T) {
 		)
 	})
 
-	t.Run("InvariantSimple", func(t *testing.T) {
-		b1 := NewBytes(8)
-		b1.Set(0, []byte("zero"))
-		other := b1.Window(0, 2)
-		other.AssertOffsetsAreNonDecreasing(2)
-
-		b2 := NewBytes(8)
-		b2.Set(0, []byte("zero"))
-		b2.Set(2, []byte("two"))
-		other = b2.Window(0, 4)
-		other.AssertOffsetsAreNonDecreasing(4)
-	})
-
-	t.Run("Truncate", func(t *testing.T) {
-		b := NewBytes(8)
-		b.Set(4, []byte("foo"))
-		require.Equal(t, 5, b.maxSetLength)
-		require.Panics(t, func() { b.Set(1, []byte("bar")) })
-		b.Truncate(1)
-		require.Equal(t, 1, b.maxSetLength)
-		require.NotPanics(t, func() { b.Set(1, []byte("baz")) })
-		require.Equal(t, 2, b.maxSetLength)
-		b.Truncate(0)
-		require.Equal(t, 0, b.maxSetLength)
-		require.NotPanics(t, func() { b.Set(4, []byte("deadbeef")) })
-	})
-
 	t.Run("Abbreviated", func(t *testing.T) {
 		rng, _ := randutil.NewTestRand()
 
@@ -488,8 +439,8 @@ func TestBytes(t *testing.T) {
 func TestProportionalSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Use a large value so that the bytes vector needs to expand.
-	value := make([]byte, 3*BytesInitialAllocationFactor)
+	// Use a large value so that elements are not inlined.
+	value := make([]byte, 3*BytesMaxInlineLength)
 
 	rng, _ := randutil.NewTestRand()
 	// We need a number divisible by 4.
@@ -531,8 +482,6 @@ func TestToArrowSerializationFormat(t *testing.T) {
 		element := []byte(randgen.RandString(rng, 1+rng.Intn(maxStringLength), letters))
 		b.Set(i, element)
 	}
-	// We have to call this in case there are trailing nulls.
-	b.UpdateOffsetsToBeNonDecreasing(numElements)
 
 	startIdx := rng.Intn(numElements)
 	endIdx := startIdx + rng.Intn(numElements-startIdx)
@@ -555,36 +504,12 @@ func TestToArrowSerializationFormat(t *testing.T) {
 	// Verify that the data contains the correct values.
 	for i := 0; i < len(offsets)-1; i++ {
 		element := data[offsets[i]:offsets[i+1]]
+		if len(element) == 0 {
+			// Bytes.Get returns a nil []byte value for NULL values whereas the
+			// slicing above will make it a zero-length []byte value. Override
+			// the latter to the former.
+			element = nil
+		}
 		require.Equal(t, wind.Get(i), element)
 	}
-}
-
-func TestForRegressions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	t.Run("Regression test for #42054", func(t *testing.T) {
-		b := NewBytes(4)
-		b.Set(0, []byte("zero"))
-		b.Set(1, []byte("one"))
-		b.Set(2, []byte("two"))
-
-		// Emulate copying when the first two values are null and the last is
-		// non-null.
-		b.Reset()
-		b.Set(2, []byte("three"))
-		b.AssertOffsetsAreNonDecreasing(2)
-
-		b.Reset()
-		b.Set(0, []byte("zero"))
-		b.Set(1, []byte("one"))
-		b.Set(2, []byte("two"))
-		b.Set(3, []byte("three"))
-
-		// Emulate copying when the first and last values are non-null, and the
-		// middle two are null.
-		b.Reset()
-		b.Set(0, []byte("zero"))
-		b.Set(3, []byte("four"))
-		b.AssertOffsetsAreNonDecreasing(3)
-	})
 }
