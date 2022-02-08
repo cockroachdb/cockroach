@@ -106,7 +106,7 @@ type PostDeserializationTableDescriptorChanges struct {
 
 	// UpgradedConstraintID indicates that table descriptors had constraint ID
 	// added.
-	UpgradedConstraintIDs bool
+	AddedConstraintIDs bool
 }
 
 // DescriptorType returns the type of this descriptor.
