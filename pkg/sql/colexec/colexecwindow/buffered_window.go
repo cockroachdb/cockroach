@@ -310,18 +310,12 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 					// first of the tuples yet to be processed was somewhere in the batch.
 					b.processingIdx = 0
 				}
-				// Although we didn't change the length of the batch, it is necessary to
-				// set the length anyway (to maintain the invariant of flat bytes).
-				output.SetLength(output.Length())
 				return output
 			}
 			if b.currentBatch.Length() > 0 {
 				b.windower.processBatch(b.currentBatch, b.processingIdx, b.nextPartitionIdx)
 				if b.nextPartitionIdx >= b.currentBatch.Length() {
-					// This was the last batch and it has been entirely filled. Although
-					// we didn't change the length of the batch, it is necessary to set
-					// the length anyway (to maintain the invariant of flat bytes).
-					b.currentBatch.SetLength(b.currentBatch.Length())
+					// This was the last batch and it has been entirely filled.
 					b.state = windowFinished
 					return b.currentBatch
 				}

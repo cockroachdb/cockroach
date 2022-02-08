@@ -160,9 +160,6 @@ func (s *substringInt64Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -242,9 +239,6 @@ func (s *substringInt64Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -324,9 +318,6 @@ func (s *substringInt64Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -406,9 +397,6 @@ func (s *substringInt16Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -488,9 +476,6 @@ func (s *substringInt16Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -570,9 +555,6 @@ func (s *substringInt16Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -652,9 +634,6 @@ func (s *substringInt32Int16Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -734,9 +713,6 @@ func (s *substringInt32Int32Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
 
@@ -816,8 +792,5 @@ func (s *substringInt32Int64Operator) Next() coldata.Batch {
 			}
 		},
 	)
-	// Although we didn't change the length of the batch, it is necessary to set
-	// the length anyway (this helps maintaining the invariant of flat bytes).
-	batch.SetLength(n)
 	return batch
 }
