@@ -775,3 +775,57 @@ func (c *Constraint) CalculateMaxResults(
 	}
 	return distinctVals, true
 }
+
+// CollectFirstColumnValues examines the Span first-column prefix ranges in c
+// and returns all included values. If a null value is included, hasNullValue
+// is returned as true.
+func (c *Constraint) CollectFirstColumnValues(
+	evalCtx *tree.EvalContext,
+) (_ tree.Datums, hasNullValue bool, ok bool) {
+	if c.IsContradiction() || c.IsUnconstrained() {
+		return nil, false, false
+	}
+	numSpans := c.Spans.Count()
+	values := make(tree.Datums, 0, numSpans)
+
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	hasNullValue = false
+	var prevValue tree.Datum
+	addValueIfNotDup := func(value tree.Datum) {
+		if prevValue == nil || keyCtx.Compare(0, prevValue, value) != 0 {
+			values = append(values, value)
+			prevValue = value
+		}
+	}
+
+	// Traverse all the spans and collect all of the unique span prefixes of
+	// length 1.
+	for k := 0; k < numSpans; k++ {
+		span := c.Spans.Get(k)
+
+		startKey := c.Spans.Get(k).StartKey()
+		keyCount, ok := span.KeyCount(&keyCtx, 1)
+
+		if !ok {
+			return nil, false, false
+		}
+		currKey := startKey.CutBack(startKey.Length() - 1)
+		for l, ok := 0, true; l < int(keyCount); l++ {
+			if !ok {
+				return nil, false, false
+			}
+			if currKey.IsEmpty() {
+				return nil, false, false
+			}
+			if currKey.Value(0) == tree.DNull {
+				hasNullValue = true
+			}
+			addValueIfNotDup(currKey.Value(0))
+			currKey, ok = currKey.Next(&keyCtx)
+		}
+	}
+	if len(values) < 1 {
+		return nil, false, false
+	}
+	return values, hasNullValue, true
+}

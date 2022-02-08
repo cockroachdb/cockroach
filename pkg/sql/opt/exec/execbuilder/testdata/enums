@@ -144,19 +144,19 @@ EXPLAIN (opt) SELECT * FROM composite_key ORDER BY y LIMIT 5
 limit
  ├── union-all
  │    ├── union-all
- │    │    ├── union-all
- │    │    │    ├── scan composite_key
- │    │    │    │    ├── constraint: /6/7: [/'hello' - /'hello']
- │    │    │    │    └── limit: 5
- │    │    │    └── scan composite_key
- │    │    │         ├── constraint: /10/11: [/'howdy' - /'howdy']
- │    │    │         └── limit: 5
+ │    │    ├── scan composite_key
+ │    │    │    ├── constraint: /6/7: [/'hello' - /'hello']
+ │    │    │    └── limit: 5
  │    │    └── scan composite_key
- │    │         ├── constraint: /18/19: [/'hi' - /'hi']
+ │    │         ├── constraint: /10/11: [/'howdy' - /'howdy']
  │    │         └── limit: 5
- │    └── scan composite_key
- │         ├── constraint: /26/27: [/'cheers' - /'cheers']
- │         └── limit: 5
+ │    └── union-all
+ │         ├── scan composite_key
+ │         │    ├── constraint: /14/15: [/'hi' - /'hi']
+ │         │    └── limit: 5
+ │         └── scan composite_key
+ │              ├── constraint: /18/19: [/'cheers' - /'cheers']
+ │              └── limit: 5
  └── 5
 
 statement ok
