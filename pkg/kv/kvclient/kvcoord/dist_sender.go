@@ -279,9 +279,10 @@ type DistSender struct {
 	firstRangeProvider FirstRangeProvider
 	transportFactory   TransportFactory
 	rpcContext         *rpc.Context
-	nodeDialer         *nodedialer.Dialer
-	rpcRetryOptions    retry.Options
-	asyncSenderSem     *quotapool.IntPool
+	// nodeDialer allows RPC calls from the SQL layer to the KV layer.
+	nodeDialer      *nodedialer.Dialer
+	rpcRetryOptions retry.Options
+	asyncSenderSem  *quotapool.IntPool
 	// clusterID is used to verify access to enterprise features.
 	// It is copied out of the rpcContext at construction time and used in
 	// testing.
@@ -334,7 +335,8 @@ type DistSenderConfig struct {
 	nodeDescriptor  *roachpb.NodeDescriptor
 	RPCRetryOptions *retry.Options
 	RPCContext      *rpc.Context
-	NodeDialer      *nodedialer.Dialer
+	// NodeDialer is the dialer from the SQL layer to the KV layer.
+	NodeDialer *nodedialer.Dialer
 
 	// One of the following two must be provided, but not both.
 	//

@@ -103,7 +103,11 @@ type DistSQLPlanner struct {
 	// gossip handle used to check node version compatibility.
 	gossip gossip.OptionalGossip
 
+	// nodeDialer handles communication between SQL and KV nodes.
 	nodeDialer *nodedialer.Dialer
+
+	// podNodeDialer handles communication between SQL nodes/pods.
+	podNodeDialer *nodedialer.Dialer
 
 	// nodeHealth encapsulates the various node health checks to avoid planning
 	// on unhealthy nodes.
@@ -120,6 +124,9 @@ type DistSQLPlanner struct {
 	nodeDescs kvcoord.NodeDescStore
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
+
+	// bulk IO interface
+	distSQLTenantPlanner
 }
 
 // ReplicaOraclePolicy controls which policy the physical planner uses to choose
@@ -150,6 +157,7 @@ func NewDistSQLPlanner(
 	stopper *stop.Stopper,
 	isAvailable func(base.SQLInstanceID) bool,
 	nodeDialer *nodedialer.Dialer,
+	podNodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
@@ -159,6 +167,7 @@ func NewDistSQLPlanner(
 		distSQLSrv:           distSQLSrv,
 		gossip:               gw,
 		nodeDialer:           nodeDialer,
+		podNodeDialer:        podNodeDialer,
 		nodeHealth: distSQLNodeHealth{
 			gossip:      gw,
 			connHealth:  nodeDialer.ConnHealthTryDial,

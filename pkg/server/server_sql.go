@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -236,8 +237,11 @@ type sqlServerArgs struct {
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
 
-	// Used by DistSQLPlanner.
+	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
+
+	// Used by DistSQLPlanner to dial other pods in a multi-tenant environment.
+	podNodeDialer *nodedialer.Dialer
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
@@ -377,6 +381,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.sqlInstanceProvider = instanceprovider.New(
 		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
 	)
+
+	if !codec.ForSystemTenant() {
+		podConnector := kvtenantccl.NewPodConnector(cfg.rpcContext.MasterCtx, cfg.sqlInstanceProvider)
+		resolver := kvtenant.AddressResolver(podConnector)
+		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, resolver)
+	} else {
+		cfg.podNodeDialer = cfg.nodeDialer
+	}
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -567,6 +579,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
 		NodeDialer:        cfg.nodeDialer,
+		PodNodeDialer:     cfg.podNodeDialer,
 		LeaseManager:      leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
@@ -681,6 +694,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			isAvailable,
 			cfg.nodeDialer,
+			cfg.podNodeDialer,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
