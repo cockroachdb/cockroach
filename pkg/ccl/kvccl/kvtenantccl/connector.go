@@ -462,7 +462,7 @@ func (c *Connector) GetSpanConfigRecords(
 ) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
-			Targets: spanconfig.TargetsToTargetProtos(targets),
+			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
 			return err
@@ -483,8 +483,8 @@ func (c *Connector) UpdateSpanConfigRecords(
 ) error {
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: spanconfig.TargetsToTargetProtos(toDelete),
-			ToUpsert: spanconfig.RecordsToSpanConfigEntries(toUpsert),
+			ToDelete: spanconfig.TargetsToProtos(toDelete),
+			ToUpsert: spanconfig.RecordsToEntries(toUpsert),
 		})
 		return err
 	})

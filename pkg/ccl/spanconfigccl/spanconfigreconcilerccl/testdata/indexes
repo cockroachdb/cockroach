@@ -35,8 +35,8 @@ ALTER INDEX db.t@idx CONFIGURE ZONE USING num_voters = 5;
 # - any future indexes that may be added to this table (table's config)
 mutations
 ----
-delete /Table/10{6-7}
 upsert /Table/106{-/2}                     num_replicas=7
+delete /Table/10{6-7}
 upsert /Table/106/{2-3}                    num_replicas=7 num_voters=5
 upsert /Table/10{6/3-7}                    num_replicas=7
 

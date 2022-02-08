@@ -1550,14 +1550,14 @@ func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
 	records, err := n.spanConfigAccessor.GetSpanConfigRecords(
-		ctx, spanconfig.TargetProtosToTargets(req.Targets),
+		ctx, spanconfig.TargetsFromProtos(req.Targets),
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &roachpb.GetSpanConfigsResponse{
-		SpanConfigEntries: spanconfig.RecordsToSpanConfigEntries(records),
+		SpanConfigEntries: spanconfig.RecordsToEntries(records),
 	}, nil
 }
 
@@ -1569,7 +1569,7 @@ func (n *Node) UpdateSpanConfigs(
 	// outlandishly large string buffers here and OOM-ing the host cluster. Is
 	// the maximum protobuf message size enough of a safeguard?
 	err := n.spanConfigAccessor.UpdateSpanConfigRecords(
-		ctx, spanconfig.TargetProtosToTargets(req.ToDelete), spanconfig.EntriesToRecords(req.ToUpsert),
+		ctx, spanconfig.TargetsFromProtos(req.ToDelete), spanconfig.EntriesToRecords(req.ToUpsert),
 	)
 	if err != nil {
 		return nil, err

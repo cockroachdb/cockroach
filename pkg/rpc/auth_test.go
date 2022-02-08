@@ -198,7 +198,7 @@ func TestTenantAuthRequest(t *testing.T) {
 		}
 	}
 	makeSpanTarget := func(sp roachpb.Span) roachpb.SpanConfigTarget {
-		return spanconfig.MakeSpanTarget(sp).SpanConfigTargetProto()
+		return spanconfig.MakeTargetFromSpan(sp).ToProto()
 	}
 	makeGetSpanConfigsReq := func(
 		target roachpb.SpanConfigTarget,

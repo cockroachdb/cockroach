@@ -59,7 +59,7 @@ func seedTenantSpanConfigsMigration(
 			// boundary. Look towards CreateTenantRecord for more details.
 			tenantSpanConfig := d.SpanConfig.Default
 			tenantPrefix := keys.MakeTenantPrefix(tenantID)
-			tenantTarget := spanconfig.MakeSpanTarget(roachpb.Span{
+			tenantTarget := spanconfig.MakeTargetFromSpan(roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.PrefixEnd(),
 			})
@@ -69,7 +69,7 @@ func seedTenantSpanConfigsMigration(
 			}
 			toUpsert := []spanconfig.Record{
 				{
-					Target: spanconfig.MakeSpanTarget(tenantSeedSpan),
+					Target: spanconfig.MakeTargetFromSpan(tenantSeedSpan),
 					Config: tenantSpanConfig,
 				},
 			}
