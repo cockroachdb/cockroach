@@ -769,21 +769,23 @@ func (r *Replica) handleReadWithinUncertaintyIntervalError(
 	if !canDoServersideRetry(ctx, pErr, ba, nil /* br */, nil /* g */, nil /* deadline */) {
 		return nil, pErr
 	}
-	// TODO(nvanbenschoten): give non-txn requests uncertainty intervals. #73732.
-	//if ba.Txn == nil && ba.Timestamp.Synthetic {
-	//	// If the request is non-transactional and it was refreshed into the future
-	//	// after observing a value with a timestamp in the future, immediately sleep
-	//	// until its new read timestamp becomes present. We don't need to do this
-	//	// for transactional requests because they will do this during their
-	//	// commit-wait sleep after committing.
-	//	//
-	//	// See TxnCoordSender.maybeCommitWait for a discussion about why doing this
-	//	// is necessary to preserve real-time ordering for transactions that write
-	//	// into the future.
-	//	if err := r.Clock().SleepUntil(ctx, ba.Timestamp); err != nil {
-	//		return nil, roachpb.NewError(err)
-	//	}
-	//}
+	if ba.Txn == nil && ba.Timestamp.Synthetic {
+		// If the request is non-transactional and it was refreshed into the future
+		// after observing a value with a timestamp in the future, immediately sleep
+		// until its new read timestamp becomes present. We don't need to do this
+		// for transactional requests because they will do this during their
+		// commit-wait sleep after committing.
+		//
+		// See TxnCoordSender.maybeCommitWait for a discussion about why doing this
+		// is necessary to preserve real-time ordering for transactions that write
+		// into the future.
+		var cancel func()
+		ctx, cancel = r.store.Stopper().WithCancelOnQuiesce(ctx)
+		defer cancel()
+		if err := r.Clock().SleepUntil(ctx, ba.Timestamp); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
 	return ba, nil
 }
 
@@ -1041,7 +1043,7 @@ func (r *Replica) collectSpans(
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
-			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans)
+			cmd.DeclareKeys(desc, &ba.Header, inner, latchSpans, lockSpans, r.Clock().MaxOffset())
 			if considerOptEval {
 				switch inner.(type) {
 				case *roachpb.ScanRequest, *roachpb.ReverseScanRequest:

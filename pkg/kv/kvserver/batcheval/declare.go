@@ -12,8 +12,10 @@ package batcheval
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -26,6 +28,7 @@ func DefaultDeclareKeys(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, _ *spanset.SpanSet,
+	_ time.Duration,
 ) {
 	access := spanset.SpanReadWrite
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
@@ -44,29 +47,35 @@ func DefaultDeclareIsolatedKeys(
 	header *roachpb.Header,
 	req roachpb.Request,
 	latchSpans, lockSpans *spanset.SpanSet,
+	maxOffset time.Duration,
 ) {
 	access := spanset.SpanReadWrite
 	timestamp := header.Timestamp
 	if roachpb.IsReadOnly(req) && !roachpb.IsLocking(req) {
 		access = spanset.SpanReadOnly
-		if header.Txn != nil {
-			// For transactional reads, acquire read latches all the way up to
-			// the transaction's uncertainty limit, because reads may observe
-			// writes all the way up to this timestamp.
-			//
-			// It is critical that reads declare latches up through their
-			// uncertainty interval so that they are properly synchronized with
-			// earlier writes that may have a happened-before relationship with
-			// the read. These writes could not have completed and returned to
-			// the client until they were durable in the Range's Raft log.
-			// However, they may not have been applied to the replica's state
-			// machine by the time the write was acknowledged, because Raft
-			// entry application occurs asynchronously with respect to the
-			// writer (see AckCommittedEntriesBeforeApplication). Latching is
-			// the only mechanism that ensures that any observers of the write
-			// wait for the write apply before reading.
-			timestamp.Forward(header.Txn.GlobalUncertaintyLimit)
-		}
+
+		// For non-locking reads, acquire read latches all the way up to the
+		// request's worst-case (i.e. global) uncertainty limit, because reads may
+		// observe writes all the way up to this timestamp.
+		//
+		// It is critical that reads declare latches up through their uncertainty
+		// interval so that they are properly synchronized with earlier writes that
+		// may have a happened-before relationship with the read. These writes could
+		// not have completed and returned to the client until they were durable in
+		// the Range's Raft log. However, they may not have been applied to the
+		// replica's state machine by the time the write was acknowledged, because
+		// Raft entry application occurs asynchronously with respect to the writer
+		// (see AckCommittedEntriesBeforeApplication). Latching is the only
+		// mechanism that ensures that any observers of the write wait for the write
+		// apply before reading.
+		//
+		// NOTE: we pass an empty lease status here, which means that observed
+		// timestamps collected by transactions will not be used. The actual
+		// uncertainty interval used by the request may be smaller (i.e. contain a
+		// local limit), but we can't determine that until after we have declared
+		// keys, acquired latches, and consulted the replica's lease.
+		in := uncertainty.ComputeInterval(header, kvserverpb.LeaseStatus{}, maxOffset)
+		timestamp.Forward(in.GlobalLimit)
 	}
 	latchSpans.AddMVCC(access, req.Header().Span(), timestamp)
 	lockSpans.AddNonMVCC(access, req.Header().Span())
