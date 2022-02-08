@@ -300,6 +300,7 @@ func init() {
 		&tree.Truncate{},
 
 		// CCL statements (without Export which has an optimizer operator).
+		&tree.AlterBackup{},
 		&tree.Backup{},
 		&tree.ShowBackup{},
 		&tree.Restore{},
