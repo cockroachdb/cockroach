@@ -219,10 +219,10 @@ func (n *changePrivilegesNode) startExec(params runParams) error {
 				if granteeHasGrantPriv && n.isGrant && !n.withGrantOption && len(noticeMessage) == 0 {
 					noticeMessage = "grant options were automatically applied but this behavior is deprecated"
 				}
-				if grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant) {
+				if !n.withGrantOption && (grantPresent || allPresent || (granteeHasGrantPriv && n.isGrant)) {
 					if n.isGrant {
 						privileges.GrantPrivilegeToGrantOptions(grantee, true /*isGrant*/)
-					} else if !n.isGrant && !n.withGrantOption {
+					} else {
 						privileges.GrantPrivilegeToGrantOptions(grantee, false /*isGrant*/)
 					}
 				}
