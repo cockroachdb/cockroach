@@ -203,16 +203,16 @@ func TestValidation(t *testing.T) {
 
 	u := settings.NewUpdater(sv)
 	t.Run("d_with_maximum", func(t *testing.T) {
-		err := u.Set(ctx, "d_with_maximum", "1h", "d")
+		err := u.Set(ctx, "d_with_maximum", v("1h", "d"))
 		require.NoError(t, err)
-		err = u.Set(ctx, "d_with_maximum", "0h", "d")
+		err = u.Set(ctx, "d_with_maximum", v("0h", "d"))
 		require.NoError(t, err)
-		err = u.Set(ctx, "d_with_maximum", "30m", "d")
+		err = u.Set(ctx, "d_with_maximum", v("30m", "d"))
 		require.NoError(t, err)
 
-		err = u.Set(ctx, "d_with_maximum", "-1m", "d")
+		err = u.Set(ctx, "d_with_maximum", v("-1m", "d"))
 		require.Error(t, err)
-		err = u.Set(ctx, "d_with_maximum", "1h1s", "d")
+		err = u.Set(ctx, "d_with_maximum", v("1h1s", "d"))
 		require.Error(t, err)
 	})
 }
@@ -383,46 +383,46 @@ func TestCache(t *testing.T) {
 		if expected, actual := 0, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "bool.t", settings.EncodeBool(false), "b"); err != nil {
+		if err := u.Set(ctx, "bool.t", v(settings.EncodeBool(false), "b")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.boolTA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "bool.f", settings.EncodeBool(true), "b"); err != nil {
+		if err := u.Set(ctx, "bool.f", v(settings.EncodeBool(true), "b")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 0, changes.strFooA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "str.foo", "baz", "s"); err != nil {
+		if err := u.Set(ctx, "str.foo", v("baz", "s")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.strFooA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "str.val", "valid", "s"); err != nil {
+		if err := u.Set(ctx, "str.val", v("valid", "s")); err != nil {
 			t.Fatal(err)
 		}
-		if err := u.Set(ctx, "i.2", settings.EncodeInt(3), "i"); err != nil {
+		if err := u.Set(ctx, "i.2", v(settings.EncodeInt(3), "i")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 0, changes.fA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "f", settings.EncodeFloat(3.1), "f"); err != nil {
+		if err := u.Set(ctx, "f", v(settings.EncodeFloat(3.1), "f")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.fA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "fVal", settings.EncodeFloat(3.1), "f"); err != nil {
+		if err := u.Set(ctx, "fVal", v(settings.EncodeFloat(3.1), "f")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 0, changes.dA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "d", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+		if err := u.Set(ctx, "d", v(settings.EncodeDuration(2*time.Hour), "d")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.dA; expected != actual {
@@ -431,38 +431,38 @@ func TestCache(t *testing.T) {
 		if expected, actual := 0, changes.duA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "d_with_explicit_unit", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+		if err := u.Set(ctx, "d_with_explicit_unit", v(settings.EncodeDuration(2*time.Hour), "d")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.duA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "dVal", settings.EncodeDuration(2*time.Hour), "d"); err != nil {
+		if err := u.Set(ctx, "dVal", v(settings.EncodeDuration(2*time.Hour), "d")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 0, changes.byteSize; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "zzz", settings.EncodeInt(mb*5), "z"); err != nil {
+		if err := u.Set(ctx, "zzz", v(settings.EncodeInt(mb*5), "z")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.byteSize; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "byteSize.Val", settings.EncodeInt(mb*5), "z"); err != nil {
+		if err := u.Set(ctx, "byteSize.Val", v(settings.EncodeInt(mb*5), "z")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 0, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
-		if err := u.Set(ctx, "e", settings.EncodeInt(2), "e"); err != nil {
+		if err := u.Set(ctx, "e", v(settings.EncodeInt(2), "e")); err != nil {
 			t.Fatal(err)
 		}
 		if expected, actual := 1, changes.eA; expected != actual {
 			t.Fatalf("expected %d, got %d", expected, actual)
 		}
 		if expected, err := "strconv.Atoi: parsing \"notAValidValue\": invalid syntax",
-			u.Set(ctx, "e", "notAValidValue", "e"); !testutils.IsError(err, expected) {
+			u.Set(ctx, "e", v("notAValidValue", "e")); !testutils.IsError(err, expected) {
 			t.Fatalf("expected '%s' != actual error '%s'", expected, err)
 		}
 		defaultDummyV := dummyVersion{msg1: "default", growsbyone: "AB"}
@@ -523,22 +523,22 @@ func TestCache(t *testing.T) {
 	t.Run("any setting not included in an Updater reverts to default", func(t *testing.T) {
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "bool.f", settings.EncodeBool(true), "b"); err != nil {
+			if err := u.Set(ctx, "bool.f", v(settings.EncodeBool(true), "b")); err != nil {
 				t.Fatal(err)
 			}
 			if expected, actual := 0, changes.i1A; expected != actual {
 				t.Fatalf("expected %d, got %d", expected, actual)
 			}
-			if err := u.Set(ctx, "i.1", settings.EncodeInt(1), "i"); err != nil {
+			if err := u.Set(ctx, "i.1", v(settings.EncodeInt(1), "i")); err != nil {
 				t.Fatal(err)
 			}
 			if expected, actual := 1, changes.i1A; expected != actual {
 				t.Fatalf("expected %d, got %d", expected, actual)
 			}
-			if err := u.Set(ctx, "i.2", settings.EncodeInt(7), "i"); err != nil {
+			if err := u.Set(ctx, "i.2", v(settings.EncodeInt(7), "i")); err != nil {
 				t.Fatal(err)
 			}
-			if err := u.Set(ctx, "i.Val", settings.EncodeInt(1), "i"); err != nil {
+			if err := u.Set(ctx, "i.Val", v(settings.EncodeInt(1), "i")); err != nil {
 				t.Fatal(err)
 			}
 			u.ResetRemaining(ctx)
@@ -571,7 +571,7 @@ func TestCache(t *testing.T) {
 	t.Run("an invalid update to a given setting preserves its previously set value", func(t *testing.T) {
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "i.2", settings.EncodeInt(9), "i"); err != nil {
+			if err := u.Set(ctx, "i.2", v(settings.EncodeInt(9), "i")); err != nil {
 				t.Fatal(err)
 			}
 			u.ResetRemaining(ctx)
@@ -582,7 +582,7 @@ func TestCache(t *testing.T) {
 		// value.
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "i.2", settings.EncodeBool(false), "b"); !testutils.IsError(err,
+			if err := u.Set(ctx, "i.2", v(settings.EncodeBool(false), "b")); !testutils.IsError(err,
 				"setting 'i.2' defined as type i, not b",
 			) {
 				t.Fatal(err)
@@ -598,7 +598,7 @@ func TestCache(t *testing.T) {
 		// current value.
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "i.2", settings.EncodeBool(false), "i"); !testutils.IsError(err,
+			if err := u.Set(ctx, "i.2", v(settings.EncodeBool(false), "i")); !testutils.IsError(err,
 				"strconv.Atoi: parsing \"false\": invalid syntax",
 			) {
 				t.Fatal(err)
@@ -615,7 +615,7 @@ func TestCache(t *testing.T) {
 		beforestrVal := strVal.Get(sv)
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "str.val", "abc2def", "s"); !testutils.IsError(err,
+			if err := u.Set(ctx, "str.val", v("abc2def", "s")); !testutils.IsError(err,
 				"not all runes of abc2def are letters: 2",
 			) {
 				t.Fatal(err)
@@ -629,7 +629,7 @@ func TestCache(t *testing.T) {
 		beforeDVal := dVal.Get(sv)
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "dVal", settings.EncodeDuration(-time.Hour), "d"); !testutils.IsError(err,
+			if err := u.Set(ctx, "dVal", v(settings.EncodeDuration(-time.Hour), "d")); !testutils.IsError(err,
 				"cannot be set to a negative duration: -1h0m0s",
 			) {
 				t.Fatal(err)
@@ -643,7 +643,7 @@ func TestCache(t *testing.T) {
 		beforeByteSizeVal := byteSizeVal.Get(sv)
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "byteSize.Val", settings.EncodeInt(-mb), "z"); !testutils.IsError(err,
+			if err := u.Set(ctx, "byteSize.Val", v(settings.EncodeInt(-mb), "z")); !testutils.IsError(err,
 				"bytesize cannot be negative",
 			) {
 				t.Fatal(err)
@@ -657,7 +657,7 @@ func TestCache(t *testing.T) {
 		beforeFVal := fVal.Get(sv)
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "fVal", settings.EncodeFloat(-1.1), "f"); !testutils.IsError(err,
+			if err := u.Set(ctx, "fVal", v(settings.EncodeFloat(-1.1), "f")); !testutils.IsError(err,
 				"cannot set to a negative value: -1.1",
 			) {
 				t.Fatal(err)
@@ -671,7 +671,7 @@ func TestCache(t *testing.T) {
 		beforeIVal := iVal.Get(sv)
 		{
 			u := settings.NewUpdater(sv)
-			if err := u.Set(ctx, "i.Val", settings.EncodeInt(-1), "i"); !testutils.IsError(err,
+			if err := u.Set(ctx, "i.Val", v(settings.EncodeInt(-1), "i")); !testutils.IsError(err,
 				"int cannot be negative",
 			) {
 				t.Fatal(err)
@@ -721,7 +721,7 @@ func TestOnChangeWithMaxSettings(t *testing.T) {
 	intSetting.SetOnChange(sv, func(ctx context.Context) { changes++ })
 
 	u := settings.NewUpdater(sv)
-	if err := u.Set(ctx, maxName, settings.EncodeInt(9), "i"); err != nil {
+	if err := u.Set(ctx, maxName, v(settings.EncodeInt(9), "i")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -836,4 +836,11 @@ func setDummyVersion(dv dummyVersion, vs *settings.VersionSetting, sv *settings.
 	}
 	vs.SetInternal(context.Background(), sv, encoded)
 	return nil
+}
+
+func v(val, typ string) settings.EncodedValue {
+	return settings.EncodedValue{
+		Value: val,
+		Type:  typ,
+	}
 }

@@ -305,7 +305,7 @@ type testingOverrideMonitor struct {
 
 	mu struct {
 		syncutil.Mutex
-		overrides map[string]settingswatcher.RawValue
+		overrides map[string]settings.EncodedValue
 	}
 }
 
@@ -315,7 +315,7 @@ func newTestingOverrideMonitor() *testingOverrideMonitor {
 	m := &testingOverrideMonitor{
 		ch: make(chan struct{}, 1),
 	}
-	m.mu.overrides = make(map[string]settingswatcher.RawValue)
+	m.mu.overrides = make(map[string]settings.EncodedValue)
 	return m
 }
 
@@ -330,7 +330,7 @@ func (m *testingOverrideMonitor) set(key string, val string, valType string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.mu.overrides[key] = settingswatcher.RawValue{
+	m.mu.overrides[key] = settings.EncodedValue{
 		Value: val,
 		Type:  valType,
 	}
@@ -348,10 +348,10 @@ func (m *testingOverrideMonitor) NotifyCh() <-chan struct{} {
 }
 
 // Overrides is part of the settingswatcher.OverridesMonitor interface.
-func (m *testingOverrideMonitor) Overrides() map[string]settingswatcher.RawValue {
+func (m *testingOverrideMonitor) Overrides() map[string]settings.EncodedValue {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	res := make(map[string]settingswatcher.RawValue)
+	res := make(map[string]settings.EncodedValue)
 	for k, v := range m.mu.overrides {
 		res[k] = v
 	}

@@ -299,7 +299,11 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			}
 
 			if knobs := params.p.execCfg.TenantTestingKnobs; knobs != nil && knobs.ClusterSettingsUpdater != nil {
-				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, n.name, encoded, n.setting.Typ()); err != nil {
+				encVal := settings.EncodedValue{
+					Value: encoded,
+					Type:  n.setting.Typ(),
+				}
+				if err := params.p.execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, n.name, encVal); err != nil {
 					return err
 				}
 			}
