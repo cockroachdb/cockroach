@@ -92,7 +92,7 @@ type ConnectorConfig struct {
 	DefaultZoneConfig *zonepb.ZoneConfig
 }
 
-// ConnectorFactory constructs a new tenant Connector from the provide network
+// ConnectorFactory constructs a new tenant Connector from the provided network
 // addresses pointing to KV nodes.
 type ConnectorFactory interface {
 	NewConnector(cfg ConnectorConfig, addrs []string) (Connector, error)
@@ -108,12 +108,12 @@ func (requiresCCLBinaryFactory) NewConnector(_ ConnectorConfig, _ []string) (Con
 	return nil, errors.Errorf(`tenant connector requires a CCL binary`)
 }
 
-// AddressResolver wraps a Connector in an adapter that allows it be used as a
-// nodedialer.AddressResolver. Addresses are resolved to a node's KV
+// AddressResolver wraps a NodeDescStore interface in an adapter that allows it
+// be used as a nodedialer.AddressResolver. Addresses are resolved to a node's
 // address.
-func AddressResolver(c Connector) nodedialer.AddressResolver {
+func AddressResolver(s kvcoord.NodeDescStore) nodedialer.AddressResolver {
 	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		nd, err := c.GetNodeDescriptor(nodeID)
+		nd, err := s.GetNodeDescriptor(nodeID)
 		if err != nil {
 			return nil, err
 		}

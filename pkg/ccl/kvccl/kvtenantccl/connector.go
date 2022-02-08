@@ -17,6 +17,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -595,4 +598,30 @@ func (c *Connector) tryForgetClient(ctx context.Context, client roachpb.Internal
 	if c.mu.client == client {
 		c.mu.client = nil
 	}
+}
+
+type PodConnector struct {
+	ctx                 context.Context
+	sqlInstanceProvider sqlinstance.Provider
+}
+
+func NewPodConnector(ctx context.Context, sqlInstanceProvider sqlinstance.Provider) *PodConnector {
+	return &PodConnector{
+		ctx:                 ctx,
+		sqlInstanceProvider: sqlInstanceProvider,
+	}
+}
+
+func (p *PodConnector) GetNodeDescriptor(nodeID roachpb.NodeID) (*roachpb.NodeDescriptor, error) {
+	if p.sqlInstanceProvider == nil {
+		return nil, errors.Errorf("no sqlInstanceProvider")
+	}
+	info, err := p.sqlInstanceProvider.GetInstance(p.ctx, base.SQLInstanceID(nodeID))
+	if err != nil {
+		return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+	}
+	return &roachpb.NodeDescriptor{
+		NodeID:  roachpb.NodeID(info.InstanceID),
+		Address: util.UnresolvedAddr{AddressField: info.InstanceAddr},
+	}, nil
 }
