@@ -23,6 +23,8 @@ import (
 // a new "encodedJSON" object from scratch on demand.
 type JSONs struct {
 	Bytes
+	// scratch is a scratch space for encoding a JSON object on demand.
+	scratch []byte
 }
 
 // NewJSONs returns a new JSONs presized to n elements.
@@ -48,19 +50,14 @@ func (js *JSONs) Get(i int) json.JSON {
 	return ret
 }
 
-// Set sets the ith JSON in JSONs. Overwriting a value that is not at the end
-// of the JSONs is not allowed since it complicates memory movement to make/take
-// away necessary space in the flat buffer.
+// Set sets the ith JSON in JSONs.
 func (js *JSONs) Set(i int, j json.JSON) {
-	b := &js.Bytes
-	appendTo := b.getAppendTo(i)
 	var err error
-	b.data, err = json.EncodeJSON(appendTo, j)
+	js.scratch, err = json.EncodeJSON(js.scratch[:0], j)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	b.offsets[i+1] = int32(len(b.data))
-	b.maxSetLength = i + 1
+	js.Bytes.Set(i, js.scratch)
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to
@@ -93,15 +90,12 @@ func (js *JSONs) AppendVal(j json.JSON) {
 		js.Bytes.AppendVal(nil)
 		return
 	}
-	b := &js.Bytes
-	appendTo := b.getAppendTo(b.Len())
 	var err error
-	b.data, err = json.EncodeJSON(appendTo, j)
+	js.scratch, err = json.EncodeJSON(js.scratch[:0], j)
 	if err != nil {
 		colexecerror.ExpectedError(err)
 	}
-	b.offsets = append(b.offsets, int32(len(b.data)))
-	b.maxSetLength = b.Len()
+	js.Bytes.AppendVal(js.scratch)
 }
 
 // String is used for debugging purposes.

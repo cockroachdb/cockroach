@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
-	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -51,7 +50,6 @@ func newBufferedWindowOperator(
 			outputTypes:  outputTypes,
 			diskAcc:      args.DiskAcc,
 			outputColIdx: args.OutputColIdx,
-			outputColFam: typeconv.TypeFamilyToCanonicalTypeFamily(outputColType.Family()),
 		},
 		windower: windower,
 	}
@@ -153,7 +151,6 @@ type windowInitFields struct {
 	outputTypes  []*types.T
 	diskAcc      *mon.BoundAccount
 	outputColIdx int
-	outputColFam types.Family
 }
 
 // bufferedWindowOp extracts common fields for the various window operators
@@ -239,18 +236,8 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			// Load the next batch into currentBatch. If currentBatch still has data,
 			// move it into the queue.
 			if b.currentBatch != nil && b.currentBatch.Length() > 0 {
-				// We might have already set some values on the output vector
-				// within the current batch. If that vector is bytes-like, we
-				// have to explicitly maintain the invariant of the vector by
-				// updating the offsets.
 				// TODO(yuzefovich): it is quite unfortunate that the output
 				// vector is being spilled to disk. Consider refactoring this.
-				switch b.outputColFam {
-				case types.BytesFamily:
-					b.currentBatch.ColVec(b.outputColIdx).Bytes().UpdateOffsetsToBeNonDecreasing(b.currentBatch.Length())
-				case types.JsonFamily:
-					b.currentBatch.ColVec(b.outputColIdx).JSON().UpdateOffsetsToBeNonDecreasing(b.currentBatch.Length())
-				}
 				b.bufferQueue.Enqueue(b.Ctx, b.currentBatch)
 			}
 			// We have to copy the input batch data because calling Next on the input
@@ -310,14 +297,6 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 				var output coldata.Batch
 				if output, err = b.bufferQueue.Dequeue(b.Ctx); err != nil {
 					colexecerror.InternalError(err)
-				}
-				// The spilling queue sets 'maxSetLength' to the length of the batch for
-				// bytes-like types, so we have to reset it so that `Set` can be used.
-				switch b.outputColFam {
-				case types.BytesFamily:
-					output.ColVec(b.outputColIdx).Bytes().Truncate(b.processingIdx)
-				case types.JsonFamily:
-					output.ColVec(b.outputColIdx).JSON().Truncate(b.processingIdx)
 				}
 				// Set all the window output values that remain unset, then emit this
 				// batch. Note that because the beginning of the next partition will

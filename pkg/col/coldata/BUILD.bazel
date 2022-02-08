@@ -18,13 +18,11 @@ go_library(
     deps = [
         "//pkg/col/typeconv",
         "//pkg/sql/colexecerror",
-        "//pkg/sql/memsize",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/json",
-        "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
