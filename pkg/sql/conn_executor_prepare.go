@@ -53,7 +53,7 @@ func (ex *connExecutor) execPrepare(
 	}
 
 	stmt := makeStatement(parseCmd.Statement, ex.generateID())
-	ps, err := ex.addPreparedStmt(
+	_, err := ex.addPreparedStmt(
 		ctx,
 		parseCmd.Name,
 		stmt,
@@ -65,28 +65,6 @@ func (ex *connExecutor) execPrepare(
 		return retErr(err)
 	}
 
-	// Convert the inferred SQL types back to an array of pgwire Oids.
-	if len(ps.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
-		return retErr(
-			pgwirebase.NewProtocolViolationErrorf(
-				"more than %d arguments to prepared statement: %d",
-				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
-	}
-	inferredTypes := make([]oid.Oid, len(ps.Types))
-	copy(inferredTypes, parseCmd.RawTypeHints)
-
-	for i := range ps.Types {
-		// OID to Datum is not a 1-1 mapping (for example, int4 and int8
-		// both map to TypeInt), so we need to maintain the types sent by
-		// the client.
-		if inferredTypes[i] == 0 || inferredTypes[i] == oid.T_unknown {
-			t, _ := ps.ValueType(tree.PlaceholderIdx(i))
-			inferredTypes[i] = t.Oid()
-		}
-	}
-	// Remember the inferred placeholder types so they can be reported on
-	// Describe.
-	ps.InferredTypes = inferredTypes
 	return nil, nil
 }
 
@@ -107,7 +85,10 @@ func (ex *connExecutor) addPreparedStmt(
 	origin PreparedStatementOrigin,
 ) (*PreparedStatement, error) {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
-		panic(errors.AssertionFailedf("prepared statement already exists: %q", name))
+		return nil, pgerror.Newf(
+			pgcode.DuplicatePreparedStatement,
+			"prepared statement %q already exists", name,
+		)
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
@@ -116,10 +97,29 @@ func (ex *connExecutor) addPreparedStmt(
 		return nil, err
 	}
 
+	if len(prepared.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
+		return nil, pgwirebase.NewProtocolViolationErrorf(
+			"more than %d arguments to prepared statement: %d",
+			pgwirebase.MaxPreparedStatementArgs, len(prepared.TypeHints))
+	}
+
 	if err := prepared.memAcc.Grow(ctx, int64(len(name))); err != nil {
 		return nil, err
 	}
 	ex.extraTxnState.prepStmtsNamespace.prepStmts[name] = prepared
+
+	// Remember the inferred placeholder types so they can be reported on
+	// Describe. First, try to preserve the hints sent by the client.
+	prepared.InferredTypes = make([]oid.Oid, len(prepared.Types))
+	copy(prepared.InferredTypes, rawTypeHints)
+	for i, it := range prepared.InferredTypes {
+		// If the client did not provide an OID type hint, then infer the OID.
+		if it == 0 || it == oid.T_unknown {
+			t, _ := prepared.ValueType(tree.PlaceholderIdx(i))
+			prepared.InferredTypes[i] = t.Oid()
+		}
+	}
+
 	return prepared, nil
 }
 
@@ -166,13 +166,12 @@ func (ex *connExecutor) prepare(
 	prepare := func(ctx context.Context, txn *kv.Txn) (err error) {
 		ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 		p := &ex.planner
-		if origin != PreparedStatementOriginSQL {
-			// If the PREPARE command was issued as a SQL statement, then we
-			// have already reset the planner at the very beginning of the
-			// execution (in execStmtInOpenState). We might have also
-			// instrumented the planner to collect execution statistics, and
-			// resetting the planner here would break the assumptions of the
-			// instrumentation.
+		if origin == PreparedStatementOriginWire {
+			// If the PREPARE command was issued as a SQL statement or through
+			// deserialize_session, then we have already reset the planner at the very
+			// beginning of the execution (in execStmtInOpenState). We might have also
+			// instrumented the planner to collect execution statistics, and resetting
+			// the planner here would break the assumptions of the instrumentation.
 			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
 		}
 
