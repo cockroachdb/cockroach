@@ -157,6 +157,24 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 // either expects incoming connections from KV nodes, or from tenant SQL
 // servers.
 func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
+	srv, _ /* interceptors */ := NewServerEx(rpcCtx, opts...)
+	return srv
+}
+
+// ServerInterceptorInfo contains the server-side interceptors that a server
+// created with NewServerEx() will run.
+type ServerInterceptorInfo struct {
+	// UnaryInterceptors lists the interceptors for regular (unary) RPCs.
+	UnaryInterceptors []grpc.UnaryServerInterceptor
+	// StreamInterceptors lists the interceptors for streaming RPCs.
+	StreamInterceptors []grpc.StreamServerInterceptor
+}
+
+// NewServerEx is like NewServer, but also returns the interceptors that have
+// been registered with gRPC for the server. These interceptors can be used
+// manually when bypassing gRPC to call into the server (like the
+// internalClientAdapter does).
+func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInterceptorInfo) {
 	var o serverOpts
 	for _, f := range opts {
 		f(&o)
@@ -256,7 +274,10 @@ func NewServer(rpcCtx *Context, opts ...ServerOption) *grpc.Server {
 
 	s := grpc.NewServer(grpcOpts...)
 	RegisterHeartbeatServer(s, rpcCtx.NewHeartbeatService())
-	return s
+	return s, ServerInterceptorInfo{
+		UnaryInterceptors:  unaryInterceptor,
+		StreamInterceptors: streamInterceptor,
+	}
 }
 
 type heartbeatResult struct {
@@ -574,6 +595,7 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 	if err := rpcCtx.Stopper.RunAsyncTask(rpcCtx.MasterCtx, "wait-rpcctx-quiesce", waitQuiesce); err != nil {
 		waitQuiesce(rpcCtx.MasterCtx)
 	}
+
 	return rpcCtx
 }
 
@@ -604,11 +626,101 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 	return nil
 }
 
+// internalClientAdapter is an implementation of roachpb.InternalClient that
+// bypasses gRPC, calling the wrapped local server directly.
+//
+// Even though the calls don't go through gRPC, the internalClientAdapter runs
+// the configured gRPC server-side interceptors. The client-side interceptors
+// are not run at the moment.
 type internalClientAdapter struct {
-	server roachpb.InternalServer
+	server                   roachpb.InternalServer
+	serverStreamInterceptors serverStreamInterceptorsChain
+
+	// Unary RPC handler. This includes the chain of server-side gRPC
+	// interceptors.
+	batchHandler grpc.UnaryHandler
 }
 
 var _ RestrictedInternalClient = internalClientAdapter{}
+
+func makeInternalClientAdapter(
+	server roachpb.InternalServer,
+	unaryServerInterceptors []grpc.UnaryServerInterceptor,
+	streamServerInterceptors []grpc.StreamServerInterceptor,
+) internalClientAdapter {
+	return internalClientAdapter{
+		server:                   server,
+		serverStreamInterceptors: streamServerInterceptors,
+		batchHandler: chainUnaryInterceptors(
+			&grpc.UnaryServerInfo{
+				Server:     server,
+				FullMethod: tracing.BatchMethodName,
+			},
+			unaryServerInterceptors,
+			func(ctx context.Context, req interface{}) (interface{}, error) {
+				return server.Batch(ctx, req.(*roachpb.BatchRequest))
+			},
+		),
+	}
+}
+
+// bindInterceptorToHandler takes an RPC interceptor and an RPC handler and
+// returns a new handler that consists of the interceptor wrapping the original
+// handler.
+func bindInterceptorToHandler(
+	info *grpc.UnaryServerInfo, interceptor grpc.UnaryServerInterceptor, handler grpc.UnaryHandler,
+) grpc.UnaryHandler {
+	return func(ctx context.Context, req interface{}) (resp interface{}, err error) {
+		return interceptor(ctx, req, info, handler)
+	}
+}
+
+// chainUnaryInterceptors takes a slice of RPC interceptors and a final RPC
+// handler and returns a new handler that consists of all the interceptors
+// running, in order, before finally running the original handler.
+//
+// Note that this allocates one function per interceptor, so the resulting
+// handler should be memoized.
+func chainUnaryInterceptors(
+	info *grpc.UnaryServerInfo, interceptors []grpc.UnaryServerInterceptor, handler grpc.UnaryHandler,
+) grpc.UnaryHandler {
+	f := handler
+	for i := len(interceptors) - 1; i >= 0; i-- {
+		f = bindInterceptorToHandler(info, interceptors[i], f)
+	}
+	return f
+}
+
+type serverStreamInterceptorsChain []grpc.StreamServerInterceptor
+
+// run runs all the interceptors and bottoms out by running handler.
+//
+// As opposed to the []UnaryServerInterceptor case, we cannot memoize the
+// chaining of interceptors with a handler because the handler is
+// request-specific: it needs to capture the request proto.
+//
+// This code was adapted from gRPC:
+// https://github.com/grpc/grpc-go/blob/ec717cad7395d45698b57c1df1ae36b4dbaa33dd/server.go#L1396
+func (c serverStreamInterceptorsChain) run(
+	srv interface{},
+	stream grpc.ServerStream,
+	info *grpc.StreamServerInfo,
+	handler grpc.StreamHandler,
+) error {
+	// state groups escaping variables into a single allocation.
+	var state struct {
+		i    int
+		next grpc.StreamHandler
+	}
+	state.next = func(srv interface{}, stream grpc.ServerStream) error {
+		if state.i == len(c)-1 {
+			return c[state.i](srv, stream, info, handler)
+		}
+		state.i++
+		return c[state.i-1](srv, stream, info, state.next)
+	}
+	return state.next(srv, stream)
+}
 
 // Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
@@ -619,10 +731,14 @@ func (a internalClientAdapter) Batch(
 	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
 	// Create a new context from the existing one with the "local request" field set.
 	// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-	return a.server.Batch(grpcutil.NewLocalRequestContext(ctx), ba)
+	res, err := a.batchHandler(grpcutil.NewLocalRequestContext(ctx), ba)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*roachpb.BatchResponse), nil
 }
 
-// RangeFeed implements the roachpb.InternalClient interface.
+// RangeFeed implements the RestrictedInternalClient interface.
 func (a internalClientAdapter) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
 ) (roachpb.Internal_RangeFeedClient, error) {
@@ -637,7 +753,17 @@ func (a internalClientAdapter) RangeFeed(
 	go func() {
 		defer cancel()
 		defer sp.Finish()
-		err := a.server.RangeFeed(args, rfAdapter)
+
+		info := &grpc.StreamServerInfo{
+			FullMethod:     "/cockroach.roachpb.Internal/RangeFeed",
+			IsClientStream: false,
+			IsServerStream: true,
+		}
+		handler := func(srv interface{}, stream grpc.ServerStream) error {
+			return a.server.RangeFeed(args, rfAdapter)
+		}
+		err := a.serverStreamInterceptors.run(a.server, rfAdapter, info, handler)
+
 		if err == nil {
 			err = io.EOF
 		}
@@ -726,13 +852,21 @@ var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 
 // IsLocal returns true if the given InternalClient is local.
 func IsLocal(iface RestrictedInternalClient) bool {
-	_, ok := iface.(internalClientAdapter)
+	_, ok := iface.(*internalClientAdapter)
 	return ok // internalClientAdapter is used for local connections.
 }
 
 // SetLocalInternalServer sets the context's local internal batch server.
-func (rpcCtx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	rpcCtx.localInternalClient = internalClientAdapter{internalServer}
+//
+// serverInterceptors lists the interceptors that will be run on RPCs done
+// through this local server.
+func (rpcCtx *Context) SetLocalInternalServer(
+	internalServer roachpb.InternalServer, serverInterceptors ServerInterceptorInfo,
+) {
+	rpcCtx.localInternalClient = makeInternalClientAdapter(
+		internalServer,
+		serverInterceptors.UnaryInterceptors,
+		serverInterceptors.StreamInterceptors)
 }
 
 // removeConn removes the given connection from the pool. The supplied connKeys
