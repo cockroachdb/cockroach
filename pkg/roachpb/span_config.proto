@@ -166,56 +166,99 @@ message SpanConfig {
   bool rangefeed_enabled = 10;
 }
 
+// SystemSpanConfigTarget specifies the target of system span configurations.
+message SystemSpanConfigTarget {
+  option (gogoproto.equal) = true;
+
+	// SourceTenantID is the ID of the tenant that specified the system span
+	// configuration.
+	TenantID SourceTenantID = 1 [(gogoproto.nullable) = false];
+
+	// TargetTenantID is the ID of the tenant that the associated system span
+	// configuration applies to. If the host tenant is the source then the
+	// system span configuration applies over all ranges in the system (including
+	// those belonging to secondary tenants).
+	//
+	// Secondary tenants are only allowed to target themselves. The host tenant
+	// may use this field to target a specific secondary tenant.
+	TenantID TargetTenantID = 2 [(gogoproto.nullable) = false];
+}
+
+// SpanConfigTarget specifies the target of an associated span configuration.
+message SpanConfigTarget {
+  oneof union {
+    // Span is a keyspan that a span config is said to apply over.
+    Span span = 1;
+    // SystemSpanConfigTarget specifies the target of a system span
+    // configuration.
+    SystemSpanConfigTarget system_span_config_target = 2;
+  }
+}
+
 // SpanConfigEntry ties a span to its corresponding config.
 message SpanConfigEntry {
-  // Span is the keyspan the config is said to apply over.
-  Span span = 1 [(gogoproto.nullable) = false];
+  reserved 1;
 
-  // Config is the set of attributes that apply over the corresponding keyspan.
+  // Target specifies the target (keyspan(s)) the config applies over.
+  SpanConfigTarget target = 3 [(gogoproto.nullable) = false];
+
+  // Config is the set of attributes that apply over the corresponding target.
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
-// GetSpanConfigsRequest is used to fetch the span configurations over the
-// specified keyspans.
+// GetSpanConfigsRequest is used to fetch the span configurations and system
+// span configurations.
 message GetSpanConfigsRequest {
-  // Spans to request the configurations for. The spans listed here are not
-  // allowed to overlap with one another.
-  repeated Span spans = 1 [(gogoproto.nullable) = false];
+  reserved 1;
+
+  // Targets to request configurations for. The targets listed here are not
+  // allowed to be duplicated/overlap with one another.
+  repeated SpanConfigTarget targets = 3 [(gogoproto.nullable) = false];
 };
 
-// GetSpanConfigsResponse lists out the span configurations that overlap with
-// the requested spans.
+// GetSpanConfigsResponse lists out the span configurations and system span
+// configurations that have been requested.
 message GetSpanConfigsResponse {
   // SpanConfigEntries capture the span configurations over the requested spans.
   // The results for each Span in the matching GetSpanConfigsRequest are
   // flattened out into a single slice, and follow the same ordering. It's
   // possible for there to be no configurations for a given span; there'll
   // simply be no entries for it.
-  repeated SpanConfigEntry span_config_entries = 1 [(gogoproto.nullable) = false];
+  //
+  // Any system span configurations set by the tenant are also returned if
+  // requested.
+  repeated SpanConfigEntry span_config_entries = 2 [(gogoproto.nullable) = false];
+
+  reserved 1;
 };
 
-// UpdateSpanConfigsRequest is used to update the span configurations over the
-// given spans.
+// UpdateSpanConfigsRequest is used to update the span configurations and system
+// span configurations over the given spans.
 //
-// This is a "targeted" API: the spans being deleted are expected to have been
-// present with the same bounds (same start/end key); the same is true for spans
-// being upserted with new configs. If bounds are mismatched, an error is
-// returned. If spans are being added, they're expected to not overlap with any
+// This is a "targeted" API: the targets being deleted are expected to have been
+// present exactly as specified. The same is true for targets being upserted with
+// new configs. If targets aren't present, an error is returned.
+//
+// Adding configurations that target a span are expected to not overlap with any
 // existing spans. When divvying up an existing span into multiple others,
 // callers are expected to delete the old and upsert the new ones. This can
-// happen as part of the same request; we delete the spans marked for deletion
-// before upserting whatever was requested.
+// happen as part of the same request, as we delete targets marked for deletion
+// before upserting what was requested.
 //
-// Spans are not allowed to overlap with other spans in the same list but can
-// across lists. This is necessary to support the delete+upsert semantics
-// described above.
+// Targets are not allowed to overlap with other targets in the same list. They
+// are, however, allowed to overlap across lists. This is necessary to support
+// the delete+upsert semantics described above.
+// Targets of configurations being added must not overlap with any existing
+// targets.
 message UpdateSpanConfigsRequest {
-  // ToDelete captures the spans we want to delete configs for.
-  repeated Span to_delete = 1 [(gogoproto.nullable) = false];
+  reserved 1, 2;
 
-  // ToUpsert captures the spans we want to upsert and the configs we want to
-  // upsert with.
-  repeated SpanConfigEntry to_upsert = 2 [(gogoproto.nullable) = false];
+  // ToDelete captures the targets we want to delete configs for.
+  repeated SpanConfigTarget to_delete = 3 [(gogoproto.nullable) = false];
+
+  // To upsert captures the targets we want to upsert and the configs we want
+  // to upsert with.
+  repeated SpanConfigEntry to_upsert = 4 [(gogoproto.nullable) = false];
 };
 
 message UpdateSpanConfigsResponse { };
