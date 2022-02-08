@@ -2021,6 +2021,17 @@ func (desc *Mutable) AddNotNullMutation(
 	desc.addMutation(m)
 }
 
+// AddModifyRowLevelTTLMutation adds a row-level TTL mutation to descs.Mutations.
+func (desc *Mutable) AddModifyRowLevelTTLMutation(
+	ttl *descpb.ModifyRowLevelTTL, direction descpb.DescriptorMutation_Direction,
+) {
+	m := descpb.DescriptorMutation{
+		Descriptor_: &descpb.DescriptorMutation_ModifyRowLevelTTL{ModifyRowLevelTTL: ttl},
+		Direction:   direction,
+	}
+	desc.addMutation(m)
+}
+
 // AddColumnMutation adds a column mutation to desc.Mutations. Callers must take
 // care not to further mutate the column descriptor, since this method retains
 // a pointer to it.

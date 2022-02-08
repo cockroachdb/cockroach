@@ -986,7 +986,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 
-			if err := handleTTLStorageParamChange(params, ttlBefore, n.tableDesc.GetRowLevelTTL()); err != nil {
+			if err := handleTTLStorageParamChange(
+				params,
+				tn,
+				n.tableDesc,
+				ttlBefore,
+				n.tableDesc.GetRowLevelTTL(),
+			); err != nil {
 				return err
 			}
 
@@ -1005,7 +1011,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			descriptorChanged = true
 
-			if err := handleTTLStorageParamChange(params, ttlBefore, n.tableDesc.GetRowLevelTTL()); err != nil {
+			if err := handleTTLStorageParamChange(
+				params,
+				tn,
+				n.tableDesc,
+				ttlBefore,
+				n.tableDesc.GetRowLevelTTL(),
+			); err != nil {
 				return err
 			}
 
@@ -1760,7 +1772,10 @@ func (p *planner) updateFKBackReferenceName(
 }
 
 func handleTTLStorageParamChange(
-	params runParams, before, after *descpb.TableDescriptor_RowLevelTTL,
+	params runParams,
+	tn *tree.TableName,
+	tableDesc *tabledesc.Mutable,
+	before, after *descpb.TableDescriptor_RowLevelTTL,
 ) error {
 	switch {
 	case before == nil && after == nil:
@@ -1785,8 +1800,41 @@ func handleTTLStorageParamChange(
 				return err
 			}
 		}
-	default:
-		// TODO(#75428): handle adding or dropping TTL
+	case before == nil && after != nil:
+		// Adding a TTL requires adding the automatic column and deferring the TTL
+		// addition to after the column is successfully added.
+		tableDesc.RowLevelTTL = nil
+		col, err := rowLevelTTLAutomaticColumnDef(after)
+		if err != nil {
+			return err
+		}
+		addCol := &tree.AlterTableAddColumn{
+			ColumnDef: col,
+		}
+		if err := params.p.addColumnImpl(
+			params,
+			&alterTableNode{
+				tableDesc: tableDesc,
+				n: &tree.AlterTable{
+					Cmds: []tree.AlterTableCmd{addCol},
+				},
+			},
+			tn,
+			tableDesc,
+			addCol,
+		); err != nil {
+			return err
+		}
+		tableDesc.AddModifyRowLevelTTLMutation(
+			&descpb.ModifyRowLevelTTL{RowLevelTTL: after},
+			descpb.DescriptorMutation_ADD,
+		)
+		version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
+		if err := tableDesc.AllocateIDs(params.ctx, version); err != nil {
+			return err
+		}
+	case before != nil && after == nil:
+		// TODO(#75428): handle dropping.
 	}
 
 	return nil
