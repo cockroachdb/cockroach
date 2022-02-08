@@ -191,21 +191,23 @@ func TestImportRemoteSpans(t *testing.T) {
 	for _, verbose := range []bool{false, true} {
 		t.Run(fmt.Sprintf("%s=%t", "verbose-child=", verbose), func(t *testing.T) {
 			tr := NewTracerWithOpt(context.Background())
-			sp := tr.StartSpan("root", WithRecording(RecordingStructured))
+			var opt SpanOption
+			if verbose {
+				opt = WithRecording(RecordingVerbose)
+			} else {
+				opt = WithRecording(RecordingStructured)
+			}
+			sp := tr.StartSpan("root", opt)
 			ch := tr.StartSpan("child", WithParent(sp), WithDetachedRecording())
 			ch.RecordStructured(&types.Int32Value{Value: 4})
-			if verbose {
-				sp.SetVerbose(true)
-				ch.SetVerbose(true)
-			}
 			ch.Record("foo")
-			ch.SetVerbose(false)
 			sp.ImportRemoteSpans(ch.FinishAndGetRecording(RecordingVerbose))
 
 			if verbose {
 				require.NoError(t, CheckRecording(sp.FinishAndGetRecording(RecordingVerbose), `
 				=== operation:root _verbose:1
 					=== operation:child _verbose:1
+					event:&Int32Value{Value:4,XXX_unrecognized:[],}
 					event:foo
 					structured:{"@type":"type.googleapis.com/google.protobuf.Int32Value","value":4}
 	`))

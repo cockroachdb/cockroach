@@ -1094,7 +1094,7 @@ func (n *Node) setupSpanForIncomingRPC(
 			return
 		}
 
-		rec = newSpan.FinishAndGetRecording(newSpan.RecordingType())
+		rec = newSpan.FinishAndGetConfiguredRecording()
 		if rec != nil {
 			// Decide if the trace for this RPC, if any, will need to be redacted. It
 			// needs to be redacted if the response goes to a tenant. In case the request
