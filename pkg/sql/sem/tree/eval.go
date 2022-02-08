@@ -431,6 +431,28 @@ func ArrayContains(ctx *EvalContext, haystack *DArray, needles *DArray) (*DBool,
 	return DBoolTrue, nil
 }
 
+// ArrayOverlaps return true if there is even one element
+// common between the left and right arrays.
+func ArrayOverlaps(ctx *EvalContext, left, right *DArray) (*DBool, error) {
+	array := MustBeDArray(left)
+	other := MustBeDArray(right)
+	if !array.ParamTyp.Equivalent(other.ParamTyp) {
+		return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
+	}
+	for _, needle := range array.Array {
+		// Nulls don't compare to each other in && syntax.
+		if needle == DNull {
+			continue
+		}
+		for _, hay := range other.Array {
+			if needle.Compare(ctx, hay) == 0 {
+				return DBoolTrue, nil
+			}
+		}
+	}
+	return DBoolFalse, nil
+}
+
 // JSONExistsAny return true if any value in dArray is exist in the json
 func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
 	// TODO(justin): this can be optimized.
@@ -2598,21 +2620,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperatorSymbol]cmpOpOverload{
 				Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 					array := MustBeDArray(left)
 					other := MustBeDArray(right)
-					if !array.ParamTyp.Equivalent(other.ParamTyp) {
-						return nil, pgerror.New(pgcode.DatatypeMismatch, "cannot compare arrays with different element types")
-					}
-					for _, needle := range array.Array {
-						// Nulls don't compare to each other in && syntax.
-						if needle == DNull {
-							continue
-						}
-						for _, hay := range other.Array {
-							if needle.Compare(ctx, hay) == 0 {
-								return DBoolTrue, nil
-							}
-						}
-					}
-					return DBoolFalse, nil
+					return ArrayOverlaps(ctx, array, other)
 				},
 				Volatility: VolatilityImmutable,
 			},

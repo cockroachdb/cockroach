@@ -734,3 +734,132 @@ func getColumnTypes(columns []catalog.Column) ([]*types.T, error) {
 	}
 	return outTypes, nil
 }
+
+func TestEncodeOverlapsArrayInvertedIndexSpans(t *testing.T) {
+	testCases := []struct {
+		indexedValue string
+		value        string
+		expected     bool
+		unique       bool
+	}{
+
+		// This test uses EncodeInvertedIndexTableKeys and EncodeOverlapsInvertedIndexSpans
+		// to determine if the spans produced from the second Array value will
+		// correctly overlap or be distinct from the first value.
+
+		// The expression is a union of spans, so unique should never be true
+		// unless the value produces a single empty array span.
+
+		// First we test that the spans will include expected value.
+		{`{1}`, `{1}`, true, false},
+		{`{1, 2}`, `{1}`, true, false},
+		{`{2}`, `{1, 2}`, true, false},
+		{`{2, NULL}`, `{1, 2}`, true, false},
+		{`{1, 2}`, `{1, 2}`, true, false},
+		{`{1, 3}`, `{1, 2}`, true, false},
+		{`{2}`, `{2, 2}`, true, false},
+		{`{1, 2}`, `{1, 2, 1}`, true, false},
+		{`{1, 1, 2, 3}`, `{1, 2, 1}`, true, false},
+		{`{1, 2, 4}`, `{1, 2, 3}`, true, false},
+		{`{2}`, `{2, NULL}`, true, false},
+		{`{2, 3}`, `{2, NULL}`, true, false},
+		{`{1, NULL}`, `{1, 2, NULL}`, true, false},
+
+		// Then we test that the spans exclude results that should be excluded.
+		{`{}`, `{}`, false, true},
+		{`{}`, `{1}`, false, false},
+		{`{1}`, `{}`, false, true},
+		{`{}`, `{1, 2}`, false, false},
+		{`{NULL}`, `{}`, false, true},
+		{`{}`, `{NULL}`, false, true},
+		{`{}`, `{NULL, NULL}`, false, true},
+		{`{2}`, `{1}`, false, false},
+		{`{4, 3}`, `{2, 1}`, false, false},
+		{`{5}`, `{1, 2, 1}`, false, false},
+		{`{NULL, 3}`, `{1, 2, 1}`, false, false},
+		{`{NULL}`, `{NULL}`, false, true},
+		{`{NULL}`, `{1, NULL}`, false, false},
+		{`{1,NULL}`, `{NULL}`, false, true},
+		{`{2, NULL}`, `{1, NULL}`, false, false},
+	}
+
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parseArray := func(s string) tree.Datum {
+		arr, _, err := tree.ParseDArrayFromString(&evalCtx, s, types.Int)
+		if err != nil {
+			t.Fatalf("Failed to parse array %s: %v", s, err)
+		}
+		return arr
+	}
+
+	runTest := func(indexedValue, value tree.Datum, expected, expectUnique bool) {
+		_, err := EncodeInvertedIndexTableKeys(indexedValue, nil, descpb.LatestNonPrimaryIndexDescriptorVersion)
+		require.NoError(t, err)
+
+		invertedExpr, err := EncodeOverlapsInvertedIndexSpans(&evalCtx, value)
+		require.NoError(t, err)
+
+		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
+		if !ok {
+			t.Fatalf("For (%s, %s), invertedExpr %v is not a SpanExpression", indexedValue, value, invertedExpr)
+		}
+
+		// Array spans for && are never tight.
+		if spanExpr.Tight == true {
+			t.Errorf("For (%s, %s), expected tight=false, but got true", indexedValue, value)
+		}
+
+		// Array spans for && are never unique unless the result
+		// is a singular empty array span.
+		if spanExpr.Unique != expectUnique {
+			if expectUnique {
+				t.Errorf("For (%s, %s), expected unique=true, but got false", indexedValue, value)
+			} else {
+				t.Errorf("For (%s, %s), expected unique=false, but got true", indexedValue, value)
+			}
+		}
+
+		actual, _ := tree.ArrayOverlaps(&evalCtx, value.(*tree.DArray), indexedValue.(*tree.DArray))
+		if bool(*actual) != expected {
+			if expected {
+				t.Errorf("expected %s to be overlapped %s but it was not", indexedValue, value)
+			} else {
+				t.Errorf("expected %s not to be overlapped %s but it was", indexedValue, value)
+			}
+		}
+	}
+
+	// Run pre-defined test cases from above.
+	for _, c := range testCases {
+		indexedValue, value := parseArray(c.indexedValue), parseArray(c.value)
+		runTest(indexedValue, value, c.expected, c.unique)
+	}
+
+	// Run a set of randomly generated test cases.
+	rng, _ := randutil.NewTestRand()
+	for i := 0; i < 100; i++ {
+		typ := randgen.RandArrayType(rng)
+
+		// Generate two random arrays and evaluate the result of `left && right`.
+		// Using 1/9th as the Null Chance to generate arrays with a small
+		// number of NULLs added in between.
+		left := randgen.RandArray(rng, typ, 9 /* nullChance */)
+		right := randgen.RandArray(rng, typ, 9 /* nullChance */)
+
+		// We cannot check for false positives with these tests (due to the fact that
+		// the spans are not tight), so we will only test for false negatives.
+		overlaps, err := tree.ArrayOverlaps(&evalCtx, right.(*tree.DArray), left.(*tree.DArray))
+		require.NoError(t, err)
+		if !*overlaps {
+			continue
+		}
+
+		rightArr, _ := right.(*tree.DArray)
+		// Check for uniqueness. Results won't be unique until the value array is empty
+		// or contains only NULLs, producing an empty overlap which is unique.
+		unique := rightArr.Len() == 0 || !rightArr.HasNonNulls
+
+		// Now check that we get the same result with the inverted index spans.
+		runTest(left, right, true, unique)
+	}
+}

@@ -701,6 +701,34 @@ func EncodeContainedInvertedIndexSpans(
 	}
 }
 
+// EncodeOverlapsInvertedIndexSpans returns the spans that must be scanned in
+// the inverted index to evaluate an overlaps (&&) predicate with the given
+// datum, which should be an Array. These spans should be used to find the
+// objects in the index that could overlap with the given array. In other
+// words, if we have a predicate x && y, this function should use the value of
+// y to find the spans to scan in an inverted index on x.
+//
+// The spans are returned in an inverted.SpanExpression, which represents the
+// set operations that must be applied on the spans read during execution. The
+// span expression returned will be tight. See comments in the
+// SpanExpression definition for details.
+func EncodeOverlapsInvertedIndexSpans(
+	evalCtx *tree.EvalContext, val tree.Datum,
+) (invertedExpr inverted.Expression, err error) {
+	if val == tree.DNull {
+		return nil, nil
+	}
+	datum := tree.UnwrapDatum(evalCtx, val)
+	switch val.ResolvedType().Family() {
+	case types.ArrayFamily:
+		return encodeOverlapsArrayInvertedIndexSpans(val.(*tree.DArray), nil /* inKey */)
+	default:
+		return nil, errors.AssertionFailedf(
+			"trying to apply inverted index to unsupported type %s", datum.ResolvedType(),
+		)
+	}
+}
+
 // encodeArrayInvertedIndexTableKeys returns a list of inverted index keys for
 // the given input array, one per entry in the array. The input inKey is
 // prefixed to all returned keys.
@@ -744,8 +772,6 @@ func encodeArrayInvertedIndexTableKeys(
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
 //
-// Returns unique=true if the spans are guaranteed not to produce
-// duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
 ) (invertedExpr inverted.Expression, err error) {
@@ -787,8 +813,6 @@ func encodeContainingArrayInvertedIndexSpans(
 // the given array, one slice of spans per entry in the array. The input
 // inKey is prefixed to all returned keys.
 //
-// Returns unique=true if the spans are guaranteed not to produce
-// duplicate primary keys. Otherwise, returns unique=false.
 func encodeContainedArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
 ) (invertedExpr inverted.Expression, err error) {
@@ -827,6 +851,48 @@ func encodeContainedArrayInvertedIndexSpans(
 	// ARRAY[1, 2, 3] would be returned by the scan, but it should be filtered
 	// out since ARRAY[1, 2, 3] <@ ARRAY[1] is false.
 	invertedExpr.SetNotTight()
+	return invertedExpr, nil
+}
+
+// encodeOverlapsArrayInvertedIndexSpans returns the spans that must be
+// scanned in the inverted index to evaluate an overlaps (&&) predicate with
+// the given array, one slice of spans per entry in the array. The input
+// inKey is prefixed to all returned keys.
+//
+func encodeOverlapsArrayInvertedIndexSpans(
+	val *tree.DArray, inKey []byte,
+) (invertedExpr inverted.Expression, err error) {
+	emptyArrSpanExpr := inverted.ExprForSpan(
+		inverted.MakeSingleValSpan(encoding.EncodeEmptyArray(inKey)), false, /* tight */
+	)
+	emptyArrSpanExpr.Unique = true
+	// If the given array is empty, we return an empty span expression.
+	if val.Array.Len() == 0 {
+		return emptyArrSpanExpr, nil
+	}
+
+	// We always exclude nulls from the list of keys when evaluating &&.
+	// This is because an expression like ARRAY[NULL] && ARRAY[NULL] is false,
+	// since NULL in SQL represents an unknown value.
+	keys, err := encodeArrayInvertedIndexTableKeys(val, inKey, descpb.LatestNonPrimaryIndexDescriptorVersion, true /* excludeNulls */)
+	if err != nil {
+		return nil, err
+	}
+	// No keys indicate that the given array was empty except for NULLs
+	// which were filtered out, hence returning an empty span expression.
+	if len(keys) == 0 {
+		return emptyArrSpanExpr, nil
+	}
+	for _, key := range keys {
+		spanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(key), false, /* tight */
+		)
+		if invertedExpr == nil {
+			invertedExpr = spanExpr
+		} else {
+			invertedExpr = inverted.Or(invertedExpr, spanExpr)
+		}
+	}
 	return invertedExpr, nil
 }
 

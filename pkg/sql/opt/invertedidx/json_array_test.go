@@ -223,7 +223,7 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 
 	tc := testcat.New()
 	if _, err := tc.ExecuteDDL(
-		"CREATE TABLE t (j JSON, a INT[], INVERTED INDEX (j), INVERTED INDEX (a))",
+		"CREATE TABLE t (j JSON, a INT[], str STRING[], INVERTED INDEX (j), INVERTED INDEX (a), INVERTED INDEX (str))",
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -705,6 +705,73 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 			unique:           false,
 			remainingFilters: "",
 		},
+		{
+			// Overlaps is supported for arrays.
+			filters:          "a && '{1}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}'",
+		},
+		{
+			// Overlaps with an empty array produces a unique inverted expression.
+			filters:          "a && '{}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           true,
+			remainingFilters: "a && '{}'",
+		},
+		{
+			filters:          "a && '{1}' AND a && '{2}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' AND a && '{2}'",
+		},
+		{
+			filters:          "a && '{1}' AND str && '{hello}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' AND str && '{hello}'",
+		},
+		{
+			// When operations affecting two different variables are OR-ed, we cannot
+			// constrain either index.
+			filters:  "a && '{1}' OR str && '{hello}'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			filters:  "a && '{1}' OR str <@ '{hello}'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			filters:  "a && '{1}' OR str @> '{hello}'",
+			indexOrd: arrayOrd,
+			ok:       false,
+		},
+		{
+			filters:          "a && '{1}' AND str <@ '{hello}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "a && '{1}' AND str <@ '{hello}'",
+		},
+		{
+			filters:          "str <@ '{hello}' AND a && '{1}'",
+			indexOrd:         arrayOrd,
+			ok:               true,
+			tight:            false,
+			unique:           false,
+			remainingFilters: "str <@ '{hello}' AND a && '{1}'",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -732,24 +799,24 @@ func TestTryFilterJsonOrArrayIndex(t *testing.T) {
 		}
 
 		if tc.tight != spanExpr.Tight {
-			t.Fatalf("expected tight=%v, but got %v", tc.tight, spanExpr.Tight)
+			t.Fatalf("For (%s), expected tight=%v, but got %v", tc.filters, tc.tight, spanExpr.Tight)
 		}
 		if tc.unique != spanExpr.Unique {
-			t.Fatalf("expected unique=%v, but got %v", tc.unique, spanExpr.Unique)
+			t.Fatalf("For (%s), expected unique=%v, but got %v", tc.filters, tc.unique, spanExpr.Unique)
 		}
 
 		if remainingFilters == nil {
 			if tc.remainingFilters != "" {
-				t.Fatalf("expected remainingFilters=%s, got <nil>", tc.remainingFilters)
+				t.Fatalf("For (%s), expected remainingFilters=%s, got <nil>", tc.filters, tc.remainingFilters)
 			}
 			continue
 		}
 		if tc.remainingFilters == "" {
-			t.Fatalf("expected remainingFilters=<nil>, got %v", remainingFilters)
+			t.Fatalf("For (%s), expected remainingFilters=<nil>, got %v", tc.filters, remainingFilters)
 		}
 		expRemainingFilters := testutils.BuildFilters(t, &f, &semaCtx, evalCtx, tc.remainingFilters)
 		if remainingFilters.String() != expRemainingFilters.String() {
-			t.Errorf("expected remainingFilters=%v, got %v", expRemainingFilters, remainingFilters)
+			t.Errorf("For (%s), expected remainingFilters=%v, got %v", tc.filters, expRemainingFilters, remainingFilters)
 		}
 	}
 }
