@@ -161,9 +161,9 @@ func (c tenantCluster) tenantConn(idx serverIdx) *sqlutils.SQLRunner {
 }
 
 func (c tenantCluster) tenantHTTPClient(t *testing.T, idx serverIdx) *httpClient {
-	client, err := c.tenant(idx).tenant.RPCContext().GetHTTPClient()
+	client, err := c.tenant(idx).tenant.GetAdminAuthenticatedHTTPClient()
 	require.NoError(t, err)
-	return &httpClient{t: t, client: client, baseURL: "https://" + c[idx].tenant.HTTPAddr()}
+	return &httpClient{t: t, client: client, baseURL: c[idx].tenant.AdminURL()}
 }
 
 func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.PersistedSQLStats {

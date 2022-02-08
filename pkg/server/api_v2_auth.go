@@ -50,7 +50,7 @@ func newAuthenticationV2Server(
 
 	authServer := &authenticationV2Server{
 		sqlServer:  s.sqlServer,
-		authServer: newAuthenticationServer(s),
+		authServer: newAuthenticationServer(s.cfg.Config, s.sqlServer),
 		mux:        simpleMux,
 		ctx:        ctx,
 		basePath:   basePath,
