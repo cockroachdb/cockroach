@@ -11,19 +11,16 @@
 package tracing
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
 )
 
 // TraceToJSON returns the string representation of the trace in JSON format.
 //
 // TraceToJSON assumes that the first span in the recording contains all the
 // other spans.
-func TraceToJSON(trace Recording) (string, error) {
+func TraceToJSON(trace tracingpb.Recording) (string, error) {
 	root := normalizeSpan(trace[0], trace)
 	marshaller := jsonpb.Marshaler{
 		Indent: "\t",
@@ -35,7 +32,7 @@ func TraceToJSON(trace Recording) (string, error) {
 	return str, nil
 }
 
-func normalizeSpan(s tracingpb.RecordedSpan, trace Recording) tracingpb.NormalizedSpan {
+func normalizeSpan(s tracingpb.RecordedSpan, trace tracingpb.Recording) tracingpb.NormalizedSpan {
 	var n tracingpb.NormalizedSpan
 	n.Operation = s.Operation
 	n.StartTime = s.StartTime
@@ -51,23 +48,6 @@ func normalizeSpan(s tracingpb.RecordedSpan, trace Recording) tracingpb.Normaliz
 		n.Children = append(n.Children, normalizeSpan(ss, trace))
 	}
 	return n
-}
-
-// MessageToJSONString converts a protocol message into a JSON string. The
-// emitDefaults flag dictates whether fields with zero values are rendered or
-// not.
-//
-// TODO(andrei): It'd be nice if this function dealt with redactable vs safe
-// fields, like EventPayload.AppendJSONFields does.
-func MessageToJSONString(msg protoutil.Message, emitDefaults bool) (string, error) {
-	// Convert to json.
-	jsonEncoder := jsonpb.Marshaler{EmitDefaults: emitDefaults}
-	msgJSON, err := jsonEncoder.MarshalToString(msg)
-	if err != nil {
-		return "", errors.Newf("error when converting %s to JSON string", proto.MessageName(msg))
-	}
-
-	return msgJSON, nil
 }
 
 // RedactAndTruncateError redacts the error and truncates the string

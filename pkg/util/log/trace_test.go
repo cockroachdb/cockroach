@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"golang.org/x/net/trace"
 )
 
@@ -116,7 +117,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	VErrEvent(ctxWithEventLog, NoLogV(), "testerr")
 
 	tracer := tracing.NewTracer()
-	sp := tracer.StartSpan("s", tracing.WithRecording(tracing.RecordingVerbose))
+	sp := tracer.StartSpan("s", tracing.WithRecording(tracingpb.RecordingVerbose))
 	ctxWithBoth := tracing.ContextWithSpan(ctxWithEventLog, sp)
 	// Events should only go to the trace.
 	Event(ctxWithBoth, "test3")
@@ -126,7 +127,7 @@ func TestEventLogAndTrace(t *testing.T) {
 	// Events to parent context should still go to the event log.
 	Event(ctxWithEventLog, "test6")
 
-	rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
+	rec := sp.FinishAndGetRecording(tracingpb.RecordingVerbose)
 	el.Finish()
 
 	if err := tracing.CheckRecordedSpans(rec, `

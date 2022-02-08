@@ -1440,7 +1440,7 @@ type ExecutorTestingKnobs struct {
 
 	// WithStatementTrace is called after the statement is executed in
 	// execStmtInOpenState.
-	WithStatementTrace func(trace tracing.Recording, stmt string)
+	WithStatementTrace func(trace tracingpb.Recording, stmt string)
 
 	// RunAfterSCJobsCacheLookup is called after the SchemaChangeJobCache is checked for
 	// a given table id.
@@ -2205,7 +2205,7 @@ type SessionTracing struct {
 
 	// If recording==true, recordingType indicates the type of the current
 	// recording.
-	recordingType tracing.RecordingType
+	recordingType tracingpb.RecordingType
 
 	// ex is the connExecutor to which this SessionTracing is tied.
 	ex *connExecutor
@@ -2226,7 +2226,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 		return st.lastRecording, nil
 	}
 
-	return generateSessionTraceVTable(st.connSpan.GetRecording(tracing.RecordingVerbose))
+	return generateSessionTraceVTable(st.connSpan.GetRecording(tracingpb.RecordingVerbose))
 }
 
 // StartTracing starts "session tracing". From this moment on, everything
@@ -2248,7 +2248,7 @@ func (st *SessionTracing) getSessionTrace() ([]traceRow, error) {
 //   are per-row.
 // showResults: If set, result rows are reported in the trace.
 func (st *SessionTracing) StartTracing(
-	recType tracing.RecordingType, kvTracingEnabled, showResults bool,
+	recType tracingpb.RecordingType, kvTracingEnabled, showResults bool,
 ) error {
 	if st.enabled {
 		// We're already tracing. Only treat as no-op if the same options
@@ -2290,7 +2290,7 @@ func (st *SessionTracing) StartTracing(
 			opName,
 			tracing.WithForceRealSpan(),
 		)
-		st.connSpan.SetRecordingType(tracing.RecordingVerbose)
+		st.connSpan.SetRecordingType(tracingpb.RecordingVerbose)
 		st.ex.ctxHolder.hijack(newConnCtx)
 	}
 
@@ -2327,14 +2327,14 @@ func (st *SessionTracing) StopTracing() error {
 	st.enabled = false
 	st.kvTracingEnabled = false
 	st.showResults = false
-	st.recordingType = tracing.RecordingOff
+	st.recordingType = tracingpb.RecordingOff
 
 	// Accumulate all recordings and finish the tracing spans.
-	rec := st.connSpan.GetRecording(tracing.RecordingVerbose)
+	rec := st.connSpan.GetRecording(tracingpb.RecordingVerbose)
 	// We're about to finish this span, but there might be a child that remains
 	// open - the child corresponding to the current transaction. We don't want
 	// that span to be recording any more.
-	st.connSpan.SetRecordingType(tracing.RecordingOff)
+	st.connSpan.SetRecordingType(tracingpb.RecordingOff)
 	st.connSpan.Finish()
 	st.connSpan = nil
 	st.ex.ctxHolder.unhijack()
