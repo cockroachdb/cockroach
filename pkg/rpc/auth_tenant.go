@@ -61,6 +61,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/TokenBucket":
 		return a.authTokenBucket(tenID, req.(*roachpb.TokenBucketRequest))
 
+	case "/cockroach.roachpb.Internal/TenantSettings":
+		return a.authTenantSettings(tenID, req.(*roachpb.TenantSettingsRequest))
+
 	case "/cockroach.rpc.Heartbeat/Ping":
 		return nil // no restriction to usage of this endpoint by tenants
 
@@ -249,6 +252,20 @@ func (a tenantAuthorizer) authTokenBucket(
 	}
 	if argTenant := roachpb.MakeTenantID(args.TenantID); argTenant != tenID {
 		return authErrorf("token bucket request for tenant %s not permitted", argTenant)
+	}
+	return nil
+}
+
+// authTenantSettings authorizes the provided tenant to invoke the
+// TenantSettings RPC with the provided args.
+func (a tenantAuthorizer) authTenantSettings(
+	tenID roachpb.TenantID, args *roachpb.TenantSettingsRequest,
+) error {
+	if !args.TenantID.IsSet() {
+		return authErrorf("tenant settings request with unspecified tenant not permitted")
+	}
+	if args.TenantID != tenID {
+		return authErrorf("tenant settings request for tenant %s not permitted", args.TenantID)
 	}
 	return nil
 }

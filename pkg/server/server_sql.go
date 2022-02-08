@@ -949,9 +949,18 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		reporter.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
-	settingsWatcher := settingswatcher.New(
-		cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.settingsStorage,
-	)
+	var settingsWatcher *settingswatcher.SettingsWatcher
+	if codec.ForSystemTenant() {
+		settingsWatcher = settingswatcher.New(
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.settingsStorage,
+		)
+	} else {
+		// Create the tenant settings watcher, using the tenant connector as the
+		// overrides monitor.
+		settingsWatcher = settingswatcher.NewWithOverrides(
+			cfg.clock, codec, cfg.Settings, cfg.rangeFeedFactory, cfg.stopper, cfg.tenantConnect, cfg.settingsStorage,
+		)
+	}
 
 	return &SQLServer{
 		ambientCtx:              cfg.BaseConfig.AmbientCtx,
