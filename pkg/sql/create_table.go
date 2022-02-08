@@ -1445,26 +1445,11 @@ func NewTableDesc(
 			}
 		}
 		if !hasRowLevelTTLColumn {
-			def := &tree.ColumnTableDef{
-				Name:   colinfo.TTLDefaultExpirationColumnName,
-				Type:   types.TimestampTZ,
-				Hidden: true,
-			}
-			intervalExpr, err := parser.ParseExpr(ttl.DurationExpr)
+			col, err := rowLevelTTLAutomaticColumnDef(ttl)
 			if err != nil {
-				return nil, errors.Wrapf(err, "unexpected expression for TTL duration")
+				return nil, err
 			}
-			def.DefaultExpr.Expr = &tree.BinaryExpr{
-				Operator: tree.MakeBinaryOperator(tree.Plus),
-				Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
-				Right:    intervalExpr,
-			}
-			def.OnUpdateExpr.Expr = &tree.BinaryExpr{
-				Operator: tree.MakeBinaryOperator(tree.Plus),
-				Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
-				Right:    intervalExpr,
-			}
-			n.Defs = append(n.Defs, def)
+			n.Defs = append(n.Defs, col)
 			cdd = append(cdd, nil)
 		}
 	}
@@ -2320,17 +2305,15 @@ func newTableDesc(
 	// TODO(#75428): ensure backup & restore work too - this may need to be placed in NewTableDesc.
 	// This involves plumbing InternalExecutor in there,
 	if ttl := ret.RowLevelTTL; ttl != nil {
-		env := JobSchedulerEnv(params.p.ExecCfg())
-		j, err := newRowLevelTTLScheduledJob(
-			env,
+		j, err := createRowLevelTTLScheduledJob(
+			params.ctx,
+			params.ExecCfg(),
+			params.p.txn,
 			params.p.User(),
 			ret.GetID(),
 			ttl,
 		)
 		if err != nil {
-			return nil, err
-		}
-		if err := j.Create(params.ctx, params.p.ExecCfg().InternalExecutor, params.p.txn); err != nil {
 			return nil, err
 		}
 		ttl.ScheduleID = j.ScheduleID()
@@ -2382,6 +2365,50 @@ func rowLevelTTLSchedule(ttl *descpb.TableDescriptor_RowLevelTTL) string {
 		return override
 	}
 	return defaultTTLScheduleCron
+}
+
+func createRowLevelTTLScheduledJob(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	txn *kv.Txn,
+	owner security.SQLUsername,
+	tblID descpb.ID,
+	ttl *descpb.TableDescriptor_RowLevelTTL,
+) (*jobs.ScheduledJob, error) {
+	env := JobSchedulerEnv(execCfg)
+	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
+	if err != nil {
+		return nil, err
+	}
+	if err := j.Create(ctx, execCfg.InternalExecutor, txn); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func rowLevelTTLAutomaticColumnDef(
+	ttl *descpb.TableDescriptor_RowLevelTTL,
+) (*tree.ColumnTableDef, error) {
+	def := &tree.ColumnTableDef{
+		Name:   colinfo.TTLDefaultExpirationColumnName,
+		Type:   types.TimestampTZ,
+		Hidden: true,
+	}
+	intervalExpr, err := parser.ParseExpr(ttl.DurationExpr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "unexpected expression for TTL duration")
+	}
+	def.DefaultExpr.Expr = rowLevelTTLAutomaticColumnExpr(intervalExpr)
+	def.OnUpdateExpr.Expr = rowLevelTTLAutomaticColumnExpr(intervalExpr)
+	return def, nil
+}
+
+func rowLevelTTLAutomaticColumnExpr(intervalExpr tree.Expr) tree.Expr {
+	return &tree.BinaryExpr{
+		Operator: tree.MakeBinaryOperator(tree.Plus),
+		Left:     &tree.FuncExpr{Func: tree.WrapFunction("current_timestamp")},
+		Right:    intervalExpr,
+	}
 }
 
 // replaceLikeTableOps processes the TableDefs in the input CreateTableNode,

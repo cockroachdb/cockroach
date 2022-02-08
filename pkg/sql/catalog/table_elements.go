@@ -84,6 +84,10 @@ type Mutation interface {
 	// if the mutation is a materialized view refresh, nil otherwise.
 	AsMaterializedViewRefresh() MaterializedViewRefresh
 
+	// AsModifyRowLevelTTL returns the corresponding ModifyRowLevelTTL
+	// if the mutation is a row-level TTL alter, nil otherwise.
+	AsModifyRowLevelTTL() ModifyRowLevelTTL
+
 	// NOTE: When adding new types of mutations to this interface, be sure to
 	// audit the code which unpacks and introspects mutations to be sure to add
 	// cases for the new type.
@@ -446,6 +450,14 @@ type MaterializedViewRefresh interface {
 	// TableWithNewIndexes returns a new TableDescriptor based on the old one
 	// but with the refreshed indexes put in.
 	TableWithNewIndexes(tbl TableDescriptor) TableDescriptor
+}
+
+// ModifyRowLevelTTL is an interface around a modify row level TTL mutation.
+type ModifyRowLevelTTL interface {
+	TableElementMaybeMutation
+
+	// RowLevelTTL returns the row level TTL for the mutation.
+	RowLevelTTL() *descpb.TableDescriptor_RowLevelTTL
 }
 
 // Partitioning is an interface around an index partitioning.
