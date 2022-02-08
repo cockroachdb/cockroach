@@ -93,6 +93,14 @@ func TestShowTransferState(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
+		// Add a prepared statement to make sure SHOW TRANSFER STATE handles it.
+		// Since lib/pq doesn't tell us the name of the prepared statement, we won't
+		// be able to test that we can use it after deserializing the session, but
+		// there are other tests for that.
+		stmt, err := conn.Prepare("SELECT 1 WHERE 1 = 1")
+		require.NoError(t, err)
+		defer stmt.Close()
+
 		rows, err := conn.Query(`SHOW TRANSFER STATE WITH 'foobar'`)
 		require.NoError(t, err, "show transfer state failed")
 		defer rows.Close()
@@ -192,34 +200,6 @@ func TestShowTransferState(t *testing.T) {
 
 			require.True(t, errVal.Valid)
 			require.Equal(t, "cannot serialize a session which is inside a transaction", errVal.String)
-			require.False(t, sessionState.Valid)
-			require.False(t, sessionRevivalToken.Valid)
-		})
-
-		t.Run("prepared_statements", func(t *testing.T) {
-			pgURL, cleanup := sqlutils.PGUrl(
-				t,
-				tenant.SQLAddr(),
-				"TestShowTransferState-errors-prepared_statements",
-				url.UserPassword(security.TestUser, "hunter2"),
-			)
-			defer cleanup()
-
-			conn, err := gosql.Open("postgres", pgURL.String())
-			require.NoError(t, err)
-			defer conn.Close()
-
-			// Use a dummy prepared statement.
-			stmt, err := conn.Prepare("SELECT 1 WHERE 1 = 1")
-			require.NoError(t, err)
-			defer stmt.Close()
-
-			var errVal, sessionState, sessionRevivalToken gosql.NullString
-			err = conn.QueryRow("SHOW TRANSFER STATE").Scan(&errVal, &sessionState, &sessionRevivalToken)
-			require.NoError(t, err)
-
-			require.True(t, errVal.Valid)
-			require.Equal(t, "cannot serialize a session which has portals or prepared statements", errVal.String)
 			require.False(t, sessionState.Valid)
 			require.False(t, sessionRevivalToken.Valid)
 		})
