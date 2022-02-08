@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/config",
         "//pkg/config/zonepb",
         "//pkg/gossip",
@@ -21,6 +22,8 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/spanconfig",
+        "//pkg/sql/sqlinstance",
+        "//pkg/util",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",
         "//pkg/util/log",

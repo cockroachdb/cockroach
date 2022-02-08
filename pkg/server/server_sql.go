@@ -89,6 +89,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -235,8 +236,11 @@ type sqlServerArgs struct {
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
 
-	// Used by DistSQLPlanner.
+	// Used by DistSQLPlanner to dial KV nodes.
 	nodeDialer *nodedialer.Dialer
+
+	// Used by DistSQLPlanner to dial other pods in a multi-tenant environment.
+	podNodeDialer *nodedialer.Dialer
 
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
@@ -377,6 +381,24 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	cfg.sqlInstanceProvider = instanceprovider.New(
 		cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.rangeFeedFactory, cfg.clock,
 	)
+
+	if !codec.ForSystemTenant() {
+		// In a multi-tenant environment, use the sqlInstanceProvider to resolve
+		// SQL pod addresses.
+		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, error) {
+			if cfg.sqlInstanceProvider == nil {
+				return nil, errors.Errorf("no sqlInstanceProvider")
+			}
+			info, err := cfg.sqlInstanceProvider.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
+			if err != nil {
+				return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
+			}
+			return &util.UnresolvedAddr{AddressField: info.InstanceAddr}, nil
+		}
+		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+	} else {
+		cfg.podNodeDialer = cfg.nodeDialer
+	}
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -567,6 +589,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		JobRegistry:       jobRegistry,
 		Gossip:            cfg.gossip,
 		NodeDialer:        cfg.nodeDialer,
+		PodNodeDialer:     cfg.podNodeDialer,
 		LeaseManager:      leaseMgr,
 
 		ExternalStorage:        cfg.externalStorage,
@@ -681,6 +704,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.stopper,
 			isAvailable,
 			cfg.nodeDialer,
+			cfg.podNodeDialer,
 		),
 
 		TableStatsCache: stats.NewTableStatisticsCache(
