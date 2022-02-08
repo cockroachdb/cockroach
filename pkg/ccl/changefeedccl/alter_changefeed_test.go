@@ -39,7 +39,7 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD TARGET bar`, feed.JobID()))
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
@@ -55,11 +55,7 @@ func TestAlterChangefeedAddTarget(t *testing.T) {
 		})
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestAlterChangefeedDropTarget(t *testing.T) {
@@ -80,7 +76,7 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
 		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP TARGET bar`, feed.JobID()))
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar`, feed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
 		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
@@ -94,11 +90,7 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 		assertPayloads(t, testFeed, nil)
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
 }
 
 func TestAlterChangefeedErrors(t *testing.T) {
@@ -117,7 +109,7 @@ func TestAlterChangefeedErrors(t *testing.T) {
 
 		sqlDB.ExpectErr(t,
 			`could not load job with job id -1`,
-			`ALTER CHANGEFEED -1 ADD TARGET bar`,
+			`ALTER CHANGEFEED -1 ADD bar`,
 		)
 
 		sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b INT`)
@@ -125,19 +117,43 @@ func TestAlterChangefeedErrors(t *testing.T) {
 		sqlDB.QueryRow(t, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE'`).Scan(&alterTableJobID)
 		sqlDB.ExpectErr(t,
 			fmt.Sprintf(`job %d is not changefeed job`, alterTableJobID),
-			fmt.Sprintf(`ALTER CHANGEFEED %d ADD TARGET bar`, alterTableJobID),
+			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, alterTableJobID),
 		)
 
 		sqlDB.ExpectErr(t,
 			fmt.Sprintf(`job %d is not paused`, feed.JobID()),
-			fmt.Sprintf(`ALTER CHANGEFEED %d ADD TARGET bar`, feed.JobID()),
+			fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()),
 		)
 
 	}
 
-	t.Run(`enterprise`, enterpriseTest(testFn))
-	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 	t.Run(`kafka`, kafkaTest(testFn))
-	t.Run(`webhook`, webhookTest(testFn))
-	t.Run(`pubsub`, pubsubTest(testFn))
+}
+
+func TestAlterChangefeedDropAllTargetsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar`)
+		defer closeFeed(t, testFeed)
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.ExpectErr(t,
+			fmt.Sprintf(`cannot drop all targets for changefeed job %d`, feed.JobID()),
+			fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo, bar`, feed.JobID()),
+		)
+
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
 }

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,9 +44,13 @@ func alterChangefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	jobID := jobspb.JobID(alterChangefeedStmt.JobID)
+	typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+	jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
-	job, err := p.ExecCfg().JobRegistry.LoadJob(ctx, jobID)
+	job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn)
 	if err != nil {
 		err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
 		return nil, nil, nil, false, err
@@ -59,7 +65,6 @@ func alterChangefeedPlanHook(
 		return nil, nil, nil, false, errors.Errorf(`job %d is not paused`, jobID)
 	}
 
-	avoidBuffering := false
 	header := colinfo.ResultColumns{
 		{Name: "job_id", Typ: types.Int},
 	}
@@ -127,26 +132,56 @@ func alterChangefeedPlanHook(
 			}
 		}
 
-		err = saveDetails(ctx, p, jobID, details)
-		return err
-	}
+		if len(details.Targets) == 0 {
+			return errors.Errorf("cannot drop all targets for changefeed job %d", jobID)
+		}
 
-	return fn, header, nil, avoidBuffering, nil
-}
+		if err := validateSink(ctx, p, jobID, details, details.Opts); err != nil {
+			return err
+		}
 
-func saveDetails(
-	ctx context.Context, p sql.PlanHookState, jobID jobspb.JobID, details jobspb.ChangefeedDetails,
-) error {
-	err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		err := p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, txn, true, func(
+		oldStmt, err := parser.ParseOne(job.Payload().Description)
+		if err != nil {
+			return err
+		}
+		oldChangefeedStmt, ok := oldStmt.AST.(*tree.CreateChangefeed)
+		if !ok {
+			return errors.Errorf(`could not parse create changefeed statement for job %d`, jobID)
+		}
+
+		var targets tree.TargetList
+		for _, target := range details.Targets {
+			targetName := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{}, tree.Name(target.StatementTimeName))
+			targets.Tables = append(targets.Tables, &targetName)
+		}
+
+		oldChangefeedStmt.Targets = targets
+		jobDescription := tree.AsString(oldChangefeedStmt)
+
+		newPayload := job.Payload()
+		newPayload.Description = jobDescription
+		newPayload.Details = jobspb.WrapPayloadDetails(details)
+
+		finalDescs, err := getTableDescriptors(ctx, p, &targets, statementTime, initialHighWater)
+		if err != nil {
+			return err
+		}
+
+		newPayload.DescriptorIDs = func() (sqlDescIDs []descpb.ID) {
+			for _, desc := range finalDescs {
+				sqlDescIDs = append(sqlDescIDs, desc.GetID())
+			}
+			return sqlDescIDs
+		}()
+
+		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, true, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
-			md.Payload.Details = jobspb.WrapPayloadDetails(details)
-			ju.UpdatePayload(md.Payload)
+			ju.UpdatePayload(&newPayload)
 			return nil
 		})
 		return err
-	})
+	}
 
-	return err
+	return fn, header, nil, false, nil
 }

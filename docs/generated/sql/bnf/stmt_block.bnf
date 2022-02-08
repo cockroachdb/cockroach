@@ -1172,7 +1172,6 @@ unreserved_keyword ::=
 	| 'SYSTEM'
 	| 'TABLES'
 	| 'TABLESPACE'
-	| 'TARGET'
 	| 'TEMP'
 	| 'TEMPLATE'
 	| 'TEMPORARY'
@@ -2367,8 +2366,8 @@ alter_default_privileges_target_object ::=
 	| 'SCHEMAS'
 
 alter_changefeed_cmd ::=
-	'ADD' 'TARGET' single_table_pattern_list
-	| 'DROP' 'TARGET' single_table_pattern_list
+	'ADD' changefeed_targets
+	| 'DROP' changefeed_targets
 
 role_option ::=
 	'CREATEROLE'

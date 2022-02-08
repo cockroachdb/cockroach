@@ -308,34 +308,13 @@ func changefeedPlanHook(
 
 		telemetry.Count(`changefeed.create.enterprise`)
 
-		metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-		sli, err := metrics.getSLIMetrics(opts[changefeedbase.OptMetricsScope])
-		if err != nil {
-			return err
-		}
-
 		// In the case where a user is executing a CREATE CHANGEFEED and is still
 		// waiting for the statement to return, we take the opportunity to ensure
 		// that the user has not made any obvious errors when specifying the sink in
 		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
 		// which will be immediately closed, only to check for errors.
-		{
-			var nilOracle timestampLowerBoundOracle
-			canarySink, err := getSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
-				nilOracle, p.User(), jobspb.InvalidJobID, sli)
-			if err != nil {
-				return changefeedbase.MaybeStripRetryableErrorMarker(err)
-			}
-			if err := canarySink.Close(); err != nil {
-				return err
-			}
-			if sink, ok := canarySink.(SinkWithTopics); ok {
-				topics := sink.Topics()
-				for _, topic := range topics {
-					p.BufferClientNotice(ctx, pgnotice.Newf(`changefeed will emit to topic %s`, topic))
-				}
-				details.Opts[changefeedbase.Topics] = strings.Join(topics, ",")
-			}
+		if err := validateSink(ctx, p, jobspb.InvalidJobID, details, opts); err != nil {
+			return err
 		}
 
 		// The below block creates the job and if there's an initial scan, protects
@@ -526,6 +505,37 @@ func getTargets(
 		}
 	}
 	return targets, nil
+}
+
+func validateSink(
+	ctx context.Context,
+	p sql.PlanHookState,
+	jobID jobspb.JobID,
+	details jobspb.ChangefeedDetails,
+	opts map[string]string,
+) error {
+	metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	sli, err := metrics.getSLIMetrics(opts[changefeedbase.OptMetricsScope])
+	if err != nil {
+		return err
+	}
+	var nilOracle timestampLowerBoundOracle
+	canarySink, err := getSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
+		nilOracle, p.User(), jobID, sli)
+	if err != nil {
+		return changefeedbase.MaybeStripRetryableErrorMarker(err)
+	}
+	if err := canarySink.Close(); err != nil {
+		return err
+	}
+	if sink, ok := canarySink.(SinkWithTopics); ok {
+		topics := sink.Topics()
+		for _, topic := range topics {
+			p.BufferClientNotice(ctx, pgnotice.Newf(`changefeed will emit to topic %s`, topic))
+		}
+		details.Opts[changefeedbase.Topics] = strings.Join(topics, ",")
+	}
+	return nil
 }
 
 func changefeedJobDescription(

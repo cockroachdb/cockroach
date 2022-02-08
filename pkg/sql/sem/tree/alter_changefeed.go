@@ -10,12 +10,10 @@
 
 package tree
 
-import "strconv"
-
 // AlterChangefeed represents an ALTER CHANGEFEED statement.
 type AlterChangefeed struct {
-	JobID int64
-	Cmds  AlterChangefeedCmds
+	Jobs Expr
+	Cmds AlterChangefeedCmds
 }
 
 var _ Statement = &AlterChangefeed{}
@@ -23,7 +21,7 @@ var _ Statement = &AlterChangefeed{}
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeed) Format(ctx *FmtCtx) {
 	ctx.WriteString(`ALTER CHANGEFEED `)
-	ctx.WriteString(strconv.Itoa(int(node.JobID)))
+	ctx.FormatNode(node.Jobs)
 	ctx.FormatNode(&node.Cmds)
 }
 
@@ -59,7 +57,7 @@ type AlterChangefeedAddTarget struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedAddTarget) Format(ctx *FmtCtx) {
-	ctx.WriteString(" ADD TARGET ")
+	ctx.WriteString(" ADD ")
 	ctx.FormatNode(&node.Targets.Tables)
 }
 
@@ -69,6 +67,6 @@ type AlterChangefeedDropTarget struct {
 
 // Format implements the NodeFormatter interface.
 func (node *AlterChangefeedDropTarget) Format(ctx *FmtCtx) {
-	ctx.WriteString(" DROP TARGET ")
+	ctx.WriteString(" DROP ")
 	ctx.FormatNode(&node.Targets.Tables)
 }

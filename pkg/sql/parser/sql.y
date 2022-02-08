@@ -858,7 +858,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
-%token <str> TABLE TABLES TABLESPACE TARGET TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
+%token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
 %token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE
 %token <str> TRANSACTION TRANSACTIONS TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE TYPES
@@ -4311,12 +4311,8 @@ explain_option_list:
 alter_changefeed_stmt:
   ALTER CHANGEFEED a_expr alter_changefeed_cmds
   {
-    jobID, err := $3.numVal().AsInt64()
-    if err != nil {
-      return setErr(sqllex, err)
-    }
     $$.val = &tree.AlterChangefeed{
-      JobID: jobID,
+      Jobs: $3.expr(),
       Cmds: $4.alterChangefeedCmds(),
     }
   }
@@ -4332,18 +4328,18 @@ alter_changefeed_cmds:
   }
 
 alter_changefeed_cmd:
-  // ALTER CHANGEFEED <job_id> ADD TARGET ...
-  ADD TARGET single_table_pattern_list
+  // ALTER CHANGEFEED <job_id> ADD [TABLE] ...
+  ADD changefeed_targets
   {
     $$.val = &tree.AlterChangefeedAddTarget{
-      Targets: tree.TargetList{Tables: $3.tablePatterns()},
+      Targets: $2.targetList(),
     }
   }
-  // ALTER CHANGEFEED <job_id> DROP TARGET ...
-| DROP TARGET single_table_pattern_list
+  // ALTER CHANGEFEED <job_id> DROP [TABLE] ...
+| DROP changefeed_targets
   {
     $$.val = &tree.AlterChangefeedDropTarget{
-      Targets: tree.TargetList{Tables: $3.tablePatterns()},
+      Targets: $2.targetList(),
     }
   }
 
@@ -13732,7 +13728,6 @@ unreserved_keyword:
 | SYSTEM
 | TABLES
 | TABLESPACE
-| TARGET
 | TEMP
 | TEMPLATE
 | TEMPORARY
