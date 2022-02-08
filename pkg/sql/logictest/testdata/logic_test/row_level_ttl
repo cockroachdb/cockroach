@@ -45,7 +45,22 @@ WHERE label LIKE 'row-level-ttl-%'
 ----
 1
 
+statement ok
+ALTER TABLE tbl SET (ttl_expire_after = '10 days')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                           id INT8 NOT NULL,
+                                                                                           text STRING NULL,
+                                                                                           crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL,
+                                                                                           CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                           FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10 days':::INTERVAL)
+
 # Ensure schedules are removed on DROP TABLE.
+
 statement ok
 DROP TABLE tbl
 
