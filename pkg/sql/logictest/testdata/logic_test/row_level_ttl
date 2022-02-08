@@ -46,7 +46,7 @@ WHERE label LIKE 'row-level-ttl-%'
 1
 
 # Ensure schedules are removed on DROP TABLE.
-query I
+statement ok
 DROP TABLE tbl
 
 query I
@@ -324,3 +324,36 @@ CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table 
 
 statement error foreign keys to/from table with TTL "ttl_become_table" are not permitted
 ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
+
+# Create a table without a TTL. Add the TTL to the table and ensure
+# the schedule and TTL is setup correctly.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+   id INT PRIMARY KEY,
+   text TEXT,
+   FAMILY (id, text)
+)
+
+statement ok
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes', ttl_select_batch_size = 200)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                                                         id INT8 NOT NULL,
+                                                                                                                         text STRING NULL,
+                                                                                                                         crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                         CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                         FAMILY fam_0_id_text (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 200)
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root

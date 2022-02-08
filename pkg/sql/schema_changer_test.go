@@ -7444,3 +7444,121 @@ SET experimental_enable_hash_sharded_indexes = on;
 CREATE INDEX idx_test_split_b ON t.test_split (b) USING HASH WITH (bucket_count=8);
 `)
 }
+
+func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var shouldFail bool
+	failFunc := func() error {
+		if shouldFail {
+			shouldFail = false
+			return errors.AssertionFailedf("fail!")
+		}
+		return nil
+	}
+
+	const (
+		createNonTTLTable = `CREATE DATABASE t;
+	CREATE TABLE t.test (id TEXT PRIMARY KEY);`
+		expectNonTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+)`
+	)
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		schemaChange            string
+		knobs                   *sql.SchemaChangerTestingKnobs
+		expectedShowCreateTable string
+		expectSchedule          bool
+	}{
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during add mutation",
+			setup:        createNonTTLTable,
+			schemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeBackfill: failFunc,
+			},
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during modify row-level-ttl mutation",
+			setup:        createNonTTLTable,
+			schemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeModifyRowLevelTTL: failFunc,
+			},
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) when tied to another mutation which fails",
+			setup:        createNonTTLTable,
+			schemaChange: `BEGIN; ALTER TABLE t.test SET (ttl_expire_after = '10 hours'); CREATE INDEX test_idx ON t.test(id); COMMIT`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeIndexValidation: failFunc,
+			},
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			params.Knobs.SQLSchemaChanger = tc.knobs
+			s, sqlDB, kvDB := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			_, err := sqlDB.Exec(tc.setup)
+			require.NoError(t, err)
+
+			shouldFail = true
+			defer func() {
+				shouldFail = false
+			}()
+			_, err = sqlDB.Exec(tc.schemaChange)
+			require.Error(t, err)
+
+			// Ensure CREATE TABLE is the same.
+			var actualSchema string
+			require.NoError(t, sqlDB.QueryRow(`SELECT create_statement FROM [SHOW CREATE TABLE t.test]`).Scan(&actualSchema))
+			require.Equal(t, tc.expectedShowCreateTable, actualSchema)
+
+			// Ensure the schedule is still there.
+			desc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				"t",
+				"test",
+			)
+			if tc.expectSchedule {
+				require.NotNil(t, desc.GetRowLevelTTL())
+				require.Greater(t, desc.GetRowLevelTTL().ScheduleID, 0)
+
+				// Ensure there is only one schedule and that it belongs to the table.
+				var numSchedules int
+				require.NoError(t, sqlDB.QueryRow(
+					`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE $1`,
+					fmt.Sprintf("row-level-ttl-%d", desc.GetRowLevelTTL().ScheduleID),
+				).Scan(&numSchedules))
+				require.Equal(t, 0, numSchedules)
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.Equal(t, 1, numSchedules)
+			} else {
+				require.Nil(t, desc.GetRowLevelTTL())
+
+				// Ensure there are no schedules.
+				var numSchedules int
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.Equal(t, 0, numSchedules)
+			}
+		})
+	}
+}
