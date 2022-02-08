@@ -70,8 +70,8 @@ type ObjectNamePrefix struct {
 	ExplicitSchema bool
 }
 
-// Format implements the NodeFormatter interface.
-func (tp *ObjectNamePrefix) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (tp *ObjectNamePrefix) FormatImpl(ctx *FmtCtx) {
 	alwaysFormat := ctx.alwaysFormatTablePrefix()
 	if tp.ExplicitSchema || alwaysFormat {
 		if tp.ExplicitCatalog || alwaysFormat {
@@ -97,8 +97,8 @@ func (tp *ObjectNamePrefix) Catalog() string {
 // ObjectNamePrefixList is a list of ObjectNamePrefix
 type ObjectNamePrefixList []ObjectNamePrefix
 
-// Format implements the NodeFormatter interface.
-func (tp ObjectNamePrefixList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (tp ObjectNamePrefixList) FormatImpl(ctx *FmtCtx) {
 	for idx, objectNamePrefix := range tp {
 		ctx.FormatNode(&objectNamePrefix)
 		if idx != len(tp)-1 {
@@ -169,8 +169,8 @@ func (u *UnresolvedObjectName) Resolved(ann *Annotations) ObjectName {
 	return r.(ObjectName)
 }
 
-// Format implements the NodeFormatter interface.
-func (u *UnresolvedObjectName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (u *UnresolvedObjectName) FormatImpl(ctx *FmtCtx) {
 	// If we want to format the corresponding resolved name, look it up in the
 	// annotation.
 	if ctx.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil {
@@ -179,12 +179,12 @@ func (u *UnresolvedObjectName) Format(ctx *FmtCtx) {
 			// unresolved names everywhere. We will need to revisit and see if we need
 			// to switch to (or add) an UnresolvedObjectName formatter.
 			tn := u.ToTableName()
-			tn.Format(ctx)
+			ctx.FormatNode(&tn)
 			return
 		}
 
 		if n := u.Resolved(ctx.ann); n != nil {
-			n.Format(ctx)
+			ctx.FormatNode(n)
 			return
 		}
 	}

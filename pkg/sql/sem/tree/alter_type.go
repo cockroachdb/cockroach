@@ -21,8 +21,8 @@ type AlterType struct {
 	Cmd  AlterTypeCmd
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterType) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterType) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER TYPE ")
 	ctx.FormatNode(node.Type)
 	ctx.FormatNode(node.Cmd)
@@ -58,8 +58,8 @@ type AlterTypeAddValue struct {
 	Placement   *AlterTypeAddValuePlacement
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeAddValue) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeAddValue) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" ADD VALUE ")
 	if node.IfNotExists {
 		ctx.WriteString("IF NOT EXISTS ")
@@ -93,8 +93,8 @@ type AlterTypeRenameValue struct {
 	NewVal EnumValue
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeRenameValue) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeRenameValue) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME VALUE ")
 	ctx.FormatNode(&node.OldVal)
 	ctx.WriteString(" TO ")
@@ -111,8 +111,8 @@ type AlterTypeDropValue struct {
 	Val EnumValue
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeDropValue) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeDropValue) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" DROP VALUE ")
 	ctx.FormatNode(&node.Val)
 }
@@ -127,8 +127,8 @@ type AlterTypeRename struct {
 	NewName Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeRename) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeRename) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" RENAME TO ")
 	ctx.FormatNode(&node.NewName)
 }
@@ -143,8 +143,8 @@ type AlterTypeSetSchema struct {
 	Schema Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeSetSchema) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeSetSchema) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" SET SCHEMA ")
 	ctx.FormatNode(&node.Schema)
 }
@@ -159,8 +159,8 @@ type AlterTypeOwner struct {
 	Owner RoleSpec
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterTypeOwner) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterTypeOwner) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(" OWNER TO ")
 	ctx.FormatNode(&node.Owner)
 }

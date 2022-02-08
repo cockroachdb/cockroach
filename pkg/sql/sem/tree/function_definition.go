@@ -183,8 +183,8 @@ var FunDefs map[string]*FunctionDefinition
 // package because of dependency issues: we can't use oidHasher from this file.
 var OidToBuiltinName map[oid.Oid]string
 
-// Format implements the NodeFormatter interface.
-func (fd *FunctionDefinition) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (fd *FunctionDefinition) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(fd.Name)
 }
 func (fd *FunctionDefinition) String() string { return AsString(fd) }

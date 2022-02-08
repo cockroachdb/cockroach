@@ -18,14 +18,14 @@ type DropOwnedBy struct {
 
 var _ Statement = &DropOwnedBy{}
 
-// Format implements the NodeFormatter interface.
-func (node *DropOwnedBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropOwnedBy) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP OWNED BY ")
 	for i := range node.Roles {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		node.Roles[i].Format(ctx)
+		node.Roles[i].FormatImpl(ctx)
 	}
 	if node.DropBehavior != DropDefault {
 		ctx.WriteString(" ")

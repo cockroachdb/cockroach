@@ -16,8 +16,8 @@ type AlterDatabaseOwner struct {
 	Owner RoleSpec
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabaseOwner) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabaseOwner) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" OWNER TO ")
@@ -33,8 +33,8 @@ type AlterDatabaseAddRegion struct {
 
 var _ Statement = &AlterDatabaseAddRegion{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabaseAddRegion) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabaseAddRegion) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ADD REGION ")
@@ -53,8 +53,8 @@ type AlterDatabaseDropRegion struct {
 
 var _ Statement = &AlterDatabaseDropRegion{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabaseDropRegion) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabaseDropRegion) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" DROP REGION ")
@@ -72,12 +72,12 @@ type AlterDatabasePrimaryRegion struct {
 
 var _ Statement = &AlterDatabasePrimaryRegion{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabasePrimaryRegion) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabasePrimaryRegion) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" PRIMARY REGION ")
-	node.PrimaryRegion.Format(ctx)
+	node.PrimaryRegion.FormatImpl(ctx)
 }
 
 // AlterDatabaseSurvivalGoal represents a ALTER DATABASE SURVIVE ... statement.
@@ -88,12 +88,12 @@ type AlterDatabaseSurvivalGoal struct {
 
 var _ Statement = &AlterDatabaseSurvivalGoal{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabaseSurvivalGoal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabaseSurvivalGoal) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ")
-	node.SurvivalGoal.Format(ctx)
+	node.SurvivalGoal.FormatImpl(ctx)
 }
 
 // AlterDatabasePlacement represents a ALTER DATABASE PLACEMENT statement.
@@ -104,10 +104,10 @@ type AlterDatabasePlacement struct {
 
 var _ Statement = &AlterDatabasePlacement{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterDatabasePlacement) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER DATABASE ")
 	ctx.FormatNode(&node.Name)
 	ctx.WriteString(" ")
-	node.Placement.Format(ctx)
+	node.Placement.FormatImpl(ctx)
 }

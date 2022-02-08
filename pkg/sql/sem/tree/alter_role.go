@@ -18,8 +18,8 @@ type AlterRole struct {
 	KVOptions KVOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterRole) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterRole) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
@@ -47,8 +47,8 @@ type AlterRoleSet struct {
 	SetOrReset   *SetVar
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterRoleSet) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterRoleSet) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")

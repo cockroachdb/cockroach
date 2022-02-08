@@ -28,8 +28,8 @@ type SetVar struct {
 	ResetAll bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetVar) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetVar) FormatImpl(ctx *FmtCtx) {
 	if node.ResetAll {
 		ctx.WriteString("RESET ALL")
 		return
@@ -69,8 +69,8 @@ type SetClusterSetting struct {
 	Value Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetClusterSetting) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetClusterSetting) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SET CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
@@ -95,8 +95,8 @@ type SetTransaction struct {
 	Modes TransactionModes
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetTransaction) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetTransaction) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SET TRANSACTION")
 	ctx.FormatNode(&node.Modes)
 }
@@ -106,8 +106,8 @@ func (node *SetTransaction) Format(ctx *FmtCtx) {
 // last position.
 type SetSessionAuthorizationDefault struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *SetSessionAuthorizationDefault) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetSessionAuthorizationDefault) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SET SESSION AUTHORIZATION DEFAULT")
 }
 
@@ -116,8 +116,8 @@ type SetSessionCharacteristics struct {
 	Modes TransactionModes
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetSessionCharacteristics) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetSessionCharacteristics) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SET SESSION CHARACTERISTICS AS TRANSACTION")
 	ctx.FormatNode(&node.Modes)
 }
@@ -127,8 +127,8 @@ type SetTracing struct {
 	Values Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *SetTracing) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *SetTracing) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SET TRACING = ")
 	// Set tracing values never contain PII and should be distinguished
 	// for feature tracking purposes.

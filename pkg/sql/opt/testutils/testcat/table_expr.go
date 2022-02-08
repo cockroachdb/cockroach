@@ -78,8 +78,8 @@ func (c *tableCol) String() string {
 	return tree.AsString(c)
 }
 
-// Format implements the NodeFormatter interface.
-func (c *tableCol) Format(ctx *tree.FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (c *tableCol) FormatImpl(ctx *tree.FmtCtx) {
 	ctx.FormatNode(&c.name)
 }
 

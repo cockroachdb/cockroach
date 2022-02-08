@@ -29,8 +29,8 @@ type Delete struct {
 	Returning ReturningClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Delete) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Delete) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	ctx.WriteString("DELETE FROM ")
 	ctx.FormatNode(node.Table)

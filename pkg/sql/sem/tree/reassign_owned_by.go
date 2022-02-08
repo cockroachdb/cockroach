@@ -18,14 +18,14 @@ type ReassignOwnedBy struct {
 
 var _ Statement = &ReassignOwnedBy{}
 
-// Format implements the NodeFormatter interface.
-func (node *ReassignOwnedBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ReassignOwnedBy) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("REASSIGN OWNED BY ")
 	for i := range node.OldRoles {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		node.OldRoles[i].Format(ctx)
+		node.OldRoles[i].FormatImpl(ctx)
 	}
 	ctx.WriteString(" TO ")
 	ctx.FormatNode(&node.NewRole)

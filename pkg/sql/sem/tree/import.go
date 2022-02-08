@@ -23,8 +23,8 @@ type Import struct {
 
 var _ Statement = &Import{}
 
-// Format implements the NodeFormatter interface.
-func (node *Import) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Import) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("IMPORT ")
 
 	if node.Bundle {

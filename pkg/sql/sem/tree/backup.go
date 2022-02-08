@@ -76,8 +76,8 @@ type Backup struct {
 
 var _ Statement = &Backup{}
 
-// Format implements the NodeFormatter interface.
-func (node *Backup) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Backup) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("BACKUP ")
 	if node.Targets != nil {
 		ctx.FormatNode(node.Targets)
@@ -160,8 +160,8 @@ type Restore struct {
 
 var _ Statement = &Restore{}
 
-// Format implements the NodeFormatter interface.
-func (node *Restore) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Restore) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
 	if node.DescriptorCoverage == RequestedDescriptors {
 		ctx.FormatNode(&node.Targets)
@@ -197,8 +197,8 @@ type KVOption struct {
 // KVOptions is a list of KVOptions.
 type KVOptions []KVOption
 
-// Format implements the NodeFormatter interface.
-func (o *KVOptions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (o *KVOptions) FormatImpl(ctx *FmtCtx) {
 	for i := range *o {
 		n := &(*o)[i]
 		if i > 0 {
@@ -219,8 +219,8 @@ func (o *KVOptions) Format(ctx *FmtCtx) {
 // StringOrPlaceholderOptList is a list of strings or placeholders.
 type StringOrPlaceholderOptList []Expr
 
-// Format implements the NodeFormatter interface.
-func (node *StringOrPlaceholderOptList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *StringOrPlaceholderOptList) FormatImpl(ctx *FmtCtx) {
 	if len(*node) > 1 {
 		ctx.WriteString("(")
 	}
@@ -231,7 +231,7 @@ func (node *StringOrPlaceholderOptList) Format(ctx *FmtCtx) {
 }
 
 // Format implements the NodeFormatter interface
-func (o *BackupOptions) Format(ctx *FmtCtx) {
+func (o *BackupOptions) FormatImpl(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {
@@ -321,8 +321,8 @@ func (o BackupOptions) IsDefault() bool {
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
 }
 
-// Format implements the NodeFormatter interface.
-func (o *RestoreOptions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (o *RestoreOptions) FormatImpl(ctx *FmtCtx) {
 	var addSep bool
 	maybeAddSep := func() {
 		if addSep {

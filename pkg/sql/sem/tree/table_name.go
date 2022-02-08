@@ -26,13 +26,13 @@ type TableName struct {
 	objName
 }
 
-// Format implements the NodeFormatter interface.
-func (t *TableName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (t *TableName) FormatImpl(ctx *FmtCtx) {
 	if ctx.tableNameFormatter != nil {
 		ctx.tableNameFormatter(ctx, t)
 		return
 	}
-	t.ObjectNamePrefix.Format(ctx)
+	t.ObjectNamePrefix.FormatImpl(ctx)
 	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}
@@ -130,8 +130,8 @@ func makeObjectNamePrefixFromUnresolvedName(n *UnresolvedName) ObjectNamePrefix 
 // of table names.
 type TableNames []TableName
 
-// Format implements the NodeFormatter interface.
-func (ts *TableNames) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (ts *TableNames) FormatImpl(ctx *FmtCtx) {
 	sep := ""
 	for i := range *ts {
 		ctx.WriteString(sep)
@@ -160,8 +160,8 @@ type TableIndexName struct {
 	Index UnrestrictedName
 }
 
-// Format implements the NodeFormatter interface.
-func (n *TableIndexName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *TableIndexName) FormatImpl(ctx *FmtCtx) {
 	if n.Index == "" {
 		ctx.FormatNode(&n.Table)
 		return
@@ -190,8 +190,8 @@ func (n *TableIndexName) String() string { return AsString(n) }
 // TableIndexNames is a list of indexes.
 type TableIndexNames []*TableIndexName
 
-// Format implements the NodeFormatter interface.
-func (n *TableIndexNames) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *TableIndexNames) FormatImpl(ctx *FmtCtx) {
 	sep := ""
 	for _, tni := range *n {
 		ctx.WriteString(sep)

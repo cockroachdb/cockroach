@@ -183,8 +183,8 @@ func binExprFmtWithParenAndSubOp(ctx *FmtCtx, e1 Expr, subOp, op string, e2 Expr
 	exprFmtWithParen(ctx, e2)
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AndExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AndExpr) FormatImpl(ctx *FmtCtx) {
 	binExprFmtWithParen(ctx, node.Left, "AND", node.Right, true)
 }
 
@@ -214,8 +214,8 @@ type OrExpr struct {
 
 func (*OrExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *OrExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *OrExpr) FormatImpl(ctx *FmtCtx) {
 	binExprFmtWithParen(ctx, node.Left, "OR", node.Right, true)
 }
 
@@ -245,8 +245,8 @@ type NotExpr struct {
 
 func (*NotExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *NotExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *NotExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("NOT ")
 	exprFmtWithParen(ctx, node.Expr)
 }
@@ -273,8 +273,8 @@ type IsNullExpr struct {
 
 func (*IsNullExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *IsNullExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IsNullExpr) FormatImpl(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
 	ctx.WriteString(" IS NULL")
 }
@@ -302,8 +302,8 @@ type IsNotNullExpr struct {
 
 func (*IsNotNullExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *IsNotNullExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IsNotNullExpr) FormatImpl(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
 	ctx.WriteString(" IS NOT NULL")
 }
@@ -328,8 +328,8 @@ type ParenExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ParenExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ParenExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteByte(')')
@@ -498,8 +498,8 @@ type ComparisonExpr struct {
 
 func (*ComparisonExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *ComparisonExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ComparisonExpr) FormatImpl(ctx *FmtCtx) {
 	opStr := node.Operator.String()
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
@@ -645,8 +645,8 @@ type RangeCond struct {
 
 func (*RangeCond) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *RangeCond) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RangeCond) FormatImpl(ctx *FmtCtx) {
 	notStr := " BETWEEN "
 	if node.Not {
 		notStr = " NOT BETWEEN "
@@ -704,8 +704,8 @@ func (node *IsOfTypeExpr) ResolvedTypes() []*types.T {
 	return node.resolvedTypes
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IsOfTypeExpr) FormatImpl(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
 	ctx.WriteString(" IS")
 	if node.Not {
@@ -730,8 +730,8 @@ type IfErrExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IfErrExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IfErrExpr) FormatImpl(ctx *FmtCtx) {
 	if node.Else != nil {
 		ctx.WriteString("IFERROR(")
 	} else {
@@ -773,8 +773,8 @@ func (node *IfExpr) TypedElseExpr() TypedExpr {
 	return node.Else.(TypedExpr)
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IfExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IfExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("IF(")
 	ctx.FormatNode(node.Cond)
 	ctx.WriteString(", ")
@@ -792,8 +792,8 @@ type NullIfExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *NullIfExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *NullIfExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("NULLIF(")
 	ctx.FormatNode(node.Expr1)
 	ctx.WriteString(", ")
@@ -839,8 +839,8 @@ func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
 	return node.Exprs[idx].(TypedExpr)
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CoalesceExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CoalesceExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(node.Name)
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
@@ -850,8 +850,8 @@ func (node *CoalesceExpr) Format(ctx *FmtCtx) {
 // DefaultVal represents the DEFAULT expression.
 type DefaultVal struct{}
 
-// Format implements the NodeFormatter interface.
-func (node DefaultVal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node DefaultVal) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DEFAULT")
 }
 
@@ -861,16 +861,16 @@ func (DefaultVal) ResolvedType() *types.T { return nil }
 // PartitionMaxVal represents the MAXVALUE expression.
 type PartitionMaxVal struct{}
 
-// Format implements the NodeFormatter interface.
-func (node PartitionMaxVal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node PartitionMaxVal) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("MAXVALUE")
 }
 
 // PartitionMinVal represents the MINVALUE expression.
 type PartitionMinVal struct{}
 
-// Format implements the NodeFormatter interface.
-func (node PartitionMinVal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node PartitionMinVal) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("MINVALUE")
 }
 
@@ -898,8 +898,8 @@ func NewPlaceholder(name string) (*Placeholder, error) {
 	return &Placeholder{Idx: PlaceholderIdx(uval - 1)}, nil
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Placeholder) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Placeholder) FormatImpl(ctx *FmtCtx) {
 	if ctx.placeholderFormat != nil {
 		ctx.placeholderFormat(ctx, node)
 		return
@@ -937,8 +937,8 @@ func NewTypedTuple(typ *types.T, typedExprs Exprs) *Tuple {
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Tuple) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Tuple) FormatImpl(ctx *FmtCtx) {
 	// If there are labels, extra parentheses are required surrounding the
 	// expression.
 	if len(node.Labels) > 0 {
@@ -976,8 +976,8 @@ type Array struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Array) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Array) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY[")
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(']')
@@ -998,8 +998,8 @@ type ArrayFlatten struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ArrayFlatten) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ArrayFlatten) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
 	if ctx.HasFlags(FmtParsable) {
@@ -1016,8 +1016,8 @@ func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 // because it's not parenthesized.
 type Exprs []Expr
 
-// Format implements the NodeFormatter interface.
-func (node *Exprs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Exprs) FormatImpl(ctx *FmtCtx) {
 	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(", ")
@@ -1064,8 +1064,8 @@ func (*Subquery) Variable() {}
 // SubqueryExpr implements the SubqueryExpr interface.
 func (*Subquery) SubqueryExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *Subquery) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Subquery) FormatImpl(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtSymbolicSubqueries) {
 		ctx.Printf("@S%d", node.Idx)
 	} else {
@@ -1097,8 +1097,8 @@ func (node *TypedDummy) String() string {
 	return AsString(node)
 }
 
-// Format implements the NodeFormatter interface.
-func (node *TypedDummy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *TypedDummy) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("dummyvalof(")
 	ctx.FormatTypeReference(node.Typ)
 	ctx.WriteString(")")
@@ -1291,8 +1291,8 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 	return nil
 }
 
-// Format implements the NodeFormatter interface.
-func (node *BinaryExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *BinaryExpr) FormatImpl(ctx *FmtCtx) {
 	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.isPadded())
 }
 
@@ -1359,8 +1359,8 @@ type UnaryExpr struct {
 
 func (*UnaryExpr) operatorExpr() {}
 
-// Format implements the NodeFormatter interface.
-func (node *UnaryExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *UnaryExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString(node.Operator.String())
 	e := node.Expr
 	_, isOp := e.(operatorExpr)
@@ -1497,8 +1497,8 @@ const (
 	OrderedSetAgg
 )
 
-// Format implements the NodeFormatter interface.
-func (node *FuncExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *FuncExpr) FormatImpl(ctx *FmtCtx) {
 	var typ string
 	if node.Type != 0 {
 		typ = funcTypeName[node.Type] + " "
@@ -1560,8 +1560,8 @@ type CaseExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CaseExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CaseExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CASE ")
 	if node.Expr != nil {
 		ctx.FormatNode(node.Expr)
@@ -1594,8 +1594,8 @@ type When struct {
 	Val  Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *When) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *When) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("WHEN ")
 	ctx.FormatNode(node.Cond)
 	ctx.WriteString(" THEN ")
@@ -1620,8 +1620,8 @@ type CastExpr struct {
 	SyntaxMode castSyntaxMode
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CastExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CastExpr) FormatImpl(ctx *FmtCtx) {
 	switch node.SyntaxMode {
 	case CastPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
@@ -1679,8 +1679,8 @@ func NewTypedCastExpr(expr TypedExpr, typ *types.T) *CastExpr {
 // ArraySubscripts represents a sequence of one or more array subscripts.
 type ArraySubscripts []*ArraySubscript
 
-// Format implements the NodeFormatter interface.
-func (a *ArraySubscripts) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (a *ArraySubscripts) FormatImpl(ctx *FmtCtx) {
 	for _, s := range *a {
 		ctx.FormatNode(s)
 	}
@@ -1694,8 +1694,8 @@ type IndirectionExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *IndirectionExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *IndirectionExpr) FormatImpl(ctx *FmtCtx) {
 	// If the sub expression is a CastExpr or an Array that has a type,
 	// we need to wrap it in a ParenExpr, otherwise the indirection
 	// will get interpreted as part of the type.
@@ -1732,8 +1732,8 @@ type AnnotateTypeExpr struct {
 	SyntaxMode annotateSyntaxMode
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AnnotateTypeExpr) FormatImpl(ctx *FmtCtx) {
 	switch node.SyntaxMode {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
@@ -1762,8 +1762,8 @@ type CollateExpr struct {
 	typeAnnotation
 }
 
-// Format implements the NodeFormatter interface.
-func (node *CollateExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CollateExpr) FormatImpl(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
 	ctx.WriteString(" COLLATE ")
 	lex.EncodeLocaleName(&ctx.Buffer, node.Locale)
@@ -1778,8 +1778,8 @@ type TupleStar struct {
 // NormalizeVarName implements the VarName interface.
 func (node *TupleStar) NormalizeVarName() (VarName, error) { return node, nil }
 
-// Format implements the NodeFormatter interface.
-func (node *TupleStar) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *TupleStar) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteString(").*")
@@ -1822,8 +1822,8 @@ func NewTypedColumnAccessExpr(expr TypedExpr, colName Name, colIdx int) *ColumnA
 	}
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ColumnAccessExpr) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteString(").")

@@ -19,8 +19,8 @@ type StreamIngestion struct {
 
 var _ Statement = &StreamIngestion{}
 
-// Format implements the NodeFormatter interface.
-func (node *StreamIngestion) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *StreamIngestion) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("RESTORE ")
 	ctx.FormatNode(&node.Targets)
 	ctx.WriteString(" ")

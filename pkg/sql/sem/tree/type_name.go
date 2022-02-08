@@ -40,8 +40,8 @@ func (t *TypeName) Type() string {
 	return string(t.ObjectName)
 }
 
-// Format implements the NodeFormatter interface.
-func (t *TypeName) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (t *TypeName) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(&t.ObjectNamePrefix)
 	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
@@ -238,8 +238,8 @@ type ArrayTypeReference struct {
 	ElementType ResolvableTypeReference
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ArrayTypeReference) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ArrayTypeReference) FormatImpl(ctx *FmtCtx) {
 	if typ, ok := GetStaticallyKnownType(node.ElementType); ok {
 		ctx.FormatTypeReference(types.MakeArray(typ))
 	} else {

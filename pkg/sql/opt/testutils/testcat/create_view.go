@@ -19,7 +19,7 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 	tc.qualifyTableName(&stmt.Name)
 
 	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
-	stmt.AsSource.Format(fmtCtx)
+	stmt.AsSource.FormatImpl(fmtCtx)
 
 	view := &View{
 		ViewID:      tc.nextStableID(),

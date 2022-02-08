@@ -139,8 +139,8 @@ type TransactionModes struct {
 	Deferrable    DeferrableMode
 }
 
-// Format implements the NodeFormatter interface.
-func (node *TransactionModes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *TransactionModes) FormatImpl(ctx *FmtCtx) {
 	var sep string
 	if node.Isolation != UnspecifiedIsolation {
 		ctx.Printf(" ISOLATION LEVEL %s", node.Isolation)
@@ -224,8 +224,8 @@ type BeginTransaction struct {
 	Modes TransactionModes
 }
 
-// Format implements the NodeFormatter interface.
-func (node *BeginTransaction) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *BeginTransaction) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("BEGIN TRANSACTION")
 	ctx.FormatNode(&node.Modes)
 }
@@ -233,16 +233,16 @@ func (node *BeginTransaction) Format(ctx *FmtCtx) {
 // CommitTransaction represents a COMMIT statement.
 type CommitTransaction struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *CommitTransaction) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *CommitTransaction) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("COMMIT TRANSACTION")
 }
 
 // RollbackTransaction represents a ROLLBACK statement.
 type RollbackTransaction struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *RollbackTransaction) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RollbackTransaction) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION")
 }
 
@@ -251,8 +251,8 @@ type Savepoint struct {
 	Name Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Savepoint) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Savepoint) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SAVEPOINT ")
 	ctx.FormatNode(&node.Name)
 }
@@ -262,8 +262,8 @@ type ReleaseSavepoint struct {
 	Savepoint Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ReleaseSavepoint) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ReleaseSavepoint) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("RELEASE SAVEPOINT ")
 	ctx.FormatNode(&node.Savepoint)
 }
@@ -273,8 +273,8 @@ type RollbackToSavepoint struct {
 	Savepoint Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *RollbackToSavepoint) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *RollbackToSavepoint) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
 	ctx.FormatNode(&node.Savepoint)
 }

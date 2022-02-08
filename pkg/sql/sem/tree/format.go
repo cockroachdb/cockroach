@@ -236,7 +236,7 @@ const (
 
 const flagsRequiringAnnotations FmtFlags = FmtAlwaysQualifyTableNames
 
-// FmtCtx is suitable for passing to Format() methods.
+// FmtCtx is suitable for passing to FormatImpl() methods.
 // It also exposes the underlying bytes.Buffer interface for
 // convenience.
 //
@@ -386,9 +386,10 @@ func (ctx *FmtCtx) Printf(f string, args ...interface{}) {
 
 // NodeFormatter is implemented by nodes that can be pretty-printed.
 type NodeFormatter interface {
-	// Format performs pretty-printing towards a bytes buffer. The flags member
-	// of ctx influences the results. Most callers should use FormatNode instead.
-	Format(ctx *FmtCtx)
+	// FormatImpl performs pretty-printing towards a bytes buffer. The flags
+	// member of ctx influences the results. Most callers should use FormatNode
+	// instead.
+	FormatImpl(ctx *FmtCtx)
 }
 
 // FormatName formats a string as a name.
@@ -653,10 +654,10 @@ func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
 			// Deliberately empty so we format as normal.
 		case Datum, Constant, *Name, *UnrestrictedName:
 			ctx.WriteString(string(redact.StartMarker()))
-			v.Format(ctx)
+			v.FormatImpl(ctx)
 			ctx.WriteString(string(redact.EndMarker()))
 			return
 		}
-		n.Format(ctx)
+		n.FormatImpl(ctx)
 	}
 }

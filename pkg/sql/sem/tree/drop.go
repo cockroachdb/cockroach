@@ -51,8 +51,8 @@ type DropDatabase struct {
 	DropBehavior DropBehavior
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropDatabase) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropDatabase) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP DATABASE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -72,8 +72,8 @@ type DropIndex struct {
 	Concurrently bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropIndex) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropIndex) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP INDEX ")
 	if node.Concurrently {
 		ctx.WriteString("CONCURRENTLY ")
@@ -95,8 +95,8 @@ type DropTable struct {
 	DropBehavior DropBehavior
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropTable) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropTable) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP TABLE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -116,8 +116,8 @@ type DropView struct {
 	IsMaterialized bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropView) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropView) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP ")
 	if node.IsMaterialized {
 		ctx.WriteString("MATERIALIZED ")
@@ -149,8 +149,8 @@ type DropSequence struct {
 	DropBehavior DropBehavior
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropSequence) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropSequence) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP SEQUENCE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -169,8 +169,8 @@ type DropRole struct {
 	IfExists bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *DropRole) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropRole) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP")
 	if node.IsRole {
 		ctx.WriteString(" ROLE ")
@@ -192,8 +192,8 @@ type DropType struct {
 
 var _ Statement = &DropType{}
 
-// Format implements the NodeFormatter interface.
-func (node *DropType) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropType) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP TYPE ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -219,8 +219,8 @@ type DropSchema struct {
 
 var _ Statement = &DropSchema{}
 
-// Format implements the NodeFormatter interface.
-func (node *DropSchema) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *DropSchema) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("DROP SCHEMA ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")

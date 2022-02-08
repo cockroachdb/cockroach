@@ -35,8 +35,8 @@ type ScheduledBackup struct {
 
 var _ Statement = &ScheduledBackup{}
 
-// Format implements the NodeFormatter interface.
-func (node *ScheduledBackup) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ScheduledBackup) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("CREATE SCHEDULE")
 
 	if node.ScheduleLabelSpec.IfNotExists {

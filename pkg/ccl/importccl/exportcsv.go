@@ -232,7 +232,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 					if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 						return err
 					}
-					ed.Datum.Format(f)
+					ed.Datum.FormatImpl(f)
 					csvRow[i] = f.String()
 					f.Reset()
 				}

@@ -147,8 +147,8 @@ func (f ExplainFlag) String() string {
 	return explainFlagStrings[f]
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Explain) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Explain) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ")
 	b := util.MakeStringListBuilder("(", ", ", ") ")
 	if node.Mode != ExplainPlan {
@@ -185,8 +185,8 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 	return p.nestUnder(d, p.Doc(node.Statement))
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ExplainAnalyze) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("EXPLAIN ANALYZE ")
 	b := util.MakeStringListBuilder("(", ", ", ") ")
 	if node.Mode != ExplainPlan {

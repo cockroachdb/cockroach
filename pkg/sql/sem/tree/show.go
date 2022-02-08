@@ -30,8 +30,8 @@ type ShowVar struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowVar) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowVar) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	// Session var names never contain PII and should be distinguished
 	// for feature tracking purposes.
@@ -45,8 +45,8 @@ type ShowClusterSetting struct {
 	Name string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowClusterSetting) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
 	// Cluster setting names never contain PII and should be distinguished
 	// for feature tracking purposes.
@@ -61,8 +61,8 @@ type ShowClusterSettingList struct {
 	All bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowClusterSettingList) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowClusterSettingList) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	qual := "PUBLIC"
 	if node.All {
@@ -96,8 +96,8 @@ type ShowBackup struct {
 	Options              KVOptions
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowBackup) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowBackup) FormatImpl(ctx *FmtCtx) {
 	if node.InCollection != nil && node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatNode(node.InCollection)
@@ -129,8 +129,8 @@ type ShowColumns struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowColumns) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowColumns) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW COLUMNS FROM ")
 	ctx.FormatNode(node.Table)
 
@@ -144,8 +144,8 @@ type ShowDatabases struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowDatabases) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowDatabases) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DATABASES")
 
 	if node.WithComment {
@@ -158,16 +158,16 @@ type ShowEnums struct {
 	ObjectNamePrefix
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowEnums) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowEnums) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ENUMS")
 }
 
 // ShowTypes represents a SHOW TYPES statement.
 type ShowTypes struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTypes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTypes) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TYPES")
 }
 
@@ -187,8 +187,8 @@ type ShowTraceForSession struct {
 	Compact   bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTraceForSession) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.Compact {
 		ctx.WriteString("COMPACT ")
@@ -203,8 +203,8 @@ type ShowIndexes struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowIndexes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowIndexes) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW INDEXES FROM ")
 	ctx.FormatNode(node.Table)
 
@@ -219,8 +219,8 @@ type ShowDatabaseIndexes struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowDatabaseIndexes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowDatabaseIndexes) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW INDEXES FROM DATABASE ")
 	ctx.FormatNode(&node.Database)
 
@@ -235,8 +235,8 @@ type ShowQueries struct {
 	Cluster bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowQueries) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowQueries) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.All {
 		ctx.WriteString("ALL ")
@@ -266,8 +266,8 @@ type ShowJobs struct {
 	Schedules *Select
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowJobs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowJobs) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.Automatic {
 		ctx.WriteString("AUTOMATIC ")
@@ -292,8 +292,8 @@ type ShowChangefeedJobs struct {
 	Jobs *Select
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowChangefeedJobs) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CHANGEFEED JOBS")
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
@@ -306,8 +306,8 @@ type ShowSurvivalGoal struct {
 	DatabaseName Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSurvivalGoal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSurvivalGoal) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SURVIVAL GOAL FROM DATABASE")
 	if node.DatabaseName != "" {
 		ctx.WriteString(" ")
@@ -335,8 +335,8 @@ type ShowRegions struct {
 	DatabaseName    Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowRegions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowRegions) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW REGIONS")
 	switch node.ShowRegionsFrom {
 	case ShowRegionsFromDefault:
@@ -361,8 +361,8 @@ type ShowSessions struct {
 	Cluster bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSessions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSessions) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.All {
 		ctx.WriteString("ALL ")
@@ -379,8 +379,8 @@ type ShowSchemas struct {
 	Database Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSchemas) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSchemas) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SCHEMAS")
 	if node.Database != "" {
 		ctx.WriteString(" FROM ")
@@ -393,8 +393,8 @@ type ShowSequences struct {
 	Database Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSequences) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSequences) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SEQUENCES")
 	if node.Database != "" {
 		ctx.WriteString(" FROM ")
@@ -408,8 +408,8 @@ type ShowTables struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTables) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTables) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TABLES")
 	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
@@ -427,8 +427,8 @@ type ShowTransactions struct {
 	Cluster bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTransactions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTransactions) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.All {
 		ctx.WriteString("ALL ")
@@ -446,8 +446,8 @@ type ShowConstraints struct {
 	WithComment bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowConstraints) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowConstraints) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CONSTRAINTS FROM ")
 	ctx.FormatNode(node.Table)
 
@@ -463,8 +463,8 @@ type ShowGrants struct {
 	Grantees RoleSpecList
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowGrants) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowGrants) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW GRANTS")
 	if node.Targets != nil {
 		ctx.WriteString(" ON ")
@@ -482,8 +482,8 @@ type ShowRoleGrants struct {
 	Grantees RoleSpecList
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowRoleGrants) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW GRANTS ON ROLE")
 	if node.Roles != nil {
 		ctx.WriteString(" ")
@@ -515,8 +515,8 @@ type ShowCreate struct {
 	Name *UnresolvedObjectName
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowCreate) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowCreate) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ")
 
 	switch node.Mode {
@@ -529,24 +529,24 @@ func (node *ShowCreate) Format(ctx *FmtCtx) {
 // ShowCreateAllSchemas represents a SHOW CREATE ALL SCHEMAS statement.
 type ShowCreateAllSchemas struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateAllSchemas) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowCreateAllSchemas) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL SCHEMAS")
 }
 
 // ShowCreateAllTables represents a SHOW CREATE ALL TABLES statement.
 type ShowCreateAllTables struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateAllTables) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowCreateAllTables) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TABLES")
 }
 
 // ShowCreateAllTypes represents a SHOW CREATE ALL TYPES statement.
 type ShowCreateAllTypes struct{}
 
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateAllTypes) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowCreateAllTypes) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CREATE ALL TYPES")
 }
 
@@ -555,8 +555,8 @@ type ShowCreateSchedules struct {
 	ScheduleID Expr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateSchedules) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowCreateSchedules) FormatImpl(ctx *FmtCtx) {
 	if node.ScheduleID != nil {
 		ctx.WriteString("SHOW CREATE SCHEDULE ")
 		ctx.FormatNode(node.ScheduleID)
@@ -574,8 +574,8 @@ type ShowSyntax struct {
 	Statement string
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSyntax) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSyntax) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SYNTAX ")
 	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
 		ctx.WriteString("'_'")
@@ -588,8 +588,8 @@ func (node *ShowSyntax) Format(ctx *FmtCtx) {
 type ShowTransactionStatus struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTransactionStatus) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTransactionStatus) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TRANSACTION STATUS")
 }
 
@@ -610,8 +610,8 @@ var ShowLastQueryStatisticsDefaultColumns = NameList([]Name{
 	"post_commit_jobs_latency",
 })
 
-// Format implements the NodeFormatter interface.
-func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowLastQueryStatistics) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW LAST QUERY STATISTICS RETURNING ")
 	// The column names for this statement never contain PII and should
 	// be distinguished for feature tracking purposes.
@@ -624,8 +624,8 @@ func (node *ShowLastQueryStatistics) Format(ctx *FmtCtx) {
 type ShowFullTableScans struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowFullTableScans) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowFullTableScans) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW FULL TABLE SCANS")
 }
 
@@ -633,8 +633,8 @@ func (node *ShowFullTableScans) Format(ctx *FmtCtx) {
 type ShowSavepointStatus struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowSavepointStatus) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SAVEPOINT STATUS")
 }
 
@@ -642,8 +642,8 @@ func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
 type ShowUsers struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowUsers) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowUsers) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW USERS")
 }
 
@@ -651,8 +651,8 @@ func (node *ShowUsers) Format(ctx *FmtCtx) {
 type ShowRoles struct {
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowRoles) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowRoles) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ROLES")
 }
 
@@ -662,8 +662,8 @@ type ShowRanges struct {
 	DatabaseName Name
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowRanges) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowRanges) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW RANGES FROM ")
 	if node.DatabaseName != "" {
 		ctx.WriteString("DATABASE ")
@@ -683,8 +683,8 @@ type ShowRangeForRow struct {
 	Row          Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowRangeForRow) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowRangeForRow) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW RANGE FROM ")
 	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
@@ -702,8 +702,8 @@ type ShowFingerprints struct {
 	Table *UnresolvedObjectName
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowFingerprints) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowFingerprints) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE ")
 	ctx.FormatNode(node.Table)
 }
@@ -714,8 +714,8 @@ type ShowTableStats struct {
 	UsingJSON bool
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowTableStats) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowTableStats) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW STATISTICS ")
 	if node.UsingJSON {
 		ctx.WriteString("USING JSON ")
@@ -729,8 +729,8 @@ type ShowHistogram struct {
 	HistogramID int64
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowHistogram) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowHistogram) FormatImpl(ctx *FmtCtx) {
 	ctx.Printf("SHOW HISTOGRAM %d", node.HistogramID)
 }
 
@@ -746,8 +746,8 @@ type ShowPartitions struct {
 	Table   *UnresolvedObjectName
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ShowPartitions) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ShowPartitions) FormatImpl(ctx *FmtCtx) {
 	if node.IsDB {
 		ctx.Printf("SHOW PARTITIONS FROM DATABASE ")
 		ctx.FormatNode(&node.Database)
@@ -817,8 +817,8 @@ const (
 	PausedSchedules
 )
 
-// Format implements the NodeFormatter interface.
-func (s ScheduleState) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (s ScheduleState) FormatImpl(ctx *FmtCtx) {
 	switch s {
 	case ActiveSchedules:
 		ctx.WriteString("RUNNING")
@@ -838,8 +838,8 @@ type ShowSchedules struct {
 
 var _ Statement = &ShowSchedules{}
 
-// Format implements the NodeFormatter interface.
-func (n *ShowSchedules) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ShowSchedules) FormatImpl(ctx *FmtCtx) {
 	if n.ScheduleID != nil {
 		ctx.WriteString("SHOW SCHEDULE ")
 		ctx.FormatNode(n.ScheduleID)
@@ -869,8 +869,8 @@ type ShowDefaultPrivileges struct {
 
 var _ Statement = &ShowDefaultPrivileges{}
 
-// Format implements the NodeFormatter interface.
-func (n *ShowDefaultPrivileges) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *ShowDefaultPrivileges) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("SHOW DEFAULT PRIVILEGES ")
 	if len(n.Roles) > 0 {
 		ctx.WriteString("FOR ROLE ")

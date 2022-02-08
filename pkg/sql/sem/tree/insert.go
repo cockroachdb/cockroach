@@ -29,8 +29,8 @@ type Insert struct {
 	Returning  ReturningClause
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Insert) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Insert) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.With)
 	if node.OnConflict.IsUpsertAlias() {
 		ctx.WriteString("UPSERT")

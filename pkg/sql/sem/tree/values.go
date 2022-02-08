@@ -24,8 +24,8 @@ type ValuesClause struct {
 	Rows []Exprs
 }
 
-// Format implements the NodeFormatter interface.
-func (node *ValuesClause) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *ValuesClause) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("VALUES ")
 	comma := ""
 	for i := range node.Rows {

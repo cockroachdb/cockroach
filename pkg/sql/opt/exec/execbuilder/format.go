@@ -60,7 +60,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, scalar opt.ScalarExpr) string {
 			ctx.WriteString(f.ColumnString(opt.ColumnID(idx + 1)))
 		}),
 	)
-	expr.Format(fmtCtx)
+	expr.FormatImpl(fmtCtx)
 	return fmtCtx.String()
 }
 

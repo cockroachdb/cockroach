@@ -19,8 +19,8 @@ type CommentOnConstraint struct {
 	Comment    *string
 }
 
-//Format implements the NodeFormatter interface.
-func (n *CommentOnConstraint) Format(ctx *FmtCtx) {
+//FormatImpl implements the NodeFormatter interface.
+func (n *CommentOnConstraint) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("COMMENT ON CONSTRAINT ")
 	ctx.FormatNode(&n.Constraint)
 	ctx.WriteString(" ON ")

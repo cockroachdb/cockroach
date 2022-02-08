@@ -15,8 +15,8 @@ type Analyze struct {
 	Table TableExpr
 }
 
-// Format implements the NodeFormatter interface.
-func (node *Analyze) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *Analyze) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ANALYZE ")
 	ctx.FormatNode(node.Table)
 }

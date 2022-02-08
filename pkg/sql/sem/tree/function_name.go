@@ -34,8 +34,8 @@ type ResolvableFunctionReference struct {
 	FunctionReference
 }
 
-// Format implements the NodeFormatter interface.
-func (fn *ResolvableFunctionReference) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (fn *ResolvableFunctionReference) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(fn.FunctionReference)
 }
 func (fn *ResolvableFunctionReference) String() string { return AsString(fn) }

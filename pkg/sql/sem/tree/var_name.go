@@ -50,9 +50,9 @@ var _ VarName = &ColumnItem{}
 // expression.
 type UnqualifiedStar struct{}
 
-// Format implements the NodeFormatter interface.
-func (UnqualifiedStar) Format(ctx *FmtCtx) { ctx.WriteByte('*') }
-func (u UnqualifiedStar) String() string   { return AsString(u) }
+// FormatImpl implements the NodeFormatter interface.
+func (UnqualifiedStar) FormatImpl(ctx *FmtCtx) { ctx.WriteByte('*') }
+func (u UnqualifiedStar) String() string       { return AsString(u) }
 
 // NormalizeVarName implements the VarName interface.
 func (u UnqualifiedStar) NormalizeVarName() (VarName, error) { return u, nil }
@@ -96,8 +96,8 @@ type AllColumnsSelector struct {
 	TableName *UnresolvedObjectName
 }
 
-// Format implements the NodeFormatter interface.
-func (a *AllColumnsSelector) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (a *AllColumnsSelector) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(a.TableName)
 	ctx.WriteString(".*")
 }
@@ -130,9 +130,9 @@ type ColumnItem struct {
 	ColumnName Name
 }
 
-// Format implements the NodeFormatter interface.
+// FormatImpl implements the NodeFormatter interface.
 // If this is updated, then dummyColumnItem.Format should be updated as well.
-func (c *ColumnItem) Format(ctx *FmtCtx) {
+func (c *ColumnItem) FormatImpl(ctx *FmtCtx) {
 	if c.TableName != nil {
 		ctx.FormatNode(c.TableName)
 		ctx.WriteByte('.')

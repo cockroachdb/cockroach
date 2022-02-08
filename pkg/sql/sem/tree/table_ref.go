@@ -35,8 +35,8 @@ type TableRef struct {
 	As AliasClause
 }
 
-// Format implements the NodeFormatter interface.
-func (n *TableRef) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (n *TableRef) FormatImpl(ctx *FmtCtx) {
 	ctx.Printf("[%d", n.TableID)
 	if n.Columns != nil {
 		ctx.WriteByte('(')

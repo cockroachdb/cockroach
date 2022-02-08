@@ -163,8 +163,8 @@ func (expr *NumVal) Negate() {
 	expr.negative = !expr.negative
 }
 
-// Format implements the NodeFormatter interface.
-func (expr *NumVal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (expr *NumVal) FormatImpl(ctx *FmtCtx) {
 	s := expr.origString
 	if s == "" {
 		s = expr.value.String()
@@ -452,8 +452,8 @@ func (expr *StrVal) RawString() string {
 	return expr.s
 }
 
-// Format implements the NodeFormatter interface.
-func (expr *StrVal) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (expr *StrVal) FormatImpl(ctx *FmtCtx) {
 	buf, f := &ctx.Buffer, ctx.flags
 	if expr.scannedAsBytes {
 		lexbase.EncodeSQLBytes(buf, expr.s)

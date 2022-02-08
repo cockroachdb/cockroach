@@ -1089,7 +1089,7 @@ func removeValuesCol(values *tree.ValuesClause, col int) {
 
 type emptyStatement struct{}
 
-func (e emptyStatement) Format(*tree.FmtCtx) {}
+func (e emptyStatement) FormatImpl(*tree.FmtCtx) {}
 
 // SQLChunkReducer implements the reduce.ChunkReducer interface. Each SQL
 // statement in the string passed to Init is treated as a segment that can

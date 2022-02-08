@@ -19,8 +19,8 @@ type AlterIndex struct {
 
 var _ Statement = &AlterIndex{}
 
-// Format implements the NodeFormatter interface.
-func (node *AlterIndex) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterIndex) FormatImpl(ctx *FmtCtx) {
 	ctx.WriteString("ALTER INDEX ")
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
@@ -32,8 +32,8 @@ func (node *AlterIndex) Format(ctx *FmtCtx) {
 // AlterIndexCmds represents a list of index alterations.
 type AlterIndexCmds []AlterIndexCmd
 
-// Format implements the NodeFormatter interface.
-func (node *AlterIndexCmds) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterIndexCmds) FormatImpl(ctx *FmtCtx) {
 	for i, n := range *node {
 		if i > 0 {
 			ctx.WriteString(",")
@@ -60,7 +60,7 @@ type AlterIndexPartitionBy struct {
 	*PartitionByIndex
 }
 
-// Format implements the NodeFormatter interface.
-func (node *AlterIndexPartitionBy) Format(ctx *FmtCtx) {
+// FormatImpl implements the NodeFormatter interface.
+func (node *AlterIndexPartitionBy) FormatImpl(ctx *FmtCtx) {
 	ctx.FormatNode(node.PartitionByIndex)
 }

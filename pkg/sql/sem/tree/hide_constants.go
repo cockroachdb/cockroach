@@ -43,7 +43,7 @@ func (ctx *FmtCtx) formatNodeOrHideConstants(n NodeFormatter) {
 			return
 		}
 	}
-	n.Format(ctx)
+	n.FormatImpl(ctx)
 }
 
 // formatHideConstants shortens multi-valued VALUES clauses to a
@@ -63,7 +63,7 @@ func (node *ValuesClause) formatHideConstants(ctx *FmtCtx) {
 func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
 	exprs := *node
 	if len(exprs) < 2 {
-		node.Format(ctx)
+		node.FormatImpl(ctx)
 		return
 	}
 
@@ -83,10 +83,10 @@ func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
 		if len(exprs) > 2 {
 			v2 = append(v2, arityIndicator(len(exprs)-2))
 		}
-		v2.Format(ctx)
+		v2.FormatImpl(ctx)
 		return
 	}
-	node.Format(ctx)
+	node.FormatImpl(ctx)
 }
 
 // formatHideConstants formats tuples containing only literals or
@@ -101,7 +101,7 @@ func (node *Exprs) formatHideConstants(ctx *FmtCtx) {
 //      (1+2, b, c)       -> (_ + _, b, c)
 func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 	if len(node.Exprs) < 2 {
-		node.Format(ctx)
+		node.FormatImpl(ctx)
 		return
 	}
 
@@ -125,10 +125,10 @@ func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 				v2.Labels = node.Labels[:2]
 			}
 		}
-		v2.Format(ctx)
+		v2.FormatImpl(ctx)
 		return
 	}
-	node.Format(ctx)
+	node.FormatImpl(ctx)
 }
 
 // formatHideConstants formats array expressions containing only
@@ -140,7 +140,7 @@ func (node *Tuple) formatHideConstants(ctx *FmtCtx) {
 //      array[1+2, 2+3, 3+4] -> array[_ + _, _ + _, _ + _]
 func (node *Array) formatHideConstants(ctx *FmtCtx) {
 	if len(node.Exprs) < 2 {
-		node.Format(ctx)
+		node.FormatImpl(ctx)
 		return
 	}
 
@@ -161,10 +161,10 @@ func (node *Array) formatHideConstants(ctx *FmtCtx) {
 		if len(node.Exprs) > 2 {
 			v2.Exprs = append(v2.Exprs, arityIndicator(len(node.Exprs)-2))
 		}
-		v2.Format(ctx)
+		v2.FormatImpl(ctx)
 		return
 	}
-	node.Format(ctx)
+	node.FormatImpl(ctx)
 }
 
 func arityIndicator(n int) Expr {
