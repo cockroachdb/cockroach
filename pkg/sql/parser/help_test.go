@@ -40,6 +40,8 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
 
+		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
+
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},

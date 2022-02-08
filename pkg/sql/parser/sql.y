@@ -552,6 +552,15 @@ func (u *sqlSymUnion) alterChangefeedCmd() tree.AlterChangefeedCmd {
 func (u *sqlSymUnion) alterChangefeedCmds() tree.AlterChangefeedCmds {
     return u.val.(tree.AlterChangefeedCmds)
 }
+func (u *sqlSymUnion) backupKMS() tree.BackupKMS {
+    return u.val.(tree.BackupKMS)
+}
+func (u *sqlSymUnion) alterBackupCmd() tree.AlterBackupCmd {
+    return u.val.(tree.AlterBackupCmd)
+}
+func (u *sqlSymUnion) alterBackupCmds() tree.AlterBackupCmds {
+    return u.val.(tree.AlterBackupCmds)
+}
 func (u *sqlSymUnion) alterTableCmd() tree.AlterTableCmd {
     return u.val.(tree.AlterTableCmd)
 }
@@ -831,12 +840,12 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> MULTIPOINT MULTIPOINTM MULTIPOINTZ MULTIPOINTZM
 %token <str> MULTIPOLYGON MULTIPOLYGONM MULTIPOLYGONZ MULTIPOLYGONZM
 
-%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
+%token <str> NAN NAME NAMES NATURAL NEVER NEW_DB_NAME NEW_KMS NEXT NO NOCANCELQUERY NOCONTROLCHANGEFEED
 %token <str> NOCONTROLJOB NOCREATEDB NOCREATELOGIN NOCREATEROLE NOLOGIN NOMODIFYCLUSTERSETTING
 %token <str> NOSQLLOGIN NO_INDEX_JOIN NO_ZIGZAG_JOIN NO_FULL_SCAN NONE NONVOTERS NORMAL NOT NOTHING NOTNULL
 %token <str> NOVIEWACTIVITY NOVIEWACTIVITYREDACTED NOWAIT NULL NULLIF NULLS NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR OLD_KMS ON ONLY OPT OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACEMENT PLACING
@@ -907,6 +916,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.Statement> alter_stmt
 %type <tree.Statement> alter_changefeed_stmt
+%type <tree.Statement> alter_backup_stmt
 %type <tree.Statement> alter_ddl_stmt
 %type <tree.Statement> alter_table_stmt
 %type <tree.Statement> alter_index_stmt
@@ -1155,6 +1165,10 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %type <tree.AlterChangefeedCmd> alter_changefeed_cmd
 %type <tree.AlterChangefeedCmds> alter_changefeed_cmds
+
+%type <tree.BackupKMS> backup_kms
+%type <tree.AlterBackupCmd> alter_backup_cmd
+%type <tree.AlterBackupCmd> alter_backup_cmds
 
 %type <tree.AlterTableCmd> alter_table_cmd
 %type <tree.AlterTableCmds> alter_table_cmds
@@ -1555,6 +1569,7 @@ alter_ddl_stmt:
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
+| alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -4348,6 +4363,61 @@ alter_changefeed_cmd:
       Targets: $2.targetList(),
     }
   }
+
+// %Help: ALTER BACKUP - alter an existing backup's encryption keys
+// %Category: CCL
+// %Text:
+// ALTER BACKUP <location...>
+//        [ ADD NEW_KMS = <kms...> ]
+//        [ WITH OLD_KMS = <kms...> ]
+// Locations:
+//    "[scheme]://[host]/[path to backup]?[parameters]"
+//
+// KMS:
+//    "[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : add new kms keys to backup
+alter_backup_stmt:
+  ALTER BACKUP string_or_placeholder alter_backup_cmds
+  {
+		$$.val = &tree.AlterBackup {
+			Backup:	$3.expr(),
+			Cmds:	$4.alterBackupCmds(),
+		}
+  }
+| ALTER BACKUP string_or_placeholder IN string_or_placeholder alter_backup_cmds
+	{
+		$$.val = &tree.AlterBackup {
+			Subdir:	$3.expr(),
+			Backup:	$5.expr(),
+			Cmds:	$6.alterBackupCmds(),
+		}
+	}
+
+alter_backup_cmds:
+	alter_backup_cmd
+	{
+		$$.val = tree.AlterBackupCmds{$1.alterBackupCmd()}
+	}
+|	alter_backup_cmds alter_backup_cmd
+	{
+		$$.val = append($1.alterBackupCmds(), $2.alterBackupCmd())
+	}
+
+alter_backup_cmd:
+	ADD backup_kms
+	{
+		$$.val = &tree.AlterBackupKMS{
+			KMSInfo:	$2.backupKMS(),
+		}
+	}
+
+backup_kms:
+	NEW_KMS '=' string_or_placeholder_opt_list WITH OLD_KMS '=' string_or_placeholder_opt_list
+	{
+		$$.val = tree.BackupKMS{
+    	NewKMSURI:	$3.stringOrPlaceholderOptList(),
+    	OldKMSURI:	$7.stringOrPlaceholderOptList(),
+    }
+	}
 
 // %Help: PREPARE - prepare a statement for later execution
 // %Category: Misc
@@ -13596,6 +13666,7 @@ unreserved_keyword:
 | NAN
 | NEVER
 | NEW_DB_NAME
+| NEW_KMS
 | NEXT
 | NO
 | NORMAL
@@ -13620,6 +13691,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OIDS
+| OLD_KMS
 | OPERATOR
 | OPT
 | OPTION
