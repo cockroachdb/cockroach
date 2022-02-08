@@ -1485,3 +1485,18 @@ is [type=bool]
  │    │         └── null [type=unknown]
  │    └── array: [type=string[]]
  └── null [type=unknown]
+
+# Regression test for #75365. Do not create invalid casts when building CASE
+# expressions. We build a Select expressions here instead of a scalar so that
+# logical properties are generated, which is required to reproduce the bug.
+# TODO(#75103): We should be more permissive with casts of arrays of tuples.
+# These tests should be successful, not user-facing errors.
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] ELSE ARRAY[]::RECORD[] END
+----
+error (42804): CASE types tuple[] and tuple{string, int}[] cannot be matched
+
+build
+SELECT CASE WHEN false THEN ARRAY[('', 0)] WHEN true THEN ARRAY[]::RECORD[] ELSE ARRAY[('', 0)] END
+----
+error (42804): CASE types tuple[] and tuple{string, int}[] cannot be matched

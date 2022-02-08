@@ -440,12 +440,10 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		}
 
 		// Don't bother moving leases whose QPS is below some small fraction of the
-		// store's QPS (unless the store has extra leases to spare anyway). It's
-		// just unnecessary churn with no benefit to move leases responsible for,
-		// for example, 1 qps on a store with 5000 qps.
+		// store's QPS. It's just unnecessary churn with no benefit to move leases
+		// responsible for, for example, 1 qps on a store with 5000 qps.
 		const minQPSFraction = .001
-		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction &&
-			float64(localDesc.Capacity.LeaseCount) <= storeList.candidateLeases.mean {
+		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction {
 			log.VEventf(ctx, 3, "r%d's %.2f qps is too little to matter relative to s%d's %.2f total qps",
 				replWithStats.repl.RangeID, replWithStats.qps, localDesc.StoreID, localDesc.Capacity.QueriesPerSecond)
 			continue
@@ -553,9 +551,8 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		}
 
 		// Don't bother moving ranges whose QPS is below some small fraction of the
-		// store's QPS (unless the store has extra ranges to spare anyway). It's
-		// just unnecessary churn with no benefit to move ranges responsible for,
-		// for example, 1 qps on a store with 5000 qps.
+		// store's QPS. It's just unnecessary churn with no benefit to move ranges
+		// responsible for, for example, 1 qps on a store with 5000 qps.
 		const minQPSFraction = .001
 		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction {
 			log.VEventf(

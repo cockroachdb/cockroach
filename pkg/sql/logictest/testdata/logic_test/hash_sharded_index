@@ -2,7 +2,7 @@ statement ok
 SET experimental_enable_hash_sharded_indexes = true
 
 # Tests for creating a hash sharded primary key
-statement ok 
+statement ok
 CREATE TABLE sharded_primary (a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = 10)
 
 query TT
@@ -359,7 +359,7 @@ ALTER TABLE sharded_secondary ADD COLUMN c INT AS (mod(a, 100)) STORED
 statement error cannot create a sharded index on a computed column
 CREATE INDEX ON sharded_secondary (a, c) USING HASH WITH BUCKET_COUNT=12;
 
-# Ensure that sharded indexes cannot be created on computed columns 
+# Ensure that sharded indexes cannot be created on computed columns
 # in the same txn
 statement error cannot create a sharded index on a computed column
 CREATE TABLE shard_on_computed_column (

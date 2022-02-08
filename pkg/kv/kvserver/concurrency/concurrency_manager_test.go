@@ -973,7 +973,7 @@ func (m *monitor) runSync(opName string, fn func(context.Context)) {
 		opName: opName,
 		ctx:    ctx,
 		collect: func() tracing.Recording {
-			return sp.GetRecording(tracing.RecordingVerbose)
+			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,
 	}
@@ -990,7 +990,7 @@ func (m *monitor) runAsync(opName string, fn func(context.Context)) (cancel func
 		opName: opName,
 		ctx:    ctx,
 		collect: func() tracing.Recording {
-			return sp.GetRecording(tracing.RecordingVerbose)
+			return sp.GetConfiguredRecording()
 		},
 		cancel: sp.Finish,
 	}

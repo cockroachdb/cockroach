@@ -63,7 +63,17 @@ func TestTracingOffRecording(t *testing.T) {
 }
 
 func TestTracerRecording(t *testing.T) {
-	tr := NewTracer()
+	ctx := context.Background()
+	tr := NewTracerWithOpt(ctx, WithTracingMode(TracingModeActiveSpansRegistry))
+
+	// Check that a span that was not configured to record returns nil for its
+	// recording.
+	sNonRecording := tr.StartSpan("not recording")
+	require.Equal(t, RecordingOff, sNonRecording.RecordingType())
+	require.Nil(t, sNonRecording.GetConfiguredRecording())
+	require.Nil(t, sNonRecording.GetRecording(RecordingVerbose))
+	require.Nil(t, sNonRecording.GetRecording(RecordingStructured))
+	require.Nil(t, sNonRecording.FinishAndGetConfiguredRecording())
 
 	s1 := tr.StartSpan("a", WithRecording(RecordingStructured))
 	if s1.IsNoop() {
