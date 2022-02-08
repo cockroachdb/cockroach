@@ -1039,21 +1039,31 @@ func sanitizeLocalityKV(kv string) string {
 
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*jobspb.EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
+) ([]jobspb.EncryptionInfo, error) {
+	files, err := getEncryptionInfoFiles(ctx, src)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	defer r.Close()
-	encInfoBytes, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+	var encInfo []jobspb.EncryptionInfo
+	// User is more likely to read newer Encryption-Info than old, so append from newest to oldest.
+	for i := len(files) - 1; i >= 0; i-- {
+		r, err := src.ReadFile(ctx, files[i])
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		defer r.Close()
+
+		encInfoBytes, err := ioutil.ReadAll(r)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		var currentEncInfo jobspb.EncryptionInfo
+		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
+			return nil, err
+		}
+		encInfo = append(encInfo, currentEncInfo)
 	}
-	var encInfo jobspb.EncryptionInfo
-	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
-		return nil, err
-	}
-	return &encInfo, nil
+	return encInfo, nil
 }
 
 func writeEncryptionInfoIfNotExists(

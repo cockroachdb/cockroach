@@ -167,6 +167,7 @@ type CCLOnlyStatement interface {
 	cclOnlyStatement()
 }
 
+var _ CCLOnlyStatement = &AlterBackup{}
 var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
@@ -176,6 +177,17 @@ var _ CCLOnlyStatement = &Export{}
 var _ CCLOnlyStatement = &ScheduledBackup{}
 var _ CCLOnlyStatement = &StreamIngestion{}
 var _ CCLOnlyStatement = &ReplicationStream{}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterBackup) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterBackup) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterBackup) StatementTag() string { return "ALTER BACKUP" }
+
+func (*AlterBackup) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DDL }
@@ -1648,6 +1660,7 @@ func (*ValuesClause) StatementType() StatementType { return TypeDML }
 // StatementTag returns a short string identifying the type of statement.
 func (*ValuesClause) StatementTag() string { return "VALUES" }
 
+func (n *AlterBackup) String() string                    { return AsString(n) }
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }
