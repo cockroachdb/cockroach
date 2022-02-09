@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -76,14 +75,6 @@ func (t *testServerShim) NodeLiveness() interface{}             { panic(unsuppor
 func (t *testServerShim) HeartbeatNodeLiveness() error          { panic(unsupportedShimMethod) }
 func (t *testServerShim) NodeDialer() interface{}               { panic(unsupportedShimMethod) }
 func (t *testServerShim) SetDistSQLSpanResolver(spanResolver interface{}) {
-	panic(unsupportedShimMethod)
-}
-func (t *testServerShim) AdminURL() string                    { panic(unsupportedShimMethod) }
-func (t *testServerShim) GetHTTPClient() (http.Client, error) { panic(unsupportedShimMethod) }
-func (t *testServerShim) GetAdminAuthenticatedHTTPClient() (http.Client, error) {
-	panic(unsupportedShimMethod)
-}
-func (t *testServerShim) GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error) {
 	panic(unsupportedShimMethod)
 }
 func (t *testServerShim) MustGetSQLCounter(name string) int64        { panic(unsupportedShimMethod) }
