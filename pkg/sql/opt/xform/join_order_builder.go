@@ -1328,24 +1328,24 @@ func commute(op opt.Operator) bool {
 //    ON x = a
 //
 func assoc(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the associative property would not lead to
-		// 'orphaned' predicates, where one or more referenced relations are not in
-		// the resulting join's inputs. Take as an example this reordering that
-		// results from applying the associative property:
-		//
-		//    SELECT * FROM (SELECT * FROM xy INNER JOIN ab ON y = a)
-		//    INNER JOIN uv
-		//    ON x = u
-		//    =>
-		//    SELECT * FROM xy
-		//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON x = u)
-		//    ON y = a
-		//
-		// Note that the x = u predicate references the xy relation, which is not
-		// in that join's inputs. Therefore, this transformation is invalid.
-		return false
-	}
+	// if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
+	// 	// Ensure that application of the associative property would not lead to
+	// 	// 'orphaned' predicates, where one or more referenced relations are not in
+	// 	// the resulting join's inputs. Take as an example this reordering that
+	// 	// results from applying the associative property:
+	// 	//
+	// 	//    SELECT * FROM (SELECT * FROM xy INNER JOIN ab ON y = a)
+	// 	//    INNER JOIN uv
+	// 	//    ON x = u
+	// 	//    =>
+	// 	//    SELECT * FROM xy
+	// 	//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON x = u)
+	// 	//    ON y = a
+	// 	//
+	// 	// Note that the x = u predicate references the xy relation, which is not
+	// 	// in that join's inputs. Therefore, this transformation is invalid.
+	// 	return false
+	// }
 	return checkProperty(assocTable, edgeA, edgeB)
 }
 
@@ -1368,11 +1368,11 @@ func assoc(edgeA, edgeB *edge) bool {
 //    INNER JOIN ab ON x = a
 //
 func leftAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.rightVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the left-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
+	// if edgeB.ses.intersects(edgeA.op.rightVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
+	// 	// Ensure that application of the left-asscom property would not lead to
+	// 	// 'orphaned' predicates. See the assoc() comment for why this is necessary.
+	// 	return false
+	// }
 	return checkProperty(leftAsscomTable, edgeA, edgeB)
 }
 
@@ -1397,11 +1397,11 @@ func leftAsscom(edgeA, edgeB *edge) bool {
 //    ON x = a
 //
 func rightAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.leftVertexes) {
-		// Ensure that application of the right-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
+	// if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.leftVertexes) {
+	// 	// Ensure that application of the right-asscom property would not lead to
+	// 	// 'orphaned' predicates. See the assoc() comment for why this is necessary.
+	// 	return false
+	// }
 	return checkProperty(rightAsscomTable, edgeA, edgeB)
 }
 
