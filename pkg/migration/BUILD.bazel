@@ -15,7 +15,6 @@ go_library(
         "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
-        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
