@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -28,29 +29,46 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
 )
 
-// nativeToDatum converts go native type (interface{} as
-// returned by goavro library) to the datum of appropriate type.
+// nativeTimeToDatum maps the time.Time object returned by goAvro to the proper CRL datum type.
+func nativeTimeToDatum(t time.Time, targetT *types.T) (tree.Datum, error) {
+	duration := tree.TimeFamilyPrecisionToRoundDuration(targetT.Precision())
+	switch targetT.Family() {
+	case types.DateFamily:
+		return tree.NewDDateFromTime(t)
+	case types.TimestampFamily:
+		return tree.MakeDTimestamp(t, duration)
+	default:
+		return nil, errors.New("type not supported")
+	}
+}
+
+// nativeToDatum converts go native types (interface{} as returned by goavro
+// library) and logical time types to the datum with the appropriate type.
 //
-// While Avro specification is fairly broad, and supports arbitrary complex
-// data types, this method concerns itself only with the primitive avro types,
-// which include:
-//   null, boolean, int (32), long (64), float (32), double (64),
+// While Avro's specification is fairly broad, and supports arbitrary complex
+// data types, this method concerns itself with
+// - primitive avro types: null, boolean, int (32), long (64), float (32), double (64),
 //   bytes, string, and arrays of the above.
+// - logical avro types (as defined by the go avro library): long.time-micros, int.time-millis,
+//    long.timestamp-micros,long.timestamp-millis, and int.date
 //
-// Avro record is, essentially, a key->value mapping from field name to field value.
+// An avro record is, essentially, a key->value mapping from field name to field value.
 // A field->value mapping may be represented directly (i.e. the
 // interface{} pass in will have corresponding go primitive type):
 //   user_id:123 -- that is the interface{} type will be int, and it's value is 123.
 //
 // Or, we could see field_name:null, if the field is nullable and is null.
 //
-// Or, we could see e.g. user_id:{"int":123}, if field called user_id can
-// be either null, or an int and the value of the field is 123. The value in
-// this case is another interface{} which should be a map[string]interface{},
-// where the key is a primitive Avro type name ("string", "long", etc).
+// Or, we could see e.g. user_id:{"int":123}, if field called user_id can be
+// either null, or an int and the value of the field is 123. The value in this
+// case is another interface{} which should be a map[string]interface{}, where
+// the key is a primitive or logical Avro type name ("string",
+// "long.time-millis", etc).
 func nativeToDatum(
 	x interface{}, targetT *types.T, avroT []string, evalCtx *tree.EvalContext,
 ) (tree.Datum, error) {
@@ -77,6 +95,12 @@ func nativeToDatum(
 		d = tree.NewDFloat(tree.DFloat(v))
 	case float64:
 		d = tree.NewDFloat(tree.DFloat(v))
+	case time.Time:
+		return nativeTimeToDatum(v, targetT)
+	case time.Duration:
+		// goAvro returns avro cols of logical type time as time.duration
+		dU := v / time.Microsecond
+		d = tree.MakeDTime(timeofday.TimeOfDay(dU))
 	case []byte:
 		if targetT.Identical(types.Bytes) {
 			d = tree.NewDBytes(tree.DBytes(v))
@@ -147,18 +171,28 @@ var familyToAvroT = map[types.Family][]string{
 	// Arrays can be specified as avro array type, or we can try parsing string.
 	types.ArrayFamily: {"array", "string"},
 
+	// Time families with avro logical types. Avro logical type names pulled from:
+	// https://github.com/linkedin/goavro/blob/master/logical_type.go and
+	// https://avro.apache.org/docs/current/spec.html
+	types.DateFamily:      {"string", "int.date"},
+	types.TimeFamily:      {"string", "long.time-micros", "int.time-millis"},
+	types.TimestampFamily: {"string", "long.timestamp-micros", "long.timestamp-millis"},
+
+	// goavro does not yet support times with local timezones. So, CRDB can only
+	// import these datum types if the goAvro type is string.
+	types.TimeTZFamily:      {"string"},
+	types.TimestampTZFamily: {"string"},
+
+	// goavro does no support the interval logical type
+	types.IntervalFamily: {"string"},
+
 	// Families we can try to convert using string conversion.
 	types.UuidFamily:           {"string"},
-	types.DateFamily:           {"string"},
-	types.TimeFamily:           {"string"},
-	types.IntervalFamily:       {"string"},
-	types.TimestampTZFamily:    {"string"},
-	types.TimestampFamily:      {"string"},
 	types.CollatedStringFamily: {"string"},
 	types.INetFamily:           {"string"},
 	types.JsonFamily:           {"string"},
 	types.BitFamily:            {"string"},
-	types.DecimalFamily:        {"string"},
+	types.DecimalFamily:        {"string"}, //TODO(Butler): import avro with logical decimal
 	types.EnumFamily:           {"string"},
 }
 
@@ -191,7 +225,6 @@ func (a *avroConsumer) convertNative(x interface{}, conv *row.DatumRowConverter)
 		if !ok {
 			return fmt.Errorf("cannot convert avro value %v to col %s", v, conv.VisibleCols[idx].GetType().Name())
 		}
-
 		datum, err := nativeToDatum(v, typ, avroT, conv.EvalCtx)
 		if err != nil {
 			return err
