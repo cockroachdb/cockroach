@@ -79,9 +79,12 @@ func EvalAddSSTable(
 	if args.WriteAtRequestTimestamp &&
 		(args.SSTTimestamp.IsEmpty() || h.Timestamp != args.SSTTimestamp ||
 			util.ConstantWithMetamorphicTestBool("addsst-rewrite-forced", false)) {
+		st := cArgs.EvalCtx.ClusterSettings()
 		// TODO(dt): use a quotapool.
-		concurrency := int(addSSTableRewriteConcurrency.Get(&cArgs.EvalCtx.ClusterSettings().SV))
-		sst, err = storage.UpdateSSTTimestamps(sst, args.SSTTimestamp, h.Timestamp, concurrency)
+		concurrency := int(addSSTableRewriteConcurrency.Get(&st.SV))
+		sst, err = storage.UpdateSSTTimestamps(
+			ctx, st, sst, args.SSTTimestamp, h.Timestamp, concurrency,
+		)
 		if err != nil {
 			return result.Result{}, errors.Wrap(err, "updating SST timestamps")
 		}

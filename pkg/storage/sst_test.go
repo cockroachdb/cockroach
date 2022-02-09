@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -120,8 +121,10 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 
 	r := rand.New(rand.NewSource(7))
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	writer := MakeIngestionSSTWriter(sstFile)
+	writer := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer writer.Close()
 
 	key := make([]byte, 8)
@@ -165,7 +168,7 @@ func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		ts := hlc.Timestamp{WallTime: 1634899098417970999, Logical: 9}
-		_, err := UpdateSSTTimestamps(sstFile.Bytes(), hlc.Timestamp{}, ts, 0)
+		_, err := UpdateSSTTimestamps(ctx, st, sstFile.Bytes(), hlc.Timestamp{}, ts, 0)
 		require.NoError(b, err)
 	}
 }
