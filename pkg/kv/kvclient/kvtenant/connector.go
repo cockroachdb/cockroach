@@ -56,12 +56,6 @@ type Connector interface {
 	// (e.g. is the Range being requested owned by the requesting tenant?).
 	rangecache.RangeDescriptorDB
 
-	// SystemConfigProvider provides a filtered view of the SystemConfig
-	// containing only information applicable to secondary tenants. This
-	// obviates the need for SQL-only tenant processes to join the cluster-wide
-	// gossip network.
-	config.SystemConfigProvider
-
 	// RegionsServer provides access to a tenant's available regions. This is
 	// necessary for region validation for zone configurations and multi-region
 	// primitives.

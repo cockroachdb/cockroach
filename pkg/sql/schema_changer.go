@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -2644,8 +2645,10 @@ func DeleteTableDescAndZoneConfig(
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if !descs.UnsafeSkipSystemConfigTrigger.Get(&settings.SV) {
-			if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
+		if !descs.UnsafeSkipSystemConfigTrigger.Get(&settings.SV) && !settings.Version.IsActive(
+			ctx, clusterversion.DisableSystemConfigGossipTrigger,
+		) {
+			if err := txn.DeprecatedSetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 				return err
 			}
 		}
