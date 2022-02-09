@@ -468,7 +468,7 @@ type ModifyRowLevelTTL interface {
 	TableElementMaybeMutation
 
 	// RowLevelTTL returns the row level TTL for the mutation.
-	RowLevelTTL() *descpb.TableDescriptor_RowLevelTTL
+	RowLevelTTL() *catpb.RowLevelTTL
 }
 
 // Partitioning is an interface around an index partitioning.
