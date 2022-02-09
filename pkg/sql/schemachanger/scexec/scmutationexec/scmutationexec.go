@@ -45,8 +45,8 @@ type Clock interface {
 // CatalogReader describes catalog read operations as required by the mutation
 // visitor.
 type CatalogReader interface {
-	// MustReadImmutableDescriptor reads a descriptor from the catalog by ID.
-	MustReadImmutableDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
+	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
+	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
 
 	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
 	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
@@ -58,6 +58,16 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
+}
+
+func MustReadImmutableDescriptor(
+	ctx context.Context, cr CatalogReader, id descpb.ID,
+) (catalog.Descriptor, error) {
+	descs, err := cr.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], nil
 }
 
 // Partitioner is the interface for adding partitioning to a table descriptor.
@@ -146,7 +156,7 @@ func (m *visitor) RemoveJobStateFromDescriptor(
 	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
 	{
-		_, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescriptorID)
+		_, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescriptorID)
 
 		// If we're clearing the status, we might have already deleted the
 		// descriptor. Permit that by detecting the prior deletion and
@@ -354,7 +364,7 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 	}
 	typ.AddReferencingDescriptorID(op.DescID)
 	// Sanity: Validate that a back reference exists by now.
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
 	if err != nil {
 		return err
 	}
@@ -480,7 +490,7 @@ func (m *visitor) CreateGcJobForDatabase(
 }
 
 func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -512,7 +522,7 @@ func (m *visitor) MarkDescriptorAsDropped(
 func (m *visitor) MarkDescriptorAsDroppedSynthetically(
 	ctx context.Context, op scop.MarkDescriptorAsDroppedSynthetically,
 ) error {
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
 	if err != nil {
 		return err
 	}
@@ -523,7 +533,7 @@ func (m *visitor) MarkDescriptorAsDroppedSynthetically(
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	descriptor, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	descriptor, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -1052,7 +1062,7 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 	if err != nil {
 		return err
 	}
-	sc, err := m.cr.MustReadImmutableDescriptor(ctx, op.SchemaID)
+	sc, err := MustReadImmutableDescriptor(ctx, m.cr, op.SchemaID)
 	if err != nil {
 		return err
 	}
@@ -1088,7 +1098,7 @@ func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnCom
 func (m *visitor) RemoveConstraintComment(
 	ctx context.Context, op scop.RemoveConstraintComment,
 ) error {
-	tbl, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	tbl, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -1098,7 +1108,7 @@ func (m *visitor) RemoveConstraintComment(
 func (m *visitor) RemoveDatabaseRoleSettings(
 	ctx context.Context, op scop.RemoveDatabaseRoleSettings,
 ) error {
-	db, err := m.cr.MustReadImmutableDescriptor(ctx, op.DatabaseID)
+	db, err := MustReadImmutableDescriptor(ctx, m.cr, op.DatabaseID)
 	if err != nil {
 		return err
 	}

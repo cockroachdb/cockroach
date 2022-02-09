@@ -474,10 +474,18 @@ func (s *TestState) Catalog() scexec.Catalog {
 var _ scmutationexec.CatalogReader = (*TestState)(nil)
 
 // MustReadImmutableDescriptor implements the scmutationexec.CatalogReader interface.
-func (s *TestState) MustReadImmutableDescriptor(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
-	return s.mustReadImmutableDescriptor(id)
+func (s *TestState) MustReadImmutableDescriptors(
+	ctx context.Context, ids ...descpb.ID,
+) ([]catalog.Descriptor, error) {
+	out := make([]catalog.Descriptor, 0, len(ids))
+	for _, id := range ids {
+		d, err := s.mustReadImmutableDescriptor(id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }
 
 // AddSyntheticDescriptor implements the scmutationexec.CatalogReader interface.
