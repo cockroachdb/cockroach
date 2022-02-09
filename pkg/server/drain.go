@@ -75,6 +75,12 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return delegateDrain(ctx, req, client, stream)
 	}
 
+	return s.handleDrain(ctx, req, stream)
+}
+
+func (s *adminServer) handleDrain(
+	ctx context.Context, req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer,
+) error {
 	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", req.DoDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
