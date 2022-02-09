@@ -178,7 +178,9 @@ func startTenantInternal(
 		return nil, nil, "", "", err
 	}
 
-	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s)
+	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, s)
+
+	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
@@ -524,6 +526,7 @@ func makeTenantSQLServerArgs(
 		regionsServer:            tenantConnect,
 		costController:           costController,
 		allowSessionRevival:      true,
+		grpc:                     grpcServer,
 	}, nil
 }
 
