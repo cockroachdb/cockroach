@@ -266,6 +266,11 @@ object DatabaseRoleSetting
 DatabaseRoleSetting :  DatabaseID
 DatabaseRoleSetting :  RoleName
 
+object RowLevelTTL
+
+RowLevelTTL :  TableID
+RowLevelTTL :  RowLevelTTL
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -332,4 +337,5 @@ ForeignKey <|-- ConstraintComment
 UniqueConstraint <|-- ConstraintComment
 CheckConstraint <|-- ConstraintComment
 Database <|-- DatabaseRoleSetting
+Table <|-- RowLevelTTL
 @enduml
