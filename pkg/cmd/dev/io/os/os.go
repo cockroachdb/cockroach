@@ -213,7 +213,14 @@ func (o *OS) ReadFile(filename string) (string, error) {
 // WriteFile wraps around ioutil.ReadFile, writing the given contents to
 // the given file on disk.
 func (o *OS) WriteFile(filename, contents string) error {
-	command := fmt.Sprintf("echo %q > %s", strings.TrimSpace(contents[:10]), filename)
+	var command string
+	{
+		commandContents := contents
+		if len(commandContents) > 10 {
+			commandContents = commandContents[:10] // keeps the logging manageable
+		}
+		command = fmt.Sprintf("echo %q > %s", strings.TrimSpace(commandContents), filename)
+	}
 	o.logger.Print(command)
 
 	_, err := o.Next(command, func() (output string, err error) {
