@@ -136,15 +136,15 @@ func splitPreApply(
 	// Persist the closed timestamp.
 	//
 	// In order to tolerate a nil initClosedTS input, let's forward to
-	// r.GetClosedTimestamp(). Generally, initClosedTS is not expected to be nil
-	// (and is expected to be in advance of r.GetClosedTimestamp() since it's
-	// coming hot off a Raft command), but let's not rely on the non-nil. Note
-	// that r.GetClosedTimestamp() does not yet incorporate initClosedTS because
-	// the split command has not been applied yet.
+	// r.GetCurrentClosedTimestamp(). Generally, initClosedTS is not expected to
+	// be nil (and is expected to be in advance of r.GetCurrentClosedTimestamp()
+	// since it's coming hot off a Raft command), but let's not rely on the
+	// non-nil. Note that r.GetCurrentClosedTimestamp() does not yet incorporate
+	// initClosedTS because the split command has not been applied yet.
 	if initClosedTS == nil {
 		initClosedTS = &hlc.Timestamp{}
 	}
-	initClosedTS.Forward(r.GetClosedTimestamp(ctx))
+	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}

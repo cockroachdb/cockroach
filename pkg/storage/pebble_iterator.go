@@ -76,6 +76,7 @@ var pebbleIterPool = sync.Pool{
 
 type cloneableIter interface {
 	Clone() (*pebble.Iterator, error)
+	Close() error
 }
 
 type testingSetBoundsListener interface {
@@ -91,7 +92,7 @@ func newPebbleIterator(
 ) *pebbleIterator {
 	iter := pebbleIterPool.Get().(*pebbleIterator)
 	iter.reusable = false // defensive
-	iter.init(handle, iterToClone, opts, durability)
+	iter.init(handle, iterToClone, false /* iterUnused */, opts, durability)
 	return iter
 }
 
@@ -106,6 +107,7 @@ func newPebbleIterator(
 func (p *pebbleIterator) init(
 	handle pebble.Reader,
 	iterToClone cloneableIter,
+	iterUnused bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
 ) {
@@ -183,8 +185,15 @@ func (p *pebbleIterator) init(
 
 	if doClone {
 		var err error
-		if p.iter, err = iterToClone.Clone(); err != nil {
-			panic(err)
+		if iterUnused {
+			// NB: If the iterator was never used (at the time of writing, this means
+			// that the iterator was created by `PinEngineStateForIterators()`), we
+			// don't need to clone it.
+			p.iter = iterToClone.(*pebble.Iterator)
+		} else {
+			if p.iter, err = iterToClone.Clone(); err != nil {
+				panic(err)
+			}
 		}
 		p.iter.SetBounds(p.options.LowerBound, p.options.UpperBound)
 	} else {

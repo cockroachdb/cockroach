@@ -47,9 +47,11 @@ type pebbleBatch struct {
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
-	iter             cloneableIter
-	writeOnly        bool
-	closed           bool
+
+	iter       cloneableIter
+	writeOnly  bool
+	iterUnused bool
+	closed     bool
 
 	wrappedIntentWriter intentDemuxWriter
 	// scratch space for wrappedIntentWriter.
@@ -103,6 +105,12 @@ func (p *pebbleBatch) Close() {
 		panic("closing an already-closed pebbleBatch")
 	}
 	p.closed = true
+
+	if p.iterUnused {
+		if err := p.iter.Close(); err != nil {
+			panic(err)
+		}
+	}
 
 	// Setting iter to nil is sufficient since it will be closed by one of the
 	// subsequent destroy calls.
@@ -230,14 +238,15 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts, StandardDurability)
+			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts, StandardDurability)
+			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 	}
 
 	iter.inuse = true
@@ -272,14 +281,15 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts, StandardDurability)
+			iter.init(p.batch, p.iter, p.iterUnused, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts, StandardDurability)
+			iter.init(p.db, p.iter, p.iterUnused, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 	}
 
 	iter.inuse = true
@@ -299,6 +309,10 @@ func (p *pebbleBatch) PinEngineStateForIterators() error {
 		} else {
 			p.iter = p.db.NewIter(nil)
 		}
+		// Since the iterator is being created just to pin the state of the engine
+		// for future iterators, we'll avoid cloning it the next time we want an
+		// iterator and instead just re-use what we created here.
+		p.iterUnused = true
 	}
 	return nil
 }

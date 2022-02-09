@@ -1767,9 +1767,11 @@ type pebbleReadOnly struct {
 	normalIter       pebbleIterator
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
-	iter             cloneableIter
-	durability       DurabilityRequirement
-	closed           bool
+
+	iter       cloneableIter
+	iterUnused bool
+	durability DurabilityRequirement
+	closed     bool
 }
 
 var _ ReadWriter = &pebbleReadOnly{}
@@ -1811,6 +1813,13 @@ func (p *pebbleReadOnly) Close() {
 		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
+	if p.iterUnused {
+		err := p.iter.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	// Setting iter to nil is sufficient since it will be closed by one of the
 	// subsequent destroy calls.
 	p.iter = nil
@@ -1929,11 +1938,12 @@ func (p *pebbleReadOnly) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 		iter.reusable = true
 	}
 
@@ -1964,11 +1974,12 @@ func (p *pebbleReadOnly) NewEngineIterator(opts IterOptions) EngineIterator {
 	if iter.iter != nil {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
-		iter.init(p.parent.db, p.iter, opts, p.durability)
+		iter.init(p.parent.db, p.iter, p.iterUnused, opts, p.durability)
 		if p.iter == nil {
 			// For future cloning.
 			p.iter = iter.iter
 		}
+		p.iterUnused = false
 		iter.reusable = true
 	}
 
@@ -2001,6 +2012,10 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
 		p.iter = p.parent.db.NewIter(o)
+		// Since the iterator is being created just to pin the state of the engine
+		// for future iterators, we'll avoid cloning it the next time we want an
+		// iterator and instead just re-use what we created here.
+		p.iterUnused = true
 	}
 	return nil
 }
