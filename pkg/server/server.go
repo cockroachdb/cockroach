@@ -493,6 +493,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvMemoryMonitor.Stop(ctx)
 	}))
 
+	systemConfigWatcher := systemconfigwatcher.New(
+		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
+	)
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:       cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                st,
@@ -520,6 +524,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
+		SystemConfigProvider:    systemConfigWatcher,
 	}
 
 	var spanConfig struct {
@@ -622,9 +627,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvserver.RegisterPerStoreServer(grpcServer.Server, node.perReplicaServer)
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
 
-	systemConfigWatcher := systemconfigwatcher.New(
-		keys.SystemSQLCodec, clock, rangeFeedFactory, &cfg.DefaultZoneConfig,
-	)
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
 	)

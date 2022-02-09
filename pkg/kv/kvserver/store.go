@@ -247,6 +247,12 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 		ScanInterval:                10 * time.Minute,
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		ProtectedTimestampCache:     protectedts.EmptyCache(clock),
+
+		// Use a constant empty system config, which mirrors the previously
+		// existing logic to install an empty system config in gossip.
+		SystemConfigProvider: config.NewConstantSystemConfigProvider(
+			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
+		),
 	}
 
 	// Use shorter Raft tick settings in order to minimize start up and failover
@@ -1054,6 +1060,13 @@ type StoreConfig struct {
 
 	// KVAdmissionController is an optional field used for admission control.
 	KVAdmissionController KVAdmissionController
+
+	// SystemConfigProvider is used to drive replication decision-making in the
+	// mixed-version state, before the span configuration infrastructure has been
+	// bootstrapped.
+	//
+	// TODO(ajwerner): Remove in 22.2.
+	SystemConfigProvider config.SystemConfigProvider
 }
 
 // ConsistencyTestingKnobs is a BatchEvalTestingKnobs struct used to control the
@@ -1915,24 +1928,25 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.cfg.NodeLiveness.RegisterCallback(s.nodeIsLiveCallback)
 	}
 
-	// Gossip is only ever nil while bootstrapping a cluster and
-	// in unittests.
-	if s.cfg.Gossip != nil {
-		// Register update channel for any changes to the system config.
-		// This may trigger splits along structured boundaries,
-		// and update max range bytes.
-		gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
+	// SystemConfigProvider can be nil during some tests.
+	if scp := s.cfg.SystemConfigProvider; scp != nil {
+		systemCfgUpdateC, _ := scp.RegisterSystemConfigChannel()
 		_ = s.stopper.RunAsyncTask(ctx, "syscfg-listener", func(context.Context) {
 			for {
 				select {
-				case <-gossipUpdateC:
-					cfg := s.cfg.Gossip.GetSystemConfig()
+				case <-systemCfgUpdateC:
+					cfg := scp.GetSystemConfig()
 					s.systemGossipUpdate(cfg)
 				case <-s.stopper.ShouldQuiesce():
 					return
 				}
 			}
 		})
+	}
+
+	// Gossip is only ever nil while bootstrapping a cluster and
+	// in unittests.
+	if s.cfg.Gossip != nil {
 
 		// Start a single goroutine in charge of periodically gossiping the
 		// sentinel and first range metadata if we have a first range.
@@ -1965,9 +1979,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			enabled := spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV)
 			if enabled {
 				s.applyAllFromSpanConfigStore(ctx)
-			} else {
-				if s.cfg.Gossip != nil && s.cfg.Gossip.GetSystemConfig() != nil {
-					s.systemGossipUpdate(s.cfg.Gossip.GetSystemConfig())
+			} else if scp := s.cfg.SystemConfigProvider; scp != nil {
+				if sc := scp.GetSystemConfig(); sc != nil {
+					s.systemGossipUpdate(sc)
 				}
 			}
 		})
@@ -2110,11 +2124,6 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		return nil, errSysCfgUnavailable
 	}
 
-	sysCfg := s.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		return nil, errSysCfgUnavailable
-	}
-
 	// We need a version gate here before switching over to the span configs
 	// infrastructure. In a mixed-version cluster we need to wait for
 	// the host tenant to have fully populated `system.span_configurations`
@@ -2142,6 +2151,11 @@ func (s *Store) GetConfReader(ctx context.Context) (spanconfig.StoreReader, erro
 		!spanconfigstore.EnabledSetting.Get(&s.ClusterSettings().SV) ||
 		!s.cfg.Settings.Version.IsActive(ctx, clusterversion.EnableSpanConfigStore) ||
 		s.TestingKnobs().UseSystemConfigSpanForQueues {
+
+		sysCfg := s.cfg.SystemConfigProvider.GetSystemConfig()
+		if sysCfg == nil {
+			return nil, errSysCfgUnavailable
+		}
 		return sysCfg, nil
 	}
 

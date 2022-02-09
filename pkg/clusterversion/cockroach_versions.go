@@ -269,7 +269,10 @@ const (
 	DontProposeWriteTimestampForLeaseTransfers
 	// TenantSettingsTable adds the system table for tracking tenant usage.
 	TenantSettingsTable
-
+	// DisableSystemConfigGossipTrigger is a follow-up to EnableSpanConfigStore
+	// to disable the data propagation mechanism it and the entire spanconfig
+	// infrastructure obviate.
+	DisableSystemConfigGossipTrigger
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -428,6 +431,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     TenantSettingsTable,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
+	},
+	{
+		Key:     DisableSystemConfigGossipTrigger,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
 	},
 
 	// *************************************************

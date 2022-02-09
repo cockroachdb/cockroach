@@ -189,6 +189,9 @@ func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 // getIndexBound searches the kv list for 'key' and returns its index if found
 // or the index it would be placed at if not found.
 func (s *SystemConfig) getIndexBound(key roachpb.Key) int {
+	if s == nil {
+		panic("here")
+	}
 	return sort.Search(len(s.Values), func(i int) bool {
 		return key.Compare(s.Values[i].Key) <= 0
 	})

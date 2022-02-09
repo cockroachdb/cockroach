@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -428,7 +429,10 @@ func EndTxn(
 		// potentially gossip now that we've removed an intent. This is important
 		// to deal with cases where previously committed values were not gossipped
 		// due to an outstanding intent.
-		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) {
+		if cArgs.EvalCtx.ContainsKey(keys.SystemConfigSpan.Key) &&
+			!cArgs.EvalCtx.ClusterSettings().Version.IsActive(
+				ctx, clusterversion.DisableSystemConfigGossipTrigger,
+			) {
 			txnResult.Local.MaybeGossipSystemConfigIfHaveFailure = true
 		}
 	}

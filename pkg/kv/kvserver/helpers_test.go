@@ -170,7 +170,7 @@ func (s *Store) EnqueueRaftUpdateCheck(rangeID roachpb.RangeID) {
 }
 
 func manualQueue(s *Store, q queueImpl, repl *Replica) error {
-	cfg := s.Gossip().GetSystemConfig()
+	cfg := s.cfg.SystemConfigProvider.GetSystemConfig()
 	if cfg == nil {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}

@@ -63,10 +63,15 @@ const (
 	// bi-level key addressing scheme. The value is a roachpb.RangeDescriptor.
 	KeyFirstRangeDescriptor = "first-range"
 
-	// KeySystemConfig is the gossip key for the system DB span.
+	// KeyDeprecatedSystemConfig is the gossip key for the system DB span.
 	// The value if a config.SystemConfig which holds all key/value
 	// pairs in the system DB span.
-	KeySystemConfig = "system-db"
+	//
+	// This key is used in the 21.2<->22.1 mixed version state. It is not used
+	// in 22.1.
+	//
+	// TODO(ajwerner): Delete in 22.2.
+	KeyDeprecatedSystemConfig = "system-db"
 
 	// KeyDistSQLNodeVersionKeyPrefix is key prefix for each node's DistSQL
 	// version.
