@@ -220,13 +220,13 @@ DROP TABLE defaultdb.shipments CASCADE;
     columnId: 1
     defaultExpr: gen_random_uuid()
     tableId: 109
-    usesSequenceIDs: []
+    usesSequenceIds: []
 - [[DefaultExpression:{DescID: 109, ColumnID: 5}, ABSENT], PUBLIC]
   details:
     columnId: 5
     defaultExpr: nextval(106:::REGCLASS)
     tableId: 109
-    usesSequenceIDs:
+    usesSequenceIds:
     - 106
 - [[ForeignKey:{DescID: 109, ReferencedDescID: 104, Name: fk_customers}, ABSENT], PUBLIC]
   details:
@@ -333,12 +333,12 @@ DROP TABLE defaultdb.shipments CASCADE;
     unique: true
 - [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 109}, ABSENT], PUBLIC]
   details:
-    columnID: 5
+    columnId: 5
     dependedOn: 109
     tableId: 106
 - [[RelationDependedOnBy:{DescID: 109, ReferencedDescID: 111}, ABSENT], PUBLIC]
   details:
-    columnID: 2
+    columnId: 2
     dependedOn: 111
     tableId: 109
 - [[Sequence:{DescID: 110}, ABSENT], PUBLIC]

@@ -101,7 +101,7 @@ func columnDescToElement(
 		Inaccessible:                      column.Inaccessible,
 		GeneratedAsIdentitySequenceOption: nilToEmptyString(column.GeneratedAsIdentitySequenceOption),
 		GeneratedAsIdentityType:           column.GeneratedAsIdentityType,
-		UsesSequenceIds:                   column.UsesSequenceIds,
+		UsesSequenceIDs:                   column.UsesSequenceIds,
 		ComputerExpr:                      nilToEmptyString(column.ComputeExpr),
 		PgAttributeNum:                    column.GetPGAttributeNum(),
 		SystemColumnKind:                  column.SystemColumnKind,
