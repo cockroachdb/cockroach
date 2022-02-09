@@ -4,7 +4,7 @@ which docker
 
 id
 ----
-503:20
+502:20
 
 cat crdb-checkout/build/teamcity-bazel-support.sh
 ----
@@ -62,6 +62,9 @@ _tc_release_branch() {
 #   `GO_TEST_JSON_OUTPUT_FILE`.
 # create_tarball: whether to create a tarball with full logs. If the test's
 #   exit code is passed, the tarball is generated on failures.
+#
+# The variable BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS can be set to add extra
+# arguments to $github_post.
 process_test_json() {
   local testfilter=$1
   local github_post=$2
@@ -90,7 +93,7 @@ process_test_json() {
       echo "GITHUB_API_TOKEN must be set"
       exit 1
     else
-      $github_post < "$test_json"
+      $github_post ${BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS:+$BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS} < "$test_json"
     fi
   fi
 
@@ -121,7 +124,7 @@ docker volume inspect bzlhome
 ----
 [
     {
-        "CreatedAt": "2022-02-04T03:10:06Z",
+        "CreatedAt": "2022-01-21T18:57:42Z",
         "Driver": "local",
         "Labels": {},
         "Mountpoint": "/var/lib/docker/volumes/bzlhome/_data",
@@ -134,7 +137,7 @@ docker volume inspect bzlhome
 mkdir crdb-checkout/artifacts
 ----
 
-docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 503:503 cockroachdb/bazel:20220121-121551
+docker run --rm -it -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220121-121551
 ----
 
 which docker
@@ -143,7 +146,7 @@ which docker
 
 id
 ----
-503:20
+502:20
 
 cat crdb-checkout/build/teamcity-bazel-support.sh
 ----
@@ -201,6 +204,9 @@ _tc_release_branch() {
 #   `GO_TEST_JSON_OUTPUT_FILE`.
 # create_tarball: whether to create a tarball with full logs. If the test's
 #   exit code is passed, the tarball is generated on failures.
+#
+# The variable BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS can be set to add extra
+# arguments to $github_post.
 process_test_json() {
   local testfilter=$1
   local github_post=$2
@@ -229,7 +235,7 @@ process_test_json() {
       echo "GITHUB_API_TOKEN must be set"
       exit 1
     else
-      $github_post < "$test_json"
+      $github_post ${BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS:+$BAZEL_SUPPORT_EXTRA_GITHUB_POST_ARGS} < "$test_json"
     fi
   fi
 
@@ -260,7 +266,7 @@ docker volume inspect bzlhome
 ----
 [
     {
-        "CreatedAt": "2022-02-04T03:10:06Z",
+        "CreatedAt": "2022-01-21T18:57:42Z",
         "Driver": "local",
         "Labels": {},
         "Mountpoint": "/var/lib/docker/volumes/bzlhome/_data",
@@ -273,6 +279,6 @@ docker volume inspect bzlhome
 mkdir crdb-checkout/artifacts
 ----
 
-docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 503:503 cockroachdb/bazel:20220121-121551 echo hi
+docker run --rm -i -v crdb-checkout:/cockroach --workdir=/cockroach -v crdb-checkout/build/bazelutil/empty.bazelrc:/cockroach/.bazelrc.user -v crdb-checkout/artifacts:/artifacts -v bzlhome:/home/roach:delegated -u 502:502 cockroachdb/bazel:20220121-121551 echo hi
 ----
 

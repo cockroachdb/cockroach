@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/exec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -74,7 +75,7 @@ func TestRecorderDriven(t *testing.T) {
 	if f := flag.Lookup("rewrite"); f != nil && f.Value.String() == "true" {
 		rewriting = true
 	}
-	if rewriting {
+	if rewriting && bazel.BuiltWithBazel() {
 		t.Fatalf("not supported under bazel") // needs to shell out to bazel itself
 	}
 
