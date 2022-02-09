@@ -7,6 +7,7 @@ go_library(
         "tracing_ui.go",
         "ui.go",
     ],
+    # keep
     embedsrcs = select({
         "//pkg/ui:cockroach_with_ui": [
             "dist_vendor/list.min.js",
