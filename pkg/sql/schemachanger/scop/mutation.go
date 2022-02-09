@@ -210,7 +210,7 @@ type MakeAddedColumnDeleteOnly struct {
 	Inaccessible                      bool
 	GeneratedAsIdentityType           catpb.GeneratedAsIdentityType
 	GeneratedAsIdentitySequenceOption string
-	UsesSequenceIds                   []descpb.ID
+	UsesSequenceIDs                   []descpb.ID
 	ComputerExpr                      string
 	PgAttributeNum                    uint32
 	SystemColumnKind                  catpb.SystemColumnKind
