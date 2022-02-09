@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -64,7 +65,7 @@ func TestSettingAndCheckingLicense(t *testing.T) {
 		{"", idA, t0, "requires an enterprise license"},
 	} {
 		updater := st.MakeUpdater()
-		if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
+		if err := setLicense(ctx, updater, tc.lic); err != nil {
 			t.Fatal(err)
 		}
 		err := checkEnterpriseEnabledAt(st, tc.checkTime, tc.checkCluster, "", "", true)
@@ -92,7 +93,7 @@ func TestGetLicenseTypePresent(t *testing.T) {
 			Type:              tc.licenseType,
 			ValidUntilUnixSec: 0,
 		}).Encode()
-		if err := updater.Set(ctx, "enterprise.license", lic, "s"); err != nil {
+		if err := setLicense(ctx, updater, lic); err != nil {
 			t.Fatal(err)
 		}
 		actual, err := getLicenseType(st)
@@ -125,7 +126,7 @@ func TestSettingBadLicenseStrings(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		u := st.MakeUpdater()
 
-		if err := u.Set(ctx, "enterprise.license", tc.lic, "s"); !testutils.IsError(
+		if err := setLicense(ctx, u, tc.lic); !testutils.IsError(
 			err, tc.err,
 		) {
 			t.Fatalf("%q: expected err %q, got %v", tc.lic, tc.err, err)
@@ -184,7 +185,7 @@ func TestTimeToEnterpriseLicenseExpiry(t *testing.T) {
 		{"No License", "", 0},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			if err := updater.Set(ctx, "enterprise.license", tc.lic, "s"); err != nil {
+			if err := setLicense(ctx, updater, tc.lic); err != nil {
 				t.Fatal(err)
 			}
 			actual := base.LicenseTTL.Value()
@@ -228,4 +229,11 @@ func TestApplyTenantLicenseWithoutLicense(t *testing.T) {
 func TestApplyTenantLicenseWithInvalidLicense(t *testing.T) {
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", "THIS IS NOT A VALID LICENSE")()
 	require.Error(t, ApplyTenantLicense())
+}
+
+func setLicense(ctx context.Context, updater settings.Updater, val string) error {
+	return updater.Set(ctx, "enterprise.license", settings.EncodedValue{
+		Value: val,
+		Type:  "s",
+	})
 }
