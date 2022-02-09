@@ -852,6 +852,9 @@ message ListSessionsResponse {
   repeated Session sessions = 1 [ (gogoproto.nullable) = false ];
   // Any errors that occurred during fan-out calls to other nodes.
   repeated ListSessionsError errors = 2 [ (gogoproto.nullable) = false ];
+  // If set and non-empty, indicates the prefix to application_name
+  // used for statements/queries issued internally by CockroachDB.
+  string internal_app_name_prefix = 3;
 }
 
 // Request object for issuing a query cancel request.
