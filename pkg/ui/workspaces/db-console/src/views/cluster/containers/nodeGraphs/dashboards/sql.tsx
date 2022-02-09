@@ -52,7 +52,11 @@ export default function(props: GraphDashboardProps) {
       tooltip={`The total number of open SQL transactions  ${tooltipSelection}.`}
     >
       <Axis label="transactions">
-        <Metric name="cr.node.sql.txns.open" title="Open Transactions" />
+        <Metric
+          name="cr.node.sql.txns.open"
+          title="Open Transactions"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -65,6 +69,7 @@ export default function(props: GraphDashboardProps) {
         <Metric
           name="cr.node.sql.statements.active"
           title="Active Statements"
+          downsampleMax
         />
       </Axis>
     </LineGraph>,
