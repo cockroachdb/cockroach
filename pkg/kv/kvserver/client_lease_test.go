@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -96,19 +97,29 @@ func TestStoreRangeLease(t *testing.T) {
 }
 
 // TestStoreGossipSystemData verifies that the system-config and node-liveness
-// data is gossiped at startup.
+// data is gossiped at startup in the mixed version state.
+//
+// TODO(ajwerner): Delete this test in 22.2.
 func TestStoreGossipSystemData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	zcfg := zonepb.DefaultZoneConfig()
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false,
+	)
 	serverArgs := base.TestServerArgs{
+		Settings: settings,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
 			Server: &server.TestingKnobs{
-				DefaultZoneConfigOverride: &zcfg,
+				DefaultZoneConfigOverride:      &zcfg,
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: 1,
 			},
 		},
 	}
@@ -128,7 +139,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 	}
 
 	getSystemConfig := func(s *kvserver.Store) *config.SystemConfig {
-		systemConfig := s.Gossip().GetSystemConfig()
+		systemConfig := s.Gossip().DeprecatedGetSystemConfig()
 		return systemConfig
 	}
 	getNodeLiveness := func(s *kvserver.Store) livenesspb.Liveness {
@@ -159,7 +170,9 @@ func TestStoreGossipSystemData(t *testing.T) {
 // re-gossiped on lease transfer even if it hasn't changed. This helps prevent
 // situations where a previous leaseholder can restart and not receive the
 // system config because it was the original source of it within the gossip
-// network.
+// network. This test only applies in the mixed version state.
+//
+// TODO(ajwerner): Remove this test in 22.2.
 func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -168,6 +181,17 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, numStores,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableMergeQueue: true,
+					},
+					Server: &server.TestingKnobs{
+						BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+						DisableAutomaticVersionUpgrade: 1,
+					},
+				},
+			},
 		},
 	)
 	defer tc.Stopper().Stop(context.Background())
@@ -177,7 +201,7 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 
 	initialStoreIdx := -1
 	for i := range tc.Servers {
-		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if tc.GetFirstStoreFromServer(t, i).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			initialStoreIdx = i
 		}
 	}
@@ -190,10 +214,10 @@ func TestGossipSystemConfigOnLeaseChange(t *testing.T) {
 		t.Fatalf("Unexpected error %v", err)
 	}
 	testutils.SucceedsSoon(t, func() error {
-		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if tc.GetFirstStoreFromServer(t, initialStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			return errors.New("system config still most recently gossiped by original leaseholder")
 		}
-		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+		if !tc.GetFirstStoreFromServer(t, newStoreIdx).Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 			return errors.New("system config not most recently gossiped by new leaseholder")
 		}
 		return nil

@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -115,3 +116,6 @@ func (t *testServerShim) Engines() []storage.Engine                { panic(unsup
 func (t *testServerShim) MetricsRecorder() *status.MetricsRecorder { panic(unsupportedShimMethod) }
 func (t *testServerShim) CollectionFactory() interface{}           { panic(unsupportedShimMethod) }
 func (t *testServerShim) SpanConfigKVSubscriber() interface{}      { panic(unsupportedShimMethod) }
+func (t *testServerShim) SystemConfigProvider() config.SystemConfigProvider {
+	panic(unsupportedShimMethod)
+}

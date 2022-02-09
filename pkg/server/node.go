@@ -1313,34 +1313,7 @@ func (n *Node) GossipSubscription(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	stripContent := func(_ string, content roachpb.Value) (roachpb.Value, error) {
-		// Don't strip anything.
-		return content, nil
-	}
-	if _, ok := roachpb.TenantFromContext(ctx); ok {
-		// If this is a tenant connection, strip portions of the gossip infos.
-		stripContent = func(key string, content roachpb.Value) (roachpb.Value, error) {
-			switch key {
-			case gossip.KeySystemConfig:
-				// Strip the system config down to just those keys in the
-				// GossipSubscriptionSystemConfigMask, preventing cluster-wide
-				// or system tenant-specific information to leak.
-				var ents config.SystemConfigEntries
-				if err := content.GetProto(&ents); err != nil {
-					return roachpb.Value{}, errors.Wrap(err, "could not unmarshal system config")
-				}
-
-				var newContent roachpb.Value
-				newEnts := kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
-				if err := newContent.SetProto(&newEnts); err != nil {
-					return roachpb.Value{}, errors.Wrap(err, "could not marshal system config")
-				}
-				return newContent, nil
-			default:
-				return content, nil
-			}
-		}
-	}
+	_, isSecondaryTenant := roachpb.TenantFromContext(ctx)
 
 	// Register a callback for each of the requested patterns. We don't want to
 	// block the gossip callback goroutine on a slow consumer, so we instead
@@ -1352,43 +1325,72 @@ func (n *Node) GossipSubscription(
 	entC := make(chan *roachpb.GossipSubscriptionEvent, 256)
 	entCClosed := false
 	var callbackMu syncutil.Mutex
-	const maxBlockDur = 1 * time.Millisecond
+	var systemConfigUpdateCh <-chan struct{}
 	for _, pattern := range args.Patterns {
-		pattern := pattern
-		callback := func(key string, content roachpb.Value) {
-			callbackMu.Lock()
-			defer callbackMu.Unlock()
-			if entCClosed {
-				return
-			}
-			content, err := stripContent(key, content)
-			var event roachpb.GossipSubscriptionEvent
-			if err != nil {
-				event.Error = roachpb.NewError(err)
-			} else {
+		switch pattern := pattern; pattern {
+		// Note that we need to support clients subscribing to the system config
+		// over this RPC even if the system config is no longer stored in gossip
+		// in the host cluster. To achieve this, we special-case the system config
+		// key and hook it up to the node's SystemConfigProvider.
+		//
+		// TODO(ajwerner): Remove support for the system config key in the
+		// in 22.2, or leave it and make it a no-op.
+		case gossip.KeyDeprecatedSystemConfig:
+			var unregister func()
+			systemConfigUpdateCh, unregister = n.storeCfg.SystemConfigProvider.RegisterSystemConfigChannel()
+			defer unregister()
+		default:
+			callback := func(key string, content roachpb.Value) {
+				callbackMu.Lock()
+				defer callbackMu.Unlock()
+				if entCClosed {
+					return
+				}
+				var event roachpb.GossipSubscriptionEvent
 				event.Key = key
 				event.Content = content
 				event.PatternMatched = pattern
-			}
-			select {
-			case entC <- &event:
-			default:
+				const maxBlockDur = 1 * time.Millisecond
 				select {
 				case entC <- &event:
-				case <-time.After(maxBlockDur):
-					// entC blocking for too long. The consumer must not be
-					// keeping up. Terminate the subscription.
-					close(entC)
-					entCClosed = true
+				default:
+					select {
+					case entC <- &event:
+					case <-time.After(maxBlockDur):
+						// entC blocking for too long. The consumer must not be
+						// keeping up. Terminate the subscription.
+						close(entC)
+						entCClosed = true
+					}
 				}
 			}
+			unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
+			defer unregister()
 		}
-		unregister := n.storeCfg.Gossip.RegisterCallback(pattern, callback)
-		defer unregister()
 	}
-
+	handleSystemConfigUpdate := func() error {
+		cfg := n.storeCfg.SystemConfigProvider.GetSystemConfig()
+		ents := cfg.SystemConfigEntries
+		if isSecondaryTenant {
+			ents = kvtenant.GossipSubscriptionSystemConfigMask.Apply(ents)
+		}
+		var event roachpb.GossipSubscriptionEvent
+		var content roachpb.Value
+		if err := content.SetProto(&ents); err != nil {
+			event.Error = roachpb.NewError(errors.Wrap(err, "could not marshal system config"))
+		} else {
+			event.Key = gossip.KeyDeprecatedSystemConfig
+			event.Content = content
+			event.PatternMatched = gossip.KeyDeprecatedSystemConfig
+		}
+		return stream.Send(&event)
+	}
 	for {
 		select {
+		case <-systemConfigUpdateCh:
+			if err := handleSystemConfigUpdate(); err != nil {
+				return errors.Wrap(err, "handling system config update")
+			}
 		case e, ok := <-entC:
 			if !ok {
 				// The consumer was not keeping up with gossip updates, so its
