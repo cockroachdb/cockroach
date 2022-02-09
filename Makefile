@@ -1650,7 +1650,7 @@ pkg/util/log/log_channels_generated.go: pkg/util/log/gen/main.go pkg/util/log/lo
 .PHONY: execgen
 execgen: ## Regenerate generated code for the vectorized execution engine.
 execgen: $(EXECGEN_TARGETS) bin/execgen
-	for i in $(EXECGEN_TARGETS); do echo EXECGEN $$i && ./bin/execgen -fmt=false $$i > $$i; done
+	for i in $(EXECGEN_TARGETS); do echo EXECGEN $$i && COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true ./bin/execgen -fmt=false $$i > $$i; done
 	goimports -w $(EXECGEN_TARGETS)
 
 # Add a catch-all rule for any non-existent execgen generated
