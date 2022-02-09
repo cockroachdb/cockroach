@@ -69,6 +69,7 @@ func initCLIDefaults() {
 	setUserfileContextDefaults()
 	setCertContextDefaults()
 	setDebugRecoverContextDefaults()
+	setDebugSendKVBatchContextDefaults()
 
 	initPreFlagsDefaults()
 

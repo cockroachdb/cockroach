@@ -1517,12 +1517,19 @@ func (emptyMetricStruct) MetricStruct() {}
 func (n *Node) GetSpanConfigs(
 	ctx context.Context, req *roachpb.GetSpanConfigsRequest,
 ) (*roachpb.GetSpanConfigsResponse, error) {
-	entries, err := n.spanConfigAccessor.GetSpanConfigEntriesFor(ctx, req.Spans)
+	targets := make([]spanconfig.Target, 0, len(req.Spans))
+	for _, span := range req.Spans {
+		targets = append(targets, spanconfig.MakeSpanTarget(span))
+	}
+
+	records, err := n.spanConfigAccessor.GetSpanConfigRecords(ctx, targets)
 	if err != nil {
 		return nil, err
 	}
 
-	return &roachpb.GetSpanConfigsResponse{SpanConfigEntries: entries}, nil
+	return &roachpb.GetSpanConfigsResponse{
+		SpanConfigEntries: spanconfig.RecordsToSpanConfigEntries(records),
+	}, nil
 }
 
 // UpdateSpanConfigs implements the roachpb.InternalServer interface.
@@ -1532,32 +1539,17 @@ func (n *Node) UpdateSpanConfigs(
 	// TODO(irfansharif): We want to protect ourselves from tenants creating
 	// outlandishly large string buffers here and OOM-ing the host cluster. Is
 	// the maximum protobuf message size enough of a safeguard?
-	err := n.spanConfigAccessor.UpdateSpanConfigEntries(ctx, req.ToDelete, req.ToUpsert)
+
+	toDelete := make([]spanconfig.Target, 0, len(req.ToDelete))
+	for _, toDel := range req.ToDelete {
+		toDelete = append(toDelete, spanconfig.MakeSpanTarget(toDel))
+	}
+
+	toUpsert := spanconfig.EntriesToRecords(req.ToUpsert)
+
+	err := n.spanConfigAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert)
 	if err != nil {
 		return nil, err
 	}
 	return &roachpb.UpdateSpanConfigsResponse{}, nil
-}
-
-// GetSystemSpanConfigs implements the roachpb.InternalServer interface.
-func (n *Node) GetSystemSpanConfigs(
-	ctx context.Context, _ *roachpb.GetSystemSpanConfigsRequest,
-) (*roachpb.GetSystemSpanConfigsResponse, error) {
-	entries, err := n.spanConfigAccessor.GetSystemSpanConfigEntries(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &roachpb.GetSystemSpanConfigsResponse{SystemSpanConfigEntries: entries}, nil
-}
-
-// UpdateSystemSpanConfigs implements the roachpb.InternalServer interface.
-func (n *Node) UpdateSystemSpanConfigs(
-	ctx context.Context, req *roachpb.UpdateSystemSpanConfigsRequest,
-) (*roachpb.UpdateSystemSpanConfigsResponse, error) {
-	err := n.spanConfigAccessor.UpdateSystemSpanConfigEntries(ctx, req.ToDelete, req.ToUpsert)
-	if err != nil {
-		return nil, err
-	}
-	return &roachpb.UpdateSystemSpanConfigsResponse{}, nil
 }

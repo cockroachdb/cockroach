@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/errors"
 )
@@ -39,30 +38,16 @@ type dummyKVAccessor struct {
 
 var _ spanconfig.KVAccessor = &dummyKVAccessor{}
 
-// GetSpanConfigEntriesFor is part of the KVAccessor interface.
-func (k dummyKVAccessor) GetSpanConfigEntriesFor(
-	context.Context, []roachpb.Span,
-) ([]roachpb.SpanConfigEntry, error) {
+// GetSpanConfigRecords is part of the KVAccessor interface.
+func (k dummyKVAccessor) GetSpanConfigRecords(
+	context.Context, []spanconfig.Target,
+) ([]spanconfig.Record, error) {
 	return nil, k.error
 }
 
-// UpdateSpanConfigEntries is part of the KVAccessor interface.
-func (k dummyKVAccessor) UpdateSpanConfigEntries(
-	context.Context, []roachpb.Span, []roachpb.SpanConfigEntry,
-) error {
-	return k.error
-}
-
-// GetSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k dummyKVAccessor) GetSystemSpanConfigEntries(
-	context.Context,
-) ([]roachpb.SystemSpanConfigEntry, error) {
-	return nil, k.error
-}
-
-// UpdateSystemSpanConfigEntries is part of the spanconfig.KVAccessor interface.
-func (k dummyKVAccessor) UpdateSystemSpanConfigEntries(
-	context.Context, []roachpb.SystemSpanConfigTarget, []roachpb.SystemSpanConfigEntry,
+// UpdateSpanConfigRecords is part of the KVAccessor interface.
+func (k dummyKVAccessor) UpdateSpanConfigRecords(
+	context.Context, []spanconfig.Target, []spanconfig.Record,
 ) error {
 	return k.error
 }

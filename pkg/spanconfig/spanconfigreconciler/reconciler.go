@@ -119,7 +119,7 @@ func New(
 //
 // TODO(irfansharif): The descriptions above presume holding the entire set of
 // span configs in memory, but we could break away from that by adding
-// pagination + retrieval limit to the GetSpanConfigEntriesFor API. We'd then
+// pagination + retrieval limit to the GetSpanConfigRecords API. We'd then
 // paginate through chunks of the keyspace at a time, do a "full reconciliation
 // pass" over just that chunk, and continue.
 //
@@ -211,20 +211,20 @@ func (f *fullReconciler) reconcile(
 
 	// Translate the entire SQL state to ensure KV reflects the most up-to-date
 	// view of things.
-	var entries []roachpb.SpanConfigEntry
-	entries, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
+	var records []spanconfig.Record
+	records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, f.sqlTranslator)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 
-	updates := make([]spanconfig.Update, len(entries))
-	for i, entry := range entries {
-		updates[i] = spanconfig.Update(entry)
+	updates := make([]spanconfig.Update, len(records))
+	for i, record := range records {
+		updates[i] = spanconfig.Update(record)
 	}
 
 	toDelete, toUpsert := storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, updates...)
 	if len(toDelete) != 0 || len(toUpsert) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 	}
@@ -232,20 +232,20 @@ func (f *fullReconciler) reconcile(
 	// Keep a copy of the current view of the world (i.e. KVAccessor
 	// contents). We could also fetch everything from KV, but making a copy here
 	// is cheaper (and saves an RTT). We'll later mutate
-	// storeWithExistingSpanConfigs to determine what extraneous entries are in
+	// storeWithExistingSpanConfigs to determine what extraneous records are in
 	// KV, in order to delete them. After doing so, we'll issue those same
 	// deletions against this copy in order for it to reflect an up-to-date view
 	// of span configs.
 	storeWithLatestSpanConfigs = storeWithExistingSpanConfigs.Copy(ctx)
 
-	// Delete all updated spans in a store populated with all current entries.
+	// Delete all updated spans in a store populated with all current records.
 	// Because our translation above captures the entire SQL state, deleting all
-	// "updates" will leave behind only the extraneous entries in KV -- we'll
+	// "updates" will leave behind only the extraneous records in KV -- we'll
 	// get rid of them below.
 	var storeWithExtraneousSpanConfigs *spanconfigstore.Store
 	{
 		for _, u := range updates {
-			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Span))
+			storeWithExistingSpanConfigs.Apply(ctx, false /* dryrun */, spanconfig.Deletion(u.Target))
 		}
 		storeWithExtraneousSpanConfigs = storeWithExistingSpanConfigs
 	}
@@ -270,7 +270,7 @@ func (f *fullReconciler) reconcile(
 func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
-	var tenantSpan roachpb.Span
+	var target spanconfig.Target
 	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
@@ -278,34 +278,34 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		// TODO(irfansharif): Should we include the scratch range here? Some
 		// tests make use of it; we may want to declare configs over it and have
 		// it considered all the same.
-		tenantSpan = roachpb.Span{
+		target = spanconfig.MakeSpanTarget(roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
 			EndKey: keys.TableDataMax,
-		}
+		})
 		if f.knobs.ConfigureScratchRange {
-			tenantSpan.EndKey = keys.ScratchRangeMax
+			target.EndKey = keys.ScratchRangeMax
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
 		tenPrefix := keys.MakeTenantPrefix(f.tenID)
-		tenantSpan = roachpb.Span{
+		target = spanconfig.MakeSpanTarget(roachpb.Span{
 			Key:    tenPrefix,
 			EndKey: tenPrefix.PrefixEnd(),
-		}
+		})
 	}
 
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
 		// Fully populate the store with KVAccessor contents.
-		entries, err := f.kvAccessor.GetSpanConfigEntriesFor(ctx, []roachpb.Span{
-			tenantSpan,
+		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
+			target,
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		for _, entry := range entries {
-			store.Apply(ctx, false /* dryrun */, spanconfig.Update(entry))
+		for _, record := range records {
+			store.Apply(ctx, false /* dryrun */, spanconfig.Update(record))
 		}
 	}
 	return store, nil
@@ -314,24 +314,23 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 // deleteExtraneousSpanConfigs deletes all extraneous span configs from KV.
 func (f *fullReconciler) deleteExtraneousSpanConfigs(
 	ctx context.Context, storeWithExtraneousSpanConfigs *spanconfigstore.Store,
-) ([]roachpb.Span, error) {
-	var extraneousSpans []roachpb.Span
-	if err := storeWithExtraneousSpanConfigs.ForEachOverlapping(ctx, keys.EverythingSpan,
-		func(entry roachpb.SpanConfigEntry) error {
-			extraneousSpans = append(extraneousSpans, entry.Span)
-			return nil
-		},
+) ([]spanconfig.Target, error) {
+	var extraneousTargets []spanconfig.Target
+	if err := storeWithExtraneousSpanConfigs.Iterate(func(record spanconfig.Record) error {
+		extraneousTargets = append(extraneousTargets, record.Target)
+		return nil
+	},
 	); err != nil {
 		return nil, err
 	}
 
 	// Delete the extraneous entries, if any.
-	if len(extraneousSpans) != 0 {
-		if err := f.kvAccessor.UpdateSpanConfigEntries(ctx, extraneousSpans, nil); err != nil {
+	if len(extraneousTargets) != 0 {
+		if err := f.kvAccessor.UpdateSpanConfigRecords(ctx, extraneousTargets, nil); err != nil {
 			return nil, err
 		}
 	}
-	return extraneousSpans, nil
+	return extraneousTargets, nil
 }
 
 // incrementalReconciler is a single orchestrator for the incremental
@@ -399,12 +398,12 @@ func (r *incrementalReconciler) reconcile(
 					Key:    r.codec.TablePrefix(uint32(missingID)),
 					EndKey: r.codec.TablePrefix(uint32(missingID)).PrefixEnd(),
 				}
-				updates = append(updates, spanconfig.Deletion(tableSpan))
+				updates = append(updates, spanconfig.Deletion(spanconfig.MakeSpanTarget(tableSpan)))
 			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
 			if len(toDelete) != 0 || len(toUpsert) != 0 {
-				if err := r.kvAccessor.UpdateSpanConfigEntries(ctx, toDelete, toUpsert); err != nil {
+				if err := r.kvAccessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {
 					return err
 				}
 			}

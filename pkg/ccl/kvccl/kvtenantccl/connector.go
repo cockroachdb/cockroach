@@ -456,11 +456,15 @@ func (c *Connector) TokenBucket(
 	return nil, ctx.Err()
 }
 
-// GetSpanConfigEntriesFor implements the spanconfig.KVAccessor interface.
-func (c *Connector) GetSpanConfigEntriesFor(
-	ctx context.Context, spans []roachpb.Span,
-) (entries []roachpb.SpanConfigEntry, _ error) {
+// GetSpanConfigRecords implements the spanconfig.KVAccessor interface.
+func (c *Connector) GetSpanConfigRecords(
+	ctx context.Context, targets []spanconfig.Target,
+) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		spans := make([]roachpb.Span, 0, len(targets))
+		for _, target := range targets {
+			spans = append(spans, *target.GetSpan())
+		}
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
 			Spans: spans,
 		})
@@ -468,23 +472,31 @@ func (c *Connector) GetSpanConfigEntriesFor(
 			return err
 		}
 
-		entries = resp.SpanConfigEntries
+		records = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return entries, nil
+	return records, nil
 }
 
-// UpdateSpanConfigEntries implements the spanconfig.KVAccessor
+// UpdateSpanConfigRecords implements the spanconfig.KVAccessor
 // interface.
-func (c *Connector) UpdateSpanConfigEntries(
-	ctx context.Context, toDelete []roachpb.Span, toUpsert []roachpb.SpanConfigEntry,
+func (c *Connector) UpdateSpanConfigRecords(
+	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
+	spansToDelete := make([]roachpb.Span, 0, len(toDelete))
+	for _, toDel := range toDelete {
+		spansToDelete = append(spansToDelete, roachpb.Span(toDel))
+	}
+
+	entriesToUpsert := spanconfig.RecordsToSpanConfigEntries(toUpsert)
+
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
+
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: toDelete,
-			ToUpsert: toUpsert,
+			ToDelete: spansToDelete,
+			ToUpsert: entriesToUpsert,
 		})
 		return err
 	})
@@ -493,39 +505,6 @@ func (c *Connector) UpdateSpanConfigEntries(
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
-}
-
-// GetSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
-func (c *Connector) GetSystemSpanConfigEntries(
-	ctx context.Context,
-) (entries []roachpb.SystemSpanConfigEntry, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		resp, err := c.GetSystemSpanConfigs(ctx, &roachpb.GetSystemSpanConfigsRequest{})
-		if err != nil {
-			return err
-		}
-
-		entries = resp.SystemSpanConfigEntries
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return entries, nil
-}
-
-// UpdateSystemSpanConfigEntries implements the spanconfig.KVAccessor interface.
-func (c *Connector) UpdateSystemSpanConfigEntries(
-	ctx context.Context,
-	toDelete []roachpb.SystemSpanConfigTarget,
-	toUpsert []roachpb.SystemSpanConfigEntry,
-) error {
-	return c.withClient(ctx, func(ctx context.Context, c *client) error {
-		_, err := c.UpdateSystemSpanConfigs(ctx, &roachpb.UpdateSystemSpanConfigsRequest{
-			ToDelete: toDelete,
-			ToUpsert: toUpsert,
-		})
-		return err
-	})
 }
 
 // withClient is a convenience wrapper that executes the given closure while
