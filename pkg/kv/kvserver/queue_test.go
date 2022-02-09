@@ -988,7 +988,7 @@ func TestQueueRateLimitedTimeoutFunc(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
 			queueGuaranteedProcessingTimeBudget.Override(ctx, &st.SV, tc.guaranteedProcessingTime)
 			recoverySnapshotRate.Override(ctx, &st.SV, tc.rateLimit)
-			tf := makeRateLimitedTimeoutFunc(recoverySnapshotRate)
+			tf := makeRateLimitedTimeoutFunc(recoverySnapshotRate, 0)
 			repl := mvccStatsReplicaInQueue{
 				size: tc.replicaSize,
 			}

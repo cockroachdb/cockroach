@@ -49,6 +49,15 @@ import (
 // why this value was chosen in particular, but it seems to work.
 const mergeApplicationTimeout = 5 * time.Second
 
+// sendSnapshotTimeout is the timeout for sending snapshots. While a snapshot is
+// in transit, Raft log truncation is halted to allow the recipient to catch up.
+// If the snapshot takes very long to transfer for whatever reason this can
+// cause the Raft log to grow very large. We therefore set a conservative
+// timeout to eventually allow Raft log truncation while avoiding snapshot
+// starvation -- even if another snapshot is sent immediately, this still
+// allows truncation up to the new snapshot index.
+const sendSnapshotTimeout = 20 * time.Minute
+
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
@@ -1684,7 +1693,11 @@ func (r *Replica) initializeRaftLearners(
 		// orphaned learner. Second, this tickled some bugs in etcd/raft around
 		// switching between StateSnapshot and StateProbe. Even if we worked through
 		// these, it would be susceptible to future similar issues.
-		if err := r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority); err != nil {
+		err := contextutil.RunWithTimeout(
+			ctx, "send-learner-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+				return r.sendSnapshot(ctx, rDesc, kvserverpb.SnapshotRequest_INITIAL, priority)
+			})
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -2434,6 +2447,9 @@ func (r *Replica) sendSnapshot(
 		// finish sending the snapshot.
 		r.reportSnapshotStatus(ctx, recipient.ReplicaID, retErr)
 	}()
+
+	ctx, cancel := context.WithTimeout(ctx, sendSnapshotTimeout) // nolint:context
+	defer cancel()
 
 	snap, err := r.GetSnapshot(ctx, snapType, recipient.StoreID)
 	if err != nil {

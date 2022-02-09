@@ -91,7 +91,7 @@ func newConsistencyQueue(store *Store) *consistencyQueue {
 			failures:             store.metrics.ConsistencyQueueFailures,
 			pending:              store.metrics.ConsistencyQueuePending,
 			processingNanos:      store.metrics.ConsistencyQueueProcessingNanos,
-			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate),
+			processTimeoutFunc:   makeRateLimitedTimeoutFunc(consistencyCheckRate, 0),
 		},
 	)
 	return q

@@ -71,8 +71,10 @@ func defaultProcessTimeoutFunc(cs *cluster.Settings, _ replicaInQueue) time.Dura
 // is a function of the size of the range and the maximum allowed rate of data
 // transfer that adheres to a minimum timeout specified in a cluster setting.
 //
-// The parameter controls which rate to use.
-func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProcessTimeoutFunc {
+// The parameters controls which rate to use and the max timeout (if non-zero).
+func makeRateLimitedTimeoutFunc(
+	rateSetting *settings.ByteSizeSetting, maximumTimeout time.Duration,
+) queueProcessTimeoutFunc {
 	return func(cs *cluster.Settings, r replicaInQueue) time.Duration {
 		minimumTimeout := queueGuaranteedProcessingTimeBudget.Get(&cs.SV)
 		// NB: In production code this will type assertion will always succeed.
@@ -87,6 +89,10 @@ func makeRateLimitedTimeoutFunc(rateSetting *settings.ByteSizeSetting) queueProc
 		totalBytes := stats.KeyBytes + stats.ValBytes + stats.IntentBytes + stats.SysBytes
 		estimatedDuration := time.Duration(totalBytes/snapshotRate) * time.Second
 		timeout := estimatedDuration * permittedRangeScanSlowdown
+		if maximumTimeout > 0 && timeout > maximumTimeout {
+			timeout = maximumTimeout
+		}
+		// Allow minimum timeout (guaranteed processing time) to override given max.
 		if timeout < minimumTimeout {
 			timeout = minimumTimeout
 		}

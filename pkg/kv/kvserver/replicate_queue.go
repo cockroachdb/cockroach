@@ -186,7 +186,7 @@ func newReplicateQueue(store *Store, allocator Allocator) *replicateQueue {
 			// so we use the raftSnapshotQueueTimeoutFunc. This function sets a
 			// timeout based on the range size and the sending rate in addition
 			// to consulting the setting which controls the minimum timeout.
-			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
+			processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate, sendSnapshotTimeout),
 			successes:          store.metrics.ReplicateQueueSuccesses,
 			failures:           store.metrics.ReplicateQueueFailures,
 			pending:            store.metrics.ReplicateQueuePending,
