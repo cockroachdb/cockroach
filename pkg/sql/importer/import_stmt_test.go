@@ -76,7 +76,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createAvroData(
+func CreateAvroData(
 	t *testing.T, name string, fields []map[string]interface{}, rows []map[string]interface{},
 ) string {
 	var data bytes.Buffer
@@ -1573,7 +1573,7 @@ func TestImportRowLimit(t *testing.T) {
 	avroRows := []map[string]interface{}{
 		{"a": 1, "b": 2}, {"a": 3, "b": 4}, {"a": 5, "b": 6},
 	}
-	avroData := createAvroData(t, "t", avroField, avroRows)
+	avroData := CreateAvroData(t, "t", avroField, avroRows)
 
 	tests := []struct {
 		name        string
@@ -4551,7 +4551,7 @@ func TestImportComputed(t *testing.T) {
 	avroRows := []map[string]interface{}{
 		{"a": 1, "b": 2}, {"a": 3, "b": 4},
 	}
-	avroData := createAvroData(t, "t", avroField, avroRows)
+	avroData := CreateAvroData(t, "t", avroField, avroRows)
 	pgdumpData := `
 CREATE TABLE users (a INT, b INT, c INT AS (a + b) STORED);
 INSERT INTO users (a, b) VALUES (1, 2), (3, 4);

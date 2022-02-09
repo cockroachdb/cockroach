@@ -216,6 +216,7 @@ go_test(
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/timeutil/pgdate",
         "//pkg/workload",
         "//pkg/workload/bank",
         "//pkg/workload/tpcc",
