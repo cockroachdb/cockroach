@@ -88,19 +88,24 @@ func NewTxnKVStreamer(
 // GetResponses).
 func (f *TxnKVStreamer) proceedWithLastResult(
 	ctx context.Context,
-) (kvs []roachpb.KeyValue, batchResp []byte, err error) {
+) (skip bool, kvs []roachpb.KeyValue, batchResp []byte, err error) {
 	result := f.lastResultState.Result
 	if get := result.GetResp; get != nil {
 		if get.IntentValue != nil {
-			return nil, nil, errors.AssertionFailedf(
+			return false, nil, nil, errors.AssertionFailedf(
 				"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
 			)
+		}
+		if get.Value == nil {
+			// Nothing found in this particular response, so we skip it.
+			f.releaseLastResult(ctx)
+			return true, nil, nil, nil
 		}
 		pos := result.EnqueueKeysSatisfied[f.lastResultState.numEmitted]
 		origSpan := f.spans[pos]
 		f.lastResultState.numEmitted++
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
-		return f.getResponseScratch[:], nil, nil
+		return false, f.getResponseScratch[:], nil, nil
 	}
 	scan := result.ScanResp
 	if len(scan.BatchResponses) > 0 {
@@ -111,7 +116,7 @@ func (f *TxnKVStreamer) proceedWithLastResult(
 	}
 	// Note that scan.Rows and batchResp might be nil when the ScanResponse is
 	// empty, and the caller (the KVFetcher) will skip over it.
-	return scan.Rows, batchResp, nil
+	return false, scan.Rows, batchResp, nil
 }
 
 func (f *TxnKVStreamer) releaseLastResult(ctx context.Context) {
@@ -137,7 +142,7 @@ func (f *TxnKVStreamer) nextBatch(
 	if f.lastResultState.numEmitted < len(f.lastResultState.EnqueueKeysSatisfied) {
 		// Note that we should never get an error here since we're processing
 		// the same result again.
-		kvs, batchResp, err = f.proceedWithLastResult(ctx)
+		_, kvs, batchResp, err = f.proceedWithLastResult(ctx)
 		return true, kvs, batchResp, err
 	}
 
@@ -147,7 +152,7 @@ func (f *TxnKVStreamer) nextBatch(
 	}
 
 	// Process the next result we have already received from the streamer.
-	if len(f.results) > 0 {
+	for len(f.results) > 0 {
 		// Peel off the next result and set it into lastResultState.
 		f.lastResultState.Result = f.results[0]
 		f.lastResultState.numEmitted = 0
@@ -156,7 +161,14 @@ func (f *TxnKVStreamer) nextBatch(
 		// the next iteration.
 		f.results[0] = kvstreamer.Result{}
 		f.results = f.results[1:]
-		kvs, batchResp, err = f.proceedWithLastResult(ctx)
+		var skip bool
+		skip, kvs, batchResp, err = f.proceedWithLastResult(ctx)
+		if err != nil {
+			return false, nil, nil, err
+		}
+		if skip {
+			continue
+		}
 		return true, kvs, batchResp, err
 	}
 
