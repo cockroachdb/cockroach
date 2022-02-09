@@ -211,7 +211,7 @@ pointOuterLoop:
 				}
 			case outsideLinearRing:
 			default:
-				return false, errors.Newf("findPointSideOfPolygon returned unknown linearRingSide %d", pointSide)
+				return false, errors.AssertionFailedf("findPointSideOfPolygon returned unknown linearRingSide %d", pointSide)
 			}
 		}
 		if !curIntersects && eventListener.ExitIfPointDoesNotIntersect() {
