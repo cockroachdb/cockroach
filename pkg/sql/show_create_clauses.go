@@ -33,9 +33,10 @@ import (
 
 // tableComments stores the comment data for a table.
 type tableComments struct {
-	comment *string
-	columns []comment
-	indexes []comment
+	comment     *string
+	columns     []comment
+	indexes     []comment
+	constraints []comment
 }
 
 type comment struct {
@@ -59,7 +60,8 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 			row := it.Cur()
 			commentType := keys.CommentType(tree.MustBeDInt(row[0]))
 			switch commentType {
-			case keys.TableCommentType, keys.ColumnCommentType, keys.IndexCommentType:
+			case keys.TableCommentType, keys.ColumnCommentType,
+				keys.IndexCommentType, keys.ConstraintCommentType:
 				subID := int(tree.MustBeDInt(row[2]))
 				cmt := string(tree.MustBeDString(row[3]))
 
@@ -74,6 +76,8 @@ func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc 
 					tc.columns = append(tc.columns, comment{subID, cmt})
 				case keys.IndexCommentType:
 					tc.indexes = append(tc.indexes, comment{subID, cmt})
+				case keys.ConstraintCommentType:
+					tc.constraints = append(tc.constraints, comment{subID, cmt})
 				}
 			}
 		}
@@ -291,6 +295,25 @@ func showComments(
 				Index: tree.UnrestrictedName(idx.GetName()),
 			},
 			Comment: &indexComment.comment,
+		})
+	}
+
+	// Get all the constraints for the table and create a map by ID.
+	constraints, err := table.GetConstraintInfo()
+	if err != nil {
+		return err
+	}
+	constraintIDToConstraint := make(map[descpb.ConstraintID]string)
+	for constraintName, constraint := range constraints {
+		constraintIDToConstraint[constraint.ConstraintID] = constraintName
+	}
+	for _, constraintComment := range tc.constraints {
+		f.WriteString(";\n")
+		constraintName := constraintIDToConstraint[descpb.ConstraintID(constraintComment.subID)]
+		f.FormatNode(&tree.CommentOnConstraint{
+			Constraint: tree.Name(constraintName),
+			Table:      tn.ToUnresolvedObjectName(),
+			Comment:    &constraintComment.comment,
 		})
 	}
 
