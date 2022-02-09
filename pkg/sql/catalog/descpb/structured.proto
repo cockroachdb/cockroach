@@ -533,15 +533,17 @@ message IndexDescriptor {
   // the merge process. See #75720 for further details.
   optional bool use_delete_preserving_encoding = 24 [(gogoproto.nullable) = false];
 
-  // Used within the table descriptor to uniquely identify individual
-  // constraints, which is only set for primary keys and unique secondary
-  // indexes.
-  optional uint32 constraint_id = 33 [(gogoproto.customname) = "ConstraintID",
-    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
-
   // CreatedAtNanos, if non-zero, represents an approximate time at which the
   // index was created.
   optional int64 created_at_nanos = 25 [(gogoproto.nullable) = false];
+
+  // Used within the table descriptor to uniquely identify individual
+  // constraints, which is only set for primary keys and unique secondary
+  // indexes.
+  optional uint32 constraint_id = 26 [(gogoproto.customname) = "ConstraintID",
+    (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+
+  // Next ID: 27
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
