@@ -1589,6 +1589,16 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	// upwards. Here we map the persisted cluster version to the
 	// corresponding format major version, ratcheting Pebble's format
 	// major version if necessary.
+	//
+	// Note that when introducing a new Pebble format version that relies on _all_
+	// engines in a cluster being at the same, newer format major version, two
+	// cluster versions should be used. The first is used to enable the feature in
+	// Pebble, and should control the version ratchet below. The second is used as
+	// a feature flag. The use of two cluster versions relies on a guarantee
+	// provided by the migration framework (see pkg/migration) that if a node is
+	// at a version X+1, it is guaranteed that all nodes have already ratcheted
+	// their store version to the version X that enabled the feature at the Pebble
+	// level.
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
