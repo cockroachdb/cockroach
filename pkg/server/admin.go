@@ -550,6 +550,11 @@ func (s *adminServer) getDatabaseStats(
 	responses := make(chan tableStatsResponse, len(tableSpans))
 
 	for tableName, tableSpan := range tableSpans {
+		// Because Go reuses loop variables across iterations, we must
+		// make these local, stable copies for the async task to close
+		// over, else our results will be nondeterministic.
+		tableName := tableName
+		tableSpan := tableSpan
 		if err := s.server.stopper.RunAsyncTask(
 			ctx, "server.adminServer: requesting table stats",
 			func(ctx context.Context) {
