@@ -143,6 +143,21 @@ func (c constraintToUpdate) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstr
 	return c.desc.UniqueWithoutIndexConstraint
 }
 
+// GetConstraintID returns the ID for the constraint.
+func (c constraintToUpdate) GetConstraintID() descpb.ConstraintID {
+	switch c.desc.ConstraintType {
+	case descpb.ConstraintToUpdate_CHECK:
+		return c.desc.Check.ConstraintID
+	case descpb.ConstraintToUpdate_FOREIGN_KEY:
+		return c.ForeignKey().ConstraintID
+	case descpb.ConstraintToUpdate_NOT_NULL:
+		return 0
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		return c.UniqueWithoutIndex().ConstraintID
+	}
+	panic("unknown constraint type")
+}
+
 // primaryKeySwap implements the catalog.PrimaryKeySwap interface.
 type primaryKeySwap struct {
 	maybeMutation

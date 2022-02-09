@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -1541,7 +1540,36 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = tree.NewDOid(tree.MustBeDInt(objID))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
-				objID = tree.NewDOid(tree.MustBeDInt(objID))
+				tableDesc, err := p.Descriptors().GetImmutableTableByID(
+					ctx,
+					p.txn,
+					descpb.ID(tree.MustBeDInt(objID)),
+					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+				if err != nil {
+					return err
+				}
+				schema, err := p.Descriptors().GetImmutableSchemaByID(
+					ctx,
+					p.txn,
+					tableDesc.GetParentSchemaID(),
+					tree.CommonLookupFlags{
+						Required: true,
+					})
+				if err != nil {
+					return err
+				}
+				constraints, err := tableDesc.GetConstraintInfo()
+				if err != nil {
+					return err
+				}
+				var constraint descpb.ConstraintDetail
+				for _, constraintToCheck := range constraints {
+					if constraintToCheck.ConstraintID == descpb.ConstraintID(tree.MustBeDInt(objSubID)) {
+						constraint = constraintToCheck
+						break
+					}
+				}
+				objID = getOIDFromConstraint(constraint, dbContext.GetID(), schema.GetName(), tableDesc)
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:
@@ -1561,6 +1589,55 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 		}
 		return nil
 	},
+}
+
+func getOIDFromConstraint(
+	constraint descpb.ConstraintDetail,
+	dbID descpb.ID,
+	schemaName string,
+	tableDesc catalog.TableDescriptor,
+) *tree.DOid {
+	hasher := makeOidHasher()
+	tableID := tableDesc.GetID()
+	var oid *tree.DOid
+	if constraint.CheckConstraint != nil {
+		oid = hasher.CheckConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.CheckConstraint)
+	} else if constraint.FK != nil {
+		oid = hasher.ForeignKeyConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.FK,
+		)
+	} else if constraint.UniqueWithoutIndexConstraint != nil {
+		oid = hasher.UniqueWithoutIndexConstraintOid(
+			dbID,
+			schemaName,
+			tableID,
+			constraint.UniqueWithoutIndexConstraint,
+		)
+	} else if constraint.Index != nil {
+		if constraint.Index.ID == tableDesc.GetPrimaryIndexID() {
+			oid = hasher.PrimaryKeyConstraintOid(
+				dbID,
+				schemaName,
+				tableID,
+				constraint.Index,
+			)
+		} else {
+			oid = hasher.UniqueConstraintOid(
+				dbID,
+				schemaName,
+				tableID,
+				constraint.Index.ID,
+			)
+		}
+	}
+	return oid
 }
 
 var pgCatalogSharedDescriptionTable = virtualSchemaTable{
@@ -4376,9 +4453,4 @@ func stringOid(s string) *tree.DOid {
 	h := makeOidHasher()
 	h.writeStr(s)
 	return h.getOid()
-}
-
-// MakeConstraintOidBuilder constructs an OID builder.
-func MakeConstraintOidBuilder() descmetadata.ConstraintOidBuilder {
-	return makeOidHasher()
 }

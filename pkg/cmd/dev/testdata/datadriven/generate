@@ -1,0 +1,15 @@
+dev gen protobuf
+----
+bazel run //pkg/gen:go_proto
+
+dev gen bazel
+----
+bazel info workspace --color=no
+build/bazelutil/bazel-generate.sh
+
+dev generate bazel --mirror --force
+----
+bazel info workspace --color=no
+export COCKROACH_BAZEL_CAN_MIRROR=1
+export COCKROACH_BAZEL_FORCE_GENERATE=1
+build/bazelutil/bazel-generate.sh
