@@ -192,7 +192,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+			po.tableDesc.RowLevelTTL = nil
+			return nil
 		},
 	},
 	`ttl_automatic_column`: {
