@@ -13,7 +13,6 @@ package coldata
 import (
 	"encoding/binary"
 	"fmt"
-	"reflect"
 	"strings"
 	"unsafe"
 
@@ -53,9 +52,16 @@ import (
 // bytes for the offset. The offset determines the position of 'start' within
 // Bytes.buffer.
 type element struct {
-	data           []byte
-	_              [paddingLength]byte
-	lengthOrOffset int32
+	header        sliceHeader
+	_             [6]byte
+	inlinedLength byte
+	nonInlined    bool
+}
+
+type sliceHeader struct {
+	bufferOffset int
+	len          int
+	cap          int
 }
 
 // TODO: updates comments about 20 bytes of inlinable space.
@@ -64,54 +70,9 @@ type element struct {
 // bit system.
 const ElementSize = int64(unsafe.Sizeof(element{}))
 
-// paddingLength is the number of bytes that are not assigned to any particular
-// field in element and are such that ElementSize is exactly 32 on a 64 bit
-// system.
-const paddingLength = 4
-
-// lenOffsetInSliceHeader is the offset of Len field in reflect.SliceHeader
-// relative to the start of the struct.
-const lenOffsetInSliceHeader = unsafe.Sizeof(uintptr(0))
-
 // BytesMaxInlineLength is the maximum length of a []byte that can be inlined
 // within element.
-const BytesMaxInlineLength = int(2*unsafe.Sizeof(int(0))) + paddingLength
-
-// Assert that the layout of the slice header hasn't changed - we expect the
-// layout as
-//   type SliceHeader struct {
-//	   Data uintptr
-//	   Len  int
-//	   Cap  int
-//   }
-func init() {
-	sliceHeaderSize := unsafe.Sizeof([]byte{})
-	expectedSliceHeaderSize := unsafe.Sizeof(uintptr(0)) + 2*unsafe.Sizeof(0)
-	if sliceHeaderSize != expectedSliceHeaderSize {
-		panic(errors.AssertionFailedf(
-			"unexpectedly the size of the slice header changed: expected %d, actual %d",
-			expectedSliceHeaderSize, sliceHeaderSize,
-		))
-	}
-	var sh reflect.SliceHeader
-	actualDataOffset := uintptr(unsafe.Pointer(&sh.Data)) - uintptr(unsafe.Pointer(&sh))
-	if actualDataOffset != 0 {
-		panic(errors.AssertionFailedf("unexpectedly Data field is not the first in reflect.SliceHeader"))
-	}
-	actualLenOffset := uintptr(unsafe.Pointer(&sh.Len)) - uintptr(unsafe.Pointer(&sh))
-	if actualLenOffset != lenOffsetInSliceHeader {
-		panic(errors.AssertionFailedf(
-			"unexpectedly Len field is %d bytes after Data, not %d bytes",
-			actualLenOffset, lenOffsetInSliceHeader,
-		))
-	}
-}
-
-// isInlined returns true if the []byte value is inlined in e.
-//gcassert:inline
-func (e *element) isInlined() bool {
-	return *(*uintptr)(unsafe.Pointer(&e.data)) == 0
-}
+const BytesMaxInlineLength = int(ElementSize - 2)
 
 // inlinedSlice returns 19 bytes of space within e that can be used for storing
 // a value inlined, as a slice.
@@ -120,28 +81,28 @@ func (e *element) inlinedSlice() []byte {
 	// Take the pointer to the data, skip first 8 bytes (past
 	// reflect.SliceHeader.Data), convert the following 19 bytes into a pointer
 	// to [19]byte, and then make a slice out of it.
-	return (*(*[BytesMaxInlineLength]byte)(unsafe.Pointer(uintptr(unsafe.Pointer(&e.data)) + lenOffsetInSliceHeader)))[:]
+	return (*(*[BytesMaxInlineLength]byte)(unsafe.Pointer(&e.header)))[:]
 }
 
 //gcassert:inline
-func (e *element) get() []byte {
-	if e.isInlined() {
-		return e.inlinedSlice()[:e.lengthOrOffset:BytesMaxInlineLength]
+func (e *element) get(b *Bytes) []byte {
+	if !e.nonInlined {
+		return e.inlinedSlice()[:e.inlinedLength:BytesMaxInlineLength]
 	}
-	return e.data
+	return b.buffer[e.header.bufferOffset : e.header.bufferOffset+e.header.len : e.header.bufferOffset+e.header.cap]
 }
 
 //gcassert:inline
 func (e *element) len() int {
-	if e.isInlined() {
-		return int(e.lengthOrOffset)
+	if !e.nonInlined {
+		return int(e.inlinedLength)
 	}
-	return len(e.data)
+	return e.header.len
 }
 
 func (e *element) set(v []byte, b *Bytes) {
 	if len(v) <= BytesMaxInlineLength {
-		*e = element{lengthOrOffset: int32(len(v))}
+		*e = element{inlinedLength: byte(len(v))}
 		copy(e.inlinedSlice(), v)
 	} else {
 		e.setNonInlined(v, b)
@@ -150,23 +111,19 @@ func (e *element) set(v []byte, b *Bytes) {
 
 func (e *element) setNonInlined(v []byte, b *Bytes) {
 	// Check if we there was an old non-inlined value we can overwrite.
-	if !e.isInlined() && cap(e.data) >= len(v) {
-		e.data = e.data[:len(v)]
-		copy(e.data, v)
+	if e.nonInlined && e.header.cap >= len(v) {
+		copy(e.get(b)[:len(v)], v)
+		e.header.len = len(v)
 	} else {
-		oldBuffer := b.buffer
-		b.buffer = append(b.buffer, v...)
-		if cap(oldBuffer) != cap(b.buffer) && cap(oldBuffer) > 0 {
-			// The buffer has been reallocated, so we have to update old
-			// non-inlined elements.
-			for i := 0; i < b.firstUnsetIdx; i++ {
-				if e := b.elements[i]; !e.isInlined() {
-					e.data = b.buffer[e.lengthOrOffset : e.lengthOrOffset+int32(len(e.data)) : e.lengthOrOffset+int32(cap(e.data))]
-				}
-			}
+		*e = element{
+			header: sliceHeader{
+				bufferOffset: len(b.buffer),
+				len:          len(v),
+				cap:          len(v),
+			},
+			nonInlined: true,
 		}
-		e.data = b.buffer[len(oldBuffer) : len(oldBuffer)+len(v) : len(oldBuffer)+len(v)]
-		e.lengthOrOffset = int32(len(oldBuffer))
+		b.buffer = append(b.buffer, v...)
 	}
 }
 
@@ -177,10 +134,6 @@ type Bytes struct {
 	// buffer contains all values that couldn't be inlined within the
 	// corresponding elements.
 	buffer []byte
-	// firstUnsetIdx tracks the element with the smallest index that has not
-	// been set yet. In other words all elements starting with this index are
-	// expected to contain a zero value.
-	firstUnsetIdx int
 	// isWindow indicates whether this Bytes is a "window" into another Bytes.
 	// If it is, no modifications are allowed (all of them will panic).
 	isWindow bool
@@ -198,7 +151,7 @@ func NewBytes(n int) *Bytes {
 // Note this function call is mostly inlined except in a handful of very large
 // generated functions, so we can't add the gcassert directive for it.
 func (b *Bytes) Get(i int) []byte {
-	return b.elements[i].get()
+	return b.elements[i].get(b)
 }
 
 // Set sets the ith []byte in Bytes.
@@ -212,9 +165,6 @@ func (b *Bytes) Set(i int, v []byte) {
 		}
 	}
 	b.elements[i].set(v, b)
-	if i+1 > b.firstUnsetIdx {
-		b.firstUnsetIdx = i + 1
-	}
 }
 
 // Window creates a "window" into the receiver. It behaves similarly to Golang's
@@ -236,6 +186,7 @@ func (b *Bytes) Window(start, end int) *Bytes {
 	}
 	return &Bytes{
 		elements: b.elements[start:end],
+		buffer:   b.buffer,
 		isWindow: true,
 	}
 }
@@ -290,9 +241,6 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 		for i := 0; i < toCopy; i++ {
 			b.Set(destIdx+i, src.Get(srcStartIdx+i))
 		}
-	}
-	if destIdx+toCopy > b.firstUnsetIdx {
-		b.firstUnsetIdx = destIdx + toCopy
 	}
 }
 
@@ -362,10 +310,8 @@ func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 		b.zero(newLen)
 		b.elements = b.elements[:newLen]
 	}
-	b.firstUnsetIdx = destIdx
 	for i := 0; i < len(srcElementsToCopy); i++ {
-		b.elements[b.firstUnsetIdx].set(srcElementsToCopy[i].get(), b)
-		b.firstUnsetIdx++
+		b.elements[destIdx+i].set(srcElementsToCopy[i].get(src), b)
 	}
 }
 
@@ -377,7 +323,6 @@ func (b *Bytes) AppendVal(v []byte) {
 	}
 	b.elements = append(b.elements, element{})
 	b.elements[len(b.elements)-1].set(v, b)
-	b.firstUnsetIdx = len(b.elements)
 }
 
 // Len returns how many []byte values the receiver contains.
@@ -414,10 +359,10 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 // Panics if passed an invalid element.
 //gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
-	if b.elements[idx].isInlined() {
+	if !b.elements[idx].nonInlined {
 		return ElementSize
 	}
-	return ElementSize + int64(cap(b.elements[idx].data))
+	return ElementSize + int64(b.elements[idx].header.cap)
 }
 
 // Abbreviated returns a uint64 slice where each uint64 represents the first
@@ -471,8 +416,8 @@ var zeroElements = make([]element, MaxBatchSize)
 // first unset element.
 //gcassert:inline
 func (b *Bytes) zero(startIdx int) {
-	for n := startIdx; n < b.firstUnsetIdx; {
-		n += copy(b.elements[n:b.firstUnsetIdx], zeroElements)
+	for n := startIdx; n < len(b.elements); {
+		n += copy(b.elements[n:], zeroElements)
 	}
 }
 
@@ -483,13 +428,13 @@ func (b *Bytes) zero(startIdx int) {
 // Namely, this allows us to remove all "holes" (unused space) in b.buffer which
 // can occur when an old non-inlined element is overwritten by a new element
 // that is either fully-inlined or non-inlined but larger.
+//gcassert:inline
 func (b *Bytes) Reset() {
 	if b.isWindow {
 		return
 	}
 	b.zero(0 /* startIdx */)
 	b.buffer = b.buffer[:0]
-	b.firstUnsetIdx = 0
 }
 
 // String is used for debugging purposes.
@@ -510,7 +455,6 @@ func BytesFromArrowSerializationFormat(b *Bytes, data []byte, offsets []int32) {
 	if cap(b.elements) < numElements {
 		b.elements = make([]element, numElements)
 		b.buffer = b.buffer[:0]
-		b.firstUnsetIdx = 0
 	} else {
 		b.Reset()
 		b.elements = b.elements[:numElements]
@@ -531,7 +475,7 @@ func (b *Bytes) ToArrowSerializationFormat(n int) ([]byte, []int32) {
 	data := make([]byte, 0, dataSize)
 	offsets := make([]int32, 1, n+1)
 	for _, e := range b.elements[:n] {
-		data = append(data, e.get()...)
+		data = append(data, e.get(b)...)
 		offsets = append(offsets, int32(len(data)))
 	}
 	return data, offsets
