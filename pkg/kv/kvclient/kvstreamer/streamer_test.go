@@ -91,12 +91,10 @@ func TestStreamerLimitations(t *testing.T) {
 		streamer := getStreamer()
 		defer streamer.Close()
 		streamer.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */)
-		// Use a Scan request for this test case because Gets of non-existent
-		// keys aren't added to the results.
-		scan := roachpb.NewScan(roachpb.Key("key"), roachpb.Key("key1"), false /* forUpdate */)
+		get := roachpb.NewGet(roachpb.Key("key"), false /* forUpdate */)
 		reqs := []roachpb.RequestUnion{{
-			Value: &roachpb.RequestUnion_Scan{
-				Scan: scan.(*roachpb.ScanRequest),
+			Value: &roachpb.RequestUnion_Get{
+				Get: get.(*roachpb.GetRequest),
 			},
 		}}
 		require.NoError(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))

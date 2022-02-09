@@ -1249,22 +1249,17 @@ func (w *workerCoordinator) processSingleRangeResults(
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
-				if get.Value != nil {
-					// Create a Result only for non-empty Get responses.
-					result := Result{
-						GetResp: get,
-						// This currently only works because all requests
-						// are unique.
-						EnqueueKeysSatisfied: []int{enqueueKey},
-						position:             req.positions[i],
-					}
-					result.memoryTok.streamer = w.s
-					result.memoryTok.toRelease = getResponseSize(get)
-					memoryTokensBytes += result.memoryTok.toRelease
-					results = append(results, result)
+				result := Result{
+					GetResp: get,
+					// This currently only works because all requests are
+					// unique.
+					EnqueueKeysSatisfied: []int{enqueueKey},
+					position:             req.positions[i],
 				}
-				// Note that we count this Get response as complete regardless
-				// of the fact whether it is empty or not.
+				result.memoryTok.streamer = w.s
+				result.memoryTok.toRelease = getResponseSize(get)
+				memoryTokensBytes += result.memoryTok.toRelease
+				results = append(results, result)
 				numCompleteGetResponses++
 			}
 
@@ -1318,9 +1313,11 @@ func (w *workerCoordinator) processSingleRangeResults(
 		}
 	}
 
-	w.finalizeSingleRangeResults(
-		results, memoryFootprintBytes, hasNonEmptyScanResponse, numCompleteGetResponses,
-	)
+	if len(results) > 0 {
+		w.finalizeSingleRangeResults(
+			results, memoryFootprintBytes, hasNonEmptyScanResponse, numCompleteGetResponses,
+		)
+	}
 
 	// If we have any incomplete requests, add them back into the work
 	// pool.
@@ -1333,6 +1330,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 // singleRangeBatch. By "finalization" we mean setting Complete field of
 // ScanResp to correct value for all scan responses, updating the estimate of an
 // average response size, and telling the Streamer about these results.
+//
+// This method assumes that results has length greater than zero.
 func (w *workerCoordinator) finalizeSingleRangeResults(
 	results []Result,
 	actualMemoryReservation int64,
@@ -1381,14 +1380,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	w.s.mu.numCompleteRequests += numCompleteResponses
 	w.s.mu.numUnreleasedResults += len(results)
 	w.s.mu.results = append(w.s.mu.results, results...)
-	if len(results) > 0 || numCompleteResponses > 0 {
-		// We want to signal the condition variable when either we have some
-		// results to return to the client or we received some empty responses.
-		// The latter is needed so that the client doesn't block forever
-		// thinking there are more requests in flight when, in fact, all
-		// responses have already come back empty.
-		w.s.mu.hasResults.Signal()
-	}
+	w.s.mu.hasResults.Signal()
 }
 
 var zeroIntSlice []int
