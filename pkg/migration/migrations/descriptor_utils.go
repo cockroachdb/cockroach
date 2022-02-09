@@ -57,9 +57,6 @@ func createSystemTable(
 		b := txn.NewBatch()
 		b.CPut(tKey, desc.GetID(), nil)
 		b.CPut(catalogkeys.MakeDescMetadataKey(codec, desc.GetID()), desc.DescriptorProto(), nil)
-		if err := txn.SetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
-			return err
-		}
 		return txn.Run(ctx, b)
 	})
 }
