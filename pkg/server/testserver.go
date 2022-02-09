@@ -815,7 +815,7 @@ func (ts *TestServer) SQLAddr() string {
 
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx, nil /* reporter */)
+	return ts.drain.drainClients(ctx, nil /* reporter */)
 }
 
 // Readiness returns nil when the server's health probe reports

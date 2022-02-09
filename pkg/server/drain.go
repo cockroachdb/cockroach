@@ -16,10 +16,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -75,17 +77,53 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return delegateDrain(ctx, req, client, stream)
 	}
 
-	return s.handleDrain(ctx, req, stream)
+	return s.server.drain.handleDrain(ctx, req, stream)
 }
 
-func (s *adminServer) handleDrain(
+type drainServer struct {
+	stopper      *stop.Stopper
+	grpc         *grpcServer
+	sqlServer    *SQLServer
+	drainSleepFn func(time.Duration)
+
+	kvServer struct {
+		nodeLiveness *liveness.NodeLiveness
+		node         *Node
+	}
+}
+
+// newDrainServer constructs a drainServer suitable for any kind of server.
+func newDrainServer(
+	cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer, sqlServer *SQLServer,
+) *drainServer {
+	var drainSleepFn = time.Sleep
+	if cfg.TestingKnobs.Server != nil {
+		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
+			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
+		}
+	}
+	return &drainServer{
+		stopper:      stopper,
+		grpc:         grpc,
+		sqlServer:    sqlServer,
+		drainSleepFn: drainSleepFn,
+	}
+}
+
+// setNode configures the drainServer to also support KV node shutdown.
+func (s *drainServer) setNode(node *Node, nodeLiveness *liveness.NodeLiveness) {
+	s.kvServer.node = node
+	s.kvServer.nodeLiveness = nodeLiveness
+}
+
+func (s *drainServer) handleDrain(
 	ctx context.Context, req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer,
 ) error {
 	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", req.DoDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
 	if req.DoDrain {
-		remaining, info, err := s.server.Drain(ctx, req.Verbose)
+		remaining, info, err := s.runDrain(ctx, req.Verbose)
 		if err != nil {
 			log.Ops.Errorf(ctx, "drain failed: %v", err)
 			return err
@@ -93,7 +131,7 @@ func (s *adminServer) handleDrain(
 		res.DrainRemainingIndicator = remaining
 		res.DrainRemainingDescription = info.StripMarkers()
 	}
-	if s.server.isDraining() {
+	if s.isDraining() {
 		res.IsDraining = true
 	}
 
@@ -104,7 +142,7 @@ func (s *adminServer) handleDrain(
 	return s.maybeShutdownAfterDrain(ctx, req)
 }
 
-func (s *adminServer) maybeShutdownAfterDrain(
+func (s *drainServer) maybeShutdownAfterDrain(
 	ctx context.Context, req *serverpb.DrainRequest,
 ) error {
 	if !req.Shutdown {
@@ -121,12 +159,12 @@ func (s *adminServer) maybeShutdownAfterDrain(
 		// first seems more reasonable since grpc.Stop closes the listener right
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
-		s.server.grpc.Stop()
-		s.server.stopper.Stop(ctx)
+		s.grpc.Stop()
+		s.stopper.Stop(ctx)
 	}()
 
 	select {
-	case <-s.server.stopper.IsStopped():
+	case <-s.stopper.IsStopped():
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -192,7 +230,7 @@ func delegateDrain(
 	return nil
 }
 
-// Drain idempotently activates the draining mode.
+// runDrain idempotently activates the draining mode.
 // Note: new code should not be taught to use this method
 // directly. Use the Drain() RPC instead with a suitably crafted
 // DrainRequest.
@@ -203,11 +241,7 @@ func delegateDrain(
 //
 // The reporter function, if non-nil, is called for each
 // packet of load shed away from the server during the drain.
-//
-// TODO(knz): This method is currently exported for use by the
-// shutdown code in cli/start.go; however, this is a mis-design. The
-// start code should use the Drain() RPC like quit does.
-func (s *Server) Drain(
+func (s *drainServer) runDrain(
 	ctx context.Context, verbose bool,
 ) (remaining uint64, info redact.RedactableString, err error) {
 	reports := make(map[redact.SafeString]int)
@@ -235,14 +269,14 @@ func (s *Server) Drain(
 		}
 	}()
 
-	if err = s.doDrain(ctx, reporter, verbose); err != nil {
+	if err = s.drainInner(ctx, reporter, verbose); err != nil {
 		return 0, "", err
 	}
 
 	return
 }
 
-func (s *Server) doDrain(
+func (s *drainServer) drainInner(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
 	// First drain all clients and SQL leases.
@@ -256,12 +290,14 @@ func (s *Server) doDrain(
 
 // isDraining returns true if either clients are being drained
 // or one of the stores on the node is not accepting replicas.
-func (s *Server) isDraining() bool {
-	return s.sqlServer.pgServer.IsDraining() || s.node.IsDraining()
+func (s *drainServer) isDraining() bool {
+	return s.sqlServer.pgServer.IsDraining() || (s.kvServer.node != nil && s.kvServer.node.IsDraining())
 }
 
 // drainClients starts draining the SQL layer.
-func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.SafeString)) error {
+func (s *drainServer) drainClients(
+	ctx context.Context, reporter func(int, redact.SafeString),
+) error {
 	shouldDelayDraining := !s.isDraining()
 	// Mark the server as draining in a way that probes to
 	// /health?ready=1 will notice.
@@ -271,11 +307,11 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 	// delay draining so that client traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
-		s.drainSleepFn(drainWait.Get(&s.st.SV))
+		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
 	}
 
 	// Disable incoming SQL clients up to the queryWait timeout.
-	queryMaxWait := queryWait.Get(&s.st.SV)
+	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
@@ -292,11 +328,15 @@ func (s *Server) drainClients(ctx context.Context, reporter func(int, redact.Saf
 
 // drainNode initiates the draining mode for the node, which
 // starts draining range leases.
-func (s *Server) drainNode(
+func (s *drainServer) drainNode(
 	ctx context.Context, reporter func(int, redact.SafeString), verbose bool,
 ) (err error) {
-	if err = s.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
+	if s.kvServer.node == nil {
+		// No KV subsystem. Nothing to do.
+		return nil
+	}
+	if err = s.kvServer.nodeLiveness.SetDraining(ctx, true /* drain */, reporter); err != nil {
 		return err
 	}
-	return s.node.SetDraining(true /* drain */, reporter, verbose)
+	return s.kvServer.node.SetDraining(true /* drain */, reporter, verbose)
 }
