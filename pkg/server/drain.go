@@ -126,7 +126,7 @@ func (s *drainServer) handleDrain(
 		remaining, info, err := s.runDrain(ctx, req.Verbose)
 		if err != nil {
 			log.Ops.Errorf(ctx, "drain failed: %v", err)
-			return err
+			return serverError(ctx, err)
 		}
 		res.DrainRemainingIndicator = remaining
 		res.DrainRemainingDescription = info.StripMarkers()
@@ -136,7 +136,7 @@ func (s *drainServer) handleDrain(
 	}
 
 	if err := stream.Send(&res); err != nil {
-		return err
+		return serverError(ctx, err)
 	}
 
 	return s.maybeShutdownAfterDrain(ctx, req)
@@ -167,7 +167,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 	case <-s.stopper.IsStopped():
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return serverError(ctx, ctx.Err())
 	case <-time.After(10 * time.Second):
 		// This is a hack to work around the problem in
 		// https://github.com/cockroachdb/cockroach/issues/37425#issuecomment-494336131
@@ -200,7 +200,7 @@ func delegateDrain(
 	// Retrieve the stream interface to the target node.
 	drainClient, err := client.Drain(ctx, req)
 	if err != nil {
-		return err
+		return serverError(ctx, err)
 	}
 	// Forward all the responses from the remote server,
 	// to our client.
@@ -219,12 +219,12 @@ func delegateDrain(
 				break
 			}
 
-			return err
+			return serverError(ctx, err)
 		}
 		// Forward the response from the target node to our remote
 		// client.
 		if err := stream.Send(resp); err != nil {
-			return err
+			return serverError(ctx, err)
 		}
 	}
 	return nil
