@@ -259,6 +259,9 @@ type DescriptorMetadataUpdater interface {
 
 	// DeleteDatabaseRoleSettings deletes role settings associated with a database.
 	DeleteDatabaseRoleSettings(ctx context.Context, database catalog.DatabaseDescriptor) error
+
+	// DeleteSchedule deletes the given schedule.
+	DeleteSchedule(ctx context.Context, id int64) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

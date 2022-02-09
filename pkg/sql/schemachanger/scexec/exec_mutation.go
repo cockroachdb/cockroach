@@ -138,15 +138,15 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 		}
 	}
-	commentUpdater := deps.DescriptorMetadataUpdater(ctx)
+	metadataUpdater := deps.DescriptorMetadataUpdater(ctx)
 	for _, comment := range mvs.commentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := commentUpdater.UpsertDescriptorComment(
+			if err := metadataUpdater.UpsertDescriptorComment(
 				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := commentUpdater.DeleteDescriptorComment(
+			if err := metadataUpdater.DeleteDescriptorComment(
 				comment.id, comment.subID, comment.commentType); err != nil {
 				return err
 			}
@@ -154,19 +154,19 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	}
 	for _, comment := range mvs.constraintCommentsToUpdate {
 		if len(comment.comment) > 0 {
-			if err := commentUpdater.UpsertConstraintComment(
+			if err := metadataUpdater.UpsertConstraintComment(
 				comment.tbl, comment.constraintID, comment.comment); err != nil {
 				return err
 			}
 		} else {
-			if err := commentUpdater.DeleteConstraintComment(
+			if err := metadataUpdater.DeleteConstraintComment(
 				comment.tbl, comment.constraintID); err != nil {
 				return err
 			}
 		}
 	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
-		err := commentUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.database)
+		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.database)
 		if err != nil {
 			return err
 		}
@@ -188,6 +188,11 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			}
 			return nil
 		}); err != nil {
+			return err
+		}
+	}
+	for _, scheduleID := range mvs.scheduleIDsToDelete {
+		if err := metadataUpdater.DeleteSchedule(ctx, scheduleID); err != nil {
 			return err
 		}
 	}
@@ -290,6 +295,7 @@ type mutationVisitorState struct {
 	schemaChangerJob             *jobs.Record
 	schemaChangerJobUpdates      map[jobspb.JobID]schemaChangerJobUpdate
 	eventsByStatement            map[uint32][]eventPayload
+	scheduleIDsToDelete          []int64
 }
 
 type constraintCommentToUpdate struct {
@@ -399,6 +405,10 @@ func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(
 			database: db,
 		})
 	return nil
+}
+
+func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
+	mvs.scheduleIDsToDelete = append(mvs.scheduleIDsToDelete, scheduleID)
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {

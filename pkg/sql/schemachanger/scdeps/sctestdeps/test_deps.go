@@ -874,6 +874,12 @@ func (s *TestState) DeleteDatabaseRoleSettings(
 	return nil
 }
 
+// DeleteSchedule implements scexec.DescriptorMetadataUpdater
+func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
+	s.LogSideEffectf("delete schedule ID %d", id)
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,

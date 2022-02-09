@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -16,11 +16,11 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.RelationDependedOnBy)(nil),
+	opRegistry.register((*scpb.RowLevelTTL)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
+				emit(func(this *scpb.RowLevelTTL) scop.Op {
 					return notImplemented(this)
 				}),
 			),
@@ -28,13 +28,11 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
+				minPhase(scop.PostCommitNonRevertiblePhase),
 				revertible(false),
-				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
-					return &scop.
-						RemoveRelationDependedOnBy{
-						TableID:      this.TableID,
-						DependedOnBy: this.DependedOnBy,
+				emit(func(this *scpb.RowLevelTTL) scop.Op {
+					return &scop.DeleteSchedule{
+						ScheduleID: this.RowLevelTTL.ScheduleID,
 					}
 				}),
 			),
