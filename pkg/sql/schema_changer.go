@@ -809,6 +809,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		}
 		// Go through the recording motions. See comment above.
 		sqltelemetry.RecordError(ctx, err, &sc.settings.SV)
+		if jobs.IsPauseSelfError(err) {
+			// For testing only
+			return err
+		}
 	}
 
 	// Run through mutation state machine and backfill.
@@ -2259,6 +2263,10 @@ type SchemaChangerTestingKnobs struct {
 	// RunBeforeResume runs at the start of the Resume hook.
 	RunBeforeResume func(jobID jobspb.JobID) error
 
+	// RunBeforeDescTxn runs at the start of every call to
+	// (*schemaChanger).txn.
+	RunBeforeDescTxn func() error
+
 	// OldNamesDrainedNotification is called during a schema change,
 	// after all leases on the version of the descriptor with the old
 	// names are gone, and just before the mapping of the old names to the
@@ -2302,6 +2310,12 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
+	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
 	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
 }
 
