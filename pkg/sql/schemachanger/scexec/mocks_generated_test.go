@@ -66,19 +66,24 @@ func (mr *MockCatalogMockRecorder) GetFullyQualifiedName(arg0, arg1 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFullyQualifiedName", reflect.TypeOf((*MockCatalog)(nil).GetFullyQualifiedName), arg0, arg1)
 }
 
-// MustReadImmutableDescriptor mocks base method.
-func (m *MockCatalog) MustReadImmutableDescriptor(arg0 context.Context, arg1 catid.DescID) (catalog.Descriptor, error) {
+// MustReadImmutableDescriptors mocks base method.
+func (m *MockCatalog) MustReadImmutableDescriptors(arg0 context.Context, arg1 ...catid.DescID) ([]catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MustReadImmutableDescriptor", arg0, arg1)
-	ret0, _ := ret[0].(catalog.Descriptor)
+	varargs := []interface{}{arg0}
+	for _, a := range arg1 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MustReadImmutableDescriptors", varargs...)
+	ret0, _ := ret[0].([]catalog.Descriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// MustReadImmutableDescriptor indicates an expected call of MustReadImmutableDescriptor.
-func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptor(arg0, arg1 interface{}) *gomock.Call {
+// MustReadImmutableDescriptors indicates an expected call of MustReadImmutableDescriptors.
+func (mr *MockCatalogMockRecorder) MustReadImmutableDescriptors(arg0 interface{}, arg1 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadImmutableDescriptor", reflect.TypeOf((*MockCatalog)(nil).MustReadImmutableDescriptor), arg0, arg1)
+	varargs := append([]interface{}{arg0}, arg1...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MustReadImmutableDescriptors", reflect.TypeOf((*MockCatalog)(nil).MustReadImmutableDescriptors), varargs...)
 }
 
 // MustReadMutableDescriptor mocks base method.
