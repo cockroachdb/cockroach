@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,6 +79,10 @@ func runMetaTestForEngines(run testRunForEngines) {
 		restarts:  run.restarts,
 		engineSeq: run.engineSequence,
 		path:      filepath.Join(tempDir, "store"),
+		// TODO(travers): Add metamorphic test support for different versions, which
+		// will give us better coverage across multiple format major versions and
+		// table versions.
+		st: cluster.MakeTestingClusterSettings(),
 	}
 	fmt.Printf("store path = %s\n", testRunner.path)
 

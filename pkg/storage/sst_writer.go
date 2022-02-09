@@ -15,7 +15,9 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -54,12 +56,18 @@ func (noopSyncCloser) Close() error {
 
 // MakeIngestionWriterOptions returns writer options suitable for writing SSTs
 // that will subsequently be ingested (e.g. with AddSSTable).
-func MakeIngestionWriterOptions() sstable.WriterOptions {
-	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatRocksDBv2)
-	// TODO(sumeer): we should use BlockPropertyCollectors here if the cluster
-	// version permits (which is also reflected in the store's roachpb.Version
-	// and pebble.FormatMajorVersion).
-	opts.BlockPropertyCollectors = nil
+func MakeIngestionWriterOptions(ctx context.Context, st *cluster.Settings) sstable.WriterOptions {
+	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
+	// Only enable block properties if this cluster version support it.
+	// NB: we check for the _second_ of the two cluster versions. The first is
+	// used as a barrier for the major format version bump in the store. Nodes
+	// that are at the second version are guaranteed by the cluster migration
+	// framework to have already bumped their store major format versions to a
+	// sufficient version by the first.
+	if !st.Version.IsActive(ctx, clusterversion.EnablePebbleFormatVersionBlockProperties) {
+		opts.BlockPropertyCollectors = nil
+		opts.TableFormat = sstable.TableFormatRocksDBv2
+	}
 	opts.MergerName = "nullptr"
 	return opts
 }
@@ -86,8 +94,13 @@ func MakeBackupSSTWriter(f io.Writer) SSTWriter {
 // MakeIngestionSSTWriter creates a new SSTWriter tailored for ingestion SSTs.
 // These SSTs have bloom filters enabled (as set in DefaultPebbleOptions) and
 // format set to RocksDBv2.
-func MakeIngestionSSTWriter(f writeCloseSyncer) SSTWriter {
-	return SSTWriter{fw: sstable.NewWriter(f, MakeIngestionWriterOptions()), f: f}
+func MakeIngestionSSTWriter(
+	ctx context.Context, cs *cluster.Settings, f writeCloseSyncer,
+) SSTWriter {
+	return SSTWriter{
+		fw: sstable.NewWriter(f, MakeIngestionWriterOptions(ctx, cs)),
+		f:  f,
+	}
 }
 
 // Finish finalizes the writer and returns the constructed file's contents,

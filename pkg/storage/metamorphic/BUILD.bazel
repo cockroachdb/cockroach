@@ -37,6 +37,7 @@ go_test(
     ],
     embed = [":metamorphic"],
     deps = [
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",

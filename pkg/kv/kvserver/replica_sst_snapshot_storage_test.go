@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -165,7 +166,9 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	}
 	keyRanges := rditer.MakeReplicatedKeyRanges(&desc)
 
-	msstw, err := newMultiSSTWriter(ctx, scratch, keyRanges, 0)
+	msstw, err := newMultiSSTWriter(
+		ctx, cluster.MakeTestingClusterSettings(), scratch, keyRanges, 0,
+	)
 	require.NoError(t, err)
 	_, err = msstw.Finish(ctx)
 	require.NoError(t, err)
@@ -184,7 +187,7 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	for _, r := range keyRanges {
 		func() {
 			sstFile := &storage.MemFile{}
-			sst := storage.MakeIngestionSSTWriter(sstFile)
+			sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 			defer sst.Close()
 			err := sst.ClearRawRange(r.Start, r.End)
 			require.NoError(t, err)

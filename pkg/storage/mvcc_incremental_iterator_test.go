@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1246,7 +1247,7 @@ func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
 	// TODO(sumeer): change this test before interleaved intents are disallowed.
 	ingest := func(it MVCCIterator, count int) {
 		memFile := &MemFile{}
-		sst := MakeIngestionSSTWriter(memFile)
+		sst := MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), memFile)
 		defer sst.Close()
 
 		for i := 0; i < count; i++ {
