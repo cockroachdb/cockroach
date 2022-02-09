@@ -1768,6 +1768,7 @@ Response object for ListSessions and ListLocalSessions.
 | ----- | ---- | ----- | ----------- | -------------- |
 | sessions | [Session](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.Session) | repeated | A list of sessions on this node or cluster. | [reserved](#support-status) |
 | errors | [ListSessionsError](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ListSessionsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| internal_app_name_prefix | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
 
 
 
@@ -1897,6 +1898,7 @@ Response object for ListSessions and ListLocalSessions.
 | ----- | ---- | ----- | ----------- | -------------- |
 | sessions | [Session](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.Session) | repeated | A list of sessions on this node or cluster. | [reserved](#support-status) |
 | errors | [ListSessionsError](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ListSessionsError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| internal_app_name_prefix | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
 
 
 
