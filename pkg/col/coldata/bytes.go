@@ -53,14 +53,12 @@ import (
 // bytes for the offset. The offset determines the position of 'start' within
 // Bytes.buffer.
 type element struct {
-	data []byte
-	_    [paddingLength]byte
-	// We use 'nonInlined' rather than 'inlined' here so that zero value of
-	// element was valid (namely, it'll contain a non-inlined value with an
-	// empty []byte).
-	nonInlined     bool
+	data           []byte
+	_              [paddingLength]byte
 	lengthOrOffset int32
 }
+
+// TODO: updates comments about 20 bytes of inlinable space.
 
 // ElementSize is the size of element object. It is expected to be 32 on a 64
 // bit system.
@@ -69,7 +67,7 @@ const ElementSize = int64(unsafe.Sizeof(element{}))
 // paddingLength is the number of bytes that are not assigned to any particular
 // field in element and are such that ElementSize is exactly 32 on a 64 bit
 // system.
-const paddingLength = 3
+const paddingLength = 4
 
 // lenOffsetInSliceHeader is the offset of Len field in reflect.SliceHeader
 // relative to the start of the struct.
@@ -109,6 +107,12 @@ func init() {
 	}
 }
 
+// isInlined returns true if the []byte value is inlined in e.
+//gcassert:inline
+func (e *element) isInlined() bool {
+	return *(*uintptr)(unsafe.Pointer(&e.data)) == 0
+}
+
 // inlinedSlice returns 19 bytes of space within e that can be used for storing
 // a value inlined, as a slice.
 //gcassert:inline
@@ -121,7 +125,7 @@ func (e *element) inlinedSlice() []byte {
 
 //gcassert:inline
 func (e *element) get() []byte {
-	if !e.nonInlined {
+	if e.isInlined() {
 		return e.inlinedSlice()[:e.lengthOrOffset:BytesMaxInlineLength]
 	}
 	return e.data
@@ -129,7 +133,7 @@ func (e *element) get() []byte {
 
 //gcassert:inline
 func (e *element) len() int {
-	if !e.nonInlined {
+	if e.isInlined() {
 		return int(e.lengthOrOffset)
 	}
 	return len(e.data)
@@ -146,7 +150,7 @@ func (e *element) set(v []byte, b *Bytes) {
 
 func (e *element) setNonInlined(v []byte, b *Bytes) {
 	// Check if we there was an old non-inlined value we can overwrite.
-	if e.nonInlined && cap(e.data) >= len(v) {
+	if !e.isInlined() && cap(e.data) >= len(v) {
 		e.data = e.data[:len(v)]
 		copy(e.data, v)
 	} else {
@@ -154,18 +158,15 @@ func (e *element) setNonInlined(v []byte, b *Bytes) {
 		b.buffer = append(b.buffer, v...)
 		if cap(oldBuffer) != cap(b.buffer) && cap(oldBuffer) > 0 {
 			// The buffer has been reallocated, so we have to update old
-			// non-inlined elements. Set nonInlined to false so that e is
-			// skipped in the loop.
-			e.nonInlined = false
+			// non-inlined elements.
 			for i := 0; i < b.firstUnsetIdx; i++ {
-				if e := b.elements[i]; e.nonInlined {
+				if e := b.elements[i]; !e.isInlined() {
 					e.data = b.buffer[e.lengthOrOffset : e.lengthOrOffset+int32(len(e.data)) : e.lengthOrOffset+int32(cap(e.data))]
 				}
 			}
 		}
 		e.data = b.buffer[len(oldBuffer) : len(oldBuffer)+len(v) : len(oldBuffer)+len(v)]
 		e.lengthOrOffset = int32(len(oldBuffer))
-		e.nonInlined = true
 	}
 }
 
@@ -413,7 +414,7 @@ func (b *Bytes) ProportionalSize(n int64) int64 {
 // Panics if passed an invalid element.
 //gcassert:inline
 func (b *Bytes) ElemSize(idx int) int64 {
-	if !b.elements[idx].nonInlined {
+	if b.elements[idx].isInlined() {
 		return ElementSize
 	}
 	return ElementSize + int64(cap(b.elements[idx].data))
