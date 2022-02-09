@@ -929,6 +929,11 @@
           },
           "x-go-name": "Errors"
         },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
+        },
         "sessions": {
           "description": "A list of sessions on this node or cluster.",
           "type": "array",
@@ -1809,6 +1814,11 @@
             "$ref": "#/definitions/ListSessionsError"
           },
           "x-go-name": "Errors"
+        },
+        "internal_app_name_prefix": {
+          "description": "If set and non-empty, indicates the prefix to application_name\nused for statements/queries issued internally by CockroachDB.",
+          "type": "string",
+          "x-go-name": "InternalAppNamePrefix"
         },
         "next": {
           "description": "The continuation token, for use in the next paginated call in the `start`\nparameter.",
