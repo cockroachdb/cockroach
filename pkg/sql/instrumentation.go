@@ -296,6 +296,7 @@ func (ih *instrumentationHelper) Finish(
 			ImplicitTxn: ih.implicitTxn,
 			Database:    p.SessionData().Database,
 			Failed:      retErr != nil,
+			PlanHash:    ih.planGist.Hash(),
 		}
 		// We populate transaction fingerprint ID if this is an implicit transaction.
 		// See executor_statement_metrics.go:recordStatementSummary() for further

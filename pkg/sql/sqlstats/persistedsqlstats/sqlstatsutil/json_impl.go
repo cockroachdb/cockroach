@@ -135,6 +135,39 @@ func (a *int64Array) encodeJSON() (json.JSON, error) {
 	return builder.Build(), nil
 }
 
+type stringArray []string
+
+func (a *stringArray) decodeJSON(js json.JSON) error {
+	arrLen := js.Len()
+	for i := 0; i < arrLen; i++ {
+		var value jsonString
+		valJSON, err := js.FetchValIdx(i)
+		if err != nil {
+			return err
+		}
+		if err := value.decodeJSON(valJSON); err != nil {
+			return err
+		}
+		*a = append(*a, string(value))
+	}
+
+	return nil
+}
+
+func (a *stringArray) encodeJSON() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*a))
+
+	for _, value := range *a {
+		jsVal, err := (*jsonString)(&value).encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+		builder.Add(jsVal)
+	}
+
+	return builder.Build(), nil
+}
+
 type stmtFingerprintIDArray []roachpb.StmtFingerprintID
 
 func (s *stmtFingerprintIDArray) decodeJSON(js json.JSON) error {
@@ -237,6 +270,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"rowsRead", (*numericStats)(&s.RowsRead)},
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
 		{"nodes", (*int64Array)(&s.Nodes)},
+		{"planGists", (*stringArray)(&s.PlanGists)},
 	}
 }
 
