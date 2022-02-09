@@ -1556,6 +1556,16 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				}
 			}
 		}
+	case types.FloatFamily:
+		if v, ok := inVal.(*DFloat); ok {
+			switch typ.Width() {
+			case 32:
+				if *v > math.MaxFloat32 || *v < -math.MaxFloat32 {
+					return nil, ErrFloatOutOfRange
+				}
+				return NewDFloat(DFloat(float32(*v))), nil
+			}
+		}
 	case types.BitFamily:
 		if v, ok := AsDBitArray(inVal); ok {
 			if typ.Width() > 0 {

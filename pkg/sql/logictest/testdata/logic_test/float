@@ -159,3 +159,27 @@ query BB
 SELECT 'nan'::decimal IS NAN, 'nan'::decimal IS NOT NAN
 ----
 true  false
+
+# Regression for #73743.
+query R
+SELECT 18754999.99::FLOAT8::FLOAT4::FLOAT8;
+----
+1.8755e+07
+
+statement ok
+CREATE TABLE regression_73472 (
+  f4 FLOAT4,
+  f8 FLOAT8
+);
+INSERT INTO regression_73472 VALUES (18754999.99, 18754999.99)
+
+query RR
+SELECT * FROM regression_73472
+----
+1.8755e+07  1.875499999e+07
+
+statement error float out of range
+INSERT INTO regression_73472 VALUES ('-4e+38', '-4e+38')
+
+statement error float out of range
+SELECT '4e+38'::float8::float4
