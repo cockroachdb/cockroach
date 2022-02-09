@@ -426,7 +426,7 @@ func validateSettings(ctx context.Context, p sql.PlanHookState) error {
 		return err
 	}
 	if !ok {
-		return pgerror.New(pgcode.InsufficientPrivilege, "permission denied to create changefeed")
+		return pgerror.New(pgcode.InsufficientPrivilege, "current user must have a role WITH CONTROLCHANGEFEED")
 	}
 
 	return nil

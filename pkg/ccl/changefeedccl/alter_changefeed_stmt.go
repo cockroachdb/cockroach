@@ -44,34 +44,36 @@ func alterChangefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-	jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
-
-	job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn)
-	if err != nil {
-		err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
-		return nil, nil, nil, false, err
-	}
-
-	details, ok := job.Details().(jobspb.ChangefeedDetails)
-	if !ok {
-		return nil, nil, nil, false, errors.Errorf(`job %d is not changefeed job`, jobID)
-	}
-
-	if job.Status() != jobs.StatusPaused {
-		return nil, nil, nil, false, errors.Errorf(`job %d is not paused`, jobID)
-	}
-
 	header := colinfo.ResultColumns{
 		{Name: "job_id", Typ: types.Int},
+		{Name: "job_description", Typ: types.String},
 	}
+	lockForUpdate := false
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := validateSettings(ctx, p); err != nil {
 			return err
+		}
+
+		typedExpr, err := alterChangefeedStmt.Jobs.TypeCheck(ctx, p.SemaCtx(), types.Int)
+		if err != nil {
+			return err
+		}
+		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
+
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn)
+		if err != nil {
+			err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
+			return err
+		}
+
+		details, ok := job.Details().(jobspb.ChangefeedDetails)
+		if !ok {
+			return errors.Errorf(`job %d is not changefeed job`, jobID)
+		}
+
+		if job.Status() != jobs.StatusPaused {
+			return errors.Errorf(`job %d is not paused`, jobID)
 		}
 
 		var opts alterChangefeedOpts
@@ -174,13 +176,26 @@ func alterChangefeedPlanHook(
 			return sqlDescIDs
 		}()
 
-		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, true, func(
+		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.ExtendedEvalContext().Txn, lockForUpdate, func(
 			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			ju.UpdatePayload(&newPayload)
 			return nil
 		})
-		return err
+
+		if err != nil {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case resultsCh <- tree.Datums{
+			tree.NewDInt(tree.DInt(jobID)),
+			tree.NewDString(jobDescription),
+		}:
+			return nil
+		}
 	}
 
 	return fn, header, nil, false, nil

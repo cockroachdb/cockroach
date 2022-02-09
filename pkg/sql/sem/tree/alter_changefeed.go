@@ -25,6 +25,7 @@ func (node *AlterChangefeed) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Cmds)
 }
 
+// AlterChangefeedCmds represents a list of changefeed alterations
 type AlterChangefeedCmds []AlterChangefeedCmd
 
 // Format implements the NodeFormatter interface.
@@ -51,6 +52,7 @@ func (*AlterChangefeedDropTarget) alterChangefeedCmd() {}
 var _ AlterChangefeedCmd = &AlterChangefeedAddTarget{}
 var _ AlterChangefeedCmd = &AlterChangefeedDropTarget{}
 
+// AlterChangefeedAddTarget represents an ADD <targets> command
 type AlterChangefeedAddTarget struct {
 	Targets TargetList
 }
@@ -61,6 +63,7 @@ func (node *AlterChangefeedAddTarget) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Targets.Tables)
 }
 
+// AlterChangefeedDropTarget represents an DROP <targets> command
 type AlterChangefeedDropTarget struct {
 	Targets TargetList
 }
