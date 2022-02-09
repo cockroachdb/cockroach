@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -164,7 +163,7 @@ func makeState(
 	ctx context.Context,
 	sv *cluster.Settings,
 	deps JobRunDependencies,
-	descriptors []descpb.ID,
+	descriptorIDs []descpb.ID,
 	rollback bool,
 ) (scpb.CurrentState, error) {
 	var s scpb.CurrentState
@@ -178,27 +177,21 @@ func makeState(
 		stmts = make(map[uint32]scpb.Statement)
 
 		// TODO(ajwerner): This would be a great place for a batched read.
-		for _, id := range descriptors {
+		descs, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)
+		if err != nil {
+			// TODO(ajwerner): It seems possible that a descriptor could be deletted
+			// and the schema change is in a happy place. Ideally we'd enforce that
+			// descriptors may only be deleted on the very last step of the schema
+			// change.
+			return err
+		}
+		for _, desc := range descs {
 			// TODO(ajwerner): Verify that the job ID matches on all of the
 			// descriptors. Also verify that the Authorization matches.
-
-			desc, err := txnDeps.Catalog().MustReadImmutableDescriptor(ctx, id)
-
-			// If the descriptor was not found, it's not exactly clear what to do.
-			// Probably this means that deleting descriptors needs to be the very
-			// last step of a schema change.
-			//
-			// TODO(ajwerner): Sort this out.
-			if errors.Is(err, catalog.ErrDescriptorNotFound) {
-				return err
-			}
-			if err != nil {
-				return err
-			}
 			cs := desc.GetDeclarativeSchemaChangerState()
 			if cs == nil {
 				return errors.Errorf(
-					"descriptor %d does not contain schema changer state", id,
+					"descriptor %d does not contain schema changer state", desc.GetID(),
 				)
 			}
 			s.Current = append(s.Current, cs.CurrentStatuses...)

@@ -53,7 +53,7 @@ type Catalog interface {
 	scmutationexec.CatalogReader
 
 	// MustReadMutableDescriptor the mutable equivalent to
-	// MustReadImmutableDescriptor in scmutationexec.CatalogReader.
+	// MustReadImmutableDescriptors in scmutationexec.CatalogReader.
 	// This method should be used carefully.
 	MustReadMutableDescriptor(ctx context.Context, id descpb.ID) (catalog.MutableDescriptor, error)
 

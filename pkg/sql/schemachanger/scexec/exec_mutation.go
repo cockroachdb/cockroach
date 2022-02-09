@@ -387,7 +387,9 @@ func (mvs *mutationVisitorState) DeleteConstraintComment(
 	constraintName string,
 	constraintType scpb.ConstraintType,
 ) error {
-	schema, err := mvs.c.MustReadImmutableDescriptor(ctx, tbl.GetParentSchemaID())
+	schema, err := scmutationexec.MustReadImmutableDescriptor(
+		ctx, mvs.c, tbl.GetParentSchemaID(),
+	)
 	if err != nil {
 		return err
 	}
