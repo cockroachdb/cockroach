@@ -222,6 +222,11 @@ func (rec *SpanSetReplicaEvalContext) GetCurrentReadSummary(ctx context.Context)
 	return rec.i.GetCurrentReadSummary(ctx)
 }
 
+// GetCurrentClosedTimestamp is part of the EvalContext interface.
+func (rec *SpanSetReplicaEvalContext) GetCurrentClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	return rec.i.GetCurrentClosedTimestamp(ctx)
+}
+
 // GetClosedTimestamp is part of the EvalContext interface.
 func (rec *SpanSetReplicaEvalContext) GetClosedTimestamp(ctx context.Context) hlc.Timestamp {
 	return rec.i.GetClosedTimestamp(ctx)
