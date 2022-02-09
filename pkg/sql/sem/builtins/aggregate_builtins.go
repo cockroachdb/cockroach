@@ -204,6 +204,41 @@ var aggregates = map[string]builtinDefinition{
 		),
 	)),
 
+	"final_regr_avgx": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgXAggregate,
+			"Calculates the average of the independent variable (sum(X)/N) in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_avgy": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionAvgYAggregate,
+			"Calculates the average of the dependent variable (sum(Y)/N) in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_regr_intercept": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionInterceptAggregate,
+			"Calculates y-intercept of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage.",
+			tree.VolatilityImmutable,
+		)),
+	),
+
+	"final_regr_r2": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionR2Aggregate,
+			"Calculates square of the correlation coefficient in final stage.",
+			tree.VolatilityImmutable,
+		)),
+	),
+
+	"final_regr_slope": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalRegressionSlopeAggregate,
+			"Calculates slope of the least-squares-fit linear equation determined by the (X, Y) pairs in final stage.",
+			tree.VolatilityImmutable,
+		)),
+	),
+
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
 	"covar_samp": makeRegressionAggregateBuiltin(
@@ -1171,6 +1206,11 @@ var _ tree.AggregateFunc = &finalCovarPopAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXXAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXYAggregate{}
 var _ tree.AggregateFunc = &finalRegrSYYAggregate{}
+var _ tree.AggregateFunc = &finalRegressionAvgXAggregate{}
+var _ tree.AggregateFunc = &finalRegressionAvgYAggregate{}
+var _ tree.AggregateFunc = &finalRegressionInterceptAggregate{}
+var _ tree.AggregateFunc = &finalRegressionR2Aggregate{}
+var _ tree.AggregateFunc = &finalRegressionSlopeAggregate{}
 var _ tree.AggregateFunc = &covarSampAggregate{}
 var _ tree.AggregateFunc = &regressionInterceptAggregate{}
 var _ tree.AggregateFunc = &regressionR2Aggregate{}
@@ -2153,6 +2193,87 @@ func (a *regressionAccumulatorDecimalBase) regrSYYLastStage() (tree.Datum, error
 	return mapToDFloat(&a.syy, a.ed.Err())
 }
 
+// regressionAvgXLastStage computes SQL:2003 average of the independent variable
+// (sum(X)/N) from the precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regressionAvgXLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sx / a.n
+	a.ed.Quo(&a.tmp, &a.sx, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// regressionAvgYLastStage computes SQL:2003 average of the dependent variable
+// (sum(Y)/N) from the precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regressionAvgYLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sy / a.n
+	a.ed.Quo(&a.tmp, &a.sy, &a.n)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// regressionInterceptLastStage computes y-intercept from the precalculated
+// transition values.
+func (a *regressionAccumulatorDecimalBase) regressionInterceptLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	// (a.sy - a.sx*a.sxy/a.sxx) / a.n
+	a.ed.Quo(
+		&a.tmp,
+		a.ed.Sub(&a.tmp, &a.sy, a.ed.Mul(&a.tmp, &a.sx, a.ed.Quo(&a.tmp, &a.sxy, &a.sxx))),
+		&a.n,
+	)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// regressionR2LastStage computes square of the correlation coefficient from the
+// precalculated transition values.
+func (a *regressionAccumulatorDecimalBase) regressionR2LastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+	if a.syy.Cmp(decimalZero) == 0 {
+		return tree.NewDFloat(tree.DFloat(1.0)), nil
+	}
+
+	// (a.sxy * a.sxy) / (a.sxx * a.syy)
+	a.ed.Quo(
+		&a.tmp,
+		a.ed.Mul(&a.tmp, &a.sxy, &a.sxy),
+		a.ed.Mul(&a.tmpN, &a.sxx, &a.syy),
+	)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// regressionSlopeLastStage computes slope of the least-squares-fit linear
+// equation determined by the (X, Y) pairs from the precalculated transition
+// values.
+func (a *regressionAccumulatorDecimalBase) regressionSlopeLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+	if a.sxx.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sxy / a.sxx
+	a.ed.Quo(&a.tmp, &a.sxy, &a.sxx)
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
 type finalRegressionAccumulatorDecimalBase struct {
 	regressionAccumulatorDecimalBase
 	otherTransitionValues [regrFieldsTotal]*apd.Decimal
@@ -2503,13 +2624,28 @@ func newRegressionAvgXAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionAvgXAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
+	return a.regressionAvgXLastStage()
+}
 
-	// a.sx / a.n
-	a.ed.Quo(&a.tmp, &a.sx, &a.n)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionAvgXAggregate represents SQL:2003 average of the independent
+// variable (sum(X)/N).
+type finalRegressionAvgXAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionAvgXAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionAvgXAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionAvgXAggregate) Result() (tree.Datum, error) {
+	return a.regressionAvgXLastStage()
 }
 
 // regressionAvgYAggregate represents SQL:2003 average of the dependent
@@ -2528,13 +2664,28 @@ func newRegressionAvgYAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionAvgYAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
+	return a.regressionAvgYLastStage()
+}
 
-	// a.sy / a.n
-	a.ed.Quo(&a.tmp, &a.sy, &a.n)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionAvgYAggregate represents SQL:2003 average of the independent
+// variable (sum(Y)/N).
+type finalRegressionAvgYAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionAvgYAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionAvgYAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionAvgYAggregate) Result() (tree.Datum, error) {
+	return a.regressionAvgYLastStage()
 }
 
 // regressionInterceptAggregate represents y-intercept.
@@ -2552,20 +2703,27 @@ func newRegressionInterceptAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionInterceptAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	if a.sxx.Cmp(decimalZero) == 0 {
-		return tree.DNull, nil
-	}
+	return a.regressionInterceptLastStage()
+}
 
-	// (a.sy - a.sx*a.sxy/a.sxx) / a.n
-	a.ed.Quo(
-		&a.tmp,
-		a.ed.Sub(&a.tmp, &a.sy, a.ed.Mul(&a.tmp, &a.sx, a.ed.Quo(&a.tmp, &a.sxy, &a.sxx))),
-		&a.n,
-	)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionInterceptAggregate represents y-intercept.
+type finalRegressionInterceptAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionInterceptAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionInterceptAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionInterceptAggregate) Result() (tree.Datum, error) {
+	return a.regressionInterceptLastStage()
 }
 
 // regressionR2Aggregate represents square of the correlation coefficient.
@@ -2583,23 +2741,27 @@ func newRegressionR2Aggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionR2Aggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	if a.sxx.Cmp(decimalZero) == 0 {
-		return tree.DNull, nil
-	}
-	if a.syy.Cmp(decimalZero) == 0 {
-		return tree.NewDFloat(tree.DFloat(1.0)), nil
-	}
+	return a.regressionR2LastStage()
+}
 
-	// (a.sxy * a.sxy) / (a.sxx * a.syy)
-	a.ed.Quo(
-		&a.tmp,
-		a.ed.Mul(&a.tmp, &a.sxy, &a.sxy),
-		a.ed.Mul(&a.tmpN, &a.sxx, &a.syy),
-	)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionR2Aggregate represents square of the correlation coefficient.
+type finalRegressionR2Aggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionR2Aggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionR2Aggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionR2Aggregate) Result() (tree.Datum, error) {
+	return a.regressionR2LastStage()
 }
 
 // regressionSlopeAggregate represents slope of the least-squares-fit linear
@@ -2618,16 +2780,28 @@ func newRegressionSlopeAggregate(
 
 // Result implements tree.AggregateFunc interface.
 func (a *regressionSlopeAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
-	if a.sxx.Cmp(decimalZero) == 0 {
-		return tree.DNull, nil
-	}
+	return a.regressionSlopeLastStage()
+}
 
-	// a.sxy / a.sxx
-	a.ed.Quo(&a.tmp, &a.sxy, &a.sxx)
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalRegressionSlopeAggregate represents slope of the least-squares-fit
+// linear equation determined by the (X, Y) pairs.
+type finalRegressionSlopeAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalRegressionSlopeAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalRegressionSlopeAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalRegressionSlopeAggregate) Result() (tree.Datum, error) {
+	return a.regressionSlopeLastStage()
 }
 
 // regressionSXXAggregate represents sum of squares of the independent variable.

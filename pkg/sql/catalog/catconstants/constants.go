@@ -385,6 +385,6 @@ var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.defaults.default_hash_sharded_index_bucket_count",
 	"used as bucket count if bucket count is not specified in hash sharded index definition",
-	8,
+	16,
 	settings.NonNegativeInt,
 ).WithPublic()

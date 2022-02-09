@@ -52,16 +52,6 @@ message SyncAllEnginesRequest{}
 // SyncAllEnginesResponse is the response to a SyncAllEnginesRequest.
 message SyncAllEnginesResponse{}
 
-// DeprecateBaseEncryptionRegistryRequest is used to instruct the target node
-// to stop using the Base version monolithic encryption-at-rest registry.
-message DeprecateBaseEncryptionRegistryRequest {
-  roachpb.Version version = 1;
-}
-
-// DeprecateBaseEncryptionRegistryResponse is the response to a
-// DeprecateBaseEncryptionRegistryRequest.
-message DeprecateBaseEncryptionRegistryResponse{}
-
 // WaitForSpanConfigSubscriptionRequest waits until the target node is wholly
 // subscribed to the global span configurations state.
 message WaitForSpanConfigSubscriptionRequest{}
@@ -94,10 +84,6 @@ service Migration {
    // PurgeOutdatedReplicas is used to instruct the target node to purge all
    // replicas with a version less than the one provided.
    rpc PurgeOutdatedReplicas (PurgeOutdatedReplicasRequest) returns (PurgeOutdatedReplicasResponse) { }
-
-   // DeprecateBaseRegistry is used to instruct the target node to stop
-   // using the Base version monolithic encryption-at-rest registry.
-   rpc DeprecateBaseEncryptionRegistry (DeprecateBaseEncryptionRegistryRequest) returns (DeprecateBaseEncryptionRegistryResponse) { }
 
    // WaitForSpanConfigSubscription waits until the target node is wholly
    // subscribed to the global span configurations state.
