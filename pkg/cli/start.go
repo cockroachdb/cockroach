@@ -1220,7 +1220,11 @@ func getClientGRPCConn(
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
 	clock := hlc.NewClock(hlc.UnixNano, 0)
-	stopper := stop.NewStopper()
+	tracer := cfg.Tracer
+	if tracer == nil {
+		tracer = tracing.NewTracer()
+	}
+	stopper := stop.NewStopper(stop.WithTracer(tracer))
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{
 			TenantID: roachpb.SystemTenantID,

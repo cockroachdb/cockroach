@@ -103,7 +103,7 @@ var (
 		settings.TenantWritable,
 		"bulkio.backup.split_keys_on_timestamps",
 		"split backup data on timestamps when writing revision history",
-		false,
+		true,
 	)
 )
 

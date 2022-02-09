@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfigstore",
-    srcs = ["store.go"],
+    srcs = [
+        "spanconfigstore.go",
+        "store.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore",
     visibility = ["//visibility:public"],
     deps = [
@@ -20,7 +23,10 @@ go_library(
 
 go_test(
     name = "spanconfigstore_test",
-    srcs = ["store_test.go"],
+    srcs = [
+        "spanconfigstore_test.go",
+        "store_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":spanconfigstore"],
     deps = [
