@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -184,7 +185,7 @@ var tableParams = map[string]tableParam{
 			if setTrue && po.tableDesc.RowLevelTTL == nil {
 				// Set the base struct, but do not populate it.
 				// An error from runPostChecks will appear if the requisite fields are not set.
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
 				return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
@@ -245,7 +246,7 @@ var tableParams = map[string]tableParam{
 				)
 			}
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
 			return nil
@@ -263,7 +264,7 @@ var tableParams = map[string]tableParam{
 	`ttl_select_batch_size`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			val, err := DatumAsInt(evalCtx, key, datum)
 			if err != nil {
@@ -285,7 +286,7 @@ var tableParams = map[string]tableParam{
 	`ttl_delete_batch_size`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			val, err := DatumAsInt(evalCtx, key, datum)
 			if err != nil {
@@ -307,7 +308,7 @@ var tableParams = map[string]tableParam{
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			str, err := DatumAsString(evalCtx, key, datum)
 			if err != nil {

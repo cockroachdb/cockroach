@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -165,7 +166,7 @@ type modifyRowLevelTTL struct {
 }
 
 // RowLevelTTL contains the row level TTL config to add or remove.
-func (c modifyRowLevelTTL) RowLevelTTL() *descpb.TableDescriptor_RowLevelTTL {
+func (c modifyRowLevelTTL) RowLevelTTL() *catpb.RowLevelTTL {
 	return c.desc.RowLevelTTL
 }
 

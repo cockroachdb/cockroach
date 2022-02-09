@@ -2411,7 +2411,7 @@ func (desc *wrapper) GetRegionalByRowTableRegionColumnName() (tree.Name, error) 
 }
 
 // GetRowLevelTTL implements the TableDescriptor interface.
-func (desc *wrapper) GetRowLevelTTL() *descpb.TableDescriptor_RowLevelTTL {
+func (desc *wrapper) GetRowLevelTTL() *catpb.RowLevelTTL {
 	return desc.RowLevelTTL
 }
 
