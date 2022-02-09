@@ -9,12 +9,14 @@
 package backupccl
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -105,7 +107,7 @@ var restoreAtNow = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.restore_at_current_time.enabled",
 	"write restored data at the current timestamp",
-	false,
+	true,
 )
 
 func newRestoreDataProcessor(
@@ -385,6 +387,16 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		return roachpb.BulkOpSummary{}, errors.Newf(
 			"cannot use %s until version %s", restoreAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
 		)
+	}
+
+	// If the system tenant is restoring a guest tenant span, we don't want to
+	// forward all the restored data to now, as there may be importing tables in
+	// that span, that depend on the difference in timestamps on restored existing
+	// vs importing keys to rollback.
+	if writeAtBatchTS && kr.fromSystemTenant &&
+		(bytes.HasPrefix(entry.Span.Key, keys.TenantPrefix) || bytes.HasPrefix(entry.Span.EndKey, keys.TenantPrefix)) {
+		log.Warningf(ctx, "restoring span %s at its original timestamps because it is a tenant span", entry.Span)
+		writeAtBatchTS = false
 	}
 
 	// "disallowing" shadowing of anything older than logical=1 is i.e. allow all

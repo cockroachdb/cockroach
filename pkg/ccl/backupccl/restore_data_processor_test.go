@@ -402,6 +402,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("%+v", err)
 			}
 			kvs := clientKVsToEngineKVs(clientKVs)
+			for i := range kvs {
+				if i < len(expectedKVs) {
+					expectedKVs[i].Key.Timestamp = kvs[i].Key.Timestamp
+				}
+			}
 
 			if !reflect.DeepEqual(kvs, expectedKVs) {
 				for i := 0; i < len(kvs) || i < len(expectedKVs); i++ {
