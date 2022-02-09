@@ -693,7 +693,7 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	// Check our config.
 	var sysCfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		sysCfg = s.cfg.Gossip.GetSystemConfig()
+		sysCfg = s.cfg.Gossip.DeprecatedGetSystemConfig()
 		if sysCfg == nil {
 			return errors.New("system config not yet present")
 		}

@@ -176,10 +176,14 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	// sql.catalog.unsafe_skip_system_config_trigger.enabled cluster setting.
 	// The usage of gossip to propagate cluster settings in the system tenant
 	// will be fixed in an upcoming PR with #70566.
-	if err := params.p.EvalContext().Txn.SetSystemConfigTrigger(
-		params.EvalContext().Codec.ForSystemTenant(),
-	); err != nil {
-		return err
+	if !params.EvalContext().Settings.Version.IsActive(
+		params.ctx, clusterversion.DisableSystemConfigGossipTrigger,
+	) {
+		if err := params.p.EvalContext().Txn.DeprecatedSetSystemConfigTrigger(
+			params.EvalContext().Codec.ForSystemTenant(),
+		); err != nil {
+			return err
+		}
 	}
 
 	execCfg := params.extendedEvalCtx.ExecCfg

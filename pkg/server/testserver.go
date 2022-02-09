@@ -626,6 +626,11 @@ func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
 	return t.SQLServer.spanconfigSQLWatcher
 }
 
+// SystemConfigProvider is part TestTenantInterface.
+func (t *TestTenant) SystemConfigProvider() config.SystemConfigProvider {
+	return t.SQLServer.systemConfigWatcher
+}
+
 // DrainClients exports the drainClients() method for use by tests.
 func (t *TestTenant) DrainClients(ctx context.Context) error {
 	return t.drain.drainClients(ctx, nil /* reporter */)
@@ -1336,6 +1341,11 @@ func (ts *TestServer) CollectionFactory() interface{} {
 // SpanConfigKVSubscriber is part of the TestServerInterface.
 func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
+}
+
+// SystemConfigProvider is part of the TestServerInterface.
+func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
+	return ts.node.storeCfg.SystemConfigProvider
 }
 
 type testServerFactoryImpl struct{}

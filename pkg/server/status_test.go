@@ -235,6 +235,7 @@ func TestHealthTelemetry(t *testing.T) {
 func TestStatusGossipJson(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -250,9 +251,6 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 	if _, ok := data.Infos["node:1"]; !ok {
 		t.Errorf("no node 1 info returned: %v", data)
-	}
-	if _, ok := data.Infos["system-db"]; !ok {
-		t.Errorf("no system config info returned: %v", data)
 	}
 }
 
