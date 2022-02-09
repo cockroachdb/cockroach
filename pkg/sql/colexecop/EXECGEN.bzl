@@ -41,6 +41,7 @@ def gen_eg_go_rules(targets):
             # [2]: https://docs.bazel.build/versions/3.7.0/be/general.html#general-advice
             # [3]: https://github.com/cockroachdb/cockroach/pull/57027
             cmd = """
+              export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
               ln -s external/cockroach/pkg pkg
               $(location :execgen) -template $(SRCS) \
                   -fmt=false pkg/sql/colexec/$@ > $@
