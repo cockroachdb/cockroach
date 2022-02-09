@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package settingswatcher
+package settings
 
 import (
 	"testing"
@@ -18,16 +18,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRawValue_SafeFormat(t *testing.T) {
+func TestEncodedValueSafeFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	for _, tc := range []struct {
-		rv       RawValue
+		rv       EncodedValue
 		redacted string
 		regular  string
 	}{
 		{
-			rv: RawValue{
+			rv: EncodedValue{
 				Value: "asdf",
 				Type:  "b",
 			},

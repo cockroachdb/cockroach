@@ -141,14 +141,14 @@ func initializeCachedSettings(
 ) error {
 	dec := settingswatcher.MakeRowDecoder(codec)
 	for _, kv := range kvs {
-		settings, rv, _, err := dec.DecodeRow(kv)
+		settings, val, _, err := dec.DecodeRow(kv)
 		if err != nil {
 			return errors.Wrap(err, `while decoding settings data
 -this likely indicates the settings table structure or encoding has been altered;
 -skipping settings updates`)
 		}
-		if err := updater.Set(ctx, settings, rv.Value, rv.Type); err != nil {
-			log.Warningf(ctx, "setting %q to %v failed: %+v", settings, rv, err)
+		if err := updater.Set(ctx, settings, val); err != nil {
+			log.Warningf(ctx, "setting %q to %v failed: %+v", settings, val, err)
 		}
 	}
 	updater.ResetRemaining(ctx)

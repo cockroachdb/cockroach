@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -90,13 +91,19 @@ func TestPutHttp(t *testing.T) {
 		}))
 
 		u := testSettings.MakeUpdater()
-		if err := u.Set(ctx, "cloudstorage.http.custom_ca", string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})), "s"); err != nil {
+		if err := u.Set(ctx, "cloudstorage.http.custom_ca", settings.EncodedValue{
+			Value: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+			Type:  "s",
+		}); err != nil {
 			t.Fatal(err)
 		}
 
 		cleanup := func() {
 			srv.Close()
-			if err := u.Set(ctx, "cloudstorage.http.custom_ca", "", "s"); err != nil {
+			if err := u.Set(ctx, "cloudstorage.http.custom_ca", settings.EncodedValue{
+				Value: "",
+				Type:  "s",
+			}); err != nil {
 				t.Fatal(err)
 			}
 		}

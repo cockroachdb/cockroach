@@ -19,6 +19,7 @@ import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
+import "settings/encoding.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -2729,7 +2730,7 @@ message TenantSettingsEvent {
   //  - the changed overrides since the last event for the precedence if
   //    Incremental is true (removed overrides have empty RawValue and ValueType
   //    fields).
-  repeated TenantSetting overrides = 3;
+  repeated TenantSetting overrides = 3 [(gogoproto.nullable) = false];
 
   // If non-nil, the other fields will be empty and this will be the final event
   // sent on the stream before it is terminated.
@@ -2737,13 +2738,9 @@ message TenantSettingsEvent {
 }
 
 // TenantSetting contains the name and value of a tenant setting.
-//
-// The value representation is the same as that used by the system.settings
-// table (value and valueType columns).
 message TenantSetting {
   string name = 1;
-  string raw_value = 2;
-  string value_type = 3;
+  settings.EncodedValue value = 2 [(gogoproto.nullable) = false];
 }
 
 // TenantConsumption contains information about resource utilization by a

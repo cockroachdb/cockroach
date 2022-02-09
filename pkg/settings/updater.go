@@ -18,22 +18,22 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// EncodeDuration encodes a duration in the format parseRaw expects.
+// EncodeDuration encodes a duration in the format of EncodedValue.Value.
 func EncodeDuration(d time.Duration) string {
 	return d.String()
 }
 
-// EncodeBool encodes a bool in the format parseRaw expects.
+// EncodeBool encodes a bool in the format of EncodedValue.Value.
 func EncodeBool(b bool) string {
 	return strconv.FormatBool(b)
 }
 
-// EncodeInt encodes an int in the format parseRaw expects.
+// EncodeInt encodes an int in the format of EncodedValue.Value.
 func EncodeInt(i int64) string {
 	return strconv.FormatInt(i, 10)
 }
 
-// EncodeFloat encodes a bool in the format parseRaw expects.
+// EncodeFloat encodes a float in the format of EncodedValue.Value.
 func EncodeFloat(f float64) string {
 	return strconv.FormatFloat(f, 'G', -1, 64)
 }
@@ -50,7 +50,7 @@ type updater struct {
 // wrapped atomic settings values as we go and note which settings were updated,
 // then set the rest to default in ResetRemaining().
 type Updater interface {
-	Set(ctx context.Context, key, rawValue, valType string) error
+	Set(ctx context.Context, key string, value EncodedValue) error
 	ResetRemaining(ctx context.Context)
 }
 
@@ -58,7 +58,7 @@ type Updater interface {
 type NoopUpdater struct{}
 
 // Set implements Updater. It is a no-op.
-func (u NoopUpdater) Set(ctx context.Context, key, rawValue, valType string) error { return nil }
+func (u NoopUpdater) Set(ctx context.Context, key string, value EncodedValue) error { return nil }
 
 // ResetRemaining implements Updater. It is a no-op.
 func (u NoopUpdater) ResetRemaining(context.Context) {}
@@ -72,7 +72,7 @@ func NewUpdater(sv *Values) Updater {
 }
 
 // Set attempts to parse and update a setting and notes that it was updated.
-func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error {
+func (u updater) Set(ctx context.Context, key string, value EncodedValue) error {
 	d, ok := registry[key]
 	if !ok {
 		if _, ok := retiredSettings[key]; ok {
@@ -84,40 +84,40 @@ func (u updater) Set(ctx context.Context, key, rawValue string, vt string) error
 
 	u.m[key] = struct{}{}
 
-	if expected := d.Typ(); vt != expected {
-		return errors.Errorf("setting '%s' defined as type %s, not %s", key, expected, vt)
+	if expected := d.Typ(); value.Type != expected {
+		return errors.Errorf("setting '%s' defined as type %s, not %s", key, expected, value.Type)
 	}
 
 	switch setting := d.(type) {
 	case *StringSetting:
-		return setting.set(ctx, u.sv, rawValue)
+		return setting.set(ctx, u.sv, value.Value)
 	case *BoolSetting:
-		b, err := strconv.ParseBool(rawValue)
+		b, err := strconv.ParseBool(value.Value)
 		if err != nil {
 			return err
 		}
 		setting.set(ctx, u.sv, b)
 		return nil
 	case numericSetting:
-		i, err := strconv.Atoi(rawValue)
+		i, err := strconv.Atoi(value.Value)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, int64(i))
 	case *FloatSetting:
-		f, err := strconv.ParseFloat(rawValue, 64)
+		f, err := strconv.ParseFloat(value.Value, 64)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, f)
 	case *DurationSetting:
-		d, err := time.ParseDuration(rawValue)
+		d, err := time.ParseDuration(value.Value)
 		if err != nil {
 			return err
 		}
 		return setting.set(ctx, u.sv, d)
 	case *DurationSettingWithExplicitUnit:
-		d, err := time.ParseDuration(rawValue)
+		d, err := time.ParseDuration(value.Value)
 		if err != nil {
 			return err
 		}

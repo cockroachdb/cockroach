@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -73,6 +74,9 @@ type Connector interface {
 	// KVAccessor provides access to the subset of the cluster's span configs
 	// applicable to secondary tenants.
 	spanconfig.KVAccessor
+
+	// OverridesMonitor provides access to tenant cluster setting overrides.
+	settingswatcher.OverridesMonitor
 }
 
 // TokenBucketProvider supplies an endpoint (to tenants) for the TokenBucket API
@@ -86,13 +90,14 @@ type TokenBucketProvider interface {
 
 // ConnectorConfig encompasses the configuration required to create a Connector.
 type ConnectorConfig struct {
+	TenantID          roachpb.TenantID
 	AmbientCtx        log.AmbientContext
 	RPCContext        *rpc.Context
 	RPCRetryOptions   retry.Options
 	DefaultZoneConfig *zonepb.ZoneConfig
 }
 
-// ConnectorFactory constructs a new tenant Connector from the provide network
+// ConnectorFactory constructs a new tenant Connector from the provided network
 // addresses pointing to KV nodes.
 type ConnectorFactory interface {
 	NewConnector(cfg ConnectorConfig, addrs []string) (Connector, error)

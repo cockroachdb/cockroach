@@ -1,3 +1,5 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
@@ -8,6 +10,7 @@ go_library(
         "common.go",
         "doc.go",
         "duration.go",
+        "encoding.go",
         "enum.go",
         "float.go",
         "int.go",
@@ -19,6 +22,7 @@ go_library(
         "values.go",
         "version.go",
     ],
+    embed = [":settings_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/settings",
     visibility = ["//visibility:public"],
     deps = [
@@ -26,19 +30,43 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
 go_test(
     name = "settings_test",
     size = "small",
-    srcs = ["settings_test.go"],
+    srcs = [
+        "encoding_test.go",
+        "settings_test.go",
+    ],
+    embed = [":settings"],
     deps = [
-        ":settings",
         "//pkg/testutils",
         "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+proto_library(
+    name = "settings_proto",
+    srcs = ["encoding.proto"],
+    strip_import_prefix = "/pkg",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+)
+
+go_proto_library(
+    name = "settings_go_proto",
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/settings",
+    proto = ":settings_proto",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gogo_protobuf//gogoproto"],
 )
