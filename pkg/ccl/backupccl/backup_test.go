@@ -5436,7 +5436,6 @@ func TestFileIOLimits(t *testing.T) {
 	)
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
-
 	sqlDB.Exec(t, `RESTORE data.bank FROM $1`, LocalFoo)
 	sqlDB.ExpectErr(
 		t, "local file access to paths outside of external-io-dir is not allowed",
@@ -9278,7 +9277,6 @@ func TestBackupRestoreOldIncrementalDefault(t *testing.T) {
 		{dest: collections, inc: incrementals}}
 
 	for _, br := range tests {
-
 		dest := strings.Join(br.dest, ", ")
 		inc := strings.Join(br.inc, ", ")
 
@@ -9300,16 +9298,12 @@ func TestBackupRestoreOldIncrementalDefault(t *testing.T) {
 
 		sib := fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s WITH incremental_storage = %s", dest, inc)
 		sqlDB.Exec(t, sib)
-		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb', incremental_storage = %s", dest, inc)
+		sir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'inc_fkdb'", dest)
 		sqlDB.Exec(t, sir)
 
-		ir := fmt.Sprintf("RESTORE DATABASE fkdb FROM LATEST IN %s WITH new_db_name = 'trad_fkdb'", dest)
-		sqlDB.Exec(t, ir)
-
-		sqlDB.CheckQueryResults(t, `SELECT * FROM trad_fkdb.fk`, sqlDB.QueryStr(t, `SELECT * FROM inc_fkdb.fk`))
+		sqlDB.CheckQueryResults(t, `SELECT * FROM inc_fkdb.fk`, sqlDB.QueryStr(t, `SELECT * FROM fkdb.fk`))
 
 		sqlDB.Exec(t, "DROP DATABASE fkdb")
-		sqlDB.Exec(t, "DROP DATABASE trad_fkdb;")
 		sqlDB.Exec(t, "DROP DATABASE inc_fkdb;")
 	}
 }

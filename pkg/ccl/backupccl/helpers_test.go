@@ -110,6 +110,12 @@ func BackupRestoreTestSetup(
 	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
 }
 
+func BackupDestinationTestSetup(
+	t testing.TB, clusterSize int, numAccounts int, init func(*testcluster.TestCluster),
+) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, tempDir string, cleanup func()) {
+	return backupRestoreTestSetupWithParams(t, clusterSize, numAccounts, init, base.TestClusterArgs{})
+}
+
 func backupRestoreTestSetupEmpty(
 	t testing.TB,
 	clusterSize int,
@@ -313,7 +319,7 @@ func makeInsecureHTTPServer(t *testing.T) (string, func()) {
 		srv.Close()
 		t.Fatal(err)
 	}
-	uri.Path = filepath.Join(uri.Path, "testing")
+	uri.Path = joinURLPath(uri.Path, "testing")
 	return uri.String(), cleanup
 }
 

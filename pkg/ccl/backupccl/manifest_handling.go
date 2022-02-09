@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,6 +49,7 @@ const (
 	// backupOldManifestName is an old name for the serialized BackupManifest
 	// proto. It is used by 20.1 nodes and earlier.
 	backupOldManifestName = "BACKUP"
+
 	// backupManifestChecksumSuffix indicates where the checksum for the manifest
 	// is stored if present. It can be found in the name of the backup manifest +
 	// this suffix.
@@ -646,53 +646,12 @@ func getLocalityInfo(
 	return info, nil
 }
 
-const incBackupSubdirGlob = "/[0-9]*/[0-9]*.[0-9][0-9]/"
-
-// listingDelimDataSlash is used when listing to find backups and groups all the
-// data sst files in each backup, which start with "data/", into a single result
-// that can be skipped over quickly.
-const listingDelimDataSlash = "data/"
-
 const (
 	// IncludeManifest is a named const that can be passed to FindPriorBackups.
 	IncludeManifest = true
 	// OmitManifest is a named const that can be passed to FindPriorBackups.
 	OmitManifest = false
 )
-
-// FindPriorBackups finds "appended" incremental backups by searching
-// for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
-// If includeManifest is true the returned paths are to the manifests for the
-// prior backup, otherwise it is just to the backup path.
-func FindPriorBackups(
-	ctx context.Context, store cloud.ExternalStorage, includeManifest bool,
-) ([]string, error) {
-	var prev []string
-	if err := store.List(ctx, "", listingDelimDataSlash, func(p string) error {
-		if ok, err := path.Match(incBackupSubdirGlob+backupManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupManifestName)
-			}
-			prev = append(prev, p)
-			return nil
-		}
-		if ok, err := path.Match(incBackupSubdirGlob+backupOldManifestName, p); err != nil {
-			return err
-		} else if ok {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupOldManifestName)
-			}
-			prev = append(prev, p)
-		}
-		return nil
-	}); err != nil {
-		return nil, errors.Wrap(err, "reading previous backup layers")
-	}
-	sort.Strings(prev)
-	return prev, nil
-}
 
 // checkForLatestFileInCollection checks whether the directory pointed by store contains the
 // latestFileName pointer directory.
@@ -709,6 +668,83 @@ func checkForLatestFileInCollection(
 	return true, nil
 }
 
+func resolveBackupManifestsDeprecatedSyntax(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	baseStores []cloud.ExternalStorage,
+	mkStore cloud.ExternalStorageFromURIFactory,
+	from [][]string,
+	endTime hlc.Timestamp,
+	encryption *jobspb.BackupEncryptionOptions,
+	user security.SQLUsername,
+) (
+	defaultURIs []string,
+	// mainBackupManifests contains the manifest located at each defaultURI in the backup chain.
+	mainBackupManifests []BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	reservedMemSize int64,
+	_ error,
+) {
+	// If explicit incremental backups were are passed, we simply load them one
+	// by one as specified and return the results.
+	var ownedMemSize int64
+	defer func() {
+		if ownedMemSize != 0 {
+			mem.Shrink(ctx, ownedMemSize)
+		}
+	}()
+
+	_, memSize, err := ReadBackupManifestFromStore(ctx, mem, baseStores[0], encryption)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	ownedMemSize += memSize
+
+	defaultURIs = make([]string, len(from))
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
+	mainBackupManifests = make([]BackupManifest, len(from))
+
+	for i, uris := range from {
+		// The first URI in the list must contain the main BACKUP manifest.
+		defaultURIs[i] = uris[0]
+
+		stores := make([]cloud.ExternalStorage, len(uris))
+		for j := range uris {
+			stores[j], err = mkStore(ctx, uris[j], user)
+			if err != nil {
+				return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
+			}
+			defer stores[j].Close()
+		}
+
+		mainBackupManifests[i], memSize, err = ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
+		if err != nil {
+			return nil, nil, nil, 0, err
+		}
+		ownedMemSize += memSize
+
+		if len(uris) > 1 {
+			localityInfo[i], err = getLocalityInfo(
+				ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
+			)
+			if err != nil {
+				return nil, nil, nil, 0, err
+			}
+		}
+	}
+
+	totalMemSize := ownedMemSize
+	ownedMemSize = 0
+
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := validateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+}
+
 // resolveBackupManifests resolves the URIs that point to the incremental layers
 // (each of which can be partitioned) of backups into the actual backup
 // manifests and metadata required to RESTORE. If only one layer is explicitly
@@ -720,9 +756,8 @@ func resolveBackupManifests(
 	mem *mon.BoundAccount,
 	baseStores []cloud.ExternalStorage,
 	mkStore cloud.ExternalStorageFromURIFactory,
-	from [][]string,
-	incFrom []string,
-	defaultIncFrom []string,
+	fullyResolvedBaseDirectory []string,
+	fullyResolvedIncrementalsDirectory []string,
 	endTime hlc.Timestamp,
 	encryption *jobspb.BackupEncryptionOptions,
 	user security.SQLUsername,
@@ -740,227 +775,150 @@ func resolveBackupManifests(
 			mem.Shrink(ctx, ownedMemSize)
 		}
 	}()
-
 	baseManifest, memSize, err := ReadBackupManifestFromStore(ctx, mem, baseStores[0], encryption)
 	if err != nil {
 		return nil, nil, nil, 0, err
 	}
 	ownedMemSize += memSize
 
-	// If explicit incremental backups were are passed, we simply load them one
-	// by one as specified and return the results.
-	if len(from) > 1 {
-		defaultURIs = make([]string, len(from))
-		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(from))
-		mainBackupManifests = make([]BackupManifest, len(from))
+	incStores := make([]cloud.ExternalStorage, len(fullyResolvedIncrementalsDirectory))
+	for i := range fullyResolvedIncrementalsDirectory {
+		store, err := mkStore(ctx, fullyResolvedIncrementalsDirectory[i], user)
+		if err != nil {
+			return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
+		}
+		defer store.Close()
+		incStores[i] = store
+	}
 
-		for i, uris := range from {
-			// The first URI in the list must contain the main BACKUP manifest.
-			defaultURIs[i] = uris[0]
+	var prev []string
+	if len(incStores) > 0 {
+		prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
+	}
+	numLayers := len(prev) + 1
 
-			stores := make([]cloud.ExternalStorage, len(uris))
-			for j := range uris {
-				stores[j], err = mkStore(ctx, uris[j], user)
-				if err != nil {
-					return nil, nil, nil, 0, errors.Wrapf(err, "export configuration")
-				}
-				defer stores[j].Close()
+	defaultURIs = make([]string, numLayers)
+	mainBackupManifests = make([]BackupManifest, numLayers)
+	localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
+
+	// Setup the full backup layer explicitly.
+	defaultURIs[0] = fullyResolvedBaseDirectory[0]
+	mainBackupManifests[0] = baseManifest
+	localityInfo[0], err = getLocalityInfo(
+		ctx, baseStores, fullyResolvedBaseDirectory, baseManifest, encryption, "", /* prefix */
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	// If we discovered additional layers, handle them too.
+	if numLayers > 1 {
+		numPartitions := len(fullyResolvedIncrementalsDirectory)
+		// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
+		// URI to each layer in that partition below.
+		baseURIs := make([]*url.URL, numPartitions)
+		for i := range fullyResolvedIncrementalsDirectory {
+			baseURIs[i], err = url.Parse(fullyResolvedIncrementalsDirectory[i])
+			if err != nil {
+				return nil, nil, nil, 0, err
 			}
+		}
 
-			mainBackupManifests[i], memSize, err = ReadBackupManifestFromStore(ctx, mem, stores[0], encryption)
+		// For each layer, we need to load the default manifest then calculate the URI and the
+		// locality info for each partition.
+		for i := range prev {
+			defaultManifestForLayer, memSize, err := readBackupManifest(ctx, mem, incStores[0], prev[i], encryption)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
 			ownedMemSize += memSize
+			mainBackupManifests[i+1] = defaultManifestForLayer
 
-			if len(uris) > 1 {
-				localityInfo[i], err = getLocalityInfo(
-					ctx, stores, uris, mainBackupManifests[i], encryption, "", /* prefix */
-				)
-				if err != nil {
-					return nil, nil, nil, 0, err
-				}
+			// prev[i] is the path to the manifest file itself for layer i -- the
+			// dirname piece of that path is the subdirectory in each of the
+			// partitions in which we'll also expect to find a partition manifest.
+			// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
+			incSubDir := path.Dir(prev[i])
+			partitionURIs := make([]string, numPartitions)
+			for j := range baseURIs {
+				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
+				u.Path = joinURLPath(u.Path, incSubDir)
+				partitionURIs[j] = u.String()
 			}
-		}
-	} else {
-		// Since incremental layers were *not* explicitly specified, search for any
-		// automatically created incremental layers inside the base layer.
-		var incStores []cloud.ExternalStorage
-		var prev []string
-		var err error
-		if len(incFrom) != 0 {
-			// The user has supplied an explicit incrementals directory. Use it
-			// exclusively.
-			incStores = make([]cloud.ExternalStorage, len(incFrom))
-			for i := range incFrom {
-				store, err := mkStore(ctx, incFrom[i], user)
-				if err != nil {
-					return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
-				}
-				defer store.Close()
-				incStores[i] = store
-			}
-			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
-		} else {
-			// The user has not supplied an explicit incrementals directory. Use a
-			// default.
-			// At most one default may be active:
-			// (1) The "old" style, i.e. the base collection directory itself.
-			// (2) The "new" style, i.e. the subdirectory `/incrementals` appended
-			// to the base collection.
-			// No more than one default may contain incremental backups. So correct
-			// behavior is to take the first default with any backups, or implicitly
-			// none if both defaults are empty.
-			incStores = make([]cloud.ExternalStorage, len(defaultIncFrom))
-			for i := range defaultIncFrom {
-				store, err := mkStore(ctx, defaultIncFrom[i], user)
-				if err != nil {
-					return nil, nil, nil, 0, errors.Wrapf(err, "failed to open backup storage location")
-				}
-				defer store.Close()
-				incStores[i] = store
-			}
-			prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
-			if len(prev) > 0 {
-				// The new-style default has incremental backups. Use them.
-				incFrom = defaultIncFrom
-			} else {
-				// The new-style default has no incremental backups. Search the old-style
-				// default.
-				incFrom = from[0]
-				incStores = baseStores
-				prev, err = FindPriorBackups(ctx, incStores[0], IncludeManifest)
-			}
-		}
-
-		if err != nil {
-			if errors.Is(err, cloud.ErrListingUnsupported) {
-				log.Warningf(ctx, "storage sink %T does not support listing, only resolving the base backup", incStores[0])
-				// If we do not support listing, we have to just assume there are none
-				// and restore the specified base.
-				prev = nil
-			} else {
+			defaultURIs[i+1] = partitionURIs[0]
+			localityInfo[i+1], err = getLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
+			if err != nil {
 				return nil, nil, nil, 0, err
 			}
-		}
-
-		numLayers := len(prev) + 1
-
-		defaultURIs = make([]string, numLayers)
-		mainBackupManifests = make([]BackupManifest, numLayers)
-		localityInfo = make([]jobspb.RestoreDetails_BackupLocalityInfo, numLayers)
-
-		// Setup the full backup layer explicitly.
-		defaultURIs[0] = from[0][0]
-		mainBackupManifests[0] = baseManifest
-		localityInfo[0], err = getLocalityInfo(
-			ctx, baseStores, from[0], baseManifest, encryption, "", /* prefix */
-		)
-		if err != nil {
-			return nil, nil, nil, 0, err
-		}
-
-		// If we discovered additional layers, handle them too.
-		if numLayers > 1 {
-			numPartitions := len(incFrom)
-			// We need the parsed base URI (<prefix>/<subdir>) for each partition to calculate the
-			// URI to each layer in that partition below.
-			baseURIs := make([]*url.URL, numPartitions)
-			for i := range incFrom {
-				baseURIs[i], err = url.Parse(incFrom[i])
-				if err != nil {
-					return nil, nil, nil, 0, err
-				}
-			}
-
-			// For each layer, we need to load the default manifest then calculate the URI and the
-			// locality info for each partition.
-			for i := range prev {
-				defaultManifestForLayer, memSize, err := readBackupManifest(ctx, mem, incStores[0], prev[i], encryption)
-				if err != nil {
-					return nil, nil, nil, 0, err
-				}
-				ownedMemSize += memSize
-				mainBackupManifests[i+1] = defaultManifestForLayer
-
-				// prev[i] is the path to the manifest file itself for layer i -- the
-				// dirname piece of that path is the subdirectory in each of the
-				// partitions in which we'll also expect to find a partition manifest.
-				// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
-				incSubDir := path.Dir(prev[i])
-				partitionURIs := make([]string, numPartitions)
-				for j := range baseURIs {
-					u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
-					u.Path = path.Join(u.Path, incSubDir)
-					partitionURIs[j] = u.String()
-				}
-				defaultURIs[i+1] = partitionURIs[0]
-				localityInfo[i+1], err = getLocalityInfo(ctx, incStores, partitionURIs, defaultManifestForLayer, encryption, incSubDir)
-				if err != nil {
-					return nil, nil, nil, 0, err
-				}
-			}
-		}
-	}
-
-	// Check that the requested target time, if specified, is valid for the list
-	// of incremental backups resolved, truncating the results to the backup that
-	// contains the target time.
-	if !endTime.IsEmpty() {
-		ok := false
-		for i, b := range mainBackupManifests {
-			// Find the backup that covers the requested time.
-			if b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime) {
-				ok = true
-
-				mainBackupManifests = mainBackupManifests[:i+1]
-				defaultURIs = defaultURIs[:i+1]
-				localityInfo = localityInfo[:i+1]
-
-				// Ensure that the backup actually has revision history.
-				if !endTime.Equal(b.EndTime) {
-					if b.MVCCFilter != MVCCFilter_All {
-						const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
-						if i == 0 {
-							return nil, nil, nil, 0, errors.Errorf(
-								errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
-								timeutil.Unix(0, b.EndTime.WallTime).UTC(),
-							)
-						}
-						return nil, nil, nil, 0, errors.Errorf(
-							errPrefix+" nearest BACKUP times are %s or %s",
-							backupOptRevisionHistory,
-							timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
-							timeutil.Unix(0, b.EndTime.WallTime).UTC(),
-						)
-					}
-					// Ensure that the revision history actually covers the requested time -
-					// while the BACKUP's start and end might contain the requested time for
-					// example if start time is 0 (full backup), the revision history was
-					// only captured since the GC window. Note that the RevisionStartTime is
-					// the latest for ranges backed up.
-					if endTime.LessEq(b.RevisionStartTime) {
-						return nil, nil, nil, 0, errors.Errorf(
-							"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
-								" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
-						)
-					}
-				}
-				break
-			}
-		}
-
-		if !ok {
-			return nil, nil, nil, 0, errors.Errorf(
-				"invalid RESTORE timestamp: supplied backups do not cover requested time",
-			)
 		}
 	}
 
 	totalMemSize := ownedMemSize
 	ownedMemSize = 0
 
-	return defaultURIs, mainBackupManifests, localityInfo, totalMemSize, nil
+	validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, err := validateEndTimeAndTruncate(
+		defaultURIs, mainBackupManifests, localityInfo, endTime)
+
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return validatedDefaultURIs, validatedMainBackupManifests, validatedLocalityInfo, totalMemSize, nil
+}
+
+func validateEndTimeAndTruncate(
+	defaultURIs []string,
+	mainBackupManifests []BackupManifest,
+	localityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
+	endTime hlc.Timestamp,
+) ([]string, []BackupManifest, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	// Check that the requested target time, if specified, is valid for the list
+	// of incremental backups resolved, truncating the results to the backup that
+	// contains the target time.
+	if endTime.IsEmpty() {
+		return defaultURIs, mainBackupManifests, localityInfo, nil
+	}
+	for i, b := range mainBackupManifests {
+		// Find the backup that covers the requested time.
+		if !(b.StartTime.Less(endTime) && endTime.LessEq(b.EndTime)) {
+			continue
+		}
+
+		// Ensure that the backup actually has revision history.
+		if !endTime.Equal(b.EndTime) {
+			if b.MVCCFilter != MVCCFilter_All {
+				const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with '%s' option."
+				if i == 0 {
+					return nil, nil, nil, errors.Errorf(
+						errPrefix+" nearest backup time is %s", backupOptRevisionHistory,
+						timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+					)
+				}
+				return nil, nil, nil, errors.Errorf(
+					errPrefix+" nearest BACKUP times are %s or %s",
+					backupOptRevisionHistory,
+					timeutil.Unix(0, mainBackupManifests[i-1].EndTime.WallTime).UTC(),
+					timeutil.Unix(0, b.EndTime.WallTime).UTC(),
+				)
+			}
+			// Ensure that the revision history actually covers the requested time -
+			// while the BACKUP's start and end might contain the requested time for
+			// example if start time is 0 (full backup), the revision history was
+			// only captured since the GC window. Note that the RevisionStartTime is
+			// the latest for ranges backed up.
+			if endTime.LessEq(b.RevisionStartTime) {
+				return nil, nil, nil, errors.Errorf(
+					"invalid RESTORE timestamp: BACKUP for requested time only has revision history"+
+						" from %v", timeutil.Unix(0, b.RevisionStartTime.WallTime).UTC(),
+				)
+			}
+		}
+		return defaultURIs[:i+1], mainBackupManifests[:i+1], localityInfo[:i+1], nil
+
+	}
+
+	return nil, nil, nil, errors.Errorf(
+		"invalid RESTORE timestamp: supplied backups do not cover requested time",
+	)
 }
 
 // TODO(anzoteh96): benchmark the performance of different search algorithms,

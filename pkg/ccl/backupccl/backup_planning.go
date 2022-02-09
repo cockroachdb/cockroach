@@ -14,7 +14,6 @@ import (
 	cryptorand "crypto/rand"
 	"fmt"
 	"net/url"
-	"path"
 	"strconv"
 	"strings"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -253,9 +251,9 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	// Remove the backup locality parameter.
 	q.Del(localityURLParam)
 	parsedURI.RawQuery = q.Encode()
-	if appendPath != "" {
-		parsedURI.Path = path.Join(parsedURI.Path, appendPath)
-	}
+
+	parsedURI.Path = joinURLPath(parsedURI.Path, appendPath)
+
 	baseURI := parsedURI.String()
 	return localityKV, baseURI, nil
 }
@@ -265,8 +263,10 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 // URIs by locality KV, appending appendPath to the path component of both the
 // default URI and all the locality URIs. The URIs in the result do not include
 // the COCKROACH_LOCALITY parameter.
-func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]string, error) {
-	urisByLocalityKV := make(map[string]string)
+func getURIsByLocalityKV(
+	to []string, appendPath string,
+) (defaultURI string, urisByLocalityKV map[string]string, err error) {
+	urisByLocalityKV = make(map[string]string)
 	if len(to) == 1 {
 		localityKV, baseURI, err := getLocalityAndBaseURI(to[0], appendPath)
 		if err != nil {
@@ -279,7 +279,6 @@ func getURIsByLocalityKV(to []string, appendPath string) (string, map[string]str
 		return baseURI, urisByLocalityKV, nil
 	}
 
-	var defaultURI string
 	for _, uri := range to {
 		localityKV, baseURI, err := getLocalityAndBaseURI(uri, appendPath)
 		if err != nil {
@@ -1429,7 +1428,6 @@ func getBackupDetailAndManifest(
 		mvccFilter = MVCCFilter_All
 	}
 	endTime := initialDetails.EndTime
-
 	var targetDescs []catalog.Descriptor
 	var descriptorProtos []descpb.Descriptor
 	if initialDetails.FullCluster {
@@ -1453,7 +1451,7 @@ func getBackupDetailAndManifest(
 	// TODO(pbardea): Refactor (defaultURI and urisByLocalityKV) pairs into a
 	// backupDestination struct.
 	collectionURI, defaultURI, resolvedSubdir, urisByLocalityKV, prevs, err :=
-		resolveDest(ctx, user, initialDetails.Destination, makeCloudStorage, endTime, initialDetails.IncrementalFrom, execCfg.Settings.Version.IsActive(ctx, clusterversion.IncrementalBackupSubdir))
+		resolveDest(ctx, user, initialDetails.Destination, endTime, initialDetails.IncrementalFrom, execCfg)
 	if err != nil {
 		return jobspb.BackupDetails{}, BackupManifest{}, err
 	}

@@ -12,8 +12,6 @@ import (
 	"context"
 	"fmt"
 	"go/constant"
-	"net/url"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -1742,19 +1740,6 @@ func checkClusterRegions(
 	return nil
 }
 
-func appendPaths(uris []string, tailDir string) ([]string, error) {
-	retval := make([]string, len(uris))
-	for i, uri := range uris {
-		parsed, err := url.Parse(uri)
-		if err != nil {
-			return nil, err
-		}
-		parsed.Path = path.Join(parsed.Path, tailDir)
-		retval[i] = parsed.String()
-	}
-	return retval, nil
-}
-
 func doRestorePlan(
 	ctx context.Context,
 	restoreStmt *tree.Restore,
@@ -1769,43 +1754,54 @@ func doRestorePlan(
 	resultsCh chan<- tree.Datums,
 	subdir string,
 ) error {
-	if len(from) < 1 || len(from[0]) < 1 {
+	if len(from) == 0 || len(from[0]) == 0 {
 		return errors.New("invalid base backup specified")
 	}
 
-	var defaultIncFrom []string
-	var err error
-	if subdir == "" {
-		if defaultIncFrom, err = appendPaths(from[0][:], DefaultIncrementalsSubdir); err != nil {
-			return err
-		}
-	} else {
-		if strings.EqualFold(subdir, "LATEST") {
-			// set subdir to content of latest file
-			latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
-			if err != nil {
-				return err
-			}
-			subdir = latest
-		}
-		if len(from) != 1 {
-			return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
-		}
-
-		if defaultIncFrom, err = appendPaths(from[0][:], path.Join(DefaultIncrementalsSubdir, subdir)); err != nil {
-			return err
-		}
-		if from[0], err = appendPaths(from[0][:], subdir); err != nil {
-			return err
-		}
-		if incFrom, err = appendPaths(incFrom[:], subdir); err != nil {
-			return err
-		}
+	if subdir != "" && len(from) != 1 {
+		return errors.Errorf("RESTORE FROM ... IN can only by used against a single collection path (per-locality)")
 	}
 
-	baseStores := make([]cloud.ExternalStorage, len(from[0]))
-	for i := range from[0] {
-		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, from[0][i], p.User())
+	// var fullyResolvedBaseDirectory []string
+	//var fullyResolvedIncrementalsDirectory []string
+	var fullyResolvedSubdir string
+
+	if strings.EqualFold(subdir, "LATEST") {
+		// set subdir to content of latest file
+		latest, err := readLatestFile(ctx, from[0][0], p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, p.User())
+		if err != nil {
+			return err
+		}
+		fullyResolvedSubdir = latest
+	} else {
+		fullyResolvedSubdir = subdir
+	}
+
+	fullyResolvedBaseDirectory, err := appendPaths(from[0][:], fullyResolvedSubdir)
+	if err != nil {
+		return err
+	}
+
+	fullyResolvedIncrementalsDirectory, err := resolveIncrementalsBackupLocation(
+		ctx,
+		p.User(),
+		p.ExecCfg(),
+		incFrom,
+		from[0],
+		fullyResolvedSubdir,
+	)
+	if err != nil {
+		return err
+	}
+
+	// fullyResolvedIncrementalsDirectory may in fact be nil, if incrementals aren't supported at this location.
+	// In that case, resolveIncrementalsBackupLocation() has logged a warning, further iterations over
+	// fullyResolvedIncrementalsDirectory will be vacuous, and we should proceed with the base backup.
+	//
+	// Note that incremental _backup_ requests to this location will fail loudly instead.
+	baseStores := make([]cloud.ExternalStorage, len(fullyResolvedBaseDirectory))
+	for i := range fullyResolvedBaseDirectory {
+		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, fullyResolvedBaseDirectory[i], p.User())
 		if err != nil {
 			return errors.Wrapf(err, "failed to open backup storage location")
 		}
@@ -1845,10 +1841,22 @@ func doRestorePlan(
 	defer mem.Close(ctx)
 
 	// get base from here.
-	defaultURIs, mainBackupManifests, localityInfo, memReserved, err := resolveBackupManifests(
-		ctx, &mem, baseStores, p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, from,
-		incFrom, defaultIncFrom, endTime, encryption, p.User(),
-	)
+	var defaultURIs []string
+	var mainBackupManifests []BackupManifest
+	var localityInfo []jobspb.RestoreDetails_BackupLocalityInfo
+	var memReserved int64
+	mkStore := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI
+	if len(from) <= 1 {
+		// INTO-syntax.
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifests(
+			ctx, &mem, baseStores, mkStore, fullyResolvedBaseDirectory,
+			fullyResolvedIncrementalsDirectory, endTime, encryption, p.User(),
+		)
+	} else {
+		// Old, deprecated TO-syntax.
+		defaultURIs, mainBackupManifests, localityInfo, memReserved, err = resolveBackupManifestsDeprecatedSyntax(
+			ctx, &mem, baseStores, mkStore, from, endTime, encryption, p.User())
+	}
 
 	if err != nil {
 		return err
@@ -2070,11 +2078,17 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
+	var fromDescription [][]string
+	if len(from) == 1 {
+		fromDescription = [][]string{fullyResolvedBaseDirectory}
+	} else {
+		fromDescription = from
+	}
 	description, err := restoreJobDescription(
 		p,
 		restoreStmt,
-		from,
-		incFrom,
+		fromDescription,
+		fullyResolvedIncrementalsDirectory,
 		restoreStmt.Options,
 		intoDB,
 		newDBName,

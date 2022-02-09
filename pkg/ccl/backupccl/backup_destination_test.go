@@ -13,18 +13,15 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"path"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,32 +29,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestStorageFactory(t *testing.T) (cloud.ExternalStorageFromURIFactory, func()) {
-	dir, dirCleanupFn := testutils.TempDir(t)
-	settings := cluster.MakeTestingClusterSettings()
-	settings.ExternalIODir = dir
-	clientFactory := blobs.TestBlobServiceClient(settings.ExternalIODir)
-	externalStorageFromURI := func(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
-		error) {
-		conf, err := cloud.ExternalStorageConfFromURI(uri, user)
-		require.NoError(t, err)
-		return nodelocal.TestingMakeLocalStorage(ctx, conf.LocalFile, settings, clientFactory, base.ExternalIODirConfig{})
-	}
-	return externalStorageFromURI, dirCleanupFn
-}
-
 // TestBackupRestoreResolveDestination is an integration style tests that tests
 // all of the expected ways of organizing backups.
 func TestBackupRestoreResolveDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	tc, _, _, cleanupFn := BackupDestinationTestSetup(t, MultiNode, 1,
+		InitManualReplication)
+	defer cleanupFn()
+
 	ctx := context.Background()
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	emptyReader := bytes.NewReader([]byte{})
 
-	// Setup a storage factory.
-	externalStorageFromURI, cleanup := newTestStorageFactory(t)
-	defer cleanup()
+	externalStorageFromURI := execCfg.DistSQLSrv.ExternalStorageFromURI
 
 	// writeManifest writes an empty backup manifest file to the given URI.
 	writeManifest := func(t *testing.T, uri string) {
@@ -92,7 +78,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			parsedURI, err := url.Parse(baseURI)
 			require.NoError(t, err)
 			if locality != defaultLocalityValue {
-				parsedURI.Path = path.Join(parsedURI.Path, locality)
+				parsedURI.Path = joinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
 			q.Add(localityURLParam, locality)
@@ -138,9 +124,9 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
 						ctx, security.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
-						externalStorageFromURI, endTime,
+						endTime,
 						incrementalFrom,
-						true,
+						&execCfg,
 					)
 					require.NoError(t, err)
 
@@ -205,9 +191,9 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
 						ctx, security.RootUserName(),
 						jobspb.BackupDetails_Destination{To: to},
-						externalStorageFromURI, endTime,
+						endTime,
 						nil, /* incrementalFrom */
-						true,
+						&execCfg,
 					)
 					require.NoError(t, err)
 
@@ -283,16 +269,16 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			// - BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
 			// - BACKUP INTO LATEST IN collection, incremental_storage = inc_storage_path
 			t.Run("collection", func(t *testing.T) {
-				collectionLoc := fmt.Sprintf("nodelocal://1/%s/?AUTH=implicit", t.Name())
+				collectionLoc := fmt.Sprintf("nodelocal://1/%s?AUTH=implicit", t.Name())
 				// Note that this default is NOT arbitrary, but rather hard-coded as
 				// the `/incrementals` subdir in the collection.
-				defaultIncrementalStorageLoc := fmt.Sprintf("nodelocal://1/%s/incrementals/?AUTH=implicit", t.Name())
+				defaultIncrementalStorageLoc := fmt.Sprintf("nodelocal://1/%s/incrementals?AUTH=implicit", t.Name())
 
 				collectionTo := localizeURI(t, collectionLoc, localities)
 				defaultIncrementalTo := localizeURI(t, defaultIncrementalStorageLoc, localities)
 
 				// This custom location is arbitrary.
-				customIncrementalStorageLoc := fmt.Sprintf("nodelocal://2/custom-incremental/%s/?AUTH=implicit", t.Name())
+				customIncrementalStorageLoc := fmt.Sprintf("nodelocal://2/custom-incremental/%s?AUTH=implicit", t.Name())
 				customIncrementalTo := localizeURI(t, customIncrementalStorageLoc, localities)
 
 				fullTime := time.Date(2020, 12, 25, 6, 0, 0, 0, time.UTC)
@@ -346,14 +332,25 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 						_, localityCollections, err = getURIsByLocalityKV(incrementalTo, "")
 						require.NoError(t, err)
 					}
+					currentVersion := execCfg.Settings.Version.ActiveVersion(ctx)
+					if !incrementalBackupSubdirEnabled {
+						// Downgrading is disallowed in normal operation, but fine for testing here.
+						execCfg.Settings.Version.SetActiveVersion(ctx, clusterversion.ClusterVersion{
+							roachpb.Version{
+								Major: 21,
+								Minor: 2,
+							},
+						})
+					}
+
 					collectionURI, defaultURI, chosenSuffix, urisByLocalityKV, prevBackupURIs, err := resolveDest(
 						ctx, security.RootUserName(),
 						jobspb.BackupDetails_Destination{To: collectionTo, Subdir: subdir, IncrementalStorage: incrementalTo},
-						externalStorageFromURI,
 						endTime,
 						incrementalFrom,
-						incrementalBackupSubdirEnabled,
+						&execCfg,
 					)
+					execCfg.Settings.Version.SetActiveVersion(ctx, currentVersion)
 					require.NoError(t, err)
 
 					localityDests := make(map[string]string, len(localityCollections))
