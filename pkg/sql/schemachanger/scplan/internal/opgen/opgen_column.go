@@ -35,7 +35,7 @@ func init() {
 						Inaccessible:                      this.Inaccessible,
 						GeneratedAsIdentityType:           this.GeneratedAsIdentityType,
 						GeneratedAsIdentitySequenceOption: this.GeneratedAsIdentitySequenceOption,
-						UsesSequenceIds:                   this.UsesSequenceIds,
+						UsesSequenceIDs:                   this.UsesSequenceIDs,
 						ComputerExpr:                      this.ComputerExpr,
 						PgAttributeNum:                    this.PgAttributeNum,
 						SystemColumnKind:                  this.SystemColumnKind,

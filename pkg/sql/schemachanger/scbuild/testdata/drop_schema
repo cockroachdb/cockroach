@@ -130,7 +130,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     columnId: 3
     defaultExpr: nextval(106:::REGCLASS)
     tableId: 107
-    usesSequenceIDs:
+    usesSequenceIds:
     - 106
 - [[IndexComment:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC]
   details:
@@ -275,42 +275,42 @@ DROP SCHEMA defaultdb.SC1 CASCADE
     unique: true
 - [[RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT], PUBLIC]
   details:
-    columnID: 3
+    columnId: 3
     dependedOn: 107
     tableId: 106
 - [[RelationDependedOnBy:{DescID: 107, ReferencedDescID: 108}, ABSENT], PUBLIC]
   details:
-    columnID: 2
+    columnId: 2
     dependedOn: 108
     tableId: 107
 - [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 109}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 109
     tableId: 108
 - [[RelationDependedOnBy:{DescID: 108, ReferencedDescID: 110}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 110
     tableId: 108
 - [[RelationDependedOnBy:{DescID: 109, ReferencedDescID: 110}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 110
     tableId: 109
 - [[RelationDependedOnBy:{DescID: 109, ReferencedDescID: 111}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 111
     tableId: 109
 - [[RelationDependedOnBy:{DescID: 111, ReferencedDescID: 114}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 114
     tableId: 111
 - [[RelationDependedOnBy:{DescID: 111, ReferencedDescID: 115}, ABSENT], PUBLIC]
   details:
-    columnID: 1
+    columnId: 1
     dependedOn: 115
     tableId: 111
 - [[Schema:{DescID: 104}, ABSENT], PUBLIC]

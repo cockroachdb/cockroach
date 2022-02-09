@@ -75,21 +75,21 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     columnId: 2
     defaultExpr: nextval(104:::REGCLASS)
     tableId: 105
-    usesSequenceIDs:
+    usesSequenceIds:
     - 104
 - [[DefaultExpression:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     defaultExpr: nextval(104:::REGCLASS)
     tableId: 106
-    usesSequenceIDs:
+    usesSequenceIds:
     - 104
 - [[DefaultExpression:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   details:
     columnId: 2
     defaultExpr: CAST(chr(nextval(104:::REGCLASS)) AS @100107)
     tableId: 109
-    usesSequenceIDs:
+    usesSequenceIds:
     - 104
 - [[Locality:{DescID: 104}, ABSENT], PUBLIC]
   details:
@@ -106,17 +106,17 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
     owner: root
 - [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT], PUBLIC]
   details:
-    columnID: 2
+    columnId: 2
     dependedOn: 105
     tableId: 104
 - [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 106}, ABSENT], PUBLIC]
   details:
-    columnID: 2
+    columnId: 2
     dependedOn: 106
     tableId: 104
 - [[RelationDependedOnBy:{DescID: 104, ReferencedDescID: 109}, ABSENT], PUBLIC]
   details:
-    columnID: 2
+    columnId: 2
     dependedOn: 109
     tableId: 104
 - [[Sequence:{DescID: 104}, ABSENT], PUBLIC]

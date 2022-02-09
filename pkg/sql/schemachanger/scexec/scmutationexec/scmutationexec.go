@@ -698,7 +698,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		Inaccessible:                      op.Inaccessible,
 		GeneratedAsIdentityType:           op.GeneratedAsIdentityType,
 		GeneratedAsIdentitySequenceOption: emptyStrToNil(op.GeneratedAsIdentitySequenceOption),
-		UsesSequenceIds:                   op.UsesSequenceIds,
+		UsesSequenceIds:                   op.UsesSequenceIDs,
 		ComputeExpr:                       emptyStrToNil(op.ComputerExpr),
 		PGAttributeNum:                    op.PgAttributeNum,
 		SystemColumnKind:                  op.SystemColumnKind,

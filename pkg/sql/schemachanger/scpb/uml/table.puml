@@ -13,7 +13,7 @@ Column :  Hidden
 Column :  Inaccessible
 Column :  GeneratedAsIdentityType
 Column :  GeneratedAsIdentitySequenceOption
-Column : []UsesSequenceIds
+Column : []UsesSequenceIDs
 Column :  ComputerExpr
 Column :  PgAttributeNum
 Column :  SystemColumnKind
