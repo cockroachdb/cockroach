@@ -249,6 +249,9 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "DatabaseID"),
 		rel.EntityAttr(RoleName, "RoleName"),
 	),
+	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
 )
 
 // JoinTargetNode generates a clause that joins the target and node vars

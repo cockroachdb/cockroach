@@ -225,3 +225,16 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(
 			return descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, txn)
 		})
 }
+
+// DeleteSchedule implement scexec.DescriptorMetadataUpdater.
+func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
+	_, err := mu.ie.ExecEx(
+		ctx,
+		"delete-schedule",
+		mu.txn,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
+		scheduleID,
+	)
+	return err
+}
