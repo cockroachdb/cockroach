@@ -631,7 +631,7 @@ message PrimaryKeySwap {
 message ModifyRowLevelTTL {
   option (gogoproto.equal) = true;
 
-  optional TableDescriptor.RowLevelTTL row_level_ttl = 1 [(gogoproto.customname) = "RowLevelTTL"];
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 1 [(gogoproto.customname) = "RowLevelTTL"];
 }
 
 // ComputedColumnSwap is a mutation corresponding to the atomic swap phase
@@ -1236,22 +1236,8 @@ message TableDescriptor {
   // from the PARTITION ALL BY clause.
   optional bool partition_all_by = 44 [(gogoproto.nullable)=false];
 
-  message RowLevelTTL {
-    option (gogoproto.equal) = true;
-
-    // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
-    optional string duration_expr = 1 [(gogoproto.nullable)=false];
-    // SelectBatchSize is the amount of rows that should be fetched at a time
-    optional int64 select_batch_size = 2 [(gogoproto.nullable)=false];
-    // DeleteBatchSize is the amount of rows that should be deleted at a time.
-    optional int64 delete_batch_size = 3 [(gogoproto.nullable)=false];
-    // DeletionCron signifies how often the TTL deletion job runs in a cron format.
-    optional string deletion_cron = 4 [(gogoproto.nullable)=false];
-    // ScheduleID is the ID of the row-level TTL job schedules.
-    optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
-  }
   // RowLevelTTL is set if there is a TTL set on the table.
-  optional RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
+  optional cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];
 
   // ExcludeDataFromBackup specifies if the table's row data can be excluded
   // from a backup targeting this table. This in turn means that the protected
