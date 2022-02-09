@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -7814,4 +7815,128 @@ func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
 	close(wait)
 
 	require.Error(t, <-errC, "schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
+}
+
+func TestPauseBeforeRandomDescTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type testCase struct {
+		name      string
+		setupSQL  string
+		changeSQL string
+		verify    func(t *testing.T, sqlRunner *sqlutils.SQLRunner)
+	}
+
+	// We run the schema change twice. First, to find out how many
+	// sc.txn calls there are, and then a second time that pauses
+	// a random one. By finding the count of txns, we make sure
+	// that we have an equal probability of pausing after each
+	// transaction.
+	getTxnCount := func(t *testing.T, tc testCase) int {
+		var (
+			count       int32 // accessed atomically
+			shouldCount int32 // accessed atomically
+		)
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeDescTxn: func() error {
+					if atomic.LoadInt32(&shouldCount) == 1 {
+						atomic.AddInt32(&count, 1)
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(ctx)
+
+		sqlRunner.Exec(t, tc.setupSQL)
+		atomic.StoreInt32(&shouldCount, 1)
+		sqlRunner.Exec(t, tc.changeSQL)
+		return int(atomic.LoadInt32(&count))
+	}
+
+	runWithPauseAt := func(t *testing.T, tc testCase, pauseAt int) {
+		var (
+			count       int32 // accessed atomically
+			shouldPause int32 // accessed atomically
+			jobID       jobspb.JobID
+		)
+
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeResume: func(id jobspb.JobID) error {
+					jobID = id
+					return nil
+				},
+				RunBeforeDescTxn: func() error {
+					if atomic.LoadInt32(&shouldPause) == 0 {
+						return nil
+					}
+					current := int(atomic.AddInt32(&count, 1))
+					if current == pauseAt {
+						atomic.StoreInt32(&shouldPause, 0)
+						return jobs.MarkPauseRequestError(errors.Newf("paused sc.txn call %d", current))
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(ctx)
+
+		sqlRunner.Exec(t, tc.setupSQL)
+		atomic.StoreInt32(&shouldPause, 1)
+		sqlRunner.ExpectErr(t, ".*paused sc.txn call.*", tc.changeSQL)
+		sqlRunner.Exec(t, "RESUME JOB $1", jobID)
+
+		row := sqlRunner.QueryRow(t, "SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID)
+		var status string
+		row.Scan(&status)
+		require.Equal(t, "succeeded", status)
+		tc.verify(t, sqlRunner)
+	}
+
+	rnd, _ := randutil.NewTestRand()
+	for _, tc := range []testCase{
+		{
+			name: "create index",
+			setupSQL: `
+CREATE TABLE t (pk INT PRIMARY KEY, b INT);
+INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
+`,
+			changeSQL: "CREATE INDEX on t (b)",
+			verify: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				rows := sqlutils.MatrixToStr(sqlRunner.QueryStr(t, "SELECT * FROM t@t_b_idx"))
+				require.Equal(t, "1, 1\n2, 2\n3, 3\n", rows)
+			},
+		},
+	} {
+		txnCount := getTxnCount(t, tc)
+
+		const testAll = false
+		if testAll {
+			for i := 1; i <= txnCount; i++ {
+				t.Run(fmt.Sprintf("%s_pause_at_txn_%d", tc.name, i), func(t *testing.T) {
+					runWithPauseAt(t, tc, i)
+				})
+			}
+		} else {
+			pauseAt := rnd.Intn(txnCount) + 1
+			t.Run(fmt.Sprintf("%s_pause_at_txn_%d", tc.name, pauseAt), func(t *testing.T) {
+				runWithPauseAt(t, tc, pauseAt)
+
+			})
+		}
+	}
+
 }
