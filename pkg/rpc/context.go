@@ -398,6 +398,9 @@ type Context struct {
 
 	// For testing. See the comment on the same field in HeartbeatService.
 	TestingAllowNamedRPCToAnonymousServer bool
+
+	clientUnaryInterceptors  []grpc.UnaryClientInterceptor
+	clientStreamInterceptors []grpc.StreamClientInterceptor
 }
 
 // connKey is used as key in the Context.conns map.
@@ -608,6 +611,42 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		waitQuiesce(rpcCtx.MasterCtx)
 	}
 
+	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
+		// TODO(tbg): re-write all of this for our tracer.
+
+		// We use a decorator to set the "node" tag. All other spans get the
+		// node tag from context log tags.
+		//
+		// Unfortunately we cannot use the corresponding interceptor on the
+		// server-side of gRPC to set this tag on server spans because that
+		// interceptor runs too late - after a traced RPC's recording had
+		// already been collected. So, on the server-side, the equivalent code
+		// is in setupSpanForIncomingRPC().
+		//
+		tagger := func(span *tracing.Span) {
+			span.SetTag("node", attribute.IntValue(int(rpcCtx.NodeID.Get())))
+		}
+		compatMode := func(reqCtx context.Context) bool {
+			return !rpcCtx.ContextOptions.Settings.Version.IsActive(reqCtx, clusterversion.SelectRPCsTakeTracingInfoInband)
+		}
+
+		if rpcCtx.ClientOnly {
+			// client-only RPC contexts don't have a node ID to report nor a
+			// cluster version to check against.
+			tagger = func(span *tracing.Span) {}
+			compatMode = func(_ context.Context) bool { return false }
+		}
+
+		rpcCtx.clientUnaryInterceptors = append(rpcCtx.clientUnaryInterceptors,
+			grpcinterceptor.ClientInterceptor(tracer, tagger, compatMode))
+		rpcCtx.clientStreamInterceptors = append(rpcCtx.clientStreamInterceptors,
+			grpcinterceptor.StreamClientInterceptor(tracer, tagger))
+	}
+	// Note that we do not consult rpcCtx.Knobs.StreamClientInterceptor. That knob
+	// can add another interceptor, but it can only do it dynamically, based on
+	// a connection class. Only calls going over an actual gRPC connection will
+	// use that interceptor.
+
 	return rpcCtx
 }
 
@@ -646,6 +685,7 @@ func (rpcCtx *Context) GetLocalInternalClientForAddr(
 // are not run at the moment.
 type internalClientAdapter struct {
 	server                   roachpb.InternalServer
+	clientUnaryInterceptors  clientUnaryInterceptorsChain
 	serverStreamInterceptors serverStreamInterceptorsChain
 
 	// Unary RPC handler. This includes the chain of server-side gRPC
@@ -659,10 +699,12 @@ func makeInternalClientAdapter(
 	server roachpb.InternalServer,
 	unaryServerInterceptors []grpc.UnaryServerInterceptor,
 	streamServerInterceptors []grpc.StreamServerInterceptor,
+	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
 ) internalClientAdapter {
 	return internalClientAdapter{
 		server:                   server,
 		serverStreamInterceptors: streamServerInterceptors,
+		clientUnaryInterceptors: clientUnaryInterceptors,
 		batchHandler: chainUnaryInterceptors(
 			&grpc.UnaryServerInfo{
 				Server:     server,
@@ -734,6 +776,62 @@ func (c serverStreamInterceptorsChain) run(
 	return state.next(srv, stream)
 }
 
+type clientUnaryInterceptorsChain []grpc.UnaryClientInterceptor
+
+func (c clientUnaryInterceptorsChain) run(
+	ctx context.Context,
+	method string,
+	req, reply interface{},
+	rpcHandler func(ctx context.Context, req interface{}) error,
+) error {
+	if len(c) == 0 {
+		return rpcHandler(ctx, req)
+	}
+	invoker := func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		return rpcHandler(ctx, req)
+	}
+	chainInvoker := getChainUnaryInvoker(c, 0 /* curr */, invoker)
+	return chainInvoker(ctx, method, req, reply, nil /* ClientConn */)
+}
+
+// !!!
+//// chainUnaryClientInterceptors chains all unary client interceptors into one.
+//func chainUnaryClientInterceptors(cc *ClientConn) {
+//	interceptors := cc.dopts.chainUnaryInts
+//	// Prepend dopts.unaryInt to the chaining interceptors if it exists, since unaryInt will
+//	// be executed before any other chained interceptors.
+//	if cc.dopts.unaryInt != nil {
+//		interceptors = append([]UnaryClientInterceptor{cc.dopts.unaryInt}, interceptors...)
+//	}
+//	var chainedInt UnaryClientInterceptor
+//	if len(interceptors) == 0 {
+//		chainedInt = nil
+//	} else if len(interceptors) == 1 {
+//		chainedInt = interceptors[0]
+//	} else {
+//		chainedInt = func(ctx context.Context, method string, req, reply interface{}, cc *ClientConn, invoker UnaryInvoker, opts ...CallOption) error {
+//			return interceptors[0](ctx, method, req, reply, cc, getChainUnaryInvoker(interceptors, 0, invoker), opts...)
+//		}
+//	}
+//	cc.dopts.unaryInt = chainedInt
+//}
+
+// getChainUnaryInvoker returns a function that, when called, invokes all the
+// interceptors from curr onwards and bottoms out by invoking finalInvoker. curr
+// == 0 means call all the interceptors.
+//
+// The returned function is generated recursively.
+func getChainUnaryInvoker(
+	interceptors clientUnaryInterceptorsChain, curr int, finalInvoker grpc.UnaryInvoker,
+) grpc.UnaryInvoker {
+	if curr == len(interceptors)-1 {
+		return finalInvoker
+	}
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
+		return interceptors[curr+1](ctx, method, req, reply, cc, getChainUnaryInvoker(interceptors, curr+1, finalInvoker), opts...)
+	}
+}
+
 // Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
@@ -741,13 +839,33 @@ func (a internalClientAdapter) Batch(
 	// Mark this as originating locally, which is useful for the decision about
 	// memory allocation tracking.
 	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
-	// Create a new context from the existing one with the "local request" field set.
-	// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
-	res, err := a.batchHandler(grpcutil.NewLocalRequestContext(ctx), ba)
-	if err != nil {
+
+	// !!!
+	//res, err := a.batchHandler(ctx, ba)
+	//if err != nil {
+
+	methodName := grpcinterceptor.BatchMethodName
+	// reply serves to communicate the RPC response from the RPC handler (through
+	// the server interceptors) to the client interceptors. The client
+	// interceptors will have a chance to modify it, and ultimately it'll be
+	// returned to the caller.
+	var reply *roachpb.BatchResponse
+	// serverInvoker adapts the chain of server interceptors (which bottoms out at
+	// the RPC handler through rpcHandler above) to the interface expected by the
+	// client interceptors.
+	serverInvoker := func(ctx context.Context, req interface{}) error {
+		res, err := a.batchHandler(ctx, ba)
+		if err != nil {
+			return err
+		}
+		// reply can be further modified by client interceptors.
+		reply = res.(*roachpb.BatchResponse)
+		return nil
+	}
+	if err := a.clientUnaryInterceptors.run(ctx, methodName, ba, reply, serverInvoker); err != nil {
 		return nil, err
 	}
-	return res.(*roachpb.BatchResponse), nil
+	return reply, nil
 }
 
 // RangeFeed implements the RestrictedInternalClient interface.
@@ -873,7 +991,9 @@ func IsLocal(iface RestrictedInternalClient) bool {
 // serverInterceptors lists the interceptors that will be run on RPCs done
 // through this local server.
 func (rpcCtx *Context) SetLocalInternalServer(
-	internalServer roachpb.InternalServer, serverInterceptors ServerInterceptorInfo,
+	internalServer roachpb.InternalServer,
+	serverInterceptors ServerInterceptorInfo,
+	clientUnaryInterceptors []grpc.UnaryClientInterceptor,
 ) {
 	rpcCtx.localInternalClient = makeInternalClientAdapter(
 		internalServer,
@@ -975,6 +1095,7 @@ func (rpcCtx *Context) grpcDialOptions(
 	var unaryInterceptors []grpc.UnaryClientInterceptor
 	var streamInterceptors []grpc.StreamClientInterceptor
 
+	// !!! I've copied this to the ctor. Remove from here.
 	if tracer := rpcCtx.Stopper.Tracer(); tracer != nil {
 		// TODO(tbg): re-write all of this for our tracer.
 
@@ -1042,6 +1163,14 @@ func (rpcCtx *Context) grpcDialOptions(
 		dialOpts = append(dialOpts, grpc.WithChainStreamInterceptor(streamInterceptors...))
 	}
 	return dialOpts, nil
+}
+
+// !!! comment
+func (rpcCtx *Context) ClientInterceptors() (
+	[]grpc.UnaryClientInterceptor,
+	[]grpc.StreamClientInterceptor,
+) {
+	return rpcCtx.clientUnaryInterceptors, rpcCtx.clientStreamInterceptors
 }
 
 // growStackCodec wraps the default grpc/encoding/proto codec to detect
