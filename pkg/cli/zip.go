@@ -13,6 +13,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"net"
 	"os"
 	"strings"
@@ -94,13 +95,24 @@ func (zc *debugZipContext) runZipRequest(ctx context.Context, zr *zipReporter, r
 // forAllNodes runs fn on every node, possibly concurrently.
 func (zc *debugZipContext) forAllNodes(
 	ctx context.Context,
-	nodeList []serverpb.NodeDetails,
-	fn func(ctx context.Context, node serverpb.NodeDetails) error,
+	ni nodesInfo,
+	fn func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) error,
 ) error {
+	if ni.nodeListResponse == nil {
+		// Nothing to do, return
+		return errors.AssertionFailedf("nodes list is empty")
+	}
+	if ni.nodeStatusResponse != nil && len(ni.nodeStatusResponse.Nodes) != len(ni.nodeListResponse.Nodes) {
+		return errors.AssertionFailedf("mismatching node status response and node list")
+	}
 	if zipCtx.concurrency == 1 {
 		// Sequential case. Simplify.
-		for _, node := range nodeList {
-			if err := fn(ctx, node); err != nil {
+		for index, nodeDetails := range ni.nodeListResponse.Nodes {
+			var nodeStatus *statuspb.NodeStatus
+			if ni.nodeStatusResponse != nil {
+				nodeStatus = &ni.nodeStatusResponse.Nodes[index]
+			}
+			if err := fn(ctx, nodeDetails, nodeStatus); err != nil {
 				return err
 			}
 		}
@@ -110,12 +122,16 @@ func (zc *debugZipContext) forAllNodes(
 	// Multiple nodes concurrently.
 
 	// nodeErrs collects the individual error objects.
-	nodeErrs := make(chan error, len(nodeList))
+	nodeErrs := make(chan error, len(ni.nodeListResponse.Nodes))
 	// The wait group to wait for all concurrent collectors.
 	var wg sync.WaitGroup
-	for _, node := range nodeList {
+	for index, nodeDetails := range ni.nodeListResponse.Nodes {
 		wg.Add(1)
-		go func(node serverpb.NodeDetails) {
+		var nodeStatus *statuspb.NodeStatus
+		if ni.nodeStatusResponse != nil {
+			nodeStatus = &ni.nodeStatusResponse.Nodes[index]
+		}
+		go func(nodeDetails serverpb.NodeDetails, nodeStatus *statuspb.NodeStatus) {
 			defer wg.Done()
 			if err := zc.sem.Acquire(ctx, 1); err != nil {
 				nodeErrs <- err
@@ -123,14 +139,14 @@ func (zc *debugZipContext) forAllNodes(
 			}
 			defer zc.sem.Release(1)
 
-			nodeErrs <- fn(ctx, node)
-		}(node)
+			nodeErrs <- fn(ctx, nodeDetails, nodeStatus)
+		}(nodeDetails, nodeStatus)
 	}
 	wg.Wait()
 
 	// The final error.
 	var err error
-	for range nodeList {
+	for range ni.nodeListResponse.Nodes {
 		err = errors.CombineErrors(err, <-nodeErrs)
 	}
 	return err
@@ -231,20 +247,19 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 	// For a SQL only server, the nodeList will be a list of SQL nodes
 	// and livenessByNodeID is null. For a KV server, the nodeList will
 	// be a list of KV nodes along with the corresponding node liveness data.
-	nodeList, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
+	ni, livenessByNodeID, err := zc.collectClusterData(ctx, firstNodeDetails)
 	if err != nil {
 		return err
 	}
-
 	// Collect the CPU profiles, before the other per-node requests
 	// below possibly influences the nodes and thus CPU profiles.
-	if err := zc.collectCPUProfiles(ctx, nodeList, livenessByNodeID); err != nil {
+	if err := zc.collectCPUProfiles(ctx, ni, livenessByNodeID); err != nil {
 		return err
 	}
 
 	// Collect the per-node data.
-	if err := zc.forAllNodes(ctx, nodeList, func(ctx context.Context, node serverpb.NodeDetails) error {
-		return zc.collectPerNodeData(ctx, node, livenessByNodeID)
+	if err := zc.forAllNodes(ctx, ni, func(ctx context.Context, nodeDetails serverpb.NodeDetails, nodesStatus *statuspb.NodeStatus) error {
+		return zc.collectPerNodeData(ctx, nodeDetails, nodesStatus, livenessByNodeID)
 	}); err != nil {
 		return err
 	}

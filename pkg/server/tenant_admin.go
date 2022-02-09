@@ -84,7 +84,6 @@ func (t *tenantAdminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
 	telemetry.Inc(telemetryHealthCheck)
-
 	resp := &serverpb.HealthResponse{}
 	// If Ready is not set, the client doesn't want to know whether this node is
 	// ready to receive client traffic.

@@ -44,7 +44,7 @@ func TestTenantZip(t *testing.T) {
 	})
 	defer c.Cleanup()
 
-	out, err := c.RunWithCapture("debug zip --concurrency=1 " + os.DevNull)
+	out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
 	if err != nil {
 		t.Fatal(err)
 	}

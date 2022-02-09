@@ -13,7 +13,6 @@ package cli
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -112,35 +111,25 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.table_indexes",
 }
 
-// getNodesList constructs a NodesListResponse using the Nodes API. We need this while building
-// the nodes list for older servers that don't support the new NodesList API.
-func (zc *debugZipContext) getNodesList(ctx context.Context) (*serverpb.NodesListResponse, error) {
-	nodes, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
-	if err != nil {
-		return nil, err
-	}
-	nodesList := &serverpb.NodesListResponse{}
-	for _, node := range nodes.Nodes {
-		nodeDetails := serverpb.NodeDetails{
-			NodeID:     int32(node.Desc.NodeID),
-			Address:    node.Desc.Address,
-			SQLAddress: node.Desc.SQLAddress,
-		}
-		nodesList.Nodes = append(nodesList.Nodes, nodeDetails)
-	}
-	return nodesList, nil
+// nodesInfo holds node details pulled from a SQL or KV node.
+// SQL only servers will only return nodeDetails for all SQL nodes.
+// Storage servers will return both nodeDetails as well as nodeStatus
+// for all KV nodes.
+type nodesInfo struct {
+	nodeStatusResponse *serverpb.NodesResponse
+	nodeListResponse   *serverpb.NodesListResponse
 }
 
 // collectClusterData runs the data collection that only needs to
 // occur once for the entire cluster.
 func (zc *debugZipContext) collectClusterData(
 	ctx context.Context, firstNodeDetails *serverpb.DetailsResponse,
-) (nodeList []serverpb.NodeDetails, livenessByNodeID nodeLivenesses, err error) {
+) (ni nodesInfo, livenessByNodeID nodeLivenesses, err error) {
 	clusterWideZipRequests := makeClusterWideZipRequests(zc.admin, zc.status)
 
 	for _, r := range clusterWideZipRequests {
 		if err := zc.runZipRequest(ctx, zc.clusterPrinter, r); err != nil {
-			return nil, nil, err
+			return nodesInfo{}, nil, err
 		}
 	}
 
@@ -150,39 +139,38 @@ func (zc *debugZipContext) collectClusterData(
 			query = override
 		}
 		if err := zc.dumpTableDataForZip(zc.clusterPrinter, zc.firstNodeSQLConn, debugBase, table, query); err != nil {
-			return nil, nil, errors.Wrapf(err, "fetching %s", table)
+			return nodesInfo{}, nil, errors.Wrapf(err, "fetching %s", table)
 		}
 	}
 
 	{
-		var nodes *serverpb.NodesListResponse
 		s := zc.clusterPrinter.start("requesting nodes")
 		err := zc.runZipFn(ctx, s, func(ctx context.Context) error {
-			nodes, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
-			if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
-				// Fallback to the old Nodes API; this could occur while connecting to
-				// an older node which does not have the NodesList API implemented.
-				nodes, err = zc.getNodesList(ctx)
-			}
+			ni, err = zc.nodesInfo(ctx)
 			return err
 		})
-		if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", nodes, err); cErr != nil {
-			return nil, nil, cErr
+		if ni.nodeStatusResponse != nil {
+			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodeStatusResponse, err); cErr != nil {
+				return nodesInfo{}, nil, cErr
+			}
+		} else {
+			if cErr := zc.z.createJSONOrError(s, debugBase+"/nodes.json", ni.nodeListResponse, err); cErr != nil {
+				return nodesInfo{}, nil, cErr
+			}
 		}
 
-		// In case nodes came up back empty (the Nodes() RPC failed), we
-		// still want to inspect the per-node endpoints on the head
-		// node. As per the above, we were able to connect at least to
-		// that.
-		nodeList = []serverpb.NodeDetails{{
-			NodeID:     int32(firstNodeDetails.NodeID),
-			Address:    firstNodeDetails.Address,
-			SQLAddress: firstNodeDetails.SQLAddress,
-		}}
-
-		if nodes != nil {
-			// If the nodes were found, use that instead.
-			nodeList = nodes.Nodes
+		if ni.nodeListResponse == nil {
+			// In case nodes came up back empty (the Nodes()/NodesList() RPC failed), we
+			// still want to inspect the per-node endpoints on the head
+			// node. As per the above, we were able to connect at least to
+			// that.
+			ni.nodeListResponse = &serverpb.NodesListResponse{
+				Nodes: []serverpb.NodeDetails{{
+					NodeID:     int32(firstNodeDetails.NodeID),
+					Address:    firstNodeDetails.Address,
+					SQLAddress: firstNodeDetails.SQLAddress,
+				}},
+			}
 		}
 
 		// We'll want livenesses to decide whether a node is decommissioned.
@@ -193,12 +181,45 @@ func (zc *debugZipContext) collectClusterData(
 			return err
 		})
 		if cErr := zc.z.createJSONOrError(s, livenessName+".json", nodes, err); cErr != nil {
-			return nil, nil, cErr
+			return nodesInfo{}, nil, cErr
 		}
 		livenessByNodeID = map[roachpb.NodeID]livenesspb.NodeLivenessStatus{}
 		if lresponse != nil {
 			livenessByNodeID = lresponse.Statuses
 		}
 	}
-	return nodeList, livenessByNodeID, nil
+	return ni, livenessByNodeID, nil
+}
+
+// nodesInfo constructs debug data for all nodes for the debug zip output.
+// For SQL only servers, only the NodesListResponse is populated.
+// For regular storage servers, the more detailed NodesResponse is
+// returned along with the nodesListResponse.
+func (zc *debugZipContext) nodesInfo(ctx context.Context) (ni nodesInfo, _ error) {
+	nodesResponse, err := zc.status.Nodes(ctx, &serverpb.NodesRequest{})
+	nodesList := &serverpb.NodesListResponse{}
+	if code := status.Code(errors.Cause(err)); code == codes.Unimplemented {
+		// Likely a SQL only server; try the NodesList endpoint.
+		nodesList, err = zc.status.NodesList(ctx, &serverpb.NodesListRequest{})
+	}
+	if err != nil {
+		return nodesInfo{}, err
+	}
+	if nodesResponse != nil {
+		// Build a nodesListResponse from the nodes data. nodesListResponse is needed
+		// further downstream to perform other debug zip related functionality such as
+		// collecting per node debug data.
+		for _, node := range nodesResponse.Nodes {
+			nodeDetails := serverpb.NodeDetails{
+				NodeID:     int32(node.Desc.NodeID),
+				Address:    node.Desc.Address,
+				SQLAddress: node.Desc.SQLAddress,
+			}
+			nodesList.Nodes = append(nodesList.Nodes, nodeDetails)
+		}
+	}
+	ni.nodeListResponse = nodesList
+	ni.nodeStatusResponse = nodesResponse
+
+	return ni, nil
 }
