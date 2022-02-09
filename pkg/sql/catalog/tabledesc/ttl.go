@@ -11,14 +11,14 @@
 package tabledesc
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/robfig/cron/v3"
 )
 
 // ValidateRowLevelTTL validates that the TTL options are valid.
-func ValidateRowLevelTTL(ttl *descpb.TableDescriptor_RowLevelTTL) error {
+func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 	if ttl == nil {
 		return nil
 	}

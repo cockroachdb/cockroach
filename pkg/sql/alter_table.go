@@ -699,9 +699,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableSetStorageParams:
-			var ttlBefore *descpb.TableDescriptor_RowLevelTTL
+			var ttlBefore *catpb.RowLevelTTL
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
-				ttlBefore = protoutil.Clone(ttl).(*descpb.TableDescriptor_RowLevelTTL)
+				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := paramparse.SetStorageParameters(
 				params.ctx,
@@ -725,9 +725,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableResetStorageParams:
-			var ttlBefore *descpb.TableDescriptor_RowLevelTTL
+			var ttlBefore *catpb.RowLevelTTL
 			if ttl := n.tableDesc.GetRowLevelTTL(); ttl != nil {
-				ttlBefore = protoutil.Clone(ttl).(*descpb.TableDescriptor_RowLevelTTL)
+				ttlBefore = protoutil.Clone(ttl).(*catpb.RowLevelTTL)
 			}
 			if err := paramparse.ResetStorageParameters(
 				params.ctx,
@@ -1788,7 +1788,7 @@ func handleTTLStorageParamChange(
 	params runParams,
 	tn *tree.TableName,
 	tableDesc *tabledesc.Mutable,
-	before, after *descpb.TableDescriptor_RowLevelTTL,
+	before, after *catpb.RowLevelTTL,
 ) error {
 	switch {
 	case before == nil && after == nil:
