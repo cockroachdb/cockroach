@@ -582,7 +582,7 @@ func TestMVCCGCQueueProcess(t *testing.T) {
 		}
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
+	cfg := tc.gossip.DeprecatedGetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
@@ -867,7 +867,7 @@ func TestMVCCGCQueueTransactionTable(t *testing.T) {
 
 	// Run GC.
 	mgcq := newMVCCGCQueue(tc.store)
-	cfg := tc.gossip.GetSystemConfig()
+	cfg := tc.gossip.DeprecatedGetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}
