@@ -48,6 +48,8 @@ type Limiters struct {
 // underlying state.
 type EvalContext interface {
 	fmt.Stringer
+	ImmutableEvalContext
+
 	ClusterSettings() *cluster.Settings
 	EvalKnobs() kvserverbase.BatchEvalTestingKnobs
 
@@ -109,12 +111,6 @@ type EvalContext interface {
 	// requests on the range.
 	GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary
 
-	// GetClosedTimestamp returns the current closed timestamp on the range.
-	// It is expected that a caller will have performed some action (either
-	// calling RevokeLease or WatchForMerge) to freeze further progression of
-	// the closed timestamp before calling this method.
-	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
-
 	GetExternalStorage(ctx context.Context, dest roachpb.ExternalStorage) (cloud.ExternalStorage, error)
 	GetExternalStorageFromURI(ctx context.Context, uri string, user security.SQLUsername) (cloud.ExternalStorage,
 		error)
@@ -133,6 +129,16 @@ type EvalContext interface {
 	// non-nil on those paths (a nil account is safe to use since it functions
 	// as an unlimited account).
 	GetResponseMemoryAccount() *mon.BoundAccount
+}
+
+// ImmutableEvalContext is like EvalContext, but it encapsulates state that
+// needs to be immutable during the course of command evaluation.
+type ImmutableEvalContext interface {
+	// GetClosedTimestamp returns the current closed timestamp on the range.
+	// It is expected that a caller will have performed some action (either
+	// calling RevokeLease or WatchForMerge) to freeze further progression of
+	// the closed timestamp before calling this method.
+	GetClosedTimestamp(ctx context.Context) hlc.Timestamp
 }
 
 // MockEvalCtx is a dummy implementation of EvalContext for testing purposes.

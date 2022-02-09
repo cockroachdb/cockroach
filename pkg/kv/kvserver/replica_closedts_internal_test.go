@@ -567,7 +567,7 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			tc.repl.mu.state.RaftClosedTimestamp = test.raftClosed
 			tc.repl.mu.state.LeaseAppliedIndex = uint64(test.applied)
 			tc.repl.mu.Unlock()
-			require.Equal(t, test.expClosed, tc.repl.GetClosedTimestamp(ctx))
+			require.Equal(t, test.expClosed, tc.repl.GetCurrentClosedTimestamp(ctx))
 		})
 	}
 }

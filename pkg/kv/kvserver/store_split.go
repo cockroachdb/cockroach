@@ -144,7 +144,7 @@ func splitPreApply(
 	if initClosedTS == nil {
 		initClosedTS = &hlc.Timestamp{}
 	}
-	initClosedTS.Forward(r.GetClosedTimestamp(ctx))
+	initClosedTS.Forward(r.GetCurrentClosedTimestamp(ctx))
 	if err := rsl.SetClosedTimestamp(ctx, readWriter, initClosedTS); err != nil {
 		log.Fatalf(ctx, "%s", err)
 	}

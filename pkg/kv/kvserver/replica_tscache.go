@@ -577,7 +577,7 @@ func (r *Replica) GetCurrentReadSummary(ctx context.Context) rspb.ReadSummary {
 	// Forward the read summary by the range's closed timestamp, because any
 	// replica could have served reads below this time. We also return the
 	// closed timestamp separately, in case callers want it split out.
-	closedTS := r.GetClosedTimestamp(ctx)
+	closedTS := r.GetCurrentClosedTimestamp(ctx)
 	sum.Merge(rspb.FromTimestamp(closedTS))
 	return sum
 }
