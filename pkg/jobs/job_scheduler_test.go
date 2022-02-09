@@ -722,9 +722,11 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 
 	// Execute schedule on another thread.
 	g := ctxgroup.WithContext(context.Background())
+	ready := make(chan struct{})
 	g.Go(func() error {
 		return h.cfg.DB.Txn(context.Background(),
 			func(ctx context.Context, txn *kv.Txn) error {
+				<-ready
 				err := h.execSchedules(ctx, allSchedules, txn)
 				return err
 			},
@@ -735,6 +737,7 @@ INSERT INTO defaultdb.foo VALUES(1, 1)
 		h.cfg.DB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 			// Let schedule start running, and wait for it to be ready to update.
 			h.env.SetTime(nextRun.Add(time.Second))
+			close(ready)
 			<-ex.beforeUpdate
 
 			// Before we let schedule proceed, update the number of rows in the table.
