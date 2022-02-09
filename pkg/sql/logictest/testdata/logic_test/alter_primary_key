@@ -1401,13 +1401,17 @@ COMMENT ON INDEX pkey IS 'idx';
 COMMENT ON CONSTRAINT pkey ON pkey_comment IS 'const';
 CREATE UNIQUE INDEX i2 ON pkey_comment(c);
 COMMENT ON INDEX i2 IS 'idx2';
+COMMENT ON CONSTRAINT i2 ON pkey_comment IS 'idx3';
+
 
 # Comment should exist inside the create statement, so filter it out
 query T
 SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
 COMMENT ON INDEX public.pkey_comment@pkey IS 'idx';
-COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'
 
 
 # Altering the primary key should clean up the comment.
@@ -1419,4 +1423,6 @@ ALTER TABLE pkey_comment ALTER PRIMARY KEY USING COLUMNS (b);
 query T
 SELECT substring(@2, strpos(@2, 'COMMENT')) FROM [SHOW CREATE pkey_comment];
 ----
-COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2'
+COMMENT ON INDEX public.pkey_comment@i2 IS 'idx2';
+COMMENT ON CONSTRAINT pkey_comment_a_b_key ON public.pkey_comment IS 'const';
+COMMENT ON CONSTRAINT i2 ON public.pkey_comment IS 'idx3'

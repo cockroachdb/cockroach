@@ -332,6 +332,8 @@ CREATE TABLE test_comment."t   t" ("x'" INT PRIMARY KEY);
 COMMENT ON TABLE test_comment."t   t" IS 'has '' quotes';
 COMMENT ON INDEX test_comment."t   t"@"t   t_pkey" IS 'has '' more '' quotes';
 COMMENT ON COLUMN test_comment."t   t"."x'" IS 'i '' just '' love '' quotes';
+COMMENT ON CONSTRAINT "t   t_pkey" ON test_comment."t   t" IS 'new constraint comment';
+
 
 query T colnames
 SHOW CREATE ALL TABLES
@@ -344,6 +346,7 @@ CREATE TABLE public."t   t" (
 COMMENT ON TABLE public."t   t" IS e'has \' quotes';
 COMMENT ON COLUMN public."t   t"."x'" IS e'i \' just \' love \' quotes';
 COMMENT ON INDEX public."t   t"@"t   t_pkey" IS e'has \' more \' quotes';
+COMMENT ON CONSTRAINT "t   t_pkey" ON public."t   t" IS 'new constraint comment';
 
 # Ensure schemas are shown correctly.
 statement ok

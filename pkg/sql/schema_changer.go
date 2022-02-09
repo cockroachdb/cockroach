@@ -1041,7 +1041,7 @@ func WaitToUpdateLeases(
 //
 // It also kicks off GC jobs as needed.
 func (sc *SchemaChanger) done(ctx context.Context) error {
-	// Gathers ant comments that need to be cleaned up.
+	// Gathers ant comments that need to be swapped/cleaned.
 	type commentToDelete struct {
 		id          int64
 		subID       int64
@@ -1205,23 +1205,12 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 						subID:       int64(id),
 						commentType: keys.IndexCommentType,
 					})
-				for _, idx := range scTable.AllIndexes() {
-					if idx.GetID() == id {
-						commentsToDelete = append(commentsToDelete,
-							commentToDelete{
-								id:          int64(scTable.GetID()),
-								subID:       int64(idx.GetConstraintID()),
-								commentType: keys.ConstraintCommentType,
-							})
-						break
-					}
-				}
 				for i := range pkSwap.PrimaryKeySwapDesc().OldIndexes {
 					// Skip the primary index.
 					if pkSwap.PrimaryKeySwapDesc().OldIndexes[i] == id {
 						continue
 					}
-					// Setup a swap operation for each new index
+					// Set up a swap operation for any re-created indexes.
 					commentsToSwap = append(commentsToSwap,
 						commentToSwap{
 							id:          int64(scTable.GetID()),
