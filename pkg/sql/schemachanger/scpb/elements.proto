@@ -29,34 +29,34 @@ message ElementProto {
   DefaultExpression default_expression = 8 [(gogoproto.moretags) = "parent:\"Column\""];
   View view = 9;
   Table table = 10;
-  ForeignKey outForeignKey = 11 [(gogoproto.moretags) = "parent:\"Table\""];
-  ForeignKeyBackReference inForeignKey = 12  [(gogoproto.moretags) = "parent:\"Table\""];
-  RelationDependedOnBy relationDependedOnBy = 13  [(gogoproto.moretags) = "parent:\"Table, View\""];
-  SequenceOwnedBy sequenceOwner = 45 [(gogoproto.moretags) = "parent:\"Column, Sequence\""];
+  ForeignKey out_foreign_key = 11 [(gogoproto.moretags) = "parent:\"Table\""];
+  ForeignKeyBackReference in_foreign_key = 12 [(gogoproto.moretags) = "parent:\"Table\""];
+  RelationDependedOnBy relation_depended_on_by = 13 [(gogoproto.moretags) = "parent:\"Table, View\""];
+  SequenceOwnedBy sequence_owner = 45 [(gogoproto.moretags) = "parent:\"Column, Sequence\""];
   Type type = 15;
   Schema schema = 16;
   Database database = 17;
   Partitioning partitioning = 18 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
-  Namespace namespace = 19   [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, Type\""];
+  Namespace namespace = 19 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, Type\""];
   Owner owner = 20 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema\""];
-  UserPrivileges UserPrivileges = 21 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema\""];
-  ColumnName columnName = 22 [(gogoproto.moretags) = "parent:\"Column\""];
+  UserPrivileges user_privileges = 21 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema\""];
+  ColumnName column_name = 22 [(gogoproto.moretags) = "parent:\"Column\""];
   Locality locality = 23 [(gogoproto.moretags) = "parent:\"Table\""];
-  IndexName indexName = 24  [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
-  ConstraintName constraintName = 25  [(gogoproto.moretags) = "parent:\"UniqueConstraint, CheckConstraint\""];
-  DefaultExprTypeReference defaultExprTypeRef = 26  [(gogoproto.moretags) = "parent:\"Column, Type\""];
-  OnUpdateExprTypeReference onUpdateTypeReference = 27 [(gogoproto.moretags) = "parent:\"Column, Type\""];
-  ComputedExprTypeReference computedExprTypeReference = 28 [(gogoproto.moretags) = "parent:\"Column, Type\""];
-  ViewDependsOnType viewDependsOnType = 29 [(gogoproto.moretags) = "parent:\"View, Type\""];
-  ColumnTypeReference columnTypeReference = 30 [(gogoproto.moretags) = "parent:\"Column, Type\""];
-  DatabaseSchemaEntry schemaEntry = 31 [(gogoproto.moretags) = "parent:\"Database, Schema\""];
-  CheckConstraintTypeReference checkConstraintTypeReference = 32  [(gogoproto.moretags) = "parent:\"Table, Type\""];
-  TableComment tableComment = 33 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
-  DatabaseComment databaseComment = 35 [(gogoproto.moretags) = "parent:\"Database\""];
-  SchemaComment schemaComment = 36 [(gogoproto.moretags) = "parent:\"Schema\""];
-  IndexComment indexComment = 37 [(gogoproto.moretags) = "parent:\"Index\""];
-  ColumnComment columnComment = 38 [(gogoproto.moretags) = "parent:\"Column\""];
-  ConstraintComment constraintComment = 39  [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, ForeignKey, UniqueConstraint, CheckConstraint\""];
+  IndexName index_name = 24 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
+  ConstraintName constraint_name = 25 [(gogoproto.moretags) = "parent:\"UniqueConstraint, CheckConstraint\""];
+  DefaultExprTypeReference default_expr_type_ref = 26 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  OnUpdateExprTypeReference on_update_type_reference = 27 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  ComputedExprTypeReference computed_expr_type_reference = 28 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  ViewDependsOnType view_depends_on_type = 29 [(gogoproto.moretags) = "parent:\"View, Type\""];
+  ColumnTypeReference column_type_reference = 30 [(gogoproto.moretags) = "parent:\"Column, Type\""];
+  DatabaseSchemaEntry schema_entry = 31 [(gogoproto.moretags) = "parent:\"Database, Schema\""];
+  CheckConstraintTypeReference check_constraint_type_reference = 32 [(gogoproto.moretags) = "parent:\"Table, Type\""];
+  TableComment table_comment = 33 [(gogoproto.moretags) = "parent:\"Table, View, Sequence\""];
+  DatabaseComment database_comment = 35 [(gogoproto.moretags) = "parent:\"Database\""];
+  SchemaComment schema_comment = 36 [(gogoproto.moretags) = "parent:\"Schema\""];
+  IndexComment index_comment = 37 [(gogoproto.moretags) = "parent:\"Index\""];
+  ColumnComment column_comment = 38 [(gogoproto.moretags) = "parent:\"Column\""];
+  ConstraintComment constraint_comment = 39 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, ForeignKey, UniqueConstraint, CheckConstraint\""];
   DatabaseRoleSetting database_role_setting = 40 [(gogoproto.moretags) = "parent:\"Database\""];
 }
 
@@ -64,20 +64,20 @@ message Column {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  uint32 family_id = 4  [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
+  uint32 family_id = 4 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   string family_name = 5;
   sql.sem.types.T type = 6;
   bool nullable = 7;
-  string default_expr = 8 [(gogoproto.customname) = "DefaultExpr"];
-  string on_update_expr = 9  [(gogoproto.customname) = "OnUpdateExpr"];
+  string default_expr = 8;
+  string on_update_expr = 9;
   bool hidden = 10;
   bool inaccessible = 11;
   uint32 generated_as_identity_type = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string generated_as_identity_sequence_option = 13;
-  repeated uint32 uses_sequence_ids = 14 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string computerExpr = 15;
-  uint32 pg_attribute_num = 16  [(gogoproto.customname) = "PgAttributeNum"];
-  uint32 system_column_kind = 17 [(gogoproto.customname) = "SystemColumnKind", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.SystemColumnKind"];
+  repeated uint32 uses_sequence_ids = 14 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string computer_expr = 15;
+  uint32 pg_attribute_num = 16;
+  uint32 system_column_kind = 17 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.SystemColumnKind"];
   bool virtual = 18;
 }
 
@@ -90,19 +90,19 @@ message PrimaryIndex {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  bool unique = 3  [(gogoproto.customname) = "Unique"];
+  bool unique = 3;
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool inverted = 10  [(gogoproto.customname) = "Inverted"];
-  bool concurrently = 11  [(gogoproto.customname) = "Concurrently"];
+  bool inverted = 10;
+  bool concurrently = 11;
 
   // SourceIndexID refers to the primary index which will be used to
   // to backfill this index.
-  uint32 source_index_id = 12 [(gogoproto.customname) = "SourceIndexID",  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  uint32 source_index_id = 12 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message SecondaryIndex {
@@ -114,19 +114,19 @@ message SecondaryIndex {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  bool unique = 3  [(gogoproto.customname) = "Unique"];
+  bool unique = 3;
   repeated uint32 key_column_ids = 4 [(gogoproto.customname) = "KeyColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated Direction key_column_direction = 5 [(gogoproto.customname) = "KeyColumnDirections"];
   repeated uint32 key_suffix_column_ids = 6 [(gogoproto.customname) = "KeySuffixColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   cockroach.sql.catalog.catpb.ShardedDescriptor sharded_descriptor = 7 [(gogoproto.customname) = "ShardedDescriptor"];
   repeated uint32 storing_column_ids = 8 [(gogoproto.customname) = "StoringColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 composite_column_ids = 9 [(gogoproto.customname) = "CompositeColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool inverted = 10  [(gogoproto.customname) = "Inverted"];
-  bool concurrently = 11  [(gogoproto.customname) = "Concurrently"];
+  bool inverted = 10;
+  bool concurrently = 11;
 
   // SourceIndexID refers to the primary index which will be used to
   // to backfill this index.
-  uint32 source_index_id = 12 [(gogoproto.customname) = "SourceIndexID",  (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  uint32 source_index_id = 12 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 }
 
 message SequenceDependency {
@@ -171,9 +171,9 @@ message Sequence {
 
 message DefaultExpression {
   option (gogoproto.equal) = true;
-  uint32 table_id = 1  [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  repeated uint32 usesSequenceIDs =3  [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_sequence_ids = 3 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string default_expr = 4;
 }
 
@@ -231,9 +231,9 @@ message ViewDependsOnType {
 message ForeignKey {
   option (gogoproto.equal) = true;
   uint32 origin_id = 1 [(gogoproto.customname) = "OriginID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 origin_columns = 3 [(gogoproto.customname) = "OriginColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  repeated uint32 origin_columns = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 reference_id = 4 [(gogoproto.customname) = "ReferenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 reference_columns = 5 [(gogoproto.customname) = "ReferenceColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  repeated uint32 reference_columns = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
   uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
   string name = 8;
@@ -245,21 +245,21 @@ message ForeignKeyBackReference {
   repeated uint32 origin_columns = 3 [(gogoproto.customname) = "OriginColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   uint32 reference_id = 4 [(gogoproto.customname) = "ReferenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 reference_columns = 5 [(gogoproto.customname) = "ReferenceColumns", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  uint32 on_update = 6 [(gogoproto.customname) = "OnUpdate", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
-  uint32 on_delete = 7 [(gogoproto.customname) = "OnDelete", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
+  uint32 on_update = 6 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
+  uint32 on_delete = 7 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.ForeignKeyAction"];
   string name = 8;
 }
 
 message SequenceOwnedBy {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 owner_table_id = 2  [(gogoproto.customname) = "OwnerTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 owner_table_id = 2 [(gogoproto.customname) = "OwnerTableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message RelationDependedOnBy {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 dependedOn = 2  [(gogoproto.customname) = "DependedOnBy", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 columnID = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 depended_on = 2 [(gogoproto.customname) = "DependedOnBy", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
 }
 
 message Type {
@@ -268,57 +268,57 @@ message Type {
 
 message Schema {
   uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 dependent_objects = 3 [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message Database {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  repeated uint32 dependentObjects = 3  [(gogoproto.customname) = "DependentObjects", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 dependent_objects = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
 message ListPartition {
   option (gogoproto.equal) = true;
-  string name = 1  [(gogoproto.customname) = "Name"];
-  repeated string expr = 2  [(gogoproto.customname) = "Expr"];
+  string name = 1;
+  repeated string expr = 2;
 }
 
 message RangePartitions {
   option (gogoproto.equal) = true;
-  string name = 1  [(gogoproto.customname) = "Name"];
-  repeated string To = 2  [(gogoproto.customname) = "To"];
-  repeated string From = 3  [(gogoproto.customname) = "From"];
+  string name = 1;
+  repeated string to = 2;
+  repeated string from = 3;
 }
 
 message Partitioning {
   option (gogoproto.equal) = true;
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  repeated string fields = 3  [(gogoproto.customname) = "Fields"];
-  repeated ListPartition list_partitions = 4  [(gogoproto.customname) = "ListPartitions"];
-  repeated RangePartitions range_partitions = 5  [(gogoproto.customname) = "RangePartitions"];
+  repeated string fields = 3;
+  repeated ListPartition list_partitions = 4;
+  repeated RangePartitions range_partitions = 5;
 }
 
 message Namespace {
   uint32 database_id = 1 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 descriptor_id = 3[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 descriptor_id = 3 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string name = 4;
 }
 
 message Owner {
-  uint32 descriptor_id = 1[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string owner = 2;
 }
 
 message UserPrivileges {
-  uint32 descriptor_id = 1[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string username = 2;
   uint32 privileges = 3;
 }
 
 message Locality {
-  uint32 descriptor_id = 1[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  cockroach.sql.catalog.catpb.LocalityConfig Locality = 2 [(gogoproto.customname) = "Locality", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.LocalityConfig"];
+  uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.LocalityConfig locality = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.LocalityConfig"];
 }
 
 message ColumnName {
@@ -353,7 +353,7 @@ message ConstraintName {
 
 
 message DefaultPrivilege {
-  uint32 descriptor_id = 1[(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   message DefaultObjectPrivilege{
     repeated UserPrivileges privileges = 1;
   }
@@ -361,7 +361,7 @@ message DefaultPrivilege {
     cockroach.sql.sqlbase.DefaultPrivilegesForRole.ExplicitRole explicit_role = 2;
     cockroach.sql.sqlbase.DefaultPrivilegesForRole.ForAllRolesPseudoRole for_all_roles = 3;
   }
-    map<uint32, DefaultObjectPrivilege> privileges_per_object = 4;
+  map<uint32, DefaultObjectPrivilege> privileges_per_object = 4;
 }
 
 message DatabaseSchemaEntry {
