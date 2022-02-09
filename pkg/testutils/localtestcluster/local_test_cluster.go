@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
@@ -223,6 +224,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
 		nil,
+	)
+	cfg.SystemConfigProvider = systemconfigwatcher.New(
+		keys.SystemSQLCodec,
+		cfg.Clock,
+		rangeFeedFactory,
+		zonepb.DefaultZoneConfigRef(),
 	)
 
 	ltc.Store = kvserver.NewStore(ctx, cfg, ltc.Eng, nodeDesc)

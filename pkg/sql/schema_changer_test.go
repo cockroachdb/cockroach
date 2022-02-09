@@ -3754,10 +3754,9 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		},
 		// schema change at the end of a transaction that has written.
 		{
-			name:        `insert-create`,
-			firstStmt:   `INSERT INTO t.kv VALUES ('e', 'f')`,
-			secondStmt:  `CREATE INDEX foo2 ON t.kv (v)`,
-			expectedErr: `the first schema change statement in a transaction must precede any writes`,
+			name:       `insert-create`,
+			firstStmt:  `INSERT INTO t.kv VALUES ('e', 'f')`,
+			secondStmt: `CREATE INDEX foo2 ON t.kv (v)`,
 		},
 		// schema change at the end of a read only transaction.
 		{

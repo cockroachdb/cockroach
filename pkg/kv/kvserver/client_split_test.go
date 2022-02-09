@@ -38,17 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -249,72 +246,6 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	}
 	if !reflect.DeepEqual(expR, r) {
 		t.Fatalf("right hand side: expected %+v, got %+v", expR, r)
-	}
-}
-
-// TestStoreRangeSplitAtTablePrefix verifies a range can be split at
-// UserTableDataMin and still gossip the SystemConfig properly.
-func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 59091, "flaky test")
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-				DisableSplitQueue: true,
-			},
-		},
-	})
-	s := serv.(*server.TestServer)
-	defer s.Stopper().Stop(ctx)
-	store, err := s.Stores().GetStore(s.GetFirstStoreID())
-	require.NoError(t, err)
-
-	key := bootstrap.TestingUserTableDataMin()
-	args := adminSplitArgs(key)
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
-		t.Fatalf("%q: split unexpected error: %s", key, pErr)
-	}
-
-	var desc descpb.Descriptor
-	descBytes, err := protoutil.Marshal(&desc)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Update SystemConfig to trigger gossip.
-	if err := store.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
-		// We don't care about the values, just the keys.
-		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, descpb.ID(bootstrap.TestingUserDescID(0)))
-		return txn.Put(ctx, k, &desc)
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	successChan := make(chan struct{}, 1)
-	store.Gossip().RegisterCallback(gossip.KeySystemConfig, func(_ string, content roachpb.Value) {
-		contentBytes, err := content.GetBytes()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if bytes.Contains(contentBytes, descBytes) {
-			select {
-			case successChan <- struct{}{}:
-			default:
-			}
-		}
-	})
-
-	select {
-	case <-time.After(time.Second):
-		t.Errorf("expected a schema gossip containing %q, but did not see one", descBytes)
-	case <-successChan:
 	}
 }
 
@@ -1017,9 +948,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// This test was written with the SystemConfigSpan in mind.
-		DisableSpanConfigs: true,
+	serv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -1030,22 +959,18 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	config.TestingSetupZoneConfigHook(s.Stopper())
 
-	const maxBytes = 1 << 16
-	// Set max bytes.
-	descID := bootstrap.TestingUserDescID(0)
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
-
-	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
-		t.Fatal(err)
-	}
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
+	tdb.Exec(t, "CREATE TABLE t ()")
+	var descID uint32
+	tdb.QueryRow(t, "SELECT 't'::regclass::int").Scan(&descID)
+	const maxBytes, minBytes = 1 << 16, 1 << 14
+	tdb.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING range_max_bytes = $1, range_min_bytes = $2",
+		maxBytes, minBytes)
 
 	tableBoundary := keys.SystemSQLCodec.TablePrefix(descID)
-
 	{
 		var repl *kvserver.Replica
 
@@ -1056,13 +981,12 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 			if actualRSpan := repl.Desc().RSpan(); !actualRSpan.Equal(expectedRSpan) {
 				return errors.Errorf("expected range %s to span %s", repl, expectedRSpan)
 			}
+			// Check range's max bytes settings.
+			if actualMaxBytes := repl.GetMaxBytes(); actualMaxBytes != maxBytes {
+				return errors.Errorf("range %s max bytes mismatch, got: %d, expected: %d", repl, actualMaxBytes, maxBytes)
+			}
 			return nil
 		})
-
-		// Check range's max bytes settings.
-		if actualMaxBytes := repl.GetMaxBytes(); actualMaxBytes != maxBytes {
-			t.Fatalf("range %s max bytes mismatch, got: %d, expected: %d", repl, actualMaxBytes, maxBytes)
-		}
 
 		// Look in the range after prefix we're writing to.
 		fillRange(t, store, repl.RangeID, tableBoundary, maxBytes, false /* singleKey */)
@@ -1088,9 +1012,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// This test was written with the system config span in mind.
-		DisableSpanConfigs: true,
+	serv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -1101,25 +1023,35 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
-	config.TestingSetupZoneConfigHook(s.Stopper())
 
-	origRng := store.LookupReplica(roachpb.RKeyMin)
+	// Find the last range.
+	var max roachpb.RKey
+	var origRng *roachpb.RangeDescriptor
+	store.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+		if rd := replica.Desc(); max == nil || max.Less(rd.StartKey) {
+			origRng = rd
+			max = rd.StartKey
+		}
+		return true
+	})
 
-	// Set max bytes.
-	const maxBytes = 1 << 16
-	descID := bootstrap.TestingUserDescID(0)
-	zoneConfig := zonepb.DefaultZoneConfig()
-	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
-
-	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
-		t.Fatal(err)
-	}
+	// Create a new table and configure its size.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
+	tdb.Exec(t, "CREATE TABLE t ()")
+	var descID uint32
+	tdb.QueryRow(t, "SELECT 't'::regclass::int").Scan(&descID)
+	const maxBytes, minBytes = 1 << 16, 1 << 14
+	tdb.Exec(t, "ALTER TABLE t CONFIGURE ZONE USING range_max_bytes = $1, range_min_bytes = $2",
+		maxBytes, minBytes)
 
 	// Verify that the range is split and the new range has the correct max bytes.
 	testutils.SucceedsSoon(t, func() error {
 		newRng := store.LookupReplica(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(descID)))
+		if newRng == nil {
+			return errors.Errorf("expected new range created by split")
+		}
 		if newRng.RangeID == origRng.RangeID {
 			return errors.Errorf("expected new range created by split")
 		}
@@ -1309,132 +1241,6 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 
 		})
 	}
-}
-
-// TestStoreRangeSystemSplits verifies that splits are based on the contents of
-// the system.descriptor table.
-func TestStoreRangeSystemSplits(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	// Intentionally leave the merge queue enabled. This indirectly tests that the
-	// merge queue respects these split points.
-	ctx := context.Background()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// This test was written with the system config span in mind.
-		DisableSpanConfigs: true,
-	})
-	defer s.Stopper().Stop(ctx)
-
-	userTableMax := bootstrap.TestingUserDescID(4)
-	var exceptions map[int]struct{}
-	schema := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
-	)
-	// Write table descriptors for the tables in the metadata schema as well as
-	// five dummy user tables. This does two things:
-	//   - descriptor IDs are used to determine split keys
-	//   - the write triggers a SystemConfig update and gossip
-	// We should end up with splits at each user table prefix.
-	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
-		descTablePrefix := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
-		kvs, _ /* splits */ := schema.GetInitialValues()
-		for _, akv := range kvs {
-			if !bytes.HasPrefix(akv.Key, descTablePrefix) {
-				continue
-			}
-			if err := txn.Put(ctx, akv.Key, &akv.Value); err != nil {
-				return err
-			}
-		}
-		for i := bootstrap.TestingUserDescID(0); i <= userTableMax; i++ {
-			// We don't care about the value, just the key.
-			id := descpb.ID(i)
-			key := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-			desc := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
-			if err := txn.Put(ctx, key, desc.DescriptorProto()); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	verifySplitsAtTablePrefixes := func() {
-		t.Helper()
-		// We expect splits at each of the user tables and at a few fixed system
-		// range boundaries, but not at system config table boundaries.
-		expKeys := []roachpb.Key{
-			testutils.MakeKey(keys.Meta2Prefix, keys.NodeLivenessPrefix),
-			testutils.MakeKey(keys.Meta2Prefix, keys.NodeLivenessKeyMax),
-			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix),
-			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix.PrefixEnd()),
-			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
-		}
-		ids := catalog.MakeDescriptorIDSet(schema.DescriptorIDs()...)
-
-		for i := 0; i < keys.MaxSystemConfigDescID; i++ {
-			ids.Remove(descpb.ID(i))
-		}
-		// We sadly do split on pseudo table ID.
-		for _, id := range keys.PseudoTableIDs {
-			ids.Add(descpb.ID(id))
-		}
-		ids.ForEach(func(id descpb.ID) {
-			expKeys = append(expKeys,
-				testutils.MakeKey(
-					keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(uint32(id)),
-				),
-			)
-		})
-		for i := bootstrap.TestingUserDescID(0); i <= userTableMax; i++ {
-			if _, ok := exceptions[int(i)]; !ok {
-				expKeys = append(expKeys,
-					testutils.MakeKey(keys.Meta2Prefix, keys.SystemSQLCodec.TablePrefix(i)),
-				)
-			}
-		}
-		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
-
-		testutils.SucceedsSoon(t, func() error {
-			rows, err := s.DB().Scan(context.Background(), keys.Meta2Prefix, keys.MetaMax, 0)
-			if err != nil {
-				return err
-			}
-			keys := make([]roachpb.Key, 0, len(expKeys))
-			for _, r := range rows {
-				keys = append(keys, r.Key)
-			}
-			if !reflect.DeepEqual(keys, expKeys) {
-				return errors.Errorf("expected split keys:\n%v\nbut found:\n%v", expKeys, keys)
-			}
-			return nil
-		})
-	}
-
-	verifySplitsAtTablePrefixes()
-
-	// Write another, disjoint (+3) descriptor for a user table.
-	userTableMax += 3
-	exceptions = map[int]struct{}{int(userTableMax) - 1: {}, int(userTableMax) - 2: {}}
-	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-			return err
-		}
-		// This time, only write the last table descriptor. Splits only occur for
-		// the descriptor we add. We don't care about the value, just the key.
-		id := descpb.ID(userTableMax)
-		k := catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, id)
-		desc := tabledesc.NewBuilder(&descpb.TableDescriptor{ID: id}).BuildImmutable()
-		return txn.Put(ctx, k, desc.DescriptorProto())
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	verifySplitsAtTablePrefixes()
 }
 
 // runSetupSplitSnapshotRace engineers a situation in which a range has
@@ -3574,7 +3380,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+	serv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DisableSpanConfigs: true,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -3585,20 +3391,31 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	})
 	s := serv.(*server.TestServer)
 	defer s.Stopper().Stop(ctx)
+	// Set the closed_timestamp interval to be short to shorten the test duration
+	// because we need to wait for a checkpoint on the system config.
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
 	clock.Store(s.Clock())
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 	config.TestingSetupZoneConfigHook(s.Stopper())
 
-	// Set global reads.
+	// Split off the range for the test.
 	descID := bootstrap.TestingUserDescID(0)
 	descKey := keys.SystemSQLCodec.TablePrefix(descID)
+	splitArgs := adminSplitArgs(descKey)
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), splitArgs)
+	require.Nil(t, pErr)
+
+	// Set global reads.
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GlobalReads = proto.Bool(true)
 	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
 
-	// Trigger gossip callback and wait for propagation
-	require.NoError(t, store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0))
+	// Perform a write to the system config span being watched by
+	// the SystemConfigProvider.
+	tdb.Exec(t, "CREATE TABLE foo ()")
 	testutils.SucceedsSoon(t, func() error {
 		repl := store.LookupReplica(roachpb.RKey(descKey))
 		if repl.ClosedTimestampPolicy() != roachpb.LEAD_FOR_GLOBAL_READS {
@@ -3609,12 +3426,12 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 
 	// Write to the range, which has the effect of bumping the closed timestamp.
 	pArgs := putArgs(descKey, []byte("foo"))
-	_, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs)
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), pArgs)
 	require.Nil(t, pErr)
 
 	// Split the range. Should succeed.
 	splitKey := append(descKey, []byte("split")...)
-	splitArgs := adminSplitArgs(splitKey)
+	splitArgs = adminSplitArgs(splitKey)
 	_, pErr = kv.SendWrapped(ctx, store.TestSender(), splitArgs)
 	require.Nil(t, pErr)
 	require.Equal(t, int64(1), store.Metrics().CommitWaitsBeforeCommitTrigger.Count())

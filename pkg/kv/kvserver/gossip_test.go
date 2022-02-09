@@ -18,10 +18,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -200,13 +204,36 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 // TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents tests
 // that failures to gossip the system config due to intents are rectified when
 // later intents are aborted.
+//
+// Note that this tests the gossip functionality only in the mixed version
+// state. After the release is finalized, these gossip triggers will no longer
+// happen.
+//
+// TODO(ajwerner): Delete this test in 22.2.
 func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false,
+	)
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					DisableMergeQueue: true,
+				},
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
+				},
+			},
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 	require.NoError(t, tc.WaitForFullReplication())
 
@@ -215,13 +242,13 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 	txA := db.NewTxn(ctx, "a")
 	txB := db.NewTxn(ctx, "b")
 
-	require.NoError(t, txA.SetSystemConfigTrigger(true /* forSystemTenant */))
+	require.NoError(t, txA.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */))
 	db1000 := dbdesc.NewInitial(1000, "1000", security.AdminRoleName())
 	require.NoError(t, txA.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(1000),
 		db1000.DescriptorProto()))
 
-	require.NoError(t, txB.SetSystemConfigTrigger(true /* forSystemTenant */))
+	require.NoError(t, txB.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */))
 	db2000 := dbdesc.NewInitial(2000, "2000", security.AdminRoleName())
 	require.NoError(t, txB.Put(ctx,
 		keys.SystemSQLCodec.DescMetadataKey(2000),
@@ -237,7 +264,7 @@ func TestGossipAfterAbortOfSystemConfigTransactionAfterFailureDueToIntents(t *te
 			}
 		}
 	}
-	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).RegisterSystemConfigChannel()
+	systemConfChangeCh := tc.Server(0).GossipI().(*gossip.Gossip).DeprecatedRegisterSystemConfigChannel()
 	clearNotifictions(systemConfChangeCh)
 	require.NoError(t, txB.Commit(ctx))
 	select {

@@ -140,9 +140,9 @@ func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *roachpb.Gossip
 		panic(err)
 	}
 	return &roachpb.GossipSubscriptionEvent{
-		Key:            gossip.KeySystemConfig,
+		Key:            gossip.KeyDeprecatedSystemConfig,
 		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.KeySystemConfig,
+		PatternMatched: gossip.KeyDeprecatedSystemConfig,
 	}
 }
 
@@ -252,7 +252,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
 	sysCfg := c.GetSystemConfig()
 	require.Nil(t, sysCfg)
-	sysCfgC := c.RegisterSystemConfigChannel()
+	sysCfgC, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC, 0)
 
 	// Return first SystemConfig response.
@@ -282,7 +282,7 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
 
 	// A newly registered SystemConfig channel will be immediately notified.
-	sysCfgC2 := c.RegisterSystemConfigChannel()
+	sysCfgC2, _ := c.RegisterSystemConfigChannel()
 	require.Len(t, sysCfgC2, 1)
 }
 

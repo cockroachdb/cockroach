@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -78,7 +79,14 @@ func (r *Replica) shouldGossip(ctx context.Context) bool {
 //
 // TODO(nvanbenschoten,bdarnell): even though this is best effort, we should log
 // louder when we continually fail to gossip system config.
+//
+// TODO(ajwerner): Remove this in 22.2.
 func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error {
+	if r.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.DisableSystemConfigGossipTrigger,
+	) {
+		return nil
+	}
 	r.raftMu.AssertHeld()
 	if r.store.Gossip() == nil {
 		log.VEventf(ctx, 2, "not gossiping system config because gossip isn't initialized")
@@ -109,8 +117,9 @@ func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
-	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
-		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
+	if gossipedCfg := r.store.Gossip().DeprecatedGetSystemConfig(); gossipedCfg != nil &&
+		gossipedCfg.Equal(loadedCfg) &&
+		r.store.Gossip().InfoOriginatedHere(gossip.KeyDeprecatedSystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		// Clear the failure bit if all intents have been resolved but there's
 		// nothing new to gossip.
@@ -119,7 +128,7 @@ func (r *Replica) MaybeGossipSystemConfigRaftMuLocked(ctx context.Context) error
 	}
 
 	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig, loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
 	r.markSystemConfigGossipSuccess()

@@ -67,7 +67,7 @@ func runTest(t *testing.T, s serverutils.TestTenantInterface, sqlDB *gosql.DB) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	kvDB := execCfg.DB
 	r := execCfg.SystemConfig
-	rc := r.RegisterSystemConfigChannel()
+	rc, _ := r.RegisterSystemConfigChannel()
 	clearChan := func() {
 		select {
 		case <-rc:

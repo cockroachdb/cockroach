@@ -38,7 +38,7 @@ type Cache struct {
 		cfg       *config.SystemConfig
 		timestamp hlc.Timestamp
 
-		registered []chan<- struct{}
+		registered map[chan<- struct{}]struct{}
 	}
 }
 
@@ -53,6 +53,7 @@ func New(
 	c := Cache{
 		defaultZoneConfig: defaultZoneConfig,
 	}
+	c.mu.registered = make(map[chan<- struct{}]struct{})
 
 	// TODO(ajwerner): Consider stripping this down to just watching
 	// descriptor and zones.
@@ -85,12 +86,26 @@ func (c *Cache) GetSystemConfig() *config.SystemConfig {
 
 // RegisterSystemConfigChannel is part of the config.SystemConfigProvider
 // interface.
-func (c *Cache) RegisterSystemConfigChannel() <-chan struct{} {
+func (c *Cache) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister func()) {
 	ch := make(chan struct{}, 1)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.mu.registered = append(c.mu.registered, ch)
-	return ch
+
+	c.mu.registered[ch] = struct{}{}
+	return ch, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.mu.registered, ch)
+	}
+}
+
+// LastUpdated returns the timestamp corresponding to the current state of
+// the cache. Any subsequent call to GetSystemConfig will see a state that
+// corresponds to a snapshot as least as new as this timestamp.
+func (c *Cache) LastUpdated() hlc.Timestamp {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.mu.timestamp
 }
 
 type keyValues []roachpb.KeyValue
@@ -126,23 +141,24 @@ func (c *Cache) handleUpdate(_ context.Context, update rangefeedcache.Update) {
 
 	updatedCfg := config.NewSystemConfig(c.defaultZoneConfig)
 	updatedCfg.Values = updatedData
-	toNotify := c.setUpdatedConfig(updatedCfg, update.Timestamp)
-	for _, c := range toNotify {
+	c.setUpdatedConfig(updatedCfg, update.Timestamp)
+}
+
+func (c *Cache) setUpdatedConfig(updated *config.SystemConfig, ts hlc.Timestamp) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	changed := c.mu.cfg != updated
+	c.mu.cfg = updated
+	c.mu.timestamp = ts
+	if !changed {
+		return
+	}
+	for ch := range c.mu.registered {
 		select {
-		case c <- struct{}{}:
+		case ch <- struct{}{}:
 		default:
 		}
 	}
-}
-
-func (c *Cache) setUpdatedConfig(
-	updated *config.SystemConfig, ts hlc.Timestamp,
-) (toNotify []chan<- struct{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.mu.cfg = updated
-	c.mu.timestamp = ts
-	return c.mu.registered
 }
 
 func passThroughTranslation(

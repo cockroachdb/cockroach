@@ -21,20 +21,32 @@ type SystemConfigProvider interface {
 	// the system config. It is notified after registration (if a system config
 	// is already set), and whenever a new system config is successfully
 	// unmarshaled.
-	RegisterSystemConfigChannel() <-chan struct{}
+	RegisterSystemConfigChannel() (_ <-chan struct{}, unregister func())
 }
 
-// EmptySystemConfigProvider is an implementation of SystemConfigProvider that
-// never provides a system config.
-type EmptySystemConfigProvider struct{}
+// ConstantSystemConfigProvider is an implementation of SystemConfigProvider which
+// always returns the same value.
+type ConstantSystemConfigProvider struct {
+	cfg *SystemConfig
+}
+
+// NewConstantSystemConfigProvider constructs a SystemConfigProvider which
+// always returns the same value.
+func NewConstantSystemConfigProvider(cfg *SystemConfig) *ConstantSystemConfigProvider {
+	p := &ConstantSystemConfigProvider{cfg: cfg}
+	return p
+}
 
 // GetSystemConfig implements the SystemConfigProvider interface.
-func (EmptySystemConfigProvider) GetSystemConfig() *SystemConfig {
-	return nil
+func (c *ConstantSystemConfigProvider) GetSystemConfig() *SystemConfig {
+	return c.cfg
 }
 
 // RegisterSystemConfigChannel implements the SystemConfigProvider interface.
-func (EmptySystemConfigProvider) RegisterSystemConfigChannel() <-chan struct{} {
+func (c *ConstantSystemConfigProvider) RegisterSystemConfigChannel() (
+	_ <-chan struct{},
+	unregister func(),
+) {
 	// The system config will never be updated, so return a nil channel.
-	return nil
+	return nil, func() {}
 }

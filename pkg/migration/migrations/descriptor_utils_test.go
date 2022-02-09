@@ -89,16 +89,18 @@ SELECT *
 			table.GetParentID(), table.GetParentSchemaID(), table.GetName())
 	}
 	require.Len(t, checkEntries(t), 0)
-	require.NoError(t,
-		migrations.CreateSystemTable(ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table))
+	require.NoError(t, migrations.CreateSystemTable(
+		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+	))
 	require.Len(t, checkEntries(t), 1)
 	sqlDB.CheckQueryResults(t,
 		"SELECT create_statement FROM [SHOW CREATE TABLE system.fake_table]",
 		[][]string{{fakeTableSchema}})
 
 	// Make sure it's idempotent.
-	require.NoError(t,
-		migrations.CreateSystemTable(ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table))
+	require.NoError(t, migrations.CreateSystemTable(
+		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+	))
 	require.Len(t, checkEntries(t), 1)
 
 }

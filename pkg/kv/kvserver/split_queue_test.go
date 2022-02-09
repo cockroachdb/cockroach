@@ -70,7 +70,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		{roachpb.RKey(keys.SystemSQLCodec.TablePrefix(2001)), roachpb.RKeyMax, 32<<20 + 1, 64 << 20, true, 1},
 	}
 
-	cfg := tc.gossip.GetSystemConfig()
+	cfg := tc.gossip.DeprecatedGetSystemConfig()
 	if cfg == nil {
 		t.Fatal("config not set")
 	}

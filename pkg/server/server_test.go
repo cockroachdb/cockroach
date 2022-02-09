@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
@@ -393,12 +395,34 @@ func TestAcceptEncoding(t *testing.T) {
 	}
 }
 
+// TestSystemConfigGossip tests that system config gossip works in the mixed
+// version state. After the 22.1 release is finalized, system config gossip
+// will no longer occur.
+//
+// TODO(ajwerner): Delete this test in 22.2.
 func TestSystemConfigGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryMinSupportedVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		false,
+	)
+	serverArgs := base.TestServerArgs{
+		Settings: settings,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableMergeQueue: true,
+			},
+			Server: &TestingKnobs{
+				BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
+				DisableAutomaticVersionUpgrade: make(chan struct{}),
+			},
+		},
+	}
+	s, _, kvDB := serverutils.StartServer(t, serverArgs)
 	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 
@@ -410,7 +434,7 @@ func TestSystemConfigGossip(t *testing.T) {
 	}
 
 	// Register a callback for gossip updates.
-	resultChan := ts.Gossip().RegisterSystemConfigChannel()
+	resultChan := ts.Gossip().DeprecatedRegisterSystemConfigChannel()
 
 	// The span gets gossiped when it first shows up.
 	select {
@@ -422,7 +446,7 @@ func TestSystemConfigGossip(t *testing.T) {
 
 	// Write a system key with the transaction marked as having a Gossip trigger.
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
+		if err := txn.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
 			return err
 		}
 		return txn.Put(ctx, key, valAt(2))
@@ -438,7 +462,7 @@ func TestSystemConfigGossip(t *testing.T) {
 		var systemConfig *config.SystemConfig
 		select {
 		case <-resultChan:
-			systemConfig = ts.gossip.GetSystemConfig()
+			systemConfig = ts.gossip.DeprecatedGetSystemConfig()
 
 		case <-time.After(500 * time.Millisecond):
 			return errors.Errorf("did not receive gossip message")

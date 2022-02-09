@@ -2234,7 +2234,7 @@ ALTER TABLE t65064 INJECT STATISTICS '[
   }
 ]';
 
-query T
+query T retry
 SELECT * FROM [EXPLAIN SELECT * FROM t65064 WHERE username = 'kharris'] OFFSET 2
 ----
 ·
