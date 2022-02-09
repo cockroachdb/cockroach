@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -100,7 +101,7 @@ var importAtNow = settings.RegisterBoolSetting(
 	settings.TenantWritable,
 	"bulkio.import_at_current_time.enabled",
 	"write imported data at the current timestamp, when each batch is flushed",
-	false,
+	true,
 )
 
 // ImportBufferConfigSizes determines the minimum, maximum and step size for the
@@ -327,14 +328,13 @@ func ingestKvs(
 	defer span.Finish()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-	writeAtRequestTime := false
-	if importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
-		if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
-			return nil, errors.Newf(
-				"cannot use %s until version %s", importAtNow.Key(), clusterversion.MVCCAddSSTable.String(),
-			)
-		}
-		writeAtRequestTime = true
+	writeAtRequestTime := true
+	if !importAtNow.Get(&flowCtx.Cfg.Settings.SV) {
+		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster setting")
+		writeAtRequestTime = false
+	} else if !flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.MVCCAddSSTable) {
+		log.Warningf(ctx, "ingesting import data with raw timestamps due to cluster version")
+		writeAtRequestTime = false
 	}
 
 	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
