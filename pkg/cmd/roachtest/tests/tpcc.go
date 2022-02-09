@@ -1506,7 +1506,7 @@ func setupPrometheus(
 			snapshotCtx,
 			c,
 			t.L(),
-			filepath.Join(t.ArtifactsDir(), "prometheus-snapshot.tar.gz"),
+			t.ArtifactsDir(),
 		); err != nil {
 			t.L().Printf("failed to get prometheus snapshot: %v", err)
 		}
