@@ -64,6 +64,7 @@ func (k EngineKey) Format(f fmt.State, c rune) {
 // look like an encoded EngineKey. By splitting, at Key + \x00, the Key looks
 // like an EngineKey with no Version.
 const (
+	sentinel               = '\x00'
 	sentinelLen            = 1
 	suffixEncodedLengthLen = 1
 )
