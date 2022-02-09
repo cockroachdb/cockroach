@@ -536,8 +536,10 @@ message IndexDescriptor {
   // Used within the table descriptor to uniquely identify individual
   // constraints, which is only set for primary keys and unique secondary
   // indexes.
-  optional uint32 constraint_id = 33 [(gogoproto.customname) = "ConstraintID",
+  optional uint32 constraint_id = 25 [(gogoproto.customname) = "ConstraintID",
     (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+
+  // Next ID: 26
 }
 
 // ConstraintToUpdate represents a constraint to be added to the table and
