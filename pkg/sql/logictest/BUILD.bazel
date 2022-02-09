@@ -67,6 +67,7 @@ go_test(
         "@com_github_cockroachdb_sqllogictest//:testfiles",
     ],
     embed = [":logictest"],
+    tags = ["cpu:4"],
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
