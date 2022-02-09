@@ -413,3 +413,9 @@ type RemoveDatabaseRoleSettings struct {
 	mutationOp
 	DatabaseID descpb.ID
 }
+
+// DeleteSchedule is used to delete a schedule ID from the database.
+type DeleteSchedule struct {
+	mutationOp
+	ScheduleID int64
+}
