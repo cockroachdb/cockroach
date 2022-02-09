@@ -174,11 +174,6 @@ Replaces 'make ui-watch'.`,
 				return err
 			}
 
-			// Wait for OS signals to cancel if we're not in test-mode
-			if !isTesting {
-				<-ctx.Done()
-			}
-
 			return nil
 		},
 	}

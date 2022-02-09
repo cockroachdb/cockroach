@@ -38,6 +38,10 @@ const (
 )
 
 func (d *dev) checkDoctorStatus(ctx context.Context) error {
+	if d.knobs.skipDoctorCheck {
+		return nil
+	}
+
 	dir, err := d.getWorkspace(ctx)
 	if err != nil {
 		return err
@@ -230,12 +234,13 @@ Please add one of the following to your %s/.bazelrc.user:`, workspace)
 		}
 	}
 
-	if success {
-		if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
-			return err
-		}
-		log.Println("You are ready to build :)")
-		return nil
+	if !success {
+		return errors.New("please address the errors described above and try again")
 	}
-	return errors.New("please address the errors described above and try again")
+
+	if err := d.writeDoctorStatus(ctx, d.exec); err != nil {
+		return err
+	}
+	log.Println("You are ready to build :)")
+	return nil
 }

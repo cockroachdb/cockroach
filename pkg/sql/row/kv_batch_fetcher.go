@@ -467,11 +467,16 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
+			// Note that t.Rows and batchResp might be nil when the ScanResponse
+			// is empty, and the caller (the KVFetcher) will skip over it.
 			return true, t.Rows, batchResp, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
+			// Note that t.Rows and batchResp might be nil when the
+			// ReverseScanResponse is empty, and the caller (the KVFetcher) will
+			// skip over it.
 			return true, t.Rows, batchResp, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {

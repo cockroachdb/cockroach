@@ -12,6 +12,7 @@
 package tabledesc
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,6 +26,10 @@ var _ catalog.TableDescriptor = (*immutable)(nil)
 var _ catalog.TableDescriptor = (*Mutable)(nil)
 var _ catalog.MutableDescriptor = (*Mutable)(nil)
 var _ catalog.TableDescriptor = (*wrapper)(nil)
+
+// ConstraintIDsAddedToTableDescsVersion constraint IDs have been added to table
+// descriptors at this cluster version.
+const ConstraintIDsAddedToTableDescsVersion = clusterversion.RemoveIncompatibleDatabasePrivileges
 
 // wrapper is the base implementation of the catalog.Descriptor
 // interface, which is overloaded by immutable and Mutable.
@@ -60,7 +65,8 @@ func (desc *wrapper) HasPostDeserializationChanges() bool {
 		desc.postDeserializationChanges.UpgradedFormatVersion ||
 		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
 		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges
+		desc.postDeserializationChanges.UpgradedPrivileges ||
+		desc.postDeserializationChanges.AddedConstraintIDs
 }
 
 // ActiveChecks implements the TableDescriptor interface.

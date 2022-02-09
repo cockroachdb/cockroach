@@ -764,13 +764,14 @@ func ResolveUniqueWithoutIndexConstraint(
 	}
 
 	uc := descpb.UniqueWithoutIndexConstraint{
-		Name:      constraintName,
-		TableID:   tbl.ID,
-		ColumnIDs: columnIDs,
-		Predicate: predicate,
-		Validity:  validity,
+		Name:         constraintName,
+		TableID:      tbl.ID,
+		ColumnIDs:    columnIDs,
+		Predicate:    predicate,
+		Validity:     validity,
+		ConstraintID: tbl.NextConstraintID,
 	}
-
+	tbl.NextConstraintID++
 	if ts == NewTable {
 		tbl.UniqueWithoutIndexConstraints = append(tbl.UniqueWithoutIndexConstraints, uc)
 	} else {
@@ -1023,8 +1024,9 @@ func ResolveFK(
 		OnDelete:            descpb.ForeignKeyReferenceActionValue[d.Actions.Delete],
 		OnUpdate:            descpb.ForeignKeyReferenceActionValue[d.Actions.Update],
 		Match:               descpb.CompositeKeyMatchMethodValue[d.Match],
+		ConstraintID:        tbl.NextConstraintID,
 	}
-
+	tbl.NextConstraintID++
 	if ts == NewTable {
 		tbl.OutboundFKs = append(tbl.OutboundFKs, ref)
 		target.InboundFKs = append(target.InboundFKs, ref)

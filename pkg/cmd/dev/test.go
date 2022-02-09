@@ -11,15 +11,11 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/alessio/shellescape"
 	"github.com/spf13/cobra"
 )
 
@@ -98,6 +94,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		vModule     = mustGetFlagString(cmd, vModuleFlag)
 	)
 
+	// Enumerate all tests to run.
+	if len(pkgs) == 0 {
+		// Empty `dev test` does the same thing as `dev test pkg/...`
+		pkgs = append(pkgs, "pkg/...")
+	}
+
 	var args []string
 	args = append(args, "test")
 	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
@@ -112,54 +114,25 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var testTargets []string
 	for _, pkg := range pkgs {
-		dir, isRecursive, tag, err := d.parsePkg(pkg)
-		if err != nil {
-			return err
+		pkg = strings.TrimPrefix(pkg, "//")
+		pkg = strings.TrimPrefix(pkg, "./")
+		pkg = strings.TrimRight(pkg, "/")
+
+		if !strings.HasPrefix(pkg, "pkg/") {
+			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
 		}
-		querySuffix := ""
-		if isRecursive {
-			// Similar to `go test`, we implement `...` expansion to allow
-			// callers to use the following pattern to test all packages under a
-			// named one:
-			//
-			//     dev test pkg/util/... -v
-			//
-			// NB: We'll want to filter for just the go_test targets here. Not
-			// doing so prompts bazel to try and build all named targets. This
-			// is undesirable for the various `*_proto` targets seeing as how
-			// they're not buildable in isolation. This is because we often
-			// attach methods to proto types in hand-written files, files that
-			// are not picked up by the proto bazel targets[1]. Regular bazel
-			// compilation is still fine seeing as how the top-level go_library
-			// targets both embeds the proto target, and sources the
-			// hand-written file. But the proto target in isolation may not be
-			// buildable because without those additional methods, those types
-			// may fail to satisfy required interfaces.
-			//
-			// So, blinding selecting for all targets won't work, and we'll want
-			// to filter things out first.
-			//
-			// [1]: pkg/rpc/heartbeat.proto is one example of this pattern,
-			// where we define `Stringer` separately for the `RemoteOffset`
-			// type.
-			querySuffix = "/..."
+
+		var target string
+		if strings.Contains(pkg, ":") {
+			// For parity with bazel, we allow specifying named build targets.
+			target = pkg
 		} else {
-			if tag == "" {
-				tag = "all"
-			}
-			querySuffix = ":" + tag
+			target = fmt.Sprintf("%s:all", pkg)
 		}
-		query := fmt.Sprintf("kind(go_test, //%s%s)", dir, querySuffix)
-		out, err := d.getQueryOutput(ctx, query)
-		if err != nil {
-			return err
-		}
-		tests := strings.Split(strings.TrimSpace(string(out)), "\n")
-		testTargets = append(testTargets, tests...)
+		testTargets = append(testTargets, target)
 	}
 
 	args = append(args, testTargets...)
-
 	if ignoreCache {
 		args = append(args, "--nocache_test_results")
 	}
@@ -213,7 +186,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
 			// and -shardable-artifacts set such that we can merge the XML output
 			// files.
-			fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, getDevBin(), strings.Join(stressCmdArgs, " ")))
+			fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, d.getDevBin(), strings.Join(stressCmdArgs, " ")))
 	}
 
 	if filter != "" {
@@ -254,6 +227,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
+
+	// TODO(irfansharif): Both here and in `dev bench`, if the command is
+	// unsuccessful we could explicitly check for "missing package" errors. The
+	// situation is not so bad currently however:
+	//
+	//   [...] while parsing 'pkg/f:all': no such package 'pkg/f'
 }
 
 func getDirectoryFromTarget(target string) string {
@@ -263,26 +242,4 @@ func getDirectoryFromTarget(target string) string {
 		return target
 	}
 	return target[:colon]
-}
-
-// getQueryOutput runs `bazel query` w/ the given arguments, but returns
-// a more informative error if the query fails.
-func (d *dev) getQueryOutput(ctx context.Context, args ...string) ([]byte, error) {
-	queryArgs := []string{"query"}
-	queryArgs = append(queryArgs, args...)
-	stdoutBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
-	if err == nil {
-		return stdoutBytes, err
-	}
-	var cmderr *exec.ExitError
-	var stdout, stderr string
-	if len(stdoutBytes) > 0 {
-		stdout = fmt.Sprintf("stdout: \"%s\" ", string(stdoutBytes))
-	}
-	if errors.As(err, &cmderr) && len(cmderr.Stderr) > 0 {
-		stderr = fmt.Sprintf("stderr: \"%s\" ", strings.TrimSpace(string(cmderr.Stderr)))
-	}
-	return nil, fmt.Errorf("failed to run `bazel %s` %s%s(%w)",
-		shellescape.QuoteCommand(queryArgs), stdout, stderr, err)
-
 }

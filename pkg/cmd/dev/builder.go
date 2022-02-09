@@ -41,7 +41,7 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	ctx := cmd.Context()
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args, err := d.getDockerRunArgs(ctx, volume, true)
+	args, err := d.getDockerRunArgs(ctx, volume, false)
 	args = append(args, extraArgs...)
 	if err != nil {
 		return err

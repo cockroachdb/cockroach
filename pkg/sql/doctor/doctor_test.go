@@ -42,7 +42,8 @@ var validTableDesc = &descpb.Descriptor{
 			Columns: []descpb.ColumnDescriptor{
 				{Name: "col", ID: 1, Type: types.Int},
 			},
-			NextColumnID: 2,
+			NextColumnID:     2,
+			NextConstraintID: 2,
 			Families: []descpb.ColumnFamilyDescriptor{
 				{ID: 0, Name: "f", ColumnNames: []string{"col"}, ColumnIDs: []descpb.ColumnID{1}, DefaultColumnID: 1},
 			},
@@ -56,6 +57,7 @@ var validTableDesc = &descpb.Descriptor{
 				KeyColumnIDs:        []descpb.ColumnID{1},
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				EncodingType:        descpb.PrimaryIndexEncoding,
+				ConstraintID:        1,
 			},
 			NextIndexID: 2,
 			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(

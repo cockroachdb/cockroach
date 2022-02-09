@@ -685,6 +685,7 @@ var repairedDescriptor = `'{
     "nextFamilyId": 1,
     "nextIndexId": 2,
     "nextMutationId": 1,
+    "nextConstraintId": 2,
     "parentId": $firstDatabaseID,
     "primaryIndex": {
       "encodingType": 1,
@@ -695,7 +696,8 @@ var repairedDescriptor = `'{
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 4
+      "version": 4,
+      "constraintId": 1
     },
     "privileges": {
       "owner_proto": "root",
@@ -804,6 +806,7 @@ SELECT crdb_internal.unsafe_upsert_descriptor($firstTableID, crdb_internal.json_
     "nextFamilyId": 1,
     "nextIndexId": 2,
     "nextMutationId": 1,
+		"nextConstraintId": 2,
     "parentId": $firstDatabaseID,
     "primaryIndex": {
       "encodingType": 1,
@@ -814,7 +817,8 @@ SELECT crdb_internal.unsafe_upsert_descriptor($firstTableID, crdb_internal.json_
       "name": "primary",
       "type": "FORWARD",
       "unique": true,
-      "version": 4
+      "version": 4,
+      "constraintId": 1
     },
     "privileges": {
       "owner_proto": "admin",

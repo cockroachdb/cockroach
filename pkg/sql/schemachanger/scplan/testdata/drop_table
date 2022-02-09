@@ -53,10 +53,10 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
     [[Column:{DescID: 107, ColumnID: 5}, ABSENT], PUBLIC] -> DELETE_AND_WRITE_ONLY
     [[ColumnComment:{DescID: 107, ColumnID: 5}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> VALIDATED
-    [[ConstraintComment:{DescID: 107, ConstraintType: PrimaryKey, Name: shipments_pkey}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexComment:{DescID: 107, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[ConstraintComment:{DescID: 107, ConstraintType: FK, Name: fk_customers}, ABSENT], PUBLIC] -> ABSENT
-    [[ConstraintComment:{DescID: 107, ConstraintType: FK, Name: fk_orders}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[ConstraintComment:{DescID: 107, ConstraintID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 109}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[TableComment:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], PUBLIC] -> TXN_DROPPED
@@ -82,19 +82,16 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
       ColumnID: 5
       TableID: 107
     *scop.RemoveConstraintComment
-      ConstraintName: shipments_pkey
-      ConstraintType: 4
+      ConstraintID: 1
       TableID: 107
     *scop.RemoveIndexComment
       IndexID: 1
       TableID: 107
     *scop.RemoveConstraintComment
-      ConstraintName: fk_customers
-      ConstraintType: 3
+      ConstraintID: 2
       TableID: 107
     *scop.RemoveConstraintComment
-      ConstraintName: fk_orders
-      ConstraintType: 3
+      ConstraintID: 3
       TableID: 107
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 109

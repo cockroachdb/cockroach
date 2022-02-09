@@ -223,6 +223,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -239,6 +240,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				StoreColumnIDs:      []descpb.ColumnID{1},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				ConstraintID:        2,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -250,6 +252,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeySuffixColumnIDs:  []descpb.ColumnID{2},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 					Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+					ConstraintID:        1,
 				},
 			},
 		},
@@ -264,6 +267,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -278,6 +282,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				ConstraintID:        2,
 			},
 			[]descpb.IndexDescriptor{
 				{
@@ -289,6 +294,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 					KeySuffixColumnIDs:  []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
 					Version:             descpb.LatestNonPrimaryIndexDescriptorVersion,
+					ConstraintID:        1,
 				},
 			},
 		},
@@ -303,6 +309,7 @@ func TestMakeTableDescIndexes(t *testing.T) {
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				EncodingType:        descpb.PrimaryIndexEncoding,
 				Version:             descpb.LatestPrimaryIndexDescriptorVersion,
+				ConstraintID:        1,
 			},
 			[]descpb.IndexDescriptor{},
 		},
@@ -345,9 +352,10 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT UNIQUE WITHOUT INDEX, b INT PRIMARY KEY",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{1},
-					Name:      "unique_a",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{1},
+					Name:         "unique_a",
+					ConstraintID: 2,
 				},
 			},
 		},
@@ -355,9 +363,10 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT, b INT, CONSTRAINT c UNIQUE WITHOUT INDEX (b), UNIQUE (a, b)",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{2},
-					Name:      "c",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{2},
+					Name:         "c",
+					ConstraintID: 3,
 				},
 			},
 		},
@@ -365,14 +374,16 @@ func TestMakeTableDescUniqueConstraints(t *testing.T) {
 			"a INT, b INT, c INT, UNIQUE WITHOUT INDEX (a, b), UNIQUE WITHOUT INDEX (c)",
 			[]descpb.UniqueWithoutIndexConstraint{
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{1, 2},
-					Name:      "unique_a_b",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{1, 2},
+					Name:         "unique_a_b",
+					ConstraintID: 2,
 				},
 				{
-					TableID:   100,
-					ColumnIDs: []descpb.ColumnID{3},
-					Name:      "unique_c",
+					TableID:      100,
+					ColumnIDs:    []descpb.ColumnID{3},
+					Name:         "unique_c",
+					ConstraintID: 3,
 				},
 			},
 		},
