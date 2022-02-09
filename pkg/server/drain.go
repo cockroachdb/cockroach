@@ -72,37 +72,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		if err != nil {
 			return err
 		}
-		// Retrieve the stream interface to the target node.
-		drainClient, err := client.Drain(ctx, req)
-		if err != nil {
-			return err
-		}
-		// Forward all the responses from the remote server,
-		// to our client.
-		for {
-			// Receive one response message from the target node.
-			resp, err := drainClient.Recv()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				if grpcutil.IsClosedConnection(err) {
-					// If the drain request contained Shutdown==true, it's
-					// possible for the RPC connection to the target node to be
-					// shut down before a DrainResponse and EOF is
-					// received. This is not truly an error.
-					break
-				}
-
-				return err
-			}
-			// Forward the response from the target node to our remote
-			// client.
-			if err := stream.Send(resp); err != nil {
-				return err
-			}
-		}
-		return nil
+		return delegateDrain(ctx, req, client, stream)
 	}
 
 	doDrain := req.DoDrain
@@ -168,6 +138,48 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		log.Fatal(ctx, "timeout after drain")
 		return errors.New("unreachable")
 	}
+}
+
+// delegateDrain forwards a drain request to another node.
+// 'client' is where the request should be forwarded to.
+// 'stream' is where the request came from, and where the response should go.
+func delegateDrain(
+	ctx context.Context,
+	req *serverpb.DrainRequest,
+	client serverpb.AdminClient,
+	stream serverpb.Admin_DrainServer,
+) error {
+	// Retrieve the stream interface to the target node.
+	drainClient, err := client.Drain(ctx, req)
+	if err != nil {
+		return err
+	}
+	// Forward all the responses from the remote server,
+	// to our client.
+	for {
+		// Receive one response message from the target node.
+		resp, err := drainClient.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			if grpcutil.IsClosedConnection(err) {
+				// If the drain request contained Shutdown==true, it's
+				// possible for the RPC connection to the target node to be
+				// shut down before a DrainResponse and EOF is
+				// received. This is not truly an error.
+				break
+			}
+
+			return err
+		}
+		// Forward the response from the target node to our remote
+		// client.
+		if err := stream.Send(resp); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Drain idempotently activates the draining mode.
