@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
 )
 
@@ -95,7 +97,7 @@ func ensureInit(
 		)
 	})
 	if geosOnce.err != nil && errDisplay == EnsureInitErrorDisplayPublic {
-		return nil, errors.Newf("geos: this operation is not available")
+		return nil, pgerror.Newf(pgcode.System, "geos: this operation is not available")
 	}
 	return geosOnce.geos, geosOnce.err
 }

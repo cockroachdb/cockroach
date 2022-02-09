@@ -32,7 +32,7 @@ func TestParseWKB(t *testing.T) {
 			[]byte("\x01\x01\x00\x00\x20\xA4\x0F\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f\x00\x00\x00\x00\x00\x00\xf0\x3f"),
 			4326,
 			geopb.SpatialObject{},
-			"wkb: unknown type: 536870913",
+			"error parsing WKB: wkb: unknown type: 536870913",
 		},
 		{
 			"Normal WKB should take the SRID",
@@ -355,7 +355,7 @@ func TestParseGeometry(t *testing.T) {
 		{
 			"invalid",
 			Geometry{},
-			`syntax error: invalid keyword at line 1, pos 0
+			`error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 LINE 1: invalid
         ^`,
 		},
@@ -571,7 +571,7 @@ func TestParseGeography(t *testing.T) {
 		{
 			"invalid",
 			Geography{},
-			`syntax error: invalid keyword at line 1, pos 0
+			`error parsing EWKT: syntax error: invalid keyword at line 1, pos 0
 LINE 1: invalid
         ^`,
 		},

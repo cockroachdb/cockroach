@@ -20,6 +20,8 @@ go_library(
         "//pkg/geo/geographiclib",
         "//pkg/geo/geopb",
         "//pkg/geo/geoprojbase",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
         "//pkg/util",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
