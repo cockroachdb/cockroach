@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
@@ -66,7 +66,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	// TODO(#75428): feature flag check, ttl pause check.
 	// TODO(#75428): detect if the table has a schema change, in particular,
 	// a PK change, a DROP TTL or a DROP TABLE should early exit the job.
-	var ttlSettings descpb.TableDescriptor_RowLevelTTL
+	var ttlSettings catpb.RowLevelTTL
 	var pkColumns []string
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
@@ -231,14 +231,14 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	return nil
 }
 
-func getSelectBatchSize(sv *settings.Values, ttl descpb.TableDescriptor_RowLevelTTL) int {
+func getSelectBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int {
 	if bs := ttl.SelectBatchSize; bs != 0 {
 		return int(bs)
 	}
 	return int(defaultSelectBatchSize.Get(sv))
 }
 
-func getDeleteBatchSize(sv *settings.Values, ttl descpb.TableDescriptor_RowLevelTTL) int {
+func getDeleteBatchSize(sv *settings.Values, ttl catpb.RowLevelTTL) int {
 	if bs := ttl.DeleteBatchSize; bs != 0 {
 		return int(bs)
 	}
