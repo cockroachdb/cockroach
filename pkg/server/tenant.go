@@ -61,7 +61,7 @@ func StartTenant(
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
 ) (sqlServer *SQLServer, err error) {
-	sqlServer, _, _, _, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	sqlServer, _, _, _, _, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	return
 }
 
@@ -75,13 +75,14 @@ func startTenantInternal(
 ) (
 	sqlServer *SQLServer,
 	authServer *authenticationServer,
+	drainServer *drainServer,
 	pgAddr string,
 	httpAddr string,
 	_ error,
 ) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	// Inform the server identity provider that we're operating
@@ -90,11 +91,11 @@ func startTenantInternal(
 
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          args.MemoryPoolSize,
@@ -134,7 +135,7 @@ func startTenantInternal(
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	{
@@ -148,13 +149,13 @@ func startTenantInternal(
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)
-			return nil, nil, "", "", err
+			return nil, nil, nil, "", "", err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	args.advertiseAddr = baseCfg.AdvertiseAddr
@@ -175,10 +176,10 @@ func startTenantInternal(
 	tenantStatusServer.sqlServer = s
 
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
-	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, s)
+	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
 
 	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
@@ -206,12 +207,12 @@ func startTenantInternal(
 		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, nil, "", "", err
 		}
 	}
 
@@ -238,7 +239,7 @@ func startTenantInternal(
 		debugServer,     /* handleDebugUnauthenticated */
 		nil,             /* apiServer */
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	connManager := netutil.MakeServer(
@@ -247,7 +248,7 @@ func startTenantInternal(
 		http.HandlerFunc(httpServer.baseHandler), // handler
 	)
 	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	args.recorder.AddNode(
@@ -274,7 +275,7 @@ func startTenantInternal(
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	if err := s.preStart(ctx,
@@ -285,7 +286,7 @@ func startTenantInternal(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
@@ -305,7 +306,7 @@ func startTenantInternal(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -313,10 +314,10 @@ func startTenantInternal(
 		s.connManager,
 		s.pgL,
 		socketFile); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
-	return s, authServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
+	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
 }
 
 func makeTenantSQLServerArgs(
