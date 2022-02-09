@@ -171,21 +171,6 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		return errors.Errorf("SET CLUSTER SETTING cannot be used inside a transaction")
 	}
 
-	// Set the system config trigger explicitly here as it might not happen
-	// implicitly due to the setting of the
-	// sql.catalog.unsafe_skip_system_config_trigger.enabled cluster setting.
-	// The usage of gossip to propagate cluster settings in the system tenant
-	// will be fixed in an upcoming PR with #70566.
-	if !params.EvalContext().Settings.Version.IsActive(
-		params.ctx, clusterversion.DisableSystemConfigGossipTrigger,
-	) {
-		if err := params.p.EvalContext().Txn.DeprecatedSetSystemConfigTrigger(
-			params.EvalContext().Codec.ForSystemTenant(),
-		); err != nil {
-			return err
-		}
-	}
-
 	execCfg := params.extendedEvalCtx.ExecCfg
 	var expectedEncodedValue string
 	if err := execCfg.DB.Txn(params.ctx, func(ctx context.Context, txn *kv.Txn) error {

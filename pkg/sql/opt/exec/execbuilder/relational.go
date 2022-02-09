@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -160,10 +159,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		// `BEGIN; INSERT INTO ...; CREATE TABLE IF NOT EXISTS ...; COMMIT;`
 		// where the table already exists. This will generate some false schema
 		// cache refreshes, but that's expected to be quite rare in practice.
-		if !descs.UnsafeSkipSystemConfigTrigger.Get(&b.evalCtx.Settings.SV) &&
-			!b.evalCtx.Settings.Version.IsActive(
-				b.evalCtx.Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
-			) {
+		if !b.evalCtx.Settings.Version.IsActive(
+			b.evalCtx.Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
+		) {
 			if err := b.evalCtx.Txn.DeprecatedSetSystemConfigTrigger(b.evalCtx.Codec.ForSystemTenant()); err != nil {
 				return execPlan{}, errors.WithSecondaryError(
 					unimplemented.NewWithIssuef(26508,
