@@ -90,7 +90,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Sanity checks before committing to the removal by setting the
 	// destroy status.
 	var desc *roachpb.RangeDescriptor
-	var replicaID roachpb.ReplicaID
 	{
 		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
@@ -132,11 +131,9 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		// Mark the replica as removed before deleting data.
 		rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
 			destroyReasonRemoved)
-		replicaID = rep.mu.replicaID
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
 	}
-
 	// Proceed with the removal, all errors encountered from here down are fatal.
 
 	// Another sanity check that this replica is a part of this store.
@@ -150,7 +147,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
-	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, replicaID)
+	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, rep.replicaID)
 
 	s.mu.Lock()
 	if it := s.getOverlappingKeyRangeLocked(desc); it.repl != rep {

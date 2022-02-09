@@ -868,7 +868,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		r.mu.leaderID = leaderID
 		// Clear the remote proposal set. Would have been nil already if not
 		// previously the leader.
-		becameLeader = r.mu.leaderID == r.mu.replicaID
+		becameLeader = r.mu.leaderID == r.replicaID
 	}
 	r.mu.Unlock()
 
@@ -1040,8 +1040,8 @@ func (r *Replica) tick(ctx context.Context, livenessMap liveness.IsLiveMap) (boo
 	// into the local Raft group. The leader won't hit that path, so we update
 	// it whenever it ticks. In effect, this makes sure it always sees itself as
 	// alive.
-	if r.mu.replicaID == r.mu.leaderID {
-		r.mu.lastUpdateTimes.update(r.mu.replicaID, timeutil.Now())
+	if r.replicaID == r.mu.leaderID {
+		r.mu.lastUpdateTimes.update(r.replicaID, timeutil.Now())
 	}
 
 	r.mu.ticks++
@@ -1585,7 +1585,7 @@ func (r *Replica) withRaftGroupLocked(
 		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
-			uint64(r.mu.replicaID),
+			uint64(r.replicaID),
 			r.mu.state.RaftAppliedIndex,
 			r.store.cfg,
 			&raftLogger{ctx: ctx},
@@ -1709,7 +1709,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 	// method were to be called on an uninitialized replica (which
 	// has no state and thus an empty raft config), this might cause
 	// problems.
-	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.mu.replicaID); !currentMember {
+	if _, currentMember := r.mu.state.Desc.GetReplicaDescriptorByID(r.replicaID); !currentMember {
 		return
 	}
 

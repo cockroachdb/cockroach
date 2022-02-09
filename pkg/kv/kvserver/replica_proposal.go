@@ -257,7 +257,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc kvserverpb.Co
 
 		var shouldFatal bool
 		for _, rDesc := range cc.Terminate {
-			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.mu.replicaID {
+			if rDesc.StoreID == r.store.StoreID() && rDesc.ReplicaID == r.replicaID {
 				shouldFatal = true
 			}
 		}
@@ -381,7 +381,7 @@ func (r *Replica) leasePostApplyLocked(
 		}
 	}
 
-	iAmTheLeaseHolder := newLease.Replica.ReplicaID == r.mu.replicaID
+	iAmTheLeaseHolder := newLease.Replica.ReplicaID == r.replicaID
 	// NB: in the case in which a node restarts, minLeaseProposedTS forces it to
 	// get a new lease and we make sure it gets a new sequence number, thus
 	// causing the right half of the disjunction to fire so that we update the
