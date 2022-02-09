@@ -475,6 +475,11 @@ func makeTenantSQLServerArgs(
 		db,
 	)
 
+	grpcServer := newGRPCServer(rpcContext)
+	// In a SQL-only server, there is no separate node initialization
+	// phase. Start RPC immediately in the operational state.
+	grpcServer.setMode(modeOperational)
+
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 	return sqlServerArgs{
@@ -482,6 +487,7 @@ func makeTenantSQLServerArgs(
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
+			grpcServer:        grpcServer.Server,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
