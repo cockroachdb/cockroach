@@ -15,6 +15,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/server/telemetry",  # keep
         "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecbase",  # keep
         "//pkg/sql/colexec/colexeccmp",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
