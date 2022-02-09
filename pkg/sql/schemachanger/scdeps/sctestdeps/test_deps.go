@@ -910,6 +910,12 @@ func (s *TestState) SwapDescriptorSubComment(
 	return nil
 }
 
+// DeleteSchedule implements scexec.DescriptorMetadataUpdater
+func (s *TestState) DeleteSchedule(ctx context.Context, id int64) error {
+	s.LogSideEffectf("delete scheduleId: %d", id)
+	return nil
+}
+
 // DescriptorMetadataUpdater implement scexec.Dependencies.
 func (s *TestState) DescriptorMetadataUpdater(
 	ctx context.Context,

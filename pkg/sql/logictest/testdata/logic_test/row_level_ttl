@@ -1,6 +1,3 @@
-# LogicTest: !local-declarative-schema
-# TODO(#75428): fix DROP TABLE for declarative schema changer
-
 statement error value of "ttl_expire_after" must be an interval
 CREATE TABLE tbl (id INT PRIMARY KEY, text TEXT) WITH (ttl_expire_after = ' xx invalid interval xx')
 
