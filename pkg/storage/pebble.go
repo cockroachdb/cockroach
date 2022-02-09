@@ -375,21 +375,26 @@ type pebbleDataBlockMVCCTimeIntervalCollector struct {
 }
 
 var _ sstable.DataBlockIntervalCollector = &pebbleDataBlockMVCCTimeIntervalCollector{}
+var _ sstable.SuffixReplaceableBlockCollector = (*pebbleDataBlockMVCCTimeIntervalCollector)(nil)
 
-func (tc *pebbleDataBlockMVCCTimeIntervalCollector) Add(
-	key pebble.InternalKey, value []byte,
-) error {
-	k := key.UserKey
-	if len(k) == 0 {
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) Add(key pebble.InternalKey, _ []byte) error {
+	return tc.add(key.UserKey)
+}
+
+// add collects the given slice in the collector. The slice may be an entire
+// encoded MVCC key, or the suffix of an encoded key. In the case of the latter,
+// the slice must include the sentinel byte.
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) add(b []byte) error {
+	if len(b) == 0 {
 		return nil
 	}
 	// Last byte is the version length + 1 when there is a version,
 	// else it is 0.
-	versionLen := int(k[len(k)-1])
-	// keyPartEnd points to the sentinel byte.
-	keyPartEnd := len(k) - 1 - versionLen
-	if keyPartEnd < 0 {
-		return errors.Errorf("invalid key %s", roachpb.Key(k).String())
+	versionLen := int(b[len(b)-1])
+	// prefixPartEnd points to the sentinel byte.
+	prefixPartEnd := len(b) - 1 - versionLen
+	if prefixPartEnd < 0 {
+		return errors.Errorf("invalid key %s", roachpb.Key(b).String())
 	}
 	if versionLen == 0 {
 		return nil
@@ -398,16 +403,16 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) Add(
 	if versionLen == engineKeyVersionWallTimeLen ||
 		versionLen == engineKeyVersionWallAndLogicalTimeLen ||
 		versionLen == engineKeyVersionWallLogicalAndSyntheticTimeLen {
-		// INVARIANT: keyPartEnd < len(k) - 1.
+		// INVARIANT: prefixPartEnd < len(b) - 1.
 		// Version consists of the bytes after the sentinel and before the length.
-		k = k[keyPartEnd+1 : len(k)-1]
+		b = b[prefixPartEnd+1 : len(b)-1]
 		// Lexicographic comparison on the encoded timestamps is equivalent to the
 		// comparison on decoded timestamps, so delay decoding.
-		if len(tc.min) == 0 || bytes.Compare(k, tc.min) < 0 {
-			tc.min = append(tc.min[:0], k...)
+		if len(tc.min) == 0 || bytes.Compare(b, tc.min) < 0 {
+			tc.min = append(tc.min[:0], b...)
 		}
-		if len(tc.max) == 0 || bytes.Compare(k, tc.max) > 0 {
-			tc.max = append(tc.max[:0], k...)
+		if len(tc.max) == 0 || bytes.Compare(b, tc.max) > 0 {
+			tc.max = append(tc.max[:0], b...)
 		}
 	}
 	return nil
@@ -442,6 +447,12 @@ func (tc *pebbleDataBlockMVCCTimeIntervalCollector) FinishDataBlock() (
 			errors.Errorf("corrupt timestamps lower %d >= upper %d", lower, upper)
 	}
 	return lower, upper, nil
+}
+
+func (tc *pebbleDataBlockMVCCTimeIntervalCollector) UpdateKeySuffixes(
+	_ []byte, _, newSuffix []byte,
+) error {
+	return tc.add(newSuffix)
 }
 
 const mvccWallTimeIntervalCollector = "MVCCTimeInterval"

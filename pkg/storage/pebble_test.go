@@ -1123,6 +1123,14 @@ func TestPebbleMVCCTimeIntervalCollector(t *testing.T) {
 		[]byte("foo")))
 	// Added 2 MVCCKeys.
 	finishAndCheck(22, 26)
+	// Using the same suffix for all keys in a block results in an interval of
+	// width one (inclusive lower bound to exclusive upper bound).
+	suffix := []byte{'\x00' /* sentinel */}
+	suffix = append(suffix, encodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})...)
+	require.NoError(t, collector.UpdateKeySuffixes(
+		nil /* old prop */, nil /* old suffix */, suffix,
+	))
+	finishAndCheck(42, 43)
 }
 
 func TestPebbleMVCCTimeIntervalCollectorAndFilter(t *testing.T) {
