@@ -75,12 +75,10 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return delegateDrain(ctx, req, client, stream)
 	}
 
-	doDrain := req.DoDrain
-
-	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", doDrain, req.Shutdown)
+	log.Ops.Infof(ctx, "drain request received with doDrain = %v, shutdown = %v", req.DoDrain, req.Shutdown)
 
 	res := serverpb.DrainResponse{}
-	if doDrain {
+	if req.DoDrain {
 		remaining, info, err := s.server.Drain(ctx, req.Verbose)
 		if err != nil {
 			log.Ops.Errorf(ctx, "drain failed: %v", err)
@@ -97,8 +95,14 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return err
 	}
 
+	return s.maybeShutdownAfterDrain(ctx, req)
+}
+
+func (s *adminServer) maybeShutdownAfterDrain(
+	ctx context.Context, req *serverpb.DrainRequest,
+) error {
 	if !req.Shutdown {
-		if doDrain {
+		if req.DoDrain {
 			// The condition "if doDrain" is because we don't need an info
 			// message for just a probe.
 			log.Ops.Infof(ctx, "drain request completed without server shutdown")
