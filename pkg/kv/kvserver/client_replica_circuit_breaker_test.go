@@ -976,7 +976,7 @@ func (cbt *circuitBreakerTest) FollowerRead(idx int) error {
 	repl := cbt.repls[idx]
 	get := roachpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
 	ctx := context.Background()
-	ts := repl.GetClosedTimestamp(ctx)
+	ts := repl.GetCurrentClosedTimestamp(ctx)
 	return cbt.SendCtxTS(ctx, idx, get, ts)
 }
 
