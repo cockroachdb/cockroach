@@ -1098,6 +1098,7 @@ CREATE SEQUENCE db1.public.sq1;
 CREATE SEQUENCE db1.sc1.sq1;
 CREATE TABLE db1.sc1.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.sc1.sq1'));
 CREATE TABLE db1.public.t1 (id INT PRIMARY KEY, name varchar(256), val int DEFAULT nextval('db1.public.sq1'));
+CREATE TABLE db1.public.ttl (id INT PRIMARY KEY) WITH (ttl_expire_after = '10 minutes');
 CREATE VIEW db1.sc1.v1 AS (SELECT name FROM db1.sc1.t1);
 CREATE VIEW db1.sc1.v2 AS (SELECT name AS n1, name AS n2 FROM db1.sc1.v1);
 CREATE VIEW db1.sc1.v3 AS (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2);
@@ -1113,13 +1114,14 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 +object {111 113 sq1} -> 115
 +object {111 113 t1} -> 116
 +object {111 112 t1} -> 117
-+object {111 113 v1} -> 118
-+object {111 113 v2} -> 119
-+object {111 113 v3} -> 120
-+object {111 113 v4} -> 121
-+object {111 113 typ} -> 122
-+object {111 113 _typ} -> 123
-+object {111 113 v5} -> 124
++object {111 112 ttl} -> 118
++object {111 113 v1} -> 119
++object {111 113 v2} -> 120
++object {111 113 v3} -> 121
++object {111 113 v4} -> 122
++object {111 113 typ} -> 123
++object {111 113 _typ} -> 124
++object {111 113 v5} -> 125
 
 test
 DROP DATABASE db1 CASCADE
@@ -1127,13 +1129,16 @@ DROP DATABASE db1 CASCADE
 checking for feature: DROP DATABASE
 begin transaction #1
 # begin StatementPhase
-## StatementPhase stage 1 of 1 with 37 MutationType ops
+## StatementPhase stage 1 of 1 with 42 MutationType ops
 delete comment for descriptor #114 of type TableCommentType
 delete comment for descriptor #117 of type TableCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type ColumnCommentType
 delete comment for descriptor #117 of type IndexCommentType
+delete comment for descriptor #118 of type TableCommentType
+delete comment for descriptor #118 of type ColumnCommentType
+delete comment for descriptor #118 of type IndexCommentType
 delete comment for descriptor #112 of type SchemaCommentType
 delete comment for descriptor #115 of type TableCommentType
 delete comment for descriptor #116 of type TableCommentType
@@ -1141,32 +1146,34 @@ delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type ColumnCommentType
 delete comment for descriptor #116 of type IndexCommentType
-delete comment for descriptor #118 of type TableCommentType
 delete comment for descriptor #119 of type TableCommentType
 delete comment for descriptor #120 of type TableCommentType
 delete comment for descriptor #121 of type TableCommentType
-delete comment for descriptor #124 of type TableCommentType
+delete comment for descriptor #122 of type TableCommentType
+delete comment for descriptor #125 of type TableCommentType
 delete comment for descriptor #113 of type SchemaCommentType
 delete comment for descriptor #111 of type DatabaseCommentType
 delete comment for constraint on #117, constraint id: 1
+delete comment for constraint on #118, constraint id: 1
 delete comment for constraint on #116, constraint id: 1
 delete role settings for database on #111
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 56 MutationType ops
+## PreCommitPhase stage 1 of 1 with 59 MutationType ops
 create job #1: "schema change job"
-  descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124]
+  descriptor IDs: [111 112 113 114 115 116 117 118 119 120 121 122 123 124 125]
 delete object namespace entry {111 112 sq1} -> 114
 delete object namespace entry {111 113 sq1} -> 115
 delete object namespace entry {111 113 t1} -> 116
 delete object namespace entry {111 112 t1} -> 117
-delete object namespace entry {111 113 v1} -> 118
-delete object namespace entry {111 113 v2} -> 119
-delete object namespace entry {111 113 v3} -> 120
-delete object namespace entry {111 113 v4} -> 121
-delete object namespace entry {111 113 typ} -> 122
-delete object namespace entry {111 113 _typ} -> 123
-delete object namespace entry {111 113 v5} -> 124
+delete object namespace entry {111 112 ttl} -> 118
+delete object namespace entry {111 113 v1} -> 119
+delete object namespace entry {111 113 v2} -> 120
+delete object namespace entry {111 113 v3} -> 121
+delete object namespace entry {111 113 v4} -> 122
+delete object namespace entry {111 113 typ} -> 123
+delete object namespace entry {111 113 _typ} -> 124
+delete object namespace entry {111 113 v5} -> 125
 upsert descriptor #111
    database:
   +  declarativeSchemaChangerState:
@@ -1184,11 +1191,11 @@ upsert descriptor #111
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 32
-  +    - 118
-  +    - 120
-  +    - 121
-  +    - 122
+  +    - 48
+  +    - 134
+  +    - 136
+  +    - 137
+  +    - 138
   +    targets:
   +    - elementProto:
   +        schemaEntry:
@@ -1261,14 +1268,15 @@ upsert descriptor #112
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 31
-  +    - 33
+  +    - 47
+  +    - 49
   +    targets:
   +    - elementProto:
   +        schema:
   +          dependentObjects:
   +          - 114
   +          - 117
+  +          - 118
   +          schemaId: 112
   +      metadata:
   +        sourceElementId: 2
@@ -1305,21 +1313,21 @@ upsert descriptor #113
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 117
-  +    - 119
+  +    - 133
+  +    - 135
   +    targets:
   +    - elementProto:
   +        schema:
   +          dependentObjects:
   +          - 115
   +          - 116
-  +          - 118
   +          - 119
   +          - 120
   +          - 121
   +          - 122
   +          - 123
   +          - 124
+  +          - 125
   +          schemaId: 113
   +      metadata:
   +        sourceElementId: 2
@@ -1492,21 +1500,21 @@ upsert descriptor #115
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 34
-  +    - 35
-  +    - 36
-  +    - 37
-  +    - 38
-  +    - 39
-  +    - 40
-  +    - 41
-  +    - 42
+  +    - 50
+  +    - 51
+  +    - 52
+  +    - 53
+  +    - 54
+  +    - 55
+  +    - 56
+  +    - 57
+  +    - 58
   +    targets:
   +    - elementProto:
   +        sequence:
   +          sequenceId: 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1516,7 +1524,7 @@ upsert descriptor #115
   +          name: sq1
   +          schemaId: 113
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1524,7 +1532,7 @@ upsert descriptor #115
   +          descriptorId: 115
   +          owner: root
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1533,7 +1541,7 @@ upsert descriptor #115
   +          privileges: 2
   +          username: admin
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1541,7 +1549,7 @@ upsert descriptor #115
   +          descriptorId: 115
   +          username: public
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1550,7 +1558,7 @@ upsert descriptor #115
   +          privileges: 2
   +          username: root
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1559,14 +1567,14 @@ upsert descriptor #115
   +            when doing decomposition
   +          tableId: 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
   +          descriptorId: 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1575,7 +1583,7 @@ upsert descriptor #115
   +          dependedOn: 116
   +          tableId: 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
      families:
@@ -1606,7 +1614,7 @@ upsert descriptor #116
   -  dependedOnBy:
   -  - columnIds:
   -    - 2
-  -    id: 118
+  -    id: 119
   +  declarativeSchemaChangerState:
   +    authorization: {}
   +    currentStatuses:
@@ -1640,22 +1648,6 @@ upsert descriptor #116
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 43
-  +    - 44
-  +    - 45
-  +    - 46
-  +    - 47
-  +    - 48
-  +    - 49
-  +    - 50
-  +    - 51
-  +    - 52
-  +    - 53
-  +    - 54
-  +    - 55
-  +    - 56
-  +    - 57
-  +    - 58
   +    - 59
   +    - 60
   +    - 61
@@ -1663,6 +1655,22 @@ upsert descriptor #116
   +    - 63
   +    - 64
   +    - 65
+  +    - 66
+  +    - 67
+  +    - 68
+  +    - 69
+  +    - 70
+  +    - 71
+  +    - 72
+  +    - 73
+  +    - 74
+  +    - 75
+  +    - 76
+  +    - 77
+  +    - 78
+  +    - 79
+  +    - 80
+  +    - 81
   +    targets:
   +    - elementProto:
   +        defaultExpression:
@@ -1672,14 +1680,14 @@ upsert descriptor #116
   +          usesSequenceIds:
   +          - 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        table:
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1689,7 +1697,7 @@ upsert descriptor #116
   +          name: t1
   +          schemaId: 113
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1697,7 +1705,7 @@ upsert descriptor #116
   +          descriptorId: 116
   +          owner: root
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1706,7 +1714,7 @@ upsert descriptor #116
   +          privileges: 2
   +          username: admin
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1714,7 +1722,7 @@ upsert descriptor #116
   +          descriptorId: 116
   +          username: public
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1723,7 +1731,7 @@ upsert descriptor #116
   +          privileges: 2
   +          username: root
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1732,7 +1740,7 @@ upsert descriptor #116
   +            when doing decomposition
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1741,7 +1749,7 @@ upsert descriptor #116
   +          name: id
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1755,7 +1763,7 @@ upsert descriptor #116
   +            oid: 20
   +            width: 64
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1765,7 +1773,7 @@ upsert descriptor #116
   +            when doing decomposition
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1774,7 +1782,7 @@ upsert descriptor #116
   +          name: name
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1790,7 +1798,7 @@ upsert descriptor #116
   +            visibleType: 7
   +            width: 256
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1800,7 +1808,7 @@ upsert descriptor #116
   +            when doing decomposition
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1809,7 +1817,7 @@ upsert descriptor #116
   +          name: val
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1827,7 +1835,7 @@ upsert descriptor #116
   +          usesSequenceIds:
   +          - 115
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1837,7 +1845,7 @@ upsert descriptor #116
   +            when doing decomposition
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1855,7 +1863,7 @@ upsert descriptor #116
   +          tableId: 116
   +          unique: true
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1864,7 +1872,7 @@ upsert descriptor #116
   +          name: t1_pkey
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1874,7 +1882,7 @@ upsert descriptor #116
   +          constraintId: 1
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -1884,23 +1892,23 @@ upsert descriptor #116
   +          indexId: 1
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
   +          descriptorId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        relationDependedOnBy:
   +          columnId: 2
-  +          dependedOn: 118
+  +          dependedOn: 119
   +          tableId: 116
   +      metadata:
-  +        sourceElementId: 6
+  +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
      families:
@@ -2226,13 +2234,225 @@ upsert descriptor #118
   ...
      createAsOfTime:
        wallTime: "1"
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - DELETE_AND_WRITE_ONLY
+  +    - ABSENT
+  +    - VALIDATED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - PUBLIC
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 31
+  +    - 32
+  +    - 33
+  +    - 34
+  +    - 35
+  +    - 36
+  +    - 37
+  +    - 38
+  +    - 39
+  +    - 40
+  +    - 41
+  +    - 42
+  +    - 43
+  +    - 44
+  +    - 45
+  +    - 46
+  +    targets:
+  +    - elementProto:
+  +        table:
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 118
+  +          name: ttl
+  +          schemaId: 112
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 118
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 118
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnName:
+  +          columnId: 1
+  +          name: id
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        column:
+  +          columnId: 1
+  +          familyName: primary
+  +          pgAttributeNum: 1
+  +          tableId: 118
+  +          type:
+  +            family: IntFamily
+  +            oid: 20
+  +            width: 64
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnComment:
+  +          columnId: 1
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        primaryIndex:
+  +          indexId: 1
+  +          keyColumnDirections:
+  +          - ASC
+  +          keyColumnIds:
+  +          - 1
+  +          shardedDescriptor: {}
+  +          sourceIndexId: 1
+  +          storingColumnIds:
+  +          - 2
+  +          tableId: 118
+  +          unique: true
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: ttl_pkey
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        constraintComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          constraintId: 1
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          indexId: 1
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 118
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        rowLevelTtl:
+  +          rowLevelTtl:
+  +            durationExpr: '''00:10:00'':::INTERVAL'
+  +            scheduleId: <redacted>
+  +          tableId: 118
+  +      metadata:
+  +        sourceElementId: 6
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     families:
+     - columnIds:
+  ...
+       durationExpr: '''00:10:00'':::INTERVAL'
+       scheduleId: <redacted>
+  +  state: DROP
+     unexposedParentSchemaId: 112
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #119
+  ...
+     createAsOfTime:
+       wallTime: "1"
   -  dependedOnBy:
   -  - columnIds:
   -    - 1
-  -    id: 119
+  -    id: 120
   -  - columnIds:
   -    - 1
-  -    id: 120
+  -    id: 121
   -  dependsOn:
   -  - 116
   +  declarativeSchemaChangerState:
@@ -2255,173 +2475,32 @@ upsert descriptor #118
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 66
-  +    - 67
-  +    - 68
-  +    - 69
-  +    - 70
-  +    - 71
-  +    - 72
-  +    - 73
-  +    - 74
-  +    - 75
-  +    targets:
-  +    - elementProto:
-  +        view:
-  +          tableId: 118
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        namespace:
-  +          databaseId: 111
-  +          descriptorId: 118
-  +          name: v1
-  +          schemaId: 113
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        owner:
-  +          descriptorId: 118
-  +          owner: root
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 118
-  +          privileges: 2
-  +          username: admin
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 118
-  +          username: public
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        userPrivileges:
-  +          descriptorId: 118
-  +          privileges: 2
-  +          username: root
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        tableComment:
-  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
-  +            when doing decomposition
-  +          tableId: 118
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        locality:
-  +          descriptorId: 118
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        relationDependedOnBy:
-  +          columnId: 1
-  +          dependedOn: 119
-  +          tableId: 118
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        relationDependedOnBy:
-  +          columnId: 1
-  +          dependedOn: 120
-  +          tableId: 118
-  +      metadata:
-  +        sourceElementId: 8
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-     formatVersion: 3
-     id: 118
-  ...
-     replacementOf:
-       time: {}
-  +  state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "3"
-  +  version: "4"
-     viewQuery: (SELECT name FROM db1.sc1.t1)
-upsert descriptor #119
-  ...
-     createAsOfTime:
-       wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 120
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 121
-  -  dependsOn:
-  -  - 118
-  +  declarativeSchemaChangerState:
-  +    authorization: {}
-  +    currentStatuses:
-  +    - DROPPED
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    - ABSENT
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
-  +        statement: DROP DATABASE db1 CASCADE
-  +        statementTag: DROP DATABASE
-  +    targetRanks:
-  +    - 76
-  +    - 77
-  +    - 78
-  +    - 79
-  +    - 80
-  +    - 81
   +    - 82
   +    - 83
   +    - 84
   +    - 85
+  +    - 86
+  +    - 87
+  +    - 88
+  +    - 89
+  +    - 90
+  +    - 91
   +    targets:
   +    - elementProto:
   +        view:
   +          tableId: 119
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        namespace:
   +          databaseId: 111
   +          descriptorId: 119
-  +          name: v2
+  +          name: v1
   +          schemaId: 113
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2429,7 +2508,7 @@ upsert descriptor #119
   +          descriptorId: 119
   +          owner: root
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2438,7 +2517,7 @@ upsert descriptor #119
   +          privileges: 2
   +          username: admin
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2446,7 +2525,7 @@ upsert descriptor #119
   +          descriptorId: 119
   +          username: public
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2455,7 +2534,7 @@ upsert descriptor #119
   +          privileges: 2
   +          username: root
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2464,14 +2543,14 @@ upsert descriptor #119
   +            when doing decomposition
   +          tableId: 119
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
   +          descriptorId: 119
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2480,7 +2559,7 @@ upsert descriptor #119
   +          dependedOn: 120
   +          tableId: 119
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2489,7 +2568,7 @@ upsert descriptor #119
   +          dependedOn: 121
   +          tableId: 119
   +      metadata:
-  +        sourceElementId: 9
+  +        sourceElementId: 10
   +        subWorkId: 1
   +      targetStatus: ABSENT
      formatVersion: 3
@@ -2501,18 +2580,28 @@ upsert descriptor #119
      unexposedParentSchemaId: 113
   -  version: "3"
   +  version: "4"
-     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+     viewQuery: (SELECT name FROM db1.sc1.t1)
 upsert descriptor #120
   ...
      createAsOfTime:
        wallTime: "1"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 121
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 122
   -  dependsOn:
-  -  - 118
   -  - 119
   +  declarativeSchemaChangerState:
   +    authorization: {}
   +    currentStatuses:
   +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2527,30 +2616,32 @@ upsert descriptor #120
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 86
-  +    - 87
-  +    - 88
-  +    - 89
-  +    - 90
-  +    - 91
   +    - 92
   +    - 93
+  +    - 94
+  +    - 95
+  +    - 96
+  +    - 97
+  +    - 98
+  +    - 99
+  +    - 100
+  +    - 101
   +    targets:
   +    - elementProto:
   +        view:
   +          tableId: 120
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        namespace:
   +          databaseId: 111
   +          descriptorId: 120
-  +          name: v3
+  +          name: v2
   +          schemaId: 113
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2558,7 +2649,7 @@ upsert descriptor #120
   +          descriptorId: 120
   +          owner: root
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2567,7 +2658,7 @@ upsert descriptor #120
   +          privileges: 2
   +          username: admin
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2575,7 +2666,7 @@ upsert descriptor #120
   +          descriptorId: 120
   +          username: public
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2584,7 +2675,7 @@ upsert descriptor #120
   +          privileges: 2
   +          username: root
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2593,14 +2684,32 @@ upsert descriptor #120
   +            when doing decomposition
   +          tableId: 120
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
   +          descriptorId: 120
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnId: 1
+  +          dependedOn: 121
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 11
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnId: 1
+  +          dependedOn: 122
+  +          tableId: 120
+  +      metadata:
+  +        sourceElementId: 11
   +        subWorkId: 1
   +      targetStatus: ABSENT
      formatVersion: 3
@@ -2610,25 +2719,20 @@ upsert descriptor #120
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 113
-  -  version: "1"
-  +  version: "2"
-     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+  -  version: "3"
+  +  version: "4"
+     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
 upsert descriptor #121
   ...
      createAsOfTime:
        wallTime: "1"
-  -  dependedOnBy:
-  -  - columnIds:
-  -    - 1
-  -    - 2
-  -    id: 124
   -  dependsOn:
   -  - 119
+  -  - 120
   +  declarativeSchemaChangerState:
   +    authorization: {}
   +    currentStatuses:
   +    - DROPPED
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2643,31 +2747,30 @@ upsert descriptor #121
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 94
-  +    - 95
-  +    - 96
-  +    - 97
-  +    - 98
-  +    - 99
-  +    - 100
-  +    - 101
   +    - 102
+  +    - 103
+  +    - 104
+  +    - 105
+  +    - 106
+  +    - 107
+  +    - 108
+  +    - 109
   +    targets:
   +    - elementProto:
   +        view:
   +          tableId: 121
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        namespace:
   +          databaseId: 111
   +          descriptorId: 121
-  +          name: v4
+  +          name: v3
   +          schemaId: 113
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2675,7 +2778,7 @@ upsert descriptor #121
   +          descriptorId: 121
   +          owner: root
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2684,7 +2787,7 @@ upsert descriptor #121
   +          privileges: 2
   +          username: admin
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2692,7 +2795,7 @@ upsert descriptor #121
   +          descriptorId: 121
   +          username: public
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2701,7 +2804,7 @@ upsert descriptor #121
   +          privileges: 2
   +          username: root
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
@@ -2710,23 +2813,14 @@ upsert descriptor #121
   +            when doing decomposition
   +          tableId: 121
   +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
   +          descriptorId: 121
   +      metadata:
-  +        sourceElementId: 10
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        relationDependedOnBy:
-  +          columnId: 1
-  +          dependedOn: 124
-  +          tableId: 121
-  +      metadata:
-  +        sourceElementId: 10
+  +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
      formatVersion: 3
@@ -2736,113 +2830,24 @@ upsert descriptor #121
        time: {}
   +  state: DROP
      unexposedParentSchemaId: 113
-  -  version: "2"
-  +  version: "3"
-     viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
+  -  version: "1"
+  +  version: "2"
+     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
 upsert descriptor #122
-   type:
-     arrayTypeId: 123
-  +  declarativeSchemaChangerState:
-  +    authorization: {}
-  +    currentStatuses:
-  +    - DROPPED
-  +    - ABSENT
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
-  +        statement: DROP DATABASE db1 CASCADE
-  +        statementTag: DROP DATABASE
-  +    targetRanks:
-  +    - 113
-  +    - 114
-  +    targets:
-  +    - elementProto:
-  +        type:
-  +          typeId: 122
-  +      metadata:
-  +        sourceElementId: 6
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        namespace:
-  +          databaseId: 111
-  +          descriptorId: 122
-  +          name: typ
-  +          schemaId: 113
-  +      metadata:
-  +        sourceElementId: 6
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-     enumMembers:
-     - logicalRepresentation: a
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 124
-  -  version: "2"
-  +  referencingDescriptorIds: []
-  +  state: DROP
-  +  version: "3"
-upsert descriptor #123
-  ...
-       family: ArrayFamily
-       oid: 100123
-  +  declarativeSchemaChangerState:
-  +    authorization: {}
-  +    currentStatuses:
-  +    - DROPPED
-  +    - ABSENT
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
-  +        statement: DROP DATABASE db1 CASCADE
-  +        statementTag: DROP DATABASE
-  +    targetRanks:
-  +    - 115
-  +    - 116
-  +    targets:
-  +    - elementProto:
-  +        type:
-  +          typeId: 123
-  +      metadata:
-  +        sourceElementId: 6
-  +        subWorkId: 2
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        namespace:
-  +          databaseId: 111
-  +          descriptorId: 123
-  +          name: _typ
-  +          schemaId: 113
-  +      metadata:
-  +        sourceElementId: 6
-  +        subWorkId: 2
-  +      targetStatus: ABSENT
-     id: 123
-     kind: ALIAS
-  ...
-         withGrantOption: 2
-       version: 2
-  -  referencingDescriptorIds:
-  -  - 124
-  -  version: "2"
-  +  referencingDescriptorIds: []
-  +  state: DROP
-  +  version: "3"
-upsert descriptor #124
   ...
      createAsOfTime:
        wallTime: "1"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 1
+  -    - 2
+  -    id: 125
   -  dependsOn:
-  -  - 121
+  -  - 120
   +  declarativeSchemaChangerState:
   +    authorization: {}
   +    currentStatuses:
   +    - DROPPED
-  +    - ABSENT
   +    - ABSENT
   +    - ABSENT
   +    - ABSENT
@@ -2858,20 +2863,19 @@ upsert descriptor #124
   +        statement: DROP DATABASE db1 CASCADE
   +        statementTag: DROP DATABASE
   +    targetRanks:
-  +    - 103
-  +    - 104
-  +    - 105
-  +    - 106
-  +    - 107
-  +    - 108
-  +    - 109
   +    - 110
   +    - 111
   +    - 112
+  +    - 113
+  +    - 114
+  +    - 115
+  +    - 116
+  +    - 117
+  +    - 118
   +    targets:
   +    - elementProto:
   +        view:
-  +          tableId: 124
+  +          tableId: 122
   +      metadata:
   +        sourceElementId: 12
   +        subWorkId: 1
@@ -2879,8 +2883,8 @@ upsert descriptor #124
   +    - elementProto:
   +        namespace:
   +          databaseId: 111
-  +          descriptorId: 124
-  +          name: v5
+  +          descriptorId: 122
+  +          name: v4
   +          schemaId: 113
   +      metadata:
   +        sourceElementId: 12
@@ -2888,7 +2892,7 @@ upsert descriptor #124
   +      targetStatus: ABSENT
   +    - elementProto:
   +        owner:
-  +          descriptorId: 124
+  +          descriptorId: 122
   +          owner: root
   +      metadata:
   +        sourceElementId: 12
@@ -2896,7 +2900,7 @@ upsert descriptor #124
   +      targetStatus: ABSENT
   +    - elementProto:
   +        userPrivileges:
-  +          descriptorId: 124
+  +          descriptorId: 122
   +          privileges: 2
   +          username: admin
   +      metadata:
@@ -2905,7 +2909,7 @@ upsert descriptor #124
   +      targetStatus: ABSENT
   +    - elementProto:
   +        userPrivileges:
-  +          descriptorId: 124
+  +          descriptorId: 122
   +          username: public
   +      metadata:
   +        sourceElementId: 12
@@ -2913,7 +2917,7 @@ upsert descriptor #124
   +      targetStatus: ABSENT
   +    - elementProto:
   +        userPrivileges:
-  +          descriptorId: 124
+  +          descriptorId: 122
   +          privileges: 2
   +          username: root
   +      metadata:
@@ -2924,36 +2928,252 @@ upsert descriptor #124
   +        tableComment:
   +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
   +            when doing decomposition
-  +          tableId: 124
-  +      metadata:
-  +        sourceElementId: 12
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        viewDependsOnType:
-  +          tableId: 124
-  +          typeId: 122
-  +      metadata:
-  +        sourceElementId: 12
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        viewDependsOnType:
-  +          tableId: 124
-  +          typeId: 123
+  +          tableId: 122
   +      metadata:
   +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
   +    - elementProto:
   +        locality:
-  +          descriptorId: 124
+  +          descriptorId: 122
   +      metadata:
   +        sourceElementId: 12
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +    - elementProto:
+  +        relationDependedOnBy:
+  +          columnId: 1
+  +          dependedOn: 125
+  +          tableId: 122
+  +      metadata:
+  +        sourceElementId: 12
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     formatVersion: 3
+     id: 122
+  ...
+     replacementOf:
+       time: {}
+  +  state: DROP
+     unexposedParentSchemaId: 113
+  -  version: "2"
+  +  version: "3"
+     viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
+upsert descriptor #123
+   type:
+     arrayTypeId: 124
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 129
+  +    - 130
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 123
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 123
+  +          name: typ
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     enumMembers:
+     - logicalRepresentation: a
+  ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 125
+  -  version: "2"
+  +  referencingDescriptorIds: []
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #124
+  ...
+       family: ArrayFamily
+       oid: 100124
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 131
+  +    - 132
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 124
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 124
+  +          name: _typ
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 8
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+     id: 124
+     kind: ALIAS
+  ...
+         withGrantOption: 2
+       version: 2
+  -  referencingDescriptorIds:
+  -  - 125
+  -  version: "2"
+  +  referencingDescriptorIds: []
+  +  state: DROP
+  +  version: "3"
+upsert descriptor #125
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  dependsOn:
+  -  - 122
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  +        statement: DROP DATABASE db1 CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 119
+  +    - 120
+  +    - 121
+  +    - 122
+  +    - 123
+  +    - 124
+  +    - 125
+  +    - 126
+  +    - 127
+  +    - 128
+  +    targets:
+  +    - elementProto:
+  +        view:
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 111
+  +          descriptorId: 125
+  +          name: v5
+  +          schemaId: 113
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        owner:
+  +          descriptorId: 125
+  +          owner: root
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          privileges: 2
+  +          username: admin
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          username: public
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        userPrivileges:
+  +          descriptorId: 125
+  +          privileges: 2
+  +          username: root
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        tableComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          tableId: 125
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        viewDependsOnType:
+  +          tableId: 125
+  +          typeId: 123
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        viewDependsOnType:
+  +          tableId: 125
+  +          typeId: 124
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        locality:
+  +          descriptorId: 125
+  +      metadata:
+  +        sourceElementId: 14
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
      dependsOnTypes:
-     - 122
+     - 123
   ...
      replacementOf:
        time: {}
@@ -2968,13 +3188,14 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
-create job #2: "GC for dropping descriptors 114 117 115 116 118 119 120 121 124 and parent database 111"
-  descriptor IDs: [114 117 115 116 118 119 120 121 124]
+## PostCommitNonRevertiblePhase stage 1 of 1 with 50 MutationType ops
+create job #2: "GC for dropping descriptors 114 117 118 115 116 119 120 121 122 125 and parent database 111"
+  descriptor IDs: [114 117 118 115 116 119 120 121 122 125]
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
-write *eventpb.DropType to event log for descriptor #123: DROP DATABASE ‹db1› CASCADE
+write *eventpb.DropType to event log for descriptor #124: DROP DATABASE ‹db1› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
+delete scheduleId: <redacted>
 delete database namespace entry {0 0 db1} -> 111
 delete schema namespace entry {111 0 public} -> 112
 delete schema namespace entry {111 0 sc1} -> 113
@@ -2995,11 +3216,11 @@ upsert descriptor #111
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 32
-  -    - 118
-  -    - 120
-  -    - 121
-  -    - 122
+  -    - 48
+  -    - 134
+  -    - 136
+  -    - 137
+  -    - 138
   -    targets:
   -    - elementProto:
   -        schemaEntry:
@@ -3190,21 +3411,21 @@ upsert descriptor #115
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 34
-  -    - 35
-  -    - 36
-  -    - 37
-  -    - 38
-  -    - 39
-  -    - 40
-  -    - 41
-  -    - 42
+  -    - 50
+  -    - 51
+  -    - 52
+  -    - 53
+  -    - 54
+  -    - 55
+  -    - 56
+  -    - 57
+  -    - 58
   -    targets:
   -    - elementProto:
   -        sequence:
   -          sequenceId: 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3214,7 +3435,7 @@ upsert descriptor #115
   -          name: sq1
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3222,7 +3443,7 @@ upsert descriptor #115
   -          descriptorId: 115
   -          owner: root
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3231,7 +3452,7 @@ upsert descriptor #115
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3239,7 +3460,7 @@ upsert descriptor #115
   -          descriptorId: 115
   -          username: public
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3248,7 +3469,7 @@ upsert descriptor #115
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3257,14 +3478,14 @@ upsert descriptor #115
   -            when doing decomposition
   -          tableId: 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3273,7 +3494,7 @@ upsert descriptor #115
   -          dependedOn: 116
   -          tableId: 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
      families:
@@ -3320,22 +3541,6 @@ upsert descriptor #116
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 43
-  -    - 44
-  -    - 45
-  -    - 46
-  -    - 47
-  -    - 48
-  -    - 49
-  -    - 50
-  -    - 51
-  -    - 52
-  -    - 53
-  -    - 54
-  -    - 55
-  -    - 56
-  -    - 57
-  -    - 58
   -    - 59
   -    - 60
   -    - 61
@@ -3343,6 +3548,22 @@ upsert descriptor #116
   -    - 63
   -    - 64
   -    - 65
+  -    - 66
+  -    - 67
+  -    - 68
+  -    - 69
+  -    - 70
+  -    - 71
+  -    - 72
+  -    - 73
+  -    - 74
+  -    - 75
+  -    - 76
+  -    - 77
+  -    - 78
+  -    - 79
+  -    - 80
+  -    - 81
   -    targets:
   -    - elementProto:
   -        defaultExpression:
@@ -3352,14 +3573,14 @@ upsert descriptor #116
   -          usesSequenceIds:
   -          - 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        table:
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3369,7 +3590,7 @@ upsert descriptor #116
   -          name: t1
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3377,7 +3598,7 @@ upsert descriptor #116
   -          descriptorId: 116
   -          owner: root
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3386,7 +3607,7 @@ upsert descriptor #116
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3394,7 +3615,7 @@ upsert descriptor #116
   -          descriptorId: 116
   -          username: public
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3403,7 +3624,7 @@ upsert descriptor #116
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3412,7 +3633,7 @@ upsert descriptor #116
   -            when doing decomposition
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3421,7 +3642,7 @@ upsert descriptor #116
   -          name: id
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3435,7 +3656,7 @@ upsert descriptor #116
   -            oid: 20
   -            width: 64
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3445,7 +3666,7 @@ upsert descriptor #116
   -            when doing decomposition
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3454,7 +3675,7 @@ upsert descriptor #116
   -          name: name
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3470,7 +3691,7 @@ upsert descriptor #116
   -            visibleType: 7
   -            width: 256
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3480,7 +3701,7 @@ upsert descriptor #116
   -            when doing decomposition
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3489,7 +3710,7 @@ upsert descriptor #116
   -          name: val
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3507,7 +3728,7 @@ upsert descriptor #116
   -          usesSequenceIds:
   -          - 115
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3517,7 +3738,7 @@ upsert descriptor #116
   -            when doing decomposition
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3535,7 +3756,7 @@ upsert descriptor #116
   -          tableId: 116
   -          unique: true
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3544,7 +3765,7 @@ upsert descriptor #116
   -          name: t1_pkey
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3554,7 +3775,7 @@ upsert descriptor #116
   -          constraintId: 1
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3564,23 +3785,23 @@ upsert descriptor #116
   -          indexId: 1
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        relationDependedOnBy:
   -          columnId: 2
-  -          dependedOn: 118
+  -          dependedOn: 119
   -          tableId: 116
   -      metadata:
-  -        sourceElementId: 6
+  -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
      families:
@@ -3901,8 +4122,14 @@ upsert descriptor #118
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - VALIDATED
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -3910,32 +4137,38 @@ upsert descriptor #118
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 66
-  -    - 67
-  -    - 68
-  -    - 69
-  -    - 70
-  -    - 71
-  -    - 72
-  -    - 73
-  -    - 74
-  -    - 75
+  -    - 31
+  -    - 32
+  -    - 33
+  -    - 34
+  -    - 35
+  -    - 36
+  -    - 37
+  -    - 38
+  -    - 39
+  -    - 40
+  -    - 41
+  -    - 42
+  -    - 43
+  -    - 44
+  -    - 45
+  -    - 46
   -    targets:
   -    - elementProto:
-  -        view:
+  -        table:
   -          tableId: 118
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        namespace:
   -          databaseId: 111
   -          descriptorId: 118
-  -          name: v1
-  -          schemaId: 113
+  -          name: ttl
+  -          schemaId: 112
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3943,7 +4176,7 @@ upsert descriptor #118
   -          descriptorId: 118
   -          owner: root
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3952,7 +4185,7 @@ upsert descriptor #118
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3960,7 +4193,7 @@ upsert descriptor #118
   -          descriptorId: 118
   -          username: public
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3969,7 +4202,7 @@ upsert descriptor #118
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -3978,42 +4211,112 @@ upsert descriptor #118
   -            when doing decomposition
   -          tableId: 118
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnName:
+  -          columnId: 1
+  -          name: id
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        column:
+  -          columnId: 1
+  -          familyName: primary
+  -          pgAttributeNum: 1
+  -          tableId: 118
+  -          type:
+  -            family: IntFamily
+  -            oid: 20
+  -            width: 64
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnComment:
+  -          columnId: 1
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        primaryIndex:
+  -          indexId: 1
+  -          keyColumnDirections:
+  -          - ASC
+  -          keyColumnIds:
+  -          - 1
+  -          shardedDescriptor: {}
+  -          sourceIndexId: 1
+  -          storingColumnIds:
+  -          - 2
+  -          tableId: 118
+  -          unique: true
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: ttl_pkey
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        constraintComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          constraintId: 1
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          indexId: 1
+  -          tableId: 118
+  -      metadata:
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 118
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
-  -        relationDependedOnBy:
-  -          columnId: 1
-  -          dependedOn: 119
+  -        rowLevelTtl:
+  -          rowLevelTtl:
+  -            durationExpr: '''00:10:00'':::INTERVAL'
+  -            scheduleId: <redacted>
   -          tableId: 118
   -      metadata:
-  -        sourceElementId: 8
+  -        sourceElementId: 6
   -        subWorkId: 1
   -      targetStatus: ABSENT
-  -    - elementProto:
-  -        relationDependedOnBy:
-  -          columnId: 1
-  -          dependedOn: 120
-  -          tableId: 118
-  -      metadata:
-  -        sourceElementId: 8
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     formatVersion: 3
-     id: 118
+     families:
+     - columnIds:
   ...
      state: DROP
-     unexposedParentSchemaId: 113
-  -  version: "4"
-  +  version: "5"
-     viewQuery: (SELECT name FROM db1.sc1.t1)
+     unexposedParentSchemaId: 112
+  -  version: "2"
+  +  version: "3"
 upsert descriptor #119
   ...
      createAsOfTime:
@@ -4038,32 +4341,32 @@ upsert descriptor #119
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 76
-  -    - 77
-  -    - 78
-  -    - 79
-  -    - 80
-  -    - 81
   -    - 82
   -    - 83
   -    - 84
   -    - 85
+  -    - 86
+  -    - 87
+  -    - 88
+  -    - 89
+  -    - 90
+  -    - 91
   -    targets:
   -    - elementProto:
   -        view:
   -          tableId: 119
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        namespace:
   -          databaseId: 111
   -          descriptorId: 119
-  -          name: v2
+  -          name: v1
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4071,7 +4374,7 @@ upsert descriptor #119
   -          descriptorId: 119
   -          owner: root
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4080,7 +4383,7 @@ upsert descriptor #119
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4088,7 +4391,7 @@ upsert descriptor #119
   -          descriptorId: 119
   -          username: public
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4097,7 +4400,7 @@ upsert descriptor #119
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4106,14 +4409,14 @@ upsert descriptor #119
   -            when doing decomposition
   -          tableId: 119
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 119
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4122,7 +4425,7 @@ upsert descriptor #119
   -          dependedOn: 120
   -          tableId: 119
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4131,7 +4434,7 @@ upsert descriptor #119
   -          dependedOn: 121
   -          tableId: 119
   -      metadata:
-  -        sourceElementId: 9
+  -        sourceElementId: 10
   -        subWorkId: 1
   -      targetStatus: ABSENT
      formatVersion: 3
@@ -4141,7 +4444,7 @@ upsert descriptor #119
      unexposedParentSchemaId: 113
   -  version: "4"
   +  version: "5"
-     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
+     viewQuery: (SELECT name FROM db1.sc1.t1)
 upsert descriptor #120
   ...
      createAsOfTime:
@@ -4157,6 +4460,8 @@ upsert descriptor #120
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -4164,30 +4469,32 @@ upsert descriptor #120
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 86
-  -    - 87
-  -    - 88
-  -    - 89
-  -    - 90
-  -    - 91
   -    - 92
   -    - 93
+  -    - 94
+  -    - 95
+  -    - 96
+  -    - 97
+  -    - 98
+  -    - 99
+  -    - 100
+  -    - 101
   -    targets:
   -    - elementProto:
   -        view:
   -          tableId: 120
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        namespace:
   -          databaseId: 111
   -          descriptorId: 120
-  -          name: v3
+  -          name: v2
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4195,7 +4502,7 @@ upsert descriptor #120
   -          descriptorId: 120
   -          owner: root
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4204,7 +4511,7 @@ upsert descriptor #120
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4212,7 +4519,7 @@ upsert descriptor #120
   -          descriptorId: 120
   -          username: public
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4221,7 +4528,7 @@ upsert descriptor #120
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4230,14 +4537,32 @@ upsert descriptor #120
   -            when doing decomposition
   -          tableId: 120
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 120
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnId: 1
+  -          dependedOn: 121
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 11
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnId: 1
+  -          dependedOn: 122
+  -          tableId: 120
+  -      metadata:
+  -        sourceElementId: 11
   -        subWorkId: 1
   -      targetStatus: ABSENT
      formatVersion: 3
@@ -4245,9 +4570,9 @@ upsert descriptor #120
   ...
      state: DROP
      unexposedParentSchemaId: 113
-  -  version: "2"
-  +  version: "3"
-     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+  -  version: "4"
+  +  version: "5"
+     viewQuery: (SELECT name AS n1, name AS n2 FROM db1.sc1.v1)
 upsert descriptor #121
   ...
      createAsOfTime:
@@ -4263,7 +4588,6 @@ upsert descriptor #121
   -    - ABSENT
   -    - ABSENT
   -    - ABSENT
-  -    - ABSENT
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -4271,31 +4595,30 @@ upsert descriptor #121
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 94
-  -    - 95
-  -    - 96
-  -    - 97
-  -    - 98
-  -    - 99
-  -    - 100
-  -    - 101
   -    - 102
+  -    - 103
+  -    - 104
+  -    - 105
+  -    - 106
+  -    - 107
+  -    - 108
+  -    - 109
   -    targets:
   -    - elementProto:
   -        view:
   -          tableId: 121
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        namespace:
   -          databaseId: 111
   -          descriptorId: 121
-  -          name: v4
+  -          name: v3
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4303,7 +4626,7 @@ upsert descriptor #121
   -          descriptorId: 121
   -          owner: root
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4312,7 +4635,7 @@ upsert descriptor #121
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4320,7 +4643,7 @@ upsert descriptor #121
   -          descriptorId: 121
   -          username: public
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4329,7 +4652,7 @@ upsert descriptor #121
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
@@ -4338,23 +4661,14 @@ upsert descriptor #121
   -            when doing decomposition
   -          tableId: 121
   -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
   -          descriptorId: 121
   -      metadata:
-  -        sourceElementId: 10
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        relationDependedOnBy:
-  -          columnId: 1
-  -          dependedOn: 124
-  -          tableId: 121
-  -      metadata:
-  -        sourceElementId: 10
+  -        sourceElementId: 12
   -        subWorkId: 1
   -      targetStatus: ABSENT
      formatVersion: 3
@@ -4362,10 +4676,127 @@ upsert descriptor #121
   ...
      state: DROP
      unexposedParentSchemaId: 113
+  -  version: "2"
+  +  version: "3"
+     viewQuery: (SELECT name, n1 FROM db1.sc1.v1, db1.sc1.v2)
+upsert descriptor #122
+  ...
+     createAsOfTime:
+       wallTime: "1"
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
+  -        statement: DROP DATABASE db1 CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 110
+  -    - 111
+  -    - 112
+  -    - 113
+  -    - 114
+  -    - 115
+  -    - 116
+  -    - 117
+  -    - 118
+  -    targets:
+  -    - elementProto:
+  -        view:
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        namespace:
+  -          databaseId: 111
+  -          descriptorId: 122
+  -          name: v4
+  -          schemaId: 113
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        owner:
+  -          descriptorId: 122
+  -          owner: root
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          privileges: 2
+  -          username: admin
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          username: public
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        userPrivileges:
+  -          descriptorId: 122
+  -          privileges: 2
+  -          username: root
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        tableComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        locality:
+  -          descriptorId: 122
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        relationDependedOnBy:
+  -          columnId: 1
+  -          dependedOn: 125
+  -          tableId: 122
+  -      metadata:
+  -        sourceElementId: 12
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     formatVersion: 3
+     id: 122
+  ...
+     state: DROP
+     unexposedParentSchemaId: 113
   -  version: "3"
   +  version: "4"
      viewQuery: (SELECT n2, n1 FROM db1.sc1.v2)
-upsert descriptor #124
+upsert descriptor #125
   ...
      createAsOfTime:
        wallTime: "1"
@@ -4389,102 +4820,102 @@ upsert descriptor #124
   -        statement: DROP DATABASE db1 CASCADE
   -        statementTag: DROP DATABASE
   -    targetRanks:
-  -    - 103
-  -    - 104
-  -    - 105
-  -    - 106
-  -    - 107
-  -    - 108
-  -    - 109
-  -    - 110
-  -    - 111
-  -    - 112
+  -    - 119
+  -    - 120
+  -    - 121
+  -    - 122
+  -    - 123
+  -    - 124
+  -    - 125
+  -    - 126
+  -    - 127
+  -    - 128
   -    targets:
   -    - elementProto:
   -        view:
-  -          tableId: 124
+  -          tableId: 125
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        namespace:
   -          databaseId: 111
-  -          descriptorId: 124
+  -          descriptorId: 125
   -          name: v5
   -          schemaId: 113
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        owner:
-  -          descriptorId: 124
+  -          descriptorId: 125
   -          owner: root
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        userPrivileges:
-  -          descriptorId: 124
+  -          descriptorId: 125
   -          privileges: 2
   -          username: admin
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        userPrivileges:
-  -          descriptorId: 124
+  -          descriptorId: 125
   -          username: public
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        userPrivileges:
-  -          descriptorId: 124
+  -          descriptorId: 125
   -          privileges: 2
   -          username: root
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        tableComment:
   -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
   -            when doing decomposition
-  -          tableId: 124
+  -          tableId: 125
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        viewDependsOnType:
-  -          tableId: 124
-  -          typeId: 122
-  -      metadata:
-  -        sourceElementId: 12
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        viewDependsOnType:
-  -          tableId: 124
+  -          tableId: 125
   -          typeId: 123
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        viewDependsOnType:
+  -          tableId: 125
+  -          typeId: 124
+  -      metadata:
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
   -    - elementProto:
   -        locality:
-  -          descriptorId: 124
+  -          descriptorId: 125
   -      metadata:
-  -        sourceElementId: 12
+  -        sourceElementId: 14
   -        subWorkId: 1
   -      targetStatus: ABSENT
      dependsOnTypes:
-     - 122
+     - 123
   ...
      state: DROP
      unexposedParentSchemaId: 113
@@ -4493,7 +4924,7 @@ upsert descriptor #124
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
 delete descriptor #112
 delete descriptor #113
-delete descriptor #122
 delete descriptor #123
+delete descriptor #124
 commit transaction #3
 # end PostCommitPhase

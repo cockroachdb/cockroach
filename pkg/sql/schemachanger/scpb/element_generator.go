@@ -90,7 +90,10 @@ func ForEach{{ . }}(
 // the names of the types of its members.
 func getElementNames(inProtoFile string) (names []string, _ error) {
 	var (
-		elementProtoBufMeta = `(\s+\[\([A-z\.]+\)\s+=\s+\"[A-z\:\",\s]+\])?`
+		// e.g.: (gogoproto.customname) = 'field'
+		elementProtoBufMetaField = `\([A-z\.]+\)\s+=\s+\"[A-z\:\",\s]+`
+		// e.g.: [ (gogoproto.a) = b, (gogoproto.customname) = 'c' ]
+		elementProtoBufMeta = `(\s+\[(` + elementProtoBufMetaField + `)*\](\s+,\s+(` + elementProtoBufMetaField + `))*)?`
 		elementFieldPat     = `\s*(?P<type>\w+)\s+(?P<name>\w+)\s+=\s+\d+` +
 			elementProtoBufMeta + `;`
 		elementProtoRegexp = regexp.MustCompile(`(?s)message ElementProto {
@@ -109,7 +112,8 @@ func getElementNames(inProtoFile string) (names []string, _ error) {
 	}
 	submatch := elementProtoRegexp.FindSubmatch(got)
 	if submatch == nil {
-		return nil, fmt.Errorf("failed to find ElementProto in %s: %s",
+		return nil, fmt.Errorf(""+
+			"failed to find ElementProto in %s: %s",
 			inProtoFile, elementProtoRegexp)
 	}
 	fieldMatches := elementFieldRegexp.FindAllSubmatch(submatch[elementFieldsIdx], -1)

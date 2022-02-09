@@ -96,4 +96,7 @@ type MutationVisitorStateUpdater interface {
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
+
+	// DeleteSchedule deletes a scheduled job.
+	DeleteSchedule(scheduleID int64)
 }
