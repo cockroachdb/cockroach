@@ -542,7 +542,6 @@ func (sp *Span) reset(
 		})
 	}
 
-	atomic.StoreInt32(&sp.finished, 0)
 	c := sp.i.crdb
 	sp.i = spanInner{
 		tracer:   sp.i.tracer,
