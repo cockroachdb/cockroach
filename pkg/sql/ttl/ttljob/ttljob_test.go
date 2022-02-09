@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMakeSelectClauseFromColumns(t *testing.T) {
+func TestMakeColumnNamesSQLFromColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -34,7 +34,7 @@ func TestMakeSelectClauseFromColumns(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.expected, func(t *testing.T) {
-			require.Equal(t, tc.expected, makeSelectClauseFromColumns(tc.cols))
+			require.Equal(t, tc.expected, makeColumnNamesSQLFromColumns(tc.cols))
 		})
 	}
 }

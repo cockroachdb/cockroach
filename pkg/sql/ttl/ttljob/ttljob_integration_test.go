@@ -166,6 +166,18 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numExpiredRows:    1001,
 			numNonExpiredRows: 5,
 		},
+		{
+			desc: "three column pk, delete every row",
+			createTable: `CREATE TABLE tbl (
+	id UUID DEFAULT gen_random_uuid(),
+	other_col INT,
+	"quote-kw-col" TIMESTAMPTZ,
+	text TEXT,
+	PRIMARY KEY (id, other_col, "quote-kw-col")
+) WITH (ttl_expire_after = '30 days')`,
+			numExpiredRows:    1000,
+			numNonExpiredRows: 0,
+		},
 	}
 	// Also randomly generate random PKs.
 	for i := 0; i < 5; i++ {

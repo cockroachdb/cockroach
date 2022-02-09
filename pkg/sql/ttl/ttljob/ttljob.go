@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,11 +56,11 @@ var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
-	p := execCtx.(sql.JobExecContext)
-	ie := p.ExecCfg().InternalExecutor
-	db := p.ExecCfg().DB
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	ie := jobExecCtx.ExecCfg().InternalExecutor
+	db := jobExecCtx.ExecCfg().DB
 	var knobs sql.TTLTestingKnobs
-	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
+	if ttlKnobs := jobExecCtx.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
 		knobs = *ttlKnobs
 	}
 
@@ -81,7 +82,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var ttlSettings descpb.TableDescriptor_RowLevelTTL
 	var pkColumns []string
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
+		desc, err := jobExecCtx.ExtendedEvalContext().Descs.GetImmutableTableByID(
 			ctx,
 			txn,
 			details.TableID,
@@ -102,12 +103,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
-	selectClause := makeSelectClauseFromColumns(pkColumns)
+	columnNamesSQL := makeColumnNamesSQLFromColumns(pkColumns)
 	// lastRowPK stores the last PRIMARY KEY that was seen.
 	var lastRowPK []interface{}
 
-	selectBatchSize := getSelectBatchSize(p.ExecCfg().SV(), ttlSettings)
-	deleteBatchSize := getDeleteBatchSize(p.ExecCfg().SV(), ttlSettings)
+	selectBatchSize := getSelectBatchSize(jobExecCtx.ExecCfg().SV(), ttlSettings)
+	deleteBatchSize := getDeleteBatchSize(jobExecCtx.ExecCfg().SV(), ttlSettings)
 
 	// TODO(#75428): break this apart by ranges to avoid multi-range operations.
 	// TODO(#75428): add concurrency.
@@ -116,13 +117,13 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	for {
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
-		var expiredRowsPKs []tree.Datums
 
 		var filterClause string
+		var rows sqlutil.InternalRows
 		if len(lastRowPK) > 0 {
 			// Generate (pk_col_1, pk_col_2, ...) > ($2, $3, ...), reserving
 			// $1 for the now clause.
-			filterClause = fmt.Sprintf("AND (%s) > (", selectClause)
+			filterClause = fmt.Sprintf("AND (%s) > (", columnNamesSQL)
 			for i := range pkColumns {
 				if i > 0 {
 					filterClause += ", "
@@ -133,14 +134,14 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			q := fmt.Sprintf(
+			selectQuery := fmt.Sprintf(
 				`SELECT %[1]s FROM [%[2]d AS tbl_name]
 					%[3]s
 					WHERE crdb_internal_expiration <= $1 %[4]s
 					ORDER BY %[1]s
 					LIMIT %[5]d
 				`,
-				selectClause,
+				columnNamesSQL,
 				details.TableID,
 				aostClause,
 				filterClause,
@@ -151,11 +152,11 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				lastRowPK...,
 			)
 			var err error
-			expiredRowsPKs, err = ie.QueryBuffered(
+			rows, err = ie.QueryIterator(
 				ctx,
-				"ttl",
+				"ttl_scanner",
 				txn,
-				q,
+				selectQuery,
 				args...,
 			)
 			return err
@@ -163,45 +164,31 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return errors.Wrapf(err, "error selecting rows to delete")
 		}
 
-		// Step 2. Delete the rows which have expired.
+		// Step 2. Delete the rows which have expired. We read through the iterator
+		// until we have our deleteBatchSize, then run the delete.
 
-		for startRowIdx := 0; startRowIdx < len(expiredRowsPKs); startRowIdx += deleteBatchSize {
-			until := startRowIdx + deleteBatchSize
-			if until > len(expiredRowsPKs) {
-				until = len(expiredRowsPKs)
-			}
-			deleteBatch := expiredRowsPKs[startRowIdx:until]
+		// Flatten the datums in deleteBatch and generate the placeholder string.
+		// The result is (for a 2 column PK) something like:
+		//   placeholderStr: ($2, $3), ($4, $5), ...
+		//   deleteArgs: {cutoff, row1col1, row1col2, row2col1, row2col2, ...}
+		// where we save $1 for crdb_internal_expiration < $1
+		placeholderStr := ""
+		deleteArgs := make([]interface{}, 0, len(pkColumns)*deleteBatchSize+1)
+		deleteArgs = append(deleteArgs, details.Cutoff)
+		numSelectedRows := 0
+		numRowsForDelete := 0
 
-			// Flatten the datums in deleteBatch and generate the placeholder string.
-			// The result is (for a 2 column PK) something like:
-			//   placeholderStr: ($2, $3), ($4, $5), ...
-			//   args: {cutoff, row1col1, row1col2, row2col1, row2col2, ...}
-			// where we save $1 for crdb_internal_expiration < $1
-			args := make([]interface{}, len(pkColumns)*len(deleteBatch)+1)
-			args[0] = details.Cutoff
-			placeholderStr := ""
-			for i, row := range deleteBatch {
-				if i > 0 {
-					placeholderStr += ", "
-				}
-				placeholderStr += "("
-				for j := 0; j < len(pkColumns); j++ {
-					if j > 0 {
-						placeholderStr += ", "
-					}
-					placeholderStr += fmt.Sprintf("$%d", 2+i*len(pkColumns)+j)
-					args[i*len(pkColumns)+j+1] = row[j]
-				}
-				placeholderStr += ")"
+		runDelete := func() error {
+			if numRowsForDelete == 0 {
+				return nil
 			}
 
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				// TODO(#75428): configure admission priority
-
-				q := fmt.Sprintf(
+				deleteQuery := fmt.Sprintf(
 					`DELETE FROM [%d AS tbl_name] WHERE crdb_internal_expiration <= $1 AND (%s) IN (%s)`,
 					details.TableID,
-					selectClause,
+					columnNamesSQL,
 					placeholderStr,
 				)
 
@@ -209,13 +196,83 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					ctx,
 					"ttl_delete",
 					txn,
-					q,
-					args...,
+					deleteQuery,
+					deleteArgs...,
 				)
+				if err != nil {
+					return err
+				}
+
+				// Reset the args and string.
+				deleteArgs = deleteArgs[:1]
+				placeholderStr = ""
+				numRowsForDelete = 0
 				return err
 			}); err != nil {
 				return errors.Wrapf(err, "error during row deletion")
 			}
+			return nil
+		}
+
+		// Keep track of the last row's datums - we need this as our cursor
+		// for the next SELECT batch.
+		var lastRow tree.Datums
+		for {
+			hasNext, err := func() (bool, error) {
+				next, err := rows.Next(ctx)
+				if err != nil {
+					return false, err
+				}
+				if !next {
+					return false, nil
+				}
+
+				if len(deleteArgs) > 1 {
+					placeholderStr += ", "
+				}
+				lastRow = rows.Cur()
+				if len(pkColumns) != len(lastRow) {
+					return false, errors.Newf(
+						"number of pk columns (%d) != number of rows (%d)",
+						len(pkColumns),
+						len(lastRow),
+					)
+				}
+				placeholderStr += "("
+				for j := 0; j < len(pkColumns); j++ {
+					if j > 0 {
+						placeholderStr += ", "
+					}
+					placeholderStr += fmt.Sprintf("$%d", 2+numRowsForDelete*len(pkColumns)+j)
+					deleteArgs = append(deleteArgs, lastRow[j])
+				}
+				placeholderStr += ")"
+
+				numSelectedRows++
+				numRowsForDelete++
+
+				// If we are up to our delete batch size, run the delete.
+				if numRowsForDelete == deleteBatchSize {
+					if err := runDelete(); err != nil {
+						return false, err
+					}
+				}
+				return true, nil
+			}()
+			if err != nil {
+				return errors.CombineErrors(err, rows.Close())
+			}
+			if !hasNext {
+				if err := rows.Close(); err != nil {
+					return err
+				}
+				break
+			}
+		}
+
+		// Flush out the remaining batch.
+		if err := runDelete(); err != nil {
+			return err
 		}
 
 		// Step 3. Early exit if necessary. Otherwise, populate the lastRowPK so we
@@ -223,16 +280,15 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		// If we selected less than the select batch size, we have selected every
 		// row.
-		if len(expiredRowsPKs) < selectBatchSize {
+		if numSelectedRows < selectBatchSize {
 			break
 		}
 
 		if lastRowPK == nil {
 			lastRowPK = make([]interface{}, len(pkColumns))
 		}
-		lastRowIdx := len(expiredRowsPKs) - 1
 		for i := 0; i < len(pkColumns); i++ {
-			lastRowPK[i] = expiredRowsPKs[lastRowIdx][i]
+			lastRowPK[i] = lastRow[i]
 		}
 	}
 
@@ -253,11 +309,11 @@ func getDeleteBatchSize(sv *settings.Values, ttl descpb.TableDescriptor_RowLevel
 	return int(defaultDeleteBatchSize.Get(sv))
 }
 
-// makeSelectClauseFromColumns converts primary key columns into an escape string
+// makeColumnNamesSQLFromColumns converts primary key columns into an escape string
 // for an order by clause, e.g.:
 //   {"a", "b"} => a, b
 //   {"escape-me", "b"} => "escape-me", b
-func makeSelectClauseFromColumns(pkColumns []string) string {
+func makeColumnNamesSQLFromColumns(pkColumns []string) string {
 	var b bytes.Buffer
 	for i, pkColumn := range pkColumns {
 		if i > 0 {
