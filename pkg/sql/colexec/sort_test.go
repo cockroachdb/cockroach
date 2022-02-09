@@ -345,12 +345,12 @@ func BenchmarkSortUUID(b *testing.B) {
 			for _, constAbbrPct := range []int{0, 50, 75, 90, 100} {
 				name := fmt.Sprintf("rows=%d/cols=%d/constAbbrPct=%d", nBatches*coldata.BatchSize(), nCols, constAbbrPct)
 				b.Run(name, func(b *testing.B) {
-					// 8 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
+					// 16 (bytes / int64) * nBatches (number of batches) * coldata.BatchSize() (rows /
 					// batch) * nCols (number of columns / row).
-					b.SetBytes(int64(8 * nBatches * coldata.BatchSize() * nCols))
+					b.SetBytes(int64(16 * nBatches * coldata.BatchSize() * nCols))
 					typs := make([]*types.T, nCols)
 					for i := range typs {
-						typs[i] = types.Bytes
+						typs[i] = types.Uuid
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 					batch.SetLength(coldata.BatchSize())
