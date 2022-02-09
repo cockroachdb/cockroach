@@ -7383,6 +7383,15 @@ func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
 	CONSTRAINT test_pkey PRIMARY KEY (id ASC),
 	FAMILY "primary" (id)
 )`
+
+		createTTLTable = `CREATE DATABASE t;
+CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
+		expectTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC),
+	FAMILY "primary" (id, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10:00:00':::INTERVAL)`
 	)
 
 	testCases := []struct {
@@ -7423,6 +7432,36 @@ func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
 			expectedShowCreateTable: expectNonTTLTable,
 			expectSchedule:          false,
 		},
+		{
+			desc:         "error during ALTER TABLE ... RESET (ttl) during delete column mutation",
+			setup:        createTTLTable,
+			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeBackfill: failFunc,
+			},
+			expectedShowCreateTable: expectTTLTable,
+			expectSchedule:          true,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during modify row-level-ttl mutation",
+			setup:        createTTLTable,
+			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeModifyRowLevelTTL: failFunc,
+			},
+			expectedShowCreateTable: expectTTLTable,
+			expectSchedule:          true,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) when tied to another mutation which fails",
+			setup:        createTTLTable,
+			schemaChange: `BEGIN; ALTER TABLE t.test RESET (ttl); CREATE INDEX test_idx ON t.test(id); COMMIT`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeIndexValidation: failFunc,
+			},
+			expectedShowCreateTable: expectTTLTable,
+			expectSchedule:          true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -7456,7 +7495,7 @@ func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
 			)
 			if tc.expectSchedule {
 				require.NotNil(t, desc.GetRowLevelTTL())
-				require.Greater(t, desc.GetRowLevelTTL().ScheduleID, 0)
+				require.Greater(t, desc.GetRowLevelTTL().ScheduleID, int64(0))
 
 				// Ensure there is only one schedule and that it belongs to the table.
 				var numSchedules int
