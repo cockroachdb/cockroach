@@ -712,7 +712,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 		// The transaction heartbeat observed an aborted transaction record and
 		// this was not due to a synchronous transaction commit and transaction
 		// record garbage collection.
-		// See the comment on txnHeartbeater.mu.finalizedStatus for more details.
+		// See the comment on txnHeartbeater.mu.finalObservedStatus for more details.
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
 		if tc.typ == kv.LeafTxn {
@@ -721,10 +721,7 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 			return abortedErr
 		}
 		// Root txns handle retriable errors.
-		newTxn := roachpb.PrepareTransactionForRetry(
-			ctx, abortedErr, roachpb.NormalUserPriority, tc.clock)
-		return roachpb.NewError(roachpb.NewTransactionRetryWithProtoRefreshError(
-			abortedErr.String(), tc.mu.txn.ID, newTxn))
+		return roachpb.NewError(tc.handleRetryableErrLocked(ctx, abortedErr))
 	case protoStatus != roachpb.PENDING || hbObservedStatus != roachpb.PENDING:
 		// The transaction proto is in an unexpected state.
 		return roachpb.NewErrorf(
