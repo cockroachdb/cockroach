@@ -399,6 +399,7 @@ alter_ddl_stmt ::=
 	| alter_schema_stmt
 	| alter_type_stmt
 	| alter_default_privileges_stmt
+	| alter_changefeed_stmt
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1384,6 +1385,9 @@ alter_default_privileges_stmt ::=
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_grant_stmt
 	| 'ALTER' 'DEFAULT' 'PRIVILEGES' 'FOR' 'ALL' 'ROLES' opt_in_schemas abbreviated_revoke_stmt
 
+alter_changefeed_stmt ::=
+	'ALTER' 'CHANGEFEED' a_expr alter_changefeed_cmds
+
 role_or_group_or_user ::=
 	'ROLE'
 	| 'USER'
@@ -1878,6 +1882,9 @@ abbreviated_revoke_stmt ::=
 	'REVOKE' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 	| 'REVOKE' 'GRANT' 'OPTION' 'FOR' privileges 'ON' alter_default_privileges_target_object 'FROM' role_spec_list opt_drop_behavior
 
+alter_changefeed_cmds ::=
+	( alter_changefeed_cmd ) ( ( alter_changefeed_cmd ) )*
+
 role_options ::=
 	( role_option ) ( ( role_option ) )*
 
@@ -2357,6 +2364,10 @@ alter_default_privileges_target_object ::=
 	| 'SEQUENCES'
 	| 'TYPES'
 	| 'SCHEMAS'
+
+alter_changefeed_cmd ::=
+	'ADD' changefeed_targets
+	| 'DROP' changefeed_targets
 
 role_option ::=
 	'CREATEROLE'
