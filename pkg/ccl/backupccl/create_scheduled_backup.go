@@ -1002,6 +1002,18 @@ func (m ScheduledBackupExecutionArgs) MarshalJSONPB(marshaller *jsonpb.Marshaler
 		backup.IncrementalFrom[i] = tree.NewDString(clean)
 	}
 
+	for i := range backup.Options.IncrementalStorage {
+		raw, ok := backup.Options.IncrementalStorage[i].(*tree.StrVal)
+		if !ok {
+			return nil, errors.Errorf("unexpected %T arg in backup schedule: %v", raw, raw)
+		}
+		clean, err := cloud.SanitizeExternalStorageURI(raw.RawString(), nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+		backup.Options.IncrementalStorage[i] = tree.NewDString(clean)
+	}
+
 	for i := range backup.Options.EncryptionKMSURI {
 		raw, ok := backup.Options.EncryptionKMSURI[i].(*tree.StrVal)
 		if !ok {
