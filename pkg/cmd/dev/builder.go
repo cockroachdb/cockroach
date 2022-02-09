@@ -41,12 +41,18 @@ func makeBuilderCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 func (d *dev) builder(cmd *cobra.Command, extraArgs []string) error {
 	ctx := cmd.Context()
 	volume := mustGetFlagString(cmd, volumeFlag)
-	args, err := d.getDockerRunArgs(ctx, volume, false)
+	var tty bool
+	if len(extraArgs) == 0 {
+		tty = true
+	}
+	args, err := d.getDockerRunArgs(ctx, volume, tty)
 	args = append(args, extraArgs...)
 	if err != nil {
 		return err
 	}
-	logCommand("docker", args...)
+	if tty {
+		logCommand("docker", args...)
+	}
 	return d.exec.CommandContextInheritingStdStreams(ctx, "docker", args...)
 }
 
