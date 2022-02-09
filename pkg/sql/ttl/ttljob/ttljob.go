@@ -19,12 +19,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+)
+
+var (
+	defaultSelectBatchSize = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_select_batch_size",
+		"default amount of rows to select in a single query during a TTL job",
+		500,
+		settings.PositiveInt,
+	).WithPublic()
+	defaultDeleteBatchSize = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_delete_batch_size",
+		"default amount of rows to delete in a single query during a TTL job",
+		100,
+		settings.PositiveInt,
+	).WithPublic()
 )
 
 type rowLevelTTLResumer struct {
@@ -59,6 +78,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	// TODO(#75428): feature flag check, ttl pause check.
 	// TODO(#75428): detect if the table has a schema change, in particular,
 	// a PK change, a DROP TTL or a DROP TABLE should early exit the job.
+	var ttlSettings descpb.TableDescriptor_RowLevelTTL
 	var pkColumns []string
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
@@ -71,6 +91,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return err
 		}
 		pkColumns = desc.GetPrimaryIndex().IndexDesc().KeyColumnNames
+
+		ttl := desc.GetRowLevelTTL()
+		if ttl == nil {
+			return errors.Newf("unable to find TTL on table %s", desc.GetName())
+		}
+		ttlSettings = *ttl
 		return nil
 	}); err != nil {
 		return err
@@ -80,10 +106,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	// lastRowPK stores the last PRIMARY KEY that was seen.
 	var lastRowPK []interface{}
 
-	const (
-		selectBatchSize = 500
-		deleteBatchSize = 100
-	)
+	selectBatchSize := getSelectBatchSize(p.ExecCfg().SV(), ttlSettings)
+	deleteBatchSize := getDeleteBatchSize(p.ExecCfg().SV(), ttlSettings)
 
 	// TODO(#75428): break this apart by ranges to avoid multi-range operations.
 	// TODO(#75428): add concurrency.
@@ -109,7 +133,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			// TODO(#75428): configure select_batch_size
 			q := fmt.Sprintf(
 				`SELECT %[1]s FROM [%[2]d AS tbl_name]
 					%[3]s
@@ -142,7 +165,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 
 		// Step 2. Delete the rows which have expired.
 
-		// TODO(#75428): configure delete_batch_size
 		for startRowIdx := 0; startRowIdx < len(expiredRowsPKs); startRowIdx += deleteBatchSize {
 			until := startRowIdx + deleteBatchSize
 			if until > len(expiredRowsPKs) {
@@ -215,6 +237,20 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	}
 
 	return nil
+}
+
+func getSelectBatchSize(sv *settings.Values, ttl descpb.TableDescriptor_RowLevelTTL) int {
+	if bs := ttl.SelectBatchSize; bs != 0 {
+		return int(bs)
+	}
+	return int(defaultSelectBatchSize.Get(sv))
+}
+
+func getDeleteBatchSize(sv *settings.Values, ttl descpb.TableDescriptor_RowLevelTTL) int {
+	if bs := ttl.DeleteBatchSize; bs != 0 {
+		return int(bs)
+	}
+	return int(defaultDeleteBatchSize.Get(sv))
 }
 
 // makeSelectClauseFromColumns converts primary key columns into an escape string
