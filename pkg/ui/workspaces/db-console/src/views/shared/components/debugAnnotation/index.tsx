@@ -14,7 +14,7 @@ import "./debugAnnotation.styl";
 
 export interface DebugAnnotationProps {
   label: string;
-  value: string;
+  value: React.ReactNode;
 }
 
 /**
