@@ -263,6 +263,9 @@ type DescriptorMetadataUpdater interface {
 
 	// SwapDescriptorSubComment moves a comment from one sub ID to another.
 	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
+
+	// DeleteSchedule deletes the given schedule.
+	DeleteSchedule(ctx context.Context, id int64) error
 }
 
 // DescriptorMetadataUpdaterFactory is used to construct a DescriptorMetadataUpdater for a given

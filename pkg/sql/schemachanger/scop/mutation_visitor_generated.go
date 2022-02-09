@@ -69,6 +69,7 @@ type MutationVisitor interface {
 	RemoveColumnComment(context.Context, RemoveColumnComment) error
 	RemoveConstraintComment(context.Context, RemoveConstraintComment) error
 	RemoveDatabaseRoleSettings(context.Context, RemoveDatabaseRoleSettings) error
+	DeleteSchedule(context.Context, DeleteSchedule) error
 }
 
 // Visit is part of the MutationOp interface.
@@ -304,4 +305,9 @@ func (op RemoveConstraintComment) Visit(ctx context.Context, v MutationVisitor) 
 // Visit is part of the MutationOp interface.
 func (op RemoveDatabaseRoleSettings) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.RemoveDatabaseRoleSettings(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op DeleteSchedule) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.DeleteSchedule(ctx, op)
 }

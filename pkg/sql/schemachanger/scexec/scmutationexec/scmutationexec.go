@@ -115,6 +115,9 @@ type MutationVisitorStateUpdater interface {
 		db catalog.DatabaseDescriptor,
 	) error
 
+	// DeleteSchedule deletes a scheduled job.
+	DeleteSchedule(scheduleID int64)
+
 	// AddNewGCJobForTable enqueues a GC job for the given table.
 	AddNewGCJobForTable(descriptor catalog.TableDescriptor)
 
@@ -1115,6 +1118,13 @@ func (m *visitor) RemoveDatabaseRoleSettings(
 		return err
 	}
 	return m.s.DeleteDatabaseRoleSettings(ctx, db.(catalog.DatabaseDescriptor))
+}
+
+func (m *visitor) DeleteSchedule(ctx context.Context, op scop.DeleteSchedule) error {
+	if op.ScheduleID != 0 {
+		m.s.DeleteSchedule(op.ScheduleID)
+	}
+	return nil
 }
 
 var _ scop.MutationVisitor = (*visitor)(nil)
