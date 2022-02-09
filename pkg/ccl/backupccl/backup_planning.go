@@ -383,8 +383,17 @@ func GetRedactedBackupNode(
 		return nil, err
 	}
 
+	sanitizedIncstorage := make([]string, len(incrementalStorage))
+	for i, uri := range incrementalStorage {
+		var err error
+		sanitizedIncstorage[i], err = cloud.SanitizeExternalStorageURI(uri, nil /* extraParams */)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	resolvedOpts, err := resolveOptionsForBackupJobDescription(backup.Options, kmsURIs,
-		incrementalStorage)
+		sanitizedIncstorage)
 	if err != nil {
 		return nil, err
 	}
