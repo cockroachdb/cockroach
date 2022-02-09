@@ -318,6 +318,7 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":cli"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/build",
