@@ -43,8 +43,7 @@ c  CREATE TABLE public.c (
    "qUuX" JSONB NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX "c_bAr_idx" ("bAr"),
-   FAMILY "primary" (id, foo, "bAr", "qUuX")
+   INVERTED INDEX "c_bAr_idx" ("bAr")
 )
 
 # Regression test for #42944: make sure that mixed-case columns can be
@@ -1118,8 +1117,7 @@ c  CREATE TABLE public.c (
    bar STRING[] NULL,
    CONSTRAINT c_pkey PRIMARY KEY (id ASC),
    INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar),
-   FAMILY "primary" (id, foo, bar)
+   INVERTED INDEX c_bar_idx (bar)
 )
 
 query ITT

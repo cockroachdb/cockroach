@@ -105,8 +105,7 @@ CREATE TABLE public.dst (
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT src_pkey PRIMARY KEY (rowid ASC),
    INVERTED INDEX src_a_j_idx (a, j),
-   INVERTED INDEX src_a_b_j_idx (a, b, j),
-   FAMILY "primary" (a, b, j, rowid)
+   INVERTED INDEX src_a_b_j_idx (a, b, j)
 )
 
 # Test dropping a table with a multi-column inverted index.
