@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // todoSpanSet is a placeholder value for callsites that need to pass a properly
@@ -28,6 +30,36 @@ import (
 // Do not introduce new uses of this.
 var todoSpanSet = &spanset.SpanSet{}
 
+// evalContextImpl implements the batcheval.EvalContext interface.
+type evalContextImpl struct {
+	*Replica
+	mu struct {
+		syncutil.RWMutex
+		closedTS hlc.Timestamp
+	}
+}
+
+func newEvalContextImpl(r *Replica) *evalContextImpl {
+	return &evalContextImpl{
+		Replica: r,
+		mu: struct {
+			syncutil.RWMutex
+			closedTS hlc.Timestamp
+		}{
+			closedTS: r.GetCurrentClosedTimestamp(context.TODO()),
+		},
+	}
+}
+
+// GetClosedTimestamp implements the EvalContext interface.
+func (ec *evalContextImpl) GetClosedTimestamp(_ context.Context) hlc.Timestamp {
+	ec.mu.RLock()
+	defer ec.mu.RUnlock()
+	return ec.mu.closedTS
+}
+
+var _ batcheval.EvalContext = &evalContextImpl{}
+
 // NewReplicaEvalContext returns a batcheval.EvalContext to use for command
 // evaluation. The supplied SpanSet will be ignored except for race builds, in
 // which case state access is asserted against it. A SpanSet must always be
@@ -36,11 +68,13 @@ func NewReplicaEvalContext(r *Replica, ss *spanset.SpanSet) batcheval.EvalContex
 	if ss == nil {
 		log.Fatalf(r.AnnotateCtx(context.Background()), "can't create a ReplicaEvalContext with assertions but no SpanSet")
 	}
+
+	ec := newEvalContextImpl(r)
 	if util.RaceEnabled {
 		return &SpanSetReplicaEvalContext{
-			i:  r,
+			i:  ec,
 			ss: *ss,
 		}
 	}
-	return r
+	return ec
 }

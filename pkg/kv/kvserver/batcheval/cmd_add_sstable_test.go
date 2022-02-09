@@ -1384,7 +1384,7 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 	require.NoError(t, err)
 	r, store, err := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
 	require.NoError(t, err)
-	closedTS := r.GetClosedTimestamp(ctx)
+	closedTS := r.GetCurrentClosedTimestamp(ctx)
 	require.NotZero(t, closedTS)
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.

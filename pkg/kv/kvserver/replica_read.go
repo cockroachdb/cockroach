@@ -60,6 +60,12 @@ func (r *Replica) executeReadOnlyBatch(
 		// may start relying on this, so we assert here.
 		panic("expected consistent iterators")
 	}
+	// Pin engine state eagerly so that all iterators created over this Reader are
+	// based off the state of the engine as of this point and are mutually
+	// consistent.
+	if err := rw.PinEngineStateForIterators(); err != nil {
+		return nil, g, roachpb.NewError(err)
+	}
 	if util.RaceEnabled {
 		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
 	}

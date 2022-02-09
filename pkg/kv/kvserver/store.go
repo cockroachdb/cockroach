@@ -2261,7 +2261,7 @@ func (s *Store) startRangefeedUpdater(ctx context.Context) {
 						if r == nil {
 							continue
 						}
-						r.handleClosedTimestampUpdate(ctx, r.GetClosedTimestamp(ctx))
+						r.handleClosedTimestampUpdate(ctx, r.GetCurrentClosedTimestamp(ctx))
 					}
 				case <-confCh:
 					// Loop around to use the updated timer.
@@ -3107,7 +3107,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if w := metrics.LockTableMetrics.TopKLocksByWaiters[0].Waiters; w > maxLockWaitQueueWaitersForLock {
 			maxLockWaitQueueWaitersForLock = w
 		}
-		mc := rep.GetClosedTimestamp(ctx)
+		mc := rep.GetCurrentClosedTimestamp(ctx)
 		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
 			minMaxClosedTS = mc
 		}

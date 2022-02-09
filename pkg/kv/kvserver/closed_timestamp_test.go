@@ -770,7 +770,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 			require.NoError(t, err)
 			r, err := store.GetReplica(rightDesc.RangeID)
 			require.NoError(t, err)
-			maxClosed := r.GetClosedTimestamp(ctx)
+			maxClosed := r.GetCurrentClosedTimestamp(ctx)
 			// Note that maxClosed would not necessarily be below the freeze start if
 			// this was a LEAD_FOR_GLOBAL_READS range.
 			assert.True(t, maxClosed.LessEq(freezeStartTimestamp),
@@ -805,7 +805,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 				mergedLeaseholder, err := leftLeaseholderStore.GetReplica(leftDesc.RangeID)
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
-				require.True(t, mergedLeaseholder.GetClosedTimestamp(ctx).Less(writeTime))
+				require.True(t, mergedLeaseholder.GetCurrentClosedTimestamp(ctx).Less(writeTime))
 				var baWrite roachpb.BatchRequest
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
