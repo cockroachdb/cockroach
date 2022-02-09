@@ -12,7 +12,7 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",
         "@com_github_cockroachdb_errors//:errors",

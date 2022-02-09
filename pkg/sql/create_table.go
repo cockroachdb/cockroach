@@ -2332,7 +2332,7 @@ func newRowLevelTTLScheduledJob(
 	env scheduledjobs.JobSchedulerEnv,
 	owner security.SQLUsername,
 	tblID descpb.ID,
-	ttl *descpb.TableDescriptor_RowLevelTTL,
+	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	sj := jobs.NewScheduledJob(env)
 	sj.SetScheduleLabel(fmt.Sprintf("row-level-ttl-%d", tblID))
@@ -2360,7 +2360,7 @@ func newRowLevelTTLScheduledJob(
 	return sj, nil
 }
 
-func rowLevelTTLSchedule(ttl *descpb.TableDescriptor_RowLevelTTL) string {
+func rowLevelTTLSchedule(ttl *catpb.RowLevelTTL) string {
 	if override := ttl.DeletionCron; override != "" {
 		return override
 	}
@@ -2373,7 +2373,7 @@ func createRowLevelTTLScheduledJob(
 	txn *kv.Txn,
 	owner security.SQLUsername,
 	tblID descpb.ID,
-	ttl *descpb.TableDescriptor_RowLevelTTL,
+	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	env := JobSchedulerEnv(execCfg)
 	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
@@ -2386,9 +2386,7 @@ func createRowLevelTTLScheduledJob(
 	return j, nil
 }
 
-func rowLevelTTLAutomaticColumnDef(
-	ttl *descpb.TableDescriptor_RowLevelTTL,
-) (*tree.ColumnTableDef, error) {
+func rowLevelTTLAutomaticColumnDef(ttl *catpb.RowLevelTTL) (*tree.ColumnTableDef, error) {
 	def := &tree.ColumnTableDef{
 		Name:   colinfo.TTLDefaultExpirationColumnName,
 		Type:   types.TimestampTZ,
