@@ -78,7 +78,7 @@ type KVAccessor interface {
 type KVSubscriber interface {
 	StoreReader
 	LastUpdated() hlc.Timestamp
-	Subscribe(func(updated roachpb.Span))
+	Subscribe(func(ctx context.Context, updated roachpb.Span))
 }
 
 // SQLTranslator translates SQL descriptors and their corresponding zone
