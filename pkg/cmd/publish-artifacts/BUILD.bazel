@@ -29,7 +29,6 @@ go_test(
         "slow_test.go",
     ],
     embed = [":publish-artifacts_lib"],
-    tags = ["broken_in_bazel"],
     deps = [
         "//pkg/testutils/skip",
         "@com_github_aws_aws_sdk_go//service/s3",
