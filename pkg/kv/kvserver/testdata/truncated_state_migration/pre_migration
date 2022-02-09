@@ -10,7 +10,8 @@ put legacy=true index=100 term=9
 handle index=100 term=9
 ----
 apply: true
-/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+state: /Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+head: /Min
 
 # Note that the below aren't actually possible in practice
 # as a divergence won't happen before the migration.
@@ -18,9 +19,18 @@ apply: true
 handle index=150 term=9
 ----
 apply: true
-/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+state: /Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+head: /Local/RangeID/12/u/RaftLog/logIndex:151
 
 handle index=60 term=9
 ----
 apply: true
-/Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+state: /Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+head: /Local/RangeID/12/u/RaftLog/logIndex:151
+
+# A huge truncation (beyond raftLogTruncationClearRangeThreshold) also works.
+handle index=12345678901234567890 term=9
+----
+apply: true
+state: /Local/RangeID/12/r/RaftTruncatedState -> index=100 term=9
+head: /Local/RangeID/12/u/RaftLog/logIndex:12345678901234567891

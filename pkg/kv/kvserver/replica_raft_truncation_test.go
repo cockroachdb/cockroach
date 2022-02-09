@@ -13,6 +13,7 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"testing"
 
@@ -20,11 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/datadriven"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHandleTruncatedStateBelowRaft(t *testing.T) {
@@ -46,6 +49,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	datadriven.Walk(t, "testdata/truncated_state_migration", func(t *testing.T, path string) {
 		const rangeID = 12
 		loader := stateloader.Make(rangeID)
+		prefixBuf := &loader.RangeIDPrefixBuf
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
 
@@ -55,9 +59,9 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				d.ScanArgs(t, "index", &prevTruncatedState.Index)
 				d.ScanArgs(t, "term", &prevTruncatedState.Term)
 				return ""
+
 			case "put":
-				var index uint64
-				var term uint64
+				var index, term uint64
 				var legacy bool
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
@@ -69,16 +73,15 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				}
 
 				if legacy {
-					assert.NoError(t, loader.SetLegacyRaftTruncatedState(ctx, eng, nil, truncState))
+					require.NoError(t, loader.SetLegacyRaftTruncatedState(ctx, eng, nil, truncState))
 				} else {
-					assert.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
+					require.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
 				}
 				return ""
+
 			case "handle":
 				var buf bytes.Buffer
-
-				var index uint64
-				var term uint64
+				var index, term uint64
 				d.ScanArgs(t, "index", &index)
 				d.ScanArgs(t, "term", &term)
 
@@ -87,30 +90,60 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 					Term:  term,
 				}
 
-				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, eng, false)
-				if err != nil {
-					return err.Error()
+				// Write log entries at start, middle, end, and above the truncated interval.
+				if newTruncatedState.Index > prevTruncatedState.Index {
+					indexes := []uint64{
+						prevTruncatedState.Index + 1,                                 // start
+						(newTruncatedState.Index + prevTruncatedState.Index + 1) / 2, // middle
+						newTruncatedState.Index,                                      // end
+						newTruncatedState.Index + 1,                                  // new head
+					}
+					for _, idx := range indexes {
+						meta := enginepb.MVCCMetadata{RawBytes: make([]byte, 8)}
+						binary.BigEndian.PutUint64(meta.RawBytes, idx)
+						value, err := protoutil.Marshal(&meta)
+						require.NoError(t, err)
+						require.NoError(t, eng.PutUnversioned(prefixBuf.RaftLogKey(idx), value))
+					}
 				}
+
+				// Apply truncation.
+				apply, err := handleTruncatedStateBelowRaft(ctx, &prevTruncatedState, newTruncatedState, loader, eng, false)
+				require.NoError(t, err)
 				fmt.Fprintf(&buf, "apply: %t\n", apply)
 
+				// Check the truncated state.
 				for _, key := range []roachpb.Key{
 					keys.RaftTruncatedStateLegacyKey(rangeID),
 					keys.RaftTruncatedStateKey(rangeID),
 				} {
 					var truncatedState roachpb.RaftTruncatedState
 					ok, err := storage.MVCCGetProto(ctx, eng, key, hlc.Timestamp{}, &truncatedState, storage.MVCCGetOptions{})
-					if err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, err)
 					if !ok {
 						continue
 					}
-					fmt.Fprintf(&buf, "%s -> index=%d term=%d\n", key, truncatedState.Index, truncatedState.Term)
+					fmt.Fprintf(&buf, "state: %s -> index=%d term=%d\n", key, truncatedState.Index, truncatedState.Term)
 				}
+
+				// Find the first untruncated log entry (the log head).
+				res, err := storage.MVCCScan(ctx, eng,
+					prefixBuf.RaftLogPrefix().Clone(),
+					prefixBuf.RaftLogPrefix().PrefixEnd(),
+					hlc.Timestamp{},
+					storage.MVCCScanOptions{MaxKeys: 1})
+				require.NoError(t, err)
+				var head roachpb.Key
+				if len(res.KVs) > 0 {
+					head = res.KVs[0].Key
+				}
+				fmt.Fprintf(&buf, "head: %s\n", head)
+
 				return buf.String()
+
 			default:
+				return fmt.Sprintf("unsupported: %s", d.Cmd)
 			}
-			return fmt.Sprintf("unsupported: %s", d.Cmd)
 		})
 	})
 }

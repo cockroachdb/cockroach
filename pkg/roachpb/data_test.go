@@ -62,6 +62,17 @@ func makeSynTS(walltime int64, logical int32) hlc.Timestamp {
 	}
 }
 
+func TestKeyClone(t *testing.T) {
+	k := Key{0x01, 0x02, 0x03}
+	c := k.Clone()
+	require.Equal(t, k, c)
+
+	k[0] = 0xff
+	require.NotEqual(t, k, c)
+
+	require.Nil(t, Key(nil).Clone())
+}
+
 // TestKeyNext tests that the method for creating lexicographic
 // successors to byte slices works as expected.
 func TestKeyNext(t *testing.T) {
