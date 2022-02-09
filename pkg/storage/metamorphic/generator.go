@@ -111,6 +111,7 @@ type metaTestRunner struct {
 	nameToGenerator map[string]*opGenerator
 	ops             []opRun
 	weights         []int
+	st              *cluster.Settings
 }
 
 func (m *metaTestRunner) init() {
@@ -205,6 +206,10 @@ func (m *metaTestRunner) init() {
 	m.openBatches = make(map[readWriterID]storage.ReadWriter)
 	m.openTxns = make(map[txnID]*roachpb.Transaction)
 	m.openSavepoints = make(map[txnID][]enginepb.TxnSeq)
+	// TODO(travers): Add metamorphic test support for different versions, which
+	// will give us better coverage across multiple format major versions and
+	// table versions.
+	m.st = cluster.MakeTestingClusterSettings()
 }
 
 func (m *metaTestRunner) closeGenerators() {

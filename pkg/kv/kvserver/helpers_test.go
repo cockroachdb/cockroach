@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -397,9 +398,11 @@ func (r *Replica) LoadBasedSplitter() *split.Decider {
 	return &r.loadBasedSplitter
 }
 
-func MakeSSTable(key, value string, ts hlc.Timestamp) ([]byte, storage.MVCCKeyValue) {
+func MakeSSTable(
+	ctx context.Context, key, value string, ts hlc.Timestamp,
+) ([]byte, storage.MVCCKeyValue) {
 	sstFile := &storage.MemFile{}
-	sst := storage.MakeIngestionSSTWriter(sstFile)
+	sst := storage.MakeIngestionSSTWriter(ctx, cluster.MakeTestingClusterSettings(), sstFile)
 	defer sst.Close()
 
 	v := roachpb.MakeValueFromBytes([]byte(value))
@@ -427,7 +430,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 	ba.RangeID = store.LookupReplica(roachpb.RKey(key)).RangeID
 
 	var addReq roachpb.AddSSTableRequest
-	addReq.Data, _ = MakeSSTable(key, val, ts)
+	addReq.Data, _ = MakeSSTable(ctx, key, val, ts)
 	addReq.Key = roachpb.Key(key)
 	addReq.EndKey = addReq.Key.Next()
 	ba.Add(&addReq)
