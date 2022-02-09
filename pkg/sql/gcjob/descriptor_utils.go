@@ -75,10 +75,9 @@ func deleteDatabaseZoneConfig(
 		return nil
 	}
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if !descs.UnsafeSkipSystemConfigTrigger.Get(&settings.SV) &&
-			!settings.Version.IsActive(
-				ctx, clusterversion.DisableSystemConfigGossipTrigger,
-			) {
+		if !settings.Version.IsActive(
+			ctx, clusterversion.DisableSystemConfigGossipTrigger,
+		) {
 			if err := txn.DeprecatedSetSystemConfigTrigger(codec.ForSystemTenant()); err != nil {
 				return err
 			}
