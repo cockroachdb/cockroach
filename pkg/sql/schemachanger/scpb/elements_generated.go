@@ -523,3 +523,16 @@ func ForEachDatabaseRoleSetting(
 		}
 	})
 }
+
+func (e RowLevelTTL) element() {}
+
+// ForEachRowLevelTTL iterates over nodes of type RowLevelTTL.
+func ForEachRowLevelTTL(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *RowLevelTTL),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*RowLevelTTL); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}
