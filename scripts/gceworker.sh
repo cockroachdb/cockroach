@@ -83,6 +83,16 @@ case "${cmd}" in
     fi
     gcloud compute instances stop "${NAME}"
     ;;
+    reset)
+    read -r -p "This will hard reset (\"powercycle\") the VM. Are you sure? [yes] " response
+    # Convert to lowercase.
+    response=$(echo "$response" | tr '[:upper:]' '[:lower:]')
+    if [[ $response != "yes" ]]; then
+      echo Aborting
+      exit 1
+    fi
+    gcloud compute instances reset "${NAME}"
+    ;;
     delete|destroy)
     read -r -p "This will delete the VM! Are you sure? [yes] " response
     # Convert to lowercase.
