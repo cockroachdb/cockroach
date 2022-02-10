@@ -28,8 +28,11 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
-statement error  resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
+statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
+
+statement error cannot drop column crdb_internal_expiration while row-level TTL is active
+ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
 
 query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
