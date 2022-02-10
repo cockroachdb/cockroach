@@ -21,10 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlfsm"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // Constants for the String() representation of the session states. Shared with
@@ -109,6 +109,9 @@ type eventTxnStartPayload struct {
 	txnSQLTimestamp     time.Time
 	readOnly            tree.ReadWriteMode
 	historicalTimestamp *hlc.Timestamp
+	// qualityOfService denotes the user-level admission queue priority to use for
+	// any new Txn started using this payload.
+	qualityOfService sessiondatapb.QoSLevel
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -118,6 +121,7 @@ func makeEventTxnStartPayload(
 	txnSQLTimestamp time.Time,
 	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
+	qualityOfService sessiondatapb.QoSLevel,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                 pri,
@@ -125,6 +129,7 @@ func makeEventTxnStartPayload(
 		txnSQLTimestamp:     txnSQLTimestamp,
 		historicalTimestamp: historicalTimestamp,
 		tranCtx:             tranCtx,
+		qualityOfService:    qualityOfService,
 	}
 }
 
@@ -202,10 +207,6 @@ func (eventRetriableErr) Event()         {}
 func (eventTxnRestart) Event()           {}
 func (eventTxnReleased) Event()          {}
 func (eventTxnUpgradeToExplicit) Event() {}
-
-// Other constants.
-
-var emptyTxnID = uuid.UUID{}
 
 // TxnStateTransitions describe the transitions used by a connExecutor's
 // fsm.Machine. Args.Extended is a txnState, which is muted by the Actions.
@@ -482,6 +483,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.readOnly,
 		nil, /* txn */
 		payload.tranCtx,
+		payload.qualityOfService,
 	)
 	ts.setAdvanceInfo(
 		advCode,

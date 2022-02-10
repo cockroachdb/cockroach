@@ -1417,6 +1417,9 @@ func (d *VirtualSchemaDiffTool) TestTable(tableName string, fn func(t *testing.T
 	})
 }
 
+// Prevent the linter from emitting unused warnings.
+var _ = (*VirtualSchemaDiffTool).Run
+
 // Run will execute the diff tool with all the configurations that are in VirtualSchemaDiffTool structure.
 func (d *VirtualSchemaDiffTool) Run() {
 	if _, codeFixerExists := codeFixers[d.catalogName]; d.addMissingTables && (d.rdbmsName != Postgres || !codeFixerExists) {

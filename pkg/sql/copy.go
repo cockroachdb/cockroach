@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -614,7 +615,9 @@ func (p *planner) preparePlannerForCopy(
 	autoCommit := false
 	if txn == nil {
 		nodeID, _ := p.execCfg.NodeID.OptionalNodeID()
-		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID)
+		// The session data stack in the planner is not set up at this point, so use
+		// the default Normal QoSLevel.
+		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true

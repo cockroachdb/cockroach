@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -47,6 +48,7 @@ type rowFetcher interface {
 		rowLimitHint rowinfra.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
+		qualityOfService sessiondatapb.QoSLevel,
 	) error
 
 	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)
