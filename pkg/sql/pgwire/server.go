@@ -88,6 +88,15 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
+var MaxNumConnections = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	sql.MaxNumConnectionsClusterSettingName,
+	"the maximum number of SQL connections to the server allowed at a given time, none if 0, unlimited if < 0",
+	-1,
+).WithPublic()
+
+var allowedConnectionCount int64 = 0
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
@@ -709,6 +718,41 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	hbaConf, identMap := s.GetAuthenticationConfiguration()
+
+	postAuthHook := func() error {
+		if hasAdminRole, err := sql.HasAdminRole(ctx, s.execCfg.InternalExecutor, sArgs.User); err != nil {
+			return err
+		} else if hasAdminRole {
+			// This user is an admin and is therefore not affected by connection limits.
+			atomic.AddInt64(&allowedConnectionCount, int64(1))
+			return nil
+		}
+
+		maxNumConnectionsValue := MaxNumConnections.Get(&s.execCfg.Settings.SV)
+		if maxNumConnectionsValue < 0 {
+			// Unlimited connections are allowed.
+			atomic.AddInt64(&allowedConnectionCount, int64(1))
+			return nil
+		}
+		if !incIfLte(&allowedConnectionCount, 1, maxNumConnectionsValue) {
+			return errors.WithHint(
+				pgerror.New(
+					pgcode.TooManyConnections, "sorry, too many clients already",
+				),
+				fmt.Sprintf(
+					"the maximum number of allowed connections is %d and can be modified using the %s config key",
+					maxNumConnectionsValue,
+					MaxNumConnections.Key(),
+				),
+			)
+		}
+		return nil
+	}
+
+	postAuthHookCleanup := func() {
+		atomic.AddInt64(&allowedConnectionCount, int64(-1))
+	}
+
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(
@@ -716,15 +760,37 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		reserved,
 		connStart,
 		authOptions{
-			connType:        connType,
-			connDetails:     connDetails,
-			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
-			auth:            hbaConf,
-			identMap:        identMap,
-			testingAuthHook: testingAuthHook,
-		})
+			connType:            connType,
+			connDetails:         connDetails,
+			insecure:            s.cfg.Insecure,
+			ie:                  s.execCfg.InternalExecutor,
+			auth:                hbaConf,
+			identMap:            identMap,
+			postAuthHook:        postAuthHook,
+			postAuthHookCleanup: postAuthHookCleanup,
+			testingAuthHook:     testingAuthHook,
+		},
+	)
 	return nil
+}
+
+// increments the int64 at addr by inc if <= max
+func incIfLte(addr *int64, inc int64, max int64) bool {
+	// try until it succeeds uncontested or fails
+	for {
+		// initial state
+		prev := atomic.LoadInt64(addr)
+		// increment
+		next := prev + inc
+		// is it <= max
+		if next > max {
+			return false
+		}
+		// did the initial state change in the meantime
+		if atomic.CompareAndSwapInt64(addr, prev, next) {
+			return true
+		}
+	}
 }
 
 func handleCancel(conn net.Conn) error {

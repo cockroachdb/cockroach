@@ -549,6 +549,16 @@ The port number should be the same as in --sql-addr unless port
 forwarding is set up on an intermediate firewall/router.`,
 	}
 
+	ListenMaxSQLConns = FlagInfo{
+		Name: "max-sql-conns",
+		Description: `
+Maximum number of client SQL conns that can be open at a time on this node. If
+left unspecified, there is no limit. This setting can be used to protect a
+cluster against misconfiguration of client apps. For good security, a rate
+limiter should be used in combination with this setting. Note that SQL admins
+are not affected by (although they do contribute to) this limit.`,
+	}
+
 	ListenHTTPAddr = FlagInfo{
 		Name: "http-addr",
 		Description: `
