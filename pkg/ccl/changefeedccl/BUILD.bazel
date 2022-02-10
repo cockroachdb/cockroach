@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "changefeedccl",
     srcs = [
+        "alter_changefeed_stmt.go",
         "avro.go",
         "changefeed.go",
         "changefeed_dist.go",
@@ -65,6 +66,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/flowinfra",
+        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
@@ -122,6 +124,7 @@ go_test(
     name = "changefeedccl_test",
     size = "enormous",
     srcs = [
+        "alter_changefeed_test.go",
         "avro_test.go",
         "bench_test.go",
         "changefeed_test.go",
