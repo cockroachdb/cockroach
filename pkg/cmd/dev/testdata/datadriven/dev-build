@@ -6,6 +6,8 @@ mkdir bin
 bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
+rm cockroach
+ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach
 
 dev build cockroach-short --cpus=12 --skip-generate
 ----
@@ -15,6 +17,8 @@ mkdir bin
 bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
+rm cockroach
+ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach
 
 dev build --debug short --skip-generate
 ----
@@ -24,6 +28,8 @@ mkdir bin
 bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
+rm cockroach
+ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach
 
 dev build short --skip-generate -- -s
 ----
@@ -33,6 +39,8 @@ mkdir bin
 bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
+rm cockroach
+ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach
 
 dev build --skip-generate -- --verbose_failures --sandbox_debug
 ----
