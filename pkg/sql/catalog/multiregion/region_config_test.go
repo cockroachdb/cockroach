@@ -89,3 +89,161 @@ func TestValidateRegionConfig(t *testing.T) {
 		)
 	}
 }
+
+func TestValidateSuperRegionConfig(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const validRegionEnumID = 100
+
+	testCases := []struct {
+		testName     string
+		err          string
+		regionConfig multiregion.RegionConfig
+	}{
+		{
+			testName: "region names within a super region should be sorted",
+			err:      "the regions within super region sr1 were not in a sorted order",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b", "region_a"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "regions should be unique within a super region",
+			err:      "duplicate region region_b found in super region sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b", "region_b"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "regions within a super region should map to a valid region on the database",
+			err:      "region region_d not part of database",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_d"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "super region names should be sorted",
+			err:      "super regions are not in sorted order based on the super region name",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_b"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "a region can only appear in one super region",
+			err:      "region region_a found in multiple super regions",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr2",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "super region names must be unique",
+			err:      "duplicate super regions with name sr1 found",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{"region_a"},
+					},
+				}),
+			),
+		},
+		{
+			testName: "a super region should have at least one region",
+			err:      "no regions found within super reigon sr1",
+			regionConfig: multiregion.MakeRegionConfig(
+				catpb.RegionNames{"region_a", "region_b", "region_c"},
+				"region_b",
+				descpb.SurvivalGoal_REGION_FAILURE,
+				validRegionEnumID,
+				descpb.DataPlacement_DEFAULT,
+				multiregion.WithSuperRegions([]descpb.DatabaseDescriptor_SuperRegion{
+					{
+						SuperRegionName: "sr1",
+						Regions:         []catpb.RegionName{},
+					},
+				}),
+			),
+		},
+	}
+
+	for _, tc := range testCases {
+		err := multiregion.ValidateRegionConfig(tc.regionConfig)
+
+		require.Error(t, err)
+		require.True(
+			t,
+			testutils.IsError(err, tc.err),
+			"test %s: expected err %v, got %v",
+			tc.testName,
+			tc.err,
+			err,
+		)
+	}
+}

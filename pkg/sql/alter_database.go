@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -423,7 +424,7 @@ func (p *planner) AlterDatabaseDropRegion(
 	if err != nil {
 		return nil, err
 	}
-	if err := multiregion.CanDropRegion(regionConfig); err != nil {
+	if err := multiregion.CanDropRegion(catpb.RegionName(n.Region), regionConfig); err != nil {
 		return nil, err
 	}
 
@@ -718,6 +719,8 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	oldPrimaryRegion := n.desc.RegionConfig.PrimaryRegion
+
 	// To update the primary region we need to modify the database descriptor,
 	// update the multi-region enum, and write a new zone configuration.
 	n.desc.RegionConfig.PrimaryRegion = catpb.RegionName(n.n.PrimaryRegion)
@@ -753,14 +756,34 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		return err
 	}
 
+	isNewPrimaryRegionMemberOfASuperRegion, superRegionOfNewSuperRegion := multiregion.IsMemberOfSuperRegion(catpb.RegionName(n.n.PrimaryRegion), updatedRegionConfig)
+	isOldPrimaryRegionMemberOfASuperRegion, superRegionOfOldPrimaryRegion := multiregion.IsMemberOfSuperRegion(oldPrimaryRegion, updatedRegionConfig)
+
+	if isNewPrimaryRegionMemberOfASuperRegion {
+		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are now part of the super region %s", superRegionOfNewSuperRegion))
+	}
+
+	if isOldPrimaryRegionMemberOfASuperRegion {
+		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are no longer part of the super region %s", superRegionOfOldPrimaryRegion))
+	}
+
+	// If the old or new primary region is a member of a super region, we also
+	// have to update regional tables that are part of the default region.
+	opts := WithOnlyGlobalTables
+	if isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
+		opts = WithOnlyRegionalTablesAndGlobalTables
+	}
+
 	// Update all GLOBAL tables' zone configurations. This is required as if
 	// LOCALITY GLOBAL is used with PLACEMENT RESTRICTED, the global tables' zone
 	// configs must be explicitly rebuilt so as to move their primary region.
-	if updatedRegionConfig.IsPlacementRestricted() {
+	// If there are super regions defined on the database, we may have to update
+	// the zone config for regional tables.
+	if updatedRegionConfig.IsPlacementRestricted() || isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
 		if err := params.p.updateZoneConfigsForTables(
 			params.ctx,
 			n.desc,
-			WithOnlyGlobalTables,
+			opts,
 		); err != nil {
 			return err
 		}
@@ -1232,3 +1255,217 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 func (n *alterDatabasePlacementNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabasePlacementNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabasePlacementNode) Close(context.Context)        {}
+
+type alterDatabaseAddSuperRegion struct {
+	n    *tree.AlterDatabaseAddSuperRegion
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseAddSuperRegion(
+	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseAddSuperRegion{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
+	// If the database is not a multi-region database, a super region cannot
+	// be added.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must be multi-region to support super regions",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	// Verify that the regions are part of the database.
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return err
+	}
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	if err != nil {
+		return err
+	}
+
+	regionNames, err := typeDesc.RegionNames()
+	if err != nil {
+		return err
+	}
+
+	regionsInDatabase := make(map[catpb.RegionName]struct{})
+	for _, regionName := range regionNames {
+		regionsInDatabase[regionName] = struct{}{}
+	}
+
+	regionSet := make(map[catpb.RegionName]struct{})
+	regions := make([]catpb.RegionName, len(n.n.Regions))
+
+	// Check that the region is part of the database.
+	// And create a slice of the regions in the super region.
+	for i, region := range n.n.Regions {
+		_, found := regionsInDatabase[catpb.RegionName(region)]
+		if !found {
+			return errors.Newf("region %s not part of database", region)
+		}
+
+		regionSet[catpb.RegionName(region)] = struct{}{}
+		regions[i] = catpb.RegionName(region)
+	}
+
+	sort.Slice(regions, func(i, j int) bool {
+		return regions[i] < regions[j]
+	})
+
+	// Ensure that the super region name is not already used and that
+	// the super regions don't overlap.
+	for _, superRegion := range n.desc.RegionConfig.SuperRegions {
+		if superRegion.SuperRegionName == string(n.n.SuperRegionName) {
+			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
+		}
+
+		for _, region := range superRegion.Regions {
+			if _, found := regionSet[region]; found {
+				return errors.Newf("region %s is already defined in super region %s", region, superRegion.SuperRegionName)
+			}
+		}
+	}
+
+	addSuperRegion(n.desc.RegionConfig, descpb.DatabaseDescriptor_SuperRegion{
+		SuperRegionName: string(n.n.SuperRegionName),
+		Regions:         regions,
+	})
+
+	if err := params.p.writeNonDropDatabaseChange(params.ctx, n.desc, "add super region"); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	if err := params.p.updateZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// addSuperRegion adds the super region in sorted order based on the
+// name of super region.
+func addSuperRegion(
+	r *descpb.DatabaseDescriptor_RegionConfig, superRegion descpb.DatabaseDescriptor_SuperRegion,
+) {
+	idx := sort.Search(len(r.SuperRegions), func(i int) bool {
+		return !(r.SuperRegions[i].SuperRegionName < superRegion.SuperRegionName)
+	})
+	if idx == len(r.SuperRegions) {
+		// Not found but should be inserted at the end.
+		r.SuperRegions = append(r.SuperRegions, superRegion)
+	} else {
+		// New element to be inserted at idx.
+		r.SuperRegions = append(r.SuperRegions, descpb.DatabaseDescriptor_SuperRegion{})
+		copy(r.SuperRegions[idx+1:], r.SuperRegions[idx:])
+		r.SuperRegions[idx] = superRegion
+	}
+}
+
+func (n *alterDatabaseAddSuperRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseAddSuperRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseAddSuperRegion) Close(context.Context)        {}
+
+type alterDatabaseDropSuperRegion struct {
+	n    *tree.AlterDatabaseDropSuperRegion
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseDropSuperRegion(
+	ctx context.Context, n *tree.AlterDatabaseDropSuperRegion,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseDropSuperRegion{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
+	// If the database is not a multi-region database, there should not be any
+	// super regions.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must be multi-region to support super regions",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	found := false
+	for i, superRegion := range n.desc.RegionConfig.SuperRegions {
+		if superRegion.SuperRegionName == string(n.n.SuperRegionName) {
+			n.desc.RegionConfig.SuperRegions = append(n.desc.RegionConfig.SuperRegions[:i], n.desc.RegionConfig.SuperRegions[i+1:]...)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return errors.Newf("super region %s not found", n.n.SuperRegionName)
+	}
+
+	if err := params.p.writeNonDropDatabaseChange(params.ctx, n.desc, "remove super region"); err != nil {
+		return err
+	}
+
+	// Update all regional and regional by row tables.
+	if err := params.p.updateZoneConfigsForTables(
+		params.ctx,
+		n.desc,
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseDropSuperRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseDropSuperRegion) Close(context.Context)        {}
