@@ -71,4 +71,8 @@ genrule(
         "//pkg/sql/colexec/execgen/cmd/execgen",
         "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

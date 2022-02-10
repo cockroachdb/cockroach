@@ -48,6 +48,7 @@ def gen_eg_go_rules(targets):
               $(location :goimports) -w $@
               """,
             tools = [":execgen", ":goimports"],
+            visibility = [":__pkg__", "//pkg/gen:__pkg__"],
         )
 
 def rule_name_for(target):
