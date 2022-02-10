@@ -12,6 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/blobs",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/blobs/blobspb",
         "//pkg/roachpb",
         "//pkg/rpc",
@@ -36,6 +37,7 @@ go_test(
     ],
     embed = [":blobs"],
     deps = [
+        "//pkg/base",
         "//pkg/blobs/blobspb",
         "//pkg/roachpb",
         "//pkg/rpc",

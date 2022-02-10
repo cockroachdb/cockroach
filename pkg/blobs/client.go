@@ -14,6 +14,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -180,9 +181,10 @@ type BlobClientFactory func(ctx context.Context, dialing roachpb.NodeID) (BlobCl
 
 // NewBlobClientFactory returns a BlobClientFactory
 func NewBlobClientFactory(
-	localNodeID roachpb.NodeID, dialer *nodedialer.Dialer, externalIODir string,
+	localNodeIDContainer *base.NodeIDContainer, dialer *nodedialer.Dialer, externalIODir string,
 ) BlobClientFactory {
 	return func(ctx context.Context, dialing roachpb.NodeID) (BlobClient, error) {
+		localNodeID := localNodeIDContainer.Get()
 		if dialing == 0 || localNodeID == dialing {
 			return NewLocalClient(externalIODir)
 		}
