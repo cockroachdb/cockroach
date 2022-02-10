@@ -36,9 +36,9 @@ func (p *planner) SerializeSessionState() (*tree.DBytes, error) {
 // NOTE: This is used within an observer statement directly, and should not rely
 // on the planner because those statements do not get planned.
 func serializeSessionState(
-	inTxn bool, prepStmtsState tree.PreparedStatementState, sd *sessiondata.SessionData,
+	inExplicitTxn bool, prepStmtsState tree.PreparedStatementState, sd *sessiondata.SessionData,
 ) (*tree.DBytes, error) {
-	if inTxn {
+	if inExplicitTxn {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
 			"cannot serialize a session which is inside a transaction",
@@ -82,7 +82,6 @@ func serializeSessionState(
 // DeserializeSessionState deserializes the given state into the current session.
 func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, error) {
 	evalCtx := p.EvalContext()
-
 	if !evalCtx.TxnImplicit {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
@@ -110,10 +109,9 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	if err := evalCtx.Planner.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
 		return nil, err
 	}
-	*p.SessionData() = *sd
-
+	*evalCtx.SessionData() = *sd
 	return tree.MakeDBool(true), nil
 }
