@@ -1,4 +1,9 @@
-load(":gen.bzl", "execgen", "go_proto", "gomock", "stringer")
+load(":gen.bzl", "ALL", "execgen", "go_proto", "gomock", "stringer")
+
+filegroup(
+    name = "all_generated",
+    srcs = ALL,
+)
 
 execgen()
 
