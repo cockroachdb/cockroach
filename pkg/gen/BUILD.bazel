@@ -1,4 +1,9 @@
-load(":gen.bzl", "execgen_srcs", "go_proto_srcs", "gomock_srcs", "hoist_files", "stringer_srcs")
+load(":gen.bzl", "ALL", "execgen_srcs", "go_proto_srcs", "gomock_srcs", "hoist_files", "stringer_srcs")
+
+filegroup(
+    name = "all",
+    srcs = ALL,
+)
 
 hoist_files(
     name = "go_proto",
