@@ -20,6 +20,10 @@ const messageBlockSize = 1024
 
 type messageBlock [messageBlockSize]ResolvedTxnID
 
+func (m *messageBlock) isFull() bool {
+	return m[messageBlockSize-1].valid()
+}
+
 // concurrentWriteBuffer is a data structure that optimizes for concurrent
 // writes and also implements the Writer interface.
 type concurrentWriteBuffer struct {
