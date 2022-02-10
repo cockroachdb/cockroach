@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -2399,8 +2400,9 @@ func (s *statusServer) listSessionsHelper(
 	ctx context.Context, req *serverpb.ListSessionsRequest, limit int, start paginationState,
 ) (*serverpb.ListSessionsResponse, paginationState, error) {
 	response := &serverpb.ListSessionsResponse{
-		Sessions: make([]serverpb.Session, 0),
-		Errors:   make([]serverpb.ListSessionsError, 0),
+		Sessions:              make([]serverpb.Session, 0),
+		Errors:                make([]serverpb.ListSessionsError, 0),
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
 	}
 
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
