@@ -11,4 +11,5 @@ def gen_sort_partitioner_rule(name, target, visibility = ["//visibility:private"
           $(location :goimports) -w $@
           """,
         tools = [":execgen", ":goimports"],
+        visibility = [":__pkg__", "//pkg/gen:__pkg__"],
     )

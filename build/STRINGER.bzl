@@ -1,7 +1,6 @@
 # stringer lets us define the equivalent of `//go:generate stringer` files
 # within bazel sandbox.
 def stringer(src, typ, name, additional_args=[], trim_prefix = ""):
-    print(src)
     native.genrule(
         name = name,
         srcs = [src],  # Accessed below using `$<`.
