@@ -71,4 +71,8 @@ genrule(
         "@com_github_pseudomuto_protoc_gen_doc//cmd/protoc-gen-doc",
         "//pkg/cmd/docgen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
