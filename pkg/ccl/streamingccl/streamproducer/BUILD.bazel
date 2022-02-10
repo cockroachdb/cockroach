@@ -45,6 +45,7 @@ go_library(
         "//pkg/util/protoutil",
         "//pkg/util/span",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
