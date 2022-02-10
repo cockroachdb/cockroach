@@ -877,7 +877,7 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
+%token <str> START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
@@ -971,6 +971,8 @@ func (u *sqlSymUnion) fetchCursor() *tree.FetchCursor {
 %type <tree.Statement> alter_database_owner
 %type <tree.Statement> alter_database_placement_stmt
 %type <tree.Statement> alter_database_set_stmt
+%type <tree.Statement> alter_database_add_super_region
+%type <tree.Statement> alter_database_drop_super_region
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1747,6 +1749,8 @@ alter_database_stmt:
 | alter_database_primary_region_stmt
 | alter_database_placement_stmt
 | alter_database_set_stmt
+| alter_database_add_super_region
+| alter_database_drop_super_region
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1838,6 +1842,26 @@ alter_database_primary_region_stmt:
       PrimaryRegion: tree.Name($5),
     }
   }
+
+alter_database_add_super_region:
+  ALTER DATABASE database_name ADD SUPER REGION name VALUES name_list
+  {
+    $$.val = &tree.AlterDatabaseAddSuperRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      Regions: $9.nameList(),
+    }
+  }
+
+alter_database_drop_super_region:
+  ALTER DATABASE database_name DROP SUPER REGION name
+  {
+    $$.val = &tree.AlterDatabaseDropSuperRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+    }
+  }
+
 
 // %Help: ALTER RANGE - change the parameters of a range
 // %Category: DDL
@@ -14068,6 +14092,7 @@ unreserved_keyword:
 | STREAM
 | STRICT
 | SUBSCRIPTION
+| SUPER
 | SURVIVE
 | SURVIVAL
 | SYNTAX
