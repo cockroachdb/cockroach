@@ -1,46 +1,9 @@
-load(":gen.bzl", "ALL", "execgen_srcs", "go_proto_srcs", "gomock_srcs", "hoist_files", "stringer_srcs")
+load(":gen.bzl", "execgen", "go_proto", "gomock", "stringer")
 
-filegroup(
-    name = "all",
-    srcs = ALL,
-)
+execgen()
 
-hoist_files(
-    name = "go_proto",
-    data = [":go_proto_srcs"],
-    tags = ["no-remote-exec"],
-)
+gomock()
 
-hoist_files(
-    name = "gomock",
-    data = [":gomock_srcs"],
-    tags = ["no-remote-exec"],
-)
+go_proto()
 
-hoist_files(
-    name = "stringer",
-    data = [":stringer_srcs"],
-    tags = ["no-remote-exec"],
-)
-
-hoist_files(
-    name = "execgen",
-    data = [":execgen_srcs"],
-    tags = ["no-remote-exec"],
-)
-
-go_proto_srcs(
-    name = "go_proto_srcs",
-)
-
-gomock_srcs(
-    name = "gomock_srcs",
-)
-
-stringer_srcs(
-    name = "stringer_srcs",
-)
-
-execgen_srcs(
-    name = "execgen_srcs",
-)
+stringer()
