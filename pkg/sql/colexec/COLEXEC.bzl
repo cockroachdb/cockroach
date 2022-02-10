@@ -11,4 +11,5 @@ $(location :execgen) -template $(SRCS) -fmt=false pkg/sql/colexec/$@ > $@
 $(location :goimports) -w $@
 """,
         tools = [":execgen", ":goimports"],
+        visibility = [":__pkg__", "//pkg/gen:__pkg__"],
     )
