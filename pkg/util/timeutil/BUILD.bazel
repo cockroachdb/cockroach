@@ -59,4 +59,8 @@ genrule(
         "//pkg/util/timeutil/gen",
         "@com_github_cockroachdb_crlfmt//:crlfmt",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

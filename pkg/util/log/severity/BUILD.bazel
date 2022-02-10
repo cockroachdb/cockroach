@@ -23,4 +23,8 @@ genrule(
     exec_tools = [
         "//pkg/util/log/gen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

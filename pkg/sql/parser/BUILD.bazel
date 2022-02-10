@@ -111,6 +111,10 @@ genrule(
     exec_tools = [
         ":help-gen-test",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the target to auto-generate help messages from the grammar file.
@@ -124,6 +128,10 @@ genrule(
     cmd = """
       awk -f $(location :help.awk) < $(location :sql.y) > $@
     """,
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 exports_files(
