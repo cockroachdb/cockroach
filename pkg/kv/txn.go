@@ -139,10 +139,14 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.
-func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+// priority is the QualityOfService level to use in admission control, whose
+// value also corresponds exactly with the admission.WorkPriority to use.
+func NewTxnWithSteppingEnabled(
+	ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID, priority int32,
+) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
 	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(admission.NormalPri),
+		Priority:   priority,
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     roachpb.AdmissionHeader_FROM_SQL,
 	}

@@ -109,15 +109,21 @@ type eventTxnStartPayload struct {
 	txnSQLTimestamp     time.Time
 	readOnly            tree.ReadWriteMode
 	historicalTimestamp *hlc.Timestamp
+	// qualityOfService denotes the user-level admission queue priority to use for
+	// any new Txn started using this payload.
+	qualityOfService int32
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
+// qualityOfService must be the same type as
+// sessiondatapb.LocalOnlySessionData.QualityOfService
 func makeEventTxnStartPayload(
 	pri roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
 	txnSQLTimestamp time.Time,
 	historicalTimestamp *hlc.Timestamp,
 	tranCtx transitionCtx,
+	qualityOfService int32,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                 pri,
@@ -125,6 +131,7 @@ func makeEventTxnStartPayload(
 		txnSQLTimestamp:     txnSQLTimestamp,
 		historicalTimestamp: historicalTimestamp,
 		tranCtx:             tranCtx,
+		qualityOfService:    qualityOfService,
 	}
 }
 
@@ -496,6 +503,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.readOnly,
 		nil, /* txn */
 		payload.tranCtx,
+		payload.qualityOfService,
 	)
 	ts.setAdvanceInfo(
 		advCode,

@@ -115,11 +115,29 @@ func TestTraceAnalyzer(t *testing.T) {
 				DistSQLMode: sessiondatapb.DistSQLOn,
 			},
 		})
+
+		qosLevel := sessiondatapb.QoSLevel(122)
+		didPanic := panicSeen(func() {
+			ie.ExecEx(
+				execCtx,
+				t.Name(),
+				nil, /* txn */
+				sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+				testStmt,
+			)
+		})
+
+		// Only defined QoSLevels are currently allowed.
+		if !didPanic {
+			t.Fatalf("Use of undefined QoS level expected to panic")
+		}
+
+		qosLevel = sessiondatapb.TTLLow
 		_, err := ie.ExecEx(
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
 			testStmt,
 		)
 		require.NoError(t, err)
@@ -185,6 +203,17 @@ func TestTraceAnalyzer(t *testing.T) {
 			require.Equal(t, int64(21/2), queryLevelStats.NetworkMessages)
 		})
 	}
+}
+
+func panicSeen(g func()) (retval bool) {
+	retval = false
+	defer func() {
+		if x := recover(); x != nil {
+			retval = true
+		}
+	}()
+	g()
+	return
 }
 
 func TestTraceAnalyzerProcessStats(t *testing.T) {

@@ -100,6 +100,7 @@ parallelize_multi_key_lookup_joins_enabled            off
 password_encryption                                   scram-sha-256
 prefer_lookup_joins_for_fks                           off
 propagate_input_ordering                              off
+quality_of_service                                    default
 reorder_joins_limit                                   8
 require_explicit_primary_keys                         off
 results_buffer_size                                   16384
