@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -223,7 +224,7 @@ func (expr *AndExpr) normalize(v *NormalizeVisitor) TypedExpr {
 
 func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator.Symbol {
-	case EQ, GE, GT, LE, LT:
+	case treecmp.EQ, treecmp.GE, treecmp.GT, treecmp.LE, treecmp.LT:
 		// We want var nodes (VariableExpr, VarName, etc) to be immediate
 		// children of the comparison expression and not second or third
 		// children. That is, we want trees that look like:
@@ -304,7 +305,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					op = MakeBinaryOperator(Plus)
 				case Div:
 					op = MakeBinaryOperator(Mult)
-					if expr.Operator.Symbol != EQ {
+					if expr.Operator.Symbol != treecmp.EQ {
 						// In this case, we must remember to *flip* the inequality if the
 						// divisor is negative, since we are in effect multiplying both sides
 						// of the inequality by a negative number.
@@ -424,7 +425,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			// We've run out of work to do.
 			break
 		}
-	case In, NotIn:
+	case treecmp.In, treecmp.NotIn:
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
 		tuple, ok := expr.Right.(*DTuple)
@@ -439,7 +440,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			}
 			if len(tupleCopy.D) == 0 {
 				// NULL IN <empty-tuple> is false.
-				if expr.Operator.Symbol == In {
+				if expr.Operator.Symbol == treecmp.In {
 					return DBoolFalse
 				}
 				return DBoolTrue
@@ -453,7 +454,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			expr = &exprCopy
 			expr.Right = &tupleCopy
 		}
-	case IsDistinctFrom, IsNotDistinctFrom:
+	case treecmp.IsDistinctFrom, treecmp.IsNotDistinctFrom:
 		left := expr.TypedLeft()
 		right := expr.TypedRight()
 
@@ -462,13 +463,13 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			// This helps support index selection rules.
 			return NewTypedComparisonExpr(expr.Operator, right, left)
 		}
-	case NE,
-		Like, NotLike,
-		ILike, NotILike,
-		SimilarTo, NotSimilarTo,
-		RegMatch, NotRegMatch,
-		RegIMatch, NotRegIMatch,
-		Any, Some, All:
+	case treecmp.NE,
+		treecmp.Like, treecmp.NotLike,
+		treecmp.ILike, treecmp.NotILike,
+		treecmp.SimilarTo, treecmp.NotSimilarTo,
+		treecmp.RegMatch, treecmp.NotRegMatch,
+		treecmp.RegIMatch, treecmp.NotRegIMatch,
+		treecmp.Any, treecmp.Some, treecmp.All:
 		if expr.TypedLeft() == DNull || expr.TypedRight() == DNull {
 			return DNull
 		}
@@ -559,11 +560,11 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		return DNull
 	}
 
-	leftCmp := GE
-	rightCmp := LE
+	leftCmp := treecmp.GE
+	rightCmp := treecmp.LE
 	if expr.Not {
-		leftCmp = LT
-		rightCmp = GT
+		leftCmp = treecmp.LT
+		rightCmp = treecmp.GT
 	}
 
 	// "a BETWEEN b AND c" -> "a >= b AND a <= c"
@@ -573,7 +574,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if from == DNull {
 			newLeft = DNull
 		} else {
-			newLeft = NewTypedComparisonExpr(MakeComparisonOperator(leftCmp), leftFrom, from).normalize(v)
+			newLeft = NewTypedComparisonExpr(treecmp.MakeComparisonOperator(leftCmp), leftFrom, from).normalize(v)
 			if v.err != nil {
 				return expr
 			}
@@ -581,7 +582,7 @@ func (expr *RangeCond) normalize(v *NormalizeVisitor) TypedExpr {
 		if to == DNull {
 			newRight = DNull
 		} else {
-			newRight = NewTypedComparisonExpr(MakeComparisonOperator(rightCmp), leftTo, to).normalize(v)
+			newRight = NewTypedComparisonExpr(treecmp.MakeComparisonOperator(rightCmp), leftTo, to).normalize(v)
 			if v.err != nil {
 				return expr
 			}
@@ -752,18 +753,18 @@ func (v *NormalizeVisitor) isNumericOne(expr TypedExpr) bool {
 	return false
 }
 
-func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
+func invertComparisonOp(op treecmp.ComparisonOperator) (treecmp.ComparisonOperator, error) {
 	switch op.Symbol {
-	case EQ:
-		return MakeComparisonOperator(EQ), nil
-	case GE:
-		return MakeComparisonOperator(LE), nil
-	case GT:
-		return MakeComparisonOperator(LT), nil
-	case LE:
-		return MakeComparisonOperator(GE), nil
-	case LT:
-		return MakeComparisonOperator(GT), nil
+	case treecmp.EQ:
+		return treecmp.MakeComparisonOperator(treecmp.EQ), nil
+	case treecmp.GE:
+		return treecmp.MakeComparisonOperator(treecmp.LE), nil
+	case treecmp.GT:
+		return treecmp.MakeComparisonOperator(treecmp.LT), nil
+	case treecmp.LE:
+		return treecmp.MakeComparisonOperator(treecmp.GE), nil
+	case treecmp.LT:
+		return treecmp.MakeComparisonOperator(treecmp.GT), nil
 	default:
 		return op, errors.AssertionFailedf("unable to invert: %s", op)
 	}

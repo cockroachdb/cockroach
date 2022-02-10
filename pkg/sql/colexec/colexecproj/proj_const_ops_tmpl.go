@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -336,14 +337,14 @@ func GetProjection_CONST_SIDEConstOperator(
 	//     the right side, so we skip generating the code when the constant is on
 	//     the left.
 	// */}}
-	case tree.ComparisonOperator:
+	case treecmp.ComparisonOperator:
 		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
 			switch op.Symbol {
 			// {{range .CmpOps}}
-			case tree._NAME:
+			case treecmp._NAME:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				// {{range .LeftFamilies}}
 				case _LEFT_CANONICAL_TYPE_FAMILY:

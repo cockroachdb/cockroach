@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -2562,7 +2563,7 @@ func makeShardCheckConstraintDef(
 	}
 	return &tree.CheckConstraintTableDef{
 		Expr: &tree.ComparisonExpr{
-			Operator: tree.MakeComparisonOperator(tree.In),
+			Operator: treecmp.MakeComparisonOperator(treecmp.In),
 			Left: &tree.ColumnItem{
 				ColumnName: tree.Name(shardCol.GetName()),
 			},

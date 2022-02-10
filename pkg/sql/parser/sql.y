@@ -37,6 +37,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/scanner"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
     "github.com/cockroachdb/errors"
     "github.com/lib/pq/oid"
@@ -82,7 +83,7 @@ func processBinaryQualOp(
   case tree.BinaryOperator:
     op.IsExplicitOperator = true
     return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
-  case tree.ComparisonOperator:
+  case treecmp.ComparisonOperator:
     op.IsExplicitOperator = true
     return &tree.ComparisonExpr{Operator: op, Left: lhs, Right: rhs}, 0
   case tree.UnaryOperator:
@@ -91,8 +92,8 @@ func processBinaryQualOp(
     switch op.Symbol {
     case tree.UnaryComplement:
       return &tree.ComparisonExpr{
-        Operator: tree.ComparisonOperator{
-          Symbol: tree.RegMatch,
+        Operator: treecmp.ComparisonOperator{
+          Symbol: treecmp.RegMatch,
           IsExplicitOperator: true,
         },
         Left: lhs,
@@ -146,9 +147,9 @@ func processUnaryQualOpInternal(
         Expr: expr,
       }, 0
     }
-  case tree.ComparisonOperator:
+  case treecmp.ComparisonOperator:
     switch op.Symbol {
-    case tree.RegMatch:
+    case treecmp.RegMatch:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryComplement),
         Expr: expr,
@@ -630,8 +631,8 @@ func (u *sqlSymUnion) window() tree.Window {
 func (u *sqlSymUnion) op() tree.Operator {
     return u.val.(tree.Operator)
 }
-func (u *sqlSymUnion) cmpOp() tree.ComparisonOperator {
-    return u.val.(tree.ComparisonOperator)
+func (u *sqlSymUnion) cmpOp() treecmp.ComparisonOperator {
+    return u.val.(treecmp.ComparisonOperator)
 }
 func (u *sqlSymUnion) intervalTypeMetadata() types.IntervalTypeMetadata {
     return u.val.(types.IntervalTypeMetadata)
@@ -1304,7 +1305,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Expr> case_expr case_arg case_default
 %type <*tree.When> when_clause
 %type <[]*tree.When> when_clause_list
-%type <tree.ComparisonOperator> sub_type
+%type <treecmp.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause
 %type <bool> opt_ordinality opt_compact
@@ -11267,35 +11268,35 @@ a_expr:
   }
 | a_expr '<' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LT), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '>' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GT), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '?' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr JSON_SOME_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONSomeExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONSomeExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr JSON_ALL_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.JSONAllExists), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.JSONAllExists), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Contains), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Contains), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINED_BY a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.ContainedBy), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ContainedBy), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '=' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.EQ), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.EQ), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONCAT a_expr
   {
@@ -11335,7 +11336,7 @@ a_expr:
   }
 | a_expr AND_AND a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Overlaps), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Overlaps), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
@@ -11343,15 +11344,15 @@ a_expr:
   }
 | a_expr LESS_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LE), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr GREATER_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GE), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_EQUALS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NE), Left: $1.expr(), Right: $3.expr()}
   }
 | qual_op a_expr %prec CBRT
   {
@@ -11389,7 +11390,7 @@ a_expr:
   }
 | a_expr LIKE a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.Like), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Like), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LIKE a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11397,7 +11398,7 @@ a_expr:
   }
 | a_expr NOT_LA LIKE a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotLike), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotLike), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr NOT_LA LIKE a_expr ESCAPE a_expr %prec ESCAPE
  {
@@ -11405,7 +11406,7 @@ a_expr:
  }
 | a_expr ILIKE a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.ILike), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ILike), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr ILIKE a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11413,7 +11414,7 @@ a_expr:
   }
 | a_expr NOT_LA ILIKE a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotILike), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotILike), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr NOT_LA ILIKE a_expr ESCAPE a_expr %prec ESCAPE
  {
@@ -11421,7 +11422,7 @@ a_expr:
  }
 | a_expr SIMILAR TO a_expr %prec SIMILAR
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.SimilarTo), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.SimilarTo), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11429,7 +11430,7 @@ a_expr:
   }
 | a_expr NOT_LA SIMILAR TO a_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotSimilarTo), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotSimilarTo), Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr NOT_LA SIMILAR TO a_expr ESCAPE a_expr %prec ESCAPE
   {
@@ -11437,24 +11438,24 @@ a_expr:
   }
 | a_expr '~' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_REGMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotRegMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotRegMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REGIMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegIMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegIMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_REGIMATCH a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotRegIMatch), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotRegIMatch), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr IS NAN %prec IS
   {
     $$.val = &tree.ComparisonExpr{
-      Operator: tree.MakeComparisonOperator(tree.EQ),
+      Operator: treecmp.MakeComparisonOperator(treecmp.EQ),
       Left: $1.expr(),
       Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
     }
@@ -11462,7 +11463,7 @@ a_expr:
 | a_expr IS NOT NAN %prec IS
   {
     $$.val = &tree.ComparisonExpr{
-      Operator: tree.MakeComparisonOperator(tree.NE),
+      Operator: treecmp.MakeComparisonOperator(treecmp.NE),
       Left: $1.expr(),
       Right: tree.NewNumVal(constant.MakeFloat64(math.NaN()), "NaN", false /*negative*/),
     }
@@ -11486,35 +11487,35 @@ a_expr:
 | row OVERLAPS row { return unimplemented(sqllex, "overlaps") }
 | a_expr IS TRUE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
   }
 | a_expr IS NOT TRUE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(true)}
   }
 | a_expr IS FALSE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
   }
 | a_expr IS NOT FALSE %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.MakeDBool(false)}
   }
 | a_expr IS UNKNOWN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: tree.DNull}
   }
 | a_expr IS NOT UNKNOWN %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: tree.DNull}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: tree.DNull}
   }
 | a_expr IS DISTINCT FROM a_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
   }
 | a_expr IS NOT DISTINCT FROM a_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
   }
 | a_expr IS OF '(' type_list ')' %prec IS
   {
@@ -11542,17 +11543,17 @@ a_expr:
   }
 | a_expr IN in_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.In), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.In), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr NOT_LA IN in_expr %prec NOT_LA
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NotIn), Left: $1.expr(), Right: $4.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NotIn), Left: $1.expr(), Right: $4.expr()}
   }
 | a_expr subquery_op sub_type a_expr %prec CONCAT
   {
     op := $3.cmpOp()
     subOp := $2.op()
-    subOpCmp, ok := subOp.(tree.ComparisonOperator)
+    subOpCmp, ok := subOp.(treecmp.ComparisonOperator)
     if !ok {
       sqllex.Error(fmt.Sprintf("%s %s <array> is invalid because %q is not a boolean operator",
         subOp, op, subOp))
@@ -11644,15 +11645,15 @@ b_expr:
   }
 | b_expr '<' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LT), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '>' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GT), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GT), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '=' b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.EQ), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.EQ), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr CONCAT b_expr
   {
@@ -11668,15 +11669,15 @@ b_expr:
   }
 | b_expr LESS_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.LE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.LE), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr GREATER_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.GE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.GE), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr NOT_EQUALS b_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.NE), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.NE), Left: $1.expr(), Right: $3.expr()}
   }
 | qual_op b_expr %prec CBRT
   {
@@ -11698,11 +11699,11 @@ b_expr:
   }
 | b_expr IS DISTINCT FROM b_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsDistinctFrom), Left: $1.expr(), Right: $5.expr()}
   }
 | b_expr IS NOT DISTINCT FROM b_expr %prec IS
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.IsNotDistinctFrom), Left: $1.expr(), Right: $6.expr()}
   }
 | b_expr IS OF '(' type_list ')' %prec IS
   {
@@ -12460,15 +12461,15 @@ labeled_row:
 sub_type:
   ANY
   {
-    $$.val = tree.MakeComparisonOperator(tree.Any)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.Any)
   }
 | SOME
   {
-    $$.val = tree.MakeComparisonOperator(tree.Some)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.Some)
   }
 | ALL
   {
-    $$.val = tree.MakeComparisonOperator(tree.All)
+    $$.val = treecmp.MakeComparisonOperator(treecmp.All)
   }
 
 // We combine mathOp and Op from PostgreSQL's gram.y there.
@@ -12489,20 +12490,20 @@ all_op:
 | '/' { $$.val = tree.MakeBinaryOperator(tree.Div)   }
 | '%' { $$.val = tree.MakeBinaryOperator(tree.Mod)   }
 | '^' { $$.val = tree.MakeBinaryOperator(tree.Pow) }
-| '<' { $$.val = tree.MakeComparisonOperator(tree.LT) }
-| '>' { $$.val = tree.MakeComparisonOperator(tree.GT) }
-| '=' { $$.val = tree.MakeComparisonOperator(tree.EQ) }
-| LESS_EQUALS    { $$.val = tree.MakeComparisonOperator(tree.LE) }
-| GREATER_EQUALS { $$.val = tree.MakeComparisonOperator(tree.GE) }
-| NOT_EQUALS     { $$.val = tree.MakeComparisonOperator(tree.NE) }
+| '<' { $$.val = treecmp.MakeComparisonOperator(treecmp.LT) }
+| '>' { $$.val = treecmp.MakeComparisonOperator(treecmp.GT) }
+| '=' { $$.val = treecmp.MakeComparisonOperator(treecmp.EQ) }
+| LESS_EQUALS    { $$.val = treecmp.MakeComparisonOperator(treecmp.LE) }
+| GREATER_EQUALS { $$.val = treecmp.MakeComparisonOperator(treecmp.GE) }
+| NOT_EQUALS     { $$.val = treecmp.MakeComparisonOperator(treecmp.NE) }
   // partial set of operators from from Op
-| '?' { $$.val = tree.MakeComparisonOperator(tree.JSONExists) }
+| '?' { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONExists) }
 | '&' { $$.val = tree.MakeBinaryOperator(tree.Bitand) }
 | '|' { $$.val = tree.MakeBinaryOperator(tree.Bitor)  }
 | '#' { $$.val = tree.MakeBinaryOperator(tree.Bitxor) }
 | FLOORDIV { $$.val = tree.MakeBinaryOperator(tree.FloorDiv) }
-| CONTAINS { $$.val = tree.MakeComparisonOperator(tree.Contains) }
-| CONTAINED_BY { $$.val = tree.MakeComparisonOperator(tree.ContainedBy) }
+| CONTAINS { $$.val = treecmp.MakeComparisonOperator(treecmp.Contains) }
+| CONTAINED_BY { $$.val = treecmp.MakeComparisonOperator(treecmp.ContainedBy) }
 | LSHIFT { $$.val = tree.MakeBinaryOperator(tree.LShift) }
 | RSHIFT { $$.val = tree.MakeBinaryOperator(tree.RShift) }
 | CONCAT { $$.val = tree.MakeBinaryOperator(tree.Concat) }
@@ -12510,12 +12511,12 @@ all_op:
 | FETCHTEXT { $$.val = tree.MakeBinaryOperator(tree.JSONFetchText) }
 | FETCHVAL_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchValPath) }
 | FETCHTEXT_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchTextPath) }
-| JSON_SOME_EXISTS { $$.val = tree.MakeComparisonOperator(tree.JSONSomeExists) }
-| JSON_ALL_EXISTS { $$.val = tree.MakeComparisonOperator(tree.JSONAllExists) }
-| NOT_REGMATCH { $$.val = tree.MakeComparisonOperator(tree.NotRegMatch) }
-| REGIMATCH { $$.val = tree.MakeComparisonOperator(tree.RegIMatch) }
-| NOT_REGIMATCH { $$.val = tree.MakeComparisonOperator(tree.NotRegIMatch) }
-| AND_AND { $$.val = tree.MakeComparisonOperator(tree.Overlaps) }
+| JSON_SOME_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONSomeExists) }
+| JSON_ALL_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONAllExists) }
+| NOT_REGMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegMatch) }
+| REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.RegIMatch) }
+| NOT_REGIMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegIMatch) }
+| AND_AND { $$.val = treecmp.MakeComparisonOperator(treecmp.Overlaps) }
 | '~' { $$.val = tree.MakeUnaryOperator(tree.UnaryComplement) }
 | SQRT { $$.val = tree.MakeUnaryOperator(tree.UnarySqrt) }
 | CBRT { $$.val = tree.MakeUnaryOperator(tree.UnaryCbrt) }
@@ -12546,10 +12547,10 @@ qual_op:
 subquery_op:
   all_op
 | qual_op
-| LIKE         { $$.val = tree.MakeComparisonOperator(tree.Like)     }
-| NOT_LA LIKE  { $$.val = tree.MakeComparisonOperator(tree.NotLike)  }
-| ILIKE        { $$.val = tree.MakeComparisonOperator(tree.ILike)    }
-| NOT_LA ILIKE { $$.val = tree.MakeComparisonOperator(tree.NotILike) }
+| LIKE         { $$.val = treecmp.MakeComparisonOperator(treecmp.Like)     }
+| NOT_LA LIKE  { $$.val = treecmp.MakeComparisonOperator(treecmp.NotLike)  }
+| ILIKE        { $$.val = treecmp.MakeComparisonOperator(treecmp.ILike)    }
+| NOT_LA ILIKE { $$.val = treecmp.MakeComparisonOperator(treecmp.NotILike) }
   // cannot put SIMILAR TO here, because SIMILAR TO is a hack.
   // the regular expression is preprocessed by a function (similar_escape),
   // and the ~ operator for posix regular expressions is used.

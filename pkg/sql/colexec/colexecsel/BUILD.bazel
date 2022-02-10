@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/types",  # keep
         "//pkg/util/duration",  # keep
         "//pkg/util/json",  # keep
@@ -49,6 +50,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const firstLastNthTmpl = "pkg/sql/colexec/colexecwindow/first_last_nth_value_tmpl.go"
@@ -47,7 +47,7 @@ func init() {
 				return err
 			}
 
-			return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[tree.EQ])
+			return tmpl.Execute(wr, sameTypeComparisonOpToOverloads[treecmp.EQ])
 		}
 	}
 

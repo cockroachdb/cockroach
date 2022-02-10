@@ -15,6 +15,7 @@ go_library(
     deps = [
         "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dave_dst//:dst",
         "@com_github_dave_dst//decorator",

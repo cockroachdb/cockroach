@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1382,16 +1383,16 @@ func (expr *AllColumnsSelector) TypeCheck(
 func (expr *RangeCond) TypeCheck(
 	ctx context.Context, semaCtx *SemaContext, desired *types.T,
 ) (TypedExpr, error) {
-	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(GT), expr.Left, expr.From)
+	leftFromTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.GT), expr.Left, expr.From)
 	if err != nil {
 		return nil, err
 	}
-	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(LT), expr.Left, expr.To)
+	leftToTyped, toTyped, _, _, err := typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.LT), expr.Left, expr.To)
 	if err != nil {
 		return nil, err
 	}
 	// Ensure that the boundaries of the comparison are well typed.
-	_, _, _, _, err = typeCheckComparisonOp(ctx, semaCtx, MakeComparisonOperator(LT), expr.From, expr.To)
+	_, _, _, _, err = typeCheckComparisonOp(ctx, semaCtx, treecmp.MakeComparisonOperator(treecmp.LT), expr.From, expr.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1822,7 +1823,11 @@ func (d dNull) TypeCheck(_ context.Context, _ *SemaContext, desired *types.T) (T
 // typeCheckAndRequireTupleElems asserts that all elements in the Tuple are
 // comparable to the input Expr given the input comparison operator.
 func typeCheckAndRequireTupleElems(
-	ctx context.Context, semaCtx *SemaContext, expr TypedExpr, tuple *Tuple, op ComparisonOperator,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	expr TypedExpr,
+	tuple *Tuple,
+	op treecmp.ComparisonOperator,
 ) (TypedExpr, error) {
 	tuple.typ = types.MakeTuple(make([]*types.T, len(tuple.Exprs)))
 	for i, subExpr := range tuple.Exprs {
@@ -1891,7 +1896,7 @@ const (
 )
 
 func typeCheckComparisonOpWithSubOperator(
-	ctx context.Context, semaCtx *SemaContext, op, subOp ComparisonOperator, left, right Expr,
+	ctx context.Context, semaCtx *SemaContext, op, subOp treecmp.ComparisonOperator, left, right Expr,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
@@ -2020,7 +2025,7 @@ func deepCheckValidCmpOp(ops cmpOpOverload, leftType, rightType *types.T) bool {
 	return true
 }
 
-func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) error {
+func subOpCompError(leftType, rightType *types.T, subOp, op treecmp.ComparisonOperator) error {
 	sig := fmt.Sprintf(compSignatureWithSubOpFmt, leftType, subOp, op, rightType)
 	return pgerror.Newf(pgcode.InvalidParameterValue, unsupportedCompErrFmt, sig)
 }
@@ -2033,18 +2038,18 @@ func typeCheckSubqueryWithIn(left, right *types.T) error {
 		// accepted.
 		if len(right.TupleContents()) != 1 {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
-				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, treecmp.In, right))
 		}
 		if !left.EquivalentOrNull(right.TupleContents()[0], false /* allowNullTupleEquivalence */) {
 			return pgerror.Newf(pgcode.InvalidParameterValue,
-				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
+				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, treecmp.In, right))
 		}
 	}
 	return nil
 }
 
 func typeCheckComparisonOp(
-	ctx context.Context, semaCtx *SemaContext, op ComparisonOperator, left, right Expr,
+	ctx context.Context, semaCtx *SemaContext, op treecmp.ComparisonOperator, left, right Expr,
 ) (_ TypedExpr, _ TypedExpr, _ *CmpOp, alwaysNull bool, _ error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := FoldComparisonExpr(op, left, right)
 	ops := CmpOps[foldedOp.Symbol]
@@ -2054,7 +2059,7 @@ func typeCheckComparisonOp(
 
 	_, rightIsSubquery := foldedRight.(SubqueryExpr)
 	switch {
-	case foldedOp.Symbol == In && rightIsTuple:
+	case foldedOp.Symbol == treecmp.In && rightIsTuple:
 		sameTypeExprs := make([]Expr, len(rightTuple.Exprs)+1)
 		sameTypeExprs[0] = foldedLeft
 		copy(sameTypeExprs[1:], rightTuple.Exprs)
@@ -2086,7 +2091,7 @@ func typeCheckComparisonOp(
 		}
 		return typedLeft, rightTuple, fn, false, nil
 
-	case foldedOp.Symbol == In && rightIsSubquery:
+	case foldedOp.Symbol == treecmp.In && rightIsSubquery:
 		typedLeft, err := foldedLeft.TypeCheck(ctx, semaCtx, types.Any)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
@@ -2448,7 +2453,11 @@ func typeCheckSplitExprs(
 // typeCheckTupleComparison type checks a comparison between two tuples,
 // asserting that the elements of the two tuples are comparable at each index.
 func typeCheckTupleComparison(
-	ctx context.Context, semaCtx *SemaContext, op ComparisonOperator, left *Tuple, right *Tuple,
+	ctx context.Context,
+	semaCtx *SemaContext,
+	op treecmp.ComparisonOperator,
+	left *Tuple,
+	right *Tuple,
 ) (TypedExpr, TypedExpr, error) {
 	// All tuples must have the same length.
 	tupLen := len(left.Exprs)

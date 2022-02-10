@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",

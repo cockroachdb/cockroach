@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -255,15 +256,15 @@ func makeNot(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 // TODO(mjibson): add the other operators somewhere.
-var compareOps = [...]tree.ComparisonOperatorSymbol{
-	tree.EQ,
-	tree.LT,
-	tree.GT,
-	tree.LE,
-	tree.GE,
-	tree.NE,
-	tree.IsDistinctFrom,
-	tree.IsNotDistinctFrom,
+var compareOps = [...]treecmp.ComparisonOperatorSymbol{
+	treecmp.EQ,
+	treecmp.LT,
+	treecmp.GT,
+	treecmp.LE,
+	treecmp.GE,
+	treecmp.NE,
+	treecmp.IsDistinctFrom,
+	treecmp.IsNotDistinctFrom,
 }
 
 func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -277,7 +278,7 @@ func makeCompareOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool
 	}
 	left := makeScalar(s, typ, refs)
 	right := makeScalar(s, typ, refs)
-	return typedParen(tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(op), left, right), typ), true
+	return typedParen(tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(op), left, right), typ), true
 }
 
 func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -603,12 +604,12 @@ func makeIn(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		subq.SetType(types.MakeTuple([]*types.T{t}))
 		rhs = subq
 	}
-	op := tree.In
+	op := treecmp.In
 	if s.coin() {
-		op = tree.NotIn
+		op = treecmp.NotIn
 	}
 	return tree.NewTypedComparisonExpr(
-		tree.MakeComparisonOperator(op),
+		treecmp.MakeComparisonOperator(op),
 		// Cast any NULLs to a concrete type.
 		castType(makeScalar(s, t, refs), t),
 		rhs,

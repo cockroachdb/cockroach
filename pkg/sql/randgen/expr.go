@@ -14,6 +14,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -81,7 +82,7 @@ func isAllowedPartialIndexColType(columnTableDef *tree.ColumnTableDef) bool {
 	}
 }
 
-var cmpOps = []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GE, tree.GT}
+var cmpOps = []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GE, treecmp.GT}
 
 // randBoolColumnExpr returns a random boolean expression with the given column.
 func randBoolColumnExpr(
@@ -101,7 +102,7 @@ func randBoolColumnExpr(
 	// Otherwise, return a comparison expression with a random comparison
 	// operator, the column as the left side, and an interesting datum as the
 	// right side.
-	op := tree.MakeComparisonOperator(cmpOps[rng.Intn(len(cmpOps))])
+	op := treecmp.MakeComparisonOperator(cmpOps[rng.Intn(len(cmpOps))])
 	datum := randInterestingDatum(rng, t)
 	return &tree.ComparisonExpr{Operator: op, Left: varExpr, Right: datum}
 }
