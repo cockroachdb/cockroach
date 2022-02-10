@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
 )
@@ -62,10 +63,7 @@ func init() {
 
 	// Label the comparison operators.
 	for op, overloads := range CmpOps {
-		if int(op) >= len(comparisonOpName) || comparisonOpName[op] == "" {
-			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
-		}
-		opName := comparisonOpName[op]
+		opName := treecmp.ComparisonOpName(op)
 		for _, impl := range overloads {
 			o := impl.(*CmpOp)
 			lname := o.LeftType.String()

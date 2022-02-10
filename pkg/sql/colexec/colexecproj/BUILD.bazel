@@ -24,6 +24,7 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util/duration",  # keep
@@ -59,6 +60,7 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",

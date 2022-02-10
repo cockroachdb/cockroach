@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -61196,13 +61197,13 @@ func GetProjectionOperator(
 				}
 			}
 		}
-	case tree.ComparisonOperator:
+	case treecmp.ComparisonOperator:
 		if leftType.Family() != types.TupleFamily && rightType.Family() != types.TupleFamily {
 			// Tuple comparison has special null-handling semantics, so we will
 			// fallback to the default comparison operator if either of the
 			// input vectors is of a tuple type.
 			switch op.Symbol {
-			case tree.EQ:
+			case treecmp.EQ:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -61420,7 +61421,7 @@ func GetProjectionOperator(
 						}
 					}
 				}
-			case tree.NE:
+			case treecmp.NE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -61638,7 +61639,7 @@ func GetProjectionOperator(
 						}
 					}
 				}
-			case tree.LT:
+			case treecmp.LT:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -61856,7 +61857,7 @@ func GetProjectionOperator(
 						}
 					}
 				}
-			case tree.LE:
+			case treecmp.LE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -62074,7 +62075,7 @@ func GetProjectionOperator(
 						}
 					}
 				}
-			case tree.GT:
+			case treecmp.GT:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {
@@ -62292,7 +62293,7 @@ func GetProjectionOperator(
 						}
 					}
 				}
-			case tree.GE:
+			case treecmp.GE:
 				switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 				case types.BoolFamily:
 					switch leftType.Width() {

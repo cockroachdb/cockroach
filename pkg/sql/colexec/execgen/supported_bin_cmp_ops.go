@@ -10,7 +10,10 @@
 
 package execgen
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+)
 
 // BinaryOpName is a mapping from all binary operators that are supported by
 // the vectorized engine to their names.
@@ -36,11 +39,11 @@ var BinaryOpName = map[tree.BinaryOperatorSymbol]string{
 
 // ComparisonOpName is a mapping from all comparison operators that are
 // supported by the vectorized engine to their names.
-var ComparisonOpName = map[tree.ComparisonOperatorSymbol]string{
-	tree.EQ: "EQ",
-	tree.NE: "NE",
-	tree.LT: "LT",
-	tree.LE: "LE",
-	tree.GT: "GT",
-	tree.GE: "GE",
+var ComparisonOpName = map[treecmp.ComparisonOperatorSymbol]string{
+	treecmp.EQ: "EQ",
+	treecmp.NE: "NE",
+	treecmp.LT: "LT",
+	treecmp.LE: "LE",
+	treecmp.GT: "GT",
+	treecmp.GE: "GE",
 }
