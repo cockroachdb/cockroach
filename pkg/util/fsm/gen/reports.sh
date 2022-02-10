@@ -29,4 +29,4 @@ sed -e "s~{tmpl-full-pkg}~$full_pkg~"\
 # Run .go file to generate reports.
 diagram_file="$lower_type"_diagram.gv
 report_file="$lower_type"_report.txt
-go run "$write_reports" "$diagram_file" "$report_file" "$0 $*"
+go run "$write_reports" "$diagram_file" "$report_file"
