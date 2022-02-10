@@ -749,6 +749,8 @@ message TxnInfo {
   bool is_historical = 12;
 
   string priority = 13;
+
+  string quality_of_service = 14;
 }
 
 // ActiveQuery represents a query in flight on some Session.

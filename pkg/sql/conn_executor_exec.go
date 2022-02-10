@@ -824,7 +824,10 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		// Create a new transaction to retry with a higher timestamp than the
 		// timestamps used in the retry loop above.
 		userPriority := ex.state.mu.txn.UserPriority()
-		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+		// Should the QualityOfService be increased here to try to avoid more
+		// retries or errors?
+		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
+			ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
 		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 			return err
 		}
@@ -1527,7 +1530,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				mode,
 				sqlTs,
 				historicalTs,
-				ex.transitionCtx)
+				ex.transitionCtx,
+				ex.QualityOfService())
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
@@ -1547,7 +1551,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				mode,
 				sqlTs,
 				historicalTs,
-				ex.transitionCtx)
+				ex.transitionCtx,
+				ex.QualityOfService())
 	}
 }
 

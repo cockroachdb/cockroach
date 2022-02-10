@@ -47,6 +47,7 @@ type rowFetcher interface {
 		rowLimitHint rowinfra.RowLimit,
 		traceKV bool,
 		forceProductionKVBatchSize bool,
+		qualityOfService int32,
 	) error
 
 	NextRow(ctx context.Context) (rowenc.EncDatumRow, error)

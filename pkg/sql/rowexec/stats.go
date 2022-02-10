@@ -126,10 +126,12 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	limitHint rowinfra.RowLimit,
 	traceKV bool,
 	forceProductionKVBatchSize bool,
+	qualityOfService int32,
 ) error {
 	start := timeutil.Now()
 	err := c.fetcher.StartInconsistentScan(
-		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV, forceProductionKVBatchSize,
+		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, traceKV,
+		forceProductionKVBatchSize, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
 	return err

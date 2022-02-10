@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -3769,6 +3770,16 @@ func (ctx *EvalContext) PushIVarContainer(c IndexedVarContainer) {
 func (ctx *EvalContext) PopIVarContainer() {
 	ctx.IVarContainer = ctx.iVarContainerStack[len(ctx.iVarContainerStack)-1]
 	ctx.iVarContainerStack = ctx.iVarContainerStack[:len(ctx.iVarContainerStack)-1]
+}
+
+// QualityOfService returns the current value of session setting
+// quality_of_service, as a protobuf-compatible value, if session data is
+// available, otherwise the default value (0).
+func (ctx *EvalContext) QualityOfService() int32 {
+	if ctx.SessionData() == nil {
+		return int32(sessiondatapb.Normal)
+	}
+	return ctx.SessionData().QualityOfService
 }
 
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext

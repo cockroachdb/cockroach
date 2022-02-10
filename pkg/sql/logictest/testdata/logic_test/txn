@@ -1142,3 +1142,54 @@ query T
 SHOW intervalstyle
 ----
 postgres
+
+query T
+SHOW quality_of_service
+----
+default
+
+statement ok
+SET quality_of_service=expedited
+
+query T
+SHOW quality_of_service
+----
+expedited
+
+statement ok
+SET quality_of_service=best_effort
+
+query T
+SHOW quality_of_service
+----
+best_effort
+
+statement ok
+SET quality_of_service=default
+
+query T
+SHOW quality_of_service
+----
+default
+
+statement error pq: invalid value for parameter "quality_of_service": "ttl_low"
+SET quality_of_service=ttl_low
+
+statement ok
+BEGIN
+
+statement ok
+SET LOCAL quality_of_service=best_effort
+
+query T
+SHOW quality_of_service
+----
+best_effort
+
+statement ok
+END
+
+query T
+SHOW quality_of_service
+----
+default
