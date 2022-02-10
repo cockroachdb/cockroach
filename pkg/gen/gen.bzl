@@ -4,6 +4,10 @@ load(":gomock.bzl", "GOMOCK_SRCS")
 load(":stringer.bzl", "STRINGER_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 
+# TODO(ajwerner): Use the all variable combined with genquery to construct
+# a test to show that all of the generated files in the repo are represented
+# here. Of course, this will rely on actually representing all of the generated
+# file here.
 ALL = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS
 
 GeneratedFileInfo = provider(
@@ -49,7 +53,7 @@ def _go_proto_srcs_impl(ctx):
     )
   ]
 
-go_proto_srcs = rule(
+_go_proto_srcs = rule(
   implementation = _go_proto_srcs_impl,
   attrs = {
    "_srcs": attr.label_list(providers = [GoSource], default=PROTOBUF_SRCS),
@@ -73,7 +77,7 @@ def _gomock_srcs_impl(ctx):
     ]
   )]
 
-gomock_srcs = rule(
+_gomock_srcs = rule(
    implementation = _gomock_srcs_impl,
    attrs = {
        "_srcs": attr.label_list(allow_files=True, default=GOMOCK_SRCS),
@@ -94,7 +98,7 @@ def _execgen_srcs_impl(ctx):
     ]
   )]
 
-execgen_srcs = rule(
+_execgen_srcs = rule(
    implementation = _execgen_srcs_impl,
    attrs = {
        "_srcs": attr.label_list(allow_files=True, default=EXECGEN_SRCS),
@@ -108,7 +112,7 @@ def _stringer_srcs_impl(ctx):
     },
   )]
 
-stringer_srcs = rule(
+_stringer_srcs = rule(
    implementation = _stringer_srcs_impl,
    attrs = {
        "_srcs": attr.label_list(allow_files=True, default=STRINGER_SRCS),
@@ -162,10 +166,27 @@ set -euo pipefail
     )
   ]
 
-hoist_files = rule(
+_hoist_files = rule(
     implementation = _hoist_files_impl,
     attrs = {
         "data": attr.label_list(providers = [GeneratedFileInfo]),
     },
     executable = True,
 )
+
+def _hoist(name, src_rule):
+  src_name = name + "_srcs"
+  src_rule(name = src_name)
+  _hoist_files(name = name, data = [src_name], tags = ["no-remote-exec"])
+
+def gomock():
+  _hoist("gomock", _gomock_srcs)
+
+def go_proto():
+  _hoist("go_proto", _go_proto_srcs)
+
+def execgen():
+  _hoist("execgen", _execgen_srcs)
+
+def stringer():
+  _hoist("stringer", _stringer_srcs)
