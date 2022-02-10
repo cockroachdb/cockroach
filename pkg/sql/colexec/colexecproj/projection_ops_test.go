@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -103,7 +105,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	binOp := tree.MakeBinaryOperator(tree.Mult)
+	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -135,7 +137,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 func TestGetProjectionConstMixedTypeOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cmpOp := tree.MakeComparisonOperator(tree.GE)
+	cmpOp := treecmp.MakeComparisonOperator(treecmp.GE)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -214,31 +216,31 @@ func TestRandomComparisons(t *testing.T) {
 		}
 		colconv.ColVecToDatumAndDeselect(lDatums, lVec, numTuples, nil /* sel */, &da)
 		colconv.ColVecToDatumAndDeselect(rDatums, rVec, numTuples, nil /* sel */, &da)
-		supportedCmpOps := []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE}
+		supportedCmpOps := []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE}
 		if typ.Family() == types.JsonFamily {
-			supportedCmpOps = []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE}
+			supportedCmpOps = []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE}
 		}
 		for _, cmpOpSymbol := range supportedCmpOps {
 			for i := range lDatums {
 				cmp := lDatums[i].Compare(&evalCtx, rDatums[i])
 				var b bool
 				switch cmpOpSymbol {
-				case tree.EQ:
+				case treecmp.EQ:
 					b = cmp == 0
-				case tree.NE:
+				case treecmp.NE:
 					b = cmp != 0
-				case tree.LT:
+				case treecmp.LT:
 					b = cmp < 0
-				case tree.LE:
+				case treecmp.LE:
 					b = cmp <= 0
-				case tree.GT:
+				case treecmp.GT:
 					b = cmp > 0
-				case tree.GE:
+				case treecmp.GE:
 					b = cmp >= 0
 				}
 				expected[i] = b
 			}
-			cmpOp := tree.MakeComparisonOperator(cmpOpSymbol)
+			cmpOp := treecmp.MakeComparisonOperator(cmpOpSymbol)
 			input := colexectestutils.NewChunkingBatchSource(testAllocator, typs, []coldata.Vec{lVec, rVec, ret}, numTuples)
 			op, err := colexectestutils.CreateTestProjectingOperator(
 				ctx, flowCtx, input, []*types.T{typ, typ},
@@ -264,7 +266,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
-	binOp := tree.MakeBinaryOperator(tree.Mult)
+	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -360,11 +362,11 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames []string
 		opInfix []string
 	)
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Plus, treebin.Minus, treebin.Mult, treebin.Div} {
 		opNames = append(opNames, execgen.BinaryOpName[binOp])
 		opInfix = append(opInfix, binOp.String())
 	}
-	for _, cmpOp := range []tree.ComparisonOperatorSymbol{tree.EQ, tree.NE, tree.LT, tree.LE, tree.GT, tree.GE} {
+	for _, cmpOp := range []treecmp.ComparisonOperatorSymbol{treecmp.EQ, treecmp.NE, treecmp.LT, treecmp.LE, treecmp.GT, treecmp.GE} {
 		opNames = append(opNames, execgen.ComparisonOpName[cmpOp])
 		opInfix = append(opInfix, cmpOp.String())
 	}

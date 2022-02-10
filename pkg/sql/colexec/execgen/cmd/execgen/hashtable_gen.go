@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/errors"
 )
 
@@ -125,13 +125,13 @@ func genHashTable(inputFileContents string, wr io.Writer, htm hashTableMode) err
 
 	var data *twoArgsResolvedOverloadInfo
 	for _, ov := range twoArgsResolvedOverloadsInfo.CmpOps {
-		if ov.Name == execgen.ComparisonOpName[tree.NE] {
+		if ov.Name == execgen.ComparisonOpName[treecmp.NE] {
 			data = ov
 			break
 		}
 	}
 	if data == nil {
-		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find overload for tree.NE"))
+		colexecerror.InternalError(errors.AssertionFailedf("unexpectedly didn't find overload for treecmp.NE"))
 	}
 	return tmpl.Execute(wr, struct {
 		Overloads     interface{}

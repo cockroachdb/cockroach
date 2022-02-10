@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,7 +89,7 @@ func TestStringConcat(t *testing.T) {
 		d := randgen.RandDatum(rng, typ, false /* nullOk */)
 		expected, err := tree.PerformCast(&evalCtx, d, types.String)
 		require.NoError(t, err)
-		concatOp := tree.MakeBinaryOperator(tree.Concat)
+		concatOp := treebin.MakeBinaryOperator(treebin.Concat)
 		concatExprLeft := tree.NewTypedBinaryExpr(concatOp, tree.NewDString(""), d, types.String)
 		resLeft, err := concatExprLeft.Eval(&evalCtx)
 		require.NoError(t, err)

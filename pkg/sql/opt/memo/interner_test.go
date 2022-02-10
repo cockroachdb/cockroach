@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -118,16 +119,16 @@ func TestInterner(t *testing.T) {
 	int1 := &ConstExpr{Value: tree.NewDInt(10)}
 	int2 := &ConstExpr{Value: tree.NewDInt(20)}
 	frame1 := WindowFrame{
-		Mode:           tree.RANGE,
-		StartBoundType: tree.UnboundedPreceding,
-		EndBoundType:   tree.CurrentRow,
-		FrameExclusion: tree.NoExclusion,
+		Mode:           treewindow.RANGE,
+		StartBoundType: treewindow.UnboundedPreceding,
+		EndBoundType:   treewindow.CurrentRow,
+		FrameExclusion: treewindow.NoExclusion,
 	}
 	frame2 := WindowFrame{
-		Mode:           tree.ROWS,
-		StartBoundType: tree.UnboundedPreceding,
-		EndBoundType:   tree.CurrentRow,
-		FrameExclusion: tree.NoExclusion,
+		Mode:           treewindow.ROWS,
+		StartBoundType: treewindow.UnboundedPreceding,
+		EndBoundType:   treewindow.CurrentRow,
+		FrameExclusion: treewindow.NoExclusion,
 	}
 
 	wins1 := WindowsExpr{{
@@ -418,23 +419,23 @@ func TestInterner(t *testing.T) {
 
 		{hashFn: in.hasher.HashWindowFrame, eqFn: in.hasher.IsWindowFrameEqual, variations: []testVariation{
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: true,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.ROWS, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.ROWS, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.UnboundedFollowing, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.UnboundedFollowing, treewindow.NoExclusion},
 				equal: false,
 			},
 			{
-				val1:  WindowFrame{tree.RANGE, tree.UnboundedPreceding, tree.CurrentRow, tree.NoExclusion},
-				val2:  WindowFrame{tree.RANGE, tree.CurrentRow, tree.CurrentRow, tree.NoExclusion},
+				val1:  WindowFrame{treewindow.RANGE, treewindow.UnboundedPreceding, treewindow.CurrentRow, treewindow.NoExclusion},
+				val2:  WindowFrame{treewindow.RANGE, treewindow.CurrentRow, treewindow.CurrentRow, treewindow.NoExclusion},
 				equal: false,
 			},
 		}},

@@ -17,6 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -467,7 +469,7 @@ func (node *BinaryExpr) doc(p *PrettyCfg) pretty.Doc {
 
 	opDoc := pretty.Text(node.Operator.String())
 	var res pretty.Doc
-	if !node.Operator.Symbol.isPadded() {
+	if !node.Operator.Symbol.IsPadded() {
 		res = pretty.JoinDoc(opDoc, p.Doc(leftOperand), p.Doc(rightOperand))
 	} else {
 		pred := func(e Expr, recurse func(e Expr)) bool {
@@ -782,9 +784,9 @@ func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
 
 func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 	kw := "RANGE"
-	if wf.Mode == ROWS {
+	if wf.Mode == treewindow.ROWS {
 		kw = "ROWS"
-	} else if wf.Mode == GROUPS {
+	} else if wf.Mode == treewindow.GROUPS {
 		kw = "GROUPS"
 	}
 	d := p.Doc(wf.Bounds.StartBound)
@@ -794,23 +796,23 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
 	}
-	if wf.Exclusion != NoExclusion {
-		d = pretty.Stack(d, p.Doc(wf.Exclusion))
+	if wf.Exclusion != treewindow.NoExclusion {
+		d = pretty.Stack(d, pretty.Keyword(wf.Exclusion.String()))
 	}
 	return p.row(kw, d)
 }
 
 func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	switch node.BoundType {
-	case UnboundedPreceding:
+	case treewindow.UnboundedPreceding:
 		return pretty.Keyword("UNBOUNDED PRECEDING")
-	case OffsetPreceding:
+	case treewindow.OffsetPreceding:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Keyword("PRECEDING"))
-	case CurrentRow:
+	case treewindow.CurrentRow:
 		return pretty.Keyword("CURRENT ROW")
-	case OffsetFollowing:
+	case treewindow.OffsetFollowing:
 		return pretty.ConcatSpace(p.Doc(node.OffsetExpr), pretty.Keyword("FOLLOWING"))
-	case UnboundedFollowing:
+	case treewindow.UnboundedFollowing:
 		return pretty.Keyword("UNBOUNDED FOLLOWING")
 	default:
 		panic(errors.AssertionFailedf("unexpected type %d", errors.Safe(node.BoundType)))
@@ -888,9 +890,9 @@ func (node *ComparisonExpr) doc(p *PrettyCfg) pretty.Doc {
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
 	// verbose IS and IS NOT in those cases.
-	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
 	opDoc := pretty.Keyword(opStr)

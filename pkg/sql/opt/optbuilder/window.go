@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -57,10 +58,10 @@ func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
 
-var unboundedStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var unboundedEndBound = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
-var defaultStartBound = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
-var defaultEndBound = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+var unboundedStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var unboundedEndBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedFollowing}
+var defaultStartBound = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
+var defaultEndBound = &tree.WindowFrameBound{BoundType: treewindow.CurrentRow}
 
 // buildWindow adds any window functions on top of the expression.
 func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
@@ -173,7 +174,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 				pgerror.Newf(
 					pgcode.InvalidColumnReference,
 					"argument of %s must not contain variables",
-					tree.WindowModeName(windowFrames[i].Mode),
+					treewindow.WindowModeName(windowFrames[i].Mode),
 				),
 			)
 		}
