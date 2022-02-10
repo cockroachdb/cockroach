@@ -262,6 +262,16 @@ func (b *ReadBuffer) GetUint32() (uint32, error) {
 	return v, nil
 }
 
+// GetUint64 returns the buffer's contents as a uint64.
+func (b *ReadBuffer) GetUint64() (uint64, error) {
+	if len(b.Msg) < 8 {
+		return 0, NewProtocolViolationErrorf("insufficient data: %d", len(b.Msg))
+	}
+	v := binary.BigEndian.Uint64(b.Msg[:8])
+	b.Msg = b.Msg[8:]
+	return v, nil
+}
+
 // NewUnrecognizedMsgTypeErr creates an error for an unrecognized pgwire
 // message.
 func NewUnrecognizedMsgTypeErr(typ ClientMessageType) error {

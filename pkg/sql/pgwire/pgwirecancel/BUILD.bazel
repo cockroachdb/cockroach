@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "pgwirecancel",
+    srcs = [
+        "backend_key_data.go",
+        "cancel_semaphore.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/util/quotapool",
+    ],
+)
+
+go_test(
+    name = "pgwirecancel_test",
+    srcs = [
+        "backend_key_data_test.go",
+        "cancel_test.go",
+        "main_test.go",
+    ],
+    embed = [":pgwirecancel"],
+    deps = [
+        "//pkg/base",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
