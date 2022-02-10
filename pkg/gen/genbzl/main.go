@@ -68,6 +68,10 @@ var targets = []*target{
 		"stringer.bzl",
 		newQuery(`labels("outs",  filter("-stringer$", kind("genrule rule",  //pkg/...:*)))`),
 		listTemplateString("STRINGER_SRCS")),
+	newTarget("execgen.bzl",
+		newQuery(`let genrules = kind("genrule rule",  //pkg/...:*) in
+labels("outs",  attr("tools", "execgen", $genrules) + attr("exec_tools", "execgen", $genrules))`),
+		listTemplateString("EXECGEN_SRCS")),
 }
 
 func newQuery(q string, filters ...func(s string) (shouldKeep bool)) *query {
