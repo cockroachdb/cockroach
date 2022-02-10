@@ -80,6 +80,12 @@ type authOptions struct {
 	testingAuthHook func(ctx context.Context) error
 }
 
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) {
+	if err := writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn); err != nil {
+		log.Error(ctx, err.Error())
+	}
+}
+
 // handleAuthentication checks the connection's user. Errors are sent to the
 // client and also returned.
 //
@@ -96,16 +102,13 @@ func (c *conn) handleAuthentication(
 		return nil, authOpt.testingAuthHook(ctx)
 	}
 
-	sendError := func(err error) error {
-		_ /* err */ = writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn)
-		return err
-	}
-
 	// Retrieve the authentication method.
 	tlsState, hbaEntry, authMethod, err := c.findAuthenticationMethod(authOpt)
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_METHOD_NOT_FOUND, err)
-		return nil, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		c.sendError(ctx, execCfg, err)
+		return nil, err
 	}
 
 	ac.SetAuthMethod(hbaEntry.Method.String())
@@ -118,7 +121,9 @@ func (c *conn) handleAuthentication(
 	connClose = behaviors.ConnClose
 	if err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_UNKNOWN, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 
 	// Choose the system identity that we'll use below for mapping
@@ -136,7 +141,9 @@ func (c *conn) handleAuthentication(
 	if err := c.chooseDbRole(ctx, ac, behaviors.MapRole, systemIdentity); err != nil {
 		log.Warningf(ctx, "unable to map incoming identity %q to any database user: %+v", systemIdentity, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 
 	// Once chooseDbRole() returns, we know that the actual DB username
@@ -156,25 +163,31 @@ func (c *conn) handleAuthentication(
 	if err != nil {
 		log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 	c.sessionArgs.IsSuperuser = isSuperuser
 
 	if !exists {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, nil)
-		return connClose, sendError(pgerror.WithCandidateCode(
+		err = pgerror.WithCandidateCode(
 			security.NewErrPasswordUserAuthFailed(dbUser),
 			pgcode.InvalidAuthorizationSpecification,
-		))
+		)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 
 	if !canLoginSQL {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_LOGIN_DISABLED, nil)
-		return connClose, sendError(pgerror.Newf(
+		err = pgerror.Newf(
 			pgcode.InvalidAuthorizationSpecification,
 			"%s does not have login privilege",
 			dbUser,
-		))
+		)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 
 	// At this point, we know that the requested user exists and is
@@ -182,7 +195,9 @@ func (c *conn) handleAuthentication(
 	// implementation to complete the authentication.
 	if err := behaviors.Authenticate(ctx, systemIdentity, true /* public */, pwRetrievalFn); err != nil {
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
-		return connClose, sendError(pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+		err = pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification)
+		c.sendError(ctx, execCfg, err)
+		return connClose, err
 	}
 
 	// Add all the defaults to this session's defaults. If there is an
@@ -209,9 +224,41 @@ func (c *conn) handleAuthentication(
 	}
 
 	ac.LogAuthOK(ctx)
+	return connClose, nil
+}
+
+func (c *conn) checkMaxConnections(ctx context.Context, sqlServer *sql.Server) error {
+	if c.sessionArgs.IsSuperuser {
+		// This user is a super user and is therefore not affected by connection limits.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+
+	maxNumConnectionsValue := MaxNumConnections.Get(&sqlServer.GetExecutorConfig().Settings.SV)
+	if maxNumConnectionsValue < 0 {
+		// Unlimited connections are allowed.
+		sqlServer.IncrementConnectionCount()
+		return nil
+	}
+	if !sqlServer.IncrementConnectionCountIfLessThan(maxNumConnectionsValue) {
+		err := errors.WithHintf(
+			pgerror.New(
+				pgcode.TooManyConnections, "sorry, too many clients already",
+			),
+			"the maximum number of allowed connections is %d and can be modified using the %s config key",
+			maxNumConnectionsValue,
+			MaxNumConnections.Key(),
+		)
+		c.sendError(ctx, sqlServer.GetExecutorConfig(), err)
+		return err
+	}
+	return nil
+}
+
+func (c *conn) authOKMessage() error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
-	return connClose, c.msgBuilder.finishMsg(c.conn)
+	return c.msgBuilder.finishMsg(c.conn)
 }
 
 // chooseDbRole uses the provided RoleMapper to map an incoming
