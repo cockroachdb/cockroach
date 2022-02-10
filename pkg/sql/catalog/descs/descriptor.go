@@ -234,7 +234,6 @@ func (tc *Collection) withReadFromStore(
 			return nil, err
 		}
 	}
-	tc.kv.releaseAllDescriptors()
 	return desc, nil
 }
 
