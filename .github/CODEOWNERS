@@ -229,6 +229,7 @@
 /pkg/roachpb/dep_test.go     @cockroachdb/dev-inf
 /pkg/roachpb/error*          @cockroachdb/kv-prs
 /pkg/roachpb/gen             @cockroachdb/dev-inf
+/pkg/roachpb/gen.bzl         @cockroachdb/dev-inf
 /pkg/roachpb/app*            @cockroachdb/sql-observability
 /pkg/roachpb/index*          @cockroachdb/sql-observability
 /pkg/roachpb/internal*       @cockroachdb/kv-prs

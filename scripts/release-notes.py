@@ -833,7 +833,7 @@ if not hideheader:
     print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
     print("---")
     print()
-    print("## " + time.strftime("%B %d, %Y"))
+    print("## " + time.strftime("%B %-d, %Y"))
     print()
 
 # Print the release notes sign-up and Downloads section.
