@@ -27,8 +27,7 @@ import (
 )
 
 const (
-	crossFlag        = "cross"
-	skipGenerateFlag = "skip-generate"
+	crossFlag = "cross"
 )
 
 type buildTarget struct {
@@ -56,7 +55,6 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
         You can optionally set a config, as in --cross=windows.
         Defaults to linux if not specified. The config should be the name of a
         build configuration specified in .bazelrc, minus the "cross" prefix.`)
-	buildCmd.Flags().Bool(skipGenerateFlag, false, "skip staging generated files into the workspace")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	addCommonBuildFlags(buildCmd)
 	return buildCmd
@@ -99,12 +97,8 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
-	skipGenerate := mustGetFlagBool(cmd, skipGenerateFlag)
-	if cross != "" {
-		skipGenerate = true
-	}
 
-	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets, skipGenerate)
+	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
 	}
@@ -241,17 +235,6 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 		log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 	}
 
-	shouldHoist := false
-	for _, target := range targets {
-		if target.fullName == "//:go_path" {
-			shouldHoist = true
-		}
-	}
-	if shouldHoist {
-		if err := d.hoistGeneratedCode(ctx, workspace, bazelBin); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -272,7 +255,7 @@ func targetToBinBasename(target string) string {
 // `CommandContext`), and the second is the full list of targets to be built
 // (e.g. after translation, so short -> "//pkg/cmd/cockroach-short").
 func (d *dev) getBasicBuildArgs(
-	ctx context.Context, targets []string, skipGenerate bool,
+	ctx context.Context, targets []string,
 ) (args []string, buildTargets []buildTarget, _ error) {
 	if len(targets) == 0 {
 		// Default to building the cockroach binary.
@@ -327,96 +310,10 @@ func (d *dev) getBasicBuildArgs(
 			break
 		}
 	}
-	shouldSkipGenerate := true
-	for _, target := range buildTargets {
-		if strings.Contains(target.fullName, "//pkg/cmd/cockroach") {
-			shouldSkipGenerate = false
-			break
-		}
-	}
-	if shouldSkipGenerate {
-		skipGenerate = true
-	}
-	// If we're hoisting generated code, we also want to build //:go_path.
-	if !skipGenerate {
-		args = append(args, "//:go_path")
-		buildTargets = append(buildTargets, buildTarget{fullName: "//:go_path"})
-	}
 	if shouldBuildWithTestConfig {
 		args = append(args, "--config=test")
 	}
-
 	return args, buildTargets, nil
-}
-
-// Hoist generated code out of the sandbox and into the workspace.
-// Note that you must build //:go_path before building this.
-func (d *dev) hoistGeneratedCode(ctx context.Context, workspace string, bazelBin string) error {
-	// Clean up ignored .go files. Do this by listing all the
-	// ignored files and filtering out irrelevant ones.
-	// We do this to get rid of stale generated files that might
-	// confuse IDE's, especially if you switch between branches that
-	// have different generated code.
-	lines, err := d.exec.CommandContextSilent(ctx, "git", "status", "--ignored", "--short", filepath.Join(workspace, "pkg"))
-	if err != nil {
-		return err
-	}
-	for _, line := range strings.Split(string(lines), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || !strings.HasPrefix(line, "!! ") {
-			continue
-		}
-		filename := strings.TrimPrefix(line, "!! ")
-		if !strings.HasSuffix(filename, ".go") || strings.Contains(filename, "zcgo_flags") {
-			continue
-		}
-		if err := d.os.Remove(filename); err != nil {
-			return err
-		}
-	}
-	// Enumerate generated .go files in the sandbox so we can hoist
-	// them out.
-	cockroachDir := filepath.Join(bazelBin, "go_path", "src", "github.com", "cockroachdb", "cockroach")
-	goFiles, err := d.os.ListFilesWithSuffix(cockroachDir, ".go")
-	if err != nil {
-		return err
-	}
-	fileContents, err := d.os.ReadFile(filepath.Join(workspace, "build/bazelutil/checked_in_genfiles.txt"))
-	if err != nil {
-		return err
-	}
-	renameMap := make(map[string]string)
-	for _, line := range strings.Split(fileContents, "\n") {
-		line = strings.TrimSpace(line)
-		if len(line) == 0 || strings.HasPrefix(line, "#") {
-			continue
-		}
-		components := strings.Split(line, "|")
-		target := components[0]
-		dir := strings.Split(strings.TrimPrefix(target, "//"), ":")[0]
-		oldBasename := components[1]
-		newBasename := components[2]
-		renameMap[filepath.Join(dir, oldBasename)] = filepath.Join(dir, newBasename)
-	}
-
-	for _, file := range goFiles {
-		// First case: generated Go code that's checked into tree.
-		relPath := strings.TrimPrefix(file, cockroachDir+"/")
-		dst, ok := renameMap[relPath]
-		if ok {
-			err := d.os.CopyFile(file, filepath.Join(workspace, dst))
-			if err != nil {
-				return err
-			}
-			continue
-		}
-		// Otherwise, just copy the file to the same place in the workspace.
-		err := d.os.CopyFile(file, filepath.Join(workspace, relPath))
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Given a list of Bazel arguments, find the ones starting with --config= and
