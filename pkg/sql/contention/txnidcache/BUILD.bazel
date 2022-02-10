@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cluster_settings.go",
         "concurrent_write_buffer.go",
+        "fifo_cache.go",
         "metrics.go",
         "txn_id_cache.go",
         "writer.go",
@@ -16,7 +17,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/contention/contentionutils",
-        "//pkg/util/cache",
         "//pkg/util/encoding",
         "//pkg/util/metric",
         "//pkg/util/stop",
@@ -28,6 +28,7 @@ go_library(
 go_test(
     name = "txnidcache_test",
     srcs = [
+        "fifo_cache_test.go",
         "main_test.go",
         "txn_id_cache_test.go",
         "writer_test.go",
