@@ -40,7 +40,6 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 
 	var args []string
 	args = append(args, "run", "//pkg/compose:compose_test", "--config=test")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}

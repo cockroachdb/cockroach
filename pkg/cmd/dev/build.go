@@ -277,7 +277,6 @@ func (d *dev) getBasicBuildArgs(
 	}
 
 	args = append(args, "build")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}

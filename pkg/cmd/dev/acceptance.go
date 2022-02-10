@@ -64,7 +64,6 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 
 	var args []string
 	args = append(args, "run", "//pkg/acceptance:acceptance_test", "--config=test")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
