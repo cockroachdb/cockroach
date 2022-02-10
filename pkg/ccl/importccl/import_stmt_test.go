@@ -877,14 +877,12 @@ END;
 	k INT8 NULL,
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
 	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j) NOT VALID,
-	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i) NOT VALID,
-	FAMILY "primary" (i, k)
+	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i) NOT VALID
 )`}, {
 					`CREATE TABLE public.b (
 	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
-	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i) NOT VALID,
-	FAMILY "primary" (j)
+	CONSTRAINT b_j_fkey FOREIGN KEY (j) REFERENCES public.a(i) NOT VALID
 )`,
 				}},
 
@@ -996,8 +994,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NOT NULL,
-	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-	FAMILY "primary" (a, b)
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
 )`,
 					},
 				},
@@ -1019,8 +1016,7 @@ END;
 	a INT8 NOT NULL,
 	b INT8 NOT VISIBLE NULL,
 	c INT8 NULL,
-	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-	FAMILY "primary" (a, b, c)
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
 )`,
 					},
 				},
@@ -1040,8 +1036,7 @@ END;
 						`CREATE TABLE public.t (
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT 8:::INT8,
-	CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-	FAMILY "primary" (a, b)
+	CONSTRAINT t_pkey PRIMARY KEY (a ASC)
 )`,
 					},
 				},
@@ -1470,8 +1465,7 @@ END
 const (
 	testPgdumpCreateCities = `CREATE TABLE public.cities (
 	city VARCHAR(80) NOT NULL,
-	CONSTRAINT cities_pkey PRIMARY KEY (city ASC),
-	FAMILY "primary" (city)
+	CONSTRAINT cities_pkey PRIMARY KEY (city ASC)
 )`
 	testPgdumpCreateWeather = `CREATE TABLE public.weather (
 	city VARCHAR(80) NULL,
@@ -1481,8 +1475,7 @@ const (
 	date DATE NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT weather_pkey PRIMARY KEY (rowid ASC),
-	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID,
-	FAMILY "primary" (city, temp_lo, temp_hi, prcp, date, rowid)
+	CONSTRAINT weather_city_fkey FOREIGN KEY (city) REFERENCES public.cities(city) NOT VALID
 )`
 	testPgdumpFk = `
 CREATE TABLE public.cities (
@@ -5479,8 +5472,7 @@ func TestImportPgDump(t *testing.T) {
 	b BYTES NULL,
 	CONSTRAINT simple_pkey PRIMARY KEY (i ASC),
 	UNIQUE INDEX simple_b_s_idx (b ASC, s ASC),
-	INDEX simple_s_idx (s ASC),
-	FAMILY "primary" (i, s, b)
+	INDEX simple_s_idx (s ASC)
 )`,
 				}})
 
@@ -5518,8 +5510,7 @@ func TestImportPgDump(t *testing.T) {
 					"second", `CREATE TABLE public.second (
 	i INT8 NOT NULL,
 	s STRING NULL,
-	CONSTRAINT second_pkey PRIMARY KEY (i ASC),
-	FAMILY "primary" (i, s)
+	CONSTRAINT second_pkey PRIMARY KEY (i ASC)
 )`,
 				}})
 				res := sqlDB.QueryStr(t, "SELECT * FROM second ORDER BY i")
@@ -5545,8 +5536,7 @@ func TestImportPgDump(t *testing.T) {
 	a INT8 NULL DEFAULT nextval('public.a_seq'::REGCLASS),
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, b, rowid)
+	CONSTRAINT seqtable_pkey PRIMARY KEY (rowid ASC)
 )`,
 				}})
 				sqlDB.CheckQueryResults(t, `SHOW CREATE SEQUENCE a_seq`, [][]string{{
@@ -6198,16 +6188,14 @@ func TestImportCockroachDump(t *testing.T) {
 	i INT8 NOT NULL,
 	t STRING NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	INDEX t_t_idx (t ASC),
-	FAMILY "primary" (i, t)
+	INDEX t_t_idx (t ASC)
 )`},
 	})
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE a", [][]string{
 		{"a", `CREATE TABLE public.a (
 	i INT8 NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID,
-	FAMILY "primary" (i)
+	CONSTRAINT fk_i_ref_t FOREIGN KEY (i) REFERENCES public.t(i) NOT VALID
 )`},
 	})
 }

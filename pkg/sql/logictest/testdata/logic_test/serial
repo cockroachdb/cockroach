@@ -17,8 +17,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
-        FAMILY "primary" (a, b, c)
+        UNIQUE INDEX serial_c_key (c ASC)
 )
 
 statement ok
@@ -55,8 +54,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT unique_rowid(),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
-          FAMILY "primary" (a, b, c, rowid)
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
 )
 
 query III
@@ -79,8 +77,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT unique_rowid(),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
-         FAMILY "primary" (a, b, c, d, rowid)
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -121,8 +118,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
         CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
-        FAMILY "primary" (a, b, c)
+        UNIQUE INDEX serial_c_key (c ASC)
 )
 
 query TT
@@ -164,8 +160,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq'::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
-          FAMILY "primary" (a, b, c, rowid)
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
 )
 
 query III
@@ -188,8 +183,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq'::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
-         FAMILY "primary" (a, b, c, d, rowid)
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -226,8 +220,7 @@ serial  CREATE TABLE public.serial (
         b INT8 NULL DEFAULT 7:::INT8,
         c INT8 NOT NULL DEFAULT nextval('public.serial_c_seq2'::REGCLASS),
         CONSTRAINT serial_pkey PRIMARY KEY (a ASC),
-        UNIQUE INDEX serial_c_key (c ASC),
-        FAMILY "primary" (a, b, c)
+        UNIQUE INDEX serial_c_key (c ASC)
 )
 
 query TT
@@ -282,8 +275,7 @@ SHOW CREATE TABLE "serial_MixedCase"
                     b INT8 NULL DEFAULT 7:::INT8,
                     c INT8 NOT NULL DEFAULT nextval('public."serial_MixedCase_c_seq"'::REGCLASS),
                     CONSTRAINT "serial_MixedCase_pkey" PRIMARY KEY (a ASC),
-                    UNIQUE INDEX "serial_MixedCase_c_key" (c ASC),
-                    FAMILY "primary" (a, b, c)
+                    UNIQUE INDEX "serial_MixedCase_c_key" (c ASC)
 )
 
 statement error multiple default values specified for column "a" of table "s1"
@@ -309,8 +301,7 @@ smallbig  CREATE TABLE public.smallbig (
           b INT8 NOT NULL DEFAULT nextval('public.smallbig_b_seq'::REGCLASS),
           c INT8 NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC),
-          FAMILY "primary" (a, b, c, rowid)
+          CONSTRAINT smallbig_pkey PRIMARY KEY (rowid ASC)
 )
 
 query III
@@ -333,8 +324,7 @@ serials  CREATE TABLE public.serials (
          c INT8 NOT NULL DEFAULT nextval('public.serials_c_seq'::REGCLASS),
          d INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC),
-         FAMILY "primary" (a, b, c, d, rowid)
+         CONSTRAINT serials_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok

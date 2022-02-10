@@ -2290,8 +2290,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	y INT8 NOT NULL,
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (x ASC),
-	INDEX i (z ASC),
-	FAMILY "primary" (x, y, z)
+	INDEX i (z ASC)
 )`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)
@@ -2312,8 +2311,7 @@ INSERT INTO t.test VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
 	z INT8 NULL,
 	CONSTRAINT test_pkey PRIMARY KEY (y ASC),
 	UNIQUE INDEX test_x_key (x ASC),
-	INDEX i (z ASC),
-	FAMILY "primary" (x, y, z)
+	INDEX i (z ASC)
 )`
 	if create != expected {
 		t.Fatalf("expected %s, found %s", expected, create)

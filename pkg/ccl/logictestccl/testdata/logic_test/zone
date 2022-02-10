@@ -639,8 +639,7 @@ SHOW CREATE TABLE show_test
 ----
 show_test  CREATE TABLE public.show_test (
            x INT8 NOT NULL,
-           CONSTRAINT show_test_pkey PRIMARY KEY (x ASC),
-           FAMILY "primary" (x)
+           CONSTRAINT show_test_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
@@ -662,8 +661,7 @@ SHOW CREATE warning
 ----
 warning  CREATE TABLE public.warning (
          x INT8 NOT NULL,
-         CONSTRAINT warning_pkey PRIMARY KEY (x ASC),
-         FAMILY "primary" (x)
+         CONSTRAINT warning_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
 )
@@ -741,8 +739,7 @@ SHOW CREATE TABLE t40417
 ----
 t40417  CREATE TABLE public.t40417 (
         x INT8 NOT NULL,
-        CONSTRAINT t40417_pkey PRIMARY KEY (x ASC),
-        FAMILY "primary" (x)
+        CONSTRAINT t40417_pkey PRIMARY KEY (x ASC)
 ) PARTITION BY LIST (x) (
   PARTITION p1 VALUES IN ((1))
 );
