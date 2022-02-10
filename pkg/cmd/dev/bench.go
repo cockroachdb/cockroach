@@ -105,6 +105,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 
+	args = append(args, "--test_arg", "-test.run=-")
 	if filter == "" {
 		args = append(args, "--test_arg", "-test.bench=.")
 	} else {
