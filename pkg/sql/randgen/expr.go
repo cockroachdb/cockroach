@@ -14,6 +14,7 @@ import (
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -169,7 +170,7 @@ func randExpr(
 			expr = tree.NewUnresolvedName(string(cols[0].Name))
 			for _, x := range cols[1:] {
 				expr = &tree.BinaryExpr{
-					Operator: tree.MakeBinaryOperator(tree.Plus),
+					Operator: treebin.MakeBinaryOperator(treebin.Plus),
 					Left:     expr,
 					Right:    tree.NewUnresolvedName(string(x.Name)),
 				}
@@ -198,7 +199,7 @@ func randExpr(
 	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 		typ = xTyp
 		expr = &tree.BinaryExpr{
-			Operator: tree.MakeBinaryOperator(tree.Plus),
+			Operator: treebin.MakeBinaryOperator(treebin.Plus),
 			Left:     tree.NewUnresolvedName(string(x.Name)),
 			Right:    RandDatum(rng, xTyp, nullOk),
 		}

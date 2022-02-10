@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -321,7 +322,7 @@ func makeBinOp(s *Smither, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 type binOpTriple struct {
 	left  types.Family
-	op    tree.BinaryOperatorSymbol
+	op    treebin.BinaryOperatorSymbol
 	right types.Family
 }
 
@@ -332,31 +333,31 @@ type binOpOperands struct {
 
 var ignorePostgresBinOps = map[binOpTriple]bool{
 	// Integer division in cockroach returns a different type.
-	{types.IntFamily, tree.Div, types.IntFamily}: true,
+	{types.IntFamily, treebin.Div, types.IntFamily}: true,
 	// Float * date isn't exact.
-	{types.FloatFamily, tree.Mult, types.DateFamily}: true,
-	{types.DateFamily, tree.Mult, types.FloatFamily}: true,
-	{types.DateFamily, tree.Div, types.FloatFamily}:  true,
+	{types.FloatFamily, treebin.Mult, types.DateFamily}: true,
+	{types.DateFamily, treebin.Mult, types.FloatFamily}: true,
+	{types.DateFamily, treebin.Div, types.FloatFamily}:  true,
 
 	// Postgres does not have separate floor division operator.
-	{types.IntFamily, tree.FloorDiv, types.IntFamily}:         true,
-	{types.FloatFamily, tree.FloorDiv, types.FloatFamily}:     true,
-	{types.DecimalFamily, tree.FloorDiv, types.DecimalFamily}: true,
-	{types.DecimalFamily, tree.FloorDiv, types.IntFamily}:     true,
-	{types.IntFamily, tree.FloorDiv, types.DecimalFamily}:     true,
+	{types.IntFamily, treebin.FloorDiv, types.IntFamily}:         true,
+	{types.FloatFamily, treebin.FloorDiv, types.FloatFamily}:     true,
+	{types.DecimalFamily, treebin.FloorDiv, types.DecimalFamily}: true,
+	{types.DecimalFamily, treebin.FloorDiv, types.IntFamily}:     true,
+	{types.IntFamily, treebin.FloorDiv, types.DecimalFamily}:     true,
 
-	{types.FloatFamily, tree.Mod, types.FloatFamily}: true,
+	{types.FloatFamily, treebin.Mod, types.FloatFamily}: true,
 }
 
 // For certain operations, Postgres is picky about the operand types.
 var postgresBinOpTransformations = map[binOpTriple]binOpOperands{
-	{types.IntFamily, tree.Plus, types.DateFamily}:          {types.Int4, types.Date},
-	{types.DateFamily, tree.Plus, types.IntFamily}:          {types.Date, types.Int4},
-	{types.IntFamily, tree.Minus, types.DateFamily}:         {types.Int4, types.Date},
-	{types.DateFamily, tree.Minus, types.IntFamily}:         {types.Date, types.Int4},
-	{types.JsonFamily, tree.JSONFetchVal, types.IntFamily}:  {types.Jsonb, types.Int4},
-	{types.JsonFamily, tree.JSONFetchText, types.IntFamily}: {types.Jsonb, types.Int4},
-	{types.JsonFamily, tree.Minus, types.IntFamily}:         {types.Jsonb, types.Int4},
+	{types.IntFamily, treebin.Plus, types.DateFamily}:          {types.Int4, types.Date},
+	{types.DateFamily, treebin.Plus, types.IntFamily}:          {types.Date, types.Int4},
+	{types.IntFamily, treebin.Minus, types.DateFamily}:         {types.Int4, types.Date},
+	{types.DateFamily, treebin.Minus, types.IntFamily}:         {types.Date, types.Int4},
+	{types.JsonFamily, treebin.JSONFetchVal, types.IntFamily}:  {types.Jsonb, types.Int4},
+	{types.JsonFamily, treebin.JSONFetchText, types.IntFamily}: {types.Jsonb, types.Int4},
+	{types.JsonFamily, treebin.Minus, types.IntFamily}:         {types.Jsonb, types.Int4},
 }
 
 func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {

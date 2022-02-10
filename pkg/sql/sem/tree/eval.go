@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -361,7 +362,7 @@ func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, erro
 func initArrayElementConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    typ,
 			ReturnType:   types.MakeArray(typ),
@@ -372,7 +373,7 @@ func initArrayElementConcatenation() {
 			Volatility: VolatilityImmutable,
 		})
 
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     typ,
 			RightType:    types.MakeArray(typ),
 			ReturnType:   types.MakeArray(typ),
@@ -453,7 +454,7 @@ func JSONExistsAny(_ *EvalContext, json DJSON, dArray *DArray) (*DBool, error) {
 func initArrayToArrayConcatenation() {
 	for _, t := range types.Scalar {
 		typ := t
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     types.MakeArray(typ),
 			RightType:    types.MakeArray(typ),
 			ReturnType:   types.MakeArray(typ),
@@ -470,7 +471,7 @@ func initArrayToArrayConcatenation() {
 // and nonarrayelement + string concatenation.
 func initNonArrayToNonArrayConcatenation() {
 	addConcat := func(leftType, rightType *types.T, volatility Volatility) {
-		BinOps[Concat] = append(BinOps[Concat], &BinOp{
+		BinOps[treebin.Concat] = append(BinOps[treebin.Concat], &BinOp{
 			LeftType:     leftType,
 			RightType:    rightType,
 			ReturnType:   types.String,
@@ -557,8 +558,8 @@ func GetJSONPath(j json.JSON, ary DArray) (json.JSON, error) {
 }
 
 // BinOps contains the binary operations indexed by operation type.
-var BinOps = map[BinaryOperatorSymbol]binOpOverload{
-	Bitand: {
+var BinOps = map[treebin.BinaryOperatorSymbol]binOpOverload{
+	treebin.Bitand: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -598,7 +599,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Bitor: {
+	treebin.Bitor: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -638,7 +639,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Bitxor: {
+	treebin.Bitxor: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -666,7 +667,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Plus: {
+	treebin.Plus: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -961,7 +962,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Minus: {
+	treebin.Minus: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1275,7 +1276,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Mult: {
+	treebin.Mult: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1419,7 +1420,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Div: {
+	treebin.Div: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1529,7 +1530,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	FloorDiv: {
+	treebin.FloorDiv: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1609,7 +1610,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Mod: {
+	treebin.Mod: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1689,7 +1690,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Concat: {
+	treebin.Concat: {
 		&BinOp{
 			LeftType:   types.String,
 			RightType:  types.String,
@@ -1737,7 +1738,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 	},
 
 	// TODO(pmattis): Check that the shift is valid.
-	LShift: {
+	treebin.LShift: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1778,7 +1779,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	RShift: {
+	treebin.RShift: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1819,7 +1820,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	Pow: {
+	treebin.Pow: {
 		&BinOp{
 			LeftType:   types.Int,
 			RightType:  types.Int,
@@ -1882,7 +1883,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchVal: {
+	treebin.JSONFetchVal: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
@@ -1918,7 +1919,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchValPath: {
+	treebin.JSONFetchValPath: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),
@@ -1937,7 +1938,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchText: {
+	treebin.JSONFetchText: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.String,
@@ -1987,7 +1988,7 @@ var BinOps = map[BinaryOperatorSymbol]binOpOverload{
 		},
 	},
 
-	JSONFetchTextPath: {
+	treebin.JSONFetchTextPath: {
 		&BinOp{
 			LeftType:   types.Jsonb,
 			RightType:  types.MakeArray(types.String),

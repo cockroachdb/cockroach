@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -104,7 +105,7 @@ func TestProjDivFloat64Float64Op(t *testing.T) {
 func TestGetProjectionConstOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	binOp := tree.MakeBinaryOperator(tree.Mult)
+	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	colIdx := 3
 	inputTypes := make([]*types.T, colIdx+1)
@@ -265,7 +266,7 @@ func TestGetProjectionOperator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	typ := types.Int2
-	binOp := tree.MakeBinaryOperator(tree.Mult)
+	binOp := treebin.MakeBinaryOperator(treebin.Mult)
 	var input colexecop.Operator
 	col1Idx := 5
 	col2Idx := 7
@@ -361,7 +362,7 @@ func BenchmarkProjOp(b *testing.B) {
 		opNames []string
 		opInfix []string
 	)
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Plus, treebin.Minus, treebin.Mult, treebin.Div} {
 		opNames = append(opNames, execgen.BinaryOpName[binOp])
 		opInfix = append(opInfix, binOp.String())
 	}

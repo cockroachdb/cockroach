@@ -37,6 +37,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/roleoption"
     "github.com/cockroachdb/cockroach/pkg/sql/scanner"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
     "github.com/cockroachdb/errors"
@@ -80,7 +81,7 @@ func processBinaryQualOp(
   rhs tree.Expr,
 ) (tree.Expr, int) {
   switch op := op.(type) {
-  case tree.BinaryOperator:
+  case treebin.BinaryOperator:
     op.IsExplicitOperator = true
     return &tree.BinaryExpr{Operator: op, Left: lhs, Right: rhs}, 0
   case treecmp.ComparisonOperator:
@@ -132,16 +133,16 @@ func processUnaryQualOpInternal(
   switch op := op.(type) {
   case tree.UnaryOperator:
     return &tree.UnaryExpr{Operator: op, Expr: expr}, 0
-  case tree.BinaryOperator:
+  case treebin.BinaryOperator:
     // We have some binary operators which have the same symbol as the unary
     // operator, so adjust accordingly.
     switch op.Symbol {
-    case tree.Plus:
+    case treebin.Plus:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryPlus),
         Expr: expr,
       }, 0
-    case tree.Minus:
+    case treebin.Minus:
       return &tree.UnaryExpr{
         Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
         Expr: expr,
@@ -11177,43 +11178,43 @@ a_expr:
   }
 | a_expr '+' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Plus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '-' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Minus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Minus), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '*' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mult), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mult), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '/' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Div), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Div), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FLOORDIV a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.FloorDiv), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FloorDiv), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '%' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mod), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mod), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '^' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Pow), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Pow), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '#' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitxor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitxor), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '&' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitand), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitand), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '|' a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitor), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr '<' a_expr
   {
@@ -11249,31 +11250,31 @@ a_expr:
   }
 | a_expr CONCAT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Concat), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr LSHIFT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.LShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.LShift), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr RSHIFT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.RShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.RShift), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHVAL a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchVal), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchVal), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchText), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchText), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHVAL_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchValPath), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchValPath), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.JSONFetchTextPath), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.JSONFetchTextPath), Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REMOVE_PATH a_expr
   {
@@ -11554,43 +11555,43 @@ b_expr:
   }
 | b_expr '+' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Plus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '-' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Minus), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Minus), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '*' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mult), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mult), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '/' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Div), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Div), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr FLOORDIV b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.FloorDiv), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FloorDiv), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '%' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Mod), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Mod), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '^' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Pow), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Pow), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '#' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitxor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitxor), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '&' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitand), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitand), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '|' b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Bitor), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Bitor), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr '<' b_expr
   {
@@ -11606,15 +11607,15 @@ b_expr:
   }
 | b_expr CONCAT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Concat), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LSHIFT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.LShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.LShift), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr RSHIFT b_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.RShift), Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.RShift), Left: $1.expr(), Right: $3.expr()}
   }
 | b_expr LESS_EQUALS b_expr
   {
@@ -12433,12 +12434,12 @@ sub_type:
 // Ensure you also update process.*QualOp above when adding to this.
 all_op:
   // exactly from MathOp
-  '+' { $$.val = tree.MakeBinaryOperator(tree.Plus)  }
-| '-' { $$.val = tree.MakeBinaryOperator(tree.Minus) }
-| '*' { $$.val = tree.MakeBinaryOperator(tree.Mult)  }
-| '/' { $$.val = tree.MakeBinaryOperator(tree.Div)   }
-| '%' { $$.val = tree.MakeBinaryOperator(tree.Mod)   }
-| '^' { $$.val = tree.MakeBinaryOperator(tree.Pow) }
+  '+' { $$.val = treebin.MakeBinaryOperator(treebin.Plus)  }
+| '-' { $$.val = treebin.MakeBinaryOperator(treebin.Minus) }
+| '*' { $$.val = treebin.MakeBinaryOperator(treebin.Mult)  }
+| '/' { $$.val = treebin.MakeBinaryOperator(treebin.Div)   }
+| '%' { $$.val = treebin.MakeBinaryOperator(treebin.Mod)   }
+| '^' { $$.val = treebin.MakeBinaryOperator(treebin.Pow) }
 | '<' { $$.val = treecmp.MakeComparisonOperator(treecmp.LT) }
 | '>' { $$.val = treecmp.MakeComparisonOperator(treecmp.GT) }
 | '=' { $$.val = treecmp.MakeComparisonOperator(treecmp.EQ) }
@@ -12447,19 +12448,19 @@ all_op:
 | NOT_EQUALS     { $$.val = treecmp.MakeComparisonOperator(treecmp.NE) }
   // partial set of operators from from Op
 | '?' { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONExists) }
-| '&' { $$.val = tree.MakeBinaryOperator(tree.Bitand) }
-| '|' { $$.val = tree.MakeBinaryOperator(tree.Bitor)  }
-| '#' { $$.val = tree.MakeBinaryOperator(tree.Bitxor) }
-| FLOORDIV { $$.val = tree.MakeBinaryOperator(tree.FloorDiv) }
+| '&' { $$.val = treebin.MakeBinaryOperator(treebin.Bitand) }
+| '|' { $$.val = treebin.MakeBinaryOperator(treebin.Bitor)  }
+| '#' { $$.val = treebin.MakeBinaryOperator(treebin.Bitxor) }
+| FLOORDIV { $$.val = treebin.MakeBinaryOperator(treebin.FloorDiv) }
 | CONTAINS { $$.val = treecmp.MakeComparisonOperator(treecmp.Contains) }
 | CONTAINED_BY { $$.val = treecmp.MakeComparisonOperator(treecmp.ContainedBy) }
-| LSHIFT { $$.val = tree.MakeBinaryOperator(tree.LShift) }
-| RSHIFT { $$.val = tree.MakeBinaryOperator(tree.RShift) }
-| CONCAT { $$.val = tree.MakeBinaryOperator(tree.Concat) }
-| FETCHVAL { $$.val = tree.MakeBinaryOperator(tree.JSONFetchVal) }
-| FETCHTEXT { $$.val = tree.MakeBinaryOperator(tree.JSONFetchText) }
-| FETCHVAL_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchValPath) }
-| FETCHTEXT_PATH { $$.val = tree.MakeBinaryOperator(tree.JSONFetchTextPath) }
+| LSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.LShift) }
+| RSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.RShift) }
+| CONCAT { $$.val = treebin.MakeBinaryOperator(treebin.Concat) }
+| FETCHVAL { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchVal) }
+| FETCHTEXT { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchText) }
+| FETCHVAL_PATH { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchValPath) }
+| FETCHTEXT_PATH { $$.val = treebin.MakeBinaryOperator(treebin.JSONFetchTextPath) }
 | JSON_SOME_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONSomeExists) }
 | JSON_ALL_EXISTS { $$.val = treecmp.MakeComparisonOperator(treecmp.JSONAllExists) }
 | NOT_REGMATCH { $$.val = treecmp.MakeComparisonOperator(treecmp.NotRegMatch) }
