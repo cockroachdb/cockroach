@@ -94,6 +94,25 @@ in let og = labels("outs",  $targets)
 in $og - filter(".*:.*(-gen|gen-).*", $og)`,
 		variable: "OPTGEN_SRCS",
 	},
+	{
+		filename: "excluded.bzl",
+		query: `
+let all = kind("generated file", //pkg/...:*)
+in ($all ^ //pkg/ui/...:*)
+  + ($all ^ labels("out", kind("_gomock_prog_gen rule",  //pkg/...:*)))
+  + filter(".*:.*(-gen|gen-).*", $all)
+  + //pkg/testutils/lint/passes/errcheck:errcheck_excludes.txt`,
+		variable: "EXCLUDED_SRCS",
+	},
+	{
+		filename: "misc.bzl",
+		query: `
+kind("generated file", //pkg/...:*)
+  - labels("srcs", //pkg/gen:explicitly_generated)
+  - labels("srcs", //pkg/gen:excluded)
+`,
+		variable: "MISC_SRCS",
+	},
 }
 
 type target struct {
@@ -133,33 +152,40 @@ func execQuery(q string) (results []string, _ error) {
 }
 
 func generate(outDir string) error {
-	// TODO(ajwerner): Consider rewriting all of the files with empty values
-	// before running. Stale values may cause the queries to fail.
+	for _, t := range targets {
+		if err := t.write(outDir, nil); err != nil {
+			return err
+		}
+	}
 	for _, t := range targets {
 		out, err := execQuery(t.query)
 		if err != nil {
 			return err
 		}
-		if err != nil {
+		if err := t.write(outDir, out); err != nil {
 			return err
 		}
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, templateData{
-			Variable: t.variable,
-			Targets:  out,
-		}); err != nil {
-			return errors.Wrapf(err, "failed to execute template for %s", t.filename)
-		}
-		f, err := os.Create(filepath.Join(outDir, t.filename))
-		if err != nil {
-			return errors.Wrapf(err, "failed to open file for %s", t.filename)
-		}
-		if _, err := io.Copy(f, &buf); err != nil {
-			return errors.Wrapf(err, "failed to write file for %s", t.filename)
-		}
-		if err := f.Close(); err != nil {
-			return errors.Wrapf(err, "failed to write file for %s", t.filename)
-		}
+	}
+	return nil
+}
+
+func (t *target) write(outDir string, out []string) error {
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, templateData{
+		Variable: t.variable,
+		Targets:  out,
+	}); err != nil {
+		return errors.Wrapf(err, "failed to execute template for %s", t.filename)
+	}
+	f, err := os.Create(filepath.Join(outDir, t.filename))
+	if err != nil {
+		return errors.Wrapf(err, "failed to open file for %s", t.filename)
+	}
+	if _, err := io.Copy(f, &buf); err != nil {
+		return errors.Wrapf(err, "failed to write file for %s", t.filename)
+	}
+	if err := f.Close(); err != nil {
+		return errors.Wrapf(err, "failed to write file for %s", t.filename)
 	}
 	return nil
 }

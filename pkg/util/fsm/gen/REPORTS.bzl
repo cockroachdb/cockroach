@@ -62,4 +62,5 @@ def gen_reports(name, dep, transitions_variable, starting_state_name):
             lower + "_report.txt",
         ],
         exec_tools = [":" + template_name + "_bin"],
+        visibility = [":__pkg__", "//pkg/gen:__pkg__"],
     )
