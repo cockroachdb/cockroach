@@ -12,8 +12,10 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,6 +50,14 @@ func alterTableDropColumn(b BuildCtx, table catalog.TableDescriptor, t *tree.Alt
 		// Column drops are, while the column is in the process of being dropped,
 		// for whatever reason, idempotent. Return silently here.
 		return
+	}
+
+	if t.Column == colinfo.TTLDefaultExpirationColumnName && table.HasRowLevelTTL() {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			`cannot drop column %s while row-level TTL is active`,
+			t.Column,
+		))
 	}
 
 	// TODO:
