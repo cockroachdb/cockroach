@@ -619,7 +619,7 @@ $(JEMALLOC_DIR)/Makefile: $(C_DEPS_DIR)/jemalloc-rebuild $(JEMALLOC_SRC_DIR)/con
 $(KRB5_SRC_DIR)/src/configure.in: | bin/.submodules-initialized
 
 $(KRB5_SRC_DIR)/src/configure: $(KRB5_SRC_DIR)/src/configure.in
-	cd $(KRB5_SRC_DIR)/src && autoreconf
+	cd $(KRB5_SRC_DIR)/src && autoreconf -Wno-obsolete
 
 $(KRB5_DIR)/Makefile: $(C_DEPS_DIR)/krb5-rebuild $(KRB5_SRC_DIR)/src/configure
 	rm -rf $(KRB5_DIR)

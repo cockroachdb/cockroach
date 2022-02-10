@@ -201,7 +201,7 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 		switch targetKind {
 		case "cmake":
 			ret.cmakeTargets = append(ret.cmakeTargets, fullTarget)
-		case "genrule":
+		case "genrule", "batch_gen":
 			ret.genruleTargets = append(ret.genruleTargets, fullTarget)
 		case "go_binary":
 			ret.goBinaries = append(ret.goBinaries, fullTarget)
