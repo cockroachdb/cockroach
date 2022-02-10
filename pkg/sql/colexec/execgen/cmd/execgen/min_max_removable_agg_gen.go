@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 const minMaxRemovableAggTmpl = "pkg/sql/colexec/colexecwindow/min_max_removable_agg_tmpl.go"
@@ -49,12 +49,12 @@ func genMinMaxRemovableAgg(inputFileContents string, wr io.Writer) error {
 		{
 			Agg:       "min",
 			AggTitle:  "Min",
-			Overloads: sameTypeComparisonOpToOverloads[tree.LT],
+			Overloads: sameTypeComparisonOpToOverloads[treecmp.LT],
 		},
 		{
 			Agg:       "max",
 			AggTitle:  "Max",
-			Overloads: sameTypeComparisonOpToOverloads[tree.GT],
+			Overloads: sameTypeComparisonOpToOverloads[treecmp.GT],
 		},
 	})
 }

@@ -16,7 +16,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 // selPermutation contains information about which permutation of selection
@@ -143,7 +143,7 @@ func genMergeJoinOps(inputFileContents string, wr io.Writer, jti joinTypeInfo) e
 		SelPermutations interface{}
 		JoinType        interface{}
 	}{
-		Overloads:       sameTypeComparisonOpToOverloads[tree.EQ],
+		Overloads:       sameTypeComparisonOpToOverloads[treecmp.EQ],
 		SelPermutations: selPermutations,
 		JoinType:        jti,
 	})

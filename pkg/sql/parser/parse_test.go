@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
@@ -205,8 +206,8 @@ func TestParsePrecedence(t *testing.T) {
 	binary := func(op tree.BinaryOperatorSymbol, left, right tree.Expr) tree.Expr {
 		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(op), Left: left, Right: right}
 	}
-	cmp := func(op tree.ComparisonOperatorSymbol, left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(op), Left: left, Right: right}
+	cmp := func(op treecmp.ComparisonOperatorSymbol, left, right tree.Expr) tree.Expr {
+		return &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(op), Left: left, Right: right}
 	}
 	not := func(expr tree.Expr) tree.Expr {
 		return &tree.NotExpr{Expr: expr}
@@ -221,10 +222,10 @@ func TestParsePrecedence(t *testing.T) {
 		return &tree.BinaryExpr{Operator: tree.MakeBinaryOperator(tree.Concat), Left: left, Right: right}
 	}
 	regmatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegMatch), Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegMatch), Left: left, Right: right}
 	}
 	regimatch := func(left, right tree.Expr) tree.Expr {
-		return &tree.ComparisonExpr{Operator: tree.MakeComparisonOperator(tree.RegIMatch), Left: left, Right: right}
+		return &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.RegIMatch), Left: left, Right: right}
 	}
 
 	one := tree.NewNumVal(constant.MakeInt64(1), "1", false /* negative */)
@@ -321,25 +322,25 @@ func TestParsePrecedence(t *testing.T) {
 
 		// Equals, not-equals, greater-than, greater-than equals, less-than and
 		// less-than equals combined with higher precedence.
-		{`1 = 2|3`, cmp(tree.EQ, one, binary(tree.Bitor, two, three))},
-		{`1|2 = 3`, cmp(tree.EQ, binary(tree.Bitor, one, two), three)},
-		{`1 != 2|3`, cmp(tree.NE, one, binary(tree.Bitor, two, three))},
-		{`1|2 != 3`, cmp(tree.NE, binary(tree.Bitor, one, two), three)},
-		{`1 > 2|3`, cmp(tree.GT, one, binary(tree.Bitor, two, three))},
-		{`1|2 > 3`, cmp(tree.GT, binary(tree.Bitor, one, two), three)},
-		{`1 >= 2|3`, cmp(tree.GE, one, binary(tree.Bitor, two, three))},
-		{`1|2 >= 3`, cmp(tree.GE, binary(tree.Bitor, one, two), three)},
-		{`1 < 2|3`, cmp(tree.LT, one, binary(tree.Bitor, two, three))},
-		{`1|2 < 3`, cmp(tree.LT, binary(tree.Bitor, one, two), three)},
-		{`1 <= 2|3`, cmp(tree.LE, one, binary(tree.Bitor, two, three))},
-		{`1|2 <= 3`, cmp(tree.LE, binary(tree.Bitor, one, two), three)},
+		{`1 = 2|3`, cmp(treecmp.EQ, one, binary(tree.Bitor, two, three))},
+		{`1|2 = 3`, cmp(treecmp.EQ, binary(tree.Bitor, one, two), three)},
+		{`1 != 2|3`, cmp(treecmp.NE, one, binary(tree.Bitor, two, three))},
+		{`1|2 != 3`, cmp(treecmp.NE, binary(tree.Bitor, one, two), three)},
+		{`1 > 2|3`, cmp(treecmp.GT, one, binary(tree.Bitor, two, three))},
+		{`1|2 > 3`, cmp(treecmp.GT, binary(tree.Bitor, one, two), three)},
+		{`1 >= 2|3`, cmp(treecmp.GE, one, binary(tree.Bitor, two, three))},
+		{`1|2 >= 3`, cmp(treecmp.GE, binary(tree.Bitor, one, two), three)},
+		{`1 < 2|3`, cmp(treecmp.LT, one, binary(tree.Bitor, two, three))},
+		{`1|2 < 3`, cmp(treecmp.LT, binary(tree.Bitor, one, two), three)},
+		{`1 <= 2|3`, cmp(treecmp.LE, one, binary(tree.Bitor, two, three))},
+		{`1|2 <= 3`, cmp(treecmp.LE, binary(tree.Bitor, one, two), three)},
 
 		// NOT combined with higher precedence.
-		{`NOT 1 = 2`, not(cmp(tree.EQ, one, two))},
-		{`NOT 1 = NOT 2 = 3`, not(cmp(tree.EQ, one, not(cmp(tree.EQ, two, three))))},
+		{`NOT 1 = 2`, not(cmp(treecmp.EQ, one, two))},
+		{`NOT 1 = NOT 2 = 3`, not(cmp(treecmp.EQ, one, not(cmp(treecmp.EQ, two, three))))},
 
 		// NOT combined with self.
-		{`NOT NOT 1 = 2`, not(not(cmp(tree.EQ, one, two)))},
+		{`NOT NOT 1 = 2`, not(not(cmp(treecmp.EQ, one, two)))},
 
 		// AND combined with higher precedence.
 		{`NOT 1 AND 2`, and(not(one), two)},
@@ -365,7 +366,7 @@ func TestParsePrecedence(t *testing.T) {
 		// OPERATOR(pg_catalog.~) should not be error (#66861).
 		{
 			`'a' OPERATOR(pg_catalog.~) 'b'`,
-			&tree.ComparisonExpr{Operator: tree.ComparisonOperator{Symbol: tree.RegMatch, IsExplicitOperator: true}, Left: a, Right: b},
+			&tree.ComparisonExpr{Operator: treecmp.ComparisonOperator{Symbol: treecmp.RegMatch, IsExplicitOperator: true}, Left: a, Right: b},
 		},
 	}
 	for _, d := range testData {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -111,39 +112,39 @@ type MutableExpr interface {
 
 // ComparisonOpMap maps from a semantic tree comparison operator type to an
 // optimizer operator type.
-var ComparisonOpMap [tree.NumComparisonOperatorSymbols]Operator
+var ComparisonOpMap [treecmp.NumComparisonOperatorSymbols]Operator
 
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
-var ComparisonOpReverseMap = map[Operator]tree.ComparisonOperatorSymbol{
-	EqOp:             tree.EQ,
-	LtOp:             tree.LT,
-	GtOp:             tree.GT,
-	LeOp:             tree.LE,
-	GeOp:             tree.GE,
-	NeOp:             tree.NE,
-	InOp:             tree.In,
-	NotInOp:          tree.NotIn,
-	LikeOp:           tree.Like,
-	NotLikeOp:        tree.NotLike,
-	ILikeOp:          tree.ILike,
-	NotILikeOp:       tree.NotILike,
-	SimilarToOp:      tree.SimilarTo,
-	NotSimilarToOp:   tree.NotSimilarTo,
-	RegMatchOp:       tree.RegMatch,
-	NotRegMatchOp:    tree.NotRegMatch,
-	RegIMatchOp:      tree.RegIMatch,
-	NotRegIMatchOp:   tree.NotRegIMatch,
-	IsOp:             tree.IsNotDistinctFrom,
-	IsNotOp:          tree.IsDistinctFrom,
-	ContainsOp:       tree.Contains,
-	ContainedByOp:    tree.ContainedBy,
-	JsonExistsOp:     tree.JSONExists,
-	JsonSomeExistsOp: tree.JSONSomeExists,
-	JsonAllExistsOp:  tree.JSONAllExists,
-	OverlapsOp:       tree.Overlaps,
-	BBoxCoversOp:     tree.RegMatch,
-	BBoxIntersectsOp: tree.Overlaps,
+var ComparisonOpReverseMap = map[Operator]treecmp.ComparisonOperatorSymbol{
+	EqOp:             treecmp.EQ,
+	LtOp:             treecmp.LT,
+	GtOp:             treecmp.GT,
+	LeOp:             treecmp.LE,
+	GeOp:             treecmp.GE,
+	NeOp:             treecmp.NE,
+	InOp:             treecmp.In,
+	NotInOp:          treecmp.NotIn,
+	LikeOp:           treecmp.Like,
+	NotLikeOp:        treecmp.NotLike,
+	ILikeOp:          treecmp.ILike,
+	NotILikeOp:       treecmp.NotILike,
+	SimilarToOp:      treecmp.SimilarTo,
+	NotSimilarToOp:   treecmp.NotSimilarTo,
+	RegMatchOp:       treecmp.RegMatch,
+	NotRegMatchOp:    treecmp.NotRegMatch,
+	RegIMatchOp:      treecmp.RegIMatch,
+	NotRegIMatchOp:   treecmp.NotRegIMatch,
+	IsOp:             treecmp.IsNotDistinctFrom,
+	IsNotOp:          treecmp.IsDistinctFrom,
+	ContainsOp:       treecmp.Contains,
+	ContainedByOp:    treecmp.ContainedBy,
+	JsonExistsOp:     treecmp.JSONExists,
+	JsonSomeExistsOp: treecmp.JSONSomeExists,
+	JsonAllExistsOp:  treecmp.JSONAllExists,
+	OverlapsOp:       treecmp.Overlaps,
+	BBoxCoversOp:     treecmp.RegMatch,
+	BBoxIntersectsOp: treecmp.Overlaps,
 }
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -100,12 +101,12 @@ var _ operatorExpr = &IsOfTypeExpr{}
 
 // Operator is used to identify Operators; used in sql.y.
 type Operator interface {
-	operator()
+	Operator()
 }
 
 var _ Operator = (*UnaryOperator)(nil)
 var _ Operator = (*BinaryOperator)(nil)
-var _ Operator = (*ComparisonOperator)(nil)
+var _ Operator = (*treecmp.ComparisonOperator)(nil)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
 // It is implemented by both tree.Subquery and optbuilder.subquery, and is
@@ -352,144 +353,10 @@ func StripParens(expr Expr) Expr {
 	return expr
 }
 
-// ComparisonOperator represents a binary operator which returns a bool.
-type ComparisonOperator struct {
-	Symbol ComparisonOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeComparisonOperator creates a ComparisonOperator given a symbol.
-func MakeComparisonOperator(symbol ComparisonOperatorSymbol) ComparisonOperator {
-	return ComparisonOperator{Symbol: symbol}
-}
-
-func (o ComparisonOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-func (ComparisonOperator) operator() {}
-
-// ComparisonOperatorSymbol represents a comparison operator symbol.
-type ComparisonOperatorSymbol int
-
-// ComparisonExpr.Operator
-const (
-	EQ ComparisonOperatorSymbol = iota
-	LT
-	GT
-	LE
-	GE
-	NE
-	In
-	NotIn
-	Like
-	NotLike
-	ILike
-	NotILike
-	SimilarTo
-	NotSimilarTo
-	RegMatch
-	NotRegMatch
-	RegIMatch
-	NotRegIMatch
-	IsDistinctFrom
-	IsNotDistinctFrom
-	Contains
-	ContainedBy
-	JSONExists
-	JSONSomeExists
-	JSONAllExists
-	Overlaps
-
-	// The following operators will always be used with an associated SubOperator.
-	// If Go had algebraic data types they would be defined in a self-contained
-	// manner like:
-	//
-	// Any(ComparisonOperator)
-	// Some(ComparisonOperator)
-	// ...
-	//
-	// where the internal ComparisonOperator qualifies the behavior of the primary
-	// operator. Instead, a secondary ComparisonOperator is optionally included in
-	// ComparisonExpr for the cases where these operators are the primary op.
-	//
-	// ComparisonOperator.HasSubOperator returns true for ops in this group.
-	Any
-	Some
-	All
-
-	NumComparisonOperatorSymbols
-)
-
-var _ = NumComparisonOperatorSymbols
-
-var comparisonOpName = [...]string{
-	EQ:           "=",
-	LT:           "<",
-	GT:           ">",
-	LE:           "<=",
-	GE:           ">=",
-	NE:           "!=",
-	In:           "IN",
-	NotIn:        "NOT IN",
-	Like:         "LIKE",
-	NotLike:      "NOT LIKE",
-	ILike:        "ILIKE",
-	NotILike:     "NOT ILIKE",
-	SimilarTo:    "SIMILAR TO",
-	NotSimilarTo: "NOT SIMILAR TO",
-	// TODO(otan): come up with a better name than RegMatch, as it also covers GeoContains.
-	RegMatch:          "~",
-	NotRegMatch:       "!~",
-	RegIMatch:         "~*",
-	NotRegIMatch:      "!~*",
-	IsDistinctFrom:    "IS DISTINCT FROM",
-	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
-	Contains:          "@>",
-	ContainedBy:       "<@",
-	JSONExists:        "?",
-	JSONSomeExists:    "?|",
-	JSONAllExists:     "?&",
-	Overlaps:          "&&",
-	Any:               "ANY",
-	Some:              "SOME",
-	All:               "ALL",
-}
-
-func (i ComparisonOperatorSymbol) String() string {
-	if i < 0 || i > ComparisonOperatorSymbol(len(comparisonOpName)-1) {
-		return fmt.Sprintf("ComparisonOp(%d)", i)
-	}
-	return comparisonOpName[i]
-}
-
-// Inverse returns the inverse of this comparison operator if it exists. The
-// second return value is true if it exists, and false otherwise.
-func (i ComparisonOperatorSymbol) Inverse() (ComparisonOperatorSymbol, bool) {
-	inverse, ok := cmpOpsInverse[i]
-	return inverse, ok
-}
-
-// HasSubOperator returns if the ComparisonOperator is used with a sub-operator.
-func (i ComparisonOperatorSymbol) HasSubOperator() bool {
-	switch i {
-	case Any:
-	case Some:
-	case All:
-	default:
-		return false
-	}
-	return true
-}
-
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
-	Operator    ComparisonOperator
-	SubOperator ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
+	Operator    treecmp.ComparisonOperator
+	SubOperator treecmp.ComparisonOperator // used for array operators (when Operator is Any, Some, or All)
 	Left, Right Expr
 
 	typeAnnotation
@@ -507,9 +374,9 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 	// mode. In that mode we need the more verbose form in order to be able
 	// to re-parse the statement when reporting telemetry.
 	if !ctx.HasFlags(FmtHideConstants) {
-		if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS NOT"
-		} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+		} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 			opStr = "IS"
 		}
 	}
@@ -521,7 +388,7 @@ func (node *ComparisonExpr) Format(ctx *FmtCtx) {
 }
 
 // NewTypedComparisonExpr returns a new ComparisonExpr that is verified to be well-typed.
-func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
+func NewTypedComparisonExpr(op treecmp.ComparisonOperator, left, right TypedExpr) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, Left: left, Right: right}
 	node.typ = types.Bool
 	node.memoizeFn()
@@ -530,7 +397,7 @@ func NewTypedComparisonExpr(op ComparisonOperator, left, right TypedExpr) *Compa
 
 // NewTypedComparisonExprWithSubOp returns a new ComparisonExpr that is verified to be well-typed.
 func NewTypedComparisonExprWithSubOp(
-	op, subOp ComparisonOperator, left, right TypedExpr,
+	op, subOp treecmp.ComparisonOperator, left, right TypedExpr,
 ) *ComparisonExpr {
 	node := &ComparisonExpr{Operator: op, SubOperator: subOp, Left: left, Right: right}
 	node.typ = types.Bool
@@ -587,7 +454,7 @@ func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := FoldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()
 	switch node.Operator.Symbol {
-	case Any, Some, All:
+	case treecmp.Any, treecmp.Some, treecmp.All:
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = FoldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
@@ -1141,7 +1008,8 @@ func (o BinaryOperator) String() string {
 	return o.Symbol.String()
 }
 
-func (BinaryOperator) operator() {}
+// Operator implements tree.Operator.
+func (BinaryOperator) Operator() {}
 
 // BinaryOperatorSymbol is a symbol for a binary operator.
 type BinaryOperatorSymbol uint8
@@ -1315,7 +1183,8 @@ func (o UnaryOperator) String() string {
 	return o.Symbol.String()
 }
 
-func (UnaryOperator) operator() {}
+// Operator implements tree.Operator.
+func (UnaryOperator) Operator() {}
 
 // UnaryOperatorSymbol represents a unary operator.
 type UnaryOperatorSymbol uint8
