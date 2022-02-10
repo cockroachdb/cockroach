@@ -3272,28 +3272,7 @@ func (c *adminPrivilegeChecker) getUserAndRole(
 func (c *adminPrivilegeChecker) hasAdminRole(
 	ctx context.Context, user security.SQLUsername,
 ) (bool, error) {
-	if user.IsRootUser() {
-		// Shortcut.
-		return true, nil
-	}
-	row, err := c.ie.QueryRowEx(
-		ctx, "check-is-admin", nil, /* txn */
-		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.is_admin()")
-	if err != nil {
-		return false, err
-	}
-	if row == nil {
-		return false, errors.AssertionFailedf("hasAdminRole: expected 1 row, got 0")
-	}
-	if len(row) != 1 {
-		return false, errors.AssertionFailedf("hasAdminRole: expected 1 column, got %d", len(row))
-	}
-	dbDatum, ok := tree.AsDBool(row[0])
-	if !ok {
-		return false, errors.AssertionFailedf("hasAdminRole: expected bool, got %T", row[0])
-	}
-	return bool(dbDatum), nil
+	return sql.HasAdminRole(ctx, c.ie, user)
 }
 
 // Note that the function returns plain errors, and it is the caller's

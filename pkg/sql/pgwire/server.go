@@ -88,6 +88,42 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
+var MaxNumConnections = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	sql.MaxNumConnectionsClusterSettingName,
+	"the maximum number of SQL connections to the server allowed at a given time, none if 0, unlimited if < 0",
+	-1,
+).WithPublic()
+
+type syncAllowedConnectionCount struct {
+	value int64
+	mu    syncutil.Mutex
+}
+
+func (allowedConnectionCount *syncAllowedConnectionCount) inc() {
+	allowedConnectionCount.mu.Lock()
+	allowedConnectionCount.value++
+	allowedConnectionCount.mu.Unlock()
+}
+
+func (allowedConnectionCount *syncAllowedConnectionCount) dec() {
+	allowedConnectionCount.mu.Lock()
+	allowedConnectionCount.value--
+	allowedConnectionCount.mu.Unlock()
+}
+
+func (allowedConnectionCount *syncAllowedConnectionCount) incIfLt(max int64) bool {
+	allowedConnectionCount.mu.Lock()
+	lt := allowedConnectionCount.value < max
+	if lt {
+		allowedConnectionCount.value++
+	}
+	allowedConnectionCount.mu.Unlock()
+	return lt
+}
+
+var allowedConnectionCount = syncAllowedConnectionCount{}
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
@@ -709,6 +745,41 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	hbaConf, identMap := s.GetAuthenticationConfiguration()
+
+	postAuthHook := func() error {
+		if hasAdminRole, err := sql.HasAdminRole(ctx, s.execCfg.InternalExecutor, sArgs.User); err != nil {
+			return err
+		} else if hasAdminRole {
+			// This user is an admin and is therefore not affected by connection limits.
+			allowedConnectionCount.inc()
+			return nil
+		}
+
+		maxNumConnectionsValue := MaxNumConnections.Get(&s.execCfg.Settings.SV)
+		if maxNumConnectionsValue < 0 {
+			// Unlimited connections are allowed.
+			allowedConnectionCount.inc()
+			return nil
+		}
+		if !allowedConnectionCount.incIfLt(maxNumConnectionsValue) {
+			return errors.WithHint(
+				pgerror.New(
+					pgcode.TooManyConnections, "sorry, too many clients already",
+				),
+				fmt.Sprintf(
+					"the maximum number of allowed connections is %d and can be modified using the %s config key",
+					maxNumConnectionsValue,
+					MaxNumConnections.Key(),
+				),
+			)
+		}
+		return nil
+	}
+
+	postAuthHookCleanup := func() {
+		allowedConnectionCount.dec()
+	}
+
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(
@@ -716,14 +787,17 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		reserved,
 		connStart,
 		authOptions{
-			connType:        connType,
-			connDetails:     connDetails,
-			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
-			auth:            hbaConf,
-			identMap:        identMap,
-			testingAuthHook: testingAuthHook,
-		})
+			connType:            connType,
+			connDetails:         connDetails,
+			insecure:            s.cfg.Insecure,
+			ie:                  s.execCfg.InternalExecutor,
+			auth:                hbaConf,
+			identMap:            identMap,
+			postAuthHook:        postAuthHook,
+			postAuthHookCleanup: postAuthHookCleanup,
+			testingAuthHook:     testingAuthHook,
+		},
+	)
 	return nil
 }
 
