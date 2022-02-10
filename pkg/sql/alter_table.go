@@ -909,6 +909,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if n.tableDesc.IsPartitionAllBy() {
 				return unimplemented.NewWithIssue(58736, "changing partition of table with PARTITION ALL BY not yet implemented")
 			}
+			if n.tableDesc.GetPrimaryIndex().IsSharded() {
+				return pgerror.New(
+					pgcode.FeatureNotSupported,
+					"cannot set explicit partitioning with PARTITION BY on hash sharded primary key",
+				)
+			}
 			oldPartitioning := n.tableDesc.GetPrimaryIndex().GetPartitioning().DeepCopy()
 			if oldPartitioning.NumImplicitColumns() > 0 {
 				return unimplemented.NewWithIssue(

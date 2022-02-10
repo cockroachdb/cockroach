@@ -195,8 +195,8 @@ func (hi *hypotheticalIndex) Ordinal() int {
 	return hi.indexOrdinal
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (hi *hypotheticalIndex) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (hi *hypotheticalIndex) ImplicitColumnCount() int {
 	return 0
 }
 
