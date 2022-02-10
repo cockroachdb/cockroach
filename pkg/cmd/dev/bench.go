@@ -73,7 +73,6 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
