@@ -36,6 +36,10 @@ func TestContextualHelp(t *testing.T) {
 	}{
 		{`ALTER ??`, `ALTER`},
 
+		{`ALTER CHANGEFEED ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
+		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
+
 		{`ALTER TABLE IF ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ??`, `ALTER TABLE`},
 		{`ALTER TABLE blah ADD ??`, `ALTER TABLE`},
