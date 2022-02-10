@@ -1,4 +1,4 @@
-load(":gen.bzl", "ALL", "execgen", "go_proto", "gomock", "stringer")
+load(":gen.bzl", "ALL", "execgen", "gen", "go_proto", "gomock", "optgen", "stringer")
 
 filegroup(
     name = "all_generated",
@@ -12,3 +12,16 @@ gomock()
 go_proto()
 
 stringer()
+
+optgen()
+
+gen(
+    name = "gen",
+    srcs = [
+        ":execgen",
+        ":go_proto",
+        ":gomock",
+        ":optgen",
+        ":stringer",
+    ],
+)

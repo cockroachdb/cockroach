@@ -3,12 +3,13 @@ load(":protobuf.bzl", "PROTOBUF_SRCS")
 load(":gomock.bzl", "GOMOCK_SRCS")
 load(":stringer.bzl", "STRINGER_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
+load(":optgen.bzl", "OPTGEN_SRCS")
 
 # TODO(ajwerner): Use the all variable combined with genquery to construct
 # a test to show that all of the generated files in the repo are represented
 # here. Of course, this will rely on actually representing all of the generated
 # file here.
-ALL = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS
+ALL = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS + OPTGEN_SRCS
 
 GeneratedFileInfo = provider(
   "Info needed to hoist generated files",
@@ -84,7 +85,6 @@ _gomock_srcs = rule(
    },
 )
 
-
 def _execgen_srcs_impl(ctx):
   files = [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()]
   return [GeneratedFileInfo(
@@ -104,6 +104,27 @@ _execgen_srcs = rule(
        "_srcs": attr.label_list(allow_files=True, default=EXECGEN_SRCS),
    },
 )
+
+def _optgen_srcs_impl(ctx):
+  files = [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()]
+  return [GeneratedFileInfo(
+    generated_files = { "": files },
+    cleanup_tasks = [
+      _subshell_in_workspace_snippet([
+        _find_relevant + "-type f -name '*.og.go'" +
+          " ! -regex '.*lang/[^/].*\\.og\\.go$'" +
+          " -exec rm {} +",
+      ]),
+    ]
+  )]
+
+_optgen_srcs = rule(
+   implementation = _optgen_srcs_impl,
+   attrs = {
+       "_srcs": attr.label_list(allow_files=True, default=OPTGEN_SRCS),
+   },
+)
+
 
 def _stringer_srcs_impl(ctx):
   return [GeneratedFileInfo(
@@ -190,3 +211,9 @@ def execgen():
 
 def stringer():
   _hoist("stringer", _stringer_srcs)
+
+def optgen():
+  _hoist("optgen", _optgen_srcs)
+
+def gen(name, srcs):
+  _hoist_files(name = name, data = srcs, tags = ["no-remote-exec"])

@@ -79,9 +79,20 @@ var targets = []*target{
 	},
 	{
 		filename: "execgen.bzl",
-		query: `let genrules = kind("genrule rule",  //pkg/...:*) in
-labels("outs",  attr("tools", "execgen", $genrules) + attr("exec_tools", "execgen", $genrules))`,
+		query: `
+let genrules =
+  kind("genrule rule",  //pkg/...:*)
+in labels("outs",  attr("tools", "execgen", $genrules)
+  + attr("exec_tools", "execgen", $genrules))`,
 		variable: "EXECGEN_SRCS",
+	},
+	{
+		filename: "optgen.bzl",
+		query: `
+let targets = attr("exec_tools", "(opt|lang)gen",  kind("genrule rule",  //pkg/...:*))
+in let og = labels("outs",  $targets)
+in $og - filter(".*:.*(-gen|gen-).*", $og)`,
+		variable: "OPTGEN_SRCS",
 	},
 }
 
