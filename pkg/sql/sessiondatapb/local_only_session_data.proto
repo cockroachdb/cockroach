@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -226,6 +226,9 @@ message LocalOnlySessionData {
   // and joins using the same default number of bytes per column instead of
   // column sizes from the AvgSize table statistic.
   bool cost_scans_with_default_col_size = 61;
+  // QualityOfService is the session settings interface to admission control,
+  // to control resource overload by SQL queries.
+  sint32 quality_of_service = 62;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

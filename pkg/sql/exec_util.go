@@ -3043,6 +3043,10 @@ func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondatapb.NewSchemaC
 	m.data.NewSchemaChangerMode = val
 }
 
+func (m *sessionDataMutator) SetQualityOfService(val sessiondatapb.QoSLevel) {
+	m.data.QualityOfService = val.Validate()
+}
+
 func (m *sessionDataMutator) SetStreamReplicationEnabled(val bool) {
 	m.data.EnableStreamReplication = val
 }
