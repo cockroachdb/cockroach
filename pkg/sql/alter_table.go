@@ -469,6 +469,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
+			if t.Column == colinfo.TTLDefaultExpirationColumnName && n.tableDesc.HasRowLevelTTL() {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`cannot drop column %s while row-level TTL is active`,
+						t.Column,
+					),
+					"use ALTER TABLE %s RESET (ttl) instead",
+					tree.Name(n.tableDesc.GetName()),
+				)
+			}
+
 			colDroppedViews, err := dropColumnImpl(params, tn, n.tableDesc, t)
 			if err != nil {
 				return err
