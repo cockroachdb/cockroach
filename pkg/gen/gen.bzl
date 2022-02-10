@@ -63,113 +63,20 @@ _go_proto_srcs = rule(
   },
 )
 
-def _gomock_srcs_impl(ctx):
-  files = [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()]
+def _no_prefix_impl(ctx):
+  files = [f for di in ctx.attr.srcs for f in di[DefaultInfo].files.to_list()]
   return [GeneratedFileInfo(
-    generated_files = {
-      "": files,
-    },
-    cleanup_tasks = [
-      _subshell_in_workspace_snippet([
-        _find_relevant + "-type f -name '*.go' " +
-          # Use this || true dance to avoid egrep failing
-          # the whole script.
-          "| { egrep '/mocks_generated(_test)?\\.go' || true ; }"+
-          "| xargs rm ",
-      ]),
-    ]
+    generated_files = {"": files},
+    cleanup_tasks = ctx.attr.cleanup_tasks,
   )]
 
-_gomock_srcs = rule(
-   implementation = _gomock_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=GOMOCK_SRCS),
-   },
+_no_prefix = rule(
+  implementation = _no_prefix_impl,
+  attrs = {
+    "srcs": attr.label_list(allow_files=True),
+    "cleanup_tasks": attr.string_list(),
+  },
 )
-
-def _execgen_srcs_impl(ctx):
-  files = [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()]
-  return [GeneratedFileInfo(
-    generated_files = {
-      "": files,
-    },
-    cleanup_tasks = [
-      _subshell_in_workspace_snippet([
-        _find_relevant + "-type f -name '*.eg.go' -exec rm {} +",
-      ]),
-    ]
-  )]
-
-_execgen_srcs = rule(
-   implementation = _execgen_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=EXECGEN_SRCS),
-   },
-)
-
-def _optgen_srcs_impl(ctx):
-  files = [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()]
-  return [GeneratedFileInfo(
-    generated_files = { "": files },
-    cleanup_tasks = [
-      _subshell_in_workspace_snippet([
-        _find_relevant + "-type f -name '*.og.go'" +
-          " ! -regex '.*lang/[^/].*\\.og\\.go$'" +
-          " -exec rm {} +",
-      ]),
-    ]
-  )]
-
-_optgen_srcs = rule(
-   implementation = _optgen_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=OPTGEN_SRCS),
-   },
-)
-
-def _stringer_srcs_impl(ctx):
-  return [GeneratedFileInfo(
-    generated_files = {
-      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
-    },
-  )]
-
-_stringer_srcs = rule(
-   implementation = _stringer_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=STRINGER_SRCS),
-   },
-)
-
-def _docs_srcs_impl(ctx):
-  return [GeneratedFileInfo(
-    generated_files = {
-      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
-    },
-  )]
-
-_docs_srcs = rule(
-   implementation = _docs_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=DOCS_SRCS),
-   },
-)
-
-def _misc_srcs_impl(ctx):
-  return [GeneratedFileInfo(
-    generated_files = {
-      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
-    },
-  )]
-
-_misc_srcs = rule(
-   implementation = _misc_srcs_impl,
-   attrs = {
-       "_srcs": attr.label_list(allow_files=True, default=MISC_SRCS),
-   },
-)
-
-
 
 def _hoist_files_impl(ctx):
   cp_file_cmd_fmt = """\
@@ -229,26 +136,74 @@ def _hoist(name, src_rule):
   src_rule(name = src_name)
   _hoist_files(name = name, data = [src_name], tags = ["no-remote-exec"])
 
-def gomock():
-  _hoist("gomock", _gomock_srcs)
+def _hoist_no_prefix(name, srcs, cleanup_tasks = []):
+  srcs_name = name + "_srcs"
+  _no_prefix(
+    name = srcs_name,
+    srcs = srcs,
+    cleanup_tasks = cleanup_tasks,
+  )
+  _hoist_files(name = name, data = [srcs_name], tags = ["no-remote-exec"])
 
 def go_proto():
   _hoist("go_proto", _go_proto_srcs)
 
+def gomock():
+  _hoist_no_prefix(
+    name = "gomock",
+    srcs = GOMOCK_SRCS,
+    cleanup_tasks = [
+        _subshell_in_workspace_snippet([
+          _find_relevant + "-type f -name '*.go' " +
+            # Use this || true dance to avoid egrep failing
+            # the whole script.
+            "| { egrep '/mocks_generated(_test)?\\.go' || true ; }"+
+            "| xargs rm ",
+        ]),
+      ],
+  )
+
 def execgen():
-  _hoist("execgen", _execgen_srcs)
+  _hoist_no_prefix(
+    name = "execgen",
+    srcs = EXECGEN_SRCS,
+    cleanup_tasks = [
+      _subshell_in_workspace_snippet([
+        _find_relevant + "-type f -name '*.eg.go' -exec rm {} +",
+      ])
+    ]
+  )
 
 def stringer():
-  _hoist("stringer", _stringer_srcs)
+  _hoist_no_prefix(
+    name = "stringer",
+    srcs = STRINGER_SRCS,
+  )
 
 def optgen():
-  _hoist("optgen", _optgen_srcs)
+  _hoist_no_prefix(
+    name = "optgen",
+    srcs = OPTGEN_SRCS,
+    cleanup_tasks = [
+      _subshell_in_workspace_snippet([
+        _find_relevant + "-type f -name '*.og.go'" +
+          " ! -regex '.*lang/[^/].*\\.og\\.go$'" +
+          " -exec rm {} +",
+      ]),
+    ],
+  )
 
 def misc():
-  _hoist("misc", _misc_srcs)
+  _hoist_no_prefix(
+    name = "misc",
+    srcs = MISC_SRCS,
+  )
 
 def docs():
-  _hoist("docs", _docs_srcs)
+  _hoist_no_prefix(
+    name = "docs",
+    srcs = DOCS_SRCS,
+  )
 
 def gen(name, srcs):
   _hoist_files(name = name, data = srcs, tags = ["no-remote-exec"])
