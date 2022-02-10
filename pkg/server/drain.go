@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -317,6 +318,9 @@ func (s *drainServer) drainClients(
 	}
 	// Stop ongoing SQL execution up to the queryWait timeout.
 	s.sqlServer.distSQLServer.Drain(ctx, queryMaxWait, reporter)
+
+	// Flush in-memory SQL stats into system table.
+	s.sqlServer.pgServer.SQLServer.GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats).Flush(ctx)
 
 	// Drain the SQL leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work.

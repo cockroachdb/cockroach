@@ -17,16 +17,20 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -91,6 +95,54 @@ func doTestDrain(tt *testing.T) {
 		// return value if err is nil, which is not desired.
 		return errors.Newf("server not yet refusing RPC, got %v", err) // nolint:errwrap
 	})
+}
+
+func TestEnsureSQLStatsAreFlushedDuringDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var drainSleepCallCount = 0
+	drainCtx := newTestDrainContext(t, &drainSleepCallCount)
+	defer drainCtx.Close()
+
+	var (
+		ts      = drainCtx.tc.Server(0).SQLServer().(*sql.Server)
+		sqlConn = sqlutils.MakeSQLRunner(drainCtx.tc.ServerConn(0))
+	)
+
+	findQueryStats := func(stats []roachpb.CollectedStatementStatistics) bool {
+		for _, stat := range stats {
+			if stat.Key.Query == "INSERT INTO _ VALUES (_)" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Issue queries to be registered in stats.
+	sqlConn.Exec(t, `
+	CREATE DATABASE t;
+	CREATE TABLE t.test (x INT PRIMARY KEY);
+	INSERT INTO t.test VALUES (1);
+	INSERT INTO t.test VALUES (2);
+	INSERT INTO t.test VALUES (3);
+`)
+
+	// Find the stats for the queries.
+	stats, err := ts.GetScrubbedStmtStats(ctx)
+	require.NoError(t, err)
+	require.Truef(t, findQueryStats(stats), "expected to find stats")
+
+	// Issue a drain.
+	drainCtx.sendDrainNoShutdown()
+
+	// Check that in-memory data was flushed into system tables during the drain.
+	// Verify that the statement stats are in the reported stats pool.
+	stats, err = ts.GetScrubbedReportingStats(ctx)
+	require.NoError(t, err)
+	require.Truef(t, findQueryStats(stats), "expected to find stats in the reported stats pool")
 }
 
 type testDrainContext struct {
