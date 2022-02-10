@@ -1483,6 +1483,10 @@
           "type": "string",
           "x-go-name": "Priority"
         },
+        "quality_of_service": {
+          "type": "string",
+          "x-go-name": "QualityOfService"
+        },
         "read_only": {
           "type": "boolean",
           "x-go-name": "ReadOnly"
