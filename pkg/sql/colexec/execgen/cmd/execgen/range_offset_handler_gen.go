@@ -18,9 +18,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -68,7 +68,7 @@ func rangeOffsetHandlerGenerator(inputFileContents string, wr io.Writer) error {
 	}
 
 	var rangeOffsetHandlerTmplInfos []windowFrameOffsetBoundInfo
-	for _, bound := range []tree.WindowFrameBoundType{tree.OffsetPreceding, tree.OffsetFollowing} {
+	for _, bound := range []treewindow.WindowFrameBoundType{treewindow.OffsetPreceding, treewindow.OffsetFollowing} {
 		boundInfo := windowFrameOffsetBoundInfo{BoundType: bound}
 		for _, isStart := range []bool{true, false} {
 			isStartInfo := windowFrameOffsetIsStartInfo{IsStart: isStart}
@@ -124,7 +124,7 @@ func init() {
 }
 
 type windowFrameOffsetBoundInfo struct {
-	BoundType tree.WindowFrameBoundType
+	BoundType treewindow.WindowFrameBoundType
 	Bounds    []windowFrameOffsetIsStartInfo
 }
 
@@ -215,9 +215,9 @@ func getAssignFunc(typeFamily types.Family) assignFunc {
 }
 
 func getValueByOffsetOp(
-	bound tree.WindowFrameBoundType, isOrdColAsc bool,
+	bound treewindow.WindowFrameBoundType, isOrdColAsc bool,
 ) treebin.BinaryOperatorSymbol {
-	if bound == tree.OffsetFollowing {
+	if bound == treewindow.OffsetFollowing {
 		if isOrdColAsc {
 			return treebin.Plus
 		}

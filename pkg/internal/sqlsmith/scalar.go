@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -457,21 +458,21 @@ func makeFunc(s *Smither, ctx Context, typ *types.T, refs colRefs) (tree.TypedEx
 	), typ), true
 }
 
-var windowFrameModes = []tree.WindowFrameMode{
-	tree.RANGE,
-	tree.ROWS,
-	tree.GROUPS,
+var windowFrameModes = []treewindow.WindowFrameMode{
+	treewindow.RANGE,
+	treewindow.ROWS,
+	treewindow.GROUPS,
 }
 
-func randWindowFrameMode(s *Smither) tree.WindowFrameMode {
+func randWindowFrameMode(s *Smither) treewindow.WindowFrameMode {
 	return windowFrameModes[s.rnd.Intn(len(windowFrameModes))]
 }
 
 func makeWindowFrame(s *Smither, refs colRefs, orderTypes []*types.T) *tree.WindowFrame {
-	var frameMode tree.WindowFrameMode
+	var frameMode treewindow.WindowFrameMode
 	for {
 		frameMode = randWindowFrameMode(s)
-		if len(orderTypes) > 0 || frameMode != tree.GROUPS {
+		if len(orderTypes) > 0 || frameMode != treewindow.GROUPS {
 			// GROUPS mode requires an ORDER BY clause, so if it is not present and
 			// GROUPS mode was randomly chosen, we need to generate again; otherwise,
 			// we're done.
@@ -494,31 +495,31 @@ func makeWindowFrame(s *Smither, refs colRefs, orderTypes []*types.T) *tree.Wind
 			allowRangeWithOffsets = true
 		}
 	}
-	if frameMode == tree.RANGE && !allowRangeWithOffsets {
+	if frameMode == treewindow.RANGE && !allowRangeWithOffsets {
 		if s.coin() {
-			startBound.BoundType = tree.UnboundedPreceding
+			startBound.BoundType = treewindow.UnboundedPreceding
 		} else {
-			startBound.BoundType = tree.CurrentRow
+			startBound.BoundType = treewindow.CurrentRow
 		}
 		if s.coin() {
 			endBound = new(tree.WindowFrameBound)
 			if s.coin() {
-				endBound.BoundType = tree.CurrentRow
+				endBound.BoundType = treewindow.CurrentRow
 			} else {
-				endBound.BoundType = tree.UnboundedFollowing
+				endBound.BoundType = treewindow.UnboundedFollowing
 			}
 		}
 	} else {
 		// There are 5 bound types, but only 4 can be used for the start bound.
-		startBound.BoundType = tree.WindowFrameBoundType(s.rnd.Intn(4))
-		if startBound.BoundType == tree.OffsetFollowing {
+		startBound.BoundType = treewindow.WindowFrameBoundType(s.rnd.Intn(4))
+		if startBound.BoundType == treewindow.OffsetFollowing {
 			// With OffsetFollowing as the start bound, the end bound must be
 			// present and can either be OffsetFollowing or UnboundedFollowing.
 			endBound = new(tree.WindowFrameBound)
 			if s.coin() {
-				endBound.BoundType = tree.OffsetFollowing
+				endBound.BoundType = treewindow.OffsetFollowing
 			} else {
-				endBound.BoundType = tree.UnboundedFollowing
+				endBound.BoundType = treewindow.UnboundedFollowing
 			}
 		}
 		if endBound == nil && s.coin() {
@@ -526,19 +527,19 @@ func makeWindowFrame(s *Smither, refs colRefs, orderTypes []*types.T) *tree.Wind
 			// endBound cannot be "smaller" than startBound, so we will "prohibit" all
 			// such choices.
 			endBoundProhibitedChoices := int(startBound.BoundType)
-			if startBound.BoundType == tree.UnboundedPreceding {
+			if startBound.BoundType == treewindow.UnboundedPreceding {
 				// endBound cannot be UnboundedPreceding, so we always need to skip that
 				// choice.
 				endBoundProhibitedChoices = 1
 			}
-			endBound.BoundType = tree.WindowFrameBoundType(endBoundProhibitedChoices + s.rnd.Intn(5-endBoundProhibitedChoices))
+			endBound.BoundType = treewindow.WindowFrameBoundType(endBoundProhibitedChoices + s.rnd.Intn(5-endBoundProhibitedChoices))
 		}
 		// We will set offsets regardless of the bound type, but they will only be
 		// used when a bound is either OffsetPreceding or OffsetFollowing. Both
 		// ROWS and GROUPS mode need non-negative integers as bounds whereas RANGE
 		// mode takes the type as the single ORDER BY clause has.
 		typ := types.Int
-		if frameMode == tree.RANGE {
+		if frameMode == treewindow.RANGE {
 			typ = orderTypes[0]
 		}
 		startBound.OffsetExpr = makeScalar(s, typ, refs)

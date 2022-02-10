@@ -369,6 +369,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
