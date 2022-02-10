@@ -30,23 +30,23 @@ type blackHoleSink struct {
 	pool *sync.Pool
 
 	// Simulate a real sink.
-	ch chan *messageBlock
+	ch chan *block
 }
 
-var _ messageSink = &blackHoleSink{}
+var _ blockSink = &blackHoleSink{}
 
 func newBlackHoleSink(pool *sync.Pool, chanSize int) *blackHoleSink {
 	return &blackHoleSink{
 		pool: pool,
-		ch:   make(chan *messageBlock, chanSize),
+		ch:   make(chan *block, chanSize),
 	}
 }
 
 func (b *blackHoleSink) start() {
 	go func() {
-		for block := range b.ch {
-			*block = messageBlock{}
-			b.pool.Put(block)
+		for incomingBlock := range b.ch {
+			*incomingBlock = block{}
+			b.pool.Put(incomingBlock)
 		}
 	}()
 }
@@ -55,8 +55,8 @@ func (b *blackHoleSink) stop() {
 	close(b.ch)
 }
 
-// push implements messageSink interface.
-func (b *blackHoleSink) push(block *messageBlock) {
+// push implements blockSink interface.
+func (b *blackHoleSink) push(block *block) {
 	b.ch <- block
 }
 
@@ -75,13 +75,13 @@ func BenchmarkWriter(b *testing.B) {
 
 	ctx := context.Background()
 
-	run := func(b *testing.B, sink messageSink, blockPool *sync.Pool, numOfConcurrentWriter int) {
+	run := func(b *testing.B, sink blockSink, blockPool *sync.Pool, numOfConcurrentWriter int) {
 		starter := make(chan struct{})
 
 		w := newWriter(sink, blockPool)
 
 		b.ResetTimer()
-		b.SetBytes(messageBlockSize * entrySize)
+		b.SetBytes(blockSize * entrySize)
 		var wg sync.WaitGroup
 		for writerIdx := 0; writerIdx < numOfConcurrentWriter; writerIdx++ {
 			wg.Add(1)
@@ -109,16 +109,16 @@ func BenchmarkWriter(b *testing.B) {
 
 	type testSinkType struct {
 		name string
-		new  func() (_ messageSink, _ *sync.Pool, cleanup func())
+		new  func() (_ blockSink, _ *sync.Pool, cleanup func())
 	}
 
 	sinkTypes := []testSinkType{
 		{
 			name: "blackHole",
-			new: func() (_ messageSink, _ *sync.Pool, cleanup func()) {
+			new: func() (_ blockSink, _ *sync.Pool, cleanup func()) {
 				blockPool := &sync.Pool{
 					New: func() interface{} {
-						return &messageBlock{}
+						return &block{}
 					},
 				}
 
@@ -130,7 +130,7 @@ func BenchmarkWriter(b *testing.B) {
 		},
 		{
 			name: "real",
-			new: func() (_ messageSink, _ *sync.Pool, cleanup func()) {
+			new: func() (_ blockSink, _ *sync.Pool, cleanup func()) {
 				st := cluster.MakeTestingClusterSettings()
 				metrics := NewMetrics()
 				realSink := NewTxnIDCache(st, &metrics)
@@ -138,7 +138,7 @@ func BenchmarkWriter(b *testing.B) {
 				stopper := stop.NewStopper()
 				realSink.Start(ctx, stopper)
 
-				return realSink, realSink.messageBlockPool, func() {
+				return realSink, realSink.blockPool, func() {
 					stopper.Stop(ctx)
 				}
 			},
