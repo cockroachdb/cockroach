@@ -300,6 +300,13 @@ func (v TableImplicitRecordType) TransitioningRegionNames() (catpb.RegionNames, 
 		"can not get region names of a implicit table record type")
 }
 
+// SuperRegions implements the TypeDescriptor interface.
+func (v TableImplicitRecordType) SuperRegions() ([]descpb.SuperRegion, error) {
+	return nil, errors.AssertionFailedf(
+		"can not get super regions of a implicit table record type",
+	)
+}
+
 // GetArrayTypeID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetArrayTypeID() descpb.ID {
 	return 0

@@ -1936,6 +1936,43 @@ var varGen = map[string]sessionVar{
 			return strconv.FormatInt(int64(tabledesc.MaxBucketAllowed), 10)
 		},
 	},
+
+	// CockroachDB extension.
+	`enable_super_regions`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`enable_super_regions`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("enable_super_regions", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableSuperRegions(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSuperRegions), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(enableSuperRegions.Get(sv))
+		},
+	},
+
+	// CockroachDB extension.
+	`alter_primary_region_super_region_override`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`alter_primary_region_super_region_override`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("alter_primary_region_super_region_override", s)
+			if err != nil {
+				return err
+			}
+			m.SetEnableOverrideAlterPrimaryRegionInSuperRegion(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().OverrideAlterPrimaryRegionInSuperRegion), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(overrideAlterPrimaryRegionInSuperRegion.Get(sv))
+		}},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
