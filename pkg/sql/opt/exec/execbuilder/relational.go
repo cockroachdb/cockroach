@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2266,8 +2267,8 @@ func (b *Builder) extractWindowFunction(e opt.ScalarExpr) opt.ScalarExpr {
 	return b.extractWindowFunction(e.Child(0).(opt.ScalarExpr))
 }
 
-func (b *Builder) isOffsetMode(boundType tree.WindowFrameBoundType) bool {
-	return boundType == tree.OffsetPreceding || boundType == tree.OffsetFollowing
+func (b *Builder) isOffsetMode(boundType treewindow.WindowFrameBoundType) bool {
+	return boundType == treewindow.OffsetPreceding || boundType == treewindow.OffsetFollowing
 }
 
 func (b *Builder) buildFrame(input execPlan, w *memo.WindowsItem) (*tree.WindowFrame, error) {

@@ -32,6 +32,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treebin",  # keep
         "//pkg/sql/sem/tree/treecmp",  # keep
+        "//pkg/sql/sem/tree/treewindow",  # keep
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",

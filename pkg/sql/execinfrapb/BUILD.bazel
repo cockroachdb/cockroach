@@ -36,6 +36,7 @@ go_library(
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/transform",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
         "//pkg/util",

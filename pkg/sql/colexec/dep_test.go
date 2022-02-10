@@ -35,6 +35,7 @@ func TestNoLinkForbidden(t *testing.T) {
 		[]string{
 			"github.com/cockroachdb/cockroach/pkg/sql/catalog",
 			"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb",
+			"github.com/cockroachdb/cockroach/pkg/sql/tree",
 		}, nil,
 	)
 }
