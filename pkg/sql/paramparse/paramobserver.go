@@ -12,6 +12,7 @@ package paramparse
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -412,6 +413,12 @@ func (po *TableStorageParamObserver) onSet(
 	key string,
 	datum tree.Datum,
 ) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL whilst another schema change is in progress",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
@@ -420,6 +427,12 @@ func (po *TableStorageParamObserver) onSet(
 
 // onReset implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL whilst another schema change is in progress",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onReset(po, evalCtx, key)
 	}
