@@ -371,8 +371,7 @@ CREATE TABLE public.copy (
    j JSONB NULL,
    comp INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (k, a, b, j, comp, rowid)
+   CONSTRAINT copy_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Inaccessible expression index columns should not be copied if the indexes are
@@ -396,8 +395,7 @@ CREATE TABLE public.copy_generated (
    j JSONB NULL,
    comp INT8 NULL AS (1:::INT8 + 10:::INT8) VIRTUAL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (k, a, b, j, rowid)
+   CONSTRAINT copy_generated_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Inaccessible expression index columns should not be copied if the indexes are
@@ -424,8 +422,7 @@ CREATE TABLE public.copy_indexes (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING)),
-   FAMILY "primary" (k, a, b, j, comp)
+   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -452,8 +449,7 @@ CREATE TABLE public.copy_all (
    INDEX src_expr_idx ((a + b) ASC),
    INDEX named_idx ((a + 1:::INT8) ASC),
    UNIQUE INDEX src_expr_key ((a + 10:::INT8) ASC),
-   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING)),
-   FAMILY "primary" (k, a, b, j)
+   INVERTED INDEX src_expr_expr1_idx ((a + b), (j->'a':::STRING))
 )
 
 # Inaccessible expression index columns should be copied if the indexes are
@@ -918,8 +914,7 @@ t72012  CREATE TABLE public.t72012 (
         col INT8 NOT NULL,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
-        INDEX t72012_idx (abs(col) ASC),
-        FAMILY "primary" (col, rowid)
+        INDEX t72012_idx (abs(col) ASC)
 )
 
 statement ok

@@ -170,8 +170,7 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                               INDEX create_index_concurrently_idx (a ASC),
-                               FAMILY "primary" (a, rowid)
+                               INDEX create_index_concurrently_idx (a ASC)
 )
 
 query T noticetrace
@@ -192,8 +191,7 @@ SHOW CREATE TABLE create_index_concurrently_tbl
 create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                a INT8 NULL,
                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                               FAMILY "primary" (a, rowid)
+                               CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
