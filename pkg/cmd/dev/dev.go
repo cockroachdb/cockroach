@@ -133,8 +133,8 @@ Typical usage:
 	var debugVar bool
 	ret.cli.PersistentFlags().BoolVar(&debugVar, "debug", false, "enable debug logging for dev")
 	ret.cli.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		isDoctor := cmd.Name() == "doctor"
-		if !isDoctor {
+		skipDoctorCheck := cmd.Name() == "doctor" || cmd.Name() == "merge-test-xmls"
+		if !skipDoctorCheck {
 			if err := ret.checkDoctorStatus(cmd.Context()); err != nil {
 				return err
 			}
