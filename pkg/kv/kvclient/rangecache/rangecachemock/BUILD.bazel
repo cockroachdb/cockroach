@@ -10,6 +10,10 @@ gomock(
     library = "//pkg/kv/kvclient/rangecache",
     package = "rangecachemock",
     self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache/rangecachemock",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_library(

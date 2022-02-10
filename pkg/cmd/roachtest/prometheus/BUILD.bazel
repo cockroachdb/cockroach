@@ -34,4 +34,5 @@ gomock(
     interfaces = ["Cluster"],
     library = ":prometheus",
     package = "prometheus",
+    visibility = ["//visibility:public"],
 )

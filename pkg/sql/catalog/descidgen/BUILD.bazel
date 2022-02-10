@@ -18,12 +18,6 @@ go_library(
     ],
 )
 
-stringer(
-    name = "gen-descriptorkind-stringer",
-    src = "catalogkv.go",
-    typ = "DescriptorKind",
-)
-
 go_library(
     name = "descidgen",
     srcs = ["generate_id.go"],
