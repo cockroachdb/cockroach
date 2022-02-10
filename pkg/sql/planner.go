@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/lib/pq/oid"
 )
 
 // extendedEvalContext extends tree.EvalContext with fields that are needed for
@@ -99,6 +100,8 @@ type extendedEvalContext struct {
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
 	SchemaChangerState *SchemaChangerState
+
+	statementPreparer statementPreparer
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -807,6 +810,23 @@ func (p *planner) Ann() *tree.Annotations {
 func (p *planner) ExecutorConfig() interface{} {
 	return p.execCfg
 }
+
+// statementPreparer is an interface used when deserializing a session in order
+// to prepare statements.
+type statementPreparer interface {
+	// addPreparedStmt creates a prepared statement with the given name and type
+	// hints, and returns it.
+	addPreparedStmt(
+		ctx context.Context,
+		name string,
+		stmt Statement,
+		placeholderHints tree.PlaceholderTypes,
+		rawTypeHints []oid.Oid,
+		origin PreparedStatementOrigin,
+	) (*PreparedStatement, error)
+}
+
+var _ statementPreparer = &connExecutor{}
 
 // txnModesSetter is an interface used by SQL execution to influence the current
 // transaction.
