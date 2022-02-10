@@ -13,6 +13,7 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
 	"strings"
 	"time"
@@ -188,13 +189,28 @@ func (j *ScheduledJob) HasRecurringSchedule() bool {
 	return len(j.rec.ScheduleExpr) > 0
 }
 
+// parseCronExpr parses cron expression, with added support for
+// cockroach specific mnemonics.
+func parseCronExpr(expr string) (cron.Schedule, error) {
+	switch strings.ToLower(expr) {
+	case "@every_hour":
+		// Schedule runs once an hour at a randomly chosen minute.
+		return cron.ParseStandard(fmt.Sprintf("%d * * * *", rand.Intn(60)))
+	case "@every_day":
+		// Schedule runs once a day at a randomly chosen time.
+		return cron.ParseStandard(fmt.Sprintf("%d %d * * *", rand.Intn(60), rand.Intn(24)))
+	default:
+		return cron.ParseStandard(expr)
+	}
+}
+
 // Frequency returns how often this schedule executes.
 func (j *ScheduledJob) Frequency() (time.Duration, error) {
 	if !j.HasRecurringSchedule() {
 		return 0, errors.Newf(
 			"schedule %d is not periodic", j.rec.ScheduleID)
 	}
-	expr, err := cron.ParseStandard(j.rec.ScheduleExpr)
+	expr, err := parseCronExpr(j.rec.ScheduleExpr)
 	if err != nil {
 		return 0, errors.Wrapf(err,
 			"parsing schedule expression: %q; it must be a valid cron expression",
@@ -212,7 +228,7 @@ func (j *ScheduledJob) ScheduleNextRun() error {
 		return errors.Newf(
 			"cannot set next run for schedule %d (empty schedule)", j.rec.ScheduleID)
 	}
-	expr, err := cron.ParseStandard(j.rec.ScheduleExpr)
+	expr, err := parseCronExpr(j.rec.ScheduleExpr)
 	if err != nil {
 		return errors.Wrapf(err, "parsing schedule expression: %q", j.rec.ScheduleExpr)
 	}

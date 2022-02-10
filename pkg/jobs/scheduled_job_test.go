@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,4 +117,23 @@ func TestPauseUnpauseJob(t *testing.T) {
 	// Running schedules have nextRun set to non-null value
 	require.False(t, loaded.IsPaused())
 	require.False(t, loaded.NextRun().Equal(time.Time{}))
+}
+
+func TestCrdbCronExtensions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	frequency := func(s cron.Schedule) time.Duration {
+		notALeapYear := time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC)
+		nextRun := s.Next(notALeapYear)
+		return s.Next(nextRun).Sub(nextRun)
+	}
+
+	schedule, err := parseCronExpr("@every_hour")
+	require.NoError(t, err)
+	require.Equal(t, time.Hour, frequency(schedule))
+
+	schedule, err = parseCronExpr("@every_day")
+	require.NoError(t, err)
+	require.Equal(t, 24*time.Hour, frequency(schedule))
 }
