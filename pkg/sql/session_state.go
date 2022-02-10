@@ -109,7 +109,7 @@ func (p *planner) DeserializeSessionState(state *tree.DBytes) (*tree.DBool, erro
 			"can only deserialize matching session users",
 		)
 	}
-	if err := evalCtx.Planner.CheckCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
+	if err := p.checkCanBecomeUser(evalCtx.Context, sd.User()); err != nil {
 		return nil, err
 	}
 	*evalCtx.SessionData() = *sd

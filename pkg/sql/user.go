@@ -528,7 +528,7 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 		}
 	}
 
-	if err := p.CheckCanBecomeUser(ctx, becomeUser); err != nil {
+	if err := p.checkCanBecomeUser(ctx, becomeUser); err != nil {
 		return err
 	}
 
@@ -573,8 +573,9 @@ func (p *planner) setRole(ctx context.Context, local bool, s security.SQLUsernam
 
 }
 
-// CheckCanBecomeUser implements the EvalPlanner interface.
-func (p *planner) CheckCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error {
+// checkCanBecomeUser returns an error if the SessionUser cannot become the
+// becomeUser.
+func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser security.SQLUsername) error {
 	sessionUser := p.SessionData().SessionUser()
 
 	// Switching to None can always succeed.
