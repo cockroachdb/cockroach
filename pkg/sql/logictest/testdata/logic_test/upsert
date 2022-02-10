@@ -636,8 +636,7 @@ SELECT create_statement FROM [SHOW CREATE t29494]
 CREATE TABLE public.t29494 (
    x INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that the new column is not usable in RETURNING

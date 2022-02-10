@@ -301,8 +301,7 @@ fk1  CREATE TABLE public.fk1 (
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
      CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-     INDEX i2 (x ASC),
-     FAMILY "primary" (x, rowid)
+     INDEX i2 (x ASC)
 )
 
 # test that notices are generated on index drops
