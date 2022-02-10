@@ -365,7 +365,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 	// If there are any implicit partitioning columns in the primary index,
 	// these columns will need to be fetched.
 	primaryIndex := mb.tab.Index(cat.PrimaryIndex)
-	if primaryIndex.ImplicitPartitioningColumnCount() > 0 {
+	if primaryIndex.ImplicitColumnCount() > 0 {
 		return true
 	}
 
@@ -862,7 +862,7 @@ func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
 	// Never update primary key columns. Implicit partitioning columns are not
 	// considered part of the primary key in this case.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
-	skipCols := conflictIndex.ImplicitPartitioningColumnCount()
+	skipCols := conflictIndex.ImplicitColumnCount()
 	for i, n := skipCols, conflictIndex.KeyColumnCount(); i < n; i++ {
 		mb.updateColIDs[conflictIndex.Column(i).Ordinal()] = 0
 	}

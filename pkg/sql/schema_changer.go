@@ -2655,7 +2655,8 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 			}
 
 			if idx := m.AsIndex(); m.Adding() && m.DeleteOnly() && idx != nil {
-				if idx.IsSharded() {
+				// TODO (issue #76507): also pre-split partitioned hash sharded index.
+				if idx.IsSharded() && idx.GetPartitioning().PartitioningDesc().NumImplicitColumns == 0 {
 					splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
 					for _, shard := range splitAtShards {
 						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
