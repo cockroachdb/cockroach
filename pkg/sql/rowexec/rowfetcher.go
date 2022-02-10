@@ -80,22 +80,24 @@ func makeRowFetcher(
 	}
 	index := desc.ActiveIndexes()[indexIdx]
 
-	tableArgs := row.FetcherTableArgs{
-		Desc:    desc,
-		Index:   index,
-		Columns: columns,
+	colIDs := make([]descpb.ColumnID, len(columns))
+	for i := range colIDs {
+		colIDs[i] = columns[i].GetID()
+	}
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, flowCtx.Codec(), desc, index, colIDs); err != nil {
+		return nil, err
 	}
 
 	if err := fetcher.Init(
 		flowCtx.EvalCtx.Context,
-		flowCtx.Codec(),
 		reverseScan,
 		lockStrength,
 		lockWaitPolicy,
 		flowCtx.EvalCtx.SessionData().LockTimeout,
 		alloc,
 		mon,
-		tableArgs,
+		&spec,
 	); err != nil {
 		return nil, err
 	}

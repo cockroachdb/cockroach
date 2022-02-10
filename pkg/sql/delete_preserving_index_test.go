@@ -718,6 +718,7 @@ func fetchIndex(
 
 	mm := mon.MakeStandaloneBudget(1 << 30)
 	idx, err := table.FindIndexWithName(indexName)
+	require.NoError(t, err)
 	colIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 	var valsNeeded util.FastIntSet
 	{
@@ -737,30 +738,27 @@ func fetchIndex(
 			valsNeeded.Add(colIdxMap.GetDefault(colID))
 		})
 	}
-	var columns []catalog.Column
+	var columns []descpb.ColumnID
 	for i, col := range table.PublicColumns() {
 		if valsNeeded.Contains(i) {
-			columns = append(columns, col)
+			columns = append(columns, col.GetID())
 		}
 	}
 
-	require.NoError(t, err)
+	var spec descpb.IndexFetchSpec
+	require.NoError(t, rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, table, idx, columns))
+
 	spans := []roachpb.Span{table.IndexSpan(keys.SystemSQLCodec, idx.GetID())}
 	const reverse = false
 	require.NoError(t, fetcher.Init(
 		ctx,
-		keys.SystemSQLCodec,
 		reverse,
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0,
 		&alloc,
 		mm.Monitor(),
-		row.FetcherTableArgs{
-			Desc:    table,
-			Index:   idx,
-			Columns: columns,
-		},
+		&spec,
 	))
 
 	require.NoError(t, fetcher.StartScan(
