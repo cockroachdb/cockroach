@@ -263,6 +263,7 @@ genrule(
     name = "gen-batch-generated",
     outs = ["batch_generated-gen.go"],
     cmd = """
+     export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
      $(location //pkg/roachpb/gen) --filename=$(location batch_generated-gen.go)
        """,
     exec_tools = ["//pkg/roachpb/gen"],
