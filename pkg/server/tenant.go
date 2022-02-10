@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -60,9 +61,49 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (sqlServer *SQLServer, err error) {
-	sqlServer, _, _, _, _, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
-	return
+) (*SQLServerWrapper, error) {
+	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	if err != nil {
+		return nil, err
+	}
+	return &SQLServerWrapper{
+		SQLServer:   sqlServer,
+		authServer:  authServer,
+		drainServer: drainServer,
+		pgAddr:      pgAddr,
+		httpAddr:    httpAddr,
+	}, err
+}
+
+// SQLServerWrapper is a utility struct that encapsulates
+// a SQLServer and its helpers that make it a networked service.
+type SQLServerWrapper struct {
+	*SQLServer
+	authServer  *authenticationServer
+	drainServer *drainServer
+	pgAddr      string
+	httpAddr    string
+}
+
+// Drain idempotently activates the draining mode.
+// Note: new code should not be taught to use this method
+// directly. Use the Drain() RPC instead with a suitably crafted
+// DrainRequest.
+//
+// On failure, the system may be in a partially drained
+// state; the client should either continue calling Drain() or shut
+// down the server.
+//
+// The reporter function, if non-nil, is called for each
+// packet of load shed away from the server during the drain.
+//
+// TODO(knz): This method is currently exported for use by the
+// shutdown code in cli/start.go; however, this is a mis-design. The
+// start code should use the Drain() RPC like quit does.
+func (s *SQLServerWrapper) Drain(
+	ctx context.Context, verbose bool,
+) (remaining uint64, info redact.RedactableString, err error) {
+	return s.drainServer.runDrain(ctx, verbose)
 }
 
 // startTenantInternal is used to build TestServers.
