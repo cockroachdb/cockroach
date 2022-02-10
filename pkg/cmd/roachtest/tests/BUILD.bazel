@@ -241,4 +241,8 @@ gomock(
     interfaces = ["PromClient"],
     library = ":tests",
     package = "tests",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
