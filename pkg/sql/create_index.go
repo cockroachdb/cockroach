@@ -231,11 +231,9 @@ func makeIndexDescriptor(
 
 	if n.Sharded != nil {
 		if n.PartitionByIndex.ContainsPartitions() {
-			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning")
+			return nil, pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support explicit partitioning")
 		}
-		if tableDesc.IsLocalityRegionalByRow() {
-			return nil, hashShardedIndexesOnRegionalByRowError()
-		}
+
 		shardCol, newColumns, err := setupShardedIndex(
 			params.ctx,
 			params.EvalContext(),
@@ -512,6 +510,19 @@ func setupShardedIndex(
 		return nil, nil, hashShardedIndexesDisabledError
 	}
 
+	if !isNewTable && tableDesc.IsPartitionAllBy() {
+		partitionAllBy, err := partitionByFromTableDesc(evalCtx.Codec, tableDesc)
+		if err != nil {
+			return nil, nil, err
+		}
+		if anyColumnIsPartitioningField(columns, partitionAllBy) {
+			return nil, nil, pgerror.New(
+				pgcode.FeatureNotSupported,
+				`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
+			)
+		}
+	}
+
 	colNames := make([]string, 0, len(columns))
 	for _, c := range columns {
 		colNames = append(colNames, string(c.Column))
@@ -778,4 +789,15 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 		}
 	}
 	return nil
+}
+
+func anyColumnIsPartitioningField(columns tree.IndexElemList, partitionBy *tree.PartitionBy) bool {
+	for _, field := range partitionBy.Fields {
+		for _, column := range columns {
+			if field == column.Column {
+				return true
+			}
+		}
+	}
+	return false
 }

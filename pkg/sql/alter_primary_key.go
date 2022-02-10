@@ -86,9 +86,6 @@ func (p *planner) AlterPrimaryKey(
 		if !p.EvalContext().SessionData().HashShardedIndexesEnabled {
 			return hashShardedIndexesDisabledError
 		}
-		if tableDesc.IsLocalityRegionalByRow() {
-			return pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables")
-		}
 	}
 
 	// Ensure that other schema changes on this table are not currently
