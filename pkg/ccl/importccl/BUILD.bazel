@@ -121,6 +121,7 @@ go_test(
         "csv_internal_test.go",
         "csv_testdata_helpers_test.go",
         "exportcsv_test.go",
+        "exportparquet_test.go",
         "import_csv_mark_redaction_test.go",
         "import_into_test.go",
         "import_processor_test.go",
