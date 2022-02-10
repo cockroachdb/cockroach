@@ -614,6 +614,44 @@ var charts = []sectionDescription{
 	},
 	{
 		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Leases"},
+		},
+		Charts: []chartDescription{
+			{
+				Title: "Allocator Load-Based Lease Transfer Decisions",
+				Metrics: []string{
+					"kv.allocator.load_based_lease_transfers.should_transfer",
+					"kv.allocator.load_based_lease_transfers.significantly_switches_relative_disposition",
+					"kv.allocator.load_based_lease_transfers.missing_stats_for_existing_stores",
+					"kv.allocator.load_based_lease_transfers.delta_not_significant",
+					"kv.allocator.load_based_lease_transfers.existing_not_overfull",
+					"kv.allocator.load_based_lease_transfers.cannot_find_better_candidate",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Replicas"},
+		},
+		Charts: []chartDescription{
+			{
+				Title: "Allocator Load-Based Lease Transfer Decisions",
+				Metrics: []string{
+					"kv.allocator.load_based_replica_rebalancing.should_transfer",
+					"kv.allocator.load_based_replica_rebalancing.significantly_switches_relative_disposition",
+					"kv.allocator.load_based_replica_rebalancing.missing_stats_for_existing_store",
+					"kv.allocator.load_based_replica_rebalancing.delta_not_significant",
+					"kv.allocator.load_based_replica_rebalancing.existing_not_overfull",
+					"kv.allocator.load_based_replica_rebalancing.cannot_find_better_candidate",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{
 			{DistributionLayer, "Split Queue"},
 			{ReplicationLayer, "Split Queue"},
 		},

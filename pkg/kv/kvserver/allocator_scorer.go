@@ -105,7 +105,9 @@ type scorerOptions interface {
 	// the `eqClass`'s current stats are divergent enough to justify rebalancing
 	// replicas.
 	shouldRebalanceBasedOnThresholds(
-		ctx context.Context, eqClass equivalenceClass,
+		ctx context.Context,
+		eqClass equivalenceClass,
+		metrics AllocatorMetrics,
 	) bool
 	// balanceScore returns a discrete score (`balanceStatus`) based on whether
 	// the store represented by `sc` classifies as underfull, aroundTheMean, or
@@ -148,7 +150,7 @@ func (o rangeCountScorerOptions) deterministicForTesting() bool {
 }
 
 func (o rangeCountScorerOptions) shouldRebalanceBasedOnThresholds(
-	ctx context.Context, eqClass equivalenceClass,
+	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
 	store := eqClass.existing
 	sl := eqClass.candidateSL
@@ -276,7 +278,7 @@ func (o qpsScorerOptions) deterministicForTesting() bool {
 // stores to one of the candidate stores will lead to QPS convergence among the
 // stores in the equivalence class.
 func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
-	ctx context.Context, eqClass equivalenceClass,
+	ctx context.Context, eqClass equivalenceClass, metrics AllocatorMetrics,
 ) bool {
 	if len(eqClass.candidateSL.stores) == 0 {
 		return false
@@ -285,26 +287,32 @@ func (o qpsScorerOptions) shouldRebalanceBasedOnThresholds(
 	bestStore, declineReason := o.getRebalanceTargetToMinimizeDelta(eqClass)
 	switch declineReason {
 	case noBetterCandidate:
+		metrics.loadBasedReplicaRebalancingMetrics.CannotFindBetterCandidate.Inc(1)
 		log.VEventf(
 			ctx, 4, "could not find a better candidate to replace s%d", eqClass.existing.StoreID,
 		)
 	case existingNotOverfull:
+		metrics.loadBasedReplicaRebalancingMetrics.ExistingNotOverfull.Inc(1)
 		log.VEventf(ctx, 4, "existing store s%d is not overfull", eqClass.existing.StoreID)
 	case deltaNotSignificant:
+		metrics.loadBasedReplicaRebalancingMetrics.DeltaNotSignificant.Inc(1)
 		log.VEventf(
 			ctx, 4,
 			"delta between s%d and the next best candidate is not significant enough",
 			eqClass.existing.StoreID,
 		)
 	case significantlySwitchesRelativeDisposition:
+		metrics.loadBasedReplicaRebalancingMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
 		log.VEventf(
 			ctx, 4,
 			"rebalancing from s%[1]d to the next best candidate could make it significantly hotter than s%[1]d",
 			eqClass.existing.StoreID,
 		)
 	case missingStatsForExistingStore:
+		metrics.loadBasedReplicaRebalancingMetrics.MissingStatsForExistingStore.Inc(1)
 		log.VEventf(ctx, 4, "missing QPS stats for s%d", eqClass.existing.StoreID)
 	case shouldRebalance:
+		metrics.loadBasedReplicaRebalancingMetrics.ShouldRebalance.Inc(1)
 		var bestStoreQPS float64
 		for _, store := range eqClass.candidateSL.stores {
 			if bestStore == store.StoreID {
@@ -1056,6 +1064,7 @@ func rankedCandidateListForRebalancing(
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	options scorerOptions,
+	metrics AllocatorMetrics,
 ) []rebalanceOptions {
 	// 1. Determine whether existing replicas are valid and/or necessary.
 	existingStores := make(map[roachpb.StoreID]candidate)
@@ -1212,7 +1221,11 @@ func rankedCandidateListForRebalancing(
 	var shouldRebalanceCheck bool
 	if !needRebalance {
 		for _, eqClass := range equivalenceClasses {
-			if options.shouldRebalanceBasedOnThresholds(ctx, eqClass) {
+			if options.shouldRebalanceBasedOnThresholds(
+				ctx,
+				eqClass,
+				metrics,
+			) {
 				shouldRebalanceCheck = true
 				break
 			}

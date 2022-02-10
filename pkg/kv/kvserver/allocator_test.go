@@ -391,8 +391,7 @@ func createTestAllocatorWithKnobs(
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		},
-		knobs,
+		}, knobs, nil, /* storeMetrics */
 	)
 	return stopper, g, storePool, a, manual
 }
@@ -940,7 +939,11 @@ func TestAllocatorRebalanceBasedOnRangeCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		eqClass.existing = desc
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, eqClass)
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+			ctx,
+			eqClass,
+			a.metrics,
+		)
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -1345,7 +1348,9 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				}
 				eqClass.existing = desc
 				if a, e := a.scorerOptions().shouldRebalanceBasedOnThresholds(
-					context.Background(), eqClass,
+					context.Background(),
+					eqClass,
+					a.metrics,
 				), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf(
 						"[store %d]: shouldRebalanceBasedOnThresholds %t != expected %t", store.StoreID, a, e,
@@ -1490,7 +1495,11 @@ func TestAllocatorRebalanceByQPS(t *testing.T) {
 					existing:    desc,
 					candidateSL: sl,
 				}
-				result := options.shouldRebalanceBasedOnThresholds(ctx, eqClass)
+				result := options.shouldRebalanceBasedOnThresholds(
+					ctx,
+					eqClass,
+					a.metrics,
+				)
 				require.True(t, result)
 			} else {
 				t.Fatalf("unable to get store %d descriptor", remove.StoreID)
@@ -1656,7 +1665,11 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			existing:    desc,
 			candidateSL: sl,
 		}
-		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(ctx, eqClass)
+		result := a.scorerOptions().shouldRebalanceBasedOnThresholds(
+			ctx,
+			eqClass,
+			a.metrics,
+		)
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -1989,7 +2002,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 	defer stopper.Stop(ctx)
 
@@ -2366,7 +2379,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 	defer stopper.Stop(context.Background())
 
@@ -2431,7 +2444,7 @@ func TestAllocatorShouldTransferSuspected(t *testing.T) {
 	a := MakeAllocator(
 		storePool, func(string) (time.Duration, bool) {
 			return 0, true
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 	defer stopper.Stop(context.Background())
 
@@ -3372,6 +3385,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 				a.storePool.getLocalitiesByStore(existingRepls),
 				a.storePool.isStoreReadyForRoutineReplicaTransfer,
 				a.scorerOptions(),
+				a.metrics,
 			)
 			if len(tc.expected) > 0 {
 				require.Len(t, rebalanceOpts, 1)
@@ -5002,6 +5016,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			a.storePool.getLocalitiesByStore(existingRepls),
 			func(context.Context, roachpb.StoreID) bool { return true },
 			a.scorerOptions(),
+			a.metrics,
 		)
 		match := true
 		if len(tc.expected) != len(results) {
@@ -5207,7 +5222,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			a := MakeAllocator(
 				storePool, func(addr string) (time.Duration, bool) {
 					return c.latency[addr], true
-				}, nil, /* knobs */
+				}, nil /* knobs */, nil, /* storeMetrics */
 			)
 			target := a.TransferLeaseTarget(
 				ctx,
@@ -6787,7 +6802,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	a := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, true
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 
 	defer stopper.Stop(ctx)
@@ -6892,7 +6907,7 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	a := MakeAllocator(nil /* storePool */, nil /* nodeLatencyFn */, nil /* knobs */)
+	a := MakeAllocator(nil, nil, nil /* knobs */, nil /* storeMetrics */)
 	action, priority := a.ComputeAction(context.Background(), roachpb.SpanConfig{}, nil)
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -7422,7 +7437,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	alloc := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, false
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 
 	var wg sync.WaitGroup
@@ -7868,7 +7883,7 @@ func exampleRebalancing(
 	alloc := MakeAllocator(
 		sp, func(string) (time.Duration, bool) {
 			return 0, false
-		}, nil, /* knobs */
+		}, nil /* knobs */, nil, /* storeMetrics */
 	)
 
 	var wg sync.WaitGroup

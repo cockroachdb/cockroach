@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
@@ -350,14 +351,148 @@ func rangeUsageInfoForRepl(repl *Replica) RangeUsageInfo {
 	return info
 }
 
+var (
+	// Load-based lease transfers.
+	metaLBLeaseTransferCannotFindBetterCandidate = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.cannot_find_better_candidate",
+		Help: "The number times the allocator determined that the lease was on the best" +
+			" possible replica",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBLeaseTransferExistingNotOverfull = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.existing_not_overfull",
+		Help: "The number times the allocator determined that the lease was not on an" +
+			" overfull store",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBLeaseTransferDeltaNotSignificant = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.delta_not_significant",
+		Help: "The number times the allocator determined that the delta between the existing" +
+			" store and the best candidate was not significant",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBLeaseTransferMissingStatsForExistingStore = metric.Metadata{
+		Name:        "kv.allocator.load_based_lease_transfers.missing_stats_for_existing_stores",
+		Help:        "The number times the allocator was missing qps stats for the leaseholder",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBLeaseTransferSignificantlySwitchesRelativeDisposition = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.significantly_switches_relative_disposition",
+		Help: "The number times the allocator decided to not transfer the lease because" +
+			" it would invert the dispositions of the sending and the receiving stores",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBLeaseTransferShouldTransfer = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.should_transfer",
+		Help: "The number times the allocator determined that the lease should be" +
+			" transferred to another replica for better load distribution",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Load-based replica rebalances.
+	metaLBReplicaRebalancingCannotFindBetterCandidate = metric.Metadata{
+		Name: "kv.allocator.load_based_replica_rebalancing.cannot_find_better_candidate",
+		Help: "The number times the allocator determined that the range was on the best" +
+			" possible stores",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBReplicaRebalancingExistingNotOverfull = metric.Metadata{
+		Name: "kv.allocator.load_based_replica_rebalancing.existing_not_overfull",
+		Help: "The number times the allocator determined that none of the range's replicas" +
+			" were on overfull stores",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBReplicaRebalancingDeltaNotSignificant = metric.Metadata{
+		Name: "kv.allocator.load_based_replica_rebalancing.delta_not_significant",
+		Help: "The number times the allocator determined that the delta between an" +
+			" existing store and the best replacement candidate was not high enough",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBReplicaRebalancingMissingStatsForExistingStore = metric.Metadata{
+		Name:        "kv.allocator.load_based_replica_rebalancing.missing_stats_for_existing_store",
+		Help:        "The number times the allocator was missing the qps stats for the existing store",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBReplicaRebalancingSignificantlySwitchesRelativeDisposition = metric.Metadata{
+		Name: "kv.allocator.load_based_replica_rebalancing.significantly_switches_relative_disposition",
+		Help: "The number times the allocator decided to not rebalance the replica" +
+			" because it would invert the dispositions of the sending and the receiving stores",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaLBReplicaRebalancingShouldTransfer = metric.Metadata{
+		Name: "kv.allocator.load_based_replica_rebalancing.should_transfer",
+		Help: "The number times the allocator determined that the replica should be" +
+			" rebalanced to another store for better load distribution",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+type loadBasedLeaseTransferMetrics struct {
+	CannotFindBetterCandidate                *metric.Counter
+	ExistingNotOverfull                      *metric.Counter
+	DeltaNotSignificant                      *metric.Counter
+	MissingStatsForExistingStore             *metric.Counter
+	SignificantlySwitchesRelativeDisposition *metric.Counter
+	ShouldTransfer                           *metric.Counter
+}
+
+type loadBasedReplicaRebalancingMetrics struct {
+	CannotFindBetterCandidate                *metric.Counter
+	ExistingNotOverfull                      *metric.Counter
+	DeltaNotSignificant                      *metric.Counter
+	MissingStatsForExistingStore             *metric.Counter
+	SignificantlySwitchesRelativeDisposition *metric.Counter
+	ShouldRebalance                          *metric.Counter
+}
+
+// AllocatorMetrics capture metrics about the allocator's decisions.
+type AllocatorMetrics struct {
+	loadBasedLeaseTransferMetrics
+	loadBasedReplicaRebalancingMetrics
+}
+
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
 	storePool     *StorePool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
 	randGen       allocatorRand
+	metrics       AllocatorMetrics
 
 	knobs *AllocatorTestingKnobs
+}
+
+func makeAllocatorMetrics() AllocatorMetrics {
+	return AllocatorMetrics{
+		loadBasedLeaseTransferMetrics: loadBasedLeaseTransferMetrics{
+			CannotFindBetterCandidate:                metric.NewCounter(metaLBLeaseTransferCannotFindBetterCandidate),
+			ExistingNotOverfull:                      metric.NewCounter(metaLBLeaseTransferExistingNotOverfull),
+			DeltaNotSignificant:                      metric.NewCounter(metaLBLeaseTransferDeltaNotSignificant),
+			MissingStatsForExistingStore:             metric.NewCounter(metaLBLeaseTransferMissingStatsForExistingStore),
+			SignificantlySwitchesRelativeDisposition: metric.NewCounter(metaLBLeaseTransferSignificantlySwitchesRelativeDisposition),
+			ShouldTransfer:                           metric.NewCounter(metaLBLeaseTransferShouldTransfer),
+		},
+		loadBasedReplicaRebalancingMetrics: loadBasedReplicaRebalancingMetrics{
+			CannotFindBetterCandidate:                metric.NewCounter(metaLBReplicaRebalancingCannotFindBetterCandidate),
+			ExistingNotOverfull:                      metric.NewCounter(metaLBReplicaRebalancingExistingNotOverfull),
+			DeltaNotSignificant:                      metric.NewCounter(metaLBReplicaRebalancingDeltaNotSignificant),
+			MissingStatsForExistingStore:             metric.NewCounter(metaLBReplicaRebalancingMissingStatsForExistingStore),
+			SignificantlySwitchesRelativeDisposition: metric.NewCounter(metaLBReplicaRebalancingSignificantlySwitchesRelativeDisposition),
+			ShouldRebalance:                          metric.NewCounter(metaLBReplicaRebalancingShouldTransfer),
+		},
+	}
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -365,6 +500,7 @@ func MakeAllocator(
 	storePool *StorePool,
 	nodeLatencyFn func(addr string) (time.Duration, bool),
 	knobs *AllocatorTestingKnobs,
+	storeMetrics *StoreMetrics,
 ) Allocator {
 	var randSource rand.Source
 	// There are number of test cases that make a test store but don't add
@@ -375,12 +511,18 @@ func MakeAllocator(
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
-	return Allocator{
+	allocator := Allocator{
 		storePool:     storePool,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
+		metrics:       makeAllocatorMetrics(),
 		knobs:         knobs,
 	}
+	if storeMetrics != nil {
+		storeMetrics.registry.AddMetricStruct(allocator.metrics.loadBasedLeaseTransferMetrics)
+		storeMetrics.registry.AddMetricStruct(allocator.metrics.loadBasedReplicaRebalancingMetrics)
+	}
+	return allocator
 }
 
 // GetNeededVoters calculates the number of voters a range should have given its
@@ -1073,6 +1215,7 @@ func (a Allocator) rebalanceTarget(
 		a.storePool.getLocalitiesByStore(replicaSetForDiversityCalc),
 		a.storePool.isStoreReadyForRoutineReplicaTransfer,
 		options,
+		a.metrics,
 	)
 
 	if len(results) == 0 {
@@ -1456,15 +1599,18 @@ func (a *Allocator) TransferLeaseTarget(
 
 		switch noRebalanceReason {
 		case noBetterCandidate:
+			a.metrics.loadBasedLeaseTransferMetrics.CannotFindBetterCandidate.Inc(1)
 			log.VEventf(ctx, 5, "r%d: could not find a better target for lease", leaseRepl.GetRangeID())
 			return roachpb.ReplicaDescriptor{}
 		case existingNotOverfull:
+			a.metrics.loadBasedLeaseTransferMetrics.ExistingNotOverfull.Inc(1)
 			log.VEventf(
 				ctx, 5, "r%d: existing leaseholder s%d is not overfull",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
 			)
 			return roachpb.ReplicaDescriptor{}
 		case deltaNotSignificant:
+			a.metrics.loadBasedLeaseTransferMetrics.DeltaNotSignificant.Inc(1)
 			log.VEventf(
 				ctx, 5,
 				"r%d: delta between s%d and the coldest follower (ignoring r%d's lease) is not large enough",
@@ -1472,17 +1618,20 @@ func (a *Allocator) TransferLeaseTarget(
 			)
 			return roachpb.ReplicaDescriptor{}
 		case significantlySwitchesRelativeDisposition:
+			a.metrics.loadBasedLeaseTransferMetrics.SignificantlySwitchesRelativeDisposition.Inc(1)
 			log.VEventf(ctx, 5,
 				"r%d: lease transfer away from s%d would make it hotter than the coldest follower",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID())
 			return roachpb.ReplicaDescriptor{}
 		case missingStatsForExistingStore:
+			a.metrics.loadBasedLeaseTransferMetrics.MissingStatsForExistingStore.Inc(1)
 			log.VEventf(
 				ctx, 5, "r%d: missing stats for leaseholder s%d",
 				leaseRepl.GetRangeID(), leaseRepl.StoreID(),
 			)
 			return roachpb.ReplicaDescriptor{}
 		case shouldRebalance:
+			a.metrics.loadBasedLeaseTransferMetrics.ShouldTransfer.Inc(1)
 			log.VEventf(
 				ctx,
 				5,
