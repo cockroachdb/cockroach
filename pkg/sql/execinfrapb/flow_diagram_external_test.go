@@ -80,7 +80,7 @@ func TestPlanDiagramTableReaderWrapColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJyMk0Gr2zAQhO_9FWbPglpJk7Y-FUqggbZpk96KWVRrcQSypGrlJm7wfy-2D6EPnvIuhp1vZwTL-Ab820IFp8OXXXH6_rn4tDvuQIDzmr6qjhiqnyChFhCib4jZx0m6zQt7fYWqFGBc6NMk1wIaHwmqGySTLEEFP9QvS0dSmuLrEgRoSsrYOTYRpw8hmk7FAQR89LbvHFdFOhtGw6jwD8UBrXctOtURllJk4CoH1wIEZPibnHmTg9sHyW9z5nc5-D6fLMuMWeZOJVcPktc5c-5UcvMgeSuKqyiGJ1vcB4qo5-99OZ1VmvikUJxGh8oNGEmxd1Ov8BJVCMa1aE1nEiqnses5oQqBVETv0CRGf3FojaP51b9QjwJ8n-6d5aRagkqO4uW9PhIH75j-q_RzyeVYCyDd0vLvsO9jQ9-ib-ZnlvEw-2ZBE6eFymXYuwWN9fjqXwAAAP__T4VS9w=="
+	expectedURL := "https://cockroachdb.github.io/distsqlplan/decode.html#eJyMk1Hr0zAUxd_9FOU-B2w2N7VPggwcqNPNNymX2Fy6YJrE3NStjn53afswFP7Z_yVwz--eEwgnN-BfFio4HT7titPXj8WH3XEHApzX9Fl1xFB9Bwm1gBB9Q8w-TtJtXtjrK1SlAONCnya5FtD4SFDdIJlkCSr4pn5YOpLSFF-WIEBTUsbOsYk4vZsODD9pAAHvve07x1WRzobRMCr8TXFA612LTnWEpRQZuMrBtQABGf4qZ97k4PZB8uuc-U0Ovs0nyzJjlrmnkqsHyeucOfdUcvMgeSuKqyiG_7a4DxRRz-d9OZ1VmvikUJxGh8oNGEmxd1Oz8BJVCMa1aE1nEiqnses5oQqBVETv0CRGf3FojaP51j9QjwJ8n-6t5aRagkqO4vnNPhIH75j-KfVTyeVYCyDd0vJ72PexoS_RN_M1y3iYfbOgidNC5TLs3YLGenzxNwAA__9IF1PL"
 	if url.String() != expectedURL {
 		t.Errorf("expected `%s` got `%s`", expectedURL, url.String())
 	}
