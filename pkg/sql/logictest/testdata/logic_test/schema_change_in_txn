@@ -721,6 +721,12 @@ CREATE UNIQUE INDEX i_idx ON customers (i)
 statement ok
 CREATE UNIQUE INDEX n_idx ON customers (n)
 
+# Validate that pending jobs show within a transactions before its committed.
+query TTT
+SELECT status, started, job_type FROM crdb_internal.jobs WHERE status='pending'
+----
+pending    NULL                                    SCHEMA CHANGE
+
 statement error pgcode XXA00 violates unique constraint
 COMMIT
 
