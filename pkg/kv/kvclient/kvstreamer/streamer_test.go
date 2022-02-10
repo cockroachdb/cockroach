@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -114,8 +113,6 @@ func TestLargeKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, "the test inserts large blobs, and the machine can be overloaded when under stress")
-
 	rng, _ := randutil.NewTestRand()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ctx := context.Background()
@@ -123,17 +120,19 @@ func TestLargeKeys(t *testing.T) {
 
 	// Lower the distsql_workmem limit so that we can operate with smaller
 	// blobs. Note that the joinReader in the row-by-row engine will override
-	// the limit if it is lower than 8MiB, so we cannot go lower than that here.
-	_, err := db.Exec("SET distsql_workmem='8MiB'")
+	// the limit if it is lower than 100KiB, so we cannot go lower than that
+	// here.
+	_, err := db.Exec("SET distsql_workmem='100KiB'")
 	require.NoError(t, err)
-	// In both engines, the index joiner buffers input rows up to 4MiB in size,
-	// so we have a couple of interesting options for the blob size:
-	// - 3000000 is interesting because it doesn't exceed the buffer size, yet
-	// two rows with such blobs do exceed it. The index joiners are expected to
-	// to process each row on its own.
-	// - 5000000 is interesting because a single row already exceeds the buffer
+	// In both engines, the index joiner will buffer input rows up to a quarter
+	// of workmem limit, so we have a couple of interesting options for the blob
+	// size:
+	// - 20000 is interesting because it doesn't exceed the buffer size, yet two
+	// rows with such blobs do exceed it. The index joiners are expected to to
+	// process each row on its own.
+	// - 40000 is interesting because a single row already exceeds the buffer
 	// size.
-	for _, blobSize := range []int{3000000, 5000000} {
+	for _, blobSize := range []int{20000, 40000} {
 		// onlyLarge determines whether only large blobs are inserted or a mix
 		// of large and small blobs.
 		for _, onlyLarge := range []bool{false, true} {
