@@ -26,6 +26,7 @@ FROM [SHOW ALL]
 WHERE variable != 'optimizer' AND variable != 'crdb_version' AND variable != 'session_id'
 ----
 variable                                              value
+alter_primary_region_super_region_override            off
 application_name                                      ·
 avoid_buffering                                       off
 backslash_quote                                       safe_encoding
@@ -57,6 +58,7 @@ enable_implicit_select_for_update                     on
 enable_insert_fast_path                               on
 enable_multiregion_placement_policy                   off
 enable_seqscan                                        on
+enable_super_regions                                  off
 enable_zigzag_join                                    on
 escape_string_warning                                 on
 experimental_distsql_planning                         off
