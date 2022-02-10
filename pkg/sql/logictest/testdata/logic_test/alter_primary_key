@@ -450,8 +450,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC),
-   FAMILY "primary" (rowid, rowid_1)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid_1 ASC)
 )
 
 statement ok
@@ -463,8 +462,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    rowid INT8 NOT NULL,
    rowid_1 INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (rowid, rowid_1)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Regression for old primary key not using PrimaryIndexEncoding as its encoding type.
@@ -535,8 +533,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC)
 )
 
 statement ok
@@ -551,8 +548,7 @@ t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    crdb_internal_x_shard_4 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 4:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
 )
 
 statement ok
@@ -566,8 +562,7 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
    x INT8 NOT NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT my_pk PRIMARY KEY (x ASC),
-   FAMILY "primary" (x, rowid)
+   CONSTRAINT my_pk PRIMARY KEY (x ASC)
 )
 
 statement ok
@@ -944,8 +939,7 @@ t  CREATE TABLE public.t (
    crdb_internal_x_shard_2 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 2:::INT8)) VIRTUAL,
    x INT8 NOT NULL,
    crdb_internal_x_shard_3 INT4 NOT VISIBLE NOT NULL AS (mod(fnv32(crdb_internal.datums_to_bytes(x)), 3:::INT8)) VIRTUAL,
-   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3),
-   FAMILY "primary" (x)
+   CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=3)
 )
 
 # Changes on a hash sharded index that change the columns will cause the old
@@ -1236,13 +1230,12 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1273,14 +1266,13 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
-    UNIQUE INDEX t_k_key (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (b ASC, k ASC),
+   UNIQUE INDEX t_k_key (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort
@@ -1318,15 +1310,14 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE t];
 ----
 CREATE TABLE public.t (
-    a INT8 NOT NULL,
-    b INT8 NOT NULL,
-    k INT8 NOT NULL AS (a + b) VIRTUAL,
-    CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-    UNIQUE INDEX t_b_k_key (b ASC, k ASC),
-    UNIQUE INDEX t_k_key (k ASC),
-    UNIQUE INDEX t_a_key (a ASC),
-    INDEX t_idx_b_k (b ASC, k ASC),
-    FAMILY "primary" (a, b)
+   a INT8 NOT NULL,
+   b INT8 NOT NULL,
+   k INT8 NOT NULL AS (a + b) VIRTUAL,
+   CONSTRAINT t_pkey PRIMARY KEY (a ASC),
+   UNIQUE INDEX t_b_k_key (b ASC, k ASC),
+   UNIQUE INDEX t_k_key (k ASC),
+   UNIQUE INDEX t_a_key (a ASC),
+   INDEX t_idx_b_k (b ASC, k ASC)
 )
 
 query III colnames,rowsort

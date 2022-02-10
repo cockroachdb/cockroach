@@ -75,8 +75,7 @@ t           CREATE TABLE public.t (
             a INT8 NOT NULL,
             i INT8 NULL,
             CONSTRAINT t_pkey PRIMARY KEY (a ASC),
-            INDEX idx2 (i ASC),
-            FAMILY "primary" (a, i)
+            INDEX idx2 (i ASC)
 )
 
 statement ok
@@ -286,8 +285,7 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
     x STRING NULL,
     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
-    FAMILY "primary" (x, rowid)
+    CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
@@ -445,8 +443,7 @@ table_name  create_statement
 t24         CREATE TABLE public.t24 (
             x STRING NULL,
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC),
-            FAMILY "primary" (x, rowid)
+            CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform

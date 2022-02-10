@@ -17,8 +17,7 @@ with_no_column_refs  CREATE TABLE public.with_no_column_refs (
                      b INT8 NULL,
                      c INT8 NULL AS (3:::INT8) STORED,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC),
-                     FAMILY "primary" (a, b, c, rowid)
+                     CONSTRAINT with_no_column_refs_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -37,8 +36,7 @@ extra_parens  CREATE TABLE public.extra_parens (
               b INT8 NULL,
               c INT8 NULL AS (3:::INT8) STORED,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC),
-              FAMILY "primary" (a, b, c, rowid)
+              CONSTRAINT extra_parens_pkey PRIMARY KEY (rowid ASC)
 )
 
 
@@ -93,8 +91,7 @@ x  CREATE TABLE public.x (
    c INT8 NULL AS (a) STORED,
    d INT8 NULL AS (a + b) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, c, d, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 query TTBTTTB colnames
@@ -721,8 +718,7 @@ x  CREATE TABLE public.x (
    a INT8 NULL,
    b INT8 NULL AS (a) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -746,8 +742,7 @@ x  CREATE TABLE public.x (
    c INT8 NULL,
    b INT8 NULL AS (c) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (c, b, rowid)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -788,8 +783,7 @@ x  CREATE TABLE public.x (
    b INT8 NULL AS (a * 2:::INT8) STORED,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    c INT8 NOT NULL AS (a + 4:::INT8) STORED,
-   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, b, rowid, c)
+   CONSTRAINT x_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -922,8 +916,7 @@ t42418  CREATE TABLE public.t42418 (
         x INT8 NULL AS (1:::INT8) STORED,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
         y INT8 NULL AS (1:::INT8) STORED,
-        CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC),
-        FAMILY "primary" (x, rowid, y)
+        CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Tests for computed column rewrites.
@@ -980,8 +973,7 @@ CREATE TABLE public.trewrite_copy (
    k INT8 NOT NULL,
    ts TIMESTAMPTZ NULL,
    c STRING NULL AS (timezone('utc':::STRING, ts)::STRING) STORED,
-   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-   FAMILY "primary" (k, ts, c)
+   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC)
 )
 
 statement ok

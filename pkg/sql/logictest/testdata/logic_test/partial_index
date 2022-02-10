@@ -125,8 +125,7 @@ t6  CREATE TABLE public.t6 (
     UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
     INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
     INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
-    INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
-    FAMILY "primary" (a, rowid)
+    INDEX t6i3 (a DESC) WHERE a > 8:::INT8
 )
 
 # Renaming a column updates the index predicates.
@@ -149,8 +148,7 @@ t6  CREATE TABLE public.t6 (
     UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
-    FAMILY "primary" (b, rowid)
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8
 )
 
 # Renaming a table keeps the index predicates intact.
@@ -173,8 +171,7 @@ t7  CREATE TABLE public.t7 (
     UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
     INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
     INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-    INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
-    FAMILY "primary" (b, rowid)
+    INDEX t6i3 (b DESC) WHERE b > 8:::INT8
 )
 
 # Dropping a column referenced in the predicate drops the index.
@@ -221,8 +218,7 @@ t10  CREATE TABLE public.t10 (
      b INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT t9_pkey PRIMARY KEY (rowid ASC),
-     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8,
-     FAMILY "primary" (a, b, rowid)
+     INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
 )
 
 # SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.

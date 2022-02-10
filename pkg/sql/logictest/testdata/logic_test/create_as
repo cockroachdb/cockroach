@@ -158,8 +158,7 @@ foo5  CREATE TABLE public.foo5 (
       a INT8 NULL,
       b INT8 NOT NULL,
       c INT8 NULL,
-      CONSTRAINT foo5_pkey PRIMARY KEY (b ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT foo5_pkey PRIMARY KEY (b ASC)
 )
 
 statement ok
@@ -176,8 +175,7 @@ foo6  CREATE TABLE public.foo6 (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NULL,
-      CONSTRAINT foo6_pkey PRIMARY KEY (a ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT foo6_pkey PRIMARY KEY (a ASC)
 )
 
 statement error generate insert row: null value in column "x" violates not-null constraint
@@ -192,8 +190,7 @@ SHOW CREATE TABLE foo8
 foo8  CREATE TABLE public.foo8 (
       item STRING NOT NULL,
       qty INT8 NULL,
-      CONSTRAINT foo8_pkey PRIMARY KEY (item ASC),
-      FAMILY "primary" (item, qty)
+      CONSTRAINT foo8_pkey PRIMARY KEY (item ASC)
 )
 
 # Allow CREATE TABLE AS to specify composite primary keys.
@@ -212,8 +209,7 @@ foo9  CREATE TABLE public.foo9 (
       a INT8 NOT NULL,
       b INT8 NULL,
       c INT8 NOT NULL,
-      CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC)
 )
 
 statement ok
@@ -226,8 +222,7 @@ foo10  CREATE TABLE public.foo10 (
        a INT8 NOT NULL,
        b INT8 NOT NULL,
        c INT8 NOT NULL,
-       CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC),
-       FAMILY "primary" (a, b, c)
+       CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC)
 )
 
 statement ok
@@ -245,8 +240,7 @@ foo11  CREATE TABLE public.foo11 (
        x INT8 NOT NULL,
        y INT8 NULL,
        z INT8 NOT NULL,
-       CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC),
-       FAMILY "primary" (x, y, z)
+       CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC)
 )
 
 statement error pq: multiple primary keys for table "foo12" are not allowed

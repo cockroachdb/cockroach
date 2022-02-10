@@ -1241,8 +1241,7 @@ SHOW CREATE TABLE non_mr_table
 non_mr_table                                    CREATE TABLE public.non_mr_table (
                                                 i INT8 NULL,
                                                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                                CONSTRAINT non_mr_table_pkey PRIMARY KEY (rowid ASC),
-                                                FAMILY "primary" (i, rowid)
+                                                CONSTRAINT non_mr_table_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 

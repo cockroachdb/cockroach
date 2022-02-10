@@ -236,8 +236,7 @@ ORDER BY object_type, object_name`, full)
 		a INT8 NOT NULL,
 		b INT8 NULL,
 		CONSTRAINT tablea_pkey PRIMARY KEY (a ASC),
-		INDEX tablea_b_idx (b ASC),
-		FAMILY "primary" (a, b)
+		INDEX tablea_b_idx (b ASC)
 	)`
 		expectedCreateView := "CREATE VIEW viewa (\n\ta\n) AS SELECT a FROM data.public.tablea"
 		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
@@ -271,15 +270,13 @@ ORDER BY object_type, object_name`, full)
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
-				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a),
-				FAMILY "primary" (a, b)
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a)
 			)`
 		wantDiffDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
-				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a),
-				FAMILY "primary" (a, b)
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a)
 			)`
 
 		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS '%s'] WHERE object_type='table'`, includedFK))
@@ -303,8 +300,7 @@ ORDER BY object_type, object_name`, full)
 		want := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
-				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
-				FAMILY "primary" (a, b)
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC)
 			)`
 
 		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS '%s'] WHERE object_type='table'`, missingFK))
@@ -607,15 +603,15 @@ func showUpgradedForeignKeysTest(exportDir string) func(t *testing.T) {
 		for _, tc := range []testCase{
 			{
 				"circular",
-				"CONSTRAINT self_fk FOREIGN KEY \\(selfid\\) REFERENCES public\\.circular\\(selfid\\) NOT VALID,",
+				"CONSTRAINT self_fk FOREIGN KEY \\(selfid\\) REFERENCES public\\.circular\\(selfid\\) NOT VALID",
 			},
 			{
 				"child",
-				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\),",
+				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
 			},
 			{
 				"child_pk",
-				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\),",
+				"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
 			},
 		} {
 			results := sqlDB.QueryStr(t, `
