@@ -3777,6 +3777,16 @@ func (ctx *EvalContext) PopIVarContainer() {
 	ctx.iVarContainerStack = ctx.iVarContainerStack[:len(ctx.iVarContainerStack)-1]
 }
 
+// QualityOfService returns the current value of session setting
+// default_transaction_quality_of_service if session data is available,
+// otherwise the default value (0).
+func (ctx *EvalContext) QualityOfService() sessiondatapb.QoSLevel {
+	if ctx.SessionData() == nil {
+		return sessiondatapb.Normal
+	}
+	return ctx.SessionData().DefaultTxnQualityOfService
+}
+
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext
 // that returns a pointer.
 func NewTestingEvalContext(st *cluster.Settings) *EvalContext {

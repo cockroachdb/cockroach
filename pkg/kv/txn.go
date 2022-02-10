@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -139,10 +140,17 @@ func NewTxn(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
 // NewTxnWithSteppingEnabled is like NewTxn but suitable for use by SQL. Note
 // that this initializes Txn.admissionHeader to specify that the source is
 // FROM_SQL.
-func NewTxnWithSteppingEnabled(ctx context.Context, db *DB, gatewayNodeID roachpb.NodeID) *Txn {
+// qualityOfService is the QoSLevel level to use in admission control, whose
+// value also corresponds exactly with the admission.WorkPriority to use.
+func NewTxnWithSteppingEnabled(
+	ctx context.Context,
+	db *DB,
+	gatewayNodeID roachpb.NodeID,
+	qualityOfService sessiondatapb.QoSLevel,
+) *Txn {
 	txn := NewTxn(ctx, db, gatewayNodeID)
 	txn.admissionHeader = roachpb.AdmissionHeader{
-		Priority:   int32(admission.NormalPri),
+		Priority:   int32(qualityOfService),
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     roachpb.AdmissionHeader_FROM_SQL,
 	}
@@ -1662,7 +1670,7 @@ func (txn *Txn) AdmissionHeader() roachpb.AdmissionHeader {
 		// the transaction throughput by 10+%. In that experiment 40% of the
 		// BatchRequests evaluated by KV had been assigned high priority due to
 		// locking.
-		h.Priority = int32(admission.HighPri)
+		h.Priority = int32(admission.LockingPri)
 	}
 	return h
 }

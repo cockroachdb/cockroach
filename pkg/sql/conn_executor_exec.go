@@ -834,7 +834,8 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		// Create a new transaction to retry with a higher timestamp than the
 		// timestamps used in the retry loop above.
 		userPriority := ex.state.mu.txn.UserPriority()
-		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+		ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
+			ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
 		if err := ex.state.mu.txn.SetUserPriority(userPriority); err != nil {
 			return err
 		}
@@ -1528,12 +1529,29 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				mode,
 				sqlTs,
 				historicalTs,
-				ex.transitionCtx)
+				ex.transitionCtx,
+				ex.QualityOfService())
 	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
 		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		return ex.makeErrEvent(errNoTransactionInProgress, ast)
 	default:
-		return ex.beginImplicitTxn(ctx, ast)
+		// NB: Implicit transactions are created with the session's default
+		// historical timestamp even though the statement itself might contain
+		// an AOST clause. In these cases the clause is evaluated and applied
+		// execStmtInOpenState.
+		noBeginStmt := (*tree.BeginTransaction)(nil)
+		mode, sqlTs, historicalTs, err := ex.beginTransactionTimestampsAndReadMode(ctx, noBeginStmt)
+		if err != nil {
+			return ex.makeErrEvent(err, s)
+		}
+		return eventStartImplicitTxn,
+			makeEventTxnStartPayload(
+				ex.txnPriorityWithSessionDefault(tree.UnspecifiedUserPriority),
+				mode,
+				sqlTs,
+				historicalTs,
+				ex.transitionCtx,
+				ex.QualityOfService())
 	}
 }
 
@@ -1563,6 +1581,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			sqlTs,
 			historicalTs,
 			ex.transitionCtx,
+			ex.QualityOfService(),
 		)
 }
 

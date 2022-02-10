@@ -582,6 +582,47 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestInternalExecutorWithDefinedQoSOverrideDoesNotPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.TTLLow
+	_, err := ie.ExecEx(
+		ctx, "defined_quality_of_service_level_does_not_panic", nil,
+		sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+		"SELECT 1",
+	)
+	require.NoError(t, err)
+}
+
+func TestInternalExecutorWithUndefinedQoSOverridePanics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	qosLevel := sessiondatapb.QoSLevel(122)
+	// Only defined QoSLevels are currently allowed.
+	require.Panics(t, func() {
+		_, err := ie.ExecEx(
+			ctx,
+			"undefined_quality_of_service_level_panics",
+			nil, /* txn */
+			sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+			"SELECT 1",
+		)
+		require.Error(t, err)
+	})
+}
+
 // TODO(andrei): Test that descriptor leases are released by the
 // InternalExecutor, with and without a higher-level txn. When there is no
 // higher-level txn, the leases are released normally by the txn finishing. When
