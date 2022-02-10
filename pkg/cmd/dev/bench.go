@@ -110,6 +110,10 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", "-test.bench=.")
 	} else {
 		args = append(args, "--test_arg", fmt.Sprintf("-test.bench=%s", filter))
+		// For sharded test packages, it doesn't make much sense to spawn multiple
+		// test processes that don't end up running anything. Default to running
+		// things in a single process if a filter is specified.
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 	if short {
 		args = append(args, "--test_arg", "-test.short")
