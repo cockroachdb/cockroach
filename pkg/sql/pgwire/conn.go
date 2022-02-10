@@ -216,6 +216,12 @@ func (c *conn) GetErr() error {
 	return nil
 }
 
+func (c *conn) sendError(ctx context.Context, execCfg *sql.ExecutorConfig, err error) {
+	if err := writeErr(ctx, &execCfg.Settings.SV, err, &c.msgBuilder, c.conn); err != nil {
+		log.Error(ctx, err.Error())
+	}
+}
+
 func (c *conn) authLogEnabled() bool {
 	return c.alwaysLogAuthActivity || logSessionAuth.Get(c.sv)
 }
@@ -661,6 +667,15 @@ func (c *conn) processCommandsAsync(
 			ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
 		); retErr != nil {
 			// Auth failed or some other error.
+			return
+		}
+
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
+		}
+		defer sqlServer.DecrementConnectionCount()
+
+		if retErr = c.authOKMessage(); retErr != nil {
 			return
 		}
 

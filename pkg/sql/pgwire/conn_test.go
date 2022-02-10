@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
@@ -1782,4 +1783,161 @@ func TestRoleDefaultSettings(t *testing.T) {
 			require.Equal(t, tc.expectedSearchPath, actual)
 		})
 	}
+}
+
+func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	testServer, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer testServer.Stopper().Stop(ctx)
+
+	// Users.
+	admin := security.RootUser
+	nonAdmin := security.TestUser
+
+	// openConnWithUser opens a connection to the testServer for the given user
+	// and always returns an associated cleanup function, even in case of error,
+	// which should be called. The returned cleanup function is idempotent.
+	openConnWithUser := func(user string) (*pgx.Conn, func(), error) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t,
+			testServer.ServingSQLAddr(),
+			t.Name(),
+			url.UserPassword(user, user),
+			user == admin,
+		)
+		defer cleanup()
+		connCfg, err := pgx.ParseConfig(pgURL.String())
+		require.NoError(t, err)
+		conn, err := pgx.ConnectConfig(ctx, connCfg)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		return conn, func() {
+			require.NoError(t, conn.Close(ctx))
+		}, nil
+	}
+
+	openConnWithUserSuccess := func(user string) (*pgx.Conn, func()) {
+		conn, cleanup, err := openConnWithUser(user)
+		if err != nil {
+			defer cleanup()
+			t.FailNow()
+		}
+		return conn, cleanup
+	}
+
+	openConnWithUserError := func(user string) {
+		_, cleanup, err := openConnWithUser(user)
+		defer cleanup()
+		require.Error(t, err)
+		var pgErr *pgconn.PgError
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, pgcode.TooManyConnections.String(), pgErr.Code)
+	}
+
+	getConnectionCount := func() int {
+		return int(testServer.SQLServer().(*sql.Server).GetConnectionCount())
+	}
+
+	getMaxConnections := func() int {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		rows, err := conn.Query(ctx, "SHOW CLUSTER SETTING server.max_connections_per_gateway")
+		require.NoError(t, err)
+		defer rows.Close()
+		var maxConnections int
+		require.Equal(t, true, rows.Next())
+		err = rows.Scan(&maxConnections)
+		require.NoError(t, err)
+		return maxConnections
+	}
+
+	setMaxConnections := func(maxConnections int) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, fmt.Sprintf("SET CLUSTER SETTING server.max_connections_per_gateway = %d", maxConnections))
+		require.NoError(t, err)
+	}
+
+	createUser := func(user string) {
+		conn, cleanup := openConnWithUserSuccess(admin)
+		defer cleanup()
+		_, err := conn.Exec(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD '%[1]s'", user))
+		require.NoError(t, err)
+	}
+
+	// create nonAdmin
+	createUser(nonAdmin)
+	require.Equal(t, 0, getConnectionCount())
+
+	// assert default value
+	require.Equal(t, -1, getMaxConnections())
+	require.Equal(t, 0, getConnectionCount())
+
+	// 0 max_connections
+	func() {
+		setMaxConnections(0)
+		require.Equal(t, 0, getConnectionCount())
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 1, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	}()
+
+	// 1 max_connections nonAdmin -> admin
+	func() {
+		setMaxConnections(1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with nonAdmin
+		_, nonAdminCleanup := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 2, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 1, getConnectionCount())
+		nonAdminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	}()
+
+	// 1 max_connections admin -> nonAdmin
+	func() {
+		setMaxConnections(1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 1, getConnectionCount())
+		// can't connect with nonAdmin
+		openConnWithUserError(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 0, getConnectionCount())
+	}()
+
+	// -1 max_connections
+	func() {
+		setMaxConnections(-1)
+		require.Equal(t, 0, getConnectionCount())
+		// can connect with multiple nonAdmin
+		_, nonAdminCleanup1 := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 1, getConnectionCount())
+		_, nonAdminCleanup2 := openConnWithUserSuccess(nonAdmin)
+		require.Equal(t, 2, getConnectionCount())
+		// can connect with admin
+		_, adminCleanup := openConnWithUserSuccess(admin)
+		require.Equal(t, 3, getConnectionCount())
+		adminCleanup()
+		require.Equal(t, 2, getConnectionCount())
+		nonAdminCleanup1()
+		require.Equal(t, 1, getConnectionCount())
+		nonAdminCleanup2()
+		require.Equal(t, 0, getConnectionCount())
+	}()
 }
