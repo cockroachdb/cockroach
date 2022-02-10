@@ -1166,6 +1166,7 @@ unreserved_keyword ::=
 	| 'STREAM'
 	| 'STRICT'
 	| 'SUBSCRIPTION'
+	| 'SUPER'
 	| 'SURVIVE'
 	| 'SURVIVAL'
 	| 'SYNTAX'
@@ -1358,6 +1359,7 @@ alter_database_stmt ::=
 	| alter_database_drop_region_stmt
 	| alter_database_survival_goal_stmt
 	| alter_database_primary_region_stmt
+	| alter_database_add_super_region
 
 alter_range_stmt ::=
 	alter_zone_range_stmt
@@ -1848,6 +1850,9 @@ alter_database_survival_goal_stmt ::=
 alter_database_primary_region_stmt ::=
 	'ALTER' 'DATABASE' database_name primary_region_clause
 	| 'ALTER' 'DATABASE' database_name 'SET' primary_region_clause
+
+alter_database_add_super_region ::=
+	'ALTER' 'DATABASE' database_name 'ADD' 'SUPER' 'REGION' name 'VALUES' name_list
 
 alter_zone_range_stmt ::=
 	'ALTER' 'RANGE' a_expr set_zone_config

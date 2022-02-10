@@ -849,7 +849,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
-%token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING
+%token <str> START STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
 %token <str> SURVIVE SURVIVAL SYMMETRIC SYNTAX SYSTEM SQRT SUBSCRIPTION STATEMENTS
 
 %token <str> TABLE TABLES TABLESPACE TEMP TEMPLATE TEMPORARY TENANT TESTING_RELOCATE TEXT THEN
@@ -941,6 +941,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <tree.Statement> alter_database_owner
 %type <tree.Statement> alter_database_placement_stmt
 %type <tree.Statement> alter_database_set_stmt
+%type <tree.Statement> alter_database_add_super_region
 
 // ALTER INDEX
 %type <tree.Statement> alter_oneindex_stmt
@@ -1698,6 +1699,7 @@ alter_database_stmt:
 | alter_database_primary_region_stmt
 | alter_database_placement_stmt
 | alter_database_set_stmt
+| alter_database_add_super_region
 // ALTER DATABASE has its error help token here because the ALTER DATABASE
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
@@ -1787,6 +1789,16 @@ alter_database_primary_region_stmt:
     $$.val = &tree.AlterDatabasePrimaryRegion{
       Name: tree.Name($3),
       PrimaryRegion: tree.Name($5),
+    }
+  }
+
+alter_database_add_super_region:
+  ALTER DATABASE database_name ADD SUPER REGION name VALUES name_list
+  {
+    $$.val = &tree.AlterDatabaseAddSuperRegion{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      Regions: $9.nameList(),
     }
   }
 
@@ -13681,6 +13693,7 @@ unreserved_keyword:
 | STREAM
 | STRICT
 | SUBSCRIPTION
+| SUPER
 | SURVIVE
 | SURVIVAL
 | SYNTAX

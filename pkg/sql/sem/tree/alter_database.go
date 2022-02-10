@@ -111,3 +111,17 @@ func (node *AlterDatabasePlacement) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	node.Placement.Format(ctx)
 }
+
+// AlterDatabaseAddSuperRegion represents a
+// ALTER DATABASE ADD SUPER REGION ... statement.
+type AlterDatabaseAddSuperRegion struct {
+	DatabaseName    Name
+	SuperRegionName Name
+	Regions         []Name
+}
+
+var _ Statement = &AlterDatabaseAddSuperRegion{}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterDatabaseAddSuperRegion) Format(ctx *FmtCtx) {
+}

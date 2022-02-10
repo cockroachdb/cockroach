@@ -1232,3 +1232,110 @@ func (n *alterDatabasePlacementNode) startExec(params runParams) error {
 func (n *alterDatabasePlacementNode) Next(runParams) (bool, error) { return false, nil }
 func (n *alterDatabasePlacementNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabasePlacementNode) Close(context.Context)        {}
+
+type alterDatabaseAddSuperRegion struct {
+	n    *tree.AlterDatabaseAddSuperRegion
+	desc *dbdesc.Mutable
+}
+
+func (p *planner) AlterDatabaseAddSuperRegion(
+	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
+) (planNode, error) {
+	if err := checkSchemaChangeEnabled(
+		ctx,
+		p.ExecCfg(),
+		"ALTER DATABASE",
+	); err != nil {
+		return nil, err
+	}
+
+	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
+		tree.DatabaseLookupFlags{Required: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.checkPrivilegesForMultiRegionOp(ctx, dbDesc); err != nil {
+		return nil, err
+	}
+
+	return &alterDatabaseAddSuperRegion{n: n, desc: dbDesc}, nil
+}
+
+func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
+	fmt.Println("alterDatabaseAddSuperRegion")
+	// If the database is not a multi-region database, a super region cannot
+	// be added.
+	if !n.desc.IsMultiRegion() {
+		return errors.WithHintf(
+			pgerror.New(pgcode.InvalidName,
+				"database must have associated regions before a placement policy can be set",
+			),
+			"you must first add a primary region to the database using "+
+				"ALTER DATABASE %s PRIMARY REGION <region_name>",
+			n.n.DatabaseName.String(),
+		)
+	}
+
+	// Verify that the regions are part of the database.
+	typeID, err := n.desc.MultiRegionEnumID()
+	if err != nil {
+		return nil
+	}
+	typeDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(params.ctx, params.p.txn, typeID)
+	if err != nil {
+		return nil
+	}
+
+	// Check that the super region name is not used and also that
+	// regions within super regions do not overlap.
+	for _, region := range n.n.Regions {
+		// TODO(richardjcai): Factor this out or see if theres a better way to do
+		//    this. Also verify this works with adding and dropping and that there
+		//    is no race condition.
+		found := false
+		for _, member := range typeDesc.EnumMembers {
+			if member.LogicalRepresentation == string(region) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return errors.New(fmt.Sprintf("region %s not part of database", region))
+		}
+	}
+
+	regions := make([]string, len(n.n.Regions))
+	for i, region := range n.n.Regions {
+		regions[i] = string(region)
+	}
+
+	n.desc.RegionConfig.SuperRegions = append(n.desc.RegionConfig.SuperRegions,
+		descpb.DatabaseDescriptor_SuperRegion{
+			SuperRegionName: string(n.n.SuperRegionName),
+			Regions:         regions,
+		},
+	)
+
+	// Update the zone configs.
+	// For existing regional tables, the zone configuration should be applied
+	// at the table level.
+	// For existing regional by row tables, the zone configurations should be
+	// applied at the partition level.
+
+	fmt.Printf("%v\n", n.desc.RegionConfig.SuperRegions)
+
+	if err := params.p.writeNonDropDatabaseChange(
+		params.ctx,
+		n.desc,
+		tree.AsStringWithFQNames(n.n, params.Ann()),
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *alterDatabaseAddSuperRegion) Next(runParams) (bool, error) { return false, nil }
+func (n *alterDatabaseAddSuperRegion) Values() tree.Datums          { return tree.Datums{} }
+func (n *alterDatabaseAddSuperRegion) Close(context.Context)        {}
