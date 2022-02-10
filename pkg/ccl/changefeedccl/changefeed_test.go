@@ -1724,7 +1724,7 @@ func TestChangefeedAuthorization(t *testing.T) {
 			rootDB.Exec(t, `create type type_a as enum ('a');`)
 			rootDB.Exec(t, `create table table_a (id int, type type_a);`)
 
-			guestDB.ExpectErr(t, `permission denied to create changefeed`, tc.statement)
+			guestDB.ExpectErr(t, `current user must have a role WITH CONTROLCHANGEFEED`, tc.statement)
 			feedCreatorDB.ExpectErr(t, `user feedcreator does not have SELECT privilege on relation table_a`, tc.statement)
 
 			// Actual success would hang in sinkless and require cleanup in enterprise, so checking for successful authorization

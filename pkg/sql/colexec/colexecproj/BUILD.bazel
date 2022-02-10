@@ -15,6 +15,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/server/telemetry",  # keep
         "//pkg/sql/colconv",  # keep
+        "//pkg/sql/colexec/colexecbase",  # keep
         "//pkg/sql/colexec/colexeccmp",
         "//pkg/sql/colexec/colexecutils",
         "//pkg/sql/colexec/execgen",  # keep
@@ -23,6 +24,8 @@ go_library(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",  # keep
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",  # keep
+        "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sqltelemetry",  # keep
         "//pkg/sql/types",
         "//pkg/util/duration",  # keep
@@ -58,6 +61,8 @@ go_test(
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/skip",

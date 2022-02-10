@@ -720,6 +720,7 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 	// we may need to maintain the same constraint ID.
 	for _, mutation := range desc.GetMutations() {
 		if idx := mutation.GetIndex(); idx != nil &&
+			idx.ConstraintID == 0 &&
 			mutation.Direction == descpb.DescriptorMutation_ADD &&
 			idx.Unique {
 			idx.ConstraintID = nextConstraintID()

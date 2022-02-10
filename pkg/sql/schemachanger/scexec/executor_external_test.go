@@ -522,44 +522,51 @@ type noopMetadataUpdaterFactory struct {
 type noopMetadataUpdater struct {
 }
 
-// NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory
+// NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory.
 func (noopMetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
 	return &noopMetadataUpdater{}
 }
 
-// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater
+// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType, comment string,
 ) error {
 	return nil
 }
 
-// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater
+// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteDescriptorComment(
 	id int64, subID int64, commentType keys.CommentType,
 ) error {
 	return nil
 }
 
-//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater
+//UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertConstraintComment(
 	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
 ) error {
 	return nil
 }
 
-//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater
+//DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteConstraintComment(
 	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
 ) error {
 	return nil
 }
 
-// DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater
+// DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteDatabaseRoleSettings(
 	ctx context.Context, database catalog.DatabaseDescriptor,
+) error {
+	return nil
+}
+
+// SwapDescriptorSubComment implements  scexec.DescriptorMetadataUpdater.
+func (noopMetadataUpdater) SwapDescriptorSubComment(
+	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
 ) error {
 	return nil
 }

@@ -1,0 +1,58 @@
+parse
+ALTER CHANGEFEED 123 ADD foo
+----
+ALTER CHANGEFEED 123 ADD foo
+ALTER CHANGEFEED (123) ADD (foo) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo -- literals removed
+ALTER CHANGEFEED 123 ADD _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo
+----
+ALTER CHANGEFEED 123 DROP foo
+ALTER CHANGEFEED (123) DROP (foo) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo -- literals removed
+ALTER CHANGEFEED 123 DROP _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar
+----
+ALTER CHANGEFEED 123 ADD foo  DROP bar -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  DROP (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  DROP bar -- literals removed
+ALTER CHANGEFEED 123 ADD _  DROP _ -- identifiers removed
+
+
+parse
+ALTER CHANGEFEED 123 DROP foo ADD bar
+----
+ALTER CHANGEFEED 123 DROP foo  ADD bar -- normalized!
+ALTER CHANGEFEED (123) DROP (foo)  ADD (bar) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo  ADD bar -- literals removed
+ALTER CHANGEFEED 123 DROP _  ADD _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo, bar
+----
+ALTER CHANGEFEED 123 ADD foo, bar
+ALTER CHANGEFEED (123) ADD (foo), (bar) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo, bar -- literals removed
+ALTER CHANGEFEED 123 ADD _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 DROP foo, bar ADD baz, qux
+----
+ALTER CHANGEFEED 123 DROP foo, bar  ADD baz, qux -- normalized!
+ALTER CHANGEFEED (123) DROP (foo), (bar)  ADD (baz), (qux) -- fully parenthesized
+ALTER CHANGEFEED _ DROP foo, bar  ADD baz, qux -- literals removed
+ALTER CHANGEFEED 123 DROP _, _  ADD _, _ -- identifiers removed
+
+parse
+ALTER CHANGEFEED 123 ADD foo DROP bar ADD baz, qux DROP quux
+----
+ALTER CHANGEFEED 123 ADD foo  DROP bar  ADD baz, qux  DROP quux -- normalized!
+ALTER CHANGEFEED (123) ADD (foo)  DROP (bar)  ADD (baz), (qux)  DROP (quux) -- fully parenthesized
+ALTER CHANGEFEED _ ADD foo  DROP bar  ADD baz, qux  DROP quux -- literals removed
+ALTER CHANGEFEED 123 ADD _  DROP _  ADD _, _  DROP _ -- identifiers removed

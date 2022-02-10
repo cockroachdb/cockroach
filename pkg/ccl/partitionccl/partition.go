@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -538,7 +539,7 @@ func selectPartitionExprsByName(
 				}
 				tupleTyp := types.MakeTuple(typContents)
 				partValueExpr := tree.NewTypedComparisonExpr(
-					tree.MakeComparisonOperator(tree.EQ),
+					treecmp.MakeComparisonOperator(treecmp.EQ),
 					tree.NewTypedTuple(tupleTyp, colVars[:len(allDatums)]),
 					tree.NewDTuple(tupleTyp, allDatums...),
 				)

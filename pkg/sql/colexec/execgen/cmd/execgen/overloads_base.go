@@ -17,7 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -104,8 +105,8 @@ type overloadBase struct {
 	// Only one of CmpOp and BinOp will be set, depending on whether the
 	// overload is a binary operator or a comparison operator. Neither of the
 	// fields will be set when it is a hash or cast overload.
-	CmpOp tree.ComparisonOperator
-	BinOp tree.BinaryOperatorSymbol
+	CmpOp treecmp.ComparisonOperator
+	BinOp treebin.BinaryOperatorSymbol
 }
 
 // overloadKind describes the type of an overload. The word "kind" was chosen
@@ -314,7 +315,7 @@ type twoArgsResolvedOverload struct {
 }
 
 // NeedsBinaryOverloadHelper returns true iff the overload is such that it needs
-// access to execgen.BinaryOverloadHelper.
+// access to colexecbase.BinaryOverloadHelper.
 func (o *twoArgsResolvedOverload) NeedsBinaryOverloadHelper() bool {
 	return o.kind == binaryOverload && o.Right.RetVecMethod == "Datum"
 }

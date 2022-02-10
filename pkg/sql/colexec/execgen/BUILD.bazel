@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "execgen.go",
         "inline.go",
-        "overloads_bin_util.go",
         "placeholders.go",
         "supported_bin_cmp_ops.go",
         "template.go",
@@ -15,7 +14,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/colexecerror",
-        "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
+        "//pkg/sql/sem/tree/treecmp",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dave_dst//:dst",
         "@com_github_dave_dst//decorator",

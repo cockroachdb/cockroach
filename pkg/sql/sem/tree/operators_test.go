@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -102,8 +104,8 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 		// Postgres doesn't have separate operators for IS (NOT) DISTINCT FROM; remap
 		// to equality.
 		switch name {
-		case IsDistinctFrom.String(), IsNotDistinctFrom.String():
-			pgName = EQ.String()
+		case treecmp.IsDistinctFrom.String(), treecmp.IsNotDistinctFrom.String():
+			pgName = treecmp.EQ.String()
 		}
 
 		var leftOid oid.Oid
@@ -139,7 +141,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check comparison ops.
-	for op := ComparisonOperatorSymbol(0); op < NumComparisonOperatorSymbols; op++ {
+	for op := treecmp.ComparisonOperatorSymbol(0); op < treecmp.NumComparisonOperatorSymbols; op++ {
 		for _, impl := range CmpOps[op] {
 			o := impl.(*CmpOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)
@@ -147,7 +149,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check binary ops.
-	for op := BinaryOperatorSymbol(0); op < NumBinaryOperatorSymbols; op++ {
+	for op := treebin.BinaryOperatorSymbol(0); op < treebin.NumBinaryOperatorSymbols; op++ {
 		for _, impl := range BinOps[op] {
 			o := impl.(*BinOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)

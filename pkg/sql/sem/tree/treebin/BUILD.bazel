@@ -1,0 +1,12 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "treebin",
+    srcs = [
+        "binary_operator.go",
+        "doc.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)

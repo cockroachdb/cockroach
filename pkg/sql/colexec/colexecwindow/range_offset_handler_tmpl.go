@@ -29,8 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -126,7 +126,7 @@ func newRangeOffsetHandler(
 						_, binOp, _ := tree.WindowFrameRangeOps{}.LookupImpl(
 							ordColType, getOffsetType(ordColType))
 						// {{end}}
-						op.overloadHelper = execgen.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
+						op.overloadHelper = colexecbase.BinaryOverloadHelper{BinFn: binOp.Fn, EvalCtx: evalCtx}
 						// {{end}}
 						return op
 						// {{end}}
@@ -162,7 +162,7 @@ type rangeOffsetHandlerBase struct {
 type _OP_STRING struct {
 	rangeOffsetHandlerBase
 	// {{if eq .VecMethod "Datum"}}
-	overloadHelper execgen.BinaryOverloadHelper
+	overloadHelper colexecbase.BinaryOverloadHelper
 	// {{end}}
 	offset _OFFSET_GOTYPE
 }
@@ -192,10 +192,13 @@ var _ rangeOffsetHandler = &_OP_STRING{}
 // be '4' to indicate that the end index is the end of the partition.
 func (h *_OP_STRING) getIdx(ctx context.Context, currRow, lastIdx int) (idx int) {
 	// {{if eq .VecMethod "Datum"}}
-	// In order to inline the templated code of the binary overloads operating
-	// on datums, we need to have a `_overloadHelper` local variable of type
-	// `execgen.BinaryOverloadHelper`. This is necessary when dealing with Time
-	// and TimeTZ columns since they aren't yet handled natively.
+	// {{/*
+	//     In order to inline the templated code of the binary overloads
+	//     operating on datums, we need to have a `_overloadHelper` local
+	//     variable of type `colexecbase.BinaryOverloadHelper`. This is
+	//     necessary when dealing with Time and TimeTZ columns since they aren't
+	//     yet handled natively.
+	// */}}
 	_overloadHelper := h.overloadHelper
 	// {{end}}
 

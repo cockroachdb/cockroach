@@ -11,7 +11,10 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"net/url"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
@@ -342,4 +345,96 @@ func TestShowChangefeedJobsNoResults(t *testing.T) {
 	if rowResults.Next() || rowResults.Err() != nil {
 		t.Fatalf("Expected no results for query:%s", query)
 	}
+}
+
+func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		feed, ok := foo.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d ADD bar`, feed.JobID()))
+
+		type row struct {
+			id             jobspb.JobID
+			SinkURI        string
+			FullTableNames []uint8
+			format         string
+			topics         string
+		}
+
+		var out row
+
+		query := `SELECT job_id, sink_uri, full_table_names, format, IFNULL(topics, '') FROM [SHOW CHANGEFEED JOBS] ORDER BY sink_uri`
+		rowResults := sqlDB.Query(t, query)
+
+		if !rowResults.Next() {
+			err := rowResults.Err()
+			if err != nil {
+				t.Fatalf("Error encountered while querying the next row: %v", err)
+			} else {
+				t.Fatalf("Expected more rows when querying and none found for query: %s", query)
+			}
+		}
+		err := rowResults.Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		details, err := feed.Details()
+		require.NoError(t, err)
+		sinkURI := details.SinkURI
+		jobID := feed.JobID()
+
+		topicsArr := strings.Split(out.topics, ",")
+		sort.Strings(topicsArr)
+		sortedTopics := strings.Join(topicsArr, ",")
+		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+		require.Equal(t, "bar,foo", sortedTopics, "Expected topics:%s but found topics:%s", "bar,foo", sortedTopics)
+		require.Equal(t, "{d.public.foo,d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.foo,d.public.bar}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP foo`, feed.JobID()))
+		rowResults = sqlDB.Query(t, query)
+
+		if !rowResults.Next() {
+			err := rowResults.Err()
+			if err != nil {
+				t.Fatalf("Error encountered while querying the next row: %v", err)
+			} else {
+				t.Fatalf("Expected more rows when querying and none found for query: %s", query)
+			}
+		}
+		err = rowResults.Scan(&out.id, &out.SinkURI, &out.FullTableNames, &out.format, &out.topics)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		details, err = feed.Details()
+		require.NoError(t, err)
+		sinkURI = details.SinkURI
+		jobID = feed.JobID()
+
+		require.Equal(t, jobID, out.id, "Expected id:%d but found id:%d", jobID, out.id)
+		require.Equal(t, sinkURI, out.SinkURI, "Expected sinkUri:%s but found sinkUri:%s", sinkURI, out.SinkURI)
+		require.Equal(t, "bar", out.topics, "Expected topics:%s but found topics:%s", "bar,foo", sortedTopics)
+		require.Equal(t, "{d.public.bar}", string(out.FullTableNames), "Expected fullTableNames:%s but found fullTableNames:%s", "{d.public.foo,d.public.bar}", string(out.FullTableNames))
+		require.Equal(t, "json", out.format, "Expected format:%s but found format:%s", "json", out.format)
+
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
 }

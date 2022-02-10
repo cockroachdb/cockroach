@@ -45,6 +45,11 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	rc := execCtx.SpanConfigReconciler()
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 
+	// The reconciliation job is a forever running background job. It's always
+	// safe to wind the SQL pod down whenever it's running -- something we
+	// indicate through the job's idle status.
+	r.job.MarkIdle(true)
+
 	// Start the protected timestamp reconciler. This will periodically poll the
 	// protected timestamp table to cleanup stale records. We take advantage of
 	// the fact that there can only be one instance of the spanconfig.Resumer

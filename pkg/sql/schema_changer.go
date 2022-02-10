@@ -1041,7 +1041,20 @@ func WaitToUpdateLeases(
 //
 // It also kicks off GC jobs as needed.
 func (sc *SchemaChanger) done(ctx context.Context) error {
-
+	// Gathers ant comments that need to be swapped/cleaned.
+	type commentToDelete struct {
+		id          int64
+		subID       int64
+		commentType keys.CommentType
+	}
+	type commentToSwap struct {
+		id          int64
+		oldSubID    int64
+		newSubID    int64
+		commentType keys.CommentType
+	}
+	var commentsToDelete []commentToDelete
+	var commentsToSwap []commentToSwap
 	// Jobs (for GC, etc.) that need to be started immediately after the table
 	// descriptor updates are published.
 	var didUpdate bool
@@ -1179,6 +1192,33 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
+				}
+			}
+
+			// If a primary index swap or any indexes are being dropped clean up any
+			// comments related to it.
+			if pkSwap := m.AsPrimaryKeySwap(); pkSwap != nil {
+				id := pkSwap.PrimaryKeySwapDesc().OldPrimaryIndexId
+				commentsToDelete = append(commentsToDelete,
+					commentToDelete{
+						id:          int64(scTable.GetID()),
+						subID:       int64(id),
+						commentType: keys.IndexCommentType,
+					})
+				for i := range pkSwap.PrimaryKeySwapDesc().OldIndexes {
+					// Skip the primary index.
+					if pkSwap.PrimaryKeySwapDesc().OldIndexes[i] == id {
+						continue
+					}
+					// Set up a swap operation for any re-created indexes.
+					commentsToSwap = append(commentsToSwap,
+						commentToSwap{
+							id:          int64(scTable.GetID()),
+							oldSubID:    int64(pkSwap.PrimaryKeySwapDesc().OldIndexes[i]),
+							newSubID:    int64(pkSwap.PrimaryKeySwapDesc().NewIndexes[i]),
+							commentType: keys.IndexCommentType,
+						},
+					)
 				}
 			}
 
@@ -1364,6 +1404,33 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				if err := descsCol.WriteDescToBatch(ctx, kvTrace, tbl, b); err != nil {
 					return err
 				}
+			}
+		}
+
+		// Clean up any comments related to the mutations, specifically if we need
+		// to drop them.
+		metaDataUpdater := sc.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
+			ctx,
+			txn,
+			NewFakeSessionData(&sc.settings.SV))
+		for _, comment := range commentsToDelete {
+			err := metaDataUpdater.DeleteDescriptorComment(
+				comment.id,
+				comment.subID,
+				comment.commentType)
+			if err != nil {
+				return err
+			}
+		}
+		for _, comment := range commentsToSwap {
+			err := metaDataUpdater.SwapDescriptorSubComment(
+				comment.id,
+				comment.oldSubID,
+				comment.newSubID,
+				comment.commentType,
+			)
+			if err != nil {
+				return err
 			}
 		}
 

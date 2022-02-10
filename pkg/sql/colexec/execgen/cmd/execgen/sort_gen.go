@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 )
 
 type sortDirOverload struct {
@@ -92,12 +92,12 @@ func init() {
 				{
 					Dir:             "execinfrapb.Ordering_Column_ASC",
 					DirString:       "Asc",
-					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.LT],
+					FamilyOverloads: sameTypeComparisonOpToOverloads[treecmp.LT],
 				},
 				{
 					Dir:             "execinfrapb.Ordering_Column_DESC",
 					DirString:       "Desc",
-					FamilyOverloads: sameTypeComparisonOpToOverloads[tree.GT],
+					FamilyOverloads: sameTypeComparisonOpToOverloads[treecmp.GT],
 				},
 			},
 		}

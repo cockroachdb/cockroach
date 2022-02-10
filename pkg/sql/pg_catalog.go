@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -2100,7 +2101,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			// n.b. the In operator cannot be included in this list because it isn't
 			// a generalized operator. It is a special syntax form, because it only
 			// permits parenthesized subqueries or row expressions on the RHS.
-			if cmpOp == tree.In {
+			if cmpOp == treecmp.In {
 				continue
 			}
 			for _, overload := range overloads {
@@ -2108,7 +2109,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
 					return err
 				}
-				if inverse, ok := cmpOp.Inverse(); ok {
+				if inverse, ok := tree.CmpOpInverse(cmpOp); ok {
 					if err := addOp(inverse.String(), infixKind, params, returnType); err != nil {
 						return err
 					}

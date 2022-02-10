@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -62,8 +63,8 @@ func testStartPreceding(
 	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
-		Mode:   RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetPreceding}},
+		Mode:   treewindow.RANGE,
+		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
@@ -112,8 +113,8 @@ func testStartFollowing(
 	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
-		Mode:   RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetFollowing}, EndBound: &WindowFrameBound{BoundType: OffsetFollowing}},
+		Mode:   treewindow.RANGE,
+		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
@@ -171,8 +172,8 @@ func testEndPreceding(
 	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
-		Mode:   RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: OffsetPreceding}},
+		Mode:   treewindow.RANGE,
+		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
@@ -221,8 +222,8 @@ func testEndFollowing(
 	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
-		Mode:   RANGE,
-		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: OffsetFollowing}},
+		Mode:   treewindow.RANGE,
+		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: treewindow.OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: treewindow.OffsetFollowing}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum

@@ -28,6 +28,7 @@ go_library(
         "//pkg/sql/opt/props",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/util/encoding",
         "//pkg/util/json",

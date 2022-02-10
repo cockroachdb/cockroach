@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -914,7 +915,7 @@ func newOptTable(
 			case types.EnumFamily:
 				// We synthesize an (x IN (v1, v2, v3...)) check for enum types.
 				expr := &tree.ComparisonExpr{
-					Operator: tree.MakeComparisonOperator(tree.In),
+					Operator: treecmp.MakeComparisonOperator(treecmp.In),
 					Left:     &tree.ColumnItem{ColumnName: col.ColName()},
 					Right:    tree.NewDTuple(colType, tree.MakeAllDEnumsInType(colType)...),
 				}

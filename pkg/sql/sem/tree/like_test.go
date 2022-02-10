@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -144,9 +145,9 @@ var benchmarkLikePatterns = []string{
 }
 
 func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
-	op := Like
+	op := treecmp.Like
 	if caseInsensitive {
-		op = ILike
+		op = treecmp.ILike
 	}
 	likeFn, _ := CmpOps[op].LookupImpl(types.String, types.String)
 	iter := func() {

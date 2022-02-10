@@ -13,42 +13,41 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
-var binaryOpDecMethod = map[tree.BinaryOperatorSymbol]string{
-	tree.Plus:     "Add",
-	tree.Minus:    "Sub",
-	tree.Mult:     "Mul",
-	tree.Div:      "Quo",
-	tree.FloorDiv: "QuoInteger",
-	tree.Mod:      "Rem",
-	tree.Pow:      "Pow",
+var binaryOpDecMethod = map[treebin.BinaryOperatorSymbol]string{
+	treebin.Plus:     "Add",
+	treebin.Minus:    "Sub",
+	treebin.Mult:     "Mul",
+	treebin.Div:      "Quo",
+	treebin.FloorDiv: "QuoInteger",
+	treebin.Mod:      "Rem",
+	treebin.Pow:      "Pow",
 }
 
-var binaryOpFloatMethod = map[tree.BinaryOperatorSymbol]string{
-	tree.FloorDiv: "math.Trunc",
-	tree.Mod:      "math.Mod",
-	tree.Pow:      "math.Pow",
+var binaryOpFloatMethod = map[treebin.BinaryOperatorSymbol]string{
+	treebin.FloorDiv: "math.Trunc",
+	treebin.Mod:      "math.Mod",
+	treebin.Pow:      "math.Pow",
 }
 
-var binaryOpDecCtx = map[tree.BinaryOperatorSymbol]string{
-	tree.Plus:     "ExactCtx",
-	tree.Minus:    "ExactCtx",
-	tree.Mult:     "ExactCtx",
-	tree.Div:      "DecimalCtx",
-	tree.FloorDiv: "HighPrecisionCtx",
-	tree.Mod:      "HighPrecisionCtx",
-	tree.Pow:      "DecimalCtx",
+var binaryOpDecCtx = map[treebin.BinaryOperatorSymbol]string{
+	treebin.Plus:     "ExactCtx",
+	treebin.Minus:    "ExactCtx",
+	treebin.Mult:     "ExactCtx",
+	treebin.Div:      "DecimalCtx",
+	treebin.FloorDiv: "HighPrecisionCtx",
+	treebin.Mod:      "HighPrecisionCtx",
+	treebin.Pow:      "DecimalCtx",
 }
 
 var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
@@ -103,12 +102,12 @@ var compatibleCanonicalTypeFamilies = map[types.Family][]types.Family{
 // sameTypeBinaryOpToOverloads maps a binary operator to all of the overloads
 // that implement that comparison between two values of the same type (meaning
 // they have the same family and width).
-var sameTypeBinaryOpToOverloads = make(map[tree.BinaryOperatorSymbol][]*oneArgOverload, len(execgen.BinaryOpName))
+var sameTypeBinaryOpToOverloads = make(map[treebin.BinaryOperatorSymbol][]*oneArgOverload, len(execgen.BinaryOpName))
 
-var binOpOutputTypes = make(map[tree.BinaryOperatorSymbol]map[typePair]*types.T)
+var binOpOutputTypes = make(map[treebin.BinaryOperatorSymbol]map[typePair]*types.T)
 
 func registerBinOpOutputTypes() {
-	populateBinOpIntOutputTypeOnIntArgs := func(binOp tree.BinaryOperatorSymbol) {
+	populateBinOpIntOutputTypeOnIntArgs := func(binOp treebin.BinaryOperatorSymbol) {
 		for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 			for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 				binOpOutputTypes[binOp][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Int
@@ -117,14 +116,14 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Bit binary operators.
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Bitand, tree.Bitor, tree.Bitxor} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Bitand, treebin.Bitor, treebin.Bitxor} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 	}
 
 	// Simple arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.Plus, tree.Minus, tree.Mult, tree.Div} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Plus, treebin.Minus, treebin.Mult, treebin.Div} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
@@ -139,32 +138,32 @@ func registerBinOpOutputTypes() {
 	// decimal result.
 	for _, leftIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
 		for _, rightIntWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-			binOpOutputTypes[tree.Div][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Decimal
+			binOpOutputTypes[treebin.Div][typePair{types.IntFamily, leftIntWidth, types.IntFamily, rightIntWidth}] = types.Decimal
 		}
 	}
-	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.Interval
-	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
-	binOpOutputTypes[tree.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[treebin.Minus][typePair{types.TimestampTZFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[treebin.Plus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[treebin.Minus][typePair{types.IntervalFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.Interval
 	for _, numberTypeFamily := range numericCanonicalTypeFamilies {
 		for _, numberTypeWidth := range supportedWidthsByCanonicalTypeFamily[numberTypeFamily] {
-			binOpOutputTypes[tree.Mult][typePair{numberTypeFamily, numberTypeWidth, types.IntervalFamily, anyWidth}] = types.Interval
-			binOpOutputTypes[tree.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, numberTypeWidth}] = types.Interval
+			binOpOutputTypes[treebin.Mult][typePair{numberTypeFamily, numberTypeWidth, types.IntervalFamily, anyWidth}] = types.Interval
+			binOpOutputTypes[treebin.Mult][typePair{types.IntervalFamily, anyWidth, numberTypeFamily, numberTypeWidth}] = types.Interval
 		}
 	}
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-		binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, intWidth}] = types.Interval
+		binOpOutputTypes[treebin.Div][typePair{types.IntervalFamily, anyWidth, types.IntFamily, intWidth}] = types.Interval
 	}
-	binOpOutputTypes[tree.Div][typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Interval
-	binOpOutputTypes[tree.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
-	binOpOutputTypes[tree.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
-	binOpOutputTypes[tree.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
+	binOpOutputTypes[treebin.Div][typePair{types.IntervalFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Interval
+	binOpOutputTypes[treebin.Plus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
+	binOpOutputTypes[treebin.Minus][typePair{types.TimestampTZFamily, anyWidth, types.IntervalFamily, anyWidth}] = types.TimestampTZ
+	binOpOutputTypes[treebin.Plus][typePair{types.IntervalFamily, anyWidth, types.TimestampTZFamily, anyWidth}] = types.TimestampTZ
 	for _, compatibleFamily := range []types.Family{
 		types.IntFamily,      // types.Date + types.Time
 		types.IntervalFamily, // types.Time + types.Interval
 	} {
 		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-			binOpOutputTypes[tree.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-			binOpOutputTypes[tree.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+			binOpOutputTypes[treebin.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[treebin.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 		}
 	}
 	for _, compatibleFamily := range []types.Family{
@@ -174,13 +173,13 @@ func registerBinOpOutputTypes() {
 		types.BytesFamily,                    // types.Jsonb - types.String
 	} {
 		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-			binOpOutputTypes[tree.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-			binOpOutputTypes[tree.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+			binOpOutputTypes[treebin.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
+			binOpOutputTypes[treebin.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
 		}
 	}
 
 	// Other arithmetic binary operators.
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.FloorDiv, tree.Mod, tree.Pow} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.FloorDiv, treebin.Mod, treebin.Pow} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		binOpOutputTypes[binOp][typePair{types.FloatFamily, anyWidth, types.FloatFamily, anyWidth}] = types.Float
@@ -192,12 +191,12 @@ func registerBinOpOutputTypes() {
 	}
 
 	// Other non-arithmetic binary operators.
-	binOpOutputTypes[tree.Concat] = map[typePair]*types.T{
+	binOpOutputTypes[treebin.Concat] = map[typePair]*types.T{
 		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
 		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
 	}
 
-	for _, binOp := range []tree.BinaryOperatorSymbol{tree.LShift, tree.RShift} {
+	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.LShift, treebin.RShift} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
@@ -209,38 +208,38 @@ func registerBinOpOutputTypes() {
 
 	// ->, ->>, -
 
-	binOpOutputTypes[tree.JSONFetchVal] = map[typePair]*types.T{
+	binOpOutputTypes[treebin.JSONFetchVal] = map[typePair]*types.T{
 		{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}: types.Jsonb,
 	}
-	binOpOutputTypes[tree.JSONFetchText] = map[typePair]*types.T{
+	binOpOutputTypes[treebin.JSONFetchText] = map[typePair]*types.T{
 		{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}: types.String,
 	}
-	binOpOutputTypes[tree.JSONFetchValPath] = map[typePair]*types.T{
+	binOpOutputTypes[treebin.JSONFetchValPath] = map[typePair]*types.T{
 		{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Jsonb,
 	}
-	binOpOutputTypes[tree.JSONFetchTextPath] = map[typePair]*types.T{
+	binOpOutputTypes[treebin.JSONFetchTextPath] = map[typePair]*types.T{
 		{types.JsonFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.String,
 	}
-	binOpOutputTypes[tree.Minus][typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}] = types.Jsonb
+	binOpOutputTypes[treebin.Minus][typePair{types.JsonFamily, anyWidth, types.BytesFamily, anyWidth}] = types.Jsonb
 	for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-		binOpOutputTypes[tree.JSONFetchVal][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.Jsonb
-		binOpOutputTypes[tree.Minus][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.Jsonb
-		binOpOutputTypes[tree.JSONFetchText][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.String
+		binOpOutputTypes[treebin.JSONFetchVal][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.Jsonb
+		binOpOutputTypes[treebin.Minus][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.Jsonb
+		binOpOutputTypes[treebin.JSONFetchText][typePair{types.JsonFamily, anyWidth, types.IntFamily, intWidth}] = types.String
 	}
 
 	// ||
-	binOpOutputTypes[tree.Concat][typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}] = types.Jsonb
+	binOpOutputTypes[treebin.Concat][typePair{types.JsonFamily, anyWidth, types.JsonFamily, anyWidth}] = types.Jsonb
 }
 
-func newBinaryOverloadBase(op tree.BinaryOperatorSymbol) *overloadBase {
+func newBinaryOverloadBase(op treebin.BinaryOperatorSymbol) *overloadBase {
 	opStr := op.String()
 	switch op {
-	case tree.Bitxor:
-		// tree.Bitxor is "#" when stringified, but Go uses "^" for it, so
+	case treebin.Bitxor:
+		// treebin.Bitxor is "#" when stringified, but Go uses "^" for it, so
 		// we override the former.
 		opStr = "^"
-	case tree.FloorDiv:
-		// tree.FloorDiv is "//" when stringified, but that would be the
+	case treebin.FloorDiv:
+		// treebin.FloorDiv is "//" when stringified, but that would be the
 		// beginning of a comment in Go and we need to use "/".
 		opStr = "/"
 	}
@@ -259,16 +258,10 @@ func populateBinOpOverloads() {
 	// support all of them. Such behavior is acceptable as long as we haven't
 	// defined the output types (in binOpOutputTypes) for the operators that we
 	// don't support because all such operators will be skipped.
-	// Also note that we're sorting all operators in order to have the
-	// generated code not change when the order of iteration over map
-	// tree.BinOps changes.
-	var allBinaryOperators []tree.BinaryOperatorSymbol
-	for binOp := range tree.BinOps {
+	var allBinaryOperators []treebin.BinaryOperatorSymbol
+	for binOp := treebin.BinaryOperatorSymbol(0); binOp < treebin.NumBinaryOperatorSymbols; binOp++ {
 		allBinaryOperators = append(allBinaryOperators, binOp)
 	}
-	sort.SliceStable(allBinaryOperators, func(i, j int) bool {
-		return allBinaryOperators[i] < allBinaryOperators[j]
-	})
 
 	for _, op := range allBinaryOperators {
 		sameTypeBinaryOpToOverloads[op] = populateTwoArgsOverloads(
@@ -292,7 +285,7 @@ type binOpTypeCustomizer interface {
 func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		var result string
-		if op.overloadBase.BinOp == tree.Concat {
+		if op.overloadBase.BinOp == treebin.Concat {
 			caller, idx, err := parseNonIndexableTargetElem(targetElem)
 			if err != nil {
 				return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
@@ -312,11 +305,11 @@ func (bytesCustomizer) getBinOpAssignFunc() assignFunc {
 	}
 }
 
-func checkRightIsZero(binOp tree.BinaryOperatorSymbol) bool {
+func checkRightIsZero(binOp treebin.BinaryOperatorSymbol) bool {
 	// TODO(yuzefovich): introduce a new operator that would check whether a
 	// vector contains a zero value so that the division didn't have to do the
 	// check. This is likely to be more performant.
-	return binOp == tree.Div || binOp == tree.FloorDiv || binOp == tree.Mod
+	return binOp == treebin.Div || binOp == treebin.FloorDiv || binOp == treebin.Mod
 }
 
 func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
@@ -356,9 +349,9 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 		binOp := op.overloadBase.BinOp
 		var computeBinOp string
 		switch binOp {
-		case tree.FloorDiv:
+		case treebin.FloorDiv:
 			computeBinOp = fmt.Sprintf("%s(float64(%s) / float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
-		case tree.Mod, tree.Pow:
+		case treebin.Mod, treebin.Pow:
 			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
 		default:
 			computeBinOp = fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
@@ -403,14 +396,14 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 		var t *template.Template
 
 		switch binOp {
-		case tree.Bitand, tree.Bitor, tree.Bitxor:
+		case treebin.Bitand, treebin.Bitor, treebin.Bitxor:
 			t = template.Must(template.New("").Parse(`
 				{{.Target}} = {{.Left}} {{.Op}} {{.Right}}
 			`))
 
-		case tree.Plus, tree.Minus:
+		case treebin.Plus, treebin.Minus:
 			overflowCmp := "<"
-			if binOp == tree.Minus {
+			if binOp == treebin.Minus {
 				overflowCmp = ">"
 			}
 			args["OverflowCmp"] = overflowCmp
@@ -424,7 +417,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 			`))
 
-		case tree.Mult:
+		case treebin.Mult:
 			// If the inputs are small enough, then we don't have to do any further
 			// checks. For the sake of legibility, upperBound and lowerBound are both
 			// not set to their maximal/minimal values. An even more advanced check
@@ -466,7 +459,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 			`))
 
-		case tree.Div:
+		case treebin.Div:
 			// Note that this is the '/' operator, which has a decimal result.
 			args["Ctx"] = binaryOpDecCtx[binOp]
 			t = template.Must(template.New("").Parse(`
@@ -482,7 +475,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				}
 			}
 		`))
-		case tree.Pow:
+		case treebin.Pow:
 			args["Ctx"] = binaryOpDecCtx[binOp]
 
 			t = template.Must(template.New("").Parse(`
@@ -500,7 +493,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				{{.Target}} = resultInt
 			}
 			`))
-		case tree.FloorDiv, tree.Mod:
+		case treebin.FloorDiv, treebin.Mod:
 			// Note that these operators have integer result.
 			t = template.Must(template.New("").Parse(fmt.Sprintf(`
 			{
@@ -511,7 +504,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 			}
 		`, op.overloadBase.OpStr)))
 
-		case tree.LShift, tree.RShift:
+		case treebin.LShift, treebin.RShift:
 			t = template.Must(template.New("").Parse(fmt.Sprintf(`
 			{
 				if {{.Right}} < 0 || {{.Right}} >= 64 {
@@ -603,7 +596,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Minus:
+		case treebin.Minus:
 			return fmt.Sprintf(`
 		  nanos := %[2]s.Sub(%[3]s).Nanoseconds()
 		  %[1]s = duration.MakeDuration(nanos, 0, 0)
@@ -620,10 +613,10 @@ func (c timestampCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Plus:
+		case treebin.Plus:
 			return fmt.Sprintf(`%[1]s = %[2]s.Add(%[3]s)`,
 				targetElem, leftElem, rightElem)
-		case tree.Minus:
+		case treebin.Minus:
 			return fmt.Sprintf(`%[1]s = %[2]s.Sub(%[3]s)`,
 				targetElem, leftElem, rightElem)
 		default:
@@ -641,7 +634,7 @@ func (c jsonCustomizer) getBinOpAssignFunc() assignFunc {
 			return fmt.Sprintf("colexecerror.InternalError(\"%s\")", err)
 		}
 		switch op.overloadBase.BinOp {
-		case tree.Concat:
+		case treebin.Concat:
 			return fmt.Sprintf(`
 _j, _err := %[3]s.Concat(%[4]s)
 if _err != nil {
@@ -680,9 +673,9 @@ if _j == nil {
 				handleNonNilPath, idxVariable, leftElem, rightElem)
 		}
 		switch op.overloadBase.BinOp {
-		case tree.JSONFetchVal:
+		case treebin.JSONFetchVal:
 			return getJSONFetchValKey(fmt.Sprintf("%s.Set(%s, _j)", vecVariable, idxVariable))
-		case tree.JSONFetchText:
+		case treebin.JSONFetchText:
 			return getJSONFetchValKey(fmt.Sprintf(`
 			_text, _err := _j.AsText()
 			if _err != nil {
@@ -693,7 +686,7 @@ if _j == nil {
 			} else {
 				%[1]s.Set(%[2]s, []byte(*_text))
 			}`, vecVariable, idxVariable))
-		case tree.Minus:
+		case treebin.Minus:
 			return fmt.Sprintf(`
 // Get an unsafe string handle onto the bytes, to avoid a spurious copy. This
 // is safe since we know the bytes won't change out from under us during
@@ -732,9 +725,9 @@ if _j == nil {
 				handleNonNilPath, idxVariable, leftElem, rightElem)
 		}
 		switch op.overloadBase.BinOp {
-		case tree.JSONFetchVal:
+		case treebin.JSONFetchVal:
 			return getJSONFetchValIdx(fmt.Sprintf("%s.Set(%s, _j)", vecVariable, idxVariable))
-		case tree.JSONFetchText:
+		case treebin.JSONFetchText:
 			return getJSONFetchValIdx(fmt.Sprintf(`
 			_text, _err := _j.AsText()
 			if _err != nil {
@@ -745,7 +738,7 @@ if _j == nil {
 			} else {
 				%[1]s.Set(%[2]s, []byte(*_text))
 			}`, vecVariable, idxVariable))
-		case tree.Minus:
+		case treebin.Minus:
 			return fmt.Sprintf(`
 _j, _, _err := %[3]s.RemoveIndex(int(%[4]s))
 if _err != nil {
@@ -783,9 +776,9 @@ if _path == nil {
 				handleNonNilPath, idxVariable, leftElem, rightElem)
 		}
 		switch op.overloadBase.BinOp {
-		case tree.JSONFetchValPath:
+		case treebin.JSONFetchValPath:
 			return getJSONFetchPath(fmt.Sprintf("%s.Set(%s, _path)", vecVariable, idxVariable))
-		case tree.JSONFetchTextPath:
+		case treebin.JSONFetchTextPath:
 			return getJSONFetchPath(fmt.Sprintf(`
     _text, _err := _path.AsText()
     if _err != nil {
@@ -818,10 +811,10 @@ if rounded_res.After(tree.MaxSupportedTime) || rounded_res.Before(tree.MinSuppor
 func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Plus:
+		case treebin.Plus:
 			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s)`,
 				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
-		case tree.Minus:
+		case treebin.Minus:
 			return fmt.Sprintf(`t_res := duration.Add(%[1]s, %[2]s.Mul(-1))`,
 				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
@@ -835,7 +828,7 @@ func (c timestampIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Plus:
+		case treebin.Plus:
 			return fmt.Sprintf(`t_res := duration.Add(%[2]s, %[1]s)`,
 				leftElem, rightElem) + timestampRangeCheck + fmt.Sprintf("\n%s = t_res", targetElem)
 		default:
@@ -848,10 +841,10 @@ func (c intervalTimestampCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`%[1]s = %[2]s.Mul(int64(%[3]s))`,
 				targetElem, leftElem, rightElem)
-		case tree.Div:
+		case treebin.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -868,7 +861,7 @@ func (c intervalIntCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`%[1]s = %[3]s.Mul(int64(%[2]s))`,
 				targetElem, leftElem, rightElem)
 		default:
@@ -881,10 +874,10 @@ func (c intIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`%[1]s = %[2]s.MulFloat(float64(%[3]s))`,
 				targetElem, leftElem, rightElem)
-		case tree.Div:
+		case treebin.Div:
 			return fmt.Sprintf(`
 				if %[3]s == 0.0 {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
@@ -901,7 +894,7 @@ func (c intervalFloatCustomizer) getBinOpAssignFunc() assignFunc {
 func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`%[1]s = %[3]s.MulFloat(float64(%[2]s))`,
 				targetElem, leftElem, rightElem)
 		default:
@@ -914,7 +907,7 @@ func (c floatIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`
 		  f, err := %[3]s.Float64()
 		  if err != nil {
@@ -932,7 +925,7 @@ func (c intervalDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c decimalIntervalCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		switch op.overloadBase.BinOp {
-		case tree.Mult:
+		case treebin.Mult:
 			return fmt.Sprintf(`
 		  f, err := %[2]s.Float64()
 		  if err != nil {
@@ -998,7 +991,7 @@ func (c datumCustomizer) getBinOpAssignFunc() assignFunc {
 // convertNativeToDatum returns a string that converts nativeElem to a
 // tree.Datum that is stored in local variable named datumElemVarName.
 func convertNativeToDatum(
-	op tree.BinaryOperatorSymbol,
+	op treebin.BinaryOperatorSymbol,
 	canonicalTypeFamily types.Family,
 	nativeElem, datumElemVarName string,
 ) string {
@@ -1020,7 +1013,7 @@ func convertNativeToDatum(
 		// TODO(yuzefovich): figure out a better way to perform type resolution
 		// for types that have the same physical representation.
 		switch op {
-		case tree.Minus, tree.JSONFetchVal:
+		case treebin.Minus, treebin.JSONFetchVal:
 			// We currently support two operations that take in one datum
 			// argument and one argument with Bytes canonical type family (Minus
 			// and JSONFetchVal) and both require the value to be of String
