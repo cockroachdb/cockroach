@@ -16,9 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -42,9 +40,9 @@ type Writer interface {
 	Flush()
 }
 
-type messageSink interface {
-	// push allows a messageBlock to be pushed into the pusher.
-	push(*messageBlock)
+type blockSink interface {
+	// push allows a block to be pushed into the pusher.
+	push(*block)
 }
 
 const channelSize = 128
@@ -93,27 +91,22 @@ const channelSize = 128
 //                ^
 //                |
 //               Cache polls the channel using a goroutine and push the
-//                |   messageBlock into its storage.
+//                |   block into its storage.
 //                |
 //   +----------------------------------+
 //   |    Cache:                        |
 //   |     The cache contains a         |
 //   |     FIFO buffer backed by        |
-//   |     cache.UnorderedCache         |
+//   |     fifoCache.                   |
 //   +----------------------------------+
 type Cache struct {
 	st *cluster.Settings
 
-	msgChan chan *messageBlock
+	blockCh chan *block
 	closeCh chan struct{}
 
-	mu struct {
-		syncutil.RWMutex
-
-		store *cache.UnorderedCache
-	}
-
-	messageBlockPool *sync.Pool
+	store     *fifoCache
+	blockPool *sync.Pool
 
 	writer Writer
 
@@ -137,9 +130,9 @@ func (r *ResolvedTxnID) valid() bool {
 }
 
 var (
-	_ Reader      = &Cache{}
-	_ Writer      = &Cache{}
-	_ messageSink = &Cache{}
+	_ Reader    = &Cache{}
+	_ Writer    = &Cache{}
+	_ blockSink = &Cache{}
 )
 
 // NewTxnIDCache creates a new instance of Cache.
@@ -147,51 +140,30 @@ func NewTxnIDCache(st *cluster.Settings, metrics *Metrics) *Cache {
 	t := &Cache{
 		st:      st,
 		metrics: metrics,
-		msgChan: make(chan *messageBlock, channelSize),
+		blockCh: make(chan *block, channelSize),
 		closeCh: make(chan struct{}),
-	}
-
-	t.messageBlockPool = &sync.Pool{
-		New: func() interface{} {
-			return &messageBlock{}
+		blockPool: &sync.Pool{
+			New: func() interface{} {
+				return &block{}
+			},
 		},
 	}
 
-	t.mu.store = cache.NewUnorderedCache(cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, _, _ interface{}) bool {
-			return int64(size)*entrySize > MaxSize.Get(&st.SV)
-		},
-	})
+	t.store = newFIFOCache(t.blockPool, func() int64 {
+		return MaxSize.Get(&st.SV) / entrySize
+	} /* capacity */)
 
-	t.writer = newWriter(t, t.messageBlockPool)
+	t.writer = newWriter(t, t.blockPool)
 	return t
 }
 
 // Start implements the Provider interface.
 func (t *Cache) Start(ctx context.Context, stopper *stop.Stopper) {
-	addBlockToStore := func(msgBlock *messageBlock) {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		for blockIdx := range msgBlock {
-			if !msgBlock[blockIdx].valid() {
-				break
-			}
-			t.mu.store.Add(msgBlock[blockIdx].TxnID, msgBlock[blockIdx].TxnFingerprintID)
-		}
-	}
-
-	consumeBlock := func(b *messageBlock) {
-		addBlockToStore(b)
-		*b = messageBlock{}
-		t.messageBlockPool.Put(b)
-	}
-
 	err := stopper.RunAsyncTask(ctx, "txn-id-cache-ingest", func(ctx context.Context) {
 		for {
 			select {
-			case msgBlock := <-t.msgChan:
-				consumeBlock(msgBlock)
+			case b := <-t.blockCh:
+				t.store.add(b)
 			case <-stopper.ShouldQuiesce():
 				close(t.closeCh)
 				return
@@ -207,16 +179,13 @@ func (t *Cache) Start(ctx context.Context, stopper *stop.Stopper) {
 func (t *Cache) Lookup(txnID uuid.UUID) (result roachpb.TransactionFingerprintID, found bool) {
 	t.metrics.CacheReadCounter.Inc(1)
 
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-
-	txnFingerprintID, found := t.mu.store.Get(txnID)
+	txnFingerprintID, found := t.store.get(txnID)
 	if !found {
 		t.metrics.CacheMissCounter.Inc(1)
 		return roachpb.InvalidTransactionFingerprintID, found
 	}
 
-	return txnFingerprintID.(roachpb.TransactionFingerprintID), found
+	return txnFingerprintID, found
 }
 
 // Record implements the Writer interface.
@@ -224,10 +193,10 @@ func (t *Cache) Record(resolvedTxnID ResolvedTxnID) {
 	t.writer.Record(resolvedTxnID)
 }
 
-// push implements the messageSink interface.
-func (t *Cache) push(msg *messageBlock) {
+// push implements the blockSink interface.
+func (t *Cache) push(b *block) {
 	select {
-	case t.msgChan <- msg:
+	case t.blockCh <- b:
 	case <-t.closeCh:
 	}
 }
@@ -239,7 +208,5 @@ func (t *Cache) Flush() {
 
 // Size return the current size of the Cache.
 func (t *Cache) Size() int64 {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return int64(t.mu.store.Len()) * entrySize
+	return int64(t.store.size()) * entrySize
 }

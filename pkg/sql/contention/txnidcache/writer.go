@@ -24,20 +24,20 @@ const shardCount = 16
 type writer struct {
 	shards [shardCount]*concurrentWriteBuffer
 
-	sink         messageSink
-	msgBlockPool *sync.Pool
+	sink      blockSink
+	blockPool *sync.Pool
 }
 
 var _ Writer = &writer{}
 
-func newWriter(sink messageSink, msgBlockPool *sync.Pool) *writer {
+func newWriter(sink blockSink, blockPool *sync.Pool) *writer {
 	w := &writer{
-		sink:         sink,
-		msgBlockPool: msgBlockPool,
+		sink:      sink,
+		blockPool: blockPool,
 	}
 
 	for shardIdx := 0; shardIdx < shardCount; shardIdx++ {
-		w.shards[shardIdx] = newConcurrentWriteBuffer(sink, msgBlockPool)
+		w.shards[shardIdx] = newConcurrentWriteBuffer(sink, blockPool)
 	}
 
 	return w
