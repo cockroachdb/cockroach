@@ -126,7 +126,9 @@ func (t *tenantStatusServer) ListSessions(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	response := &serverpb.ListSessionsResponse{}
+	response := &serverpb.ListSessionsResponse{
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+	}
 	nodeStatement := func(ctx context.Context, client interface{}, instanceID base.SQLInstanceID) (interface{}, error) {
 		statusClient := client.(serverpb.StatusClient)
 		localResponse, err := statusClient.ListLocalSessions(ctx, req)
@@ -177,7 +179,10 @@ func (t *tenantStatusServer) ListLocalSessions(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+	return &serverpb.ListSessionsResponse{
+		Sessions:              sessions,
+		InternalAppNamePrefix: catconstants.InternalAppNamePrefix,
+	}, nil
 }
 
 func (t *tenantStatusServer) CancelQuery(
