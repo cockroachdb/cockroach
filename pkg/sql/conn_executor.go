@@ -296,6 +296,11 @@ type Server struct {
 
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
 	TelemetryLoggingMetrics *TelemetryLoggingMetrics
+
+	mu struct {
+		syncutil.Mutex
+		connectionCount int64
+	}
 }
 
 // Metrics collects timeseries data about SQL activity.
@@ -660,6 +665,35 @@ func (s *Server) SetupConn(
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
 	)
 	return ConnectionHandler{ex}, nil
+}
+
+// IncrementConnectionCount increases connectionCount by 1.
+func (s *Server) IncrementConnectionCount() {
+	mu := &s.mu
+	mu.Lock()
+	defer mu.Unlock()
+	mu.connectionCount++
+}
+
+// DecrementConnectionCount decreases connectionCount by 1.
+func (s *Server) DecrementConnectionCount() {
+	mu := &s.mu
+	mu.Lock()
+	defer mu.Unlock()
+	mu.connectionCount--
+}
+
+// IncrementConnectionCountIfLessThan increases connectionCount by and returns true if allowedConnectionCount < max,
+// otherwise it does nothing and returns false.
+func (s *Server) IncrementConnectionCountIfLessThan(max int64) bool {
+	mu := &s.mu
+	mu.Lock()
+	defer mu.Unlock()
+	lt := mu.connectionCount < max
+	if lt {
+		mu.connectionCount++
+	}
+	return lt
 }
 
 // ConnectionHandler is the interface between the result of SetupConn
