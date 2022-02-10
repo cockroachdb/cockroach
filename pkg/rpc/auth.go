@@ -99,6 +99,7 @@ func (a kvAuth) streamInterceptor(
 
 func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 	if grpcutil.IsLocalRequestContext(ctx) {
+		panic("!!! auth called for local request")
 		// This is an in-process request. Bypass authentication check.
 		//
 		// TODO(tbg): I don't understand when this is hit. Internal requests are routed
