@@ -115,11 +115,26 @@ func TestTraceAnalyzer(t *testing.T) {
 				DistSQLMode: sessiondatapb.DistSQLOn,
 			},
 		})
+
+		qosLevel := sessiondatapb.QoSLevel(122)
+		// Only defined QoSLevels are currently allowed.
+		require.Panics(t, func() {
+			_, err := ie.ExecEx(
+				execCtx,
+				t.Name(),
+				nil, /* txn */
+				sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
+				testStmt,
+			)
+			require.Error(t, err)
+		})
+
+		qosLevel = sessiondatapb.TTLLow
 		_, err := ie.ExecEx(
 			execCtx,
 			t.Name(),
 			nil, /* txn */
-			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
+			sessiondata.InternalExecutorOverride{User: security.RootUserName(), QualityOfService: &qosLevel},
 			testStmt,
 		)
 		require.NoError(t, err)
