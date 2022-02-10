@@ -36,6 +36,7 @@ type RegionConfig struct {
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
+	superRegions         []descpb.SuperRegion
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -51,6 +52,36 @@ func (r *RegionConfig) PrimaryRegion() catpb.RegionName {
 // Regions returns the list of regions added to the RegionConfig.
 func (r *RegionConfig) Regions() catpb.RegionNames {
 	return r.regions
+}
+
+// IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
+// member of a super region.
+func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bool {
+	for _, superRegion := range r.SuperRegions() {
+		for _, regionOfSuperRegion := range superRegion.Regions {
+			if region == regionOfSuperRegion {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// GetSuperRegionRegionsForRegion returns the members of the super region the
+// specified region is part of.
+// If the region is not a member of any super regions, we return all
+// the regions on the RegionConfig.
+func (r *RegionConfig) GetSuperRegionRegionsForRegion(region catpb.RegionName) catpb.RegionNames {
+	for _, superRegion := range r.SuperRegions() {
+		for _, regionOfSuperRegion := range superRegion.Regions {
+			if region == regionOfSuperRegion {
+				return superRegion.Regions
+			}
+		}
+	}
+
+	return r.Regions()
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
@@ -90,6 +121,11 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// SuperRegions returns the list of super regions in the database.
+func (r *RegionConfig) SuperRegions() []descpb.SuperRegion {
+	return r.superRegions
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -108,6 +144,7 @@ func MakeRegionConfig(
 	survivalGoal descpb.SurvivalGoal,
 	regionEnumID descpb.ID,
 	placement descpb.DataPlacement,
+	superRegions []descpb.SuperRegion,
 	opts ...MakeRegionConfigOption,
 ) RegionConfig {
 	ret := RegionConfig{
@@ -116,6 +153,7 @@ func MakeRegionConfig(
 		survivalGoal:  survivalGoal,
 		regionEnumID:  regionEnumID,
 		placement:     placement,
+		superRegions:  superRegions,
 	}
 	for _, opt := range opts {
 		opt(&ret)
@@ -123,9 +161,9 @@ func MakeRegionConfig(
 	return ret
 }
 
-// canSatisfySurvivalGoal returns true if the survival goal is satisfiable by
+// CanSatisfySurvivalGoal returns true if the survival goal is satisfiable by
 // the given region config.
-func canSatisfySurvivalGoal(survivalGoal descpb.SurvivalGoal, numRegions int) error {
+func CanSatisfySurvivalGoal(survivalGoal descpb.SurvivalGoal, numRegions int) error {
 	if survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
 		if numRegions < minNumRegionsForSurviveRegionGoal {
 			return errors.WithHintf(
@@ -155,11 +193,33 @@ func ValidateRegionConfig(config RegionConfig) error {
 		return errors.AssertionFailedf(
 			"cannot have a database with restricted placement that is also region survivable")
 	}
-	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
+
+	return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
+}
+
+// IsMemberOfSuperRegion returns a boolean representing if the region is part
+// of a super region and the name of the super region.
+func IsMemberOfSuperRegion(name catpb.RegionName, config RegionConfig) (bool, string) {
+	for _, superRegion := range config.SuperRegions() {
+		for _, region := range superRegion.Regions {
+			if region == name {
+				return true, superRegion.SuperRegionName
+			}
+		}
+	}
+
+	return false, ""
 }
 
 // CanDropRegion returns an error if the survival goal doesn't allow for
-// removing regions.
-func CanDropRegion(config RegionConfig) error {
-	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
+// removing regions or if the region is part of a super region.
+func CanDropRegion(name catpb.RegionName, config RegionConfig) error {
+	isMember, superRegion := IsMemberOfSuperRegion(name, config)
+	if isMember {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.DependentObjectsStillExist, "region %s is part of super region %s", name, superRegion),
+			"you must first drop super region %s before you can drop the region %s", superRegion, name,
+		)
+	}
+	return CanSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
 }

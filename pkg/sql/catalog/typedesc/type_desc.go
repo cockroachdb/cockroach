@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -255,6 +256,17 @@ func (desc *immutable) RegionNamesForValidation() (catpb.RegionNames, error) {
 		regions = append(regions, catpb.RegionName(member.LogicalRepresentation))
 	}
 	return regions, nil
+}
+
+// SuperRegions implements the TypeDescriptor interface.
+func (desc *immutable) SuperRegions() ([]descpb.SuperRegion, error) {
+	if desc.Kind != descpb.TypeDescriptor_MULTIREGION_ENUM {
+		return nil, errors.AssertionFailedf(
+			"can not get regions of a non multi-region enum %d", desc.ID,
+		)
+	}
+
+	return desc.RegionConfig.SuperRegions, nil
 }
 
 // RegionNamesIncludingTransitioning implements the TypeDescriptor interface.
@@ -709,11 +721,11 @@ func (desc *immutable) validateMultiRegion(
 			dbPrimaryRegion, primaryRegion))
 	}
 
+	regionNames, err := desc.RegionNames()
+	if err != nil {
+		vea.Report(err)
+	}
 	if dbDesc.GetRegionConfig().SurvivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
-		regionNames, err := desc.RegionNames()
-		if err != nil {
-			vea.Report(err)
-		}
 		if len(regionNames) < 3 {
 			vea.Report(
 				errors.AssertionFailedf(
@@ -722,6 +734,75 @@ func (desc *immutable) validateMultiRegion(
 					strings.Join(regionNames.ToStrings(), ","),
 				),
 			)
+		}
+	}
+
+	// Validate super regions.
+	//   1. Region names are unique within a super region and are sorted.
+	//   2. All region within a super region map to a region on the RegionConfig.
+	//   3. Super region names are unique.
+	//   4. Each region can only belong to one super region.
+
+	superRegions, err := desc.SuperRegions()
+	if err != nil {
+		vea.Report(err)
+	}
+
+	seenRegions := make(map[catpb.RegionName]struct{})
+	superRegionNames := make(map[string]struct{})
+
+	// Ensure that the super region names are in sorted order.
+	if !sort.SliceIsSorted(superRegions, func(i, j int) bool {
+		return superRegions[i].SuperRegionName < superRegions[j].SuperRegionName
+	}) {
+		vea.Report(errors.AssertionFailedf("super regions are not in sorted order based on the super region name %v", superRegions))
+	}
+
+	for _, superRegion := range superRegions {
+		if len(superRegion.Regions) == 0 {
+			vea.Report(errors.AssertionFailedf("no regions found within super region %s", superRegion.SuperRegionName))
+		}
+
+		if err := multiregion.CanSatisfySurvivalGoal(dbDesc.GetRegionConfig().SurvivalGoal, len(superRegion.Regions)); err != nil {
+			vea.Report(errors.HandleAsAssertionFailure(errors.Wrapf(err, "super region %s only has %d regions", superRegion.SuperRegionName, len(superRegion.Regions))))
+		}
+
+		_, found := superRegionNames[superRegion.SuperRegionName]
+		if found {
+			vea.Report(errors.AssertionFailedf("duplicate super regions with name %s found", superRegion.SuperRegionName))
+		}
+		superRegionNames[superRegion.SuperRegionName] = struct{}{}
+
+		// Ensure that regions within a super region are sorted.
+		if !sort.SliceIsSorted(superRegion.Regions, func(i, j int) bool {
+			return superRegion.Regions[i] < superRegion.Regions[j]
+		}) {
+			vea.Report(errors.AssertionFailedf("the regions within super region %s were not in a sorted order", superRegion.SuperRegionName))
+		}
+
+		seenRegionsInCurrentSuperRegion := make(map[catpb.RegionName]struct{})
+		for _, region := range superRegion.Regions {
+			_, found := seenRegionsInCurrentSuperRegion[region]
+			if found {
+				vea.Report(errors.AssertionFailedf("duplicate region %s found in super region %s", region, superRegion.SuperRegionName))
+			}
+			seenRegionsInCurrentSuperRegion[region] = struct{}{}
+			_, found = seenRegions[region]
+			if found {
+				vea.Report(errors.AssertionFailedf("region %s found in multiple super regions", region))
+			}
+			seenRegions[region] = struct{}{}
+
+			// Ensure that the region actually maps to a region on the regionConfig.
+			found = false
+			for _, regionName := range regionNames {
+				if region == regionName {
+					found = true
+				}
+			}
+			if !found {
+				vea.Report(errors.Newf("region %s not part of database", region))
+			}
 		}
 	}
 }
