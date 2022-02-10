@@ -28,6 +28,7 @@ go_library(
         "//pkg/cmd/dev/io/exec",
         "//pkg/cmd/dev/io/os",
         "@com_github_alessio_shellescape//:shellescape",
+        "@com_github_pkg_errors//:errors",
         "@com_github_spf13_cobra//:cobra",
     ],
 )
