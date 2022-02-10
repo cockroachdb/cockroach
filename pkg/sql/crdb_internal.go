@@ -767,23 +767,54 @@ CREATE TABLE crdb_internal.jobs (
 
 		// We'll reuse this container on each loop.
 		container := make(tree.Datums, 0, 21)
+		sessionJobs := make([]*jobs.Record, 0, len(p.extendedEvalCtx.SchemaChangeJobRecords))
+		uniqueJobs := make(map[*jobs.Record]struct{})
+		for _, job := range p.extendedEvalCtx.SchemaChangeJobRecords {
+			if _, ok := uniqueJobs[job]; ok {
+				continue
+			}
+			sessionJobs = append(sessionJobs, job)
+			uniqueJobs[job] = struct{}{}
+		}
 		return func() (datums tree.Datums, e error) {
 			// Loop while we need to skip a row.
 			for {
 				ok, err := it.Next(ctx)
-				if !ok {
+				if err != nil {
 					return nil, err
 				}
-				r := it.Cur()
-				id, status, created, payloadBytes, progressBytes, sessionIDBytes, instanceID :=
-					r[0], r[1], r[2], r[3], r[4], r[5], r[6]
+				var id, status, created, payloadBytes, progressBytes, sessionIDBytes,
+					instanceID tree.Datum
+				lastRun, nextRun, numRuns := tree.DNull, tree.DNull, tree.DNull
+				if ok {
+					r := it.Cur()
+					id, status, created, payloadBytes, progressBytes, sessionIDBytes, instanceID =
+						r[0], r[1], r[2], r[3], r[4], r[5], r[6]
+					lastRun, numRuns, nextRun = r[7], r[8], r[9]
+				} else if !ok {
+					if len(sessionJobs) == 0 {
+						return nil, nil
+					}
+					job := sessionJobs[len(sessionJobs)-1]
+					sessionJobs = sessionJobs[:len(sessionJobs)-1]
+					// Convert the job into datums, where protobufs will be intentionally,
+					// marshalled.
+					id = tree.NewDInt(tree.DInt(job.JobID))
+					status = tree.NewDString(string(jobs.StatusPending))
+					created = tree.TimestampToInexactDTimestamp(p.txn.ReadTimestamp())
+					progressBytes, payloadBytes, err = getPayloadAndProgressFromJob(p, job)
+					if err != nil {
+						return nil, err
+					}
+					sessionIDBytes = tree.NewDBytes(tree.DBytes(p.extendedEvalCtx.SessionID.GetBytes()))
+					instanceID = tree.NewDInt(tree.DInt(p.extendedEvalCtx.ExecCfg.JobRegistry.ID()))
+				}
 
 				var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 					finished, modified, fractionCompleted, highWaterTimestamp, errorStr, coordinatorID,
-					traceID, lastRun, nextRun, numRuns, executionErrors, executionEvents = tree.DNull, tree.DNull, tree.DNull,
+					traceID, executionErrors, executionEvents = tree.DNull, tree.DNull, tree.DNull,
 					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-					tree.DNull, tree.DNull
+					tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
 
 				// Extract data from the payload.
 				payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -879,8 +910,6 @@ CREATE TABLE crdb_internal.jobs (
 						traceID = tree.NewDInt(tree.DInt(progress.TraceID))
 					}
 				}
-
-				lastRun, numRuns, nextRun = r[7], r[8], r[9]
 				if payload != nil {
 					executionErrors = jobs.FormatRetriableExecutionErrorLogToStringArray(
 						ctx, payload.RetriableExecutionFailureLog,
@@ -4458,6 +4487,32 @@ func (m marshaledJobMetadataMap) GetJobMetadata(
 	return md, nil
 }
 
+func getPayloadAndProgressFromJob(
+	p *planner, job *jobs.Record,
+) (progressBytes *tree.DBytes, payloadBytes *tree.DBytes, err error) {
+	progressMarshalled, err := protoutil.Marshal(&jobspb.Progress{
+		ModifiedMicros: p.txn.ReadTimestamp().GoTime().UnixMicro(),
+		Details:        jobspb.WrapProgressDetails(job.Progress),
+		RunningStatus:  string(job.RunningStatus),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	progressBytes = tree.NewDBytes(tree.DBytes(progressMarshalled))
+	payloadMarshalled, err := protoutil.Marshal(&jobspb.Payload{
+		Description:   job.Description,
+		Statement:     job.Statements,
+		UsernameProto: job.Username.EncodeProto(),
+		Details:       jobspb.WrapPayloadDetails(job.Details),
+		Noncancelable: job.NonCancelable,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	payloadBytes = tree.NewDBytes(tree.DBytes(payloadMarshalled))
+	return progressBytes, payloadBytes, nil
+}
+
 func collectMarshaledJobMetadataMap(
 	ctx context.Context, p *planner, acct *mon.BoundAccount, descs []catalog.Descriptor,
 ) (marshaledJobMetadataMap, error) {
@@ -4511,6 +4566,18 @@ func collectMarshaledJobMetadataMap(
 	}
 	if err := it.Close(); err != nil {
 		return nil, err
+	}
+	for _, record := range p.ExtendedEvalContext().SchemaChangeJobRecords {
+		progressBytes, payloadBytes, err := getPayloadAndProgressFromJob(p, record)
+		if err != nil {
+			return nil, err
+		}
+		mj := marshaledJobMetadata{
+			status:        tree.NewDString(string(record.RunningStatus)),
+			payloadBytes:  payloadBytes,
+			progressBytes: progressBytes,
+		}
+		m[record.JobID] = mj
 	}
 	return m, nil
 }
