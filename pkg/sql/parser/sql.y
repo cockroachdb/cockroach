@@ -39,6 +39,7 @@ import (
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
+    "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
     "github.com/cockroachdb/cockroach/pkg/sql/types"
     "github.com/cockroachdb/errors"
     "github.com/lib/pq/oid"
@@ -533,8 +534,8 @@ func (u *sqlSymUnion) windowFrameBounds() tree.WindowFrameBounds {
 func (u *sqlSymUnion) windowFrameBound() *tree.WindowFrameBound {
     return u.val.(*tree.WindowFrameBound)
 }
-func (u *sqlSymUnion) windowFrameExclusion() tree.WindowFrameExclusion {
-    return u.val.(tree.WindowFrameExclusion)
+func (u *sqlSymUnion) windowFrameExclusion() treewindow.WindowFrameExclusion {
+    return u.val.(treewindow.WindowFrameExclusion)
 }
 func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
     return u.val.(tree.DistinctOn)
@@ -1393,7 +1394,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 %type <*tree.WindowFrame> opt_frame_clause
 %type <tree.WindowFrameBounds> frame_extent
 %type <*tree.WindowFrameBound> frame_bound
-%type <tree.WindowFrameExclusion> opt_frame_exclusion
+%type <treewindow.WindowFrameExclusion> opt_frame_exclusion
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
@@ -12311,7 +12312,7 @@ opt_frame_clause:
   RANGE frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.RANGE,
+      Mode: treewindow.RANGE,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12319,7 +12320,7 @@ opt_frame_clause:
 | ROWS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.ROWS,
+      Mode: treewindow.ROWS,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12327,7 +12328,7 @@ opt_frame_clause:
 | GROUPS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
-      Mode: tree.GROUPS,
+      Mode: treewindow.GROUPS,
       Bounds: $2.windowFrameBounds(),
       Exclusion: $3.windowFrameExclusion(),
     }
@@ -12342,10 +12343,10 @@ frame_extent:
   {
     startBound := $1.windowFrameBound()
     switch {
-    case startBound.BoundType == tree.UnboundedFollowing:
+    case startBound.BoundType == treewindow.UnboundedFollowing:
       sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing:
+    case startBound.BoundType == treewindow.OffsetFollowing:
       sqllex.Error("frame starting from following row cannot end with current row")
       return 1
     }
@@ -12356,19 +12357,19 @@ frame_extent:
     startBound := $2.windowFrameBound()
     endBound := $4.windowFrameBound()
     switch {
-    case startBound.BoundType == tree.UnboundedFollowing:
+    case startBound.BoundType == treewindow.UnboundedFollowing:
       sqllex.Error("frame start cannot be UNBOUNDED FOLLOWING")
       return 1
-    case endBound.BoundType == tree.UnboundedPreceding:
+    case endBound.BoundType == treewindow.UnboundedPreceding:
       sqllex.Error("frame end cannot be UNBOUNDED PRECEDING")
       return 1
-    case startBound.BoundType == tree.CurrentRow && endBound.BoundType == tree.OffsetPreceding:
+    case startBound.BoundType == treewindow.CurrentRow && endBound.BoundType == treewindow.OffsetPreceding:
       sqllex.Error("frame starting from current row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.OffsetPreceding:
+    case startBound.BoundType == treewindow.OffsetFollowing && endBound.BoundType == treewindow.OffsetPreceding:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
-    case startBound.BoundType == tree.OffsetFollowing && endBound.BoundType == tree.CurrentRow:
+    case startBound.BoundType == treewindow.OffsetFollowing && endBound.BoundType == treewindow.CurrentRow:
       sqllex.Error("frame starting from following row cannot have preceding rows")
       return 1
     }
@@ -12381,52 +12382,52 @@ frame_extent:
 frame_bound:
   UNBOUNDED PRECEDING
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedPreceding}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.UnboundedPreceding}
   }
 | UNBOUNDED FOLLOWING
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.UnboundedFollowing}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.UnboundedFollowing}
   }
 | CURRENT ROW
   {
-    $$.val = &tree.WindowFrameBound{BoundType: tree.CurrentRow}
+    $$.val = &tree.WindowFrameBound{BoundType: treewindow.CurrentRow}
   }
 | a_expr PRECEDING
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.OffsetPreceding,
+      BoundType: treewindow.OffsetPreceding,
     }
   }
 | a_expr FOLLOWING
   {
     $$.val = &tree.WindowFrameBound{
       OffsetExpr: $1.expr(),
-      BoundType: tree.OffsetFollowing,
+      BoundType: treewindow.OffsetFollowing,
     }
   }
 
 opt_frame_exclusion:
   EXCLUDE CURRENT ROW
   {
-    $$.val = tree.ExcludeCurrentRow
+    $$.val = treewindow.ExcludeCurrentRow
   }
 | EXCLUDE GROUP
   {
-    $$.val = tree.ExcludeGroup
+    $$.val = treewindow.ExcludeGroup
   }
 | EXCLUDE TIES
   {
-    $$.val = tree.ExcludeTies
+    $$.val = treewindow.ExcludeTies
   }
 | EXCLUDE NO OTHERS
   {
     // EXCLUDE NO OTHERS is equivalent to omitting the frame exclusion clause.
-    $$.val = tree.NoExclusion
+    $$.val = treewindow.NoExclusion
   }
 | /* EMPTY */
   {
-    $$.val = tree.NoExclusion
+    $$.val = treewindow.NoExclusion
   }
 
 // Supporting nonterminals for expressions.
