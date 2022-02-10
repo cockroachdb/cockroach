@@ -134,9 +134,11 @@ func (a *AggregatorSpec) summary() (string, []string) {
 }
 
 func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
-	index := "primary"
+	var index string
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name
+	} else {
+		index = desc.PrimaryIndex.Name
 	}
 	return fmt.Sprintf("%s@%s", desc.Name, index)
 }
