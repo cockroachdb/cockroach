@@ -1948,7 +1948,7 @@ func TestCancelRequest(t *testing.T) {
 		if _, err := fe.Receive(); !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("unexpected: %v", err)
 		}
-		if count := telemetry.GetRawFeatureCounts()["pgwire.unimplemented.cancel_request"]; count != 1 {
+		if count := telemetry.GetRawFeatureCounts()["pgwire.cancel_request"]; count != 1 {
 			t.Fatalf("expected 1 cancel request, got %d", count)
 		}
 	})
