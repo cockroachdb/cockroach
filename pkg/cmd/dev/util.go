@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,8 +33,7 @@ const (
 
 var (
 	// Shared flags.
-	remoteCacheAddr string
-	numCPUs         int
+	numCPUs int
 )
 
 func mustGetFlagString(cmd *cobra.Command, name string) string {
@@ -70,35 +68,6 @@ func mustGetFlagDuration(cmd *cobra.Command, name string) time.Duration {
 	return val
 }
 
-func mustGetRemoteCacheArgs(cacheAddr string) []string {
-	if cacheAddr == "" {
-		return nil
-	}
-	cAddr, err := parseAddr(cacheAddr)
-	if err != nil {
-		log.Fatalf("unexpected error: %v", err)
-	}
-	var args []string
-	args = append(args, "--remote_local_fallback")
-	args = append(args, fmt.Sprintf("--remote_cache=grpc://%s", cAddr))
-	args = append(args, fmt.Sprintf("--experimental_remote_downloader=grpc://%s", cAddr))
-	return args
-}
-
-func parseAddr(addr string) (string, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return "", err
-	}
-
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return "", fmt.Errorf("invalid address %s", addr)
-	}
-
-	return fmt.Sprintf("%s:%s", ip, port), nil
-}
-
 func (d *dev) getBazelInfo(ctx context.Context, key string) (string, error) {
 	args := []string{"info", key, "--color=no"}
 	out, err := d.exec.CommandContextSilent(ctx, "bazel", args...)
@@ -131,12 +100,6 @@ func (d *dev) getDevBin() string {
 
 func addCommonBuildFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&numCPUs, "cpus", 0, "cap the number of cpu cores used")
-	// This points to the grpc endpoint of a running `buchr/bazel-remote`
-	// instance. We're tying ourselves to the one implementation, but that
-	// seems fine for now. It seems mature, and has (very experimental)
-	// support for the  Remote Asset API, which helps speed things up when
-	// the cache sits across the network boundary.
-	cmd.Flags().StringVar(&remoteCacheAddr, "remote-cache", "", "remote caching grpc endpoint to use")
 }
 
 func addCommonTestFlags(cmd *cobra.Command) {
