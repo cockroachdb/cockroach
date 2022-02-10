@@ -12,8 +12,10 @@ package paramparse
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -404,6 +406,15 @@ func init() {
 	}
 }
 
+func hasRowLevelTTLMutation(tableDesc catalog.TableDescriptor) bool {
+	for _, mut := range tableDesc.AllMutations() {
+		if mut.AsModifyRowLevelTTL() != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // onSet implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onSet(
 	ctx context.Context,
@@ -412,6 +423,12 @@ func (po *TableStorageParamObserver) onSet(
 	key string,
 	datum tree.Datum,
 ) error {
+	if strings.HasPrefix(key, "ttl_") && hasRowLevelTTLMutation(po.tableDesc) {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL whilst TTL is being added or dropped",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
@@ -420,6 +437,12 @@ func (po *TableStorageParamObserver) onSet(
 
 // onReset implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	if strings.HasPrefix(key, "ttl_") && hasRowLevelTTLMutation(po.tableDesc) {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL whilst TTL is being added or dropped",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onReset(po, evalCtx, key)
 	}
