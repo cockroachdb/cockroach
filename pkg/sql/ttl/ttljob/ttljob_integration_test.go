@@ -181,9 +181,11 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	rand_col_2 %s,
 	text TEXT,
 	PRIMARY KEY (id, rand_col_1, rand_col_2)
-) WITH (ttl_expire_after = '30 days')`,
+) WITH (ttl_expire_after = '30 days', ttl_select_batch_size = %d, ttl_delete_batch_size = %d)`,
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
 					randgen.RandTypeFromSlice(rng, indexableTyps).SQLString(),
+					1+rng.Intn(100),
+					1+rng.Intn(100),
 				),
 				numExpiredRows:    rng.Intn(2000),
 				numNonExpiredRows: rng.Intn(100),

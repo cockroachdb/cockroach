@@ -1232,6 +1232,10 @@ message TableDescriptor {
 
     // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
     optional string duration_expr = 1 [(gogoproto.nullable)=false];
+    // SelectBatchSize is the amount of rows that should be fetched at a time
+    optional int64 select_batch_size = 2 [(gogoproto.nullable)=false];
+    // DeleteBatchSize is the amount of rows that should be deleted at a time.
+    optional int64 delete_batch_size = 3 [(gogoproto.nullable)=false];
   }
   // RowLevelTTL is set if there is a TTL set on the table.
   optional RowLevelTTL row_level_ttl = 47 [(gogoproto.customname)="RowLevelTTL"];

@@ -27,5 +27,27 @@ func ValidateRowLevelTTL(ttl *descpb.TableDescriptor_RowLevelTTL) error {
 			`"ttl_expire_after" must be set`,
 		)
 	}
+	if ttl.DeleteBatchSize != 0 {
+		if err := ValidateTTLBatchSize("ttl_delete_batch_size", ttl.DeleteBatchSize); err != nil {
+			return err
+		}
+	}
+	if ttl.SelectBatchSize != 0 {
+		if err := ValidateTTLBatchSize("ttl_select_batch_size", ttl.SelectBatchSize); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ValidateTTLBatchSize validates the batch size of a TTL.
+func ValidateTTLBatchSize(key string, val int64) error {
+	if val <= 0 {
+		return pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`"%s" must be at least 1`,
+			key,
+		)
+	}
 	return nil
 }
