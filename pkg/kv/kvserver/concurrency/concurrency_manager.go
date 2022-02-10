@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -142,7 +143,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize)
+	lt := newLockTable(cfg.MaxLockTableSize, timeutil.DefaultTimeSource{})
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
