@@ -927,8 +927,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Initialize the external storage builders configuration params now that the
 	// engines have been created. The object can be used to create ExternalStorage
 	// objects hereafter.
-	// TODO(aditya): This call seems to occur too early, see
-	// https://github.com/cockroachdb/cockroach/issues/75725
 	fileTableInternalExecutor := sql.MakeInternalExecutor(ctx, s.PGServer().SQLServer, sql.MemoryMetrics{}, s.st)
 	s.externalStorageBuilder.init(
 		s.cfg.ExternalIODirConfig,

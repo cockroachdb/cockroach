@@ -465,8 +465,6 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	// TODO(aditya): This call seems to occur too early, see
-	// https://github.com/cockroachdb/cockroach/issues/75725
 	esb.init(
 		sqlCfg.ExternalIODirConfig,
 		baseCfg.Settings,
