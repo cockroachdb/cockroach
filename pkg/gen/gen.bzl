@@ -1,3 +1,23 @@
+# This file works in concert with the binary in genbzl. That tool will utilize
+# bazel query to generate lists of generated file targets. These lists are
+# loaded below and then utilized in exported macros from here for use in
+# BUILD.bazel. That tool is invoked during the bazel generation which occurs
+# in build/bazelutil/bazel-generate.sh which itself is invoked by
+# ./dev generate bazel.
+#
+# Note that there's a circularity to the definitions which is relied upon to
+# create the MISC_SRCS target. The genbzl tool will reference targets which
+# capture all of the EXPLICIT_SRCS and the EXCLUDED_SRCS and subtract them from
+# all of the generated files in the repo in order to compute the MISC_SRCS
+# list.
+#
+# Most of these lists of generated files utilize genrule or something derived
+# from genrule, and thus the mapping within the sandbox to the files is
+# straightforward. The exception is go_proto_library which hides its
+# generated artifacts behind a few layers of indirection. See
+# _go_proto_srcs which deals with properly sussing out the prefix for those
+# generated go files.
+
 load("@io_bazel_rules_go//go:def.bzl", "GoSource")
 load(":protobuf.bzl", "PROTOBUF_SRCS")
 load(":gomock.bzl", "GOMOCK_SRCS")
@@ -7,13 +27,26 @@ load(":optgen.bzl", "OPTGEN_SRCS")
 load(":misc.bzl", "MISC_SRCS")
 load(":docs.bzl", "DOCS_SRCS")
 
+
 # TODO(ajwerner): Use the all variable combined with genquery to construct
 # a test to show that all of the generated files in the repo are represented
 # here. Of course, this will rely on actually representing all of the generated
 # file here.
 EXPLICIT_SRCS = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS + OPTGEN_SRCS + DOCS_SRCS
 
-GeneratedFileInfo = provider(
+# GeneratedFileInfo provides two pieces of information to the _hoist_files
+# rule. It provides the set of files to be hoisted via the generated_files
+# field and it provides a list of commands to run to clean up potentially
+# stale generated files. The reason to couple these is so that various rules
+# and invocations of _hoist_files can compose and the end result will properly
+# clean and hoist those files.
+#
+# Note that the layout of generated_files is a dict where the key is a prefix
+# to trim from the paths in the list of strings that are the values when
+# hoisting back into the workspace. This exists primarily to deal with the
+# _go_proto_srcs rule and go_proto_library which emit their sources into a
+# path in the sandbox which is not parallel to its path in the repo.
+_GeneratedFileInfo = provider(
   "Info needed to hoist generated files",
   fields = {
     "generated_files": "dictionary from prefix to list of files",
@@ -21,6 +54,8 @@ GeneratedFileInfo = provider(
   }
 )
 
+# This is a useful helper for creating cleanup commands which operate within
+# the workspace root.
 def _subshell_in_workspace_snippet(cmds=[]):
   return """\
 # Use a subshell with () to avoid changing the directory in the main shell.
@@ -34,6 +69,9 @@ def _subshell_in_workspace_snippet(cmds=[]):
 # irrelevant files.
 _find_relevant = "find ./pkg -name node_modules -prune -o "
 
+# This rule implementation takes PROTOBUF_SRCS, which expose the GoSource
+# provider and map then into a _GeneratedFileInfo which tells _hoist_files
+# how to locate the generated code within the sandbox. Compare this to
 def _go_proto_srcs_impl(ctx):
   generated_files = {}
   for s in ctx.attr._srcs:
@@ -45,7 +83,7 @@ def _go_proto_srcs_impl(ctx):
     generated_files[prefix] = [f for f in srcs.srcs]
 
   return [
-    GeneratedFileInfo(
+    _GeneratedFileInfo(
       generated_files = generated_files,
       # Create a task to remove any existing protobuf files.
       cleanup_tasks = [
@@ -63,9 +101,12 @@ _go_proto_srcs = rule(
   },
 )
 
+# This rule is the default rule to build construct the input to _hoist_files
+# for srcs which have a path in the sandbox that is parallel to where those
+# files should end up in the repo.
 def _no_prefix_impl(ctx):
   files = [f for di in ctx.attr.srcs for f in di[DefaultInfo].files.to_list()]
-  return [GeneratedFileInfo(
+  return [_GeneratedFileInfo(
     generated_files = {"": files},
     cleanup_tasks = ctx.attr.cleanup_tasks,
   )]
@@ -78,6 +119,23 @@ _no_prefix = rule(
   },
 )
 
+# This rule is responsible for generating an executable which can clean up old
+# generated files and hoist new ones according to info in a _GeneratedFileInfo
+# provider. Note that it also propagates the same _GeneratedFileInfo so that
+# multiple _hoist_files targets can be combined into a larger _hoist_files
+# target.
+#
+# The basic structure is that it creates a bash script which performs the
+# cleanup tasks and then copies the files and sets their permissions.
+#
+# Note that this rule is not exported and is invoked through macros which
+# obfuscate some of its structure. The go_proto and _hoist_no_prefix macros
+# invoke this rule. The gen macro also invokes this rule with targets that
+# were either generated with hard-coded invocations exported here or
+# combinations thereof.
+#
+# TODO(ajwerner): If this script proves slow, we could rewrite it to depend
+# on a go program which can perform the file IO in parallel.
 def _hoist_files_impl(ctx):
   cp_file_cmd_fmt = """\
 cp {src} {dst}
@@ -95,7 +153,7 @@ set -euo pipefail
   cmds = []
   generated_files = {}
   for set in ctx.attr.data:
-    gfi = set[GeneratedFileInfo]
+    gfi = set[_GeneratedFileInfo]
     cleanup_tasks += gfi.cleanup_tasks if hasattr(gfi, "cleanup_tasks") else []
     for prefix, files in gfi.generated_files.items():
       if prefix not in generated_files:
@@ -117,7 +175,7 @@ set -euo pipefail
   runfiles = ctx.runfiles(files = [file for files in generated_files.values() for file in files])
   return [
     DefaultInfo(executable = executable, runfiles=runfiles),
-    GeneratedFileInfo(
+    _GeneratedFileInfo(
       generated_files = generated_files,
       cleanup_tasks = cleanup_tasks,
     )
@@ -126,16 +184,18 @@ set -euo pipefail
 _hoist_files = rule(
     implementation = _hoist_files_impl,
     attrs = {
-        "data": attr.label_list(providers = [GeneratedFileInfo]),
+        "data": attr.label_list(providers = [_GeneratedFileInfo]),
     },
     executable = True,
 )
 
-def _hoist(name, src_rule):
-  src_name = name + "_srcs"
-  src_rule(name = src_name)
-  _hoist_files(name = name, data = [src_name], tags = ["no-remote-exec"])
+def go_proto():
+  _go_proto_srcs(name = "go_proto_srcs")
+  _hoist_files(name = "go_proto", data = ["go_proto_srcs"], tags = ["no-remote-exec"])
 
+
+# This macro is leveraged below by all of the macros corresponding to targets
+# which don't need any special prefix handling (all but go_proto).
 def _hoist_no_prefix(name, srcs, cleanup_tasks = []):
   srcs_name = name + "_srcs"
   _no_prefix(
@@ -144,9 +204,6 @@ def _hoist_no_prefix(name, srcs, cleanup_tasks = []):
     cleanup_tasks = cleanup_tasks,
   )
   _hoist_files(name = name, data = [srcs_name], tags = ["no-remote-exec"])
-
-def go_proto():
-  _hoist("go_proto", _go_proto_srcs)
 
 def gomock():
   _hoist_no_prefix(
