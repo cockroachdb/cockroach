@@ -1998,13 +1998,7 @@ func planDatabaseModifiersForRestore(
 		if err != nil {
 			return nil, nil, err
 		}
-		regionConfig := multiregion.MakeRegionConfig(
-			[]catpb.RegionName{defaultPrimaryRegion},
-			defaultPrimaryRegion,
-			sg,
-			regionEnumID,
-			descpb.DataPlacement_DEFAULT,
-		)
+		regionConfig := multiregion.MakeRegionConfig([]catpb.RegionName{defaultPrimaryRegion}, defaultPrimaryRegion, sg, regionEnumID, descpb.DataPlacement_DEFAULT, nil)
 		if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 			return nil, nil, err
 		}

@@ -96,13 +96,7 @@ func initializeMultiRegionMetadata(
 	if err != nil {
 		return nil, err
 	}
-	regionConfig := multiregion.MakeRegionConfig(
-		regionNames,
-		primaryRegion,
-		survivalGoal,
-		regionEnumID,
-		placement,
-	)
+	regionConfig := multiregion.MakeRegionConfig(regionNames, primaryRegion, survivalGoal, regionEnumID, placement, nil)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err
 	}

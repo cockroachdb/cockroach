@@ -872,13 +872,7 @@ func createImportingDescriptors(
 							if err != nil {
 								return err
 							}
-							regionConfig := multiregion.MakeRegionConfig(
-								regionNames,
-								desc.RegionConfig.PrimaryRegion,
-								desc.RegionConfig.SurvivalGoal,
-								desc.RegionConfig.RegionEnumID,
-								desc.RegionConfig.Placement,
-							)
+							regionConfig := multiregion.MakeRegionConfig(regionNames, desc.RegionConfig.PrimaryRegion, desc.RegionConfig.SurvivalGoal, desc.RegionConfig.RegionEnumID, desc.RegionConfig.Placement, desc.RegionConfig.SuperRegions)
 							if err := sql.ApplyZoneConfigFromDatabaseRegionConfig(
 								ctx,
 								desc.GetID(),
