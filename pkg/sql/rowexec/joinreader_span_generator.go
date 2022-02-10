@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -456,9 +457,9 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 		setOfVals := false
 		inequality := false
 		switch t.Operator.Symbol {
-		case tree.EQ, tree.In:
+		case treecmp.EQ, treecmp.In:
 			setOfVals = true
-		case tree.GE, tree.LE, tree.GT, tree.LT:
+		case treecmp.GE, treecmp.LE, treecmp.GT, treecmp.LT:
 			inequality = true
 		default:
 			// This should never happen because of enforcement at opt time.
@@ -546,22 +547,22 @@ func (g *multiSpanGenerator) fillInIndexColInfos(expr tree.TypedExpr) error {
 			}
 
 			if lval != nil {
-				if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
+				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
 					inequalityInfo.start = lval
-					inequalityInfo.startInclusive = t.Operator.Symbol == tree.LE
+					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.LE
 				} else {
 					inequalityInfo.end = lval
-					inequalityInfo.endInclusive = t.Operator.Symbol == tree.GE
+					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.GE
 				}
 			}
 
 			if rval != nil {
-				if t.Operator.Symbol == tree.LT || t.Operator.Symbol == tree.LE {
+				if t.Operator.Symbol == treecmp.LT || t.Operator.Symbol == treecmp.LE {
 					inequalityInfo.end = rval
-					inequalityInfo.endInclusive = t.Operator.Symbol == tree.LE
+					inequalityInfo.endInclusive = t.Operator.Symbol == treecmp.LE
 				} else {
 					inequalityInfo.start = rval
-					inequalityInfo.startInclusive = t.Operator.Symbol == tree.GE
+					inequalityInfo.startInclusive = t.Operator.Symbol == treecmp.GE
 				}
 			}
 			info = inequalityInfo

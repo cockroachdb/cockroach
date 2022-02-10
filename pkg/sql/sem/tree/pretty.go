@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -888,9 +889,9 @@ func (node *ComparisonExpr) doc(p *PrettyCfg) pretty.Doc {
 	// IS and IS NOT are equivalent to IS NOT DISTINCT FROM and IS DISTINCT
 	// FROM, respectively, when the RHS is true or false. We prefer the less
 	// verbose IS and IS NOT in those cases.
-	if node.Operator.Symbol == IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	if node.Operator.Symbol == treecmp.IsDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS NOT"
-	} else if node.Operator.Symbol == IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
+	} else if node.Operator.Symbol == treecmp.IsNotDistinctFrom && (node.Right == DBoolTrue || node.Right == DBoolFalse) {
 		opStr = "IS"
 	}
 	opDoc := pretty.Keyword(opStr)

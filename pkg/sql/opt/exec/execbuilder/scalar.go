@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -238,7 +239,7 @@ func (b *Builder) buildComparison(
 	}
 
 	operator := opt.ComparisonOpReverseMap[scalar.Op()]
-	return tree.NewTypedComparisonExpr(tree.MakeComparisonOperator(operator), left, right), nil
+	return tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(operator), left, right), nil
 }
 
 func (b *Builder) buildUnary(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -433,8 +434,8 @@ func (b *Builder) buildAnyScalar(
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(
-		tree.MakeComparisonOperator(tree.Any),
-		tree.MakeComparisonOperator(cmp),
+		treecmp.MakeComparisonOperator(treecmp.Any),
+		treecmp.MakeComparisonOperator(cmp),
 		left,
 		right,
 	), nil
@@ -552,8 +553,8 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	cmp := opt.ComparisonOpReverseMap[any.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(
-		tree.MakeComparisonOperator(tree.Any),
-		tree.MakeComparisonOperator(cmp),
+		treecmp.MakeComparisonOperator(treecmp.Any),
+		treecmp.MakeComparisonOperator(cmp),
 		scalarExpr,
 		subqueryExpr,
 	), nil

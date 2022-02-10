@@ -71,6 +71,7 @@ go_library(
         "//pkg/sql/colexec/execgen",
         "//pkg/sql/colexecerror",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_gostdlib//x/tools/imports",

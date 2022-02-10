@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -246,7 +247,7 @@ func getCmpFunc(typeFamily types.Family) compareFunc {
 	}
 	canonicalTypeFamily := typeconv.TypeFamilyToCanonicalTypeFamily(typeFamily)
 	var overload *oneArgOverload
-	for _, o := range sameTypeComparisonOpToOverloads[tree.EQ] {
+	for _, o := range sameTypeComparisonOpToOverloads[treecmp.EQ] {
 		if o.CanonicalTypeFamily == canonicalTypeFamily {
 			overload = o
 			break

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -57090,7 +57091,7 @@ func (p *selGEDatumDatumOp) Next() coldata.Batch {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given left and right column types and comparison.
 func GetSelectionConstOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	colIdx int,
@@ -57109,7 +57110,7 @@ func GetSelectionConstOperator(
 		// fallback to the default comparison operator if either of the
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
-		case tree.EQ:
+		case treecmp.EQ:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -57327,7 +57328,7 @@ func GetSelectionConstOperator(
 					}
 				}
 			}
-		case tree.NE:
+		case treecmp.NE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -57545,7 +57546,7 @@ func GetSelectionConstOperator(
 					}
 				}
 			}
-		case tree.LT:
+		case treecmp.LT:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -57763,7 +57764,7 @@ func GetSelectionConstOperator(
 					}
 				}
 			}
-		case tree.LE:
+		case treecmp.LE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -57981,7 +57982,7 @@ func GetSelectionConstOperator(
 					}
 				}
 			}
-		case tree.GT:
+		case treecmp.GT:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -58199,7 +58200,7 @@ func GetSelectionConstOperator(
 					}
 				}
 			}
-		case tree.GE:
+		case treecmp.GE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -58430,7 +58431,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given left and right column types and comparison.
 func GetSelectionOperator(
-	cmpOp tree.ComparisonOperator,
+	cmpOp treecmp.ComparisonOperator,
 	input colexecop.Operator,
 	inputTypes []*types.T,
 	col1Idx int,
@@ -58449,7 +58450,7 @@ func GetSelectionOperator(
 		// fallback to the default comparison operator if either of the
 		// input vectors is of a tuple type.
 		switch cmpOp.Symbol {
-		case tree.EQ:
+		case treecmp.EQ:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -58667,7 +58668,7 @@ func GetSelectionOperator(
 					}
 				}
 			}
-		case tree.NE:
+		case treecmp.NE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -58885,7 +58886,7 @@ func GetSelectionOperator(
 					}
 				}
 			}
-		case tree.LT:
+		case treecmp.LT:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -59103,7 +59104,7 @@ func GetSelectionOperator(
 					}
 				}
 			}
-		case tree.LE:
+		case treecmp.LE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -59321,7 +59322,7 @@ func GetSelectionOperator(
 					}
 				}
 			}
-		case tree.GT:
+		case treecmp.GT:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
@@ -59539,7 +59540,7 @@ func GetSelectionOperator(
 					}
 				}
 			}
-		case tree.GE:
+		case treecmp.GE:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BoolFamily:
 				switch leftType.Width() {
