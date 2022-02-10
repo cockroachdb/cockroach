@@ -589,6 +589,8 @@ const ConnAuditingClusterSettingName = "server.auth_log.sql_connections.enabled"
 // create a circular dependency.
 const AuthAuditingClusterSettingName = "server.auth_log.sql_sessions.enabled"
 
+const MaxNumConnectionsClusterSettingName = "server.max_connections_per_gateway"
+
 // shouldCheckPublicSchema indicates whether canCreateOnSchema should check
 // CREATE privileges for the public schema.
 type shouldCheckPublicSchema bool

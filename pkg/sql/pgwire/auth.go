@@ -66,6 +66,10 @@ type authOptions struct {
 	// ie is the server-wide internal executor, used to
 	// retrieve entries from system.users.
 	ie *sql.InternalExecutor
+	// postAuthHook, if non-nil, is called after successful authentication.
+	postAuthHook func(sql.SessionArgs) error
+	// postAuthHookCleanup, if non-nil, is called after connection is closed to clean up postAuthHook
+	postAuthHookCleanup func()
 
 	// The following fields are only used by tests.
 
@@ -209,6 +213,19 @@ func (c *conn) handleAuthentication(
 	}
 
 	ac.LogAuthOK(ctx)
+
+	if authOpt.postAuthHook != nil {
+		if err := authOpt.postAuthHook(c.sessionArgs); err != nil {
+			return connClose, sendError(err)
+		} else if authOpt.postAuthHookCleanup != nil {
+			prevConnClose := connClose
+			connClose = func() {
+				prevConnClose()
+				authOpt.postAuthHookCleanup()
+			}
+		}
+	}
+
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgAuth)
 	c.msgBuilder.putInt32(authOK)
 	return connClose, c.msgBuilder.finishMsg(c.conn)
