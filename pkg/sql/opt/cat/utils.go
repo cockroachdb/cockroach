@@ -223,7 +223,7 @@ func formatCatalogIndex(tab Table, ord int, tp treeprinter.Node) {
 			fmt.Fprintf(&buf, " (storing)")
 		}
 
-		if i < idx.ImplicitPartitioningColumnCount() {
+		if i < idx.ImplicitColumnCount() {
 			fmt.Fprintf(&buf, " (implicit)")
 		}
 
