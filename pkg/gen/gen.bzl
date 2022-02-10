@@ -5,12 +5,13 @@ load(":stringer.bzl", "STRINGER_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 load(":optgen.bzl", "OPTGEN_SRCS")
 load(":misc.bzl", "MISC_SRCS")
+load(":docs.bzl", "DOCS_SRCS")
 
 # TODO(ajwerner): Use the all variable combined with genquery to construct
 # a test to show that all of the generated files in the repo are represented
 # here. Of course, this will rely on actually representing all of the generated
 # file here.
-EXPLICIT_SRCS = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS + OPTGEN_SRCS
+EXPLICIT_SRCS = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS + OPTGEN_SRCS + DOCS_SRCS
 
 GeneratedFileInfo = provider(
   "Info needed to hoist generated files",
@@ -140,6 +141,20 @@ _stringer_srcs = rule(
    },
 )
 
+def _docs_srcs_impl(ctx):
+  return [GeneratedFileInfo(
+    generated_files = {
+      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
+    },
+  )]
+
+_docs_srcs = rule(
+   implementation = _docs_srcs_impl,
+   attrs = {
+       "_srcs": attr.label_list(allow_files=True, default=DOCS_SRCS),
+   },
+)
+
 def _misc_srcs_impl(ctx):
   return [GeneratedFileInfo(
     generated_files = {
@@ -231,6 +246,9 @@ def optgen():
 
 def misc():
   _hoist("misc", _misc_srcs)
+
+def docs():
+  _hoist("docs", _docs_srcs)
 
 def gen(name, srcs):
   _hoist_files(name = name, data = srcs, tags = ["no-remote-exec"])

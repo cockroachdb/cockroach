@@ -97,11 +97,13 @@ in $og - filter(".*:.*(-gen|gen-).*", $og)`,
 	{
 		filename: "excluded.bzl",
 		query: `
-let all = kind("generated file", //pkg/...:*)
+let all = kind("generated file", //...:*)
 in ($all ^ //pkg/ui/...:*)
   + ($all ^ labels("out", kind("_gomock_prog_gen rule",  //pkg/...:*)))
   + filter(".*:.*(-gen|gen-).*", $all)
-  + //pkg/testutils/lint/passes/errcheck:errcheck_excludes.txt`,
+  + //pkg/testutils/lint/passes/errcheck:errcheck_excludes.txt
+  + //build/bazelutil:test_stamping.txt
+  + labels("outs", //docs/generated/sql/bnf:svg)`,
 		variable: "EXCLUDED_SRCS",
 	},
 	{
@@ -112,6 +114,13 @@ kind("generated file", //pkg/...:*)
   - labels("srcs", //pkg/gen:excluded)
 `,
 		variable: "MISC_SRCS",
+	},
+	{
+		filename: "docs.bzl",
+		variable: "DOCS_SRCS",
+		query: `
+kind("generated file", //docs/...:*)
+  - labels("outs", //docs/generated/sql/bnf:svg)`,
 	},
 }
 

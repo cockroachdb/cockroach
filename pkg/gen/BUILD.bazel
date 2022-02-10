@@ -1,4 +1,4 @@
-load(":gen.bzl", "EXPLICIT_SRCS", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
+load(":gen.bzl", "EXPLICIT_SRCS", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
 load(":excluded.bzl", "EXCLUDED_SRCS")
 
 filegroup(
@@ -23,8 +23,18 @@ optgen()
 
 misc()
 
+docs()
+
 gen(
     name = "gen",
+    srcs = [
+        ":code",
+        ":docs",
+    ],
+)
+
+gen(
+    name = "code",
     srcs = [
         ":execgen",
         ":go_proto",
