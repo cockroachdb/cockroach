@@ -42,6 +42,10 @@ gomock(
     library = ":rangefeed",
     package = "rangefeed",
     self_package = "github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_test(

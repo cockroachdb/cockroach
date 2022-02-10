@@ -92,4 +92,8 @@ genrule(
         "@go_sdk//:bin/go",
         "@com_github_cockroachdb_tools//cmd/stringer",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

@@ -1,4 +1,4 @@
-load(":gen.bzl", "go_proto_srcs", "hoist_files")
+load(":gen.bzl", "go_proto_srcs", "gomock_srcs", "hoist_files", "stringer_srcs")
 
 hoist_files(
     name = "go_proto",
@@ -6,6 +6,26 @@ hoist_files(
     tags = ["no-remote-exec"],
 )
 
+hoist_files(
+    name = "gomock",
+    data = [":gomock_srcs"],
+    tags = ["no-remote-exec"],
+)
+
+hoist_files(
+    name = "stringer",
+    data = [":stringer_srcs"],
+    tags = ["no-remote-exec"],
+)
+
 go_proto_srcs(
     name = "go_proto_srcs",
+)
+
+gomock_srcs(
+    name = "gomock_srcs",
+)
+
+stringer_srcs(
+    name = "stringer_srcs",
 )

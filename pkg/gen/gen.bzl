@@ -1,5 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "GoSource")
 load(":protobuf.bzl", "PROTOBUF_SRCS")
+load(":gomock.bzl", "GOMOCK_SRCS")
+load(":stringer.bzl", "STRINGER_SRCS")
 
 GeneratedFileInfo = provider(
   "Info needed to hoist generated files",
@@ -24,8 +26,8 @@ def _go_proto_srcs_impl(ctx):
       generated_files = generated_files,
       # Create a task to remove any existing protobuf files.
       cleanup_tasks = [
-# Use a subshell with () to avoid changing the directory in the main shell.
 """
+# Use a subshell with () to avoid changing the directory in the main shell.
 (
     cd "${BUILD_WORKSPACE_DIRECTORY}"
     # Avoid searching the node_modules directory because it's full of
@@ -40,9 +42,67 @@ def _go_proto_srcs_impl(ctx):
   ]
 
 go_proto_srcs = rule(
-   implementation = _go_proto_srcs_impl,
+  implementation = _go_proto_srcs_impl,
+  attrs = {
+   "_srcs": attr.label_list(providers = [GoSource], default=PROTOBUF_SRCS),
+  },
+)
+
+def _gomock_srcs_impl(ctx):
+  return [GeneratedFileInfo(
+    generated_files = {
+      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
+    },
+    cleanup_tasks = [
+"""
+# Use a subshell with () to avoid changing the directory in the main shell.
+(
+  cd "${BUILD_WORKSPACE_DIRECTORY}"
+  # Avoid searching the node_modules directory because it's full of
+  # irrelevant files.
+  find ./pkg -name node_modules -prune -o \
+    -type f -name '*.go' \
+    | egrep '/(drt|mocks)_generated(_test)?\\.go' \
+    | xargs rm
+)
+""",
+    ],
+  )]
+
+gomock_srcs = rule(
+   implementation = _gomock_srcs_impl,
    attrs = {
-       "_srcs": attr.label_list(providers = [GoSource], default=PROTOBUF_SRCS),
+       "_srcs": attr.label_list(allow_files=True, default=GOMOCK_SRCS),
+   },
+)
+
+
+
+def _stringer_srcs_impl(ctx):
+  return [GeneratedFileInfo(
+    generated_files = {
+      "": [f for di in ctx.attr._srcs for f in di[DefaultInfo].files.to_list()],
+    },
+    cleanup_tasks = [
+"""
+# Use a subshell with () to avoid changing the directory in the main shell.
+(
+  cd "${BUILD_WORKSPACE_DIRECTORY}"
+  # Avoid searching the node_modules directory because it's full of
+  # irrelevant files.
+  find ./pkg -name node_modules -prune -o \
+    -type f -name '*.go' \
+    | egrep '/(drt|mocks)_generated(_test)?\\.go' \
+    | xargs rm
+)
+""",
+    ],
+  )]
+
+stringer_srcs = rule(
+   implementation = _stringer_srcs_impl,
+   attrs = {
+       "_srcs": attr.label_list(allow_files=True, default=STRINGER_SRCS),
    },
 )
 
