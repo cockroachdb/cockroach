@@ -59,6 +59,26 @@ CREATE TABLE public.tbl (
                                                                                            FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10 days':::INTERVAL)
 
+statement error cannot modify TTL whilst another schema change is in progress
+ALTER TABLE tbl RESET (ttl), RESET (ttl_expire_after)
+
+
+statement error cannot modify TTL whilst another schema change is in progress
+BEGIN;
+ALTER TABLE tbl RESET (ttl);
+ALTER TABLE tbl SET (ttl_select_batch_size = 200)
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl RESET (ttl);
+CREATE INDEX tbl_idx ON tbl (text)
+
+statement ok
+ROLLBACK
+
 # Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
 statement ok
 ALTER TABLE tbl RESET (ttl)
@@ -357,6 +377,34 @@ CREATE TABLE tbl (
    text TEXT,
    FAMILY (id, text)
 )
+
+statement error cannot modify TTL whilst another schema change is in progress
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
+
+statement error cannot modify TTL whilst another schema change is in progress
+BEGIN;
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+ALTER TABLE tbl RESET (ttl_select_batch_size)
+
+statement ok
+ROLLBACK
+
+
+statement error cannot modify TTL whilst another schema change is in progress
+BEGIN;
+CREATE INDEX tbl_idx ON tbl (text);
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+CREATE INDEX tbl_idx ON tbl (text)
+
+statement ok
+ROLLBACK
 
 statement ok
 ALTER TABLE tbl SET (ttl_expire_after = '10 minutes', ttl_select_batch_size = 200)
