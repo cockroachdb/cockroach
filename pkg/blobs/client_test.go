@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -87,8 +88,10 @@ func setUpService(
 			return nil, errors.Errorf("node %d not found", nodeID)
 		},
 	)
+	localNodeIDContainer := &base.NodeIDContainer{}
+	localNodeIDContainer.Set(context.Background(), localNodeID)
 	return NewBlobClientFactory(
-		localNodeID,
+		localNodeIDContainer,
 		localDialer,
 		localExternalDir,
 	)

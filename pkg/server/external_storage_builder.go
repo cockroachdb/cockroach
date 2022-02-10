@@ -53,7 +53,7 @@ func (e *externalStorageBuilder) init(
 		blobClientFactory = p.BlobClientFactory
 	}
 	if blobClientFactory == nil {
-		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer.Get(), nodeDialer, settings.ExternalIODir)
+		blobClientFactory = blobs.NewBlobClientFactory(nodeIDContainer, nodeDialer, settings.ExternalIODir)
 	}
 	e.conf = conf
 	e.settings = settings
