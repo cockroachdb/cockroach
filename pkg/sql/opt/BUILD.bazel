@@ -77,6 +77,10 @@ genrule(
       $(location //pkg/sql/opt/optgen/cmd/optgen) -out $@ ops $(locations :ops)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the enumeration of rulenames.
@@ -93,6 +97,10 @@ genrule(
           $(locations :ops) $(locations //pkg/sql/opt/norm:rules) $(locations //pkg/sql/opt/xform:rules)
     """,
     exec_tools = ["//pkg/sql/opt/optgen/cmd/optgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the generator for the stringification of rulenames.
