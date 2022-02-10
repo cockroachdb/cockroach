@@ -52,7 +52,10 @@ def gen_reports(name, dep, transitions_variable, starting_state_name):
     lower = transitions_variable.lower()
     native.genrule(
         name = name,
-        cmd = "$(location :{template_name}_bin) $(location {lower}_diagram.gv) $(location {lower}_report.txt) 'bazel build {name}'".format(
+        cmd = """\
+export COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true
+$(location :{template_name}_bin) $(location {lower}_diagram.gv) $(location {lower}_report.txt) 'bazel build {name}'
+""".format(
             template_name = template_name,
             lower = lower,
             name = name,
