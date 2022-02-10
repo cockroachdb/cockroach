@@ -185,6 +185,12 @@ func ShowCreateTable(
 			`ttl_automatic_column = 'on'`,
 			fmt.Sprintf(`ttl_expire_after = %s`, ttl.DurationExpr),
 		)
+		if bs := ttl.SelectBatchSize; bs != 0 {
+			storageParams = append(storageParams, fmt.Sprintf(`ttl_select_batch_size = %d`, bs))
+		}
+		if bs := ttl.DeleteBatchSize; bs != 0 {
+			storageParams = append(storageParams, fmt.Sprintf(`ttl_delete_batch_size = %d`, bs))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		storageParams = append(storageParams, `exclude_data_from_backup = true`)
