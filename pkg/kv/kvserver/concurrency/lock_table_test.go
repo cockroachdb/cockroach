@@ -51,6 +51,11 @@ new-lock-table maxlocks=<int>
 
   Creates a lockTable. The lockTable is initially enabled.
 
+time-tick [m=<int>] [s=<int>] [ms=<int>] [ns=<int>]
+----
+
+  Forces the manual clock to tick forward m minutes, s seconds, ms milliseconds, and ns nanoseconds.
+
 new-txn txn=<name> ts=<int>[,<int>] epoch=<int> [seq=<int>]
 ----
 
@@ -166,12 +171,13 @@ func TestLockTableBasic(t *testing.T) {
 		var txnCounter uint128.Uint128
 		var requestsByName map[string]Request
 		var guardsByReqName map[string]lockTableGuard
+		testTimeProvider := timeutil.NewManualTime(time.Time{})
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks))
+				ltImpl := newLockTable(int64(maxLocks), testTimeProvider)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -180,6 +186,28 @@ func TestLockTableBasic(t *testing.T) {
 				txnCounter = uint128.FromInts(0, 0)
 				requestsByName = make(map[string]Request)
 				guardsByReqName = make(map[string]lockTableGuard)
+				return ""
+
+			case "time-tick":
+				var timeDelta time.Duration
+				var delta int
+				if d.HasArg("m") {
+					d.ScanArgs(t, "m", &delta)
+					timeDelta += time.Duration(delta) * time.Minute
+				}
+				if d.HasArg("s") {
+					d.ScanArgs(t, "s", &delta)
+					timeDelta += time.Duration(delta) * time.Second
+				}
+				if d.HasArg("ms") {
+					d.ScanArgs(t, "ms", &delta)
+					timeDelta += time.Duration(delta) * time.Millisecond
+				}
+				if d.HasArg("ns") {
+					d.ScanArgs(t, "ns", &delta)
+					timeDelta += time.Duration(delta)
+				}
+				testTimeProvider.Advance(timeDelta)
 				return ""
 
 			case "new-txn":
@@ -617,7 +645,7 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5)
+	lt := newLockTable(5, timeutil.DefaultTimeSource{})
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -744,7 +772,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
-	lt := newLockTable(2)
+	lt := newLockTable(2, timeutil.DefaultTimeSource{})
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -980,7 +1008,7 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks)
+	lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1543,7 +1571,7 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks)
+						lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
@@ -1583,7 +1611,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
-			lt := newLockTable(maxLocks)
+			lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
 			lt.enabled = true
 
 			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}

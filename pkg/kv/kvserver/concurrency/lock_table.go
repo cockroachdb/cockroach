@@ -16,6 +16,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -223,6 +225,10 @@ type lockTableImpl struct {
 	// this deadlock has been created entirely due to the lock table's behavior.
 	seqNum uint64
 
+	// locks contains the btree objects (wrapped in the treeMu structure) that
+	// contain the actual lockState objects for a particular scope of the
+	// replica's key span (Global or Local). These lockState objects represent
+	// the individual locks in the lock table.
 	locks [spanset.NumSpanScope]treeMu
 
 	// maxLocks is a soft maximum on number of locks. When it is exceeded, and
@@ -243,19 +249,25 @@ type lockTableImpl struct {
 	// Range. For now, we don't do this because we don't share any state
 	// between separate concurrency.Manager instances.
 	finalizedTxnCache txnCache
+
+	// timeProvider is used to track the lock hold and lock wait start times.
+	// It may be a timeutil.DefaultTimeSource, and measure the wall clock time
+	// using Go's built-in time functions, or a utility for deterministic testing.
+	timeProvider timeutil.TimeSource
 }
 
 var _ lockTable = &lockTableImpl{}
 
-func newLockTable(maxLocks int64) *lockTableImpl {
+func newLockTable(maxLocks int64, timeProvider timeutil.TimeSource) *lockTableImpl {
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
 	lt := &lockTableImpl{
-		maxLocks: maxLocks,
-		minLocks: maxLocks / 2,
+		maxLocks:     maxLocks,
+		minLocks:     maxLocks / 2,
+		timeProvider: timeProvider,
 	}
 	for i := 0; i < int(spanset.NumSpanScope); i++ {
 		lt.locks[i].lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
@@ -397,7 +409,8 @@ type lockTableGuardImpl struct {
 
 	mu struct {
 		syncutil.Mutex
-		startWait bool
+		startWait        bool
+		requestWaitBegin time.Time
 
 		state  waitingState
 		signal chan struct{}
@@ -611,7 +624,7 @@ func (g *lockTableGuardImpl) findNextLockAfter(notify bool) {
 				// Else, past the lock where it stopped waiting. We may not
 				// encounter that lock since it may have been garbage collected.
 			}
-			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify)
+			wait, transitionedToFree := l.tryActiveWait(g, g.sa, notify, g.lt.timeProvider)
 			if transitionedToFree {
 				locksToGC[g.ss] = append(locksToGC[g.ss], l)
 			}
@@ -736,6 +749,14 @@ type lockState struct {
 		locked bool
 		// LockStrength is always Exclusive
 		holder [lock.MaxDurability + 1]lockHolderInfo
+
+		// The start time of the lockholder being marked as held in the lock table.
+		// NB: In the case of a replicated lock that is held by a transaction, if
+		// there is no wait-queue, the lock is not tracked by the in-memory lock
+		// table; thus for uncontended replicated locks, the startTime may not
+		// represent the initial acquisition time of the lock but rather the time
+		// of the wait-queue forming and the lock being tracked in the lock table.
+		startTime time.Time
 	}
 
 	// Information about the requests waiting on the lock.
@@ -1037,17 +1058,21 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 }
 
 // addToMetrics adds the receiver's state to the provided metrics struct.
-func (l *lockState) addToMetrics(m *LockTableMetrics) {
+func (l *lockState) addToMetrics(m *LockTableMetrics, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.isEmptyLock() {
 		return
 	}
+	totalWaitDuration, maxWaitDuration := l.totalAndMaxWaitDuration(now)
 	lm := LockMetrics{
-		Key:            l.key,
-		Held:           l.holder.locked,
-		WaitingReaders: int64(l.waitingReaders.Len()),
-		WaitingWriters: int64(l.queuedWriters.Len()),
+		Key:                  l.key,
+		Held:                 l.holder.locked,
+		HoldDurationNanos:    l.lockHeldDuration(now).Nanoseconds(),
+		WaitingReaders:       int64(l.waitingReaders.Len()),
+		WaitingWriters:       int64(l.queuedWriters.Len()),
+		WaitDurationNanos:    totalWaitDuration.Nanoseconds(),
+		MaxWaitDurationNanos: maxWaitDuration.Nanoseconds(),
 	}
 	lm.Waiters = lm.WaitingReaders + lm.WaitingWriters
 	m.addLockMetrics(lm)
@@ -1207,6 +1232,46 @@ func (l *lockState) isEmptyLock() bool {
 	return false
 }
 
+// Returns the duration of time the lock has been tracked as held in the lock table.
+// REQUIRES: l.mu is locked.
+func (l *lockState) lockHeldDuration(now time.Time) time.Duration {
+	if !l.holder.locked {
+		return time.Duration(0)
+	}
+
+	return now.Sub(l.holder.startTime)
+}
+
+// Returns the total amount of time all waiters in the queues of
+// readers and writers have been waiting on the lock.
+// REQUIRES: l.mu is locked.
+func (l *lockState) totalAndMaxWaitDuration(now time.Time) (time.Duration, time.Duration) {
+	var totalWaitDuration time.Duration
+	var maxWaitDuration time.Duration
+	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		g := e.Value.(*lockTableGuardImpl)
+		g.mu.Lock()
+		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		totalWaitDuration += waitDuration
+		if waitDuration > maxWaitDuration {
+			maxWaitDuration = waitDuration
+		}
+		g.mu.Unlock()
+	}
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		g := qg.guard
+		g.mu.Lock()
+		waitDuration := now.Sub(g.mu.requestWaitBegin)
+		totalWaitDuration += waitDuration
+		if waitDuration > maxWaitDuration {
+			maxWaitDuration = waitDuration
+		}
+		g.mu.Unlock()
+	}
+	return totalWaitDuration, maxWaitDuration
+}
+
 // Returns true iff the lock is currently held by the transaction with the
 // given id.
 // REQUIRES: l.mu is locked.
@@ -1252,6 +1317,7 @@ func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 // REQUIRES: l.mu is locked.
 func (l *lockState) clearLockHolder() {
 	l.holder.locked = false
+	l.holder.startTime = time.Time{}
 	for i := range l.holder.holder {
 		l.holder.holder[i] = lockHolderInfo{}
 	}
@@ -1316,7 +1382,7 @@ func (l *lockState) clearLockHolder() {
 // The return value is true iff it is actively waiting.
 // Acquires l.mu, g.mu.
 func (l *lockState) tryActiveWait(
-	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool,
+	g *lockTableGuardImpl, sa spanset.SpanAccess, notify bool, timeProvider timeutil.TimeSource,
 ) (wait bool, transitionedToFree bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1462,6 +1528,7 @@ func (l *lockState) tryActiveWait(
 				// would be more fair, but more complicated, and we expect that the
 				// common case is that this waiter will be at the end of the queue.
 				g.mu.startWait = true
+				g.mu.requestWaitBegin = timeProvider.Now()
 				state := waitForState
 				state.kind = waitQueueMaxLengthExceeded
 				g.mu.state = state
@@ -1513,6 +1580,7 @@ func (l *lockState) tryActiveWait(
 	// Make it an active waiter.
 	g.key = l.key
 	g.mu.startWait = true
+	g.mu.requestWaitBegin = timeProvider.Now()
 	if g.isSameTxnAsReservation(waitForState) {
 		state := waitForState
 		state.kind = waitSelf
@@ -1575,7 +1643,11 @@ func (l *lockState) isNonConflictingLock(g *lockTableGuardImpl, sa spanset.SpanA
 // that is acquiring the lock.
 // Acquires l.mu.
 func (l *lockState) acquireLock(
-	_ lock.Strength, durability lock.Durability, txn *enginepb.TxnMeta, ts hlc.Timestamp,
+	_ lock.Strength,
+	durability lock.Durability,
+	txn *enginepb.TxnMeta,
+	ts hlc.Timestamp,
+	timeProvider timeutil.TimeSource,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1656,8 +1728,8 @@ func (l *lockState) acquireLock(
 		}
 		return nil
 	}
-	// Not already held, so may be reserved by this request. There is also the
-	// possibility that some other request has broken this reservation because
+	// Not already held, so may have been reserved by this request. There is also
+	// the possibility that some other request has broken this reservation because
 	// of a concurrent release but that is harmless since this request is
 	// holding latches and has proceeded to evaluation.
 	if l.reservation != nil {
@@ -1692,6 +1764,7 @@ func (l *lockState) acquireLock(
 	l.holder.holder[durability].txn = txn
 	l.holder.holder[durability].ts = ts
 	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), txn.Sequence)
+	l.holder.startTime = timeProvider.Now()
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	l.releaseWritersFromTxn(txn)
@@ -1710,6 +1783,7 @@ func (l *lockState) discoveredLock(
 	g *lockTableGuardImpl,
 	sa spanset.SpanAccess,
 	notRemovable bool,
+	timeProvider timeutil.TimeSource,
 ) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -1725,6 +1799,7 @@ func (l *lockState) discoveredLock(
 		}
 	} else {
 		l.holder.locked = true
+		l.holder.startTime = timeProvider.Now()
 	}
 	holder := &l.holder.holder[lock.Replicated]
 	if holder.txn == nil {
@@ -2378,7 +2453,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock)
+	err = l.discoveredLock(&intent.Txn, intent.Txn.WriteTimestamp, g, sa, notRemovableLock, g.lt.timeProvider)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	tree.mu.Unlock()
@@ -2449,7 +2524,7 @@ func (t *lockTableImpl) AcquireLock(
 			return nil
 		}
 	}
-	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp)
+	err := l.acquireLock(strength, durability, txn, txn.WriteTimestamp, t.timeProvider)
 	tree.mu.Unlock()
 
 	if checkMaxLocks {
@@ -2687,9 +2762,10 @@ func (t *lockTableImpl) Metrics() LockTableMetrics {
 		}
 
 		// Iterate and compute metrics.
+		now := t.timeProvider.Now()
 		iter := snap.MakeIter()
 		for iter.First(); iter.Valid(); iter.Next() {
-			iter.Cur().addToMetrics(&m)
+			iter.Cur().addToMetrics(&m, now)
 		}
 
 		// Reset snapshot to free resources.

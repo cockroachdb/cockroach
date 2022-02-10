@@ -1004,10 +1004,24 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Lock Hold Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_hold_duration_nanos",
+					"kv.concurrency.max_lock_hold_duration_nanos",
+				},
+			},
+			{
 				Title: "Waiters",
 				Metrics: []string{
 					"kv.concurrency.lock_wait_queue_waiters",
 					"kv.concurrency.max_lock_wait_queue_waiters_for_lock",
+				},
+			},
+			{
+				Title: "Lock Wait Durations",
+				Metrics: []string{
+					"kv.concurrency.avg_lock_wait_duration_nanos",
+					"kv.concurrency.max_lock_wait_duration_nanos",
 				},
 			},
 		},
