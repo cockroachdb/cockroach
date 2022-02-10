@@ -4,6 +4,8 @@ load(":gomock.bzl", "GOMOCK_SRCS")
 load(":stringer.bzl", "STRINGER_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 
+ALL = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS
+
 GeneratedFileInfo = provider(
   "Info needed to hoist generated files",
   fields = {
