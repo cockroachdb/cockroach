@@ -38,7 +38,9 @@ func ValidateJobReferencesInDescriptor(
 	for _, m := range tbl.GetMutationJobs() {
 		j, err := jmg.GetJobMetadata(m.JobID)
 		if err != nil {
-			errorAccFn(errors.WithAssertionFailure(errors.Wrapf(err, "mutation job %d", m.JobID)))
+			// It may be possible for a job inside the descriptor and the jobs table
+			// to be out of synchronization, since the two aren't updated in a
+			// transactional manner.
 			continue
 		}
 		if j == nil {
