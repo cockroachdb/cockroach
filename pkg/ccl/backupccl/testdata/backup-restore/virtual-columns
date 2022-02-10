@@ -46,6 +46,5 @@ d.public.tab CREATE TABLE public.tab (
 	v INT8 NULL AS (a + b) VIRTUAL,
 	CONSTRAINT tab_pkey PRIMARY KEY (k ASC),
 	INDEX tab_v_idx (v ASC),
-	UNIQUE INDEX tab_a_b_key (a ASC, b ASC) WHERE v > 0:::INT8,
-	FAMILY "primary" (k, a, b)
+	UNIQUE INDEX tab_a_b_key (a ASC, b ASC) WHERE v > 0:::INT8
 )

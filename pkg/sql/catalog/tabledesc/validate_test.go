@@ -170,6 +170,7 @@ var validationMap = []struct {
 			"Predicate":                   {status: iSolemnlySwearThisFieldIsValidated},
 			"UseDeletePreservingEncoding": {status: thisFieldReferencesNoObjects},
 			"ConstraintID":                {status: iSolemnlySwearThisFieldIsValidated},
+			"CreatedAtNanos":              {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{

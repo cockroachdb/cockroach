@@ -16,6 +16,7 @@ import (
 	gojson "encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -270,6 +271,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					Name:             string(d.Name),
 					Unique:           true,
 					StoreColumnNames: d.Storing.ToStrings(),
+					CreatedAtNanos:   params.EvalContext().GetTxnTimestamp(time.Microsecond).UnixNano(),
 				}
 				if err := idx.FillColumns(d.Columns); err != nil {
 					return err

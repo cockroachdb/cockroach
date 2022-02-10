@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,8 +70,9 @@ func (ti testInfra) newExecDeps(
 		noopBackfiller{},  /* backfiller */
 		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
-		noopIndexValidator{},         /* indexValidator */
-		noopPartitioner{},            /* partitioner */
+		noopIndexValidator{}, /* indexValidator */
+		noopPartitioner{},    /* partitioner */
+		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdaterFactory{}, /* commentUpdaterFactory*/
 		noopEventLogger{},            /* eventLogger */
 		1,                            /* schemaChangerJobID */

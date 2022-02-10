@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // NewJobRunDependencies returns an scrun.JobRunDependencies implementation built from the
@@ -119,7 +120,8 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
 			statements:              d.statements,
 			partitioner:             d.partitioner,
-			user:                    d.job.Payload().UsernameProto.Decode(),
+			user:                    pl.UsernameProto.Decode(),
+			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
 			commentUpdaterFactory:   d.commentUpdaterFactory,
 			sessionData:             d.sessionData,
 		})

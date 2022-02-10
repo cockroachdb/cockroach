@@ -13,7 +13,7 @@ CREATE INDEX id1 ON defaultdb.t1(id, name) STORING (money)
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     - ASC
     keyColumnIds:
@@ -38,7 +38,7 @@ CREATE INVERTED INDEX CONCURRENTLY id2
     concurrently: true
     indexId: 2
     inverted: true
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     - ASC
     keyColumnIds:
@@ -74,7 +74,7 @@ CREATE INDEX id3
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     - ASC
     keyColumnIds:
@@ -119,7 +119,7 @@ CREATE INDEX id4
 - [[PrimaryIndex:{DescID: 104, IndexID: 1}, ABSENT], PUBLIC]
   details:
     indexId: 1
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -133,7 +133,7 @@ CREATE INDEX id4
 - [[PrimaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
     indexId: 2
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     keyColumnIds:
     - 1
@@ -148,7 +148,7 @@ CREATE INDEX id4
 - [[SecondaryIndex:{DescID: 104, IndexID: 3}, PUBLIC], ABSENT]
   details:
     indexId: 3
-    keyColumnDirection:
+    keyColumnDirections:
     - ASC
     - ASC
     keyColumnIds:

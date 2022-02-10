@@ -1444,7 +1444,8 @@ CREATE TABLE crdb_internal.table_indexes (
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL
+   is_sharded BOOL NOT NULL,
+   created_at TIMESTAMP NULL
 )  CREATE TABLE crdb_internal.table_indexes (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,
@@ -1453,7 +1454,8 @@ CREATE TABLE crdb_internal.table_indexes (
    index_type STRING NOT NULL,
    is_unique BOOL NOT NULL,
    is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL
+   is_sharded BOOL NOT NULL,
+   created_at TIMESTAMP NULL
 )  {}  {}
 CREATE TABLE crdb_internal.table_row_statistics (
    table_id INT8 NOT NULL,
@@ -6512,13 +6514,11 @@ CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid)
 )  CREATE TABLE public.t (
    a INT8 NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   FAMILY "primary" (a, rowid)
+   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 )  {"ALTER TABLE public.t ADD CONSTRAINT t_a_fkey FOREIGN KEY (a) REFERENCES public.t(rowid)"}  {"ALTER TABLE public.t VALIDATE CONSTRAINT t_a_fkey"}
 CREATE TABLE public.v (
    "'" INT8 NULL,
@@ -6527,15 +6527,13 @@ CREATE TABLE public.v (
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
    CONSTRAINT "v_'_fkey" FOREIGN KEY ("'") REFERENCES public.t(rowid),
    CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   UNIQUE INDEX v_s_key (s ASC)
 )  CREATE TABLE public.v (
    "'" INT8 NULL,
    s STRING NULL,
    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
    CONSTRAINT v_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX v_s_key (s ASC),
-   FAMILY "primary" ("'", s, rowid)
+   UNIQUE INDEX v_s_key (s ASC)
 )  {"ALTER TABLE public.v ADD CONSTRAINT \"v_'_fkey\" FOREIGN KEY (\"'\") REFERENCES public.t(rowid)","ALTER TABLE public.v ADD CONSTRAINT v_s_fkey FOREIGN KEY (s) REFERENCES public.v(s)"}  {"ALTER TABLE public.v VALIDATE CONSTRAINT \"v_'_fkey\"","ALTER TABLE public.v VALIDATE CONSTRAINT v_s_fkey"}
 CREATE TABLE public.c (
   a INT8 NOT NULL,
@@ -6571,8 +6569,7 @@ SHOW CREATE TABLE unlogged_tbl
 ----
 unlogged_tbl  CREATE TABLE public.unlogged_tbl (
               col INT8 NOT NULL,
-              CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC),
-              FAMILY "primary" (col)
+              CONSTRAINT unlogged_tbl_pkey PRIMARY KEY (col ASC)
 )
 
 statement error pgcode 22023 invalid storage parameter "foo"

@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -50,6 +51,10 @@ type TestState struct {
 	backfiller        scexec.Backfiller
 	indexSpanSplitter scexec.IndexSpanSplitter
 	backfillTracker   scexec.BackfillTracker
+
+	// approximateTimestamp is used to populate approximate timestamps in
+	// descriptors.
+	approximateTimestamp time.Time
 }
 
 // NewTestDependencies returns a TestState populated with the provided options.

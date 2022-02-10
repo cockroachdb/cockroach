@@ -173,6 +173,20 @@ func (mr *MockDependenciesMockRecorder) Catalog() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Catalog", reflect.TypeOf((*MockDependencies)(nil).Catalog))
 }
 
+// Clock mocks base method.
+func (m *MockDependencies) Clock() scmutationexec.Clock {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Clock")
+	ret0, _ := ret[0].(scmutationexec.Clock)
+	return ret0
+}
+
+// Clock indicates an expected call of Clock.
+func (mr *MockDependenciesMockRecorder) Clock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clock", reflect.TypeOf((*MockDependencies)(nil).Clock))
+}
+
 // DescriptorMetadataUpdater mocks base method.
 func (m *MockDependencies) DescriptorMetadataUpdater(arg0 context.Context) scexec.DescriptorMetadataUpdater {
 	m.ctrl.T.Helper()

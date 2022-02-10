@@ -390,8 +390,7 @@ ok1  CREATE TABLE public.ok1 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok1_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
@@ -443,8 +442,7 @@ ok2  CREATE TABLE public.ok2 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok2_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok2_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((2))
@@ -491,8 +489,7 @@ ok3  CREATE TABLE public.ok3 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok3_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok3_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)),
   PARTITION p2 VALUES IN ((DEFAULT))
@@ -541,8 +538,7 @@ ok4  CREATE TABLE public.ok4 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok4_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok4_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a, b) (
   PARTITION p1 VALUES IN ((1, 1)),
   PARTITION p2 VALUES IN ((1, DEFAULT)),
@@ -631,8 +627,7 @@ ok5  CREATE TABLE public.ok5 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok5_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok5_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
     PARTITION p1_1 VALUES IN ((1)),
@@ -664,8 +659,7 @@ ok6  CREATE TABLE public.ok6 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok6_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok6_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY RANGE (a) (
   PARTITION p1 VALUES FROM (0) TO (1),
   PARTITION p2 VALUES FROM (1) TO (2)
@@ -702,8 +696,7 @@ ok7  CREATE TABLE public.ok7 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok7_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok7_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY RANGE (a) (
   PARTITION p1 VALUES FROM (0) TO (1)
 )
@@ -743,8 +736,7 @@ ok8  CREATE TABLE public.ok8 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok8_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok8_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY RANGE (a) (
   PARTITION p1 VALUES FROM (MINVALUE) TO (1),
   PARTITION p2 VALUES FROM (1) TO (2),
@@ -787,8 +779,7 @@ ok9  CREATE TABLE public.ok9 (
      a INT8 NOT NULL,
      b INT8 NOT NULL,
      c INT8 NULL,
-     CONSTRAINT ok9_pkey PRIMARY KEY (a ASC, b ASC),
-     FAMILY "primary" (a, b, c)
+     CONSTRAINT ok9_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY RANGE (a, b) (
   PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, MAXVALUE),
   PARTITION p2 VALUES FROM (1, MAXVALUE) TO (3, MINVALUE),
@@ -833,8 +824,7 @@ ok10  CREATE TABLE public.ok10 (
       a INT8 NOT NULL,
       b INT8 NOT NULL,
       c INT8 NULL,
-      CONSTRAINT ok10_pkey PRIMARY KEY (a ASC, b ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT ok10_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY RANGE (a, b) (
   PARTITION p1 VALUES FROM (MINVALUE, MINVALUE) TO (1, 1),
   PARTITION p2 VALUES FROM (1, 1) TO (1, MAXVALUE),
@@ -885,8 +875,7 @@ ok11  CREATE TABLE public.ok11 (
       a INT8 NOT NULL,
       b INT8 NOT NULL,
       c INT8 NOT NULL,
-      CONSTRAINT ok11_pkey PRIMARY KEY (a ASC, b ASC, c ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT ok11_pkey PRIMARY KEY (a ASC, b ASC, c ASC)
 ) PARTITION BY LIST (a) (
   PARTITION p1 VALUES IN ((1)) PARTITION BY LIST (b) (
     PARTITION p1_1 VALUES IN ((3)) PARTITION BY LIST (c) (
@@ -942,8 +931,7 @@ ok12  CREATE TABLE public.ok12 (
       a INT8 NOT NULL,
       b INT8 NOT NULL,
       c INT8 NULL,
-      CONSTRAINT ok12_pkey PRIMARY KEY (a ASC, b ASC),
-      FAMILY "primary" (a, b, c)
+      CONSTRAINT ok12_pkey PRIMARY KEY (a ASC, b ASC)
 ) PARTITION BY LIST (a) (
   PARTITION pu VALUES IN ((NULL)),
   PARTITION p1 VALUES IN ((1)),

@@ -48,8 +48,7 @@ foo  CREATE TABLE public.foo (
      j INT8 NOT NULL DEFAULT nextval('public.test_seq'::REGCLASS),
      k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq'::REGCLASS),
      l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq'::REGCLASS),
-     CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
-     FAMILY "primary" (i, j, k, l)
+     CONSTRAINT foo_pkey PRIMARY KEY (i ASC)
 )
 
 statement ok
