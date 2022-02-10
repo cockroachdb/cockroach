@@ -1,4 +1,4 @@
-dev build cockroach-short --skip-generate
+dev build cockroach-short
 ----
 bazel build //pkg/cmd/cockroach-short:cockroach-short
 bazel info workspace --color=no
@@ -7,7 +7,7 @@ bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
 
-dev build cockroach-short --cpus=12 --skip-generate
+dev build cockroach-short --cpus=12
 ----
 bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short
 bazel info workspace --color=no
@@ -16,7 +16,7 @@ bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
 
-dev build --debug short --skip-generate
+dev build --debug short
 ----
 bazel build //pkg/cmd/cockroach-short:cockroach-short
 bazel info workspace --color=no
@@ -25,7 +25,7 @@ bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
 
-dev build short --skip-generate -- -s
+dev build short -- -s
 ----
 bazel build //pkg/cmd/cockroach-short:cockroach-short -s
 bazel info workspace --color=no
@@ -34,7 +34,7 @@ bazel info bazel-bin --color=no
 rm cockroach-short
 ln -s pkg/cmd/cockroach-short/cockroach-short_/cockroach-short cockroach-short
 
-dev build --skip-generate -- --verbose_failures --sandbox_debug
+dev build -- --verbose_failures --sandbox_debug
 ----
 bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline
 bazel build //pkg/cmd/cockroach:cockroach --config=with_ui --verbose_failures --sandbox_debug
@@ -44,7 +44,7 @@ bazel info bazel-bin --color=no
 rm cockroach
 ln -s pkg/cmd/cockroach/cockroach_/cockroach cockroach
 
-dev build stress --skip-generate
+dev build stress
 ----
 bazel build @com_github_cockroachdb_stress//:stress
 bazel info workspace --color=no
