@@ -31,8 +31,7 @@ func TestShowCreateTable(t *testing.T) {
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY GLOBAL`,
 			Database: "mrdb",
 		},
@@ -44,8 +43,7 @@ func TestShowCreateTable(t *testing.T) {
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
 			Database: "mrdb",
 		},
@@ -56,8 +54,7 @@ func TestShowCreateTable(t *testing.T) {
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (a, rowid)
+	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
 ) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
 			Database: "mrdb",
 		},
@@ -72,8 +69,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	INDEX a_idx (a ASC),
-	FAMILY "primary" (a, crdb_region, rowid)
+	INDEX a_idx (a ASC)
 ) LOCALITY REGIONAL BY ROW`,
 			Database: "mrdb",
 		},
@@ -88,8 +84,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_region_col public.crdb_internal_region NOT NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	INDEX a_idx (a ASC),
-	FAMILY "primary" (a, crdb_region_col, rowid)
+	INDEX a_idx (a ASC)
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
 			Database: "mrdb",
 		},
@@ -104,8 +99,7 @@ func TestShowCreateTable(t *testing.T) {
 	crdb_region_col public.crdb_internal_region NOT NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
-	INDEX a_idx (a ASC) WHERE a > 0:::INT8,
-	FAMILY "primary" (a, crdb_region_col, rowid)
+	INDEX a_idx (a ASC) WHERE a > 0:::INT8
 ) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
 			Database: "mrdb",
 		},

@@ -191,19 +191,8 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
 	}
-	// Do admission control for response processing. This is the shared write
-	// path for most SQL mutations.
-	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
-	if responseAdmissionQ != nil {
-		requestAdmissionHeader := tb.txn.AdmissionHeader()
-		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admission.WorkPriority(requestAdmissionHeader.Priority),
-			CreateTime: requestAdmissionHeader.CreateTime,
-		}
-		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-			return err
-		}
+	if err := tb.tryDoResponseAdmission(ctx); err != nil {
+		return err
 	}
 	tb.initNewBatch()
 	tb.rowsWritten += int64(tb.currentBatchSize)
@@ -238,6 +227,24 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	tb.lastBatchSize = tb.currentBatchSize
 	if err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b)
+	}
+	return tb.tryDoResponseAdmission(ctx)
+}
+
+func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
+	// Do admission control for response processing. This is the shared write
+	// path for most SQL mutations.
+	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
+	if responseAdmissionQ != nil {
+		requestAdmissionHeader := tb.txn.AdmissionHeader()
+		responseAdmission := admission.WorkInfo{
+			TenantID:   roachpb.SystemTenantID,
+			Priority:   admission.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime: requestAdmissionHeader.CreateTime,
+		}
+		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+			return err
+		}
 	}
 	return nil
 }

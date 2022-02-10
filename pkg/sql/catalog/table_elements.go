@@ -11,6 +11,8 @@
 package catalog
 
 import (
+	"time"
+
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -209,6 +211,11 @@ type Index interface {
 	// checked by the schema changer before they are brought back
 	// online.
 	ForcePut() bool
+
+	// CreatedAt is an approximate timestamp at which the index was created.
+	// It is derived from the statement time at which the relevant statement
+	// was issued.
+	CreatedAt() time.Time
 }
 
 // Column is an interface around the column descriptor types.

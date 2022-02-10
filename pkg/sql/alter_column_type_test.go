@@ -231,8 +231,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 		`CREATE TABLE public.test (
 	x INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (x, rowid)
+	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC)
 )`}}
 
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t.test", expected)
@@ -245,8 +244,7 @@ INSERT INTO t.test VALUES (1), (2), (3);
 		`CREATE TABLE public.test (
 	x STRING NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC),
-	FAMILY "primary" (x, rowid)
+	CONSTRAINT test_pkey PRIMARY KEY (rowid ASC)
 )`}}
 
 	sqlDB.CheckQueryResults(t, "SHOW CREATE TABLE t.test", expected)
