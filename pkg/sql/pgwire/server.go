@@ -92,6 +92,15 @@ var logSessionAuth = settings.RegisterBoolSetting(
 	"if set, log SQL session login/disconnection events (note: may hinder performance on loaded nodes)",
 	false).WithPublic()
 
+var MaxNumConnections = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.max_connections_per_gateway",
+	"the maximum number of non-superuser SQL connections per gateway allowed at a given time "+
+		"(superusers can make unlimited connections), less than 0 is unlimited "+
+		"(note: this will only limit future connection attempts and will not affect already established connections)",
+	-1, // Postgres defaults to 100, but we default to -1 to match our previous behavior of unlimited.
+).WithPublic()
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
@@ -739,6 +748,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	hbaConf, identMap := s.GetAuthenticationConfiguration()
+
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	s.serveConn(
@@ -753,7 +763,8 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			auth:            hbaConf,
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,
-		})
+		},
+	)
 	return nil
 }
 

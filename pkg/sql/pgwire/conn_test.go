@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -52,6 +53,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgproto3/v2"
 	"github.com/jackc/pgx/v4"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -1782,4 +1784,106 @@ func TestRoleDefaultSettings(t *testing.T) {
 			require.Equal(t, tc.expectedSearchPath, actual)
 		})
 	}
+}
+
+func TestPGWireRejectsNewConnIfTooManyConns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	settings := cluster.MakeTestingClusterSettings()
+	require.Equal(t, int64(-1), MaxNumConnections.Get(&settings.SV))
+
+	ctx := context.Background()
+	params := base.TestServerArgs{
+		Settings: settings,
+	}
+	pgServer, _, _ := serverutils.StartServer(t, params)
+	defer pgServer.Stopper().Stop(ctx)
+
+	MaxNumConnections.Override(ctx, &settings.SV, 1)
+
+	// Users.
+	admin := security.RootUser
+	nonAdmin := security.TestUser
+
+	// openConnWithUser opens a connection to the pgServer for the given user
+	// and always returns an associated cleanup function, even in case of error,
+	// which should be called. The returned cleanup function is idempotent.
+	openConnWithUser := func(user string) (*gosql.Conn, func(), error) {
+		pgURL, cleanup := sqlutils.PGUrlWithOptionalClientCerts(
+			t,
+			pgServer.ServingSQLAddr(),
+			t.Name(),
+			url.UserPassword(user, user),
+			user == security.RootUser,
+		)
+		defer cleanup()
+		db, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			return nil, func() {}, err
+		}
+		c, err := db.Conn(ctx)
+		if err != nil {
+			return nil, func() {
+				_ = db.Close()
+			}, err
+		}
+		return c, func() {
+			_ = c.Close()
+			_ = db.Close()
+		}, err
+	}
+
+	// tryOpenConnWithUser does the same as openConnWithUser but closes the
+	// connection immediately upon success.
+	tryOpenConnWithUser := func(user string) error {
+		_, cleanup, err := openConnWithUser(user)
+		cleanup()
+		return err
+	}
+
+	assertTooManyConnectionsErr := func(t *testing.T, err error) {
+		t.Helper()
+		require.Error(t, err)
+		pgErr := (*pq.Error)(nil)
+		require.ErrorAs(t, err, &pgErr)
+		require.Equal(t, pgcode.TooManyConnections.String(), string(pgErr.Code), "expected pgcode %s (TooManyConnections) but got %s", pgcode.TooManyConnections, pgErr.Code)
+	}
+
+	rootConn, rootConn1Cleanup, err := openConnWithUser(security.RootUser)
+	defer rootConn1Cleanup()
+	require.NoError(t, err)
+
+	// A second connection with the user root should not encounter a limit.
+	require.NoError(t, tryOpenConnWithUser(security.RootUser))
+
+	// Create a non-root admin user and a normal non-admin user.
+	_, err = rootConn.ExecContext(ctx, fmt.Sprintf("CREATE USER %[1]s WITH PASSWORD %[1]s", nonAdmin))
+	require.NoError(t, err)
+
+	// A non admin will not be able to create a connection at this point because
+	// of the root connection.
+	assertTooManyConnectionsErr(t, tryOpenConnWithUser(nonAdmin))
+
+	// Close the root connection and try again, this should succeed.
+	rootConn1Cleanup()
+	_, nonAdmin1Cleanup, err := openConnWithUser(nonAdmin)
+	defer nonAdmin1Cleanup()
+	require.NoError(t, err)
+
+	// Another non-admin connection would bring us over the limit.
+	assertTooManyConnectionsErr(t, tryOpenConnWithUser(nonAdmin))
+
+	// An admin user can still open a connection.
+	require.NoError(t, tryOpenConnWithUser(admin))
+
+	// If the non-admin connection currently open is closed, it should be possible
+	// to open a new one.
+	nonAdmin1Cleanup()
+	_, nonAdmin2Cleanup, err := openConnWithUser(nonAdmin)
+	defer nonAdmin2Cleanup()
+	require.NoError(t, err)
+
+	// Try to open another non-admin connection. This should fail.
+	assertTooManyConnectionsErr(t, tryOpenConnWithUser(nonAdmin))
 }
