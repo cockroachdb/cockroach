@@ -165,7 +165,7 @@ func TestDataDriven(t *testing.T) {
 			},
 		)
 
-		kvSubscriber.Subscribe(func(span roachpb.Span) {
+		kvSubscriber.Subscribe(func(ctx context.Context, span roachpb.Span) {
 			mu.Lock()
 			defer mu.Unlock()
 			mu.receivedUpdates = append(mu.receivedUpdates, span)
