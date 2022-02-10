@@ -66,6 +66,7 @@ go_test(
     tags = ["no-remote"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/gossip",
         "//pkg/keys",
         "//pkg/kv",
@@ -89,6 +90,8 @@ go_test(
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/sqlstats",
+        "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/testutils",
         "//pkg/testutils/buildutil",

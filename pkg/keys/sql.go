@@ -62,7 +62,7 @@ type sqlEncoder struct {
 	buf *roachpb.Key
 }
 
-// sqlEncoder implements the decoding logic for SQL keys.
+// sqlDecoder implements the decoding logic for SQL keys.
 //
 // The type is expressed as a pointer to a slice instead of a slice directly so
 // that its zero value is not usable. Any attempt to use the methods on the zero

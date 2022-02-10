@@ -267,6 +267,9 @@ const (
 	// on lease transfer Raft proposals. New leaseholders now forward their clock
 	// directly to the new lease start time.
 	DontProposeWriteTimestampForLeaseTransfers
+	// TenantSettingsTable adds the system table for tracking tenant usage.
+	TenantSettingsTable
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -421,6 +424,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     DontProposeWriteTimestampForLeaseTransfers,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 60},
+	},
+	{
+		Key:     TenantSettingsTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 62},
 	},
 
 	// *************************************************

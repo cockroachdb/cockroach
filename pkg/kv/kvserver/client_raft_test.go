@@ -4555,10 +4555,11 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	// Test that WaitForReplicaInit times out if the replica exists but is not
 	// initialized.
 	{
-		// Constructing an permanently-uninitialized replica is somewhat difficult.
+		// Constructing a permanently-uninitialized replica is somewhat difficult.
 		// Sending a fake Raft heartbeat for a range ID that the store hasn't seen
 		// before does the trick.
-		var repl44 *kvserver.Replica
+		const unusedRangeID = 1234
+		var repl *kvserver.Replica
 		testutils.SucceedsSoon(t, func() (err error) {
 			// Try several times, as the message may be dropped (see #18355).
 			tc.Servers[0].RaftTransport().SendAsync(&kvserverpb.RaftMessageRequest{
@@ -4566,20 +4567,20 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					NodeID:  store.Ident.NodeID,
 					StoreID: store.Ident.StoreID,
 				},
-				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: 44, ToReplicaID: 1}},
+				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
 			}, rpc.DefaultClass)
-			repl44, err = store.GetReplica(44)
+			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})
-		if repl44.IsInitialized() {
-			t.Fatalf("test bug: repl44 is initialized")
+		if repl.IsInitialized() {
+			t.Fatalf("test bug: range %d is initialized", unusedRangeID)
 		}
 
 		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 		defer cancel()
 		_, err = client.WaitForReplicaInit(timeoutCtx, &kvserver.WaitForReplicaInitRequest{
 			StoreRequestHeader: storeHeader,
-			RangeID:            roachpb.RangeID(44),
+			RangeID:            roachpb.RangeID(unusedRangeID),
 		})
 		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
 			t.Fatalf("expected %q error, but got %v", exp, err)

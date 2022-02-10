@@ -542,7 +542,6 @@ func (sp *Span) reset(
 		})
 	}
 
-	atomic.StoreInt32(&sp.finished, 0)
 	c := sp.i.crdb
 	sp.i = spanInner{
 		tracer:   sp.i.tracer,
@@ -554,6 +553,7 @@ func (sp *Span) reset(
 
 	c.traceID = traceID
 	c.spanID = spanID
+	c.parentSpanID = 0
 	c.operation = operation
 	c.startTime = startTime
 	c.logTags = logTags

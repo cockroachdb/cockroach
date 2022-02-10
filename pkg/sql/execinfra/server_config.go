@@ -131,7 +131,11 @@ type ServerConfig struct {
 	// draining state.
 	Gossip gossip.OptionalGossip
 
+	// Dialer for communication between SQL and KV nodes.
 	NodeDialer *nodedialer.Dialer
+
+	// Dialer for communication between SQL nodes/pods.
+	PodNodeDialer *nodedialer.Dialer
 
 	// SessionBoundInternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments

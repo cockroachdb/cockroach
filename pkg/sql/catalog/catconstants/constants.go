@@ -83,6 +83,7 @@ const (
 	TenantUsageTableName                   SystemTableName = "tenant_usage"
 	SQLInstancesTableName                  SystemTableName = "sql_instances"
 	SpanConfigurationsTableName            SystemTableName = "span_configurations"
+	TenantSettingsTableName                SystemTableName = "tenant_settings"
 )
 
 // Oid for virtual database and table.

@@ -116,6 +116,8 @@ func (t *tenantStatusServer) ListSessions(
 	ctx = t.AnnotateCtx(ctx)
 
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker already
+		// returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
@@ -131,7 +133,10 @@ func (t *tenantStatusServer) ListSessions(
 				instanceID,
 				err)
 		}
-		return localResponse, err
+		if err != nil {
+			return nil, serverError(ctx, err)
+		}
+		return localResponse, nil
 	}
 	if err := t.iteratePods(ctx, "sessions for nodes",
 		t.dialCallback,
@@ -151,7 +156,7 @@ func (t *tenantStatusServer) ListSessions(
 				})
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 	return response, nil
 }
@@ -161,6 +166,8 @@ func (t *tenantStatusServer) ListLocalSessions(
 ) (*serverpb.ListSessionsResponse, error) {
 	sessions, err := t.getLocalSessions(ctx, request)
 	if err != nil {
+		// NB: not using serverError() here since the getLocalSessions
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
@@ -180,6 +187,8 @@ func (t *tenantStatusServer) CancelQuery(
 	// Check permissions early to avoid fan-out to all nodes.
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	if t.sqlServer.SQLInstanceID() == 0 {
@@ -207,7 +216,7 @@ func (t *tenantStatusServer) CancelQuery(
 			distinctErrorMessages[err.Error()] = struct{}{}
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 
 	if !response.Canceled {
@@ -226,6 +235,8 @@ func (t *tenantStatusServer) CancelLocalQuery(
 ) (*serverpb.CancelQueryResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionByQueryID(request.QueryID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	var (
@@ -248,6 +259,8 @@ func (t *tenantStatusServer) CancelSession(
 	// Check permissions early to avoid fan-out to all nodes.
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 
@@ -276,7 +289,7 @@ func (t *tenantStatusServer) CancelSession(
 			distinctErrorMessages[err.Error()] = struct{}{}
 		},
 	); err != nil {
-		return nil, err
+		return nil, serverError(ctx, err)
 	}
 
 	if !response.Canceled {
@@ -295,6 +308,8 @@ func (t *tenantStatusServer) CancelLocalSession(
 ) (*serverpb.CancelSessionResponse, error) {
 	reqUsername := security.MakeSQLUsernameFromPreNormalizedString(request.Username)
 	if err := t.checkCancelPrivilege(ctx, reqUsername, findSessionBySessionID(request.SessionID)); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 	return t.sessionRegistry.CancelSession(request.SessionID)
@@ -308,6 +323,8 @@ func (t *tenantStatusServer) ListContentionEvents(
 
 	// Check permissions early to avoid fan-out to all nodes.
 	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		// NB: not using serverError() here since the priv checker
+		// already returns a proper gRPC error status.
 		return nil, err
 	}
 

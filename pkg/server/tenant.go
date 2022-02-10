@@ -105,6 +105,9 @@ func startTenantInternal(
 	// Initialize gRPC server for use on shared port with pg
 	grpcMain := newGRPCServer(args.rpcContext)
 	grpcMain.setMode(modeOperational)
+	// TODO(harding): Some services (e.g., blob service) don't need to register
+	// a GRPC server. It might be better to use a dummy GRPC service for these.
+	args.grpcServer = grpcMain.Server
 
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
@@ -474,10 +477,6 @@ func makeTenantSQLServerArgs(
 		db,
 	)
 
-	// We don't need this for anything except some services that want a gRPC
-	// server to register against (but they'll never get RPCs at the time of
-	// writing): the blob service and DistSQL.
-	dummyRPCServer := rpc.NewServer(rpcContext)
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 	return sqlServerArgs{
@@ -485,7 +484,6 @@ func makeTenantSQLServerArgs(
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
-			grpcServer:        dummyRPCServer,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},

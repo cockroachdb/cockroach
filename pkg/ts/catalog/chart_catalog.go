@@ -2673,6 +2673,26 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Currently Idle",
+				Metrics: []string{
+					"jobs.auto_create_stats.currently_idle",
+					"jobs.auto_span_config_reconciliation.currently_idle",
+					"jobs.auto_sql_stats_compaction.currently_idle",
+					"jobs.backup.currently_idle",
+					"jobs.changefeed.currently_idle",
+					"jobs.create_stats.currently_idle",
+					"jobs.import.currently_idle",
+					"jobs.migration.currently_idle",
+					"jobs.new_schema_change.currently_idle",
+					"jobs.restore.currently_idle",
+					"jobs.schema_change.currently_idle",
+					"jobs.schema_change_gc.currently_idle",
+					"jobs.stream_ingestion.currently_idle",
+					"jobs.stream_replication.currently_idle",
+					"jobs.typedesc_schema_change.currently_idle",
+				},
+			},
+			{
 				Title: "Auto Create Stats",
 				Metrics: []string{
 					"jobs.auto_create_stats.fail_or_cancel_completed",
