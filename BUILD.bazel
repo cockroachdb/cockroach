@@ -57,16 +57,6 @@ exports_files([
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 
-# These packages use github.com/golang/mock to generate mocks. The target
-# generating mocks for a given package necessarily depends on the package's
-# go_library target, which then prevents us from including those mock symbols
-# as part of the package's go_library target. We consequently export a second
-# target, embedding the first but also including the mock symbols. We need to
-# tell gazelle to resolve to this second target instead. See
-# pkg/kv/kvclient/rangefeed/BUILD.bazel for an annotated example.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb
-
 # See pkg/roachpb/gen/BUILD.bazel for more details.
 #
 # gazelle:resolve proto go roachpb/api.proto //pkg/roachpb

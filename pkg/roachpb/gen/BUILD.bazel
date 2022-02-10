@@ -1,31 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
-# gen, as written, depends on symbols defined within //pkg/roachpb. gen is used
-# to generated a file[1] that in turn is depended on to compile //pkg/roachpb.
-# To break this circular structure, we define a separate target[2] within
-# pkg/roachpb that enlists the pre-generated file in the source tree[3] in
-# order to generate newer revisions within the sandbox. For another example of
-# this pattern, see what we do in langgen[4].
-#
-# All dependents of //pkg/roachpb will need to depend on the file generated
-# within the Bazel sandbox, which is achieved by [5]. Conversely, to instruct
-# gazelle/Bazel to resolve gen's import of //pkg/roachpb appropriately, we add
-# the resolve directive below.
-#
-# [1]: //pkg/roachpb/gen-batch-generated
-# [2]: //pkg/roachpb:bootstrap
-# [3]: //pkg/roachpb:batch_generated.go
-# [4]: //pkg/sql/opt/optgen/lang:bootstrap
-# [5]: See the "gazelle:resolve" directive in the top-level BUILD.bazel.
-#
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/roachpb //pkg/roachpb:bootstrap
-
 go_library(
     name = "gen_lib",
     srcs = ["main.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/roachpb/gen",
     visibility = ["//visibility:private"],
-    deps = ["//pkg/roachpb:bootstrap"],
+    deps = ["@org_golang_x_tools//go/ast/inspector"],
 )
 
 go_binary(
