@@ -36,6 +36,7 @@ type RegionConfig struct {
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
+	superRegions         []descpb.DatabaseDescriptor_SuperRegion
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -90,6 +91,11 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// SuperRegions returns the list of super regions in the database.
+func (r *RegionConfig) SuperRegions() []descpb.DatabaseDescriptor_SuperRegion {
+	return r.superRegions
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -98,6 +104,13 @@ type MakeRegionConfigOption func(r *RegionConfig)
 func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
+	}
+}
+
+// WithSuperRegions is an option to include super regions into MakeRegionConfig.
+func WithSuperRegions(superRegions []descpb.DatabaseDescriptor_SuperRegion) MakeRegionConfigOption {
+	return func(r *RegionConfig) {
+		r.superRegions = superRegions
 	}
 }
 
@@ -155,7 +168,36 @@ func ValidateRegionConfig(config RegionConfig) error {
 		return errors.AssertionFailedf(
 			"cannot have a database with restricted placement that is also region survivable")
 	}
+
+	err := validateSuperRegions(config.SuperRegions())
+	if err != nil {
+		return err
+	}
+
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
+}
+
+// validateSuperRegions checks that the zone config has at least one replica
+// constrained to each region in the super region.
+func validateSuperRegions(superRegions []descpb.DatabaseDescriptor_SuperRegion) error {
+	seenRegions := make(map[catpb.RegionName]struct{})
+	superRegionNames := make(map[string]struct{})
+
+	for _, superRegion := range superRegions {
+		_, found := superRegionNames[superRegion.SuperRegionName]
+		if found {
+			return errors.AssertionFailedf("duplicate super regions with name %s found", superRegion.SuperRegionName)
+		}
+		superRegionNames[superRegion.SuperRegionName] = struct{}{}
+		for _, region := range superRegion.Regions {
+			_, found := seenRegions[region]
+			if found {
+				return errors.AssertionFailedf("region %s found in multiple super regions", region)
+			}
+			seenRegions[region] = struct{}{}
+		}
+	}
+	return nil
 }
 
 // CanDropRegion returns an error if the survival goal doesn't allow for

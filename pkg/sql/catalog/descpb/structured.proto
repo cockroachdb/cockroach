@@ -1260,6 +1260,14 @@ message DatabaseDescriptor {
   optional DescriptorState state = 8 [(gogoproto.nullable) = false];
   optional string offline_reason = 9 [(gogoproto.nullable) = false];
 
+  // SuperRegion stores a super region configuration.
+  message SuperRegion {
+    option (gogoproto.equal) = true;
+
+    optional string super_region_name = 1 [(gogoproto.nullable)=false];
+    repeated string regions = 2 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+  }
+
   // RegionConfig stores region configuration for a given database.
   message RegionConfig {
     option (gogoproto.equal) = true;
@@ -1276,6 +1284,9 @@ message DatabaseDescriptor {
     // DataPlacement dictates whether or not to use a restricted data placement
     // policy.
     optional DataPlacement placement = 5 [(gogoproto.nullable) = false];
+
+    // SuperRegions represents the super regions defined on the database.
+    repeated SuperRegion super_regions = 6 [(gogoproto.nullable) = false];
   }
   // RegionConfig is only set if multi-region controls are set on the database.
   optional RegionConfig region_config = 10;
@@ -1406,6 +1417,7 @@ message TypeDescriptor {
 
     // PrimaryRegion represents the PrimaryRegion for a multi-region enum.
     optional string primary_region = 1 [(gogoproto.nullable) = false, (gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"];
+
   }
 
   optional RegionConfig region_config = 16;
