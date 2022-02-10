@@ -101,7 +101,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 		var args []string
 		args = append(args, "test")
-		args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 		args = append(args, "--test_env=GOTRACEBACK=all")
 		if numCPUs != 0 {
 			args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
