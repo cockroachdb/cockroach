@@ -49,6 +49,10 @@ global: num=2
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+# 200ms passes between req1 and req2
+time-tick ms=200
+----
+
 # req2 is also for txn1 and will not wait for locks that are held by self.
 
 new-request r=req2 txn=txn1 ts=10,2 spans=w@b,d+r@d,g
@@ -80,6 +84,11 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+# 1s passes before txn2 begins
+time-tick s=1
+----
+
+
 # txn1 holds locks on b, c, e.
 # txn2 has a smaller timestamp than txn1.
 new-txn txn=txn2 ts=8,12 epoch=0
@@ -104,6 +113,11 @@ global: num=3
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+# 200ms passes between req3 and req4
+time-tick ms=200
+----
+
+
 # req4 from txn2 will conflict with locks on b, c since wants to write to [a, d). But does
 # not conflict with lock on e since wants to read there and the read is at a lower timestamp
 # than the lock.
@@ -117,6 +131,11 @@ start-waiting: true
 guard-state r=req4
 ----
 new: state=waitForDistinguished txn=txn1 key="b" held=true guard-access=write
+
+# 3s passes while req4 is waiting on locks on b,c
+time-tick s=3
+----
+
 
 # Release lock on b since epoch of txn1 has changed.
 update txn=txn1 ts=11,1 epoch=1 span=b
@@ -135,6 +154,10 @@ local: num=0
 guard-state r=req4
 ----
 new: state=waitForDistinguished txn=txn1 key="c" held=true guard-access=write
+
+# 1s passes while req4 continues to wait on c (and only has reservation on b)
+time-tick s=1
+----
 
 # Release lock on c since epoch of txn1 has changed.
 update txn=txn1 ts=11,1 epoch=1 span=c,e
@@ -209,6 +232,11 @@ scan r=req4
 ----
 start-waiting: true
 
+# 2s passes while req4 continues to wait on a, f after rescanning/enqueueing
+time-tick s=2
+----
+
+
 # req4 from txn2 has a reservation on b, c with ts=8,12. And txn1 has a lock on e with ts=10,1
 # which does not conflict. And txn3 with ts=6 has locks on a, f that do conflict. This is better
 # viewed as:
@@ -248,28 +276,98 @@ metrics
 ----
 locks: 5
 locksheld: 3
+totallockholddurationnanos: 11400000000
 lockswithreservation: 2
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 2000000000
 topklocksbywaiters:
 - key:
   - 97
   held: true
+  holddurationnanos: 2000000000
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 7400000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2000000000
+  maxwaitdurationnanos: 2000000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 300ms passes before req5
+time-tick ms=300
+----
+
 
 # req5 is again from transaction 1. Since it is reading from b, c, and even though txn1
 # conflicts with the reservation holder since txn1.ts > txn2.ts, reads don't wait for
@@ -298,6 +396,11 @@ global: num=5
  lock: "f"
   holder: txn: 00000000-0000-0000-0000-000000000003, ts: 6.000000000,0, info: repl epoch: 0, seqs: [0]
 local: num=0
+
+# 100ms passes between req5 and req6
+time-tick ms=100
+----
+
 
 # req6 from txn1 conflicts with lock at f, and reservations at b, c.
 
@@ -348,33 +451,104 @@ metrics
 ----
 locks: 5
 locksheld: 3
+totallockholddurationnanos: 12600000000
 lockswithreservation: 2
 lockswithwaitqueues: 2
 waiters: 2
 waitingreaders: 0
 waitingwriters: 2
+totalwaitdurationnanos: 2400000000
 topklocksbywaiters:
 - key:
   - 97
   held: true
+  holddurationnanos: 2400000000
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
 - key:
   - 98
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 7800000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2400000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2400000000
+  maxwaitdurationnanos: 2400000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 guard-state r=req6
 ----
 new: state=waitForDistinguished txn=txn2 key="b" held=false guard-access=write
+
+# 250ms passes between req6 and req7
+time-tick ms=250
+----
+
 
 # req7 from txn3 only wants to write to c
 
@@ -433,30 +607,102 @@ metrics
 ----
 locks: 5
 locksheld: 3
+totallockholddurationnanos: 13350000000
 lockswithreservation: 2
 lockswithwaitqueues: 3
 waiters: 3
 waitingreaders: 0
 waitingwriters: 3
+totalwaitdurationnanos: 2900000000
 topklocksbywaiters:
 - key:
   - 97
   held: true
+  holddurationnanos: 2650000000
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
 - key:
   - 98
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 250000000
+  maxwaitdurationnanos: 250000000
 - key:
   - 99
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8050000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 2650000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2650000000
+  maxwaitdurationnanos: 2650000000
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 250000000
+  maxwaitdurationnanos: 250000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 100ms passes between before releasing a
+time-tick ms=100
+----
+
 
 # Release a. req4 waits at f.
 release txn=txn3 span=a
@@ -516,30 +762,101 @@ metrics
 ----
 locks: 5
 locksheld: 2
+totallockholddurationnanos: 10900000000
 lockswithreservation: 3
 lockswithwaitqueues: 3
 waiters: 3
 waitingreaders: 1
 waitingwriters: 2
+totalwaitdurationnanos: 450000000
 topklocksbywaiters:
 - key:
   - 98
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 350000000
+  maxwaitdurationnanos: 350000000
 - key:
   - 99
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 100000000
+  maxwaitdurationnanos: 100000000
 - key:
   - 102
   held: true
+  holddurationnanos: 2750000000
   waiters: 1
   waitingreaders: 1
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8150000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2750000000
+  waiters: 1
+  waitingreaders: 1
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 98
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 350000000
+  maxwaitdurationnanos: 350000000
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 100000000
+  maxwaitdurationnanos: 100000000
+- key:
+  - 102
+  held: true
+  holddurationnanos: 2750000000
+  waiters: 1
+  waitingreaders: 1
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 500ms passes between before releasing f
+time-tick ms=500
+----
+
 
 # Release f. This will cause req4 to be done waiting.
 
@@ -655,29 +972,95 @@ metrics
 ----
 locks: 4
 locksheld: 3
+totallockholddurationnanos: 8650000000
 lockswithreservation: 1
 lockswithwaitqueues: 2
 waiters: 2
 waitingreaders: 0
 waitingwriters: 2
+totalwaitdurationnanos: 1450000000
 topklocksbywaiters:
 - key:
   - 98
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
 - key:
   - 99
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 8650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
+topklocksbywaitduration:
+- key:
+  - 98
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 850000000
+  maxwaitdurationnanos: 850000000
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 600000000
+  maxwaitdurationnanos: 600000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 dequeue r=req4
 ----
@@ -708,6 +1091,11 @@ local: num=0
 #  req7                  w*
 #   txn3
 #   6
+
+# 2s passes between before releasing c
+time-tick s=2
+----
+
 
 # Release the lock at c. The lock at e is not held by txn2 so will be ignored.
 # req7 will get the reservation at c and will become doneWaiting.
@@ -751,28 +1139,97 @@ metrics
 ----
 locks: 3
 locksheld: 2
+totallockholddurationnanos: 12650000000
 lockswithreservation: 1
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 2850000000
 topklocksbywaiters:
 - key:
   - 98
   held: true
+  holddurationnanos: 2000000000
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 10650000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 98
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 98
+  held: true
+  holddurationnanos: 2000000000
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2850000000
+  maxwaitdurationnanos: 2850000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+
+# 40ms passes between before releasing b
+time-tick ms=40
+----
+
 
 # Now before req7 can scan again, release the lock at b. This will cause req6 to break the
 # reservation of req7 at c and become doneWaiting too.
@@ -829,28 +1286,91 @@ metrics
 ----
 locks: 3
 locksheld: 1
+totallockholddurationnanos: 10690000000
 lockswithreservation: 2
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 2640000000
 topklocksbywaiters:
 - key:
   - 99
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 2640000000
+  maxwaitdurationnanos: 2640000000
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 101
+  held: true
+  holddurationnanos: 10690000000
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 2640000000
+  maxwaitdurationnanos: 2640000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 scan r=req7
 ----
@@ -891,6 +1411,11 @@ local: num=0
 
 # e is still locked
 
+# 15s passes between before req8
+time-tick s=15
+----
+
+
 new-request r=req8 txn=txn3 ts=6 spans=w@e
 ----
 
@@ -909,6 +1434,11 @@ global: num=1
   holder: txn: 00000000-0000-0000-0000-000000000001, ts: 10.000000000,1, info: unrepl epoch: 0, seqs: [0]
 local: num=0
 
+# 100ms passes between before releasing c-f
+time-tick ms=100
+----
+
+
 release txn=txn1 span=c,f
 ----
 global: num=0
@@ -923,27 +1453,88 @@ metrics
 ----
 locks: 0
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
 waitingwriters: 0
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 # All requests have been retired and the lock table is empty.
 # The following tests multiple requests from the same transaction.
@@ -980,27 +1571,89 @@ metrics
 ----
 locks: 1
 locksheld: 1
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
 waitingwriters: 0
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 new-request r=req10 txn=txn2 ts=8,12 spans=w@c
 ----
@@ -1051,28 +1704,91 @@ metrics
 ----
 locks: 1
 locksheld: 1
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 3
 waitingreaders: 0
 waitingwriters: 3
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: true
+  holddurationnanos: 0
   waiters: 3
   waitingreaders: 0
   waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 3
+  waitingreaders: 0
+  waitingwriters: 3
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 release txn=txn1 span=c
 ----
@@ -1116,28 +1832,90 @@ metrics
 ----
 locks: 1
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 1
 lockswithwaitqueues: 1
 waiters: 2
 waitingreaders: 0
 waitingwriters: 2
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: false
+  holddurationnanos: 0
   waiters: 2
   waitingreaders: 0
   waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: false
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 acquire r=req10 k=c durability=u
 ----
@@ -1172,28 +1950,91 @@ metrics
 ----
 locks: 1
 locksheld: 1
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 dequeue r=req10
 ----
@@ -1251,27 +2092,88 @@ metrics
 ----
 locks: 1
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 1
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
 waitingwriters: 0
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 dequeue r=req11
 ----
@@ -1349,27 +2251,88 @@ metrics
 ----
 locks: 0
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
 waitingwriters: 0
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 # Test with distinguished waiter being a later request from the same
 # transaction that eventually grabs a reservation. Triggered a bug
@@ -1440,29 +2403,94 @@ metrics
 ----
 locks: 2
 locksheld: 2
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 2
 waiters: 2
 waitingreaders: 0
 waitingwriters: 2
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key:
   - 100
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 release txn=txn1 span=c
 ----
@@ -1497,28 +2525,91 @@ metrics
 ----
 locks: 2
 locksheld: 1
+totallockholddurationnanos: 0
 lockswithreservation: 1
 lockswithwaitqueues: 1
 waiters: 2
 waitingreaders: 0
 waitingwriters: 2
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 100
   held: true
+  holddurationnanos: 0
   waiters: 2
   waitingreaders: 0
   waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 2
+  waitingreaders: 0
+  waitingwriters: 2
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 release txn=txn1 span=d
 ----
@@ -1643,28 +2734,92 @@ metrics
 ----
 locks: 2
 locksheld: 2
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 99
   held: true
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key:
+  - 100
+  held: true
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 99
+  held: true
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 new-request r=req23 txn=txn3 ts=10 spans=w@d
 ----
@@ -1726,28 +2881,90 @@ metrics
 ----
 locks: 2
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 2
 lockswithwaitqueues: 1
 waiters: 1
 waitingreaders: 0
 waitingwriters: 1
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key:
   - 100
   held: false
+  holddurationnanos: 0
   waiters: 1
   waitingreaders: 0
   waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 100
+  held: false
+  holddurationnanos: 0
+  waiters: 1
+  waitingreaders: 0
+  waitingwriters: 1
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 acquire r=req23 k=d durability=u
 ----
@@ -1788,24 +3005,85 @@ metrics
 ----
 locks: 0
 locksheld: 0
+totallockholddurationnanos: 0
 lockswithreservation: 0
 lockswithwaitqueues: 0
 waiters: 0
 waitingreaders: 0
 waitingwriters: 0
+totalwaitdurationnanos: 0
 topklocksbywaiters:
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
