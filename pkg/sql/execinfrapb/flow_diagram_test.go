@@ -48,8 +48,9 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
 	desc := &descpb.TableDescriptor{
-		Name:    "Table",
-		Indexes: []descpb.IndexDescriptor{{Name: "SomeIndex"}},
+		Name:         "Table",
+		PrimaryIndex: descpb.IndexDescriptor{Name: "primary"},
+		Indexes:      []descpb.IndexDescriptor{{Name: "SomeIndex"}},
 	}
 	tr := TableReaderSpec{
 		Table:     *desc,
@@ -166,8 +167,8 @@ func TestPlanDiagramJoin(t *testing.T) {
 
 	flows := make(map[base.SQLInstanceID]*FlowSpec)
 
-	descA := &descpb.TableDescriptor{Name: "TableA"}
-	descB := &descpb.TableDescriptor{Name: "TableB"}
+	descA := &descpb.TableDescriptor{Name: "TableA", PrimaryIndex: descpb.IndexDescriptor{Name: "primary"}}
+	descB := &descpb.TableDescriptor{Name: "TableB", PrimaryIndex: descpb.IndexDescriptor{Name: "primary"}}
 
 	trA := TableReaderSpec{
 		Table:     *descA,
