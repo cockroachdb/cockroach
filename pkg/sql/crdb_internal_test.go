@@ -500,14 +500,6 @@ UPDATE system.namespace SET id = 12345 WHERE id = %d;
 		`relation "tbl" (%d): invalid foreign key: missing table=%d: referenced table ID %d: referenced descriptor not found`,
 		tableTblID, tableFkTblID, tableFkTblID), errStr)
 
-	require.True(t, rows.Next())
-	require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errStr))
-	require.Equal(t, tableNoJobID, id)
-	require.Equal(t, "defaultdb", dbName)
-	require.Equal(t, "public", schemaName)
-	require.Equal(t, "nojob", objName)
-	require.Equal(t, `mutation job 123456: job not found`, errStr)
-
 	require.False(t, rows.Next())
 }
 

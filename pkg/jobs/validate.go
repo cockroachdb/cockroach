@@ -39,7 +39,6 @@ func ValidateJobReferencesInDescriptor(
 		j, err := jmg.GetJobMetadata(m.JobID)
 		if err != nil {
 			errorAccFn(errors.WithAssertionFailure(errors.Wrapf(err, "mutation job %d", m.JobID)))
-			continue
 		}
 		if j == nil {
 			errorAccFn(errors.AssertionFailedf("mutation job %d not found in system.jobs", m.JobID))

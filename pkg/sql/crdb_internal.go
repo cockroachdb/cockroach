@@ -4512,6 +4512,14 @@ func collectMarshaledJobMetadataMap(
 	if err := it.Close(); err != nil {
 		return nil, err
 	}
+	for _, record := range p.ExtendedEvalContext().SchemaChangeJobRecords {
+		mj := marshaledJobMetadata{
+			status:        tree.NewDString(string(record.RunningStatus)),
+			payloadBytes:  nil,
+			progressBytes: nil,
+		}
+		m[record.JobID] = mj
+	}
 	return m, nil
 }
 
