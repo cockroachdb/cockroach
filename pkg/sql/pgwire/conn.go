@@ -664,6 +664,15 @@ func (c *conn) processCommandsAsync(
 			return
 		}
 
+		if retErr = c.checkMaxConnections(ctx, sqlServer); retErr != nil {
+			return
+		}
+		defer sqlServer.DecrementConnectionCount()
+
+		if retErr = c.authOKMessage(); retErr != nil {
+			return
+		}
+
 		// Inform the client of the default session settings.
 		connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange)
 		if retErr != nil {
