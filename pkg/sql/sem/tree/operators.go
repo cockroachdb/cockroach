@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/errors"
@@ -74,10 +75,7 @@ func init() {
 
 	// Label the binary operators.
 	for op, overloads := range BinOps {
-		if int(op) >= len(binaryOpName) || binaryOpName[op] == "" {
-			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
-		}
-		opName := binaryOpName[op]
+		opName := treebin.BinaryOpName(op)
 		for _, impl := range overloads {
 			o := impl.(*BinOp)
 			lname := o.LeftType.String()

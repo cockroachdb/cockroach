@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -272,10 +273,10 @@ func GetProjectionOperator(
 
 	leftType, rightType := inputTypes[col1Idx], inputTypes[col2Idx]
 	switch op := op.(type) {
-	case tree.BinaryOperator:
+	case treebin.BinaryOperator:
 		switch op.Symbol {
 		// {{range .BinOps}}
-		case tree._NAME:
+		case treebin._NAME:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			// {{range .LeftFamilies}}
 			case _LEFT_CANONICAL_TYPE_FAMILY:

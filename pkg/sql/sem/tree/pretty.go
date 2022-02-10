@@ -468,7 +468,7 @@ func (node *BinaryExpr) doc(p *PrettyCfg) pretty.Doc {
 
 	opDoc := pretty.Text(node.Operator.String())
 	var res pretty.Doc
-	if !node.Operator.Symbol.isPadded() {
+	if !node.Operator.Symbol.IsPadded() {
 		res = pretty.JoinDoc(opDoc, p.Doc(leftOperand), p.Doc(rightOperand))
 	} else {
 		pred := func(e Expr, recurse func(e Expr)) bool {

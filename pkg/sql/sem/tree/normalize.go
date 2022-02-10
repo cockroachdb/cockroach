@@ -11,6 +11,7 @@
 package tree
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -97,9 +98,9 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		switch b := val.(type) {
 		// -(a - b) -> (b - a)
 		case *BinaryExpr:
-			if b.Operator.Symbol == Minus {
+			if b.Operator.Symbol == treebin.Minus {
 				newBinExpr := newBinExprIfValidOverload(
-					MakeBinaryOperator(Minus),
+					treebin.MakeBinaryOperator(treebin.Minus),
 					b.TypedRight(),
 					b.TypedLeft(),
 				)
@@ -132,7 +133,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	var final TypedExpr
 
 	switch expr.Operator.Symbol {
-	case Plus:
+	case treebin.Plus:
 		if v.isNumericZero(right) {
 			final = ReType(left, expectedType)
 			break
@@ -141,12 +142,12 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			final = ReType(right, expectedType)
 			break
 		}
-	case Minus:
+	case treebin.Minus:
 		if types.IsAdditiveType(left.ResolvedType()) && v.isNumericZero(right) {
 			final = ReType(left, expectedType)
 			break
 		}
-	case Mult:
+	case treebin.Mult:
 		if v.isNumericOne(right) {
 			final = ReType(left, expectedType)
 			break
@@ -158,7 +159,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		// We can't simplify multiplication by zero to zero,
 		// because if the other operand is NULL during evaluation
 		// the result must be NULL.
-	case Div, FloorDiv:
+	case treebin.Div, treebin.FloorDiv:
 		if v.isNumericOne(right) {
 			final = ReType(left, expectedType)
 			break
@@ -290,21 +291,21 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 
 			switch {
 			case v.isConst(left.Right) &&
-				(left.Operator.Symbol == Plus || left.Operator.Symbol == Minus || left.Operator.Symbol == Div):
+				(left.Operator.Symbol == treebin.Plus || left.Operator.Symbol == treebin.Minus || left.Operator.Symbol == treebin.Div):
 
 				//        cmp          cmp
 				//       /   \        /   \
 				//    [+-/]   2  ->  a   [-+*]
 				//   /     \            /     \
 				//  a       1          2       1
-				var op BinaryOperator
+				var op treebin.BinaryOperator
 				switch left.Operator.Symbol {
-				case Plus:
-					op = MakeBinaryOperator(Minus)
-				case Minus:
-					op = MakeBinaryOperator(Plus)
-				case Div:
-					op = MakeBinaryOperator(Mult)
+				case treebin.Plus:
+					op = treebin.MakeBinaryOperator(treebin.Minus)
+				case treebin.Minus:
+					op = treebin.MakeBinaryOperator(treebin.Plus)
+				case treebin.Div:
+					op = treebin.MakeBinaryOperator(treebin.Mult)
 					if expr.Operator.Symbol != treecmp.EQ {
 						// In this case, we must remember to *flip* the inequality if the
 						// divisor is negative, since we are in effect multiplying both sides
@@ -361,7 +362,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					continue
 				}
 
-			case v.isConst(left.Left) && (left.Operator.Symbol == Plus || left.Operator.Symbol == Minus):
+			case v.isConst(left.Left) && (left.Operator.Symbol == treebin.Plus || left.Operator.Symbol == treebin.Minus):
 				//       cmp              cmp
 				//      /   \            /   \
 				//    [+-]   2  ->     [+-]   a
@@ -372,21 +373,21 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				var newBinExpr *BinaryExpr
 
 				switch left.Operator.Symbol {
-				case Plus:
+				case treebin.Plus:
 					//
 					// (A + X) cmp B => X cmp (B - C)
 					//
 					newBinExpr = newBinExprIfValidOverload(
-						MakeBinaryOperator(Minus),
+						treebin.MakeBinaryOperator(treebin.Minus),
 						expr.TypedRight(),
 						left.TypedLeft(),
 					)
-				case Minus:
+				case treebin.Minus:
 					//
 					// (A - X) cmp B => X cmp' (A - B)
 					//
 					newBinExpr = newBinExprIfValidOverload(
-						MakeBinaryOperator(Minus),
+						treebin.MakeBinaryOperator(treebin.Minus),
 						left.TypedLeft(),
 						expr.TypedRight(),
 					)

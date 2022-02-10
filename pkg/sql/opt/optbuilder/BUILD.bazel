@@ -71,6 +71,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",

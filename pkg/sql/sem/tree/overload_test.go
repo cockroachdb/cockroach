@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,7 +147,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &StrVal{s: s}
 	}
 	plus := func(left, right Expr) Expr {
-		return &BinaryExpr{Operator: MakeBinaryOperator(Plus), Left: left, Right: right}
+		return &BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.Plus), Left: left, Right: right}
 	}
 	placeholder := func(id int) *Placeholder {
 		return &Placeholder{Idx: PlaceholderIdx(id)}

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -28114,9 +28115,9 @@ func GetProjectionLConstOperator(
 	c := colconv.GetDatumToPhysicalFn(constType)(constArg)
 	leftType, rightType := constType, inputTypes[colIdx]
 	switch op := op.(type) {
-	case tree.BinaryOperator:
+	case treebin.BinaryOperator:
 		switch op.Symbol {
-		case tree.Bitand:
+		case treebin.Bitand:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -28216,7 +28217,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Bitor:
+		case treebin.Bitor:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -28316,7 +28317,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Bitxor:
+		case treebin.Bitxor:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -28416,7 +28417,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Plus:
+		case treebin.Plus:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -28715,7 +28716,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Minus:
+		case treebin.Minus:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -29075,7 +29076,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Mult:
+		case treebin.Mult:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -29342,7 +29343,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Div:
+		case treebin.Div:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -29549,7 +29550,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.FloorDiv:
+		case treebin.FloorDiv:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -29717,7 +29718,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Mod:
+		case treebin.Mod:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -29885,7 +29886,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Pow:
+		case treebin.Pow:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.DecimalFamily:
 				switch leftType.Width() {
@@ -30053,7 +30054,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.Concat:
+		case treebin.Concat:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.BytesFamily:
 				switch leftType.Width() {
@@ -30108,7 +30109,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.LShift:
+		case treebin.LShift:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -30222,7 +30223,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.RShift:
+		case treebin.RShift:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.IntFamily:
 				switch leftType.Width() {
@@ -30336,7 +30337,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchVal:
+		case treebin.JSONFetchVal:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -30378,7 +30379,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchText:
+		case treebin.JSONFetchText:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -30420,7 +30421,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchValPath:
+		case treebin.JSONFetchValPath:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {
@@ -30440,7 +30441,7 @@ func GetProjectionLConstOperator(
 					}
 				}
 			}
-		case tree.JSONFetchTextPath:
+		case treebin.JSONFetchTextPath:
 			switch typeconv.TypeFamilyToCanonicalTypeFamily(leftType.Family()) {
 			case types.JsonFamily:
 				switch leftType.Width() {

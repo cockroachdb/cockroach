@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -231,7 +232,7 @@ func makeJSONComputedColumn(s *Smither) (tree.Statement, bool) {
 	}
 	col.Computed.Computed = true
 	col.Computed.Expr = tree.NewTypedBinaryExpr(
-		tree.MakeBinaryOperator(tree.JSONFetchText),
+		treebin.MakeBinaryOperator(treebin.JSONFetchText),
 		ref.typedExpr(),
 		randgen.RandDatumSimple(s.rnd, types.String),
 		types.String,
