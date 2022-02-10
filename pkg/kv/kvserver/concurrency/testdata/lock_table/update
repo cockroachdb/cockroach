@@ -109,28 +109,91 @@ metrics
 ----
 locks: 1
 locksheld: 1
+totallockholddurationnanos: 9999000000
 lockswithreservation: 0
 lockswithwaitqueues: 1
 waiters: 4
 waitingreaders: 2
 waitingwriters: 2
+totalwaitdurationnanos: 5678000000
 topklocksbywaiters:
 - key:
   - 97
   held: true
+  holddurationnanos: 1234000000
   waiters: 4
   waitingreaders: 2
   waitingwriters: 2
+  waitdurationnanos: 5555000000
+  maxwaitdurationnanos: 5000000000
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 - key: []
   held: false
+  holddurationnanos: 0
   waiters: 0
   waitingreaders: 0
   waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbyholdduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 1234000000
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+  waitdurationnanos: 5555000000
+  maxwaitdurationnanos: 5000000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+topklocksbywaitduration:
+- key:
+  - 97
+  held: true
+  holddurationnanos: 1234000000
+  waiters: 4
+  waitingreaders: 2
+  waitingwriters: 2
+  waitdurationnanos: 5555000000
+  maxwaitdurationnanos: 5000000000
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
+- key: []
+  held: false
+  holddurationnanos: 0
+  waiters: 0
+  waitingreaders: 0
+  waitingwriters: 0
+  waitdurationnanos: 0
+  maxwaitdurationnanos: 0
 
 # -------------------------------------------------------------
 # Update lock timestamp to 11,1 - nothing moves

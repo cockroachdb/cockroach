@@ -536,6 +536,26 @@ func TestLockTableBasic(t *testing.T) {
 
 			case "metrics":
 				metrics := lt.Metrics()
+				// make non-zero hold and wait times deterministic
+				if metrics.TotalLockHoldDurationNanos > 0 {
+					metrics.TotalLockHoldDurationNanos = int64(9999 * time.Millisecond)
+				}
+				if metrics.TotalWaitDurationNanos > 0 {
+					metrics.TotalWaitDurationNanos = int64(5678 * time.Millisecond)
+				}
+				for _, topK := range []*[3]LockMetrics{&metrics.TopKLocksByWaiters, &metrics.TopKLocksByWaitDuration, &metrics.TopKLocksByHoldDuration} {
+					for i := range topK {
+						if topK[i].HoldDurationNanos > 0 {
+							topK[i].HoldDurationNanos = int64(1234 * time.Millisecond)
+						}
+						if topK[i].WaitDurationNanos > 0 {
+							topK[i].WaitDurationNanos = int64(5555 * time.Millisecond)
+						}
+						if topK[i].MaxWaitDurationNanos > 0 {
+							topK[i].MaxWaitDurationNanos = int64(5000 * time.Millisecond)
+						}
+					}
+				}
 				b, err := yaml.Marshal(&metrics)
 				if err != nil {
 					d.Fatalf(t, "marshaling metrics: %v", err)

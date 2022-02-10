@@ -16,6 +16,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -86,11 +88,12 @@ type waitingState struct {
 	// Represents who the request is waiting for. The conflicting
 	// transaction may be a lock holder of a conflicting lock or a
 	// conflicting request being sequenced through the same lockTable.
-	txn           *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
-	key           roachpb.Key       // the key of the conflict
-	held          bool              // is the conflict a held lock?
-	queuedWriters int               // how many writers are waiting?
-	queuedReaders int               // how many readers are waiting?
+	txn             *enginepb.TxnMeta // always non-nil in waitFor{,Distinguished,Self}
+	key             roachpb.Key       // the key of the conflict
+	held            bool              // is the conflict a held lock?
+	queuedWriters   int               // how many writers are waiting?
+	queuedReaders   int               // how many readers are waiting?
+	activeWaitBegin time.Time         // when did this wait begin?
 
 	// Represents the action that the request was trying to perform when
 	// it hit the conflict. E.g. was it trying to read or write?
@@ -736,6 +739,11 @@ type lockState struct {
 		locked bool
 		// LockStrength is always Exclusive
 		holder [lock.MaxDurability + 1]lockHolderInfo
+
+		// The start time of the lockholder being tracked.
+		// NB: This is not necessarily the time the lock was acquired, for example
+		// in the case of a replicated lock.
+		startTime time.Time
 	}
 
 	// Information about the requests waiting on the lock.
@@ -1043,11 +1051,15 @@ func (l *lockState) addToMetrics(m *LockTableMetrics) {
 	if l.isEmptyLock() {
 		return
 	}
+	totalWaitDuration, maxWaitDuration := l.totalAndMaxWaitDuration()
 	lm := LockMetrics{
-		Key:            l.key,
-		Held:           l.holder.locked,
-		WaitingReaders: int64(l.waitingReaders.Len()),
-		WaitingWriters: int64(l.queuedWriters.Len()),
+		Key:                  l.key,
+		Held:                 l.holder.locked,
+		HoldDurationNanos:    l.lockHeldDuration().Nanoseconds(),
+		WaitingReaders:       int64(l.waitingReaders.Len()),
+		WaitingWriters:       int64(l.queuedWriters.Len()),
+		WaitDurationNanos:    totalWaitDuration.Nanoseconds(),
+		MaxWaitDurationNanos: maxWaitDuration.Nanoseconds(),
 	}
 	lm.Waiters = lm.WaitingReaders + lm.WaitingWriters
 	m.addLockMetrics(lm)
@@ -1104,7 +1116,9 @@ func (l *lockState) informActiveWaiters() {
 			findDistinguished = false
 		}
 		g.mu.Lock()
+		activeWaitBegin := g.mu.state.activeWaitBegin
 		g.mu.state = state
+		g.mu.state.activeWaitBegin = activeWaitBegin
 		if l.distinguishedWaiter == g {
 			g.mu.state.kind = waitForDistinguished
 		}
@@ -1131,7 +1145,9 @@ func (l *lockState) informActiveWaiters() {
 			}
 		}
 		g.mu.Lock()
+		activeWaitBegin := g.mu.state.activeWaitBegin
 		g.mu.state = state
+		g.mu.state.activeWaitBegin = activeWaitBegin
 		g.notify()
 		g.mu.Unlock()
 	}
@@ -1207,6 +1223,46 @@ func (l *lockState) isEmptyLock() bool {
 	return false
 }
 
+// Returns the duration of time the lock has been tracked as held in the lock table
+// REQUIRES: l.mu is locked.
+func (l *lockState) lockHeldDuration() time.Duration {
+	if !l.holder.locked {
+		return time.Duration(0)
+	}
+
+	return time.Since(l.holder.startTime)
+}
+
+// Returns the total amount of time all waiters in the queues of
+// readers and writers have been waiting on the lock
+// REQUIRES: l.mu is locked.
+func (l *lockState) totalAndMaxWaitDuration() (time.Duration, time.Duration) {
+	var totalWaitDuration time.Duration
+	var maxWaitDuration time.Duration
+	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		g := e.Value.(*lockTableGuardImpl)
+		g.mu.Lock()
+		waitDuration := time.Since(g.mu.state.activeWaitBegin)
+		totalWaitDuration += waitDuration
+		if waitDuration > maxWaitDuration {
+			maxWaitDuration = waitDuration
+		}
+		g.mu.Unlock()
+	}
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		g := qg.guard
+		g.mu.Lock()
+		waitDuration := time.Since(g.mu.state.activeWaitBegin)
+		totalWaitDuration += waitDuration
+		if waitDuration > maxWaitDuration {
+			maxWaitDuration = waitDuration
+		}
+		g.mu.Unlock()
+	}
+	return totalWaitDuration, maxWaitDuration
+}
+
 // Returns true iff the lock is currently held by the transaction with the
 // given id.
 // REQUIRES: l.mu is locked.
@@ -1252,6 +1308,7 @@ func (l *lockState) getLockHolder() (*enginepb.TxnMeta, hlc.Timestamp) {
 // REQUIRES: l.mu is locked.
 func (l *lockState) clearLockHolder() {
 	l.holder.locked = false
+	l.holder.startTime = time.Time{}
 	for i := range l.holder.holder {
 		l.holder.holder[i] = lockHolderInfo{}
 	}
@@ -1384,11 +1441,12 @@ func (l *lockState) tryActiveWait(
 	}
 
 	waitForState := waitingState{
-		kind:          waitFor,
-		key:           l.key,
-		queuedWriters: l.queuedWriters.Len(),
-		queuedReaders: l.waitingReaders.Len(),
-		guardAccess:   sa,
+		kind:            waitFor,
+		key:             l.key,
+		queuedWriters:   l.queuedWriters.Len(),
+		queuedReaders:   l.waitingReaders.Len(),
+		activeWaitBegin: time.Now(),
+		guardAccess:     sa,
 	}
 	if lockHolderTxn != nil {
 		waitForState.txn = lockHolderTxn
@@ -1692,6 +1750,7 @@ func (l *lockState) acquireLock(
 	l.holder.holder[durability].txn = txn
 	l.holder.holder[durability].ts = ts
 	l.holder.holder[durability].seqs = append([]enginepb.TxnSeq(nil), txn.Sequence)
+	l.holder.startTime = timeutil.Now()
 
 	// If there are waiting requests from the same txn, they no longer need to wait.
 	l.releaseWritersFromTxn(txn)
@@ -1725,6 +1784,7 @@ func (l *lockState) discoveredLock(
 		}
 	} else {
 		l.holder.locked = true
+		l.holder.startTime = time.Now()
 	}
 	holder := &l.holder.holder[lock.Replicated]
 	if holder.txn == nil {
