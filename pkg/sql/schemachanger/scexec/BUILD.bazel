@@ -107,4 +107,8 @@ gomock(
     ],
     library = ":scexec",
     package = "scexec_test",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
