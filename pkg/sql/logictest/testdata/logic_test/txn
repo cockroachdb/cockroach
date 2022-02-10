@@ -1142,3 +1142,54 @@ query T
 SHOW intervalstyle
 ----
 postgres
+
+query T
+SHOW default_transaction_quality_of_service
+----
+regular
+
+statement ok
+SET default_transaction_quality_of_service=critical
+
+query T
+SHOW default_transaction_quality_of_service
+----
+critical
+
+statement ok
+SET default_transaction_quality_of_service=background
+
+query T
+SHOW default_transaction_quality_of_service
+----
+background
+
+statement ok
+RESET default_transaction_quality_of_service
+
+query T
+SHOW default_transaction_quality_of_service
+----
+regular
+
+statement error pq: invalid value for parameter "default_transaction_quality_of_service": "ttl_low"
+SET default_transaction_quality_of_service=ttl_low
+
+statement ok
+BEGIN
+
+statement ok
+SET LOCAL default_transaction_quality_of_service=background
+
+query T
+SHOW default_transaction_quality_of_service
+----
+background
+
+statement ok
+END
+
+query T
+SHOW default_transaction_quality_of_service
+----
+regular

@@ -586,6 +586,9 @@ func applyOverrides(o sessiondata.InternalExecutorOverride, sd *sessiondata.Sess
 	if o.DatabaseIDToTempSchemaID != nil {
 		sd.DatabaseIDToTempSchemaID = o.DatabaseIDToTempSchemaID
 	}
+	if o.QualityOfService != nil {
+		sd.DefaultTxnQualityOfService = o.QualityOfService.ValidateInternal()
+	}
 }
 
 func (ie *InternalExecutor) maybeRootSessionDataOverride(
