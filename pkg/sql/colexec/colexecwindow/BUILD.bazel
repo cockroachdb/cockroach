@@ -73,6 +73,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/types",
         "//pkg/testutils/buildutil",
         "//pkg/testutils/colcontainerutils",
