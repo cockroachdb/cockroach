@@ -241,6 +241,10 @@ genrule(
     $(location //pkg/cmd/docgen) grammar bnf $(RULEDIR) --quiet --addr $(location //pkg/sql/parser:sql.y)
     """,
     exec_tools = ["//pkg/cmd/docgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -256,4 +260,8 @@ genrule(
     COCKROACH_REQUIRE_RAILROAD=1 $(location //pkg/cmd/docgen) grammar svg $$bnf_locs $(RULEDIR) --addr $(location //pkg/sql/parser:sql.y) --railroad $(location @railroadjar//:rr.war)
     """,
     exec_tools = ["//pkg/cmd/docgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
