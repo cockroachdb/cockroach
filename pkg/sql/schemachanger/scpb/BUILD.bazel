@@ -68,6 +68,10 @@ genrule(
     exec_tools = [
         ":element-generator",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_binary(
@@ -88,5 +92,9 @@ genrule(
        """,
     exec_tools = [
         ":element-uml-generator",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
