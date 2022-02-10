@@ -958,8 +958,8 @@ func (ti *Index) Predicate() (string, bool) {
 	return ti.predicate, ti.predicate != ""
 }
 
-// ImplicitPartitioningColumnCount is part of the cat.Index interface.
-func (ti *Index) ImplicitPartitioningColumnCount() int {
+// ImplicitColumnCount is part of the cat.Index interface.
+func (ti *Index) ImplicitColumnCount() int {
 	return 0
 }
 

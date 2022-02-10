@@ -31,10 +31,11 @@ func (desc *IndexDescriptor) IsPartial() bool {
 // ExplicitColumnStartIdx returns the start index of any explicit columns.
 func (desc *IndexDescriptor) ExplicitColumnStartIdx() int {
 	start := int(desc.Partitioning.NumImplicitColumns)
-	// We do not currently handle implicit columns along with hash sharded indexes.
-	// Thus, safe to override this to 1.
+	// Currently, we only allow implicit partitioning on hash sharded index. When
+	// that happens, the shard column always comes after implicit partition
+	// columns.
 	if desc.IsSharded() {
-		start = 1
+		start++
 	}
 	return start
 }

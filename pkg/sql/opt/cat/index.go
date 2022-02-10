@@ -159,24 +159,28 @@ type Index interface {
 	// Span returns the KV span associated with the index.
 	Span() roachpb.Span
 
-	// ImplicitPartitioningColumnCount returns the number of implicit partitioning
-	// columns at the front of the index. For example, consider the following
-	// table:
+	// ImplicitColumnCount returns the number of implicit columns at the front of
+	// the index including implicit partitioning columns and shard columns of hash
+	// sharded indexes. For example, consider the following table:
 	//
 	// CREATE TABLE t (
 	//   x INT,
 	//   y INT,
-	//   INDEX (y) PARTITION BY LIST (x) (
-	//     PARTITION p1 VALUES IN (1)
-	//   )
+	//   z INT,
+	//   INDEX (y),
+	//   INDEX (z) USING HASH
+	// ) PARTITION ALL BY LIST (x) (
+	//   PARTITION p1 VALUES IN (1)
 	// );
 	//
-	// In this case, the number of implicit partitioning columns in the index on
-	// y is 1, since x is implicitly added to the front of the index.
+	// In this case, the number of implicit columns in the index on y is 1, since
+	// x is implicitly added to the front of the index. The number of implicit
+	// columns in the index on z is 2, since x and a shard column are implicitly
+	// added to the front of the index.
 	//
 	// The implicit partitioning columns are always a prefix of the full column
-	// list, and ImplicitPartitioningColumnCount < LaxKeyColumnCount.
-	ImplicitPartitioningColumnCount() int
+	// list, and ImplicitColumnCount < LaxKeyColumnCount.
+	ImplicitColumnCount() int
 
 	// GeoConfig returns a geospatial index configuration. If non-nil, it
 	// describes the configuration for this geospatial inverted index.
