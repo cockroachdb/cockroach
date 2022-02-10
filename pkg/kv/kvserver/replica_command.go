@@ -49,6 +49,15 @@ import (
 // why this value was chosen in particular, but it seems to work.
 const mergeApplicationTimeout = 5 * time.Second
 
+// sendSnapshotTimeout is the timeout for sending snapshots. While a snapshot is
+// in transit, Raft log truncation is halted to allow the recipient to catch up.
+// If the snapshot takes very long to transfer for whatever reason this can
+// cause the Raft log to grow very large. We therefore set a conservative
+// timeout to eventually allow Raft log truncation while avoiding snapshot
+// starvation -- even if another snapshot is sent immediately, this still
+// allows truncation up to the new snapshot index.
+const sendSnapshotTimeout = 20 * time.Minute
+
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest, reason string,
@@ -2507,14 +2516,18 @@ func (r *Replica) sendSnapshot(
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	if err := r.store.cfg.Transport.SendSnapshot(
-		ctx,
-		r.store.allocator.storePool,
-		req,
-		snap,
-		newBatchFn,
-		sent,
-	); err != nil {
+	err = contextutil.RunWithTimeout(
+		ctx, "send-snapshot", sendSnapshotTimeout, func(ctx context.Context) error {
+			return r.store.cfg.Transport.SendSnapshot(
+				ctx,
+				r.store.allocator.storePool,
+				req,
+				snap,
+				newBatchFn,
+				sent,
+			)
+		})
+	if err != nil {
 		if errors.Is(err, errMalformedSnapshot) {
 			tag := fmt.Sprintf("r%d_%s", r.RangeID, snap.SnapUUID.Short())
 			if dir, err := r.store.checkpoint(ctx, tag); err != nil {
