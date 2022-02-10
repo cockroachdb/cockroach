@@ -74,7 +74,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //     │               (handles leases and txn conflicts)              │
 //     │                                                               │
 //     ▼                                                               │
-// executeReadWriteBatch                                               │
+// executeWriteBatch                                                   │
 //     │                                                               │
 //     ▼                                                               ▼
 // evalAndPropose         (turns the BatchRequest        executeReadOnlyBatch
