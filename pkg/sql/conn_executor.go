@@ -2617,6 +2617,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		SchemaChangeJobRecords: ex.extraTxnState.schemaChangeJobRecords,
 		statsProvider:          ex.server.sqlStats,
 		indexUsageStats:        ex.indexUsageStats,
+		statementPreparer:      ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)
 }
