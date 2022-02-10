@@ -1,4 +1,4 @@
-dev build pkg/roachpb:roachpb_test --skip-generate
+dev build pkg/roachpb:roachpb_test
 ----
 bazel query pkg/roachpb:roachpb_test --output=label_kind
 bazel build //pkg/roachpb:roachpb_test --config=test
