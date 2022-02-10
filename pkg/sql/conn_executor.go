@@ -295,6 +295,36 @@ type Server struct {
 
 	// TelemetryLoggingMetrics is used to track metrics for logging to the telemetry channel.
 	TelemetryLoggingMetrics *TelemetryLoggingMetrics
+
+	allowedConnectionCount struct {
+		value int64
+		mu    syncutil.Mutex
+	}
+}
+
+func (server *Server) IncAllowedConnectionCount() {
+	allowedConnectionCount := &server.allowedConnectionCount
+	allowedConnectionCount.mu.Lock()
+	allowedConnectionCount.value++
+	allowedConnectionCount.mu.Unlock()
+}
+
+func (server *Server) DecAllowedConnectionCount() {
+	allowedConnectionCount := &server.allowedConnectionCount
+	allowedConnectionCount.mu.Lock()
+	allowedConnectionCount.value--
+	allowedConnectionCount.mu.Unlock()
+}
+
+func (server *Server) IncAllowedConnectionCountIfLt(max int64) bool {
+	allowedConnectionCount := &server.allowedConnectionCount
+	allowedConnectionCount.mu.Lock()
+	lt := allowedConnectionCount.value < max
+	if lt {
+		allowedConnectionCount.value++
+	}
+	allowedConnectionCount.mu.Unlock()
+	return lt
 }
 
 // Metrics collects timeseries data about SQL activity.
