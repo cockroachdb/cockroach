@@ -7423,16 +7423,6 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
 			expectSchedule:          false,
 		},
 		{
-			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) when tied to another mutation which fails",
-			setup:        createNonTTLTable,
-			schemaChange: `BEGIN; ALTER TABLE t.test SET (ttl_expire_after = '10 hours'); CREATE INDEX test_idx ON t.test(id); COMMIT`,
-			knobs: &sql.SchemaChangerTestingKnobs{
-				RunBeforeIndexValidation: failFunc,
-			},
-			expectedShowCreateTable: expectNonTTLTable,
-			expectSchedule:          false,
-		},
-		{
 			desc:         "error during ALTER TABLE ... RESET (ttl) during delete column mutation",
 			setup:        createTTLTable,
 			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
@@ -7448,16 +7438,6 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
 			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
 			knobs: &sql.SchemaChangerTestingKnobs{
 				RunBeforeModifyRowLevelTTL: failFunc,
-			},
-			expectedShowCreateTable: expectTTLTable,
-			expectSchedule:          true,
-		},
-		{
-			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) when tied to another mutation which fails",
-			setup:        createTTLTable,
-			schemaChange: `BEGIN; ALTER TABLE t.test RESET (ttl); CREATE INDEX test_idx ON t.test(id); COMMIT`,
-			knobs: &sql.SchemaChangerTestingKnobs{
-				RunBeforeIndexValidation: failFunc,
 			},
 			expectedShowCreateTable: expectTTLTable,
 			expectSchedule:          true,
@@ -7514,6 +7494,77 @@ CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
 				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
 				require.Equal(t, 0, numSchedules)
 			}
+		})
+	}
+}
+
+func TestSchemaChangeWhileAddingOrDroppingTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		ttlChange               string
+		conflictingSchemaChange string
+	}{
+		{
+			desc: `during adding TTL`,
+			setup: `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT);`,
+			ttlChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
+		},
+		{
+			desc: `during dropping TTL`,
+			setup: `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
+			ttlChange: `ALTER TABLE t.test RESET (ttl)`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			childJobStartNotification := make(chan struct{})
+			waitBeforeContinuing := make(chan struct{})
+			var doOnce sync.Once
+			params.Knobs = base.TestingKnobs{
+				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+					RunBeforeModifyRowLevelTTL: func() error {
+						doOnce.Do(func() {
+							childJobStartNotification <- struct{}{}
+							<-waitBeforeContinuing
+						})
+						return nil
+					},
+				},
+			}
+
+			s, db, _ := serverutils.StartServer(t, params)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+
+			sqlDB.Exec(t, tc.setup)
+
+			tableID := sqlutils.QueryTableID(t, db, "t", "public", "test")
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				sqlDB.Exec(t, tc.ttlChange)
+				wg.Done()
+			}()
+
+			<-childJobStartNotification
+
+			expected := fmt.Sprintf(`pq: relation "test" \(%d\): cannot perform a schema change operation while a TTL change is in progress`, tableID)
+			sqlDB.ExpectErr(t, expected, `ALTER TABLE t.test ADD COLUMN y INT;`)
+
+			waitBeforeContinuing <- struct{}{}
+			wg.Wait()
 		})
 	}
 }

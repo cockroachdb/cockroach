@@ -71,6 +71,14 @@ ALTER TABLE tbl SET (ttl_select_batch_size = 200)
 statement ok
 ROLLBACK
 
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl RESET (ttl);
+CREATE INDEX tbl_idx ON tbl (text)
+
+statement ok
+ROLLBACK
+
 # Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
 statement ok
 ALTER TABLE tbl RESET (ttl)
@@ -377,6 +385,14 @@ statement error cannot modify TTL whilst TTL is being added or dropped
 BEGIN;
 ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
 ALTER TABLE tbl RESET (ttl_select_batch_size)
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+CREATE INDEX tbl_idx ON tbl (text)
 
 statement ok
 ROLLBACK
