@@ -202,11 +202,14 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 		}
 		binaryPath := filepath.Join(bazelBin, bazelutil.OutputOfBinaryRule(target.fullName, runtime.GOOS == "windows"))
 		base := targetToBinBasename(target.fullName)
-		var symlinkPath string
+		var symlinkPaths []string
 		// Binaries beginning with the string "cockroach" go right at
 		// the top of the workspace; others go in the `bin` directory.
 		if strings.HasPrefix(base, "cockroach") {
-			symlinkPath = filepath.Join(workspace, base)
+			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, base))
+			if strings.HasPrefix(base, "cockroach-short") {
+				symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "cockroach"))
+			}
 		} else if base == "dev" {
 			buf, err := d.os.ReadFile(filepath.Join(workspace, "dev"))
 			if err != nil {
@@ -222,23 +225,26 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 				return errors.New("could not find DEV_VERSION in top-level `dev` script")
 			}
 
-			symlinkPath = filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion))
+			symlinkPaths = append(symlinkPaths,
+				filepath.Join(workspace, "bin", "dev-versions", fmt.Sprintf("dev.%s", devVersion)))
 		} else {
-			symlinkPath = filepath.Join(workspace, "bin", base)
+			symlinkPaths = append(symlinkPaths, filepath.Join(workspace, "bin", base))
 		}
 
-		// Symlink from binaryPath -> symlinkPath
-		if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
-			return err
+		// Symlink from binaryPath -> symlinkPath, clear out detritus, if any.
+		for _, symlinkPath := range symlinkPaths {
+			if err := d.os.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
+				return err
+			}
+			rel, err := filepath.Rel(workspace, symlinkPath)
+			if err != nil {
+				rel = symlinkPath
+			}
+			log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 		}
-		if err := d.os.Symlink(binaryPath, symlinkPath); err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(workspace, symlinkPath)
-		if err != nil {
-			rel = symlinkPath
-		}
-		log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 	}
 
 	shouldHoist := false
