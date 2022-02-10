@@ -268,7 +268,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 
 	// TODO(rui): use testing hook instead of cluster setting once this value for
 	// the backfill merge is hooked up to testing hooks.
-	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.batch_size = %d`, chunkSize)); err != nil {
+	if _, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize)); err != nil {
 		t.Fatal(err)
 	}
 
