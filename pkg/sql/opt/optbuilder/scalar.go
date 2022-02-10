@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -218,7 +219,7 @@ func (b *Builder) buildScalar(
 		left := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
 		right := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
 		out = b.constructBinary(
-			tree.MakeBinaryOperator(t.Operator.Symbol),
+			treebin.MakeBinaryOperator(t.Operator.Symbol),
 			b.buildScalar(left, inScope, nil, nil, colRefs),
 			b.buildScalar(right, inScope, nil, nil, colRefs),
 			t.ResolvedType(),
@@ -751,42 +752,42 @@ func (b *Builder) constructComparison(
 }
 
 func (b *Builder) constructBinary(
-	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
+	bin treebin.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch bin.Symbol {
-	case tree.Bitand:
+	case treebin.Bitand:
 		return b.factory.ConstructBitand(left, right)
-	case tree.Bitor:
+	case treebin.Bitor:
 		return b.factory.ConstructBitor(left, right)
-	case tree.Bitxor:
+	case treebin.Bitxor:
 		return b.factory.ConstructBitxor(left, right)
-	case tree.Plus:
+	case treebin.Plus:
 		return b.factory.ConstructPlus(left, right)
-	case tree.Minus:
+	case treebin.Minus:
 		return b.factory.ConstructMinus(left, right)
-	case tree.Mult:
+	case treebin.Mult:
 		return b.factory.ConstructMult(left, right)
-	case tree.Div:
+	case treebin.Div:
 		return b.factory.ConstructDiv(left, right)
-	case tree.FloorDiv:
+	case treebin.FloorDiv:
 		return b.factory.ConstructFloorDiv(left, right)
-	case tree.Mod:
+	case treebin.Mod:
 		return b.factory.ConstructMod(left, right)
-	case tree.Pow:
+	case treebin.Pow:
 		return b.factory.ConstructPow(left, right)
-	case tree.Concat:
+	case treebin.Concat:
 		return b.factory.ConstructConcat(left, right)
-	case tree.LShift:
+	case treebin.LShift:
 		return b.factory.ConstructLShift(left, right)
-	case tree.RShift:
+	case treebin.RShift:
 		return b.factory.ConstructRShift(left, right)
-	case tree.JSONFetchText:
+	case treebin.JSONFetchText:
 		return b.factory.ConstructFetchText(left, right)
-	case tree.JSONFetchVal:
+	case treebin.JSONFetchVal:
 		return b.factory.ConstructFetchVal(left, right)
-	case tree.JSONFetchValPath:
+	case treebin.JSONFetchValPath:
 		return b.factory.ConstructFetchValPath(left, right)
-	case tree.JSONFetchTextPath:
+	case treebin.JSONFetchTextPath:
 		return b.factory.ConstructFetchTextPath(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled binary operator: %s", log.Safe(bin)))

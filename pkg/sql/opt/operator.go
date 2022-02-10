@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -149,24 +150,24 @@ var ComparisonOpReverseMap = map[Operator]treecmp.ComparisonOperatorSymbol{
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // binary operator type.
-var BinaryOpReverseMap = map[Operator]tree.BinaryOperatorSymbol{
-	BitandOp:        tree.Bitand,
-	BitorOp:         tree.Bitor,
-	BitxorOp:        tree.Bitxor,
-	PlusOp:          tree.Plus,
-	MinusOp:         tree.Minus,
-	MultOp:          tree.Mult,
-	DivOp:           tree.Div,
-	FloorDivOp:      tree.FloorDiv,
-	ModOp:           tree.Mod,
-	PowOp:           tree.Pow,
-	ConcatOp:        tree.Concat,
-	LShiftOp:        tree.LShift,
-	RShiftOp:        tree.RShift,
-	FetchValOp:      tree.JSONFetchVal,
-	FetchTextOp:     tree.JSONFetchText,
-	FetchValPathOp:  tree.JSONFetchValPath,
-	FetchTextPathOp: tree.JSONFetchTextPath,
+var BinaryOpReverseMap = map[Operator]treebin.BinaryOperatorSymbol{
+	BitandOp:        treebin.Bitand,
+	BitorOp:         treebin.Bitor,
+	BitxorOp:        treebin.Bitxor,
+	PlusOp:          treebin.Plus,
+	MinusOp:         treebin.Minus,
+	MultOp:          treebin.Mult,
+	DivOp:           treebin.Div,
+	FloorDivOp:      treebin.FloorDiv,
+	ModOp:           treebin.Mod,
+	PowOp:           treebin.Pow,
+	ConcatOp:        treebin.Concat,
+	LShiftOp:        treebin.LShift,
+	RShiftOp:        treebin.RShift,
+	FetchValOp:      treebin.JSONFetchVal,
+	FetchTextOp:     treebin.JSONFetchText,
+	FetchValPathOp:  treebin.JSONFetchValPath,
+	FetchTextPathOp: treebin.JSONFetchTextPath,
 }
 
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree

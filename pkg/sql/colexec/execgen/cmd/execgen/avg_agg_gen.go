@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -36,10 +36,10 @@ type avgTmplInfo struct {
 func (a avgTmplInfo) AssignAdd(targetElem, leftElem, rightElem, _, _, _ string) string {
 	// Note that we already have correctly resolved method for "Plus" overload,
 	// and we simply need to create a skeleton of lastArgWidthOverload to
-	// supply tree.Plus as the binary operator in order for the correct code to
-	// be returned.
+	// supply treebin.Plus as the binary operator in order for the correct code
+	// to be returned.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Plus),
+		overloadBase: newBinaryOverloadBase(treebin.Plus),
 	}}
 	return a.avgOverload(lawo, targetElem, leftElem, rightElem, "", "", "")
 }
@@ -51,7 +51,7 @@ func (a avgTmplInfo) AssignSubtract(
 	// the resolved overload to use Minus overload in particular, so all other
 	// fields remain unset.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Minus),
+		overloadBase: newBinaryOverloadBase(treebin.Minus),
 	}}
 	return a.avgOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -105,7 +106,7 @@ type Operator interface {
 }
 
 var _ Operator = (*UnaryOperator)(nil)
-var _ Operator = (*BinaryOperator)(nil)
+var _ Operator = (*treebin.BinaryOperator)(nil)
 var _ Operator = (*treecmp.ComparisonOperator)(nil)
 
 // SubqueryExpr is an interface used to identify an expression as a subquery.
@@ -989,115 +990,34 @@ func (node *TypedDummy) Eval(*EvalContext) (Datum, error) {
 	return nil, errors.AssertionFailedf("should not eval typed dummy")
 }
 
-// BinaryOperator represents a unary operator used in a BinaryExpr.
-type BinaryOperator struct {
-	Symbol BinaryOperatorSymbol
-	// IsExplicitOperator is true if OPERATOR(symbol) is used.
-	IsExplicitOperator bool
-}
-
-// MakeBinaryOperator creates a BinaryOperator given a symbol.
-func MakeBinaryOperator(symbol BinaryOperatorSymbol) BinaryOperator {
-	return BinaryOperator{Symbol: symbol}
-}
-
-func (o BinaryOperator) String() string {
-	if o.IsExplicitOperator {
-		return fmt.Sprintf("OPERATOR(%s)", o.Symbol.String())
-	}
-	return o.Symbol.String()
-}
-
-// Operator implements tree.Operator.
-func (BinaryOperator) Operator() {}
-
-// BinaryOperatorSymbol is a symbol for a binary operator.
-type BinaryOperatorSymbol uint8
-
-// BinaryExpr.Operator
-const (
-	Bitand BinaryOperatorSymbol = iota
-	Bitor
-	Bitxor
-	Plus
-	Minus
-	Mult
-	Div
-	FloorDiv
-	Mod
-	Pow
-	Concat
-	LShift
-	RShift
-	JSONFetchVal
-	JSONFetchText
-	JSONFetchValPath
-	JSONFetchTextPath
-
-	NumBinaryOperatorSymbols
-)
-
-var _ = NumBinaryOperatorSymbols
-
-var binaryOpName = [...]string{
-	Bitand:            "&",
-	Bitor:             "|",
-	Bitxor:            "#",
-	Plus:              "+",
-	Minus:             "-",
-	Mult:              "*",
-	Div:               "/",
-	FloorDiv:          "//",
-	Mod:               "%",
-	Pow:               "^",
-	Concat:            "||",
-	LShift:            "<<",
-	RShift:            ">>",
-	JSONFetchVal:      "->",
-	JSONFetchText:     "->>",
-	JSONFetchValPath:  "#>",
-	JSONFetchTextPath: "#>>",
-}
-
 // binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
 var binaryOpPrio = [...]int{
-	Pow:  1,
-	Mult: 2, Div: 2, FloorDiv: 2, Mod: 2,
-	Plus: 3, Minus: 3,
-	LShift: 4, RShift: 4,
-	Bitand: 5,
-	Bitxor: 6,
-	Bitor:  7,
-	Concat: 8, JSONFetchVal: 8, JSONFetchText: 8, JSONFetchValPath: 8, JSONFetchTextPath: 8,
+	treebin.Pow:  1,
+	treebin.Mult: 2, treebin.Div: 2, treebin.FloorDiv: 2, treebin.Mod: 2,
+	treebin.Plus: 3, treebin.Minus: 3,
+	treebin.LShift: 4, treebin.RShift: 4,
+	treebin.Bitand: 5,
+	treebin.Bitxor: 6,
+	treebin.Bitor:  7,
+	treebin.Concat: 8, treebin.JSONFetchVal: 8, treebin.JSONFetchText: 8, treebin.JSONFetchValPath: 8, treebin.JSONFetchTextPath: 8,
 }
 
 // binaryOpFullyAssoc indicates whether an operator is fully associative.
 // Reminder: an op R is fully associative if (a R b) R c == a R (b R c)
 var binaryOpFullyAssoc = [...]bool{
-	Pow:  false,
-	Mult: true, Div: false, FloorDiv: false, Mod: false,
-	Plus: true, Minus: false,
-	LShift: false, RShift: false,
-	Bitand: true,
-	Bitxor: true,
-	Bitor:  true,
-	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
-}
-
-func (i BinaryOperatorSymbol) isPadded() bool {
-	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
-}
-
-func (i BinaryOperatorSymbol) String() string {
-	if i > BinaryOperatorSymbol(len(binaryOpName)-1) {
-		return fmt.Sprintf("BinaryOp(%d)", i)
-	}
-	return binaryOpName[i]
+	treebin.Pow:  false,
+	treebin.Mult: true, treebin.Div: false, treebin.FloorDiv: false, treebin.Mod: false,
+	treebin.Plus: true, treebin.Minus: false,
+	treebin.LShift: false, treebin.RShift: false,
+	treebin.Bitand: true,
+	treebin.Bitxor: true,
+	treebin.Bitor:  true,
+	treebin.Concat: true, treebin.JSONFetchVal: false, treebin.JSONFetchText: false, treebin.JSONFetchValPath: false, treebin.JSONFetchTextPath: false,
 }
 
 // BinaryExpr represents a binary value expression.
 type BinaryExpr struct {
-	Operator    BinaryOperator
+	Operator    treebin.BinaryOperator
 	Left, Right Expr
 
 	typeAnnotation
@@ -1121,7 +1041,9 @@ func (node *BinaryExpr) ResolvedBinOp() *BinOp {
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
-func NewTypedBinaryExpr(op BinaryOperator, left, right TypedExpr, typ *types.T) *BinaryExpr {
+func NewTypedBinaryExpr(
+	op treebin.BinaryOperator, left, right TypedExpr, typ *types.T,
+) *BinaryExpr {
 	node := &BinaryExpr{Operator: op, Left: left, Right: right}
 	node.typ = typ
 	node.memoizeFn()
@@ -1143,7 +1065,9 @@ func (node *BinaryExpr) memoizeFn() {
 // newBinExprIfValidOverload constructs a new BinaryExpr if and only
 // if the pair of arguments have a valid implementation for the given
 // BinaryOperator.
-func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExpr) *BinaryExpr {
+func newBinExprIfValidOverload(
+	op treebin.BinaryOperator, left TypedExpr, right TypedExpr,
+) *BinaryExpr {
 	leftRet, rightRet := left.ResolvedType(), right.ResolvedType()
 	fn, ok := BinOps[op.Symbol].lookupImpl(leftRet, rightRet)
 	if ok {
@@ -1161,7 +1085,7 @@ func newBinExprIfValidOverload(op BinaryOperator, left TypedExpr, right TypedExp
 
 // Format implements the NodeFormatter interface.
 func (node *BinaryExpr) Format(ctx *FmtCtx) {
-	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.isPadded())
+	binExprFmtWithParen(ctx, node.Left, node.Operator.String(), node.Right, node.Operator.Symbol.IsPadded())
 }
 
 // UnaryOperator represents a unary operator used in a UnaryExpr.

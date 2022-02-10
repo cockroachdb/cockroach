@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +40,7 @@ func (s sumAggTmplInfo) AssignAdd(
 	// the resolved overload to use Plus overload in particular, so all other
 	// fields remain unset.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Plus),
+		overloadBase: newBinaryOverloadBase(treebin.Plus),
 	}}
 	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
@@ -54,7 +54,7 @@ func (s sumAggTmplInfo) AssignSubtract(
 	// the resolved overload to use Minus overload in particular, so all other
 	// fields remain unset.
 	lawo := &lastArgWidthOverload{lastArgTypeOverload: &lastArgTypeOverload{
-		overloadBase: newBinaryOverloadBase(tree.Minus),
+		overloadBase: newBinaryOverloadBase(treebin.Minus),
 	}}
 	return s.sumOverload(lawo, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol)
 }
@@ -93,7 +93,7 @@ func getSumAddOverload(inputTypeFamily types.Family) assignFunc {
 		return c.getBinOpAssignFunc()
 	}
 	var overload *oneArgOverload
-	for _, o := range sameTypeBinaryOpToOverloads[tree.Plus] {
+	for _, o := range sameTypeBinaryOpToOverloads[treebin.Plus] {
 		if o.CanonicalTypeFamily == inputTypeFamily {
 			overload = o
 			break

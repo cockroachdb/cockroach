@@ -21,6 +21,7 @@ import (
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -453,7 +454,7 @@ func (s *Smither) extractIndexes(
 
 type operator struct {
 	*tree.BinOp
-	Operator tree.BinaryOperator
+	Operator treebin.BinaryOperator
 }
 
 var operators = func() map[oid.Oid][]operator {
@@ -463,7 +464,7 @@ var operators = func() map[oid.Oid][]operator {
 			bo := ov.(*tree.BinOp)
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
-				Operator: tree.MakeBinaryOperator(BinaryOperator),
+				Operator: treebin.MakeBinaryOperator(BinaryOperator),
 			})
 		}
 	}

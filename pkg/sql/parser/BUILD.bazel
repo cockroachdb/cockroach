@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/privilege",  # keep
         "//pkg/sql/scanner",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",  # keep
         "//pkg/sql/sem/tree/treecmp",  # keep
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
@@ -57,6 +58,7 @@ go_test(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/testutils",
         "//pkg/testutils/sqlutils",

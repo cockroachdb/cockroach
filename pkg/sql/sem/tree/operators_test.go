@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -148,7 +149,7 @@ func TestOperatorVolatilityMatchesPostgres(t *testing.T) {
 	}
 
 	// Check binary ops.
-	for op := BinaryOperatorSymbol(0); op < NumBinaryOperatorSymbols; op++ {
+	for op := treebin.BinaryOperatorSymbol(0); op < treebin.NumBinaryOperatorSymbols; op++ {
 		for _, impl := range BinOps[op] {
 			o := impl.(*BinOp)
 			check(op.String(), o.LeftType, o.RightType, o.Volatility)

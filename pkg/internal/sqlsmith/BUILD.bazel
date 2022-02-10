@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/randgen",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sem/tree/treebin",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
         "//pkg/util/syncutil",
