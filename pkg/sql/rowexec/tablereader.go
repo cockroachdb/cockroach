@@ -202,6 +202,7 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 			ctx, tr.FlowCtx.Cfg.DB, initialTS, tr.maxTimestampAge, tr.Spans,
 			bytesLimit, tr.limitHint, tr.FlowCtx.TraceKV,
 			tr.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
+			tr.EvalCtx.QualityOfService(),
 		)
 	}
 	tr.scanStarted = true

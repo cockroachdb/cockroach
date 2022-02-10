@@ -994,7 +994,8 @@ func (s *Server) newConnExecutorWithTxn(
 		roachpb.UnspecifiedUserPriority,
 		tree.ReadWrite,
 		txn,
-		ex.transitionCtx)
+		ex.transitionCtx,
+		ex.QualityOfService())
 
 	// Modify the Collection to match the parent executor's Collection.
 	// This allows the InternalExecutor to see schema changes made by the
@@ -2569,6 +2570,15 @@ func (ex *connExecutor) txnPriorityWithSessionDefault(mode tree.UserPriority) ro
 	return txnPriorityToProto(mode)
 }
 
+// QualityOfService returns the QoSLevel session setting if the session
+// settings are populated, otherwise the default QoSLevel.
+func (ex *connExecutor) QualityOfService() sessiondatapb.QoSLevel {
+	if ex.sessionData() == nil {
+		return sessiondatapb.Normal
+	}
+	return ex.sessionData().DefaultTxnQualityOfService
+}
+
 func (ex *connExecutor) readWriteModeWithSessionDefault(
 	mode tree.ReadWriteMode,
 ) tree.ReadWriteMode {
@@ -2904,7 +2914,8 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	ex.state.mu.Lock()
 	defer ex.state.mu.Unlock()
 	userPriority := ex.state.mu.txn.UserPriority()
-	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db, ex.transitionCtx.nodeIDOrZero)
+	ex.state.mu.txn = kv.NewTxnWithSteppingEnabled(ctx, ex.transitionCtx.db,
+		ex.transitionCtx.nodeIDOrZero, ex.QualityOfService())
 	return ex.state.mu.txn.SetUserPriority(userPriority)
 }
 
@@ -2990,6 +3001,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			IsHistorical:          ex.state.isHistorical,
 			ReadOnly:              ex.state.readOnly,
 			Priority:              ex.state.priority.String(),
+			QualityOfService:      sessiondatapb.ToQoSLevelString(txn.AdmissionHeader().Priority),
 		}
 	}
 

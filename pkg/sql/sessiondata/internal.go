@@ -10,7 +10,10 @@
 
 package sessiondata
 
-import "github.com/cockroachdb/cockroach/pkg/security"
+import (
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+)
 
 // InternalExecutorOverride is used by the InternalExecutor interface
 // to allow control over some of the session data.
@@ -26,6 +29,11 @@ type InternalExecutorOverride struct {
 	// DatabaseIDToTempSchemaID represents the mapping for temp schemas used which
 	// allows temporary schema resolution by ID.
 	DatabaseIDToTempSchemaID map[uint32]uint32
+	// QualityOfService represents the admission control priority level to use for
+	// the internal execution request. Anything in the range -128 -> 127 may be
+	// used as long as that value has a QoSLevel defined
+	// (see QoSLevel.ValidateInternal).
+	QualityOfService *sessiondatapb.QoSLevel
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
