@@ -13,6 +13,8 @@
 package multiregion
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -36,6 +38,7 @@ type RegionConfig struct {
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
+	superRegions         []descpb.DatabaseDescriptor_SuperRegion
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -90,6 +93,11 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+// SuperRegions returns the list of super regions in the database.
+func (r *RegionConfig) SuperRegions() []descpb.DatabaseDescriptor_SuperRegion {
+	return r.superRegions
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -98,6 +106,13 @@ type MakeRegionConfigOption func(r *RegionConfig)
 func WithTransitioningRegions(transitioningRegions catpb.RegionNames) MakeRegionConfigOption {
 	return func(r *RegionConfig) {
 		r.transitioningRegions = transitioningRegions
+	}
+}
+
+// WithSuperRegions is an option to include super regions into MakeRegionConfig.
+func WithSuperRegions(superRegions []descpb.DatabaseDescriptor_SuperRegion) MakeRegionConfigOption {
+	return func(r *RegionConfig) {
+		r.superRegions = superRegions
 	}
 }
 
@@ -155,11 +170,104 @@ func ValidateRegionConfig(config RegionConfig) error {
 		return errors.AssertionFailedf(
 			"cannot have a database with restricted placement that is also region survivable")
 	}
+
+	err := validateSuperRegions(config)
+	if err != nil {
+		return err
+	}
+
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions))
 }
 
+// validateSuperRegions validates that:
+//   1. Region names are unique within a super region and are sorted.
+//   2. All region within a super region map to a region on the RegionConfig.
+//   3. Super region names are unique.
+//   4. Each region can only belong to one super region.
+func validateSuperRegions(config RegionConfig) error {
+	superRegions := config.SuperRegions()
+
+	seenRegions := make(map[catpb.RegionName]struct{})
+	superRegionNames := make(map[string]struct{})
+
+	// Ensure that the super region names are in sorted order.
+	if !sort.SliceIsSorted(superRegions, func(i, j int) bool {
+		return superRegions[i].SuperRegionName < superRegions[j].SuperRegionName
+	}) {
+		return errors.AssertionFailed("super regions are not in sorted order based on the super region name")
+	}
+
+	for _, superRegion := range superRegions {
+		if len(superRegion.Regions) == 0 {
+			return errors.AssertionFailedf("no regions found within super reigon %s", superRegion.SuperRegionName)
+		}
+
+		_, found := superRegionNames[superRegion.SuperRegionName]
+		if found {
+			return errors.AssertionFailedf("duplicate super regions with name %s found", superRegion.SuperRegionName)
+		}
+		superRegionNames[superRegion.SuperRegionName] = struct{}{}
+
+		// Ensure that regions within a super region are sorted.
+		if !sort.SliceIsSorted(superRegion.Regions, func(i, j int) bool {
+			return superRegion.Regions[i] < superRegion.Regions[j]
+		}) {
+			return errors.AssertionFailedf("the regions within super region %s were not in a sorted order", superRegion.SuperRegionName)
+		}
+
+		seenRegionsInCurrentSuperRegion := make(map[catpb.RegionName]struct{})
+		for _, region := range superRegion.Regions {
+			_, found := seenRegionsInCurrentSuperRegion[region]
+			if found {
+				return errors.AssertionFailedf("duplicate region %s found in super region %s", region, superRegion.SuperRegionName)
+			}
+			seenRegionsInCurrentSuperRegion[region] = struct{}{}
+			_, found = seenRegions[region]
+			if found {
+				return errors.AssertionFailedf("region %s found in multiple super regions", region)
+			}
+			seenRegions[region] = struct{}{}
+
+			// Ensure that the region actually maps to a region on the regionConfig.
+			regionNames := config.regions
+
+			found = false
+			for _, regionName := range regionNames {
+				if region == regionName {
+					found = true
+				}
+			}
+			if !found {
+				return errors.Newf("region %s not part of database", region)
+			}
+		}
+	}
+	return nil
+}
+
+// IsMemberOfSuperRegion returns a boolean representing if the region is part
+// of a super region and the name of the super region.
+func IsMemberOfSuperRegion(name catpb.RegionName, config RegionConfig) (bool, string) {
+	for _, superRegion := range config.SuperRegions() {
+		for _, region := range superRegion.Regions {
+			if region == name {
+				return true, superRegion.SuperRegionName
+			}
+		}
+	}
+
+	return false, ""
+}
+
 // CanDropRegion returns an error if the survival goal doesn't allow for
-// removing regions.
-func CanDropRegion(config RegionConfig) error {
+// removing regions or if the region is part of a super region.
+func CanDropRegion(name catpb.RegionName, config RegionConfig) error {
+	isMember, superRegion := IsMemberOfSuperRegion(name, config)
+	if isMember {
+		return errors.WithHintf(
+			pgerror.Newf(pgcode.DependentObjectsStillExist, "region %s is part of super region %s", name, superRegion),
+			"you must first drop super region %s before you can drop the region %s", superRegion, name,
+		)
+	}
 	return canSatisfySurvivalGoal(config.survivalGoal, len(config.regions)-1)
 }
