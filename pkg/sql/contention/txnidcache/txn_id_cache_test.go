@@ -201,7 +201,7 @@ func TestTransactionIDCache(t *testing.T) {
 		testutils.SucceedsWithin(t, func() error {
 			sizePostEviction := txnIDCache.Size()
 			if sizePostEviction >= sizePreEviction {
-				return errors.Newf("expected txn id cache size to shrink below %d, "+
+				return errors.Newf("expected txn id cache Size to shrink below %d, "+
 					"but it has increased to %d", sizePreEviction, sizePostEviction)
 			}
 			return nil
