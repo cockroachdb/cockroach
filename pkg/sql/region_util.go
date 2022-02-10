@@ -141,7 +141,10 @@ func makeRequiredConstraintForRegion(r catpb.RegionName) zonepb.Constraint {
 func zoneConfigForMultiRegionDatabase(
 	regionConfig multiregion.RegionConfig,
 ) (zonepb.ZoneConfig, error) {
-	numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
+	numVoters, numReplicas := getNumVotersAndNumReplicas(
+		int32(len(regionConfig.Regions())), regionConfig.SurvivalGoal(),
+		regionConfig.IsPlacementRestricted(),
+	)
 	var constraints []zonepb.ConstraintsConjunction
 	if regionConfig.IsPlacementRestricted() {
 		// In a RESTRICTED placement policy, the database zone config has no
@@ -184,6 +187,93 @@ func zoneConfigForMultiRegionDatabase(
 	}, nil
 }
 
+// getSuperRegionForRegion returns a pointer to the super region the region
+// if in a super region. It returns nil if the region is not in a super region.
+func getSuperRegionForRegion(
+	region catpb.RegionName, regionConfig multiregion.RegionConfig,
+) *descpb.DatabaseDescriptor_SuperRegion {
+	for _, superRegion := range regionConfig.SuperRegions() {
+		for _, subRegion := range superRegion.Regions {
+			if region == subRegion {
+				return &superRegion
+			}
+		}
+	}
+
+	return nil
+}
+
+func getReplicasPerRegionForSurvivalGoalRegion(
+	primaryRegion catpb.RegionName, regions catpb.RegionNames, numReplicas, numVoters int32,
+) map[catpb.RegionName]int32 {
+	numVotersConstrainedToPrimaryRegion := maxFailuresBeforeUnavailability(numVoters)
+
+	regionToConstraintCount := make(map[catpb.RegionName]int32)
+	numRegions := len(regions)
+	// Only one region, constrain everything to one region.
+	if numRegions == 1 {
+		regionToConstraintCount[primaryRegion] = numReplicas
+		return regionToConstraintCount
+	}
+
+	regionToConstraintCount[primaryRegion] = numVotersConstrainedToPrimaryRegion
+	replicasToConstrain := numReplicas - numVotersConstrainedToPrimaryRegion
+
+	defaultReplicasPerRegion := replicasToConstrain / int32(numRegions-1)
+	extraReplicasToConstrain := replicasToConstrain % int32(numRegions-1)
+	for i, region := range regions {
+		// Don't need to explicitly add constraint on primary region.
+		if region == primaryRegion {
+			continue
+		}
+		replicas := defaultReplicasPerRegion
+		if int32(i) < extraReplicasToConstrain {
+			replicas++
+		}
+		regionToConstraintCount[region] = replicas
+	}
+
+	return regionToConstraintCount
+}
+
+// addConstraintsForSuperRegion updates the ZoneConfig.Constraints field
+// such that every replica is guaranteed to be constrained to a region
+// within the super region.
+func addConstraintsForSuperRegion(
+	primaryRegion catpb.RegionName,
+	regions catpb.RegionNames,
+	zc *zonepb.ZoneConfig,
+	numReplicas, numVoters int32,
+	survivalGoal descpb.SurvivalGoal,
+) {
+	zc.NumReplicas = &numReplicas
+	zc.Constraints = nil
+	zc.InheritedConstraints = false
+	zc.InheritedLeasePreferences = false
+
+	switch survivalGoal {
+	case descpb.SurvivalGoal_ZONE_FAILURE:
+		for _, region := range regions {
+			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
+			})
+		}
+	case descpb.SurvivalGoal_REGION_FAILURE:
+		regionToConstraintCount := getReplicasPerRegionForSurvivalGoalRegion(primaryRegion, regions, numReplicas, numVoters)
+
+		for _, region := range regions {
+			replicaCount := regionToConstraintCount[region]
+			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
+				NumReplicas: replicaCount,
+				Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(region)},
+			})
+		}
+	default:
+		panic(fmt.Sprintf("unknown survival goal %s", survivalGoal))
+	}
+}
+
 // zoneConfigForMultiRegionPartition generates a ZoneConfig stub for a partition
 // that belongs to a regional by row table in a multi-region database.
 //
@@ -194,13 +284,11 @@ func zoneConfigForMultiRegionDatabase(
 func zoneConfigForMultiRegionPartition(
 	partitionRegion catpb.RegionName, regionConfig multiregion.RegionConfig,
 ) (zonepb.ZoneConfig, error) {
-	numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
 	zc := zonepb.NewZoneConfig()
 	voterConstraints, err := synthesizeVoterConstraints(partitionRegion, regionConfig)
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
-	zc.NumVoters = &numVoters
 
 	zc.NullVoterConstraintsIsEmpty = true
 	zc.VoterConstraints = voterConstraints
@@ -209,6 +297,22 @@ func zoneConfigForMultiRegionPartition(
 	zc.LeasePreferences = []zonepb.LeasePreference{
 		{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(partitionRegion)}},
 	}
+
+	regions := regionConfig.Regions()
+	superRegion := getSuperRegionForRegion(partitionRegion, regionConfig)
+	if superRegion != nil {
+		regions = superRegion.Regions
+	}
+
+	numVoters, numReplicas := getNumVotersAndNumReplicas(
+		int32(len(regions)), regionConfig.SurvivalGoal(), regionConfig.IsPlacementRestricted(),
+	)
+	zc.NumVoters = &numVoters
+
+	if superRegion != nil {
+		addConstraintsForSuperRegion(partitionRegion, regions, zc, numReplicas, numVoters, regionConfig.SurvivalGoal())
+	}
+
 	return *zc, err
 }
 
@@ -222,7 +326,7 @@ func maxFailuresBeforeUnavailability(numVoters int32) int32 {
 // getNumVotersAndNumReplicas computes the number of voters and the total number
 // of replicas needed for a given region config.
 func getNumVotersAndNumReplicas(
-	regionConfig multiregion.RegionConfig,
+	numRegions int32, survivalGoal descpb.SurvivalGoal, isPlacementRestricted bool,
 ) (numVoters, numReplicas int32) {
 	const numVotersForZoneSurvival = 3
 	// Under region survivability, we use 5 voting replicas to allow for a
@@ -240,13 +344,12 @@ func getNumVotersAndNumReplicas(
 	// may or may not be placed geographically close to the leaseholder replica.
 	const numVotersForRegionSurvival = 5
 
-	numRegions := int32(len(regionConfig.Regions()))
-	switch regionConfig.SurvivalGoal() {
+	switch survivalGoal {
 	// NB: See mega-comment inside `synthesizeVoterConstraints()` for why these
 	// are set the way they are.
 	case descpb.SurvivalGoal_ZONE_FAILURE:
 		numVoters = numVotersForZoneSurvival
-		if regionConfig.IsPlacementRestricted() {
+		if isPlacementRestricted {
 			numReplicas = numVoters
 		} else {
 			// <numVoters in the home region> + <1 replica for every other region>
@@ -281,7 +384,6 @@ func getNumVotersAndNumReplicas(
 func synthesizeVoterConstraints(
 	region catpb.RegionName, regionConfig multiregion.RegionConfig,
 ) ([]zonepb.ConstraintsConjunction, error) {
-	numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
 	switch regionConfig.SurvivalGoal() {
 	case descpb.SurvivalGoal_ZONE_FAILURE:
 		return []zonepb.ConstraintsConjunction{
@@ -323,6 +425,10 @@ func synthesizeVoterConstraints(
 			},
 		}, nil
 	case descpb.SurvivalGoal_REGION_FAILURE:
+		numVoters, _ := getNumVotersAndNumReplicas(
+			int32(len(regionConfig.Regions())), regionConfig.SurvivalGoal(),
+			regionConfig.IsPlacementRestricted(),
+		)
 		return []zonepb.ConstraintsConjunction{
 			{
 				// We constrain <quorum - 1> voting replicas to the primary region and
@@ -383,9 +489,6 @@ func synthesizeVoterConstraints(
 func zoneConfigForMultiRegionTable(
 	localityConfig catpb.LocalityConfig, regionConfig multiregion.RegionConfig,
 ) (*zonepb.ZoneConfig, error) {
-	// We only care about NumVoters here at the table level. NumReplicas is set at
-	// the database level, not at the table/partition level.
-	numVoters, _ := getNumVotersAndNumReplicas(regionConfig)
 	ret := zonepb.NewZoneConfig()
 
 	switch l := localityConfig.Locality.(type) {
@@ -398,6 +501,13 @@ func zoneConfigForMultiRegionTable(
 		// nonvoters as opposed to REGIONAL BY [TABLE | ROW] which can inherit the
 		// RESTRICTED placement from the database.
 		if regionConfig.IsPlacementRestricted() {
+			// We only care about NumVoters here at the table level. NumReplicas is set at
+			// the database level, not at the table/partition level.
+			numVoters, _ := getNumVotersAndNumReplicas(
+				int32(len(regionConfig.Regions())), regionConfig.SurvivalGoal(),
+				regionConfig.IsPlacementRestricted(),
+			)
+
 			ret.NumVoters = &numVoters
 			vc, err := synthesizeVoterConstraints(regionConfig.PrimaryRegion(), regionConfig)
 			if err != nil {
@@ -426,27 +536,44 @@ func zoneConfigForMultiRegionTable(
 		// nothing here because `NewZoneConfig()` already marks the field as
 		// 'inherited'.
 	case *catpb.LocalityConfig_RegionalByTable_:
-		if l.RegionalByTable.Region == nil {
+		primaryRegion := regionConfig.PrimaryRegion()
+		if l.RegionalByTable.Region != nil {
+			primaryRegion = *l.RegionalByTable.Region
+		}
+		regions := regionConfig.Regions()
+		superRegion := getSuperRegionForRegion(primaryRegion, regionConfig)
+		if l.RegionalByTable.Region == nil && superRegion == nil {
 			// If we don't have an explicit primary
 			// region, use the same configuration as the database and return a blank
 			// zcfg here.
 			return ret, nil
 		}
-		// If the table has a user-specified primary region, use it.
-		preferredRegion := *l.RegionalByTable.Region
 
-		voterConstraints, err := synthesizeVoterConstraints(preferredRegion, regionConfig)
+		if superRegion != nil {
+			regions = superRegion.Regions
+		}
+
+		numVoters, numReplicas := getNumVotersAndNumReplicas(
+			int32(len(regions)), regionConfig.SurvivalGoal(), regionConfig.IsPlacementRestricted(),
+		)
+		ret.NumVoters = &numVoters
+
+		if superRegion != nil {
+			addConstraintsForSuperRegion(primaryRegion, regions, ret, numReplicas, numVoters, regionConfig.SurvivalGoal())
+		}
+
+		// If the table has a user-specified primary region, use it.
+		voterConstraints, err := synthesizeVoterConstraints(primaryRegion, regionConfig)
 		if err != nil {
 			return nil, err
 		}
-		ret.NumVoters = &numVoters
 
 		ret.NullVoterConstraintsIsEmpty = true
 		ret.VoterConstraints = voterConstraints
 
 		ret.InheritedLeasePreferences = false
 		ret.LeasePreferences = []zonepb.LeasePreference{
-			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(preferredRegion)}},
+			{Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(primaryRegion)}},
 		}
 	case *catpb.LocalityConfig_RegionalByRow_:
 		// We purposely do not set anything here at table level - this should be done at
@@ -663,6 +790,7 @@ func prepareZoneConfigForMultiRegionTable(
 	if !rewriteZoneConfig {
 		return nil, nil
 	}
+
 	if err := newZoneConfig.Validate(); err != nil {
 		return nil, pgerror.Wrap(
 			err,
@@ -1179,6 +1307,7 @@ func SynthesizeRegionConfig(
 		regionEnumID,
 		dbDesc.GetRegionConfig().Placement,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
+		multiregion.WithSuperRegions(dbDesc.GetRegionConfig().SuperRegions),
 	)
 
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
@@ -1848,6 +1977,7 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 				mismatch.Field,
 			)
 		}
+
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			descType,
 			name,
