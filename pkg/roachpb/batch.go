@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-//go:generate go run -tags gen-batch gen/main.go
+//go:generate go run gen/main.go --filename batch_generated.go *.pb.go
 
 // WriteTimestamp returns the timestamps at which this request is writing. For
 // non-transactional requests, this is the same as the read timestamp. For
