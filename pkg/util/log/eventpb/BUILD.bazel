@@ -96,6 +96,10 @@ genrule(
     exec_tools = [
         "//pkg/util/log/eventpb:gen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -109,5 +113,9 @@ genrule(
     """.format(_EVENTPB_PROTO_LOCATIONS),
     exec_tools = [
         "//pkg/util/log/eventpb:gen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
