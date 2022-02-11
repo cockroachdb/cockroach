@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/dev/io/os"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/datadriven"
+	"github.com/google/shlex"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,19 +91,17 @@ func TestDataDriven(t *testing.T) {
 				dev.cli.SetOut(ioutil.Discard)
 			}
 
-			require.Equalf(t, d.Cmd, "dev", "unknown command: %s", d.Cmd)
-			var args []string
-			for _, cmdArg := range d.CmdArgs {
-				args = append(args, cmdArg.Key)
-				if len(cmdArg.Vals) != 0 {
-					args = append(args, cmdArg.Vals[0])
-				}
-			}
-			dev.cli.SetArgs(args)
+			require.Equalf(t, d.Cmd, "exec", "unknown command: %s", d.Cmd)
+			tokens, err := shlex.Split(d.Input)
+			require.NoError(t, err)
+			require.NotEmpty(t, tokens)
+			require.Equal(t, "dev", tokens[0])
+
+			dev.cli.SetArgs(tokens[1:])
+
 			if err := dev.cli.Execute(); err != nil {
 				return fmt.Sprintf("err: %s", err)
 			}
-
 			logs, err := ioutil.ReadAll(logger)
 			require.NoError(t, err)
 			return string(logs)
