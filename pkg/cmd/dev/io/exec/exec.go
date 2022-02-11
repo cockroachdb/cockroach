@@ -249,13 +249,13 @@ func (e *Exec) commandContextImpl(
 // Next is a thin interceptor for all exec activity, running them through
 // testing knobs first.
 func (e *Exec) Next(command string, f func() (output string, err error)) (string, error) {
-	if e.knobs.dryrun {
-		return "", nil
-	}
 	if e.knobs.intercept != nil {
 		if output, ok := e.knobs.intercept[command]; ok {
 			return output, nil
 		}
+	}
+	if e.knobs.dryrun {
+		return "", nil
 	}
 	return e.Recorder.Next(command, f)
 }
