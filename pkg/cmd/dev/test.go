@@ -79,19 +79,19 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
-		filter      = mustGetFlagString(cmd, filterFlag)
-		ignoreCache = mustGetFlagBool(cmd, ignoreCacheFlag)
-		race        = mustGetFlagBool(cmd, raceFlag)
-		rewrite     = mustGetFlagString(cmd, rewriteFlag)
-		rewriteArg  = mustGetFlagString(cmd, rewriteArgFlag)
-		short       = mustGetFlagBool(cmd, shortFlag)
-		stress      = mustGetFlagBool(cmd, stressFlag)
-		stressArgs  = mustGetFlagString(cmd, stressArgsFlag)
-		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
-		verbose     = mustGetFlagBool(cmd, vFlag)
-		showLogs    = mustGetFlagBool(cmd, showLogsFlag)
-		count       = mustGetFlagInt(cmd, countFlag)
-		vModule     = mustGetFlagString(cmd, vModuleFlag)
+		filter        = mustGetFlagString(cmd, filterFlag)
+		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
+		race          = mustGetFlagBool(cmd, raceFlag)
+		rewrite       = mustGetFlagString(cmd, rewriteFlag)
+		rewriteArg    = mustGetFlagString(cmd, rewriteArgFlag)
+		short         = mustGetFlagBool(cmd, shortFlag)
+		stress        = mustGetFlagBool(cmd, stressFlag)
+		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
+		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
+		verbose       = mustGetFlagBool(cmd, vFlag)
+		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
+		count         = mustGetFlagInt(cmd, countFlag)
+		vModule       = mustGetFlagString(cmd, vModuleFlag)
 	)
 
 	// Enumerate all tests to run.
@@ -161,31 +161,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	if stress {
-		var stressCmdArgs []string
-		if timeout > 0 {
-			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-maxtime=%s", timeout))
-			// The bazel timeout should be higher than the stress duration, lets
-			// generously give it an extra minute.
-			args = append(args, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
-		} else {
-			// We're running under stress and no timeout is specified. We want
-			// to respect the timeout passed down to stress[1]. Similar to above
-			// we want the bazel timeout to be longer, so lets just set it to
-			// 24h.
-			//
-			// [1]: Through --stress-arg=-maxtime or if nothing is specified,
-			//      -maxtime=0 is taken as "run forever".
-			args = append(args, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
-		}
-		if numCPUs > 0 {
-			stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-p=%d", numCPUs))
-		}
-		stressCmdArgs = append(stressCmdArgs, stressArgs)
-		args = append(args, "--run_under",
-			// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
-			// and -shardable-artifacts set such that we can merge the XML output
-			// files.
-			fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, d.getDevBin(), strings.Join(stressCmdArgs, " ")))
+		args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
 	}
 
 	if filter != "" {
@@ -214,18 +190,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	// flags into the go test binaries. Gives better coverage to everything
 	// listed under `go help testflags`.
 
-	{ // Handle test output flags.
-		testOutputArgs := []string{"--test_output", "errors"}
-		if stress {
-			// Stream the output to continually observe the number of successful
-			// test iterations.
-			testOutputArgs = []string{"--test_output", "streamed"}
-		} else if verbose || showLogs {
-			testOutputArgs = []string{"--test_output", "all"}
-		}
-		args = append(args, testOutputArgs...)
-	}
-
+	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
 
 	logCommand("bazel", args...)
@@ -236,6 +201,49 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	// situation is not so bad currently however:
 	//
 	//   [...] while parsing 'pkg/f:all': no such package 'pkg/f'
+}
+
+func (d *dev) getTestOutputArgs(stress, verbose, showLogs bool) []string {
+	testOutputArgs := []string{"--test_output", "errors"}
+	if stress {
+		// Stream the output to continually observe the number of successful
+		// test iterations.
+		testOutputArgs = []string{"--test_output", "streamed"}
+	} else if verbose || showLogs {
+		testOutputArgs = []string{"--test_output", "all"}
+	}
+	return testOutputArgs
+}
+
+func (d *dev) getStressArgs(stressCmdArg string, timeout time.Duration) []string {
+	var stressArgs, stressCmdArgs []string
+	if timeout > 0 {
+		stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-maxtime=%s", timeout))
+		// The bazel timeout should be higher than the stress duration, lets
+		// generously give it an extra minute.
+		stressArgs = append(stressArgs, fmt.Sprintf("--test_timeout=%d", int((timeout+time.Minute).Seconds())))
+	} else {
+		// We're running under stress and no timeout is specified. We want
+		// to respect the timeout passed down to stress[1]. Similar to above
+		// we want the bazel timeout to be longer, so lets just set it to
+		// 24h.
+		//
+		// [1]: Through --stress-arg=-maxtime or if nothing is specified,
+		//      -maxtime=0 is taken as "run forever".
+		stressArgs = append(stressArgs, fmt.Sprintf("--test_timeout=%.0f", 24*time.Hour.Seconds()))
+	}
+	if numCPUs > 0 {
+		stressCmdArgs = append(stressCmdArgs, fmt.Sprintf("-p=%d", numCPUs))
+	}
+	if stressCmdArg != "" {
+		stressCmdArgs = append(stressCmdArgs, stressCmdArg)
+	}
+	stressArgs = append(stressArgs, "--run_under",
+		// NB: Run with -bazel, which propagates `TEST_TMPDIR` to `TMPDIR`,
+		// and -shardable-artifacts set such that we can merge the XML output
+		// files.
+		fmt.Sprintf("%s -bazel -shardable-artifacts 'XML_OUTPUT_FILE=%s merge-test-xmls' %s", stressTarget, d.getDevBin(), strings.Join(stressCmdArgs, " ")))
+	return stressArgs
 }
 
 func getDirectoryFromTarget(target string) string {

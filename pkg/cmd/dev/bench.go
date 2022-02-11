@@ -133,17 +133,8 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	if benchMem {
 		args = append(args, "--test_arg", "-test.benchmem")
 	}
-
-	{ // Handle test output flags.
-		testOutputArgs := []string{"--test_output", "errors"}
-		if verbose || showLogs {
-			testOutputArgs = []string{"--test_output", "all"}
-		}
-		args = append(args, testOutputArgs...)
-	}
-
+	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
-
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }
