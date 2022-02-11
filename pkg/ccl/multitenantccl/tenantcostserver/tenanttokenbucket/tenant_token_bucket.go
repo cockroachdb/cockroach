@@ -154,6 +154,8 @@ func (s *State) Request(
 //  - currentConsumedRequestUnits is the current total number of consumed RUs.
 //
 func (s *State) Reconfigure(
+	ctx context.Context,
+	tenantID roachpb.TenantID,
 	availableRU float64,
 	refillRate float64,
 	maxBurstRU float64,
@@ -167,4 +169,8 @@ func (s *State) Reconfigure(
 	s.RUCurrent = availableRU
 	s.RURefillRate = refillRate
 	s.RUBurstLimit = maxBurstRU
+	log.Infof(
+		ctx, "token bucket for tenant %s reconfigured: available=%g refill-rate=%g burst-limit=%g",
+		tenantID.String(), s.RUCurrent, s.RURefillRate, s.RUBurstLimit,
+	)
 }
