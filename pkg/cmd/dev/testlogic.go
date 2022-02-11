@@ -48,10 +48,10 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
-	testLogicCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
 	testLogicCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	testLogicCmd.Flags().Bool(stressFlag, false, "run tests under stress")
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
+	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 
 	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
@@ -66,7 +66,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		files         = mustGetFlagString(cmd, filesFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		rewrite       = mustGetFlagString(cmd, rewriteFlag)
-		rewriteArg    = mustGetFlagString(cmd, rewriteArgFlag)
 		showLogs      = mustGetFlagBool(cmd, showLogsFlag)
 		subtests      = mustGetFlagString(cmd, subtestsFlag)
 		timeout       = mustGetFlagDuration(cmd, timeoutFlag)
@@ -75,6 +74,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		count         = mustGetFlagInt(cmd, countFlag)
 		stress        = mustGetFlagBool(cmd, stressFlag)
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
+		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 	)
 
 	validChoices := []string{"base", "ccl", "opt"}
@@ -147,9 +147,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 			args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
 			args = append(args, "--test_arg", rewrite)
-			if rewriteArg != "" {
-				args = append(args, "--test_arg", rewriteArg)
-			}
 
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
@@ -163,6 +160,13 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		if stress {
 			args = append(args, "--test_sharding_strategy=disabled")
 			args = append(args, d.getStressArgs(stressCmdArgs, timeout)...)
+		}
+		if testArgs != "" {
+			goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
+			if err != nil {
+				return err
+			}
+			args = append(args, goTestArgs...)
 		}
 
 		// TODO(irfansharif): Is this right? --config and --files is optional.

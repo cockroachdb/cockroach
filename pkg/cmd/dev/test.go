@@ -11,11 +11,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/google/shlex"
 	"github.com/spf13/cobra"
 )
 
@@ -31,7 +33,7 @@ const (
 	raceFlag        = "race"
 	ignoreCacheFlag = "ignore-cache"
 	rewriteFlag     = "rewrite"
-	rewriteArgFlag  = "rewrite-arg"
+	testArgsFlag    = "test-args"
 	vModuleFlag     = "vmodule"
 )
 
@@ -69,7 +71,7 @@ func makeTestCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Comm
 	testCmd.Flags().Bool(raceFlag, false, "run tests using race builds")
 	testCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying test binary (only applicable to certain tests)")
-	testCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
+	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	testCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	return testCmd
@@ -83,7 +85,7 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		race          = mustGetFlagBool(cmd, raceFlag)
 		rewrite       = mustGetFlagString(cmd, rewriteFlag)
-		rewriteArg    = mustGetFlagString(cmd, rewriteArgFlag)
+		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 		short         = mustGetFlagBool(cmd, shortFlag)
 		stress        = mustGetFlagBool(cmd, stressFlag)
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
@@ -146,9 +148,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		}
 		args = append(args, fmt.Sprintf("--test_env=COCKROACH_WORKSPACE=%s", workspace))
 		args = append(args, "--test_arg", rewrite)
-		if rewriteArg != "" {
-			args = append(args, "--test_arg", rewriteArg)
-		}
 		for _, testTarget := range testTargets {
 			dir := getDirectoryFromTarget(testTarget)
 			args = append(args, fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace, dir)))
@@ -186,9 +185,13 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if vModule != "" {
 		args = append(args, "--test_arg", fmt.Sprintf("-vmodule=%s", vModule))
 	}
-	// TODO(irfansharif): Support --go-flags, to pass in an arbitrary set of
-	// flags into the go test binaries. Gives better coverage to everything
-	// listed under `go help testflags`.
+	if testArgs != "" {
+		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
+		if err != nil {
+			return err
+		}
+		args = append(args, goTestArgs...)
+	}
 
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
@@ -201,6 +204,38 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	// situation is not so bad currently however:
 	//
 	//   [...] while parsing 'pkg/f:all': no such package 'pkg/f'
+}
+
+func (d *dev) getGoTestArgs(ctx context.Context, testArgs string) ([]string, error) {
+	var goTestArgs []string
+	if testArgs != "" {
+		// The test output directory defaults to wherever "go test" is running,
+		// which for us is somewhere in the sandbox. When passing arguments for
+		// go test (-{mem,cpu}profile, -trace for e.g.), we may be interested in
+		// output files. For that reason, configure it to write (if anything) to the
+		// workspace by default.
+		//
+		// TODO(irfansharif): We could also elevate the go test flags that do write
+		// output into top-level dev flags (like --rewrite) and only selectively
+		// configure -test.outputdir and the sandbox writable path.
+		workspace, err := d.getWorkspace(ctx)
+		if err != nil {
+			return nil, err
+		}
+		goTestArgs = append(goTestArgs,
+			"--test_arg", fmt.Sprintf("-test.outputdir=%s", workspace),
+			fmt.Sprintf("--sandbox_writable_path=%s", filepath.Join(workspace)),
+		)
+
+		parts, err := shlex.Split(testArgs)
+		if err != nil {
+			return nil, err
+		}
+		for _, part := range parts {
+			goTestArgs = append(goTestArgs, "--test_arg", part)
+		}
+	}
+	return goTestArgs, nil
 }
 
 func (d *dev) getTestOutputArgs(stress, verbose, showLogs bool) []string {
