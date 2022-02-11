@@ -309,12 +309,13 @@ func (s *SystemConfig) GetSpanConfigForKey(
 	}
 	spanConfig := zone.AsSpanConfig()
 	if id <= keys.MaxReservedDescID {
-		// We enable rangefeeds for system tables; various internal
-		// subsystems (leveraging system tables) rely on rangefeeds to
-		// function.
+		// We enable rangefeeds for system tables; various internal subsystems
+		// (leveraging system tables) rely on rangefeeds to function. We also do the
+		// same for the tenant pseudo range ID for forwards compatibility with the
+		// span configs infrastructure.
 		spanConfig.RangefeedEnabled = true
-		// We exclude system tables from strict GC enforcement, it's
-		// only really applicable to user tables.
+		// We exclude system tables from strict GC enforcement, it's only really
+		// applicable to user tables.
 		spanConfig.GCPolicy.IgnoreStrictEnforcement = true
 	}
 	return spanConfig, nil
