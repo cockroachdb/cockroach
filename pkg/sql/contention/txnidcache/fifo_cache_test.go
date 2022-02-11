@@ -13,7 +13,6 @@ package txnidcache
 import (
 	"fmt"
 	"math/rand"
-	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,12 +21,7 @@ import (
 )
 
 func TestFIFOCache(t *testing.T) {
-	pool := &sync.Pool{
-		New: func() interface{} {
-			return &block{}
-		},
-	}
-	cache := newFIFOCache(pool, func() int64 { return 2 * blockSize } /* capacity */)
+	cache := newFIFOCache(func() int64 { return 2 * blockSize } /* capacity */)
 
 	// Fill the first eviction block in cache to 1/4 capacity.
 	input1, expected1 := generateInputBlock(blockSize * 1 / 4 /* size */)
