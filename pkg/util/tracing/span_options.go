@@ -249,8 +249,8 @@ type remoteParent SpanMeta
 // child to Finish(). If this expectation does not hold, WithFollowsFrom should
 // be added to the StartSpan invocation.
 func WithRemoteParent(parent SpanMeta) SpanOption {
-	if parent.sterile {
-		return remoteParent{}
+	if parent.Empty() || parent.sterile {
+		return nil
 	}
 	return (remoteParent)(parent)
 }
