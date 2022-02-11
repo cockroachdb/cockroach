@@ -25,6 +25,17 @@ import (
 func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	clusterTarget := spanconfig.MakeTargetFromSystemTarget(spanconfig.SystemTarget{
+		SourceTenantID: roachpb.SystemTenantID,
+		TargetTenantID: nil,
+	})
+
+	makeTenantTarget := func(id uint64) spanconfig.Target {
+		target, err := spanconfig.MakeTenantTarget(roachpb.MakeTenantID(id), roachpb.MakeTenantID(id))
+		require.NoError(t, err)
+		return spanconfig.MakeTargetFromSystemTarget(target)
+	}
+
 	for _, tc := range []struct {
 		toDelete []spanconfig.Target
 		toUpsert []spanconfig.Record
@@ -109,6 +120,65 @@ func TestValidateUpdateArgs(t *testing.T) {
 					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 					),
+				},
+			},
+			expErr: "",
+		},
+		// Tests for system span configurations.
+		{
+			// Duplicate in toDelete.
+			toDelete: []spanconfig.Target{makeTenantTarget(10), makeTenantTarget(10)},
+			expErr:   "duplicate system targets .* in the same list",
+		},
+		{
+			// Duplicate in toUpsert.
+			toUpsert: []spanconfig.Record{
+				{
+					Target: makeTenantTarget(10),
+				},
+				{
+					Target: makeTenantTarget(10)},
+			},
+			expErr: "duplicate system targets .* in the same list",
+		},
+		{
+			// Duplicate in toDelete with some span targets.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				clusterTarget,
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				clusterTarget,
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			expErr: "duplicate system targets .* in the same list",
+		},
+		{
+			// Duplicate in toDelete with some span targets.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				clusterTarget,
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				clusterTarget,
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			expErr: "duplicate system targets .* in the same list",
+		},
+		{
+			// Duplicate some span/system target entries across different lists;
+			// should work.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				makeTenantTarget(20),
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
+				clusterTarget,
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
+			},
+			toUpsert: []spanconfig.Record{
+				{
+					Target: makeTenantTarget(20),
+				},
+				{
+					Target: spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 				},
 			},
 			expErr: "",
