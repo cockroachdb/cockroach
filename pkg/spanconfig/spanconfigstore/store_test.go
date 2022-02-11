@@ -98,10 +98,10 @@ func TestDataDriven(t *testing.T) {
 
 				var b strings.Builder
 				for _, target := range deleted {
-					b.WriteString(fmt.Sprintf("deleted %s\n", spanconfigtestutils.PrintTarget(target)))
+					b.WriteString(fmt.Sprintf("deleted %s\n", spanconfigtestutils.PrintTarget(t, target)))
 				}
 				for _, ent := range added {
-					b.WriteString(fmt.Sprintf("added %s\n", spanconfigtestutils.PrintSpanConfigRecord(ent)))
+					b.WriteString(fmt.Sprintf("added %s\n", spanconfigtestutils.PrintSpanConfigRecord(t, ent)))
 				}
 				return b.String()
 
@@ -133,7 +133,7 @@ func TestDataDriven(t *testing.T) {
 				_ = store.TestingSpanConfigStoreForEachOverlapping(span,
 					func(entry spanConfigEntry) error {
 						results = append(results,
-							spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+							spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
 								Target: spanconfig.MakeTargetFromSpan(entry.span),
 								Config: entry.config,
 							}),
