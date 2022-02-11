@@ -18,24 +18,48 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"google.golang.org/grpc/metadata"
 )
 
 func BenchmarkSetupSpanForIncomingRPC(b *testing.B) {
 	skip.UnderDeadlock(b, "span reuse triggers false-positives in the deadlock detector")
 	defer leaktest.AfterTest(b)()
-	ctx := context.Background()
-	ba := &roachpb.BatchRequest{Header: roachpb.Header{TraceInfo: tracingpb.TraceInfo{
-		TraceID:       1,
-		ParentSpanID:  2,
-		RecordingMode: tracingpb.TraceInfo_NONE,
-	}}}
-	b.ReportAllocs()
-	tr := tracing.NewTracerWithOpt(ctx,
-		tracing.WithTracingMode(tracing.TracingModeActiveSpansRegistry),
-		tracing.WithSpanReusePercent(100))
-	for i := 0; i < b.N; i++ {
-		_, sp := setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba, tr)
-		sp.finish(ctx, nil /* br */)
+
+	for _, tc := range []struct {
+		name      string
+		traceInfo bool
+		grpcMeta  bool
+	}{
+		{name: "traceInfo", traceInfo: true},
+		{name: "grpcMeta", grpcMeta: true},
+		{name: "no parent"},
+	} {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			ctx := context.Background()
+			tr := tracing.NewTracerWithOpt(ctx,
+				tracing.WithTracingMode(tracing.TracingModeActiveSpansRegistry),
+				tracing.WithSpanReusePercent(100))
+			parentSpan := tr.StartSpan("parent")
+			defer parentSpan.Finish()
+
+			ba := &roachpb.BatchRequest{}
+			if tc.traceInfo {
+				ba.TraceInfo = parentSpan.Meta().ToProto()
+			} else if tc.grpcMeta {
+				traceCarrier := tracing.MapCarrier{
+					Map: make(map[string]string),
+				}
+				tr.InjectMetaInto(parentSpan.Meta(), traceCarrier)
+				ctx = metadata.NewIncomingContext(ctx, metadata.New(traceCarrier.Map))
+			}
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_, sp := setupSpanForIncomingRPC(ctx, roachpb.SystemTenantID, ba, tr)
+				sp.finish(ctx, nil /* br */)
+			}
+		})
 	}
 }
