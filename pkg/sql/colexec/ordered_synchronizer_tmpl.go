@@ -76,10 +76,6 @@ type OrderedSynchronizer struct {
 	heap []int
 	// comparators stores one comparator per ordering column.
 	comparators []vecComparator
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
 	output      coldata.Batch
 	outVecs     coldata.TypedVecs
 }
@@ -135,7 +131,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	}
 	o.resetOutput()
 	outputIdx := 0
-	for outputIdx < o.output.Capacity() && (o.maxCapacity == 0 || outputIdx < o.maxCapacity) {
+	for outputIdx < o.output.Capacity() {
 		if o.Len() == 0 {
 			// All inputs exhausted.
 			break
@@ -189,8 +185,8 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		// Account for the memory of the row we have just set.
 		o.accountingHelper.AccountForSet(outputIdx)
 		outputIdx++
-		if o.maxCapacity == 0 && o.accountingHelper.Allocator.Used() >= o.memoryLimit {
-			o.maxCapacity = outputIdx
+		if o.accountingHelper.Allocator.Used() >= o.memoryLimit {
+			break
 		}
 	}
 

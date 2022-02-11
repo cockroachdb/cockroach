@@ -287,21 +287,12 @@ type cFetcher struct {
 	// kvFetcherMemAcc is a memory account that will be used by the underlying
 	// KV fetcher.
 	kvFetcherMemAcc *mon.BoundAccount
-
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when at the row finalization we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
 }
 
 func (cf *cFetcher) resetBatch() {
 	var reallocated bool
 	var minDesiredCapacity int
-	if cf.maxCapacity > 0 {
-		// If we have already exceeded the memory limit for the output batch, we
-		// will only be using the same batch from now on.
-		minDesiredCapacity = cf.maxCapacity
-	} else if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
+	if cf.machine.limitHint > 0 && (cf.estimatedRowCount == 0 || uint64(cf.machine.limitHint) < cf.estimatedRowCount) {
 		// If we have a limit hint, and either
 		//   1) we don't have an estimate, or
 		//   2) we have a soft limit,
@@ -917,11 +908,8 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.shiftState()
 
 			var emitBatch bool
-			if cf.maxCapacity == 0 && cf.accountingHelper.Allocator.Used() >= cf.memoryLimit {
-				cf.maxCapacity = cf.machine.rowIdx
-			}
 			if cf.machine.rowIdx >= cf.machine.batch.Capacity() ||
-				(cf.maxCapacity > 0 && cf.machine.rowIdx >= cf.maxCapacity) ||
+				(cf.accountingHelper.Allocator.Used() >= cf.memoryLimit) ||
 				(cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint) {
 				// We either
 				//   1. have no more room in our batch, so output it immediately

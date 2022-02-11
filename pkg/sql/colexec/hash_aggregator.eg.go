@@ -459,9 +459,7 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
 			)
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() &&
-				op.curOutputBucketIdx < len(op.buckets) &&
-				(op.maxCapacity == 0 || curOutputIdx < op.maxCapacity) {
+			for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
 				bucket := op.buckets[op.curOutputBucketIdx]
 				for fnIdx, fn := range bucket.fns {
 					fn.SetOutput(op.output.ColVec(fnIdx))
@@ -470,8 +468,8 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				op.accountingHelper.AccountForSet(curOutputIdx)
 				curOutputIdx++
 				op.curOutputBucketIdx++
-				if op.maxCapacity == 0 && op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
-					op.maxCapacity = curOutputIdx
+				if op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
+					break
 				}
 			}
 			if op.curOutputBucketIdx >= len(op.buckets) {
@@ -606,9 +604,7 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
 			)
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() &&
-				op.curOutputBucketIdx < len(op.buckets) &&
-				(op.maxCapacity == 0 || curOutputIdx < op.maxCapacity) {
+			for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
 				bucket := op.buckets[op.curOutputBucketIdx]
 				for fnIdx, fn := range bucket.fns {
 					fn.SetOutput(op.output.ColVec(fnIdx))
@@ -617,8 +613,8 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 				op.accountingHelper.AccountForSet(curOutputIdx)
 				curOutputIdx++
 				op.curOutputBucketIdx++
-				if op.maxCapacity == 0 && op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
-					op.maxCapacity = curOutputIdx
+				if op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
+					break
 				}
 			}
 			if op.curOutputBucketIdx >= len(op.buckets) {

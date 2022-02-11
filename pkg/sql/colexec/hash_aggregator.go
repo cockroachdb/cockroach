@@ -141,11 +141,7 @@ type hashAggregator struct {
 	curOutputBucketIdx int
 
 	maxOutputBatchMemSize int64
-	// maxCapacity if non-zero indicates the target capacity of the output
-	// batch. It is set when, after setting a row, we realize that the output
-	// batch has exceeded the memory limit.
-	maxCapacity int
-	output      coldata.Batch
+	output                coldata.Batch
 
 	aggFnsAlloc *colexecagg.AggregateFuncsAlloc
 	hashAlloc   aggBucketAlloc
