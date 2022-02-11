@@ -233,7 +233,7 @@ INSERT INTO foo VALUES (1, 2), (2, 3), (3, 4);
 					ID:           mut.NextIndexID,
 					ConstraintID: mut.NextConstraintID,
 					Unique:       true,
-					Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Version:      descpb.PrimaryIndexWithStoredColumnsVersion,
 					KeyColumnNames: []string{
 						mut.Columns[2].Name,
 					},
@@ -312,7 +312,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ID:           mut.NextIndexID,
 					ConstraintID: mut.NextConstraintID,
 					Unique:       true,
-					Version:      descpb.LatestNonPrimaryIndexDescriptorVersion,
+					Version:      descpb.PrimaryIndexWithStoredColumnsVersion,
 					KeyColumnNames: []string{
 						mut.Columns[0].Name,
 					},
