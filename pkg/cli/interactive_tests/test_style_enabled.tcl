@@ -13,7 +13,7 @@ eexpect root@
 send "SET CLUSTER SETTING sql.defaults.datestyle.enabled = true;\r"
 eexpect "SET CLUSTER SETTING"
 eexpect root@
-interrupt
+send_eof
 eexpect eof
 
 
@@ -24,7 +24,7 @@ eexpect root@
 send "SHOW intervalstyle;\r"
 eexpect "iso_8601"
 eexpect root@
-interrupt
+send_eof
 eexpect eof
 
 # TODO(#72065): uncomment

@@ -12,6 +12,7 @@ package clisqlexec_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"net/url"
@@ -38,7 +39,9 @@ func makeSQLConn(url string) clisqlclient.Conn {
 func runQueryAndFormatResults(
 	conn clisqlclient.Conn, w io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
-	return testExecCtx.RunQueryAndFormatResults(conn, w, ioutil.Discard, fn)
+	return testExecCtx.RunQueryAndFormatResults(
+		context.Background(),
+		conn, w, ioutil.Discard, fn)
 }
 
 func TestRunQuery(t *testing.T) {
@@ -74,7 +77,9 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := testExecCtx.RunQuery(conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := testExecCtx.RunQuery(
+		context.Background(),
+		conn, clisqlclient.MakeQuery(`SHOW COLUMNS FROM system.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -162,13 +162,14 @@ func runBundleRecreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	// Disable autostats collection, which will override the injected stats.
-	if err := conn.Exec(`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`, nil); err != nil {
+	if err := conn.Exec(ctx,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`); err != nil {
 		return err
 	}
 	var initStmts = [][]byte{bundle.env, bundle.schema}
 	initStmts = append(initStmts, bundle.stats...)
 	for _, a := range initStmts {
-		if err := conn.Exec(string(a), nil); err != nil {
+		if err := conn.Exec(ctx, string(a)); err != nil {
 			return errors.Wrapf(err, "failed to run %s", a)
 		}
 	}
@@ -416,13 +417,12 @@ func getExplainOutputs(
 ) (explainStrings []string, err error) {
 	for _, values := range inputs {
 		// Run an explain for each possible input.
-		dvals := make([]driver.Value, len(values))
-		for i := range values {
-			dvals[i] = values[i]
-		}
-
 		query := fmt.Sprintf("%s %s", explainPrefix, statement)
-		rows, err := conn.Query(query, dvals)
+		args := make([]interface{}, len(values))
+		for i, s := range values {
+			args[i] = s
+		}
+		rows, err := conn.Query(context.Background(), query, args...)
 		if err != nil {
 			return nil, err
 		}

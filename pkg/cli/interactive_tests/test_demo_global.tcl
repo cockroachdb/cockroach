@@ -28,6 +28,6 @@ send "\\demo shutdown 3\r"
 eexpect "shutting down nodes is not supported in --global configurations"
 eexpect "defaultdb>"
 
-interrupt
+send_eof
 eexpect eof
 end_test

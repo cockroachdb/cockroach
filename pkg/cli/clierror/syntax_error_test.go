@@ -11,6 +11,7 @@
 package clierror_test
 
 import (
+	"context"
 	"io/ioutil"
 	"net/url"
 	"testing"
@@ -44,7 +45,7 @@ func TestIsSQLSyntaxError(t *testing.T) {
 		}
 	}()
 
-	_, err := conn.QueryRow(`INVALID SYNTAX`, nil)
+	_, err := conn.QueryRow(context.Background(), `INVALID SYNTAX`)
 	if !clierror.IsSQLSyntaxError(err) {
 		t.Fatalf("expected error to be recognized as syntax error: %+v", err)
 	}

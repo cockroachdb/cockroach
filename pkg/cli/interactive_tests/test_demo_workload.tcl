@@ -30,8 +30,9 @@ if {!$workloadRunning} {
   report "Workload is not running"
   exit 1
 }
+eexpect "movr>"
 
-interrupt
+send_eof
 eexpect eof
 end_test
 
@@ -48,7 +49,8 @@ eexpect "movr>"
 send "SELECT count(*) FROM \[SHOW RANGES FROM TABLE USERS\];\r"
 eexpect "6"
 eexpect "(1 row)"
+eexpect "movr>"
 
-interrupt
+send_eof
 eexpect eof
 end_test

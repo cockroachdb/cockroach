@@ -237,6 +237,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 			startTime := timeutil.Now()
 			sqlExecCtx := clisqlexec.Context{}
 			_, _, err = sqlExecCtx.RunQuery(
+				context.Background(),
 				conn,
 				clisqlclient.MakeQuery(`SHOW ALL CLUSTER QUERIES`),
 				false,
@@ -326,6 +327,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		}()
 
 		// Create a table on each tenant to make sure that the tenants are separate.
-		require.NoError(t, conn.Exec("CREATE TABLE a (a int PRIMARY KEY)", nil))
+		require.NoError(t, conn.Exec(context.Background(), "CREATE TABLE a (a int PRIMARY KEY)"))
 	}
 }
