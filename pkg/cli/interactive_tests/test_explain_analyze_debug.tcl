@@ -42,7 +42,7 @@ eexpect "Bundle saved to"
 
 file_exists "stmt-bundle-$id.zip"
 
-interrupt
+send_eof
 eexpect eof
 
 end_test
@@ -81,7 +81,7 @@ eexpect "Bundle saved to"
 
 file_exists "stmt-bundle-$id.zip"
 
-interrupt
+send_eof
 eexpect eof
 
 stop_tenant 5 $argv
