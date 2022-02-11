@@ -149,6 +149,9 @@ func CreateTenantRecord(
 	// Does it even matter given it'll disappear as soon as tenant starts
 	// reconciling?
 	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
+	// Make sure we enable rangefeeds, as the tenant will need rangefeeds on its
+	// system table as soon as it starts up.
+	tenantSpanConfig.RangefeedEnabled = true
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
 	toUpsert := []spanconfig.Record{
 		{
