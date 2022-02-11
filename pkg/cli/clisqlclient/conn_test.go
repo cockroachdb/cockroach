@@ -11,6 +11,7 @@
 package clisqlclient_test
 
 import (
+	"context"
 	"database/sql/driver"
 	"io/ioutil"
 	"net/url"
@@ -36,6 +37,7 @@ func TestConnRecover(t *testing.T) {
 	p := cli.TestCLIParams{T: t}
 	c := cli.NewCLITest(p)
 	defer c.Cleanup()
+	ctx := context.Background()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
@@ -48,7 +50,7 @@ func TestConnRecover(t *testing.T) {
 	}()
 
 	// Sanity check to establish baseline.
-	rows, err := conn.Query(`SELECT 1`, nil)
+	rows, err := conn.Query(ctx, `SELECT 1`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func TestConnRecover(t *testing.T) {
 	// and starts delivering ErrBadConn. We don't know the timing of
 	// this however.
 	testutils.SucceedsSoon(t, func() error {
-		if sqlRows, err := conn.Query(`SELECT 1`, nil); err == nil {
+		if sqlRows, err := conn.Query(ctx, `SELECT 1`); err == nil {
 			if closeErr := sqlRows.Close(); closeErr != nil {
 				t.Fatal(closeErr)
 			}
@@ -75,7 +77,7 @@ func TestConnRecover(t *testing.T) {
 	})
 
 	// Check that Query recovers from a connection close by re-connecting.
-	rows, err = conn.Query(`SELECT 1`, nil)
+	rows, err = conn.Query(ctx, `SELECT 1`)
 	if err != nil {
 		t.Fatalf("conn.Query(): expected no error after reconnect, got %v", err)
 	}
@@ -88,14 +90,14 @@ func TestConnRecover(t *testing.T) {
 
 	// Ditto from Query().
 	testutils.SucceedsSoon(t, func() error {
-		if err := conn.Exec(`SELECT 1`, nil); !errors.Is(err, driver.ErrBadConn) {
+		if err := conn.Exec(ctx, `SELECT 1`); !errors.Is(err, driver.ErrBadConn) {
 			return errors.Newf("expected ErrBadConn, got %v", err) // nolint:errwrap
 		}
 		return nil
 	})
 
 	// Check that Exec recovers from a connection close by re-connecting.
-	if err := conn.Exec(`SELECT 1`, nil); err != nil {
+	if err := conn.Exec(ctx, `SELECT 1`); err != nil {
 		t.Fatalf("conn.Exec(): expected no error after reconnect, got %v", err)
 	}
 }
@@ -118,6 +120,7 @@ func TestTransactionRetry(t *testing.T) {
 	p := cli.TestCLIParams{T: t}
 	c := cli.NewCLITest(p)
 	defer c.Cleanup()
+	ctx := context.Background()
 
 	url, cleanup := sqlutils.PGUrl(t, c.ServingSQLAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
@@ -130,14 +133,14 @@ func TestTransactionRetry(t *testing.T) {
 	}()
 
 	var tries int
-	err := conn.ExecTxn(func(conn clisqlclient.TxBoundConn) error {
+	err := conn.ExecTxn(ctx, func(ctx context.Context, conn clisqlclient.TxBoundConn) error {
 		tries++
 		if tries > 2 {
 			return nil
 		}
 
 		// Prevent automatic server-side retries.
-		rows, err := conn.Query(`SELECT now()`, nil)
+		rows, err := conn.Query(ctx, `SELECT now()`)
 		if err != nil {
 			return err
 		}
@@ -146,7 +149,7 @@ func TestTransactionRetry(t *testing.T) {
 		}
 
 		// Force a client-side retry.
-		rows, err = conn.Query(`SELECT crdb_internal.force_retry('1h')`, nil)
+		rows, err = conn.Query(ctx, `SELECT crdb_internal.force_retry('1h')`)
 		if err != nil {
 			return err
 		}

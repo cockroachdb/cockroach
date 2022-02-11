@@ -13,6 +13,7 @@
 package clisqlcfg
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -213,7 +214,8 @@ func (c *Context) maybeSetSafeUpdates(conn clisqlclient.Conn) {
 		safeUpdates = c.CliCtx.IsInteractive
 	}
 	if safeUpdates {
-		if err := conn.Exec("SET sql_safe_updates = TRUE", nil); err != nil {
+		if err := conn.Exec(context.Background(),
+			"SET sql_safe_updates = TRUE"); err != nil {
 			// We only enable the setting in interactive sessions. Ignoring
 			// the error with a warning is acceptable, because the user is
 			// there to decide what they want to do if it doesn't work.
@@ -228,5 +230,6 @@ func (c *Context) maybeSetReadOnly(conn clisqlclient.Conn) error {
 	if !c.ReadOnly {
 		return nil
 	}
-	return conn.Exec("SET default_transaction_read_only = TRUE", nil)
+	return conn.Exec(context.Background(),
+		"SET default_transaction_read_only = TRUE")
 }

@@ -131,7 +131,7 @@ func uploadFile(
 		return err
 	}
 
-	nodeID, _, _, err := conn.GetServerMetadata()
+	nodeID, _, _, err := conn.GetServerMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "unable to get node id")
 	}
