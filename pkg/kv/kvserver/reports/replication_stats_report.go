@@ -335,7 +335,10 @@ func (v *replicationStatsVisitor) visitNewZone(
 	}()
 	var zKey ZoneKey
 	var zConfig *zonepb.ZoneConfig
-	var numReplicas int
+	// replicationFactor is set once a zone config is found that has either
+	// NumVoters or NumReplicas and can be inherited from a higher-level zone
+	// config.
+	var replicationFactor int
 
 	// Figure out the zone config for whose report the current range is to be
 	// counted. This is the lowest-level zone config covering the range that
@@ -350,32 +353,27 @@ func (v *replicationStatsVisitor) visitNewZone(
 				}
 				zKey = key
 				zConfig = zone
-				if zone.NumReplicas != nil {
-					numReplicas = int(*zone.NumReplicas)
-					return true
-				}
-				// We need to continue upwards in search for the NumReplicas.
-				return false
+				replicationFactor = v.calculateReplicationFactor(zone)
+				// We need to continue upwards in search for either NumVoters
+				// or NumReplicas if replicationFactor is 0.
+				return replicationFactor != 0
 			}
 			// We had already found the zone to report to, but we're haven't found
-			// its NumReplicas yet.
-			if zone.NumReplicas != nil {
-				numReplicas = int(*zone.NumReplicas)
-				return true
-			}
-			return false
+			// its NumVoters or NumReplicas yet.
+			replicationFactor = v.calculateReplicationFactor(zone)
+			return replicationFactor != 0
 		})
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones for range %s", r)
 	}
 	v.prevZoneKey = zKey
-	v.prevNumReplicas = numReplicas
+	v.prevNumReplicas = replicationFactor
 	if !found {
 		return errors.AssertionFailedf(
 			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	v.countRange(ctx, zKey, numReplicas, r)
+	v.countRange(ctx, zKey, replicationFactor, r)
 	return nil
 }
 
@@ -405,4 +403,17 @@ func (v *replicationStatsVisitor) countRange(
 func zoneChangesReplication(zone *zonepb.ZoneConfig) bool {
 	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
 		zone.Constraints != nil
+}
+
+// calculateReplicationFactor determines how many voters are needed which is
+// used to make a calculation that indicates if the replication status is
+// over/under replicated.
+func (v *replicationStatsVisitor) calculateReplicationFactor(zone *zonepb.ZoneConfig) int {
+	if zone.NumVoters != nil {
+		return int(*zone.NumVoters)
+	}
+	if zone.NumReplicas != nil {
+		return int(*zone.NumReplicas)
+	}
+	return 0
 }

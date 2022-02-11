@@ -429,7 +429,89 @@ func TestReplicationStatsReport(t *testing.T) {
 					},
 				},
 			},
-		}}
+		},
+		{
+			name: "simple no violations with voters",
+			baseReportTestCase: baseReportTestCase{
+				defaultZone: zone{replicas: 3, voters: 1},
+				schema: []database{
+					{
+						name: "db1",
+						tables: []table{
+							{name: "t1",
+								partitions: []partition{{
+									name:  "p1",
+									start: []int{100},
+									end:   []int{200},
+									zone:  &zone{constraints: "[+p1]"},
+								}},
+							},
+							{name: "t2"},
+						},
+						zone: &zone{
+							// Change replication options so that db1 gets a report entry.
+							replicas: 3,
+						},
+					},
+					{
+						name:   "db2",
+						tables: []table{{name: "sentinel"}},
+					},
+				},
+				splits: []split{
+					{key: "/Table/t1", stores: "1 2 3"},
+					{key: "/Table/t1/pk", stores: "1 2 3"},
+					{key: "/Table/t1/pk/1", stores: "1 2 3"},
+					{key: "/Table/t1/pk/2", stores: "1 2 3"},
+					{key: "/Table/t1/pk/3", stores: "1 2 3"},
+					{key: "/Table/t1/pk/100", stores: "1 2 3"},
+					{key: "/Table/t1/pk/150", stores: "1 2 3"},
+					{key: "/Table/t1/pk/200", stores: "1 2 3"},
+					{key: "/Table/t2", stores: "1 2 3"},
+					{key: "/Table/t2/pk", stores: "1 2 3"},
+					{
+						// This range is not covered by the db1's zone config; it'll be
+						// counted for the default zone.
+						key: "/Table/sentinel", stores: "1 2 3",
+					},
+				},
+				nodes: []node{
+					{id: 1, stores: []store{{id: 1}}},
+					{id: 2, stores: []store{{id: 2}}},
+					{id: 3, stores: []store{{id: 3}}},
+				},
+			},
+			exp: []replicationStatsEntry{
+				{
+					object: "default",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       1,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  1,
+					},
+				},
+				{
+					object: "db1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       8,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+				{
+					object: "t1.p1",
+					zoneRangeStatus: zoneRangeStatus{
+						numRanges:       2,
+						unavailable:     0,
+						underReplicated: 0,
+						overReplicated:  0,
+					},
+				},
+			},
+		},
+	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			runReplicationStatsTest(t, tc)
