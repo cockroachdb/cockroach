@@ -10,7 +10,13 @@
 
 package spanconfig
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
+)
 
 // Target specifies the target of an associated span configuration.
 type Target struct {
@@ -20,14 +26,14 @@ type Target struct {
 }
 
 // MakeTarget returns a new Target.
-func MakeTarget(t roachpb.SpanConfigTarget) Target {
+func MakeTarget(t roachpb.SpanConfigTarget) (Target, error) {
 	switch t.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return MakeTargetFromSpan(*t.GetSpan())
+		return MakeTargetFromSpan(*t.GetSpan()), nil
 		// TODO(arul): Add a case here for SpanConfigTarget_SystemTarget once we've
 		// taught and tested the KVAccessor to work with system targets.
 	default:
-		panic("cannot handle target")
+		return Target{}, errors.AssertionFailedf("unknown type of system target %v", t)
 	}
 }
 
@@ -71,15 +77,16 @@ func (t Target) GetSystemTarget() SystemTarget {
 
 // Encode returns an encoded span suitable for persistence in
 // system.span_configurations.
-func (t Target) Encode() roachpb.Span {
+func (t Target) Encode(ctx context.Context) roachpb.Span {
 	switch {
 	case t.IsSpanTarget():
 		return t.span
 	case t.IsSystemTarget():
 		return t.systemTarget.encode()
 	default:
-		panic("cannot handle any other type of target")
+		log.Fatalf(ctx, "unknown type of system target %v", t)
 	}
+	panic("unreachable")
 }
 
 // Less returns true if the receiver is considered less than the supplied
@@ -166,7 +173,7 @@ func (t Target) isEmpty() bool {
 
 // SpanConfigTargetProto returns a roachpb.SpanConfigTarget equivalent to the
 // receiver.
-func (t Target) SpanConfigTargetProto() roachpb.SpanConfigTarget {
+func (t Target) SpanConfigTargetProto(ctx context.Context) roachpb.SpanConfigTarget {
 	switch {
 	case t.IsSpanTarget():
 		sp := t.GetSpan()
@@ -185,8 +192,9 @@ func (t Target) SpanConfigTargetProto() roachpb.SpanConfigTarget {
 			},
 		}
 	default:
-		panic("cannot handle any other type of target")
+		log.Fatalf(ctx, "cannot handle any other type of target")
 	}
+	return roachpb.SpanConfigTarget{}
 }
 
 // DecodeTarget takes a raw span and decodes it into a Target given its
@@ -220,11 +228,11 @@ func (t Targets) Less(i, j int) bool {
 
 // RecordsToSpanConfigEntries converts a list of records to a list
 // roachpb.SpanConfigEntry protos suitable for sending over the wire.
-func RecordsToSpanConfigEntries(records []Record) []roachpb.SpanConfigEntry {
+func RecordsToSpanConfigEntries(ctx context.Context, records []Record) []roachpb.SpanConfigEntry {
 	entries := make([]roachpb.SpanConfigEntry, 0, len(records))
 	for _, rec := range records {
 		entries = append(entries, roachpb.SpanConfigEntry{
-			Target: rec.Target.SpanConfigTargetProto(),
+			Target: rec.Target.SpanConfigTargetProto(ctx),
 			Config: rec.Config,
 		})
 	}
@@ -233,33 +241,41 @@ func RecordsToSpanConfigEntries(records []Record) []roachpb.SpanConfigEntry {
 
 // EntriesToRecords converts a list of roachpb.SpanConfigEntries
 // (received over the wire) to a list of Records.
-func EntriesToRecords(entries []roachpb.SpanConfigEntry) []Record {
+func EntriesToRecords(entries []roachpb.SpanConfigEntry) ([]Record, error) {
 	records := make([]Record, 0, len(entries))
 	for _, entry := range entries {
+		target, err := MakeTarget(entry.Target)
+		if err != nil {
+			return nil, err
+		}
 		records = append(records, Record{
-			Target: MakeTarget(entry.Target),
+			Target: target,
 			Config: entry.Config,
 		})
 	}
-	return records
+	return records, nil
 }
 
 // TargetsToTargetProtos converts a list of targets to a list of
 // roachpb.SpanConfigTarget protos suitable for sending over the wire.
-func TargetsToTargetProtos(targets []Target) []roachpb.SpanConfigTarget {
+func TargetsToTargetProtos(ctx context.Context, targets []Target) []roachpb.SpanConfigTarget {
 	targetProtos := make([]roachpb.SpanConfigTarget, 0, len(targets))
 	for _, target := range targets {
-		targetProtos = append(targetProtos, target.SpanConfigTargetProto())
+		targetProtos = append(targetProtos, target.SpanConfigTargetProto(ctx))
 	}
 	return targetProtos
 }
 
 // TargetProtosToTargets converts a list of roachpb.SpanConfigTargets
 // (received over the wire) to a list of Targets.
-func TargetProtosToTargets(protoTargtets []roachpb.SpanConfigTarget) []Target {
+func TargetProtosToTargets(protoTargtets []roachpb.SpanConfigTarget) ([]Target, error) {
 	targets := make([]Target, 0, len(protoTargtets))
 	for _, t := range protoTargtets {
-		targets = append(targets, MakeTarget(t))
+		target, err := MakeTarget(t)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
 	}
-	return targets
+	return targets, nil
 }
