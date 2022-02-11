@@ -1,3 +1,4 @@
+load("@bazel_gomock//:gomock.bzl", "gomock")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
 
@@ -6,6 +7,7 @@ go_library(
     srcs = [
         "authentication.go",
         "backend_dialer.go",
+        "connector.go",
         "error.go",
         "frontend_admitter.go",
         "metrics.go",
@@ -36,10 +38,10 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_gogo_status//:status",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes",
-        "@org_golang_google_grpc//status",
     ],
 )
 
@@ -48,10 +50,12 @@ go_test(
     size = "small",
     srcs = [
         "authentication_test.go",
+        "connector_test.go",
         "frontend_admitter_test.go",
         "main_test.go",
         "proxy_handler_test.go",
         "server_test.go",
+        ":sqlproxyccl_mocks",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":sqlproxyccl"],
@@ -83,12 +87,28 @@ go_test(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_golang_mock//gomock",  # keep
         "@com_github_jackc_pgconn//:pgconn",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@com_github_jackc_pgx_v4//:pgx",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
+    ],
+)
+
+gomock(
+    name = "sqlproxyccl_mocks",
+    out = "mocks_generated_test.go",
+    interfaces = [
+        "TenantResolver",
+    ],
+    library = ":sqlproxyccl",
+    package = "sqlproxyccl",
+    self_package = "github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
