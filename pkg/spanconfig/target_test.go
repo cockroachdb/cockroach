@@ -24,16 +24,15 @@ import (
 // TestEncodeDecodeSystemTarget ensures that encoding/decoding a SystemTarget
 // is roundtripable.
 func TestEncodeDecodeSystemTarget(t *testing.T) {
-	tenant10 := roachpb.MakeTenantID(10)
 	for _, testTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
-		makeSystemTargetOrFatal(t, tenant10, &tenant10),
+		makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
 		// System tenant targeting its logical cluster.
-		makeSystemTargetOrFatal(t, roachpb.SystemTenantID, &roachpb.SystemTenantID),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		// System tenant targeting a secondary tenant.
-		makeSystemTargetOrFatal(t, roachpb.SystemTenantID, &tenant10),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
 		// System tenant targeting the entire cluster.
-		makeSystemTargetOrFatal(t, roachpb.SystemTenantID, nil /* targetID */),
+		MakeClusterTarget(),
 	} {
 		systemTarget, err := decodeSystemTarget(testTarget.encode())
 		require.NoError(t, err)
@@ -132,18 +131,14 @@ func TestSystemTargetValidation(t *testing.T) {
 
 // TestTargetSortingRandomized ensures we sort targets correctly.
 func TestTargetSortingRandomized(t *testing.T) {
-	tenant10 := roachpb.MakeTenantID(10)
-	tenant20 := roachpb.MakeTenantID(20)
-	tenant5 := roachpb.MakeTenantID(5)
-
 	// Construct a set of sorted targets.
 	sortedTargets := Targets{
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.SystemTenantID, nil /*targetID*/)),
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.SystemTenantID, &roachpb.SystemTenantID)),
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.SystemTenantID, &tenant10)),
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.SystemTenantID, &tenant20)),
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.MakeTenantID(5), &tenant5)),
-		MakeTargetFromSystemTarget(makeSystemTargetOrFatal(t, roachpb.MakeTenantID(10), &tenant10)),
+		MakeTargetFromSystemTarget(MakeClusterTarget()),
+		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID)),
+		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10))),
+		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(20))),
+		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.MakeTenantID(5), roachpb.MakeTenantID(5))),
+		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10))),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("z")}),
@@ -163,10 +158,10 @@ func TestTargetSortingRandomized(t *testing.T) {
 	}
 }
 
-func makeSystemTargetOrFatal(
-	t *testing.T, sourceID roachpb.TenantID, targetID *roachpb.TenantID,
+func makeTenantTargetOrFatal(
+	t *testing.T, sourceID roachpb.TenantID, targetID roachpb.TenantID,
 ) SystemTarget {
-	target, err := MakeSystemTarget(sourceID, targetID)
+	target, err := MakeTenantTarget(sourceID, targetID)
 	require.NoError(t, err)
 	return target
 }

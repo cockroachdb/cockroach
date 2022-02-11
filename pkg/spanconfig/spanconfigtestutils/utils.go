@@ -32,6 +32,10 @@ import (
 // and "end" keys.
 var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
 
+// systemTargetRe matches strings of the form
+// "{source=(<id>|system),target=(<id>|system)}".
+var systemTargetRe = regexp.MustCompile(`^{(cluster)|(source=(\d*),\s??target=(\d*))}$`)
+
 // configRe matches a single word. It's a shorthand for declaring a unique
 // config.
 var configRe = regexp.MustCompile(`^(\w+)$`)
@@ -51,12 +55,41 @@ func ParseSpan(t *testing.T, sp string) roachpb.Span {
 	}
 }
 
+// parseSystemTarget is a helepr function that constructs a
+// spanconfig.SystemTarget from a string of the form {source=<id>,target=<id>}
+func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarget {
+	if !systemTargetRe.MatchString(systemTarget) {
+		t.Fatalf("expected %s to match system target regex", systemTargetRe)
+	}
+	matches := systemTargetRe.FindStringSubmatch(systemTarget)
+
+	if matches[1] == "cluster" {
+		return spanconfig.MakeClusterTarget()
+	}
+
+	sourceID, err := strconv.Atoi(matches[3])
+	require.NoError(t, err)
+	targetID, err := strconv.Atoi(matches[4])
+	require.NoError(t, err)
+	target, err := spanconfig.MakeTenantTarget(
+		roachpb.MakeTenantID(uint64(sourceID)), roachpb.MakeTenantID(uint64(targetID)),
+	)
+	require.NoError(t, err)
+	return target
+}
+
 // ParseTarget is a helper function that constructs a spanconfig.Target from a
 // string that conforms to spanRe.
-// TODO(arul): Once we have system targets, we'll want to parse them here too
-// instead of just calling ParseSpan here.
 func ParseTarget(t *testing.T, target string) spanconfig.Target {
-	return spanconfig.MakeTargetFromSpan(ParseSpan(t, target))
+	switch {
+	case spanRe.MatchString(target):
+		return spanconfig.MakeTargetFromSpan(ParseSpan(t, target))
+	case systemTargetRe.MatchString(target):
+		return spanconfig.MakeTargetFromSystemTarget(parseSystemTarget(t, target))
+	default:
+		t.Fatalf("expected %s to match span or system target regex", target)
+	}
+	panic("unreachable")
 }
 
 // ParseConfig is helper function that constructs a roachpb.SpanConfig that's
@@ -100,6 +133,9 @@ func ParseSpanConfigRecord(t *testing.T, conf string) spanconfig.Record {
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//		system-target {source=1,target=1}
+//		system-target {source=20,target=20}
+//		system-target {source=1,target=20}
 //
 func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target {
 	var targets []spanconfig.Target
@@ -110,10 +146,20 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target
 		}
 
 		const spanPrefix = "span "
-		if !strings.HasPrefix(line, spanPrefix) {
-			t.Fatalf("malformed line %q, expected to find spanPrefix %q", line, spanPrefix)
+		const systemTargetPrefix = "system-target "
+		switch {
+		case strings.HasPrefix(line, spanPrefix):
+			line = strings.TrimPrefix(line, spanPrefix)
+		case strings.HasPrefix(line, systemTargetPrefix):
+			line = strings.TrimPrefix(line, systemTargetPrefix)
+		default:
+			t.Fatalf(
+				"malformed line %q, expected to find %q or %q prefix",
+				line,
+				spanPrefix,
+				systemTargetPrefix,
+			)
 		}
-		line = strings.TrimPrefix(line, spanPrefix)
 		targets = append(targets, ParseTarget(t, line))
 	}
 	return targets
@@ -126,6 +172,10 @@ func ParseKVAccessorGetArguments(t *testing.T, input string) []spanconfig.Target
 // 		delete [c,e)
 // 		upsert [c,d):C
 // 		upsert [d,e):D
+// 		delete {source=1,target=1}
+// 		delete {source=1,target=20}
+// 		upsert {source=1,target=1}:A
+// 		delete {source=1,target=20}:D
 //
 func ParseKVAccessorUpdateArguments(
 	t *testing.T, input string,
@@ -193,11 +243,16 @@ func PrintSpan(sp roachpb.Span) string {
 }
 
 // PrintTarget is a helper function that prints a spanconfig.Target.
-func PrintTarget(target spanconfig.Target) string {
-	if target.IsSpanTarget() {
+func PrintTarget(t *testing.T, target spanconfig.Target) string {
+	switch {
+	case target.IsSpanTarget():
 		return PrintSpan(target.GetSpan())
+	case target.IsSystemTarget():
+		return target.GetSystemTarget().String()
+	default:
+		t.Fatalf("unknown target type")
 	}
-	panic("targets other than span targets are unsupported for now")
+	panic("unreachable")
 }
 
 // PrintSpanConfig is a helper function that transforms roachpb.SpanConfig into
@@ -212,8 +267,8 @@ func PrintSpanConfig(conf roachpb.SpanConfig) string {
 // entry is assumed to either have been constructed using ParseSpanConfigRecord
 // above, or the constituent span and config to have been constructed using the
 // Parse{Span,Config} helpers above.
-func PrintSpanConfigRecord(record spanconfig.Record) string {
-	return fmt.Sprintf("%s:%s", PrintTarget(record.Target), PrintSpanConfig(record.Config))
+func PrintSpanConfigRecord(t *testing.T, record spanconfig.Record) string {
+	return fmt.Sprintf("%s:%s", PrintTarget(t, record.Target), PrintSpanConfig(record.Config))
 }
 
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given
