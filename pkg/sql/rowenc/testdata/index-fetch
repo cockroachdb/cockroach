@@ -22,8 +22,9 @@ columns:
   - c
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "t_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
@@ -76,8 +77,9 @@ columns:
   - b
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "t_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
@@ -118,8 +120,9 @@ columns:
   - b
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "b1",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -177,8 +180,9 @@ columns:
   - d
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "b2",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -238,8 +242,9 @@ columns:
   - c
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "cb1",
   "is_secondary_index": true,
   "is_unique_index": true,
@@ -309,8 +314,9 @@ columns:
   - d
 ----
 {
-  "table_name": "t",
+  "version": 1,
   "table_id": 106,
+  "table_name": "t",
   "index_name": "cb2",
   "is_secondary_index": true,
   "is_unique_index": true,
@@ -407,8 +413,9 @@ columns:
   - a
 ----
 {
-  "table_name": "fam",
+  "version": 1,
   "table_id": 107,
+  "table_name": "fam",
   "index_name": "fam_pkey",
   "is_secondary_index": false,
   "is_unique_index": true,
@@ -458,8 +465,9 @@ columns:
   - a
 ----
 {
-  "table_name": "fam",
+  "version": 1,
   "table_id": 107,
+  "table_name": "fam",
   "index_name": "b",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -520,8 +528,9 @@ columns:
   - a
 ----
 {
-  "table_name": "fam",
+  "version": 1,
   "table_id": 107,
+  "table_name": "fam",
   "index_name": "b2",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -582,8 +591,9 @@ columns:
   - a
 ----
 {
-  "table_name": "fam",
+  "version": 1,
   "table_id": 107,
+  "table_name": "fam",
   "index_name": "c",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -644,8 +654,9 @@ columns:
   - a
 ----
 {
-  "table_name": "fam",
+  "version": 1,
   "table_id": 107,
+  "table_name": "fam",
   "index_name": "c2",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -717,8 +728,9 @@ columns:
  - k
 ----
 {
-  "table_name": "inv",
+  "version": 1,
   "table_id": 108,
+  "table_name": "inv",
   "index_name": "inv",
   "is_secondary_index": true,
   "is_unique_index": false,
@@ -777,8 +789,9 @@ columns:
  - k
 ----
 {
-  "table_name": "inv",
+  "version": 1,
   "table_id": 108,
+  "table_name": "inv",
   "index_name": "inv2",
   "is_secondary_index": true,
   "is_unique_index": false,
