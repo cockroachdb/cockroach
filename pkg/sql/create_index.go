@@ -624,7 +624,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 		telemetry.Inc(sqltelemetry.SecondaryIndexColumnFamiliesCounter)
 	}
 
-	indexDesc.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
+	indexDesc.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 
 	if n.n.PartitionByIndex != nil && n.tableDesc.GetLocalityConfig() != nil {
 		return pgerror.New(
