@@ -407,7 +407,7 @@ func newJoinReader(
 	fetcher, err := makeRowFetcherLegacy(
 		flowCtx, jr.desc, int(spec.IndexIdx), false, /* reverse */
 		rightCols, jr.EvalCtx.Mon, &jr.alloc, spec.LockingStrength,
-		spec.LockingWaitPolicy, spec.HasSystemColumns, nil, /* virtualColumn */
+		spec.LockingWaitPolicy, spec.HasSystemColumns,
 	)
 	if err != nil {
 		return nil, err

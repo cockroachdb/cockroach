@@ -140,9 +140,12 @@ func checkDistAggregationInfo(
 
 	makeTableReader := func(startPK, endPK int, streamID int) execinfrapb.ProcessorSpec {
 		tr := execinfrapb.TableReaderSpec{
-			Table:     *tableDesc.TableDesc(),
-			Spans:     make([]roachpb.Span, 1),
-			ColumnIDs: columnIDs,
+			Spans: make([]roachpb.Span, 1),
+		}
+		if err := rowenc.InitIndexFetchSpec(
+			&tr.FetchSpec, keys.SystemSQLCodec, tableDesc, tableDesc.GetPrimaryIndex(), columnIDs,
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		var err error

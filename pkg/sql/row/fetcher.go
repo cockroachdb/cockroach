@@ -215,6 +215,9 @@ func (rf *Fetcher) Init(
 	memMonitor *mon.BytesMonitor,
 	spec *descpb.IndexFetchSpec,
 ) error {
+	if spec.Version != descpb.IndexFetchSpecVersionInitial {
+		return errors.Newf("unsupported IndexFetchSpec version %d", spec.Version)
+	}
 	rf.reverse = reverse
 	rf.lockStrength = lockStrength
 	rf.lockWaitPolicy = lockWaitPolicy

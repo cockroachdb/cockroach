@@ -64,17 +64,20 @@ import "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 //
 // ATTENTION: When updating these fields, add a brief description of what
 // changed to the version history below.
-const Version execinfrapb.DistSQLVersion = 61
+const Version execinfrapb.DistSQLVersion = 62
 
 // MinAcceptedVersion is the oldest version that the server is compatible with.
 // A server will not accept flows with older versions.
-const MinAcceptedVersion execinfrapb.DistSQLVersion = 60
+const MinAcceptedVersion execinfrapb.DistSQLVersion = 62
 
 /*
 
 **  VERSION HISTORY **
 
 Please add new entries at the top.
+
+- Version: 62 (MinAcceptedVersion: 62):
+ - Changed TableReaderSpec to use a descpb.IndexFetchSpec instead of table descriptor.
 
 - Version: 61 (MinAcceptedVersion: 60)
   - final_regr_avgx, final_regr_avgy, final_regr_intercept, final_regr_r2, and

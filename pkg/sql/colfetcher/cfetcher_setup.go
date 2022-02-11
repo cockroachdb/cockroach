@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -67,35 +68,35 @@ func (a *cFetcherTableArgs) populateTypes(cols []descpb.IndexFetchSpec_Column) {
 
 // populateTableArgs fills in cFetcherTableArgs.
 func populateTableArgs(
-	ctx context.Context,
-	flowCtx *execinfra.FlowCtx,
-	table catalog.TableDescriptor,
-	index catalog.Index,
-	columnIDs []descpb.ColumnID,
-	invertedCol catalog.Column,
-	helper *colexecargs.ExprHelper,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, fetchSpec *descpb.IndexFetchSpec,
 ) (_ *cFetcherTableArgs, _ error) {
 	args := cFetcherTableArgsPool.Get().(*cFetcherTableArgs)
 
 	*args = cFetcherTableArgs{
+		spec: *fetchSpec,
 		typs: args.typs,
 	}
-	if err := rowenc.InitIndexFetchSpec(
-		&args.spec, flowCtx.Codec(), table, index, columnIDs,
-	); err != nil {
-		return nil, err
+	// Before we can safely use types from the fetch spec, we need to make sure
+	// they are hydrated. In row execution engine it is done during the processor
+	// initialization, but neither ColBatchScan nor cFetcher are processors, so we
+	// need to do the hydration ourselves.
+	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
+	for i := range args.spec.FetchedColumns {
+		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.FetchedColumns[i].Type, &resolver); err != nil {
+			return nil, err
+		}
+	}
+	for i := range args.spec.KeyAndSuffixColumns {
+		if err := typedesc.EnsureTypeIsHydrated(ctx, args.spec.KeyAndSuffixColumns[i].Type, &resolver); err != nil {
+			return nil, err
+		}
 	}
 	args.populateTypes(args.spec.FetchedColumns)
 	for i := range args.spec.FetchedColumns {
 		args.ColIdxMap.Set(args.spec.FetchedColumns[i].ColumnID, i)
 	}
 
-	// Before we can safely use types from the table descriptor, we need to
-	// make sure they are hydrated. In row execution engine it is done during
-	// the processor initialization, but neither ColBatchScan nor cFetcher are
-	// processors, so we need to do the hydration ourselves.
-	resolver := flowCtx.NewTypeResolver(flowCtx.Txn)
-	return args, resolver.HydrateTypeSlice(ctx, args.typs)
+	return args, nil
 }
 
 // populateTableArgsLegacy is a legacy version of populateTableArgs which
