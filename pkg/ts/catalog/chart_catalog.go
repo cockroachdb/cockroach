@@ -2209,6 +2209,15 @@ var charts = []sectionDescription{
 				},
 				AxisLabel: "Latency",
 			},
+			{
+				Title: "Cancel Requests (Postgres Protocol)",
+				Metrics: []string{
+					"sql.pgwire_cancel.total",
+					"sql.pgwire_cancel.ignored",
+					"sql.pgwire_cancel.successful",
+				},
+				AxisLabel: "Count",
+			},
 		},
 	},
 	{
