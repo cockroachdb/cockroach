@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -42,46 +43,48 @@ type initFetcherArgs struct {
 	columns   []int
 }
 
-func makeFetcherArgs(entry initFetcherArgs) FetcherTableArgs {
+func makeIndexFetchSpec(t *testing.T, entry initFetcherArgs) descpb.IndexFetchSpec {
 	index := entry.tableDesc.ActiveIndexes()[entry.indexIdx]
-	columns := entry.tableDesc.PublicColumns()
+	colIDs := entry.tableDesc.PublicColumnIDs()
 	if entry.columns != nil {
-		columns = make([]catalog.Column, len(entry.columns))
-		for i, ord := range entry.columns {
-			columns[i] = entry.tableDesc.PublicColumns()[ord]
+		allColIDs := colIDs
+		colIDs = nil
+		for _, ord := range entry.columns {
+			colIDs = append(colIDs, allColIDs[ord])
 		}
 	}
-
-	return FetcherTableArgs{
-		Desc:    entry.tableDesc,
-		Index:   index,
-		Columns: columns,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, entry.tableDesc, index, colIDs); err != nil {
+		t.Fatal(err)
 	}
+	return spec
 }
 
 func initFetcher(
-	entry initFetcherArgs, reverseScan bool, alloc *tree.DatumAlloc, memMon *mon.BytesMonitor,
-) (fetcher *Fetcher, err error) {
-	fetcher = &Fetcher{}
+	t *testing.T,
+	entry initFetcherArgs,
+	reverseScan bool,
+	alloc *tree.DatumAlloc,
+	memMon *mon.BytesMonitor,
+) *Fetcher {
+	fetcher := &Fetcher{}
 
-	fetcherCodec := keys.SystemSQLCodec
-	fetcherArgs := makeFetcherArgs(entry)
+	spec := makeIndexFetchSpec(t, entry)
 
 	if err := fetcher.Init(
 		context.Background(),
-		fetcherCodec,
 		reverseScan,
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		alloc,
 		memMon,
-		fetcherArgs,
+		&spec,
 	); err != nil {
-		return nil, err
+		t.Fatal(err)
 	}
 
-	return fetcher, nil
+	return fetcher
 }
 
 type fetcherEntryArgs struct {
@@ -145,10 +148,7 @@ func TestNextRowSingle(t *testing.T) {
 				indexIdx:  0,
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /* memMon */)
-			if err != nil {
-				t.Fatal(err)
-			}
+			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /* memMon */)
 
 			if err := rf.StartScan(
 				context.Background(),
@@ -252,10 +252,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 				indexIdx:  0,
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
-			if err != nil {
-				t.Fatal(err)
-			}
+			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
 				context.Background(),
@@ -348,13 +345,10 @@ func TestRowFetcherMemoryLimits(t *testing.T) {
 	memMon := mon.NewMonitor("test", mon.MemoryResource, nil, nil, -1, 1000, settings)
 	memMon.Start(ctx, nil, mon.MakeStandaloneBudget(1<<20))
 	defer memMon.Stop(ctx)
-	rf, err := initFetcher(args, false /*reverseScan*/, alloc, memMon)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rf := initFetcher(t, args, false /*reverseScan*/, alloc, memMon)
 	defer rf.Close(ctx)
 
-	err = rf.StartScan(
+	err := rf.StartScan(
 		context.Background(),
 		kv.NewTxn(ctx, kvDB, 0),
 		roachpb.Spans{tableDesc.IndexSpan(keys.SystemSQLCodec, tableDesc.GetPrimaryIndexID())},
@@ -411,10 +405,7 @@ INDEX(c)
 		indexIdx:  0,
 	}
 
-	rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 	// Start a scan that has multiple input spans, to tickle the codepath that
 	// sees an "empty batch". When we have multiple input spans, the kv server
@@ -590,10 +581,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 				args.columns = []int{0, 1, 2, 3}
 			}
 
-			rf, err := initFetcher(args, false /*reverseScan*/, alloc, nil /*memMon*/)
-			if err != nil {
-				t.Fatal(err)
-			}
+			rf := initFetcher(t, args, false /*reverseScan*/, alloc, nil /*memMon*/)
 
 			if err := rf.StartScan(
 				context.Background(),
@@ -706,32 +694,25 @@ func TestRowFetcherReset(t *testing.T) {
 		indexIdx:  0,
 	}
 	da := tree.DatumAlloc{}
-	fetcher, err := initFetcher(args, false, &da, nil /*memMon*/)
-	if err != nil {
-		t.Fatal(err)
-	}
+	fetcher := initFetcher(t, args, false, &da, nil /*memMon*/)
 
-	resetFetcher, err := initFetcher(args, false /*reverseScan*/, &da, nil /*memMon*/)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resetFetcher := initFetcher(t, args, false /*reverseScan*/, &da, nil /*memMon*/)
 
 	resetFetcher.Reset()
 
 	// Now re-init the reset fetcher and make sure its the same as the fetcher we
 	// didn't reset.
 
-	fetcherArgs := makeFetcherArgs(args)
+	spec := makeIndexFetchSpec(t, args)
 	if err := resetFetcher.Init(
 		ctx,
-		keys.SystemSQLCodec,
 		false, /*reverse*/
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&da,
 		nil, /* memMonitor */
-		fetcherArgs,
+		&spec,
 	); err != nil {
 		t.Fatal(err)
 	}
