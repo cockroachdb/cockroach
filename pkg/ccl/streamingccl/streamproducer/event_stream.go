@@ -386,6 +386,7 @@ func (s *eventStream) streamLoop(ctx context.Context, frontier *span.Frontier) e
 				}
 			default:
 				// TODO(yevgeniy): Handle SSTs.
+				// TODO(erikgrinaker): Handle DeleteRange events (MVCC range tombstones).
 				return errors.AssertionFailedf("unexpected event")
 			}
 		}
