@@ -412,8 +412,7 @@ message IndexDescriptor {
   repeated Direction key_column_directions = 8;
 
   // An ordered list of column names which the index stores in addition to the
-  // columns which are explicitly part of the index (STORING clause). Only used
-  // for secondary indexes.
+  // columns which are explicitly part of the index (STORING clause).
   repeated string store_column_names = 5;
 
   // An ordered list of column IDs of which the index key is comprised. This

@@ -1149,8 +1149,8 @@ func (desc *Mutable) AddPrimaryIndex(idx descpb.IndexDescriptor) error {
 		idx.Name = PrimaryKeyIndexName(desc.Name)
 	}
 	idx.EncodingType = descpb.PrimaryIndexEncoding
-	if idx.Version < descpb.LatestPrimaryIndexDescriptorVersion {
-		idx.Version = descpb.LatestPrimaryIndexDescriptorVersion
+	if idx.Version < descpb.PrimaryIndexWithStoredColumnsVersion {
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 		// Populate store columns.
 		names := make(map[string]struct{})
 		for _, name := range idx.KeyColumnNames {
@@ -1742,8 +1742,13 @@ func (desc *Mutable) MakeMutationComplete(m descpb.DescriptorMutation) error {
 				} else {
 					primaryIndex.Name = args.NewPrimaryIndexName
 				}
-				if primaryIndex.Version == descpb.LatestNonPrimaryIndexDescriptorVersion {
-					primaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
+				// This is needed for `ALTER PRIMARY KEY`. Because the new primary index
+				// is initially created as a secondary index before being promoted as a
+				// real primary index here. `StoreColumnNames` and `StoreColumnIDs` are
+				// both filled when the index is first created. So just need to promote
+				// the version number here.
+				if primaryIndex.Version == descpb.StrictIndexColumnIDGuaranteesVersion {
+					primaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 				}
 				desc.SetPrimaryIndex(primaryIndex)
 			}
