@@ -12,7 +12,6 @@ package txnidcache
 
 import (
 	"context"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -105,9 +104,7 @@ type Cache struct {
 	msgChan chan *messageBlock
 	closeCh chan struct{}
 
-	store            *fifoCache
-	messageBlockPool *sync.Pool
-
+	store  *fifoCache
 	writer Writer
 
 	metrics *Metrics
@@ -142,18 +139,13 @@ func NewTxnIDCache(st *cluster.Settings, metrics *Metrics) *Cache {
 		metrics: metrics,
 		msgChan: make(chan *messageBlock, channelSize),
 		closeCh: make(chan struct{}),
-		messageBlockPool: &sync.Pool{
-			New: func() interface{} {
-				return &messageBlock{}
-			},
-		},
 	}
 
-	t.store = newFIFOCache(t.messageBlockPool, func() int64 {
+	t.store = newFIFOCache(func() int64 {
 		return MaxSize.Get(&st.SV) / entrySize
 	} /* capacity */)
 
-	t.writer = newWriter(t, t.messageBlockPool)
+	t.writer = newWriter(t)
 	return t
 }
 

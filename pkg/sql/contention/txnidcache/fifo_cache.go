@@ -27,8 +27,7 @@ var nodePool = &sync.Pool{
 }
 
 type fifoCache struct {
-	blockPool *sync.Pool
-	capacity  contentionutils.CapacityLimiter
+	capacity contentionutils.CapacityLimiter
 
 	mu struct {
 		syncutil.RWMutex
@@ -55,10 +54,9 @@ type evictionList struct {
 	tailBlockIdx int
 }
 
-func newFIFOCache(pool *sync.Pool, capacity contentionutils.CapacityLimiter) *fifoCache {
+func newFIFOCache(capacity contentionutils.CapacityLimiter) *fifoCache {
 	c := &fifoCache{
-		blockPool: pool,
-		capacity:  capacity,
+		capacity: capacity,
 	}
 
 	c.mu.data = make(map[uuid.UUID]roachpb.TransactionFingerprintID)
@@ -90,7 +88,7 @@ func (c *fifoCache) Add(block *messageBlock) {
 
 	// Zeros out the block and put it back into the blockPool.
 	*block = messageBlock{}
-	c.blockPool.Put(block)
+	blockPool.Put(block)
 
 	c.maybeEvictLocked()
 }

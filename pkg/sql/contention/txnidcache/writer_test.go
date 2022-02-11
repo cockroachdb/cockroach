@@ -27,18 +27,15 @@ import (
 )
 
 type blackHoleSink struct {
-	pool *sync.Pool
-
 	// Simulate a real sink.
 	ch chan *messageBlock
 }
 
 var _ messageSink = &blackHoleSink{}
 
-func newBlackHoleSink(pool *sync.Pool, chanSize int) *blackHoleSink {
+func newBlackHoleSink(chanSize int) *blackHoleSink {
 	return &blackHoleSink{
-		pool: pool,
-		ch:   make(chan *messageBlock, chanSize),
+		ch: make(chan *messageBlock, chanSize),
 	}
 }
 
@@ -46,7 +43,7 @@ func (b *blackHoleSink) start() {
 	go func() {
 		for block := range b.ch {
 			*block = messageBlock{}
-			b.pool.Put(block)
+			blockPool.Put(block)
 		}
 	}()
 }
@@ -75,10 +72,10 @@ func BenchmarkWriter(b *testing.B) {
 
 	ctx := context.Background()
 
-	run := func(b *testing.B, sink messageSink, blockPool *sync.Pool, numOfConcurrentWriter int) {
+	run := func(b *testing.B, sink messageSink, numOfConcurrentWriter int) {
 		starter := make(chan struct{})
 
-		w := newWriter(sink, blockPool)
+		w := newWriter(sink)
 
 		b.ResetTimer()
 		b.SetBytes(messageBlockSize * entrySize)
@@ -109,28 +106,22 @@ func BenchmarkWriter(b *testing.B) {
 
 	type testSinkType struct {
 		name string
-		new  func() (_ messageSink, _ *sync.Pool, cleanup func())
+		new  func() (_ messageSink, cleanup func())
 	}
 
 	sinkTypes := []testSinkType{
 		{
 			name: "blackHole",
-			new: func() (_ messageSink, _ *sync.Pool, cleanup func()) {
-				blockPool := &sync.Pool{
-					New: func() interface{} {
-						return &messageBlock{}
-					},
-				}
-
-				blackHole := newBlackHoleSink(blockPool, channelSize)
+			new: func() (_ messageSink, cleanup func()) {
+				blackHole := newBlackHoleSink(channelSize)
 				blackHole.start()
 
-				return blackHole, blockPool, blackHole.stop
+				return blackHole, blackHole.stop
 			},
 		},
 		{
 			name: "real",
-			new: func() (_ messageSink, _ *sync.Pool, cleanup func()) {
+			new: func() (_ messageSink, cleanup func()) {
 				st := cluster.MakeTestingClusterSettings()
 				metrics := NewMetrics()
 				realSink := NewTxnIDCache(st, &metrics)
@@ -138,7 +129,7 @@ func BenchmarkWriter(b *testing.B) {
 				stopper := stop.NewStopper()
 				realSink.Start(ctx, stopper)
 
-				return realSink, realSink.messageBlockPool, func() {
+				return realSink, func() {
 					stopper.Stop(ctx)
 				}
 			},
@@ -149,10 +140,10 @@ func BenchmarkWriter(b *testing.B) {
 		b.Run(fmt.Sprintf("sinkType=%s", sinkType.name), func(b *testing.B) {
 			for _, numOfConcurrentWriter := range []int{1, 24, 48, 64, 92, 128} {
 				b.Run(fmt.Sprintf("concurrentWriter=%d", numOfConcurrentWriter), func(b *testing.B) {
-					sink, blockPool, cleanup := sinkType.new()
+					sink, cleanup := sinkType.new()
 					defer cleanup()
 
-					run(b, sink, blockPool, numOfConcurrentWriter)
+					run(b, sink, numOfConcurrentWriter)
 				})
 			}
 		})

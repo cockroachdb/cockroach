@@ -11,8 +11,6 @@
 package txnidcache
 
 import (
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -24,20 +22,18 @@ const shardCount = 16
 type writer struct {
 	shards [shardCount]*concurrentWriteBuffer
 
-	sink         messageSink
-	msgBlockPool *sync.Pool
+	sink messageSink
 }
 
 var _ Writer = &writer{}
 
-func newWriter(sink messageSink, msgBlockPool *sync.Pool) *writer {
+func newWriter(sink messageSink) *writer {
 	w := &writer{
-		sink:         sink,
-		msgBlockPool: msgBlockPool,
+		sink: sink,
 	}
 
 	for shardIdx := 0; shardIdx < shardCount; shardIdx++ {
-		w.shards[shardIdx] = newConcurrentWriteBuffer(sink, msgBlockPool)
+		w.shards[shardIdx] = newConcurrentWriteBuffer(sink)
 	}
 
 	return w
