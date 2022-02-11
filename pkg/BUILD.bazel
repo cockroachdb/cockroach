@@ -84,7 +84,6 @@ ALL_TESTS = [
     "//pkg/cmd/label-merged-pr:label-merged-pr_test",
     "//pkg/cmd/mirror:mirror_test",
     "//pkg/cmd/prereqs:prereqs_test",
-    "//pkg/cmd/publish-artifacts:publish-artifacts_test",
     "//pkg/cmd/publish-provisional-artifacts:publish-provisional-artifacts_test",
     "//pkg/cmd/reduce/reduce/reducesql:reducesql_test",
     "//pkg/cmd/reduce/reduce:reduce_test",

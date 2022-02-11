@@ -1733,7 +1733,6 @@ bins = \
   bin/gossipsim \
   bin/langgen \
   bin/protoc-gen-gogoroach \
-  bin/publish-artifacts \
   bin/publish-provisional-artifacts \
   bin/optfmt \
   bin/optgen \
