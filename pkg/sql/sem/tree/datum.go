@@ -2417,7 +2417,9 @@ type DTimestamp struct {
 func MakeDTimestamp(t time.Time, precision time.Duration) (*DTimestamp, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, pgerror.Newf(
+			pgcode.InvalidTimeZoneDisplacementValue,
+			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
 	}
 	return &DTimestamp{Time: ret}, nil
 }
@@ -2699,7 +2701,9 @@ type DTimestampTZ struct {
 func MakeDTimestampTZ(t time.Time, precision time.Duration) (*DTimestampTZ, error) {
 	ret := t.Round(precision)
 	if ret.After(MaxSupportedTime) || ret.Before(MinSupportedTime) {
-		return nil, errors.Newf("timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
+		return nil, pgerror.Newf(
+			pgcode.InvalidTimeZoneDisplacementValue,
+			"timestamp %q exceeds supported timestamp bounds", ret.Format(time.RFC3339))
 	}
 	return &DTimestampTZ{Time: ret}, nil
 }

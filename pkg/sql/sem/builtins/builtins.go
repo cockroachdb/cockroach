@@ -688,7 +688,7 @@ var builtins = map[string]builtinDefinition{
 				s := string(tree.MustBeDString(args[0]))
 				uv, err := uuid.FromString(s)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid UUID")
 				}
 				return tree.NewDBytes(tree.DBytes(uv.GetBytes())), nil
 			},
@@ -758,7 +758,7 @@ var builtins = map[string]builtinDefinition{
 				s := tree.MustBeDString(args[0])
 				u, err := ulid.Parse(string(s))
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid ULID")
 				}
 				b, err := u.MarshalBinary()
 				if err != nil {
@@ -3917,7 +3917,7 @@ value if you rely on the HLC for accuracy.`,
 			pbToJSON := func(typ string, data []byte, flags protoreflect.FmtFlags) (tree.Datum, error) {
 				msg, err := protoreflect.DecodeMessage(typ, data)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid protocol message")
 				}
 				j, err := protoreflect.MessageToJSON(msg, flags)
 				if err != nil {
@@ -3998,11 +3998,11 @@ value if you rely on the HLC for accuracy.`,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				msg, err := protoreflect.NewMessage(string(tree.MustBeDString(args[0])))
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto name")
 				}
 				data, err := protoreflect.JSONBMarshalToMessage(tree.MustBeDJSON(args[1]).JSON, msg)
 				if err != nil {
-					return nil, err
+					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "invalid proto JSON")
 				}
 				return tree.NewDBytes(tree.DBytes(data)), nil
 			},

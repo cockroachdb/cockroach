@@ -535,22 +535,23 @@ func (b *Builder) scanParams(
 		var err error
 		switch {
 		case isInverted && isPartial:
-			err = fmt.Errorf(
+			err = pgerror.Newf(pgcode.WrongObjectType,
 				"index \"%s\" is a partial inverted index and cannot be used for this query",
 				idx.Name(),
 			)
 		case isInverted:
-			err = fmt.Errorf(
+			err = pgerror.Newf(pgcode.WrongObjectType,
 				"index \"%s\" is inverted and cannot be used for this query",
 				idx.Name(),
 			)
 		case isPartial:
-			err = fmt.Errorf(
+			err = pgerror.Newf(pgcode.WrongObjectType,
 				"index \"%s\" is a partial index that does not contain all the rows needed to execute this query",
 				idx.Name(),
 			)
 		default:
-			err = fmt.Errorf("index \"%s\" cannot be used for this query", idx.Name())
+			err = pgerror.Newf(pgcode.WrongObjectType,
+				"index \"%s\" cannot be used for this query", idx.Name())
 			if b.evalCtx.SessionData().DisallowFullTableScans &&
 				(b.ContainsLargeFullTableScan || b.ContainsLargeFullIndexScan) {
 				err = errors.WithHint(err,

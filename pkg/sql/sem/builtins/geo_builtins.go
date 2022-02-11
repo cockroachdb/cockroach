@@ -5861,15 +5861,15 @@ See http://developers.google.com/maps/documentation/utilities/polylinealgorithm`
 					switch bGeomT := bGeomT.(type) {
 					case *geom.Point:
 						if aGeomT.Empty() || bGeomT.Empty() {
-							return nil, errors.Newf("cannot use POINT EMPTY")
+							return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot use POINT EMPTY")
 						}
 						bbox := a.CartesianBoundingBox().Combine(b.CartesianBoundingBox())
 						return tree.NewDBox2D(*bbox), nil
 					default:
-						return nil, errors.Newf("second argument is not a POINT")
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue, "second argument is not a POINT")
 					}
 				default:
-					return nil, errors.Newf("first argument is not a POINT")
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "first argument is not a POINT")
 				}
 			},
 			types.Box2D,
