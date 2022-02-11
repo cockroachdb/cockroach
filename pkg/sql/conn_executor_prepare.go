@@ -203,6 +203,7 @@ func (ex *connExecutor) prepare(
 		prepared.PrepareMetadata = querycache.PrepareMetadata{
 			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
 				TypeHints: placeholderHints,
+				Types:     placeholderHints,
 			},
 		}
 		prepared.Statement = stmt.Statement
@@ -225,13 +226,13 @@ func (ex *connExecutor) prepare(
 
 	if txn := ex.state.mu.txn; txn != nil && txn.IsOpen() {
 		// Use the existing transaction.
-		if err := prepare(ctx, txn); err != nil {
+		if err := prepare(ctx, txn); err != nil && origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		}
 	} else {
 		// Use a new transaction. This will handle retriable errors here rather
 		// than bubbling them up to the connExecutor state machine.
-		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil {
+		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil && origin != PreparedStatementOriginSessionMigration {
 			return nil, err
 		}
 		// Prepare with an implicit transaction will end up creating
