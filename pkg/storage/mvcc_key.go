@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -438,11 +439,14 @@ func (k MVCCRangeKey) Validate() (err error) {
 	}
 }
 
-// firstRangeKeyAbove does a binary search for the first range key at or above
+// FirstRangeKeyAbove does a binary search for the first range key at or above
 // the given timestamp. It assumes the range keys are ordered in descending
 // timestamp order, as returned by SimpleMVCCIterator.RangeKeys(). Returns false
 // if no matching range key was found.
-func firstRangeKeyAbove(rangeKeys []MVCCRangeKeyValue, ts hlc.Timestamp) (MVCCRangeKeyValue, bool) {
+//
+// TODO(erikgrinaker): Consider using a new type for []MVCCRangeKeyValue as
+// returned by SimpleMVCCIterator.RangeKeys(), and add this as a method.
+func FirstRangeKeyAbove(rangeKeys []MVCCRangeKeyValue, ts hlc.Timestamp) (MVCCRangeKeyValue, bool) {
 	// This is kind of odd due to sort.Search() semantics: we do a binary search
 	// for the first range tombstone that's below the timestamp, then return the
 	// previous range tombstone if any.
@@ -452,4 +456,22 @@ func firstRangeKeyAbove(rangeKeys []MVCCRangeKeyValue, ts hlc.Timestamp) (MVCCRa
 		return rangeKeys[i-1], true
 	}
 	return MVCCRangeKeyValue{}, false
+}
+
+// HasRangeKeyBetween checks whether an MVCC range key exists between the two
+// given timestamps (in order). It assumes the range keys are ordered in
+// descending timestamp order, as returned by SimpleMVCCIterator.RangeKeys().
+func HasRangeKeyBetween(rangeKeys []MVCCRangeKeyValue, upper, lower hlc.Timestamp) bool {
+	if len(rangeKeys) == 0 {
+		return false
+	}
+	if util.RaceEnabled && upper.Less(lower) {
+		panic(errors.AssertionFailedf("HasRangeKeyBetween given upper %s <= lower %s", upper, lower))
+	}
+	if rkv, ok := FirstRangeKeyAbove(rangeKeys, lower); ok {
+		// Consider equal timestamps to be "between". This shouldn't really happen,
+		// since MVCC enforces point and range keys can't have the same timestamp.
+		return rkv.RangeKey.Timestamp.LessEq(upper)
+	}
+	return false
 }
