@@ -24,13 +24,15 @@ import (
 //
 // BackendDial uses a dial timeout of 5 seconds to mitigate network black
 // holes.
+//
+// TODO(jaylim-crl): Move dialer into connector in the future.
 var BackendDial = func(
-	msg *pgproto3.StartupMessage, outgoingAddress string, tlsConfig *tls.Config,
+	msg *pgproto3.StartupMessage, serverAddress string, tlsConfig *tls.Config,
 ) (net.Conn, error) {
 	// TODO this behavior may need to change once multi-region multi-tenant
 	// clusters are supported. The fixed timeout may need to be replaced by an
 	// adaptive timeout or the timeout could be replaced by speculative retries.
-	conn, err := net.DialTimeout("tcp", outgoingAddress, time.Second*5)
+	conn, err := net.DialTimeout("tcp", serverAddress, time.Second*5)
 	if err != nil {
 		return nil, newErrorf(
 			codeBackendDown, "unable to reach backend SQL server: %v", err,
@@ -44,7 +46,7 @@ var BackendDial = func(
 	if err != nil {
 		return nil, newErrorf(
 			codeBackendDown, "relaying StartupMessage to target server %v: %v",
-			outgoingAddress, err)
+			serverAddress, err)
 	}
 	return conn, nil
 }
