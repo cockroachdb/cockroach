@@ -118,6 +118,20 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				// expect SST ingestion into spans with active changefeeds.
 				return errors.Errorf("unexpected SST ingestion: %v", t)
 
+			case *roachpb.RangeFeedDeleteRange:
+				// For now, we just error on MVCC range tombstones. These are currently
+				// only expected to be used by schema GC, and GCed spans should not have
+				// active changefeeds across them.
+				//
+				// TODO(erikgrinaker): Write an end-to-end test which verifies that an
+				// IMPORT INTO which gets rolled back using MVCC range tombstones will
+				// not be visible to a changefeed, neither when started before the
+				// import or when resuming from a timestamp before the import. The table
+				// decriptor should be marked as offline during the import, and catchup
+				// scans should detect this and prevent reading anything in that
+				// timespan.
+				return errors.Errorf("unexpected MVCC range deletion: %v", t)
+
 			default:
 				return errors.Errorf("unexpected RangeFeedEvent variant %v", t)
 			}

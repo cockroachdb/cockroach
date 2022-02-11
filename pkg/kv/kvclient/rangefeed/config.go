@@ -41,6 +41,7 @@ type config struct {
 	onCheckpoint         OnCheckpoint
 	onFrontierAdvance    OnFrontierAdvance
 	onSSTable            OnSSTable
+	onDeleteRange        OnDeleteRange
 	extraPProfLabels     []string
 }
 
@@ -175,6 +176,25 @@ type OnSSTable func(ctx context.Context, sst *roachpb.RangeFeedSSTable)
 func WithOnSSTable(f OnSSTable) Option {
 	return optionFunc(func(c *config) {
 		c.onSSTable = f
+	})
+}
+
+// OnDeleteRange is called when an MVCC range tombstone is written (i.e. when
+// DeleteRange is called with UseExperimentalRangeTombstone, but not when the
+// range is deleted using point tombstones). If this callback is not provided,
+// such range tombstones will be ignored.
+//
+// MVCC range tombstones are currently experimental, and disabled by default.
+// They are only written when storage.CanUseExperimentalMVCCRangeTombstones() is
+// true, and are only expected during schema GC operations (i.e. not across live
+// tables or other schema objects).
+type OnDeleteRange func(ctx context.Context, value *roachpb.RangeFeedDeleteRange)
+
+// WithOnDeleteRange sets up a callback that's invoked whenever a MVCC range
+// deletion tombstone is written.
+func WithOnDeleteRange(f OnDeleteRange) Option {
+	return optionFunc(func(c *config) {
+		c.onDeleteRange = f
 	})
 }
 
