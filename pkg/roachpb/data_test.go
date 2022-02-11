@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
@@ -2060,6 +2062,74 @@ func TestTxnLocksAsLockUpdates(t *testing.T) {
 		require.Equal(t, txn.IgnoredSeqNums, intent.IgnoredSeqNums)
 		require.Equal(t, txn.TxnMeta, intent.Txn)
 	}
+}
+
+func TestLockStateInfoSafeFormat(t *testing.T) {
+	waiter1 := lock.Waiter{
+		WaitingTxn: &enginepb.TxnMeta{
+			Key:               Key("foo"),
+			ID:                uuid.NamespaceDNS,
+			Epoch:             2,
+			WriteTimestamp:    hlc.Timestamp{Logical: 3},
+			MinTimestamp:      hlc.Timestamp{Logical: 3},
+			Priority:          10,
+			Sequence:          456,
+			CoordinatorNodeID: 3,
+		},
+		ActiveWaiter: true,
+		Strength:     lock.Exclusive,
+		WaitDuration: 135 * time.Second,
+	}
+	waiter2 := lock.Waiter{
+		WaitingTxn:   nil,
+		ActiveWaiter: false,
+		Strength:     lock.None,
+		WaitDuration: 17 * time.Millisecond,
+	}
+
+	holder := &enginepb.TxnMeta{
+		Key:               Key("a"),
+		ID:                uuid.Must(uuid.FromString("deadbeef-0000-0000-0000-000000000000")),
+		Epoch:             0,
+		WriteTimestamp:    hlc.Timestamp{Logical: 1},
+		MinTimestamp:      hlc.Timestamp{Logical: 1},
+		Priority:          100,
+		Sequence:          123,
+		CoordinatorNodeID: 1,
+	}
+	lockStateInfo := &LockStateInfo{
+		RangeID:      35,
+		Key:          Key("bar"),
+		LockHolder:   holder,
+		Durability:   lock.Unreplicated,
+		HoldDuration: 5 * time.Minute,
+		Waiters:      []lock.Waiter{waiter1, waiter2},
+	}
+
+	require.EqualValues(t,
+		"range_id=35 key=\"bar\" holder=deadbeef durability=Unreplicated duration=5m0s\n"+
+			" waiters:\n"+
+			"  waiting_txn:6ba7b810 active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
+		redact.Sprint(lockStateInfo).StripMarkers())
+	require.EqualValues(t,
+		"range_id=35 key=\"bar\" holder=deadbeef-0000-0000-0000-000000000000 durability=Unreplicated duration=5m0s\n"+
+			" waiters:\n"+
+			"  waiting_txn:6ba7b810-9dad-11d1-80b4-00c04fd430c8 active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
+		redact.Sprintf("%+v", lockStateInfo).StripMarkers())
+	require.EqualValues(t,
+		"range_id=35 key=‹×› holder=deadbeef durability=Unreplicated duration=5m0s\n"+
+			" waiters:\n"+
+			"  waiting_txn:6ba7b810 active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
+		redact.Sprint(lockStateInfo).Redact())
+	require.EqualValues(t,
+		"range_id=35 key=‹×› holder=‹×› durability=Unreplicated duration=5m0s\n"+
+			" waiters:\n"+
+			"  waiting_txn:‹×› active_waiter:true strength:Exclusive wait_duration:2m15s\n"+
+			"  waiting_txn:<nil> active_waiter:false strength:None wait_duration:17ms",
+		redact.Sprintf("%+v", lockStateInfo).Redact())
 }
 
 func TestAddIgnoredSeqNumRange(t *testing.T) {
