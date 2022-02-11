@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "authentication.go",
         "backend_dialer.go",
+        "connector.go",
         "error.go",
         "frontend_admitter.go",
         "metrics.go",
@@ -48,6 +49,7 @@ go_test(
     size = "small",
     srcs = [
         "authentication_test.go",
+        "connector_test.go",
         "frontend_admitter_test.go",
         "main_test.go",
         "proxy_handler_test.go",
