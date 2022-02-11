@@ -2829,7 +2829,7 @@ select crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, 
 ----
 system
 
-query error pq: crdb_internal.pb_to_json\(\): unknown proto message type cockroach.sql.sqlbase.descriptor
+query error pq: crdb_internal.pb_to_json\(\): invalid protocol message: unknown proto message type cockroach.sql.sqlbase.descriptor
 select crdb_internal.pb_to_json('cockroach.sql.sqlbase.descriptor', descriptor)->'database'->>'name' from system.descriptor where id=1
 
 query B
@@ -2842,7 +2842,7 @@ select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_interna
 ----
 true
 
-query error pq: crdb_internal.json_to_pb\(\): unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
+query error pq: crdb_internal.json_to_pb\(\): invalid proto JSON: unmarshaling json to cockroach.sql.sqlbase.Descriptor: unknown field "__redacted__" in descpb.Descriptor
 select crdb_internal.json_to_pb('cockroach.sql.sqlbase.Descriptor', crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor, true, true)) = descriptor from system.descriptor where id = 1
 
 subtest regexp_split

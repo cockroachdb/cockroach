@@ -869,7 +869,7 @@ POLYGON ((20.012344998976914 -20.012345000286587, 20.012344998976914 -20.0123449
 POLYGON ((90 0, 90 0.000000000163709, 90.000000000327418 0.000000000163709, 90.000000000327418 0, 90 0))
 POLYGON ((90 0, 90 0.0439453125, 90.0439453125 0.0439453125, 90.0439453125 0, 90 0))
 
-statement error pq: st_pointfromgeohash\(\): geohash decode '----': invalid character at index 0
+statement error pq: st_pointfromgeohash\(\): invalid GeoHash: geohash decode '----': invalid character at index 0
 SELECT ST_AsText(ST_PointFromGeoHash('----'))
 
 statement error pq: st_pointfromgeohash\(\): length of GeoHash must be greater than 0

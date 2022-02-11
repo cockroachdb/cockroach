@@ -3063,7 +3063,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 func matchRegexpWithKey(ctx *EvalContext, str Datum, key RegexpCacheKey) (Datum, error) {
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return DBoolFalse, err
+		return DBoolFalse, pgerror.Wrap(err, pgcode.InvalidRegularExpression, "invalid regular expression")
 	}
 	return MakeDBool(DBool(re.MatchString(string(MustBeDString(str))))), nil
 }
