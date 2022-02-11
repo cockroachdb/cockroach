@@ -275,6 +275,54 @@ func (og *operationGenerator) violatesUniqueConstraints(
 	return false, nil
 }
 
+// ErrSchemaChangesDisallowedDueToPkSwap is generated when schema changes are
+// disallowed on a table because PK swap is already in progress.
+var ErrSchemaChangesDisallowedDueToPkSwap = errors.New("not schema changes allowed on selected table due to PK swap")
+
+func (og *operationGenerator) tableHasPrimaryKeySwapActive(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) error {
+
+	indexName, err := og.scanStringArray(
+		ctx,
+		tx,
+		fmt.Sprintf(`
+SELECT array_agg(index_name)
+  FROM (
+		SELECT index_name
+		  FROM [SHOW INDEXES FROM %s]
+		 WHERE index_name LIKE '%%_pkey%%'
+		 LIMIT 1
+       );
+	`, tableName.String()),
+	)
+	if err != nil {
+		return err
+	}
+
+	allowed, err := og.scanBool(
+		ctx,
+		tx,
+		`
+SELECT count(*) > 0
+  FROM crdb_internal.schema_changes
+ WHERE type = 'INDEX'
+       AND table_id = $1::REGCLASS
+       AND  target_name = $2
+       AND direction = 'DROP';
+`,
+		tableName.String(),
+		indexName[0],
+	)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return ErrSchemaChangesDisallowedDueToPkSwap
+	}
+	return nil
+}
+
 func (og *operationGenerator) violatesUniqueConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
