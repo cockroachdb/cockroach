@@ -310,6 +310,7 @@ func runConformanceReportTest(t *testing.T, tc conformanceConstraintTestCase) {
 type zone struct {
 	// 0 means unset.
 	replicas int32
+	voters   int32
 	// "" means unset. "[]" means empty.
 	constraints string
 }
@@ -318,6 +319,9 @@ func (z zone) toZoneConfig() zonepb.ZoneConfig {
 	cfg := zonepb.NewZoneConfig()
 	if z.replicas != 0 {
 		cfg.NumReplicas = proto.Int32(z.replicas)
+	}
+	if z.voters != 0 {
+		cfg.NumVoters = proto.Int32(z.voters)
 	}
 	if z.constraints != "" {
 		var constraintsList zonepb.ConstraintsList

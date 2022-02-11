@@ -255,11 +255,11 @@ type replicationStatsVisitor struct {
 	report   RangeReport
 	visitErr bool
 
-	// prevZoneKey and prevNumReplicas maintain state from one range to the next.
+	// prevZoneKey and prevNumVoters maintain state from one range to the next.
 	// This state can be reused when a range is covered by the same zone config as
 	// the previous one. Reusing it speeds up the report generation.
-	prevZoneKey     ZoneKey
-	prevNumReplicas int
+	prevZoneKey   ZoneKey
+	prevNumVoters int
 }
 
 var _ rangeVisitor = &replicationStatsVisitor{}
@@ -289,10 +289,10 @@ func (v *replicationStatsVisitor) Report() RangeReport {
 // reset is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) reset(ctx context.Context) {
 	*v = replicationStatsVisitor{
-		cfg:             v.cfg,
-		nodeChecker:     v.nodeChecker,
-		prevNumReplicas: -1,
-		report:          make(RangeReport, len(v.report)),
+		cfg:           v.cfg,
+		nodeChecker:   v.nodeChecker,
+		prevNumVoters: -1,
+		report:        make(RangeReport, len(v.report)),
 	}
 
 	// Iterate through all the zone configs to create report entries for all the
@@ -335,7 +335,13 @@ func (v *replicationStatsVisitor) visitNewZone(
 	}()
 	var zKey ZoneKey
 	var zConfig *zonepb.ZoneConfig
+	// numReplicas and numVoters are not necessarily set in tandem so
+	// both need to be found before determining desiredNumVoters.
+	// desiredNumVoters is set to numVoters or numReplicas if numVoters
+	// is not set.
+	var numVoters int
 	var numReplicas int
+	var desiredNumVoters int
 
 	// Figure out the zone config for whose report the current range is to be
 	// counted. This is the lowest-level zone config covering the range that
@@ -352,36 +358,52 @@ func (v *replicationStatsVisitor) visitNewZone(
 				zConfig = zone
 				if zone.NumReplicas != nil {
 					numReplicas = int(*zone.NumReplicas)
+				}
+				if zone.NumVoters != nil {
+					numVoters = int(*zone.NumVoters)
+				}
+				if numReplicas != 0 || numVoters != 0 {
 					return true
 				}
-				// We need to continue upwards in search for the NumReplicas.
+				// We need to continue upwards in search for NumVoters
+				// and NumReplicas.
 				return false
 			}
-			// We had already found the zone to report to, but we're haven't found
-			// its NumReplicas yet.
 			if zone.NumReplicas != nil {
 				numReplicas = int(*zone.NumReplicas)
+			}
+			if zone.NumVoters != nil {
+				numVoters = int(*zone.NumVoters)
+			}
+			if numReplicas != 0 || numVoters != 0 {
 				return true
 			}
+			// We had already found the zone to report to, but we're haven't found
+			// its NumVoters and NumReplicas yet.
 			return false
 		})
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error visiting zones for range %s", r)
 	}
+	if numVoters != 0 {
+		desiredNumVoters = numVoters
+	} else {
+		desiredNumVoters = numReplicas
+	}
 	v.prevZoneKey = zKey
-	v.prevNumReplicas = numReplicas
+	v.prevNumVoters = desiredNumVoters
 	if !found {
 		return errors.AssertionFailedf(
 			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	v.countRange(ctx, zKey, numReplicas, r)
+	v.countRange(ctx, zKey, desiredNumVoters, r)
 	return nil
 }
 
 // visitSameZone is part of the rangeVisitor interface.
 func (v *replicationStatsVisitor) visitSameZone(ctx context.Context, r *roachpb.RangeDescriptor) {
-	v.countRange(ctx, v.prevZoneKey, v.prevNumReplicas, r)
+	v.countRange(ctx, v.prevZoneKey, v.prevNumVoters, r)
 }
 
 func (v *replicationStatsVisitor) countRange(
@@ -404,5 +426,6 @@ func (v *replicationStatsVisitor) countRange(
 // the lowest ancestor for which this method returns true.
 func zoneChangesReplication(zone *zonepb.ZoneConfig) bool {
 	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
+		(zone.NumVoters != nil && *zone.NumVoters != 0) ||
 		zone.Constraints != nil
 }
