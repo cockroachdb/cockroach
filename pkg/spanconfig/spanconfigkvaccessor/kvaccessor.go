@@ -79,7 +79,7 @@ func (k *KVAccessor) GetSpanConfigRecords(
 		return nil, err
 	}
 
-	getStmt, getQueryArgs := k.constructGetStmtAndArgs(targets)
+	getStmt, getQueryArgs := k.constructGetStmtAndArgs(ctx, targets)
 	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", k.optionalTxn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getStmt, getQueryArgs...,
@@ -159,19 +159,19 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 	var deleteStmt string
 	var deleteQueryArgs []interface{}
 	if len(toDelete) > 0 {
-		deleteStmt, deleteQueryArgs = k.constructDeleteStmtAndArgs(toDelete)
+		deleteStmt, deleteQueryArgs = k.constructDeleteStmtAndArgs(ctx, toDelete)
 	}
 
 	var upsertStmt, validationStmt string
 	var upsertQueryArgs, validationQueryArgs []interface{}
 	if len(toUpsert) > 0 {
 		var err error
-		upsertStmt, upsertQueryArgs, err = k.constructUpsertStmtAndArgs(toUpsert)
+		upsertStmt, upsertQueryArgs, err = k.constructUpsertStmtAndArgs(ctx, toUpsert)
 		if err != nil {
 			return err
 		}
 
-		validationStmt, validationQueryArgs = k.constructValidationStmtAndArgs(toUpsert)
+		validationStmt, validationQueryArgs = k.constructValidationStmtAndArgs(ctx, toUpsert)
 	}
 
 	if len(toDelete) > 0 {
@@ -215,7 +215,9 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 // constructGetStmtAndArgs constructs the statement and query arguments needed
 // to fetch span configs for the given spans.
-func (k *KVAccessor) constructGetStmtAndArgs(targets []spanconfig.Target) (string, []interface{}) {
+func (k *KVAccessor) constructGetStmtAndArgs(
+	ctx context.Context, targets []spanconfig.Target,
+) (string, []interface{}) {
 	// We want to fetch the overlapping span configs for each requested span in
 	// a single round trip and using only constrained index scans. For a single
 	// requested span, we effectively want to query the following:
@@ -261,7 +263,7 @@ func (k *KVAccessor) constructGetStmtAndArgs(targets []spanconfig.Target) (strin
 		}
 
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		encodedSp := target.Encode()
+		encodedSp := target.Encode(ctx)
 		queryArgs[startKeyIdx] = encodedSp.Key
 		queryArgs[endKeyIdx] = encodedSp.EndKey
 
@@ -285,7 +287,7 @@ SELECT start_key, end_key, config FROM (
 // constructDeleteStmtAndArgs constructs the statement and query arguments
 // needed to delete span configs for the given spans.
 func (k *KVAccessor) constructDeleteStmtAndArgs(
-	toDelete []spanconfig.Target,
+	ctx context.Context, toDelete []spanconfig.Target,
 ) (string, []interface{}) {
 	// We're constructing a single delete statement to delete all requested
 	// spans. It's of the form:
@@ -297,7 +299,7 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(
 	deleteQueryArgs := make([]interface{}, len(toDelete)*2)
 	for i, toDel := range toDelete {
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		encodedSp := toDel.Encode()
+		encodedSp := toDel.Encode(ctx)
 		deleteQueryArgs[startKeyIdx] = encodedSp.Key
 		deleteQueryArgs[endKeyIdx] = encodedSp.EndKey
 		values[i] = fmt.Sprintf("($%d::BYTES, $%d::BYTES)",
@@ -311,7 +313,7 @@ func (k *KVAccessor) constructDeleteStmtAndArgs(
 // constructUpsertStmtAndArgs constructs the statement and query arguments
 // needed to upsert the given span config entries.
 func (k *KVAccessor) constructUpsertStmtAndArgs(
-	toUpsert []spanconfig.Record,
+	ctx context.Context, toUpsert []spanconfig.Record,
 ) (string, []interface{}, error) {
 	// We're constructing a single upsert statement to upsert all requested
 	// spans. It's of the form:
@@ -328,8 +330,8 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 		}
 
 		startKeyIdx, endKeyIdx, configIdx := i*3, (i*3)+1, (i*3)+2
-		upsertQueryArgs[startKeyIdx] = record.Target.Encode().Key
-		upsertQueryArgs[endKeyIdx] = record.Target.Encode().EndKey
+		upsertQueryArgs[startKeyIdx] = record.Target.Encode(ctx).Key
+		upsertQueryArgs[endKeyIdx] = record.Target.Encode(ctx).EndKey
 		upsertQueryArgs[configIdx] = marshaled
 		upsertValues[i] = fmt.Sprintf("($%d::BYTES, $%d::BYTES, $%d::BYTES)",
 			startKeyIdx+1, endKeyIdx+1, configIdx+1) // prepared statement placeholders (1-indexed)
@@ -343,7 +345,7 @@ func (k *KVAccessor) constructUpsertStmtAndArgs(
 // needed to validate that the spans being upserted don't violate table
 // invariants (spans are non overlapping).
 func (k *KVAccessor) constructValidationStmtAndArgs(
-	toUpsert []spanconfig.Record,
+	ctx context.Context, toUpsert []spanconfig.Record,
 ) (string, []interface{}) {
 	// We want to validate that upserting spans does not break the invariant
 	// that spans in the table are non-overlapping. We only need to validate
@@ -384,8 +386,8 @@ func (k *KVAccessor) constructValidationStmtAndArgs(
 		}
 
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		validationQueryArgs[startKeyIdx] = entry.Target.Encode().Key
-		validationQueryArgs[endKeyIdx] = entry.Target.Encode().EndKey
+		validationQueryArgs[startKeyIdx] = entry.Target.Encode(ctx).Key
+		validationQueryArgs[endKeyIdx] = entry.Target.Encode(ctx).EndKey
 
 		fmt.Fprintf(&validationInnerStmtBuilder, `
 SELECT count(*) = 1 FROM (

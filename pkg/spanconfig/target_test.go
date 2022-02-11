@@ -11,6 +11,7 @@
 package spanconfig
 
 import (
+	"context"
 	"math/rand"
 	"sort"
 	"testing"
@@ -38,7 +39,7 @@ func TestEncodeDecodeSystemTarget(t *testing.T) {
 
 		// Next, we encode/decode a spanconfig.Target that wraps a SystemTarget.
 		target := MakeTargetFromSystemTarget(systemTarget)
-		decodedTarget := DecodeTarget(target.Encode())
+		decodedTarget := DecodeTarget(target.Encode(context.Background()))
 		require.Equal(t, target, decodedTarget)
 	}
 }

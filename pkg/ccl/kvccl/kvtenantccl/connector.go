@@ -462,13 +462,16 @@ func (c *Connector) GetSpanConfigRecords(
 ) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
-			Targets: spanconfig.TargetsToTargetProtos(targets),
+			Targets: spanconfig.TargetsToTargetProtos(ctx, targets),
 		})
 		if err != nil {
 			return err
 		}
 
-		records = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		if err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -483,8 +486,8 @@ func (c *Connector) UpdateSpanConfigRecords(
 ) error {
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: spanconfig.TargetsToTargetProtos(toDelete),
-			ToUpsert: spanconfig.RecordsToSpanConfigEntries(toUpsert),
+			ToDelete: spanconfig.TargetsToTargetProtos(ctx, toDelete),
+			ToUpsert: spanconfig.RecordsToSpanConfigEntries(ctx, toUpsert),
 		})
 		return err
 	})

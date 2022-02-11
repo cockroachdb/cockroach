@@ -200,7 +200,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			t, sp != nil || systemTarget != nil, "neither system target and span aren't valid args",
 		)
 		if sp != nil {
-			return spanconfig.MakeTargetFromSpan(*sp).SpanConfigTargetProto()
+			return spanconfig.MakeTargetFromSpan(*sp).SpanConfigTargetProto(context.Background())
 		}
 		return roachpb.SpanConfigTarget{
 			Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
