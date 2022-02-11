@@ -261,23 +261,20 @@ func DecodeRowInfo(
 		}
 		cols[i] = col
 	}
-
-	tableArgs := FetcherTableArgs{
-		Desc:    tableDesc,
-		Index:   index,
-		Columns: cols,
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(&spec, codec, tableDesc, index, colIDs); err != nil {
+		return nil, nil, nil, err
 	}
 	rf.IgnoreUnexpectedNulls = true
 	if err := rf.Init(
 		ctx,
-		codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&tree.DatumAlloc{},
 		nil, /* memMonitor */
-		tableArgs,
+		&spec,
 	); err != nil {
 		return nil, nil, nil, err
 	}
