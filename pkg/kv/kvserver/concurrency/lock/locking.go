@@ -26,4 +26,7 @@ func init() {
 }
 
 // SafeValue implements redact.SafeValue.
+func (Durability) SafeValue() {}
+
+// SafeValue implements redact.SafeValue.
 func (WaitPolicy) SafeValue() {}

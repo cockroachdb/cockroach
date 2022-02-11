@@ -2057,6 +2057,16 @@ func MakeLockAcquisition(txn *Transaction, key Key, dur lock.Durability) LockAcq
 	return LockAcquisition{Span: Span{Key: key}, Txn: txn.TxnMeta, Durability: dur}
 }
 
+// SafeFormat implements redact.SafeFormatter.
+func (la *LockAcquisition) SafeFormat(w redact.SafePrinter, _ rune) {
+	expand := w.Flag('+')
+	txnIDRedactableString := redact.Sprint(la.Txn.Short())
+	if expand {
+		txnIDRedactableString = redact.Sprint(la.Txn.ID)
+	}
+	w.Printf("span=%s txn=%s durability=%s", la.Span, txnIDRedactableString, la.Durability)
+}
+
 // MakeLockUpdate makes a lock update from the given txn and span.
 //
 // See also txn.LocksAsLockUpdates().
@@ -2071,6 +2081,33 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 	u.Txn = txn.TxnMeta
 	u.Status = txn.Status
 	u.IgnoredSeqNums = txn.IgnoredSeqNums
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (ls LockStateInfo) SafeFormat(w redact.SafePrinter, r rune) {
+	expand := w.Flag('+')
+	w.Printf("range_id=%d key=%s ", ls.RangeID, ls.Key)
+	if expand {
+		w.Printf("holder={%+v} ", ls.LockHolder)
+	} else {
+		w.Printf("holder={%s} ", ls.LockHolder)
+	}
+	w.Printf("duration=%s", ls.HoldDuration)
+	if len(ls.LockWaiters) > 0 {
+		w.Printf("\n waiters:")
+
+		for _, lw := range ls.LockWaiters {
+			if expand {
+				w.Printf("\n  %+v", lw)
+			} else {
+				w.Printf("\n  %s", lw)
+			}
+		}
+	}
+}
+
+func (ls LockStateInfo) String() string {
+	return redact.StringWithoutMarkers(ls)
 }
 
 // EqualValue is Equal.

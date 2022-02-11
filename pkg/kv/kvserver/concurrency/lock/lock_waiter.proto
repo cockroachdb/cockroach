@@ -1,0 +1,45 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.lock;
+option go_package = "lock";
+
+import "kv/kvserver/concurrency/lock/locking.proto";
+import "storage/enginepb/mvcc3.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
+
+// KeyAccessType represents the type of operation that a transaction holding or
+// waiting on a lock intends to carry out, once necessary locks are acquired.
+enum KeyAccessType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ReadOnly = 0;
+  ReadWrite = 1;
+}
+
+// LockWaiter represents a transaction (or non-transactional operation) that is
+// waiting in the wait queue of readers or writers on an individual lock.
+message LockWaiter {
+  // The transaction associated with this waiter, or nil in the case of a
+  // non-transactional waiter.
+  storage.enginepb.TxnMeta waiting_txn = 1;
+  // Represents if this operation is actively waiting on the lock.  While all
+  // readers are active waiters, there are some cases in which writers may not
+  // be actively waiting, for instance in the case of a broken reservation.
+  bool active_waiter = 2;
+  // The type of access the waiter is attempting to acquire on the lock,
+  // indicating if this operation is in the queue of readers, or writers.
+  KeyAccessType access = 3;
+  // The wall clock duration since this operation began waiting on the lock.
+  google.protobuf.Duration wait_duration = 4 [(gogoproto.nullable) = false,
+    (gogoproto.stdduration) = true];
+}
