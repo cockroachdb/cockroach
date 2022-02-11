@@ -811,7 +811,7 @@ func (u *sqlSymUnion) setVar() *tree.SetVar {
 
 %token <str> IDENTITY
 %token <str> IF IFERROR IFNULL IGNORE_FOREIGN_KEYS ILIKE IMMEDIATE IMPORT IN INCLUDE
-%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_STORAGE
+%token <str> INCLUDING INCREMENT INCREMENTAL INCREMENTAL_LOCATION
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INNER INSERT INT INTEGER
@@ -2720,7 +2720,7 @@ opt_clear_data:
 //    encryption_passphrase="secret": encrypt backups
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : encrypt backups using KMS
 //    detached: execute backup job asynchronously, without waiting for its completion
-//    incremental_storage: specify a different path to store the incremental backup
+//    incremental_location: specify a different path to store the incremental backup
 //
 // %SeeAlso: RESTORE, WEBDOCS/backup.html
 backup_stmt:
@@ -2826,7 +2826,7 @@ backup_options:
   {
     $$.val = &tree.BackupOptions{EncryptionKMSURI: $3.stringOrPlaceholderOptList()}
   }
-| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
   {
   $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
@@ -3159,7 +3159,7 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{NewDBName: $3.expr()}
   }
-| INCREMENTAL_STORAGE '=' string_or_placeholder_opt_list
+| INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
 	{
 		$$.val = &tree.RestoreOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
 	}
@@ -13537,7 +13537,7 @@ unreserved_keyword:
 | INCLUDING
 | INCREMENT
 | INCREMENTAL
-| INCREMENTAL_STORAGE
+| INCREMENTAL_LOCATION
 | INDEXES
 | INHERITS
 | INJECT
