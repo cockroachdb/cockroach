@@ -501,6 +501,16 @@ func (c *Connector) UpdateSpanConfigRecords(
 	})
 }
 
+// GetAllSystemSpanConfigRecordsSetByHost implements the spanconfig.KVAccessor
+// interface.
+func (c *Connector) GetAllSystemSpanConfigRecordsSetByHost(
+	_ context.Context,
+) ([]spanconfig.Record, error) {
+	return nil, errors.AssertionFailedf(
+		"secondary tenants do not have access to system tenant set system span configurations",
+	)
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")

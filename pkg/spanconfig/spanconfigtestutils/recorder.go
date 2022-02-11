@@ -81,6 +81,14 @@ func (r *KVAccessorRecorder) UpdateSpanConfigRecords(
 	return nil
 }
 
+// GetAllSystemSpanConfigRecordsSetByHost implements the spanconfig.KVAccessor
+// interface.
+func (r *KVAccessorRecorder) GetAllSystemSpanConfigRecordsSetByHost(
+	ctx context.Context,
+) ([]spanconfig.Record, error) {
+	return r.underlying.GetAllSystemSpanConfigRecordsSetByHost(ctx)
+}
+
 // WithTxn is part of the KVAccessor interface.
 func (r *KVAccessorRecorder) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("unimplemented")

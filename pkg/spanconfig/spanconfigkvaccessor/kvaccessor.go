@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -68,6 +69,24 @@ func (k *KVAccessor) WithTxn(ctx context.Context, txn *kv.Txn) spanconfig.KVAcce
 	return newKVAccessor(k.db, k.ie, k.settings, k.configurationsTableFQN, txn)
 }
 
+// GetAllSystemSpanConfigRecordsSetByHost implements the spanconfig.KVAccessor
+// interface.
+func (k *KVAccessor) GetAllSystemSpanConfigRecordsSetByHost(
+	ctx context.Context,
+) ([]spanconfig.Record, error) {
+	encodedKeyspans := []roachpb.Span{
+		{
+			Key:    keys.SystemSpanConfigEntireKeyspace,
+			EndKey: keys.SystemSpanConfigEntireKeyspace.PrefixEnd(),
+		},
+		{
+			Key:    keys.SystemSpanConfigHostOnTenantKeyspace,
+			EndKey: keys.SystemSpanConfigHostOnTenantKeyspace.PrefixEnd(),
+		},
+	}
+	return k.getSpanConfigRecordsInternal(ctx, encodedKeyspans)
+}
+
 // GetSpanConfigRecords is part of the KVAccessor interface.
 func (k *KVAccessor) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
@@ -79,7 +98,20 @@ func (k *KVAccessor) GetSpanConfigRecords(
 		return nil, err
 	}
 
-	getStmt, getQueryArgs := k.constructGetStmtAndArgs(targets)
+	encodedSpans := make([]roachpb.Span, 0, len(targets))
+	for _, target := range targets {
+		encodedSpans = append(encodedSpans, target.Encode())
+	}
+
+	return k.getSpanConfigRecordsInternal(ctx, encodedSpans)
+}
+
+// getSpanConfigRecordsInternal fetches span config records from
+// system.span_configurations associated with the given encoded spans.
+func (k *KVAccessor) getSpanConfigRecordsInternal(
+	ctx context.Context, encodedSpans []roachpb.Span,
+) (records []spanconfig.Record, retErr error) {
+	getStmt, getQueryArgs := k.constructGetStmtAndArgs(encodedSpans)
 	it, err := k.ie.QueryIteratorEx(ctx, "get-span-cfgs", k.optionalTxn,
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		getStmt, getQueryArgs...,
@@ -215,7 +247,7 @@ func (k *KVAccessor) updateSpanConfigRecordsWithTxn(
 
 // constructGetStmtAndArgs constructs the statement and query arguments needed
 // to fetch span configs for the given spans.
-func (k *KVAccessor) constructGetStmtAndArgs(targets []spanconfig.Target) (string, []interface{}) {
+func (k *KVAccessor) constructGetStmtAndArgs(encodedSpans []roachpb.Span) (string, []interface{}) {
 	// We want to fetch the overlapping span configs for each requested span in
 	// a single round trip and using only constrained index scans. For a single
 	// requested span, we effectively want to query the following:
@@ -254,14 +286,13 @@ func (k *KVAccessor) constructGetStmtAndArgs(targets []spanconfig.Target) (strin
 	//   ...
 	//
 	var getStmtBuilder strings.Builder
-	queryArgs := make([]interface{}, len(targets)*2)
-	for i, target := range targets {
+	queryArgs := make([]interface{}, len(encodedSpans)*2)
+	for i, encodedSp := range encodedSpans {
 		if i > 0 {
 			getStmtBuilder.WriteString(`UNION ALL`)
 		}
 
 		startKeyIdx, endKeyIdx := i*2, (i*2)+1
-		encodedSp := target.Encode()
 		queryArgs[startKeyIdx] = encodedSp.Key
 		queryArgs[endKeyIdx] = encodedSp.EndKey
 

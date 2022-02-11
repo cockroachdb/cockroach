@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -34,6 +35,7 @@ import (
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//		system-target {cluster}
 //		system-target {source=1,target=20}
 //		system-target {source=1,target=1}
 //		system-target {source=20,target=20}
@@ -45,7 +47,12 @@ import (
 // 		upsert [d,e):D
 // 		delete {source=1,target=1}
 // 		upsert {source=1,target=1}:A
+// 		upsert {cluster}:F
 //      ----
+//
+//		kvaccessor-get-host-installed-system-span-configs
+//      ----
+//
 //
 // They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
 // respectively. For kvaccessor-get, each listed target is added to the set of
@@ -70,23 +77,33 @@ func TestDataDriven(t *testing.T) {
 			tc.Server(0).ClusterSettings(),
 			dummySpanConfigurationsFQN,
 		)
+		flushRecords := func(records []spanconfig.Record) string {
+			var output strings.Builder
+			for _, record := range records {
+				output.WriteString(fmt.Sprintf(
+					"%s\n", spanconfigtestutils.PrintSpanConfigRecord(t, record),
+				))
+			}
+			return output.String()
+		}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
+			case "kvaccessor-get-all-system-span-configs-set-by-host":
+				records, err := accessor.GetAllSystemSpanConfigRecordsSetByHost(ctx)
+				if err != nil {
+					return fmt.Sprintf("err: %s", err.Error())
+				}
+				return flushRecords(records)
+
 			case "kvaccessor-get":
 				targets := spanconfigtestutils.ParseKVAccessorGetArguments(t, d.Input)
 				records, err := accessor.GetSpanConfigRecords(ctx, targets)
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}
+				return flushRecords(records)
 
-				var output strings.Builder
-				for _, record := range records {
-					output.WriteString(fmt.Sprintf(
-						"%s\n", spanconfigtestutils.PrintSpanConfigRecord(t, record),
-					))
-				}
-				return output.String()
 			case "kvaccessor-update":
 				toDelete, toUpsert := spanconfigtestutils.ParseKVAccessorUpdateArguments(t, d.Input)
 				if err := accessor.UpdateSpanConfigRecords(ctx, toDelete, toUpsert); err != nil {

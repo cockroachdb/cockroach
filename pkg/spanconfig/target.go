@@ -11,6 +11,7 @@
 package spanconfig
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
 )
@@ -26,7 +27,7 @@ type Target struct {
 func MakeTarget(t roachpb.SpanConfigTarget) (Target, error) {
 	switch t.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return MakeTargetFromSpan(*t.GetSpan()), nil
+		return MakeSpanTargetFromProto(t)
 	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
 		systemTarget, err := MakeSystemTargetFromProto(t.GetSystemSpanConfigTarget())
 		if err != nil {
@@ -38,8 +39,28 @@ func MakeTarget(t roachpb.SpanConfigTarget) (Target, error) {
 	}
 }
 
-// MakeTargetFromSpan constructs and returns a span target.
+// MakeSpanTargetFromProto returns a new Target backed by an underlying span.
+// An error is returned if the proto does not contain a span or if the span
+// overlaps with the reserved system span config keyspace.
+func MakeSpanTargetFromProto(spanTarget roachpb.SpanConfigTarget) (Target, error) {
+	if spanTarget.GetSpan() == nil {
+		return Target{}, errors.AssertionFailedf("span config target did not contain a span")
+	}
+	if keys.SystemSpanConfigSpan.Overlaps(*spanTarget.GetSpan()) {
+		return Target{}, errors.AssertionFailedf(
+			"cannot target spans in reserved system span config keyspace",
+		)
+	}
+	return MakeTargetFromSpan(*spanTarget.GetSpan()), nil
+}
+
+// MakeTargetFromSpan constructs and returns a span target. Callers are not
+// allowed to target the reserved system span config keyspace (or part of it)
+// directly; system targets should be used instead.
 func MakeTargetFromSpan(span roachpb.Span) Target {
+	if keys.SystemSpanConfigSpan.Overlaps(span) {
+		panic("cannot target spans in reserved system span config keyspace")
+	}
 	return Target{span: span}
 }
 

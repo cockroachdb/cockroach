@@ -158,6 +158,34 @@ func TestTargetSortingRandomized(t *testing.T) {
 	}
 }
 
+// TestSpanTargetsConstructedInSystemSpanConfigKeyspace ensures that
+// constructing span targets
+func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
+	for _, tc := range []roachpb.Span{
+		MakeClusterTarget().encode(),
+		makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)).encode(),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID).encode(),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)).encode(),
+		{
+			// Extends into from the left
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.SystemSpanConfigPrefix.Next(), // End Key isn't inclusive.
+		},
+		{
+			// Entirely contained.
+			Key:    keys.SystemSpanConfigPrefix.Next(),
+			EndKey: keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+		},
+		{
+			// Extends beyond on the right.
+			Key:    keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+			EndKey: keys.SystemSpanConfigKeyMax.Next().Next(),
+		},
+	} {
+		require.Panics(t, func() { MakeTargetFromSpan(tc) })
+	}
+}
+
 func makeTenantTargetOrFatal(
 	t *testing.T, sourceID roachpb.TenantID, targetID roachpb.TenantID,
 ) SystemTarget {

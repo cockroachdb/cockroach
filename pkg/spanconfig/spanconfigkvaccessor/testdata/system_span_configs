@@ -54,6 +54,13 @@ system-target {source=20,target=20}
 {source=1,target=10}:H
 {source=20,target=20}:I
 
+kvaccessor-get-all-system-span-configs-set-by-host
+----
+{cluster}:F
+{source=1,target=1}:G
+{source=1,target=10}:H
+
+
 # Delete all the system span configurations that we just added and ensure
 # they take effect.
 kvaccessor-update
@@ -69,6 +76,9 @@ system-target {cluster}
 system-target {source=1,target=1}
 system-target {source=1,target=10}
 system-target {source=20,target=20}
+----
+
+kvaccessor-get-all-system-span-configs-set-by-host
 ----
 
 # Lastly, try adding multiple system targets set by the host tenant that apply
@@ -95,3 +105,10 @@ system-target {source=10,target=10}
 {source=1,target=20}:B
 {source=1,target=30}:C
 {source=10,target=10}:G
+
+kvaccessor-get-all-system-span-configs-set-by-host
+----
+{cluster}:Z
+{source=1,target=10}:A
+{source=1,target=20}:B
+{source=1,target=30}:C

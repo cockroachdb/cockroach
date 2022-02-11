@@ -52,6 +52,14 @@ func (k dummyKVAccessor) UpdateSpanConfigRecords(
 	return k.error
 }
 
+// GetAllSystemSpanConfigRecordsSetByHost implements the spanconfig.KVAccessor
+// interface.
+func (k dummyKVAccessor) GetAllSystemSpanConfigRecordsSetByHost(
+	_ context.Context,
+) ([]spanconfig.Record, error) {
+	return nil, k.error
+}
+
 func (k dummyKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	return k
 }

@@ -42,6 +42,11 @@ type KVAccessor interface {
 		toUpsert []Record,
 	) error
 
+	// GetAllSystemSpanConfigRecordsSetByHost returns all system span
+	// configuration records set by the host tenant. Only the host tenant
+	// is allowed to query for this; secondary tenants are not.
+	GetAllSystemSpanConfigRecordsSetByHost(ctx context.Context) ([]Record, error)
+
 	// WithTxn returns a KVAccessor that runs using the given transaction (with
 	// its operations discarded if aborted, valid only if committed). If nil, a
 	// transaction is created internally for every operation.
