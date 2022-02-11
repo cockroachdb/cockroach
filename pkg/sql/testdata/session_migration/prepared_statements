@@ -17,6 +17,34 @@ wire_prepare s2
 INSERT INTO t VALUES($1, $2, $3)
 ----
 
+exec
+ALTER TABLE t RENAME TO t2
+----
+
+wire_prepare s3
+INSERT INTO t2 VALUES($1, $2, $3)
+----
+
+exec
+ALTER TABLE t2 DROP COLUMN c
+----
+
+wire_prepare s4
+INSERT INTO t2 VALUES($1, $2)
+----
+
+wire_exec s2 1 cat 2022-02-10
+----
+ERROR: relation "t" does not exist (SQLSTATE 42P01)
+
+wire_exec s3 1 cat 2022-02-10
+----
+ERROR: INSERT has more expressions than target columns, 3 expressions for 2 targets (SQLSTATE 42601)
+
+query
+SELECT * FROM t2
+----
+
 let $x
 SELECT encode(crdb_internal.serialize_session(), 'hex')
 ----
@@ -46,13 +74,23 @@ EXECUTE s1
 ----
 1
 
+# The s2 and s3 statements should experience the same errors that they did
+# before the session migration.
 wire_exec s2 1 cat 2022-02-10
+----
+ERROR: relation "t" does not exist (SQLSTATE 42P01)
+
+wire_exec s3 1 cat 2022-02-10
+----
+ERROR: INSERT has more expressions than target columns, 3 expressions for 2 targets (SQLSTATE 42601)
+
+wire_exec s4 1 cat
 ----
 
 query
-SELECT * FROM t
+SELECT * FROM t2
 ----
-1 cat 2022-02-10 00:00:00 +0000 UTC
+1 cat
 
 reset
 ----
