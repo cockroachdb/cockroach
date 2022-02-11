@@ -32,8 +32,8 @@ const (
 )
 
 type buildTarget struct {
-	fullName   string
-	isGoBinary bool
+	fullName string
+	kind     string
 }
 
 // makeBuildCmd constructs the subcommand used to build the specified binaries.
@@ -128,14 +128,6 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 		}
 		return d.stageArtifacts(ctx, buildTargets)
 	}
-	// Cross-compilation case.
-	for _, target := range buildTargets {
-		if !target.isGoBinary {
-			// We can't cross-compile these targets because we can't be sure where
-			// Bazel is going to stage their output files.
-			return fmt.Errorf("cannot cross-compile target %s because it is not a go binary", target.fullName)
-		}
-	}
 	volume := mustGetFlagString(cmd, volumeFlag)
 	cross = "cross" + cross
 	return d.crossBuild(ctx, args, buildTargets, cross, volume)
@@ -145,6 +137,7 @@ func (d *dev) crossBuild(
 	ctx context.Context, bazelArgs []string, targets []buildTarget, crossConfig string, volume string,
 ) error {
 	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=ci")
+	configArgs := getConfigArgs(bazelArgs)
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false)
 	if err != nil {
 		return err
@@ -153,29 +146,39 @@ func (d *dev) crossBuild(
 	// to the appropriate location in /artifacts.
 	var script strings.Builder
 	script.WriteString("set -euxo pipefail\n")
-	// TODO(ricky): Actually, we need to shell-quote the arguments,
-	// but that's hard and I don't think it's necessary for now.
-	script.WriteString(fmt.Sprintf("bazel %s\n", strings.Join(bazelArgs, " ")))
-	script.WriteString(fmt.Sprintf("BAZELBIN=`bazel info bazel-bin --color=no --config=%s --config=ci`\n", crossConfig))
+	script.WriteString(fmt.Sprintf("bazel %s\n", shellescape.QuoteCommand(bazelArgs)))
 	for _, arg := range bazelArgs {
 		if arg == "--config=with_ui" {
 			script.WriteString("bazel run @nodejs//:yarn -- --check-files --cwd pkg/ui --offline\n")
 			break
 		}
 	}
+	var bazelBinSet bool
+	script.WriteString("set +x\n")
 	for _, target := range targets {
-		output := bazelutil.OutputOfBinaryRule(target.fullName, strings.Contains(crossConfig, "windows"))
-		script.WriteString(fmt.Sprintf("cp $BAZELBIN/%s /artifacts\n", output))
-		script.WriteString(fmt.Sprintf("chmod a+w /artifacts/%s", filepath.Base(output)))
+		if target.kind == "cmake" {
+			if !bazelBinSet {
+				script.WriteString(fmt.Sprintf("BAZELBIN=$(bazel info bazel-bin %s)\n", shellescape.QuoteCommand(configArgs)))
+				bazelBinSet = true
+			}
+			targetComponents := strings.Split(target.fullName, ":")
+			pkgname := strings.TrimPrefix(targetComponents[0], "//")
+			dirname := targetComponents[1]
+			script.WriteString(fmt.Sprintf("cp -R $BAZELBIN/%s/%s /artifacts/%s\n", pkgname, dirname, dirname))
+			script.WriteString(fmt.Sprintf("chmod a+w -R /artifacts/%s\n", dirname))
+			script.WriteString(fmt.Sprintf("echo \"Successfully built target %s at artifacts/%s\"\n", target.fullName, dirname))
+			continue
+		}
+		// NB: For test targets, the `stdout` output from `bazel run` is
+		// going to have some extra garbage. We grep ^/ to select out
+		// only the filename we're looking for.
+		script.WriteString(fmt.Sprintf("BIN=$(bazel run %s %s --run_under=realpath | grep ^/ | tail -n1)\n", target.fullName, shellescape.QuoteCommand(configArgs)))
+		script.WriteString("cp $BIN /artifacts\n")
+		script.WriteString("chmod a+w /artifacts/$(basename $BIN)\n")
+		script.WriteString(fmt.Sprintf("echo \"Successfully built binary for target %s at artifacts/$(basename $BIN)\"\n", target.fullName))
 	}
 	_, err = d.exec.CommandContextWithInput(ctx, script.String(), "docker", dockerArgs...)
-	if err != nil {
-		return err
-	}
-	for _, target := range targets {
-		logSuccessfulBuild(target.fullName, filepath.Join("artifacts", targetToBinBasename(target.fullName)))
-	}
-	return nil
+	return err
 }
 
 func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
@@ -193,7 +196,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 	}
 
 	for _, target := range targets {
-		if !target.isGoBinary {
+		if target.kind != "go_binary" {
 			// Skip staging for these.
 			continue
 		}
@@ -235,7 +238,7 @@ func (d *dev) stageArtifacts(ctx context.Context, targets []buildTarget) error {
 		if err != nil {
 			rel = symlinkPath
 		}
-		logSuccessfulBuild(target.fullName, rel)
+		log.Printf("Successfully built binary for target %s at %s", target.fullName, rel)
 	}
 
 	shouldHoist := false
@@ -299,15 +302,8 @@ func (d *dev) getBasicBuildArgs(
 				fields := strings.Fields(line)
 				fullTargetName := fields[len(fields)-1]
 				typ := fields[0]
-				if typ != "go_binary" && typ != "go_library" && typ != "go_test" {
-					// Skip all targets besides go_binary targets, go_library
-					// targets, and go_test targets. Notably this does not
-					// include go_proto_library targets which at this point
-					// cannot be built standalone.
-					continue
-				}
 				args = append(args, fullTargetName)
-				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, isGoBinary: typ == "go_binary"})
+				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, kind: typ})
 				if typ == "go_test" {
 					shouldBuildWithTestConfig = true
 				}
@@ -321,7 +317,7 @@ func (d *dev) getBasicBuildArgs(
 		}
 
 		args = append(args, aliased)
-		buildTargets = append(buildTargets, buildTarget{fullName: aliased, isGoBinary: true})
+		buildTargets = append(buildTargets, buildTarget{fullName: aliased, kind: "go_binary"})
 	}
 
 	// Add --config=with_ui iff we're building a target that needs it.
@@ -423,6 +419,13 @@ func (d *dev) hoistGeneratedCode(ctx context.Context, workspace string, bazelBin
 	return nil
 }
 
-func logSuccessfulBuild(target, rel string) {
-	log.Printf("Successfully built binary for target %s at %s", target, rel)
+// Given a list of Bazel arguments, find the ones starting with --config= and
+// return them.
+func getConfigArgs(args []string) (ret []string) {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--config=") {
+			ret = append(ret, arg)
+		}
+	}
+	return
 }
