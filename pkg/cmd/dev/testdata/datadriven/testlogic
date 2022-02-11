@@ -17,6 +17,10 @@ dev testlogic base --ignore-cache
 ----
 bazel test --test_env=GOTRACEBACK=all --nocache_test_results --test_output errors //pkg/sql/logictest:logictest_test --test_filter TestLogic///
 
+dev testlogic base --show-sql
+----
+bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_output errors //pkg/sql/logictest:logictest_test --test_filter TestLogic///
+
 dev testlogic base --files=prepare|fk --subtests=20042 --config=local
 ----
 bazel test --test_env=GOTRACEBACK=all --test_arg -show-sql --test_arg -config --test_arg local --test_output errors //pkg/sql/logictest:logictest_test --test_filter 'TestLogic/^local$/^prepare|fk$/20042'
