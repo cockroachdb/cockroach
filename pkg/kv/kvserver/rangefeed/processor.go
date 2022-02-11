@@ -628,6 +628,10 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 			// Publish the new value directly.
 			p.publishValue(ctx, t.Key, t.Timestamp, t.Value, t.PrevValue)
 
+		case *enginepb.MVCCDeleteRangeOp:
+			// Publish the range deletion directly.
+			p.publishDeleteRange(ctx, t.StartKey, t.EndKey, t.Timestamp)
+
 		case *enginepb.MVCCWriteIntentOp:
 			// No updates to publish.
 
@@ -695,6 +699,22 @@ func (p *Processor) publishValue(
 		PrevValue: prevVal,
 	})
 	p.reg.PublishToOverlapping(roachpb.Span{Key: key}, &event)
+}
+
+func (p *Processor) publishDeleteRange(
+	ctx context.Context, startKey, endKey roachpb.Key, timestamp hlc.Timestamp,
+) {
+	span := roachpb.Span{Key: startKey, EndKey: endKey}
+	if !p.Span.ContainsKeyRange(roachpb.RKey(startKey), roachpb.RKey(endKey)) {
+		log.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
+	}
+
+	var event roachpb.RangeFeedEvent
+	event.MustSetValue(&roachpb.RangeFeedDeleteRange{
+		Span:      span,
+		Timestamp: timestamp,
+	})
+	p.reg.PublishToOverlapping(span, &event)
 }
 
 func (p *Processor) publishSSTable(

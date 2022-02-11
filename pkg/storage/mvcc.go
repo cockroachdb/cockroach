@@ -2247,8 +2247,23 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 	} else if len(intents) > 0 {
 		return &roachpb.WriteIntentError{Intents: intents}
 	}
-	return rw.ExperimentalPutMVCCRangeKey(MVCCRangeKey{
-		StartKey: startKey, EndKey: endKey, Timestamp: timestamp}, nil)
+	err := rw.ExperimentalPutMVCCRangeKey(MVCCRangeKey{
+		StartKey:  startKey,
+		EndKey:    endKey,
+		Timestamp: timestamp,
+	}, nil)
+	if err != nil {
+		return err
+	}
+
+	rw.LogLogicalOp(MVCCDeleteRangeOpType, MVCCLogicalOpDetails{
+		Safe:      true,
+		Key:       startKey,
+		EndKey:    endKey,
+		Timestamp: timestamp,
+	})
+
+	return nil
 }
 
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {

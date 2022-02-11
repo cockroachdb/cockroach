@@ -349,6 +349,10 @@ func (f *RangeFeed) processEvents(
 						"received unexpected rangefeed SST event with no OnSSTable handler")
 				}
 				f.onSSTable(ctx, ev.SST)
+			case ev.DelRange != nil:
+				if f.onDeleteRange != nil {
+					f.onDeleteRange(ctx, ev.DelRange)
+				}
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.
