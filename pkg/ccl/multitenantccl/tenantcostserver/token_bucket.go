@@ -103,7 +103,7 @@ func (s *instance) TokenBucketRequest(
 		}
 
 		// TODO(radu): update shares.
-		*result = tenant.Bucket.Request(in)
+		*result = tenant.Bucket.Request(ctx, in)
 
 		instance.LastUpdate.Time = now
 		if err := h.updateTenantAndInstanceState(tenant, instance); err != nil {
