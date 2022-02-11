@@ -2073,6 +2073,38 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 	u.IgnoredSeqNums = txn.IgnoredSeqNums
 }
 
+// SafeFormat implements redact.SafeFormatter.
+func (ls LockStateInfo) SafeFormat(w redact.SafePrinter, r rune) {
+	expand := w.Flag('+')
+	w.Printf("range_id=%d key=%s ", ls.RangeID, ls.Key)
+	redactableLockHolder := redact.Sprint(nil)
+	if ls.LockHolder != nil {
+		if expand {
+			redactableLockHolder = redact.Sprint(ls.LockHolder.ID)
+		} else {
+			redactableLockHolder = redact.Sprint(ls.LockHolder.Short())
+		}
+	}
+	w.Printf("holder=%s ", redactableLockHolder)
+	w.Printf("durability=%s ", ls.Durability)
+	w.Printf("duration=%s", ls.HoldDuration)
+	if len(ls.Waiters) > 0 {
+		w.Printf("\n waiters:")
+
+		for _, lw := range ls.Waiters {
+			if expand {
+				w.Printf("\n  %+v", lw)
+			} else {
+				w.Printf("\n  %s", lw)
+			}
+		}
+	}
+}
+
+func (ls LockStateInfo) String() string {
+	return redact.StringWithoutMarkers(ls)
+}
+
 // EqualValue is Equal.
 //
 // TODO(tbg): remove this passthrough.

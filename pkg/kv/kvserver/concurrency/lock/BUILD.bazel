@@ -12,10 +12,16 @@ go_library(
 
 proto_library(
     name = "lock_proto",
-    srcs = ["locking.proto"],
+    srcs = [
+        "lock_table.proto",
+        "locking.proto",
+    ],
     strip_import_prefix = "/pkg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto:gogo_proto"],
+    deps = [
+        "//pkg/storage/enginepb:enginepb_proto",
+        "@com_github_gogo_protobuf//gogoproto:gogo_proto",
+    ],
 )
 
 go_proto_library(
@@ -24,5 +30,8 @@ go_proto_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock",
     proto = ":lock_proto",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_gogo_protobuf//gogoproto"],
+    deps = [
+        "//pkg/storage/enginepb",
+        "@com_github_gogo_protobuf//gogoproto",
+    ],
 )
