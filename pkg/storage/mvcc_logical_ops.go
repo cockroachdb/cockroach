@@ -45,6 +45,8 @@ const (
 	MVCCCommitIntentOpType
 	// MVCCAbortIntentOpType corresponds to the MVCCAbortIntentOp variant.
 	MVCCAbortIntentOpType
+	// MVCCDeleteRangeOpType corresponds to the MVCCDeleteRangeOp variant.
+	MVCCDeleteRangeOpType
 )
 
 // MVCCLogicalOpDetails contains details about the occurrence of an MVCC logical
@@ -52,6 +54,7 @@ const (
 type MVCCLogicalOpDetails struct {
 	Txn       enginepb.TxnMeta
 	Key       roachpb.Key
+	EndKey    roachpb.Key // only set for MVCCDeleteRangeOpType
 	Timestamp hlc.Timestamp
 
 	// Safe indicates that the values in this struct will never be invalidated
@@ -141,6 +144,16 @@ func (ol *OpLoggerBatch) logLogicalOp(op MVCCLogicalOpType, details MVCCLogicalO
 	case MVCCAbortIntentOpType:
 		ol.recordOp(&enginepb.MVCCAbortIntentOp{
 			TxnID: details.Txn.ID,
+		})
+	case MVCCDeleteRangeOpType:
+		if !details.Safe {
+			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
+			ol.opsAlloc, details.EndKey = ol.opsAlloc.Copy(details.EndKey, 0)
+		}
+		ol.recordOp(&enginepb.MVCCDeleteRangeOp{
+			StartKey:  details.Key,
+			EndKey:    details.EndKey,
+			Timestamp: details.Timestamp,
 		})
 	default:
 		panic(fmt.Sprintf("unexpected op type %v", op))

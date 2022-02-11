@@ -73,6 +73,7 @@ go_test(
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/sql/catalog/desctestutils",
+        "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
