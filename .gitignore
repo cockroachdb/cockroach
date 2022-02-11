@@ -45,8 +45,8 @@ build/Railroad.jar
 # Generated code.
 *.pb.go
 *.pb.gw.go
-pkg/cmd/roachtest/prometheus/mocks_generated_test.go
-pkg/cmd/roachtest/tests/drt_generated_test.go
-pkg/kv/kvclient/kvcoord/mocks_generated_test.go
 pkg/roachprod/vm/aws/embedded.go
 pkg/security/securitytest/embedded.go
+
+# Temporary directories during gomock generate
+**/gomock_reflect_*
