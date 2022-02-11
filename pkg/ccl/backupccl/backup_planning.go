@@ -63,7 +63,7 @@ const (
 	backupOptWithPrivileges  = "privileges"
 	backupOptAsJSON          = "as_json"
 	backupOptWithDebugIDs    = "debug_ids"
-	backupOptIncStorage      = "incremental_storage"
+	backupOptIncStorage      = "incremental_location"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )
@@ -678,7 +678,7 @@ func backupPlanHook(
 			return err
 		}
 		if !backupStmt.Nested && len(incrementalStorage) > 0 {
-			return errors.New("incremental_storage option not supported with `BACKUP TO` syntax")
+			return errors.New("incremental_location option not supported with `BACKUP TO` syntax")
 		}
 
 		endTime := p.ExecCfg().Clock.Now()
