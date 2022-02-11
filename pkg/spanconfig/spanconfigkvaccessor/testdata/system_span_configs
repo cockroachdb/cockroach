@@ -1,0 +1,80 @@
+# Walk through a full set of scenarios pertaining to  system span configs.
+
+# Test with an empty slate.
+kvaccessor-get
+system-target {source=system,target=system}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+
+# Try deleting a system span configuration that doesn't exist.
+kvaccessor-update
+delete {source=system,target=system}
+----
+err: expected to delete 1 row(s), deleted 0
+
+# Basic tests that set all possible combinations of system targets.
+kvaccessor-update
+upsert {source=system,target=system}:A
+upsert {source=system,target=10}:B
+upsert {source=20,target=20}:C
+----
+ok
+
+kvaccessor-get
+system-target {source=system,target=system}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+{source=system,target=system}:A
+{source=system,target=10}:B
+{source=20,target=20}:C
+
+
+# Try updating one of these span configurations and ensure that works.
+kvaccessor-update
+upsert {source=system,target=system}:F
+----
+ok
+
+kvaccessor-get
+system-target {source=system,target=system}
+----
+{source=system,target=system}:F
+
+# Delete all the system span configurations that we just added and ensure
+# they take effect.
+kvaccessor-update
+delete {source=system,target=system}
+delete {source=system,target=10}
+delete {source=20,target=20}
+----
+ok
+
+kvaccessor-get
+system-target {source=system,target=system}
+system-target {source=1,target=10}
+system-target {source=20,target=20}
+----
+
+# Lastly, try adding multiple system targets set by the host tenant that apply
+# to distinct secondary tenants. We also add a system span configuration set by
+# one of these secondary tenant's on itself for kicks.
+kvaccessor-update
+upsert {source=system,target=10}:A
+upsert {source=system,target=20}:B
+upsert {source=system,target=30}:C
+upsert {source=10,target=10}:G
+----
+ok
+
+kvaccessor-get
+system-target {source=system,target=10}
+system-target {source=system,target=20}
+system-target {source=system,target=30}
+system-target {source=10,target=10}
+----
+{source=system,target=10}:A
+{source=system,target=20}:B
+{source=system,target=30}:C
+{source=10,target=10}:G

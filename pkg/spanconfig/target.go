@@ -30,8 +30,14 @@ func MakeTarget(t roachpb.SpanConfigTarget) (Target, error) {
 	switch t.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
 		return MakeTargetFromSpan(*t.GetSpan()), nil
-		// TODO(arul): Add a case here for SpanConfigTarget_SystemTarget once we've
-		// taught and tested the KVAccessor to work with system targets.
+	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
+		systemTarget, err := MakeSystemTarget(
+			t.GetSystemSpanConfigTarget().SourceTenantID, t.GetSystemSpanConfigTarget().SourceTenantID,
+		)
+		if err != nil {
+			return Target{}, err
+		}
+		return MakeTargetFromSystemTarget(systemTarget), nil
 	default:
 		return Target{}, errors.AssertionFailedf("unknown type of system target %v", t)
 	}

@@ -127,7 +127,7 @@ func TestRandomized(t *testing.T) {
 		_ = store.forEachOverlapping(testSpan,
 			func(entry spanConfigEntry) error {
 				t.Fatalf("found unexpected entry: %s",
-					spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+					spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
 						Target: spanconfig.MakeTargetFromSpan(entry.span),
 						Config: entry.config,
 					}))
@@ -140,7 +140,7 @@ func TestRandomized(t *testing.T) {
 			func(entry spanConfigEntry) error {
 				if !foundEntry.isEmpty() {
 					t.Fatalf("expected single overlapping entry, found second: %s",
-						spanconfigtestutils.PrintSpanConfigRecord(spanconfig.Record{
+						spanconfigtestutils.PrintSpanConfigRecord(t, spanconfig.Record{
 							Target: spanconfig.MakeTargetFromSpan(entry.span),
 							Config: entry.config,
 						}))
