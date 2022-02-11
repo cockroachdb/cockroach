@@ -1021,9 +1021,11 @@ func (c *cliState) doReadLine(nextState cliStateEnum) cliStateEnum {
 			return cliStartLine
 		}
 
-		// Otherwise, also terminate with an interrupt error.
-		c.exitErr = err
-		return cliStop
+		// If a human is looking, tell them that quitting is done in another way.
+		if c.sqlExecCtx.TerminalOutput {
+			fmt.Fprintf(c.iCtx.stdout, "^C\nUse \\q or terminate input to exit.\n")
+		}
+		return cliStartLine
 
 	case errors.Is(err, io.EOF):
 		c.atEOF = true

@@ -62,7 +62,7 @@ eexpect "New ID:"
 eexpect root@
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv
@@ -80,7 +80,7 @@ eexpect "warning: server version older than client"
 eexpect root@
 end_test
 
-interrupt
+send_eof
 eexpect eof
 
 stop_server $argv

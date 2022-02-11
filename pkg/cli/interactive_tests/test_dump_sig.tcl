@@ -37,7 +37,7 @@ send "\r"
 eexpect root@
 
 # Finish the test.
-interrupt
+send_eof
 eexpect ":/# "
 end_test
 
