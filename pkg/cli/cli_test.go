@@ -34,12 +34,12 @@ func TestCLITimeout(t *testing.T) {
 	// the timeout a chance to have an effect. We specify --all to include some
 	// slower to access virtual tables in the query.
 	testutils.SucceedsSoon(t, func() error {
-		out, err := c.RunWithCapture("node status 1 --all --timeout 1ns")
+		out, err := c.RunWithCapture("node status 1 --all --timeout 1ms")
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		const exp = `node status 1 --all --timeout 1ns
+		const exp = `node status 1 --all --timeout 1ms
 ERROR: query execution canceled due to statement timeout
 SQLSTATE: 57014
 `

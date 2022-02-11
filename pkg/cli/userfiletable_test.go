@@ -815,11 +815,11 @@ func TestUsernameUserfileInteraction(t *testing.T) {
 			},
 		} {
 			createUserQuery := fmt.Sprintf(`CREATE USER "%s" WITH PASSWORD 'a'`, tc.username)
-			err = conn.Exec(createUserQuery, nil)
+			err = conn.Exec(ctx, createUserQuery)
 			require.NoError(t, err)
 
 			privsUserQuery := fmt.Sprintf(`GRANT CREATE ON DATABASE defaultdb TO "%s"`, tc.username)
-			err = conn.Exec(privsUserQuery, nil)
+			err = conn.Exec(ctx, privsUserQuery)
 			require.NoError(t, err)
 
 			userURL, cleanup2 := sqlutils.PGUrlWithOptionalClientCerts(t, c.ServingSQLAddr(), t.Name(),

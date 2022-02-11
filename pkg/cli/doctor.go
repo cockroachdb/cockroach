@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
@@ -198,15 +198,10 @@ func fromCluster(
 	jobsTable doctor.JobsTable,
 	retErr error,
 ) {
-	maybePrint := func(stmt string) string {
-		if debugCtx.verbose {
-			fmt.Println("querying " + stmt)
-		}
-		return stmt
-	}
+	ctx := context.Background()
 	if timeout != 0 {
-		stmt := fmt.Sprintf(`SET statement_timeout = '%s'`, timeout)
-		if err := sqlConn.Exec(maybePrint(stmt), nil); err != nil {
+		if err := sqlConn.Exec(ctx,
+			`SET statement_timeout = $1`, timeout.String()); err != nil {
 			return nil, nil, nil, err
 		}
 	}
@@ -214,7 +209,7 @@ func fromCluster(
 SELECT id, descriptor, crdb_internal_mvcc_timestamp AS mod_time_logical
 FROM system.descriptor ORDER BY id`
 	checkColumnExistsStmt := "SELECT crdb_internal_mvcc_timestamp FROM system.descriptor LIMIT 1"
-	_, err := sqlConn.QueryRow(maybePrint(checkColumnExistsStmt), nil)
+	_, err := sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.2, the system.descriptor won't have the builtin
 	// crdb_internal_mvcc_timestamp. If we can't find it, use NULL instead.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -228,7 +223,7 @@ FROM system.descriptor ORDER BY id`
 	}
 	descTable = make([]doctor.DescriptorTableRow, 0)
 
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 3), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 3), func(vals []driver.Value) error {
 		var row doctor.DescriptorTableRow
 		if id, ok := vals[0].(int64); ok {
 			row.ID = id
@@ -264,7 +259,7 @@ FROM system.descriptor ORDER BY id`
 	stmt = `SELECT "parentID", "parentSchemaID", name, id FROM system.namespace`
 
 	checkColumnExistsStmt = `SELECT "parentSchemaID" FROM system.namespace LIMIT 1`
-	_, err = sqlConn.QueryRow(maybePrint(checkColumnExistsStmt), nil)
+	_, err = sqlConn.QueryRow(ctx, checkColumnExistsStmt)
 	// On versions before 20.1, table system.namespace does not have this column.
 	// In that case the ParentSchemaID for tables is 29 and for databases is 0.
 	if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
@@ -278,7 +273,7 @@ FROM system.namespace`
 	}
 
 	namespaceTable = make([]doctor.NamespaceTableRow, 0)
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 4), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		var row doctor.NamespaceTableRow
 		if parentID, ok := vals[0].(int64); ok {
 			row.ParentID = descpb.ID(parentID)
@@ -309,7 +304,7 @@ FROM system.namespace`
 	stmt = `SELECT id, status, payload, progress FROM system.jobs`
 	jobsTable = make(doctor.JobsTable, 0)
 
-	if err := selectRowsMap(sqlConn, maybePrint(stmt), make([]driver.Value, 4), func(vals []driver.Value) error {
+	if err := selectRowsMap(sqlConn, stmt, make([]driver.Value, 4), func(vals []driver.Value) error {
 		md := jobs.JobMetadata{}
 		md.ID = jobspb.JobID(vals[0].(int64))
 		md.Status = jobs.Status(vals[1].(string))
@@ -494,7 +489,7 @@ func tableMap(in io.Reader, fn func(string) error) error {
 func selectRowsMap(
 	conn clisqlclient.Conn, stmt string, vals []driver.Value, fn func([]driver.Value) error,
 ) error {
-	rows, err := conn.Query(stmt, nil)
+	rows, err := conn.Query(context.Background(), stmt)
 	if err != nil {
 		return errors.Wrapf(err, "query '%s'", stmt)
 	}

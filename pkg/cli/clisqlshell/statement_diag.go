@@ -12,6 +12,7 @@ package clisqlshell
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"text/tabwriter"
@@ -54,7 +55,8 @@ func (c *cliState) handleStatementDiag(
 		} else {
 			filename = fmt.Sprintf("stmt-bundle-%d.zip", id)
 		}
-		cmdErr = clisqlclient.StmtDiagDownloadBundle(c.conn, id, filename)
+		cmdErr = clisqlclient.StmtDiagDownloadBundle(
+			context.Background(), c.conn, id, filename)
 		if cmdErr == nil {
 			fmt.Fprintf(c.iCtx.stdout, "Bundle saved to %q\n", filename)
 		}
@@ -75,7 +77,7 @@ func (c *cliState) statementDiagList() error {
 	const timeFmt = "2006-01-02 15:04:05 MST"
 
 	// -- List bundles --
-	bundles, err := clisqlclient.StmtDiagListBundles(c.conn)
+	bundles, err := clisqlclient.StmtDiagListBundles(context.Background(), c.conn)
 	if err != nil {
 		return err
 	}

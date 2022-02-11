@@ -12,6 +12,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"text/tabwriter"
@@ -49,8 +50,10 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	// -- List bundles --
-	bundles, err := clisqlclient.StmtDiagListBundles(conn)
+	bundles, err := clisqlclient.StmtDiagListBundles(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -71,7 +74,7 @@ func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	}
 
 	// -- List outstanding activation requests --
-	reqs, err := clisqlclient.StmtDiagListOutstandingRequests(conn)
+	reqs, err := clisqlclient.StmtDiagListOutstandingRequests(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -131,7 +134,8 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
-	if err := clisqlclient.StmtDiagDownloadBundle(conn, id, filename); err != nil {
+	if err := clisqlclient.StmtDiagDownloadBundle(
+		context.Background(), conn, id, filename); err != nil {
 		return err
 	}
 	fmt.Printf("Bundle saved to %q\n", filename)
@@ -154,11 +158,13 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return clisqlclient.StmtDiagDeleteAllBundles(conn)
+		return clisqlclient.StmtDiagDeleteAllBundles(ctx, conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -169,7 +175,7 @@ func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid ID")
 	}
 
-	return clisqlclient.StmtDiagDeleteBundle(conn, id)
+	return clisqlclient.StmtDiagDeleteBundle(ctx, conn, id)
 }
 
 var stmtDiagCancelCmd = &cobra.Command{
@@ -188,11 +194,13 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 	}
 	defer func() { resErr = errors.CombineErrors(resErr, conn.Close()) }()
 
+	ctx := context.Background()
+
 	if stmtDiagCtx.all {
 		if len(args) > 0 {
 			return errors.New("extra arguments with --all")
 		}
-		return clisqlclient.StmtDiagCancelAllOutstandingRequests(conn)
+		return clisqlclient.StmtDiagCancelAllOutstandingRequests(ctx, conn)
 	}
 	if len(args) != 1 {
 		return fmt.Errorf("accepts 1 arg, received %d", len(args))
@@ -203,7 +211,7 @@ func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 		return errors.New("invalid ID")
 	}
 
-	return clisqlclient.StmtDiagCancelOutstandingRequest(conn, id)
+	return clisqlclient.StmtDiagCancelOutstandingRequest(ctx, conn, id)
 }
 
 var stmtDiagCmds = []*cobra.Command{
