@@ -35,6 +35,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func init() {
+	randutil.SeedForTests()
+}
+
 func TestMaybeAppendColumn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -322,6 +326,47 @@ func TestSetAccountingHelper(t *testing.T) {
 		actual := testAllocator.Used()
 		if expected != actual {
 			fmt.Printf("iteration = %d numRows = %d\n", iteration, numRows)
+			for i := range typs {
+				fmt.Printf("%s ", typs[i].SQLString())
+			}
+			fmt.Println()
+			t.Fatal(errors.Newf("expected %d, actual %d", expected, actual))
+		}
+	}
+}
+
+// TestEstimateBatchSizeBytes verifies that EstimateBatchSizeBytes returns such
+// an estimate that it equals the actual footprint of the newly-created batch
+// with no values set.
+func TestEstimateBatchSizeBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := tree.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	numCols := rng.Intn(10) + 1
+	typs := make([]*types.T, numCols)
+	for i := range typs {
+		typs[i] = randgen.RandType(rng)
+	}
+	const numRuns = 10
+	for run := 0; run < numRuns; run++ {
+		memAcc.Clear(ctx)
+		numRows := rng.Intn(coldata.BatchSize()) + 1
+		batch := testAllocator.NewMemBatchWithFixedCapacity(typs, numRows)
+		expected := memAcc.Used()
+		actual := colmem.GetBatchMemSize(batch)
+		if expected != actual {
+			fmt.Printf("run = %d numRows = %d\n", run, numRows)
 			for i := range typs {
 				fmt.Printf("%s ", typs[i].SQLString())
 			}
