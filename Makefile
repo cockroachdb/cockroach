@@ -796,16 +796,8 @@ DOCGEN_TARGETS := \
 	docs/generated/eventlog.md
 
 GENERATED_TARGETS = \
-  pkg/cmd/roachtest/prometheus/mocks_generated_test.go \
-  pkg/cmd/roachtest/tests/drt_generated_test.go \
-  pkg/kv/kvclient/rangefeed/mocks_generated_test.go \
   pkg/roachprod/vm/aws/embedded.go \
-  pkg/security/securitytest/embedded.go \
-  pkg/security/certmgr/mocks_generated_test.go \
-  pkg/kv/kvclient/kvcoord/mocks_generated_test.go \
-  pkg/kv/kvclient/rangecache/rangecachemock/mocks_generated.go \
-  pkg/roachpb/roachpbmock/mocks_generated.go \
-  pkg/util/log/mocks_generated_test.go
+  pkg/security/securitytest/embedded.go
 
 EXECGEN_TARGETS = \
   pkg/col/coldata/vec.eg.go \
@@ -975,8 +967,6 @@ BUILD_TAGGED_RELEASE =
 
 ## Override for .buildinfo/tag
 BUILDINFO_TAG :=
-
-$(GENERATED_TARGETS): $(PROTOBUF_TARGETS) $(OPGEN_TARGETS) $(EXECGEN_TARGETS) $(SQLPARSER_TARGETS)
 
 $(go-targets): bin/.bootstrap $(BUILDINFO) $(CGO_FLAGS_FILES) $(PROTOBUF_TARGETS) $(LIBPROJ) $(GENERATED_TARGETS) $(CLEANUP_TARGETS)
 $(go-targets): $(LOG_TARGETS) $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS)
@@ -1458,23 +1448,11 @@ ui-maintainer-clean: ## Like clean, but also remove installed dependencies
 ui-maintainer-clean: ui-clean
 	rm -rf pkg/ui/node_modules pkg/ui/workspaces/db-console/node_modules pkg/ui/yarn.installed pkg/ui/workspaces/cluster-ui/node_modules
 
-pkg/cmd/roachtest/prometheus/mocks_generated_test.go: bin/.bootstrap pkg/cmd/roachtest/prometheus/prometheus.go pkg/roachprod/vm/aws/embedded.go pkg/security/securitytest/embedded.go $(OPTGEN_TARGETS)
-	(cd pkg/cmd/roachtest/prometheus && $(GO) generate)
-
-pkg/cmd/roachtest/tests/drt_generated_test.go: bin/.bootstrap pkg/cmd/roachtest/tests/drt.go pkg/roachprod/vm/aws/embedded.go $(OPTGEN_TARGETS) pkg/security/securitytest/embedded.go
-	(cd pkg/cmd/roachtest/tests && $(GO) generate)
-
-pkg/kv/kvclient/rangefeed/mocks_generated_test.go: bin/.bootstrap pkg/kv/kvclient/rangefeed/rangefeed.go
-	(cd pkg/kv/kvclient/rangefeed && $(GO) generate)
-
 pkg/roachprod/vm/aws/embedded.go: bin/.bootstrap pkg/roachprod/vm/aws/config.json pkg/roachprod/vm/aws/old.json bin/terraformgen
 	(cd pkg/roachprod/vm/aws && $(GO) generate)
 
 pkg/security/securitytest/embedded.go: bin/.bootstrap $(shell find pkg/security/securitytest/test_certs -type f -not -name README.md -not -name regenerate.sh)
 	(cd pkg/security/securitytest && $(GO) generate)
-
-pkg/security/certmgr/mocks_generated_test.go: bin/.bootstrap pkg/security/certmgr/cert.go
-	(cd pkg/security/certmgr && $(GO) generate)
 
 .SECONDARY: pkg/sql/parser/gen/sql.go.tmp
 pkg/sql/parser/gen/sql.go.tmp: pkg/sql/parser/gen/sql-gen.y bin/.bootstrap
