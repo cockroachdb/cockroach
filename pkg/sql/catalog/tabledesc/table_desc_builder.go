@@ -555,7 +555,7 @@ func maybeUpgradePrimaryIndexFormatVersion(desc *descpb.TableDescriptor) (hasCha
 	}
 	desc.PrimaryIndex.StoreColumnIDs = newStoreColumnIDs
 	desc.PrimaryIndex.StoreColumnNames = newStoreColumnNames
-	desc.PrimaryIndex.Version = descpb.LatestPrimaryIndexDescriptorVersion
+	desc.PrimaryIndex.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 
@@ -569,6 +569,9 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
 		break
+	case descpb.StrictIndexColumnIDGuaranteesVersion:
+		idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
+		return true
 	default:
 		return false
 	}
@@ -583,7 +586,7 @@ func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasCh
 	if set.Contains(0) {
 		return false
 	}
-	idx.Version = descpb.LatestNonPrimaryIndexDescriptorVersion
+	idx.Version = descpb.PrimaryIndexWithStoredColumnsVersion
 	return true
 }
 

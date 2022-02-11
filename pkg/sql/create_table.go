@@ -1289,7 +1289,7 @@ func NewTableDesc(
 		return nil, err
 	}
 
-	indexEncodingVersion := descpb.LatestNonPrimaryIndexDescriptorVersion
+	indexEncodingVersion := descpb.PrimaryIndexWithStoredColumnsVersion
 	isRegionalByRow := n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow
 
 	var partitionAllBy *tree.PartitionBy
