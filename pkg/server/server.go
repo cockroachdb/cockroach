@@ -114,6 +114,7 @@ type Server struct {
 	adminAuthzCheck *adminPrivilegeChecker
 	admin           *adminServer
 	status          *statusServer
+	drain           *drainServer
 	authentication  *authenticationServer
 	migrationServer *migrationServer
 	tsDB            *ts.DB
@@ -129,8 +130,7 @@ type Server struct {
 
 	spanConfigSubscriber *spanconfigkvsubscriber.KVSubscriber
 
-	sqlServer    *SQLServer
-	drainSleepFn func(time.Duration)
+	sqlServer *SQLServer
 
 	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
 	externalStorageBuilder *externalStorageBuilder
@@ -602,11 +602,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SQLInstanceID: idContainer.SQLInstanceID,
 	}
 
-	var drainSleepFn = time.Sleep
 	if cfg.TestingKnobs.Server != nil {
-		if cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn != nil {
-			drainSleepFn = cfg.TestingKnobs.Server.(*TestingKnobs).DrainSleepFn
-		}
 		updates.TestingKnobs = &cfg.TestingKnobs.Server.(*TestingKnobs).DiagnosticsTestingKnobs
 	}
 
@@ -741,6 +737,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
 	node.InitLogger(sqlServer.execCfg)
 
+	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
+	drain.setNode(node, nodeLiveness)
+
 	*lateBoundServer = Server{
 		nodeIDContainer:        nodeIDContainer,
 		cfg:                    cfg,
@@ -768,6 +767,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		adminAuthzCheck:        adminAuthzCheck,
 		admin:                  sAdmin,
 		status:                 sStatus,
+		drain:                  drain,
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
@@ -779,7 +779,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
 		sqlServer:              sqlServer,
-		drainSleepFn:           drainSleepFn,
 		externalStorageBuilder: externalStorageBuilder,
 		storeGrantCoords:       gcoords.Stores,
 		kvMemoryMonitor:        kvMemoryMonitor,
@@ -1555,4 +1554,25 @@ func (s *Server) RunLocalSQL(
 // Insecure returns true iff the server has security disabled.
 func (s *Server) Insecure() bool {
 	return s.cfg.Insecure
+}
+
+// Drain idempotently activates the draining mode.
+// Note: new code should not be taught to use this method
+// directly. Use the Drain() RPC instead with a suitably crafted
+// DrainRequest.
+//
+// On failure, the system may be in a partially drained
+// state; the client should either continue calling Drain() or shut
+// down the server.
+//
+// The reporter function, if non-nil, is called for each
+// packet of load shed away from the server during the drain.
+//
+// TODO(knz): This method is currently exported for use by the
+// shutdown code in cli/start.go; however, this is a mis-design. The
+// start code should use the Drain() RPC like quit does.
+func (s *Server) Drain(
+	ctx context.Context, verbose bool,
+) (remaining uint64, info redact.RedactableString, err error) {
+	return s.drain.runDrain(ctx, verbose)
 }

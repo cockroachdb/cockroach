@@ -513,6 +513,7 @@ type TestTenant struct {
 	sqlAddr  string
 	httpAddr string
 	*httpTestServer
+	drain *drainServer
 }
 
 var _ serverutils.TestTenantInterface = &TestTenant{}
@@ -625,6 +626,11 @@ func (t *TestTenant) SpanConfigSQLWatcher() interface{} {
 	return t.SQLServer.spanconfigSQLWatcher
 }
 
+// DrainClients exports the drainClients() method for use by tests.
+func (t *TestTenant) DrainClients(ctx context.Context) error {
+	return t.drain.drainClients(ctx, nil /* reporter */)
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
@@ -718,7 +724,7 @@ func (ts *TestServer) StartTenant(
 	if params.RPCHeartbeatInterval != 0 {
 		baseCfg.RPCHeartbeatInterval = params.RPCHeartbeatInterval
 	}
-	sqlServer, authServer, addr, httpAddr, err := startTenantInternal(
+	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
 		ctx,
 		stopper,
 		ts.Cfg.ClusterName,
@@ -739,6 +745,7 @@ func (ts *TestServer) StartTenant(
 		sqlAddr:        addr,
 		httpAddr:       httpAddr,
 		httpTestServer: hts,
+		drain:          drainServer,
 	}, err
 }
 
@@ -815,7 +822,7 @@ func (ts *TestServer) SQLAddr() string {
 
 // DrainClients exports the drainClients() method for use by tests.
 func (ts *TestServer) DrainClients(ctx context.Context) error {
-	return ts.drainClients(ctx, nil /* reporter */)
+	return ts.drain.drainClients(ctx, nil /* reporter */)
 }
 
 // Readiness returns nil when the server's health probe reports
