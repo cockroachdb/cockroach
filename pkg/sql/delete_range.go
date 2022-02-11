@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -89,20 +90,21 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 
 	// Configure the fetcher, which is only used to decode the returned keys from
 	// the DeleteRange, and is never used to actually fetch kvs.
-	table := row.FetcherTableArgs{
-		Desc:  d.desc,
-		Index: d.desc.GetPrimaryIndex(),
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&spec, params.ExecCfg().Codec, d.desc, d.desc.GetPrimaryIndex(), nil, /* columnIDs */
+	); err != nil {
+		return err
 	}
 	if err := d.fetcher.Init(
 		params.ctx,
-		params.ExecCfg().Codec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		params.p.alloc,
 		nil, /* memMonitor */
-		table,
+		&spec,
 	); err != nil {
 		return err
 	}
