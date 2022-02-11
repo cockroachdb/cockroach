@@ -267,7 +267,7 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
-		ctx.WriteString("incremental_storage = ")
+		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
 }
@@ -306,7 +306,7 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	if o.IncrementalStorage == nil {
 		o.IncrementalStorage = other.IncrementalStorage
 	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_storage option specified multiple times")
+		return errors.New("incremental_location option specified multiple times")
 	}
 
 	return nil
@@ -391,7 +391,7 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 	}
 	if o.IncrementalStorage != nil {
 		maybeAddSep()
-		ctx.WriteString("incremental_storage = ")
+		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
 }
@@ -480,7 +480,7 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 	if o.IncrementalStorage == nil {
 		o.IncrementalStorage = other.IncrementalStorage
 	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_storage option specified multiple times")
+		return errors.New("incremental_location option specified multiple times")
 	}
 
 	return nil
