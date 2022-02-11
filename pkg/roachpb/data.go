@@ -2067,6 +2067,11 @@ func (ls LockStateInfo) String() string {
 	return redact.StringWithoutMarkers(ls)
 }
 
+// Clone returns a copy of the span.
+func (s Span) Clone() Span {
+	return Span{Key: s.Key.Clone(), EndKey: s.EndKey.Clone()}
+}
+
 // EqualValue is Equal.
 //
 // TODO(tbg): remove this passthrough.

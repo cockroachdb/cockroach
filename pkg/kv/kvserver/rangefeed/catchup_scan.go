@@ -65,6 +65,8 @@ func NewCatchUpIterator(
 	return &CatchUpIterator{
 		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,
 			storage.MVCCIncrementalIterOptions{
+				KeyTypes:  storage.IterKeyTypePointsAndRanges,
+				StartKey:  span.Key,
 				EndKey:    span.EndKey,
 				StartTime: startTime,
 				EndTime:   hlc.MaxTimestamp,
@@ -96,6 +98,11 @@ type outputEventFn func(e *roachpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes in the configured key/time span, and
 // emits them as RangeFeedEvents via outputFn in chronological order.
+//
+// MVCC range tombstones are emitted at their start key (in chronological
+// order), and may thus be output before subsequent keys that they cover. For
+// example, the range key [a-f)@3 will be emitted before b@2, even though the
+// range key comes after it in time, since we emit events key by key.
 func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -103,18 +110,7 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 	// events for the same key until a different key is encountered, then output
 	// the encountered values in reverse. This also allows us to buffer events
 	// as we fill in previous values.
-	var lastKey roachpb.Key
 	reorderBuf := make([]roachpb.RangeFeedEvent, 0, 5)
-	addPrevToLastEvent := func(val []byte) {
-		if l := len(reorderBuf); l > 0 {
-			if reorderBuf[l-1].Val.PrevValue.IsPresent() {
-				panic("RangeFeedValue.PrevVal unexpectedly set")
-			}
-			// TODO(sumeer): find out if it is deliberate that we are not populating
-			// PrevValue.Timestamp.
-			reorderBuf[l-1].Val.PrevValue.RawBytes = val
-		}
-	}
 
 	outputEvents := func() error {
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
@@ -130,13 +126,61 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 	// Iterate though all keys using Next. We want to publish all committed
 	// versions of each key that are after the registration's startTS, so we
 	// can't use NextKey.
+	var lastKey roachpb.Key
 	var meta enginepb.MVCCMetadata
+	var rangeKeys []storage.MVCCRangeKeyValue
+	var rangeKeysStart roachpb.Key
 	i.SeekGE(storage.MVCCKey{Key: i.span.Key})
 	for {
 		if ok, err := i.Valid(); err != nil {
 			return err
 		} else if !ok {
 			break
+		}
+
+		hasPoint, hasRange := i.HasPointAndRange()
+
+		// Emit any new MVCC range tombstones when their start key is encountered.
+		// Range keys can currently only be MVCC range tombstones.
+		//
+		// TODO(erikgrinaker): Find a faster/better way to detect range key changes
+		// that doesn't involve constant comparisons. Pebble probably already knows,
+		// we just need a way to ask it.
+		if hasRange {
+			if rangeBounds := i.RangeBounds(); !rangeBounds.Key.Equal(rangeKeysStart) {
+				// Record the range keys for later processing.
+				rangeKeysStart = append(rangeKeysStart[:0], rangeBounds.Key...)
+				rangeKeys = rangeKeys[:0]
+				for _, rkv := range i.RangeKeys() {
+					rangeKeys = append(rangeKeys, rkv.Clone())
+				}
+
+				// Emit events for these MVCC range tombstones, in chronological order.
+				for i := len(rangeKeys) - 1; i >= 0; i-- {
+					var span roachpb.Span
+					a, span.Key = a.Copy(rangeBounds.Key, 0)
+					a, span.EndKey = a.Copy(rangeBounds.EndKey, 0)
+					err := outputFn(&roachpb.RangeFeedEvent{
+						DeleteRange: &roachpb.RangeFeedDeleteRange{
+							Span:      span,
+							Timestamp: rangeKeys[i].RangeKey.Timestamp,
+						},
+					})
+					if err != nil {
+						return err
+					}
+				}
+			}
+		} else if len(rangeKeys) > 0 {
+			rangeKeys = rangeKeys[:0]
+		}
+
+		// If there's no point key here (i.e. we found a bare range key above), then
+		// step onto the next key. This may be a point key version at the same key
+		// as the range key's start bound, or a later point/range key.
+		if !hasPoint {
+			i.Next()
+			continue
 		}
 
 		unsafeKey := i.UnsafeKey()
@@ -217,9 +261,20 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 			var val []byte
 			a, val = a.Copy(unsafeVal, 0)
 			if withDiff {
-				// Update the last version with its
-				// previous value (this version).
-				addPrevToLastEvent(val)
+				// Update the last version with its previous value (this version).
+				if l := len(reorderBuf) - 1; l >= 0 {
+					if reorderBuf[l].Val.PrevValue.IsPresent() {
+						return errors.AssertionFailedf("unexpected previous value %s for key %s",
+							reorderBuf[l].Val.PrevValue, key)
+					}
+					// If an MVCC range tombstone exists between this value and the next
+					// one, we don't emit the value after all -- it should be a tombstone.
+					if !storage.HasRangeKeyBetween(rangeKeys, reorderBuf[l].Val.Value.Timestamp, ts) {
+						// TODO(sumeer): find out if it is deliberate that we are not populating
+						// PrevValue.Timestamp.
+						reorderBuf[l].Val.PrevValue.RawBytes = val
+					}
+				}
 			}
 
 			if !ignore {

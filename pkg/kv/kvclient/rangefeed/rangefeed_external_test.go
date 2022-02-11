@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sstutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -611,6 +612,147 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 		}
 	}
 	require.Equal(t, expectKVs, seenKVs)
+}
+
+// TestWithOnDeleteRange tests that the rangefeed emits MVCC range tombstones.
+//
+// TODO(erikgrinaker): These kinds of tests should really use a data-driven test
+// harness, for more exhaustive testing. But it'll do for now.
+func TestWithOnDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	db := srv.DB()
+
+	_, _, err := tc.SplitRange(roachpb.Key("a"))
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	require.NoError(t, err)
+
+	// We lay down a few MVCC range tombstones and points. The first range
+	// tombstone should not be visible, because initial scans do not emit
+	// tombstones, nor should the points covered by it. The second range tombstone
+	// should be visible, because catchup scans do emit tombstones. The range
+	// tombstone should be ordered after the initial point, but before the catchup
+	// point, and the previous values should respect the range tombstones.
+	require.NoError(t, db.Put(ctx, "covered", "covered"))
+	require.NoError(t, db.Put(ctx, "foo", "covered"))
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.Put(ctx, "foo", "initial"))
+	rangeFeedTS := db.Clock().Now()
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	require.NoError(t, db.Put(ctx, "foo", "catchup"))
+
+	// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
+	// to ensure the DeleteRange event is truncated to the registration span.
+	var checkpointOnce sync.Once
+	checkpointC := make(chan struct{})
+	deleteRangeC := make(chan *roachpb.RangeFeedDeleteRange)
+	rowC := make(chan *roachpb.RangeFeedValue)
+
+	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}}
+	r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS,
+		func(ctx context.Context, e *roachpb.RangeFeedValue) {
+			select {
+			case rowC <- e:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithDiff(true),
+		rangefeed.WithInitialScan(nil),
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			checkpointOnce.Do(func() {
+				close(checkpointC)
+			})
+		}),
+		rangefeed.WithOnDeleteRange(func(ctx context.Context, e *roachpb.RangeFeedDeleteRange) {
+			select {
+			case deleteRangeC <- e:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Wait for initial scan. We should see the foo=initial point, but not the
+	// range tombstone nor the covered points.
+	select {
+	case e := <-rowC:
+		require.Equal(t, roachpb.Key("foo"), e.Key)
+		value, err := e.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "initial", string(value))
+		prevValue, err := e.PrevValue.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "initial", string(prevValue)) // initial scans supply current as prev
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for initial scan event")
+	}
+
+	// Wait for catchup scan. We should see the second range tombstone, truncated
+	// to the rangefeed bounds (c-g), and it should be ordered before the point
+	// foo=catchup. foo should have a tombstone as the previous value.
+	select {
+	case e := <-deleteRangeC:
+		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
+		require.NotEmpty(t, e.Timestamp)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+
+	select {
+	case e := <-rowC:
+		require.Equal(t, roachpb.Key("foo"), e.Key)
+		value, err := e.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "catchup", string(value))
+		prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
+		require.NoError(t, err)
+		require.True(t, prevValue.IsTombstone())
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for foo=catchup event")
+	}
+
+	// Wait for checkpoint after catchup scan.
+	select {
+	case <-checkpointC:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for checkpoint")
+	}
+
+	// Send another DeleteRange, and wait for the rangefeed event. This should
+	// be truncated to the rangefeed bounds (c-g).
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	select {
+	case e := <-deleteRangeC:
+		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
+		require.NotEmpty(t, e.Timestamp)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+
+	// A final point write should be emitted with a tombstone as the previous value.
+	require.NoError(t, db.Put(ctx, "foo", "final"))
+	select {
+	case e := <-rowC:
+		require.Equal(t, roachpb.Key("foo"), e.Key)
+		value, err := e.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "final", string(value))
+		prevValue, err := storage.DecodeMVCCValue(e.PrevValue.RawBytes)
+		require.NoError(t, err)
+		require.True(t, prevValue.IsTombstone())
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for foo=final event")
+	}
 }
 
 // TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced
