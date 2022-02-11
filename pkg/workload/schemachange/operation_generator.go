@@ -269,6 +269,10 @@ func (og *operationGenerator) randOp(ctx context.Context, tx pgx.Tx) (stmt strin
 			}
 			return "", err
 		}
+		// Dead statement lets retry.
+		if stmt == "" {
+			continue
+		}
 		// Screen for schema change after write in the same transaction.
 		og.checkIfOpViolatesDDLAfterWrite(op)
 		og.stmtsInTxt = append(og.stmtsInTxt, stmt)
@@ -314,6 +318,10 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (string,
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IrrelevantColumnName string`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(false))
@@ -396,6 +404,10 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ADD CONSTRAINT IrrelevantConstraintName UNIQUE (IrrelevantColumnName)`, tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 
 	columnForConstraint, err := og.randColumnWithMeta(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -462,6 +474,10 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	databaseRegionNames, err := og.getDatabaseRegionNames(ctx, tx)
@@ -828,6 +844,10 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (strin
 			},
 		}
 		return tree.Serialize(def), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	columnNames, err := og.getTableColumns(ctx, tx, tableName.String(), true)
@@ -1374,6 +1394,10 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (string
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s DROP COLUMN "IrrelevantColumnName"`, tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -1424,6 +1448,10 @@ func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) 
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP DEFAULT`, tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return "", err
@@ -1450,6 +1478,10 @@ func (og *operationGenerator) dropColumnNotNull(ctx context.Context, tx pgx.Tx) 
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "IrrelevantColumnName" DROP NOT NULL`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -1495,6 +1527,10 @@ func (og *operationGenerator) dropColumnStored(ctx context.Context, tx pgx.Tx) (
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName DROP STORED`, tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -1531,6 +1567,10 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (st
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT IrrelevantConstraintName`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	constraintName, err := og.randConstraint(ctx, tx, tableName.String())
@@ -1583,6 +1623,10 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (string,
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`DROP INDEX %s@"IrrelevantIndexName"`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	indexName, err := og.randIndex(ctx, tx, *tableName, og.pctExisting(true))
@@ -1718,6 +1762,10 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (stri
 		return fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN "IrrelevantColumnName" TO "OtherIrrelevantName"`,
 			tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 
 	srcColumnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -1766,6 +1814,10 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (strin
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER INDEX %s@"IrrelevantConstraintName" RENAME TO "OtherConstraintName"`,
 			tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	srcIndexName, err := og.randIndex(ctx, tx, *tableName, og.pctExisting(true))
@@ -1859,6 +1911,12 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (strin
 	if err != nil {
 		return "", err
 	}
+	if srcTableExists {
+		tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, srcTableName)
+		if !tableAllowsSchemaChanges || err != nil {
+			return "", err
+		}
+	}
 
 	destSchemaExists, err := og.schemaExists(ctx, tx, destTableName.Schema())
 	if err != nil {
@@ -1951,6 +2009,10 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DEFAULT "IrrelevantValue"`,
 			tableName), nil
 	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
+	}
 
 	columnForDefault, err := og.randColumnWithMeta(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
@@ -2007,6 +2069,10 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET NOT NULL`, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
@@ -2066,6 +2132,10 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (str
 	if !tableExists {
 		og.expectedExecErrors.add(pgcode.UndefinedTable)
 		return fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, setSessionVariableString, tableName), nil
+	}
+	tableAllowsSchemaChanges, err := og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if !tableAllowsSchemaChanges || err != nil {
+		return "", err
 	}
 
 	columnForTypeChange, err := og.randColumnWithMeta(ctx, tx, *tableName, og.pctExisting(true))

@@ -275,6 +275,43 @@ func (og *operationGenerator) violatesUniqueConstraints(
 	return false, nil
 }
 
+func (og *operationGenerator) tableHasPrimaryKeySwapActive(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+
+	indexName, err := og.scanStringArray(
+		ctx,
+		tx,
+		fmt.Sprintf(`
+SELECT array_agg(index_name)
+  FROM (
+		SELECT index_name
+		  FROM [SHOW INDEXES FROM %s]
+		 WHERE index_name LIKE '%%_pkey%%'
+		 LIMIT 1
+       );
+	`, tableName.String()),
+	)
+	if err != nil {
+		return false, err
+	}
+
+	return og.scanBool(
+		ctx,
+		tx,
+		`
+SELECT count(*) > 0
+  FROM crdb_internal.schema_changes
+ WHERE type = 'INDEX'
+       AND table_id = $1::REGCLASS
+       AND  target_name = $2
+       AND direction = 'DROP';
+`,
+		tableName.String(),
+		indexName[0],
+	)
+}
+
 func (og *operationGenerator) violatesUniqueConstraintsHelper(
 	ctx context.Context,
 	tx pgx.Tx,
