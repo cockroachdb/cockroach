@@ -86,7 +86,7 @@ upsert descriptor #104
   +      sharded: {}
   +      storeColumnIds: []
   +      storeColumnNames: []
-  +      version: 3
+  +      version: 4
   +    mutationId: 1
   +    state: DELETE_ONLY
      name: t
@@ -120,7 +120,7 @@ upsert descriptor #104
        - ABSENT
        jobId: "1"
   ...
-         version: 3
+         version: 4
        mutationId: 1
   -    state: DELETE_ONLY
   +    state: DELETE_AND_WRITE_ONLY
@@ -212,7 +212,7 @@ upsert descriptor #104
   +    sharded: {}
   +    storeColumnIds: []
   +    storeColumnNames: []
-  +    version: 3
+  +    version: 4
      modificationTime: {}
   -  mutations:
   -  - direction: ADD
@@ -236,7 +236,7 @@ upsert descriptor #104
   -      sharded: {}
   -      storeColumnIds: []
   -      storeColumnNames: []
-  -      version: 3
+  -      version: 4
   -    mutationId: 1
   -    state: DELETE_AND_WRITE_ONLY
      name: t
