@@ -32,6 +32,12 @@ type BatchEvalTestingKnobs struct {
 	// the chance that conflicting transactions will prevent parallel commit
 	// attempts from succeeding.
 	RecoverIndeterminateCommitsOnFailedPushes bool
+
+	// AllowGCWithNewThresholdAndKeys configures whether GC requests are allowed
+	// to increase the GC threshold and to GC individual keys at the same time. By
+	// default, this is not allowed because it is unsafe. See cmd_gc.go for an
+	// explanation of why.
+	AllowGCWithNewThresholdAndKeys bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during
