@@ -355,9 +355,10 @@ func rangeUsageInfoForRepl(repl *Replica) RangeUsageInfo {
 type Allocator struct {
 	storePool     *StorePool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
-	randGen       allocatorRand
-
-	knobs *AllocatorTestingKnobs
+	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
+	// wrapped inside a mutex, to avoid misuse.
+	randGen allocatorRand
+	knobs   *AllocatorTestingKnobs
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
@@ -735,7 +736,7 @@ func (a *Allocator) allocateTarget(
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	targetType targetReplicaType,
-) (*roachpb.StoreDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
 	candidateStoreList, aliveStoreCount, throttled := a.storePool.getStoreList(storeFilterThrottled)
 
 	target, details := a.allocateTargetFromList(
@@ -753,18 +754,19 @@ func (a *Allocator) allocateTarget(
 		false, /* allowMultipleReplsPerNode */
 		targetType,
 	)
-	if target != nil {
+
+	if !roachpb.Empty(target) {
 		return target, details, nil
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
 	// the replica to purgatory.
 	if len(throttled) > 0 {
-		return nil, "", errors.Errorf(
+		return roachpb.ReplicationTarget{}, "", errors.Errorf(
 			"%d matching stores are currently throttled: %v", len(throttled), throttled,
 		)
 	}
-	return nil, "", &allocatorError{
+	return roachpb.ReplicationTarget{}, "", &allocatorError{
 		voterConstraints:      conf.VoterConstraints,
 		constraints:           conf.Constraints,
 		existingVoterCount:    len(existingVoters),
@@ -781,7 +783,7 @@ func (a *Allocator) AllocateVoter(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-) (*roachpb.StoreDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
 	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, voterTarget)
 }
 
@@ -792,7 +794,7 @@ func (a *Allocator) AllocateNonVoter(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-) (*roachpb.StoreDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
 	return a.allocateTarget(ctx, conf, existingVoters, existingNonVoters, nonVoterTarget)
 }
 
@@ -801,10 +803,10 @@ func (a *Allocator) allocateTargetFromList(
 	candidateStores StoreList,
 	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
-	options rangeCountScorerOptions,
+	options *rangeCountScorerOptions,
 	allowMultipleReplsPerNode bool,
 	targetType targetReplicaType,
-) (*roachpb.StoreDescriptor, string) {
+) (roachpb.ReplicationTarget, string) {
 	existingReplicas := append(existingVoters, existingNonVoters...)
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
 		existingReplicas, conf.NumReplicas, conf.Constraints)
@@ -850,10 +852,12 @@ func (a *Allocator) allocateTargetFromList(
 		if err != nil {
 			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %+v", err)
 		}
-		return &target.store, string(detailsBytes)
+		return roachpb.ReplicationTarget{
+			NodeID: target.store.Node.NodeID, StoreID: target.store.StoreID,
+		}, string(detailsBytes)
 	}
 
-	return nil, ""
+	return roachpb.ReplicationTarget{}, ""
 }
 
 func (a Allocator) simulateRemoveTarget(
@@ -863,15 +867,21 @@ func (a Allocator) simulateRemoveTarget(
 	candidates []roachpb.ReplicaDescriptor,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
+	sl StoreList,
 	rangeUsageInfo RangeUsageInfo,
 	targetType targetReplicaType,
 	options scorerOptions,
-) (roachpb.ReplicaDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
+	candidateStores := make([]roachpb.StoreDescriptor, 0, len(candidates))
+	for _, cand := range candidates {
+		for _, store := range sl.stores {
+			if cand.StoreID == store.StoreID {
+				candidateStores = append(candidateStores, store)
+			}
+		}
+	}
+
 	// Update statistics first
-	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
-	// but as of October 2017 calls to the Allocator are mostly serialized by the ReplicateQueue
-	// (with the main exceptions being Scatter and the status server's allocator debug endpoint).
-	// Try to make this interfere less with other callers.
 	switch t := targetType; t {
 	case voterTarget:
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
@@ -882,7 +892,11 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveVoter(ctx, conf, candidates, existingVoters, existingNonVoters, options)
+
+		return a.removeTarget(
+			ctx, conf, makeStoreList(candidateStores),
+			existingVoters, existingNonVoters, voterTarget, options,
+		)
 	case nonVoterTarget:
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
 		defer a.storePool.updateLocalStoreAfterRebalance(
@@ -892,33 +906,45 @@ func (a Allocator) simulateRemoveTarget(
 		)
 		log.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveNonVoter(ctx, conf, candidates, existingVoters, existingNonVoters, options)
+		return a.removeTarget(
+			ctx, conf, makeStoreList(candidateStores),
+			existingVoters, existingNonVoters, nonVoterTarget, options,
+		)
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
 	}
 }
 
+func (a Allocator) storeListForTargets(candidates []roachpb.ReplicationTarget) StoreList {
+	result := make([]roachpb.StoreDescriptor, 0, len(candidates))
+	sl, _, _ := a.storePool.getStoreList(storeFilterNone)
+	for _, cand := range candidates {
+		for _, store := range sl.stores {
+			if cand.StoreID == store.StoreID {
+				result = append(result, store)
+			}
+		}
+	}
+	return makeStoreList(result)
+}
+
 func (a Allocator) removeTarget(
 	ctx context.Context,
 	conf roachpb.SpanConfig,
-	candidates []roachpb.ReplicationTarget,
+	candidateStoreList StoreList,
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	targetType targetReplicaType,
 	options scorerOptions,
-) (roachpb.ReplicaDescriptor, string, error) {
-	if len(candidates) == 0 {
-		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one" +
-			" candidate replica to allocator.removeTarget()")
+) (roachpb.ReplicationTarget, string, error) {
+	if len(candidateStoreList.stores) == 0 {
+		return roachpb.ReplicationTarget{}, "", errors.Errorf(
+			"must supply at least one" +
+				" candidate replica to allocator.removeTarget()",
+		)
 	}
 
 	existingReplicas := append(existingVoters, existingNonVoters...)
-	// Retrieve store descriptors for the provided candidates from the StorePool.
-	candidateStoreIDs := make(roachpb.StoreIDSlice, len(candidates))
-	for i, exist := range candidates {
-		candidateStoreIDs[i] = exist.StoreID
-	}
-	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
 		existingReplicas, conf.NumReplicas, conf.Constraints)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.storePool.getStoreDescriptor,
@@ -958,12 +984,14 @@ func (a Allocator) removeTarget(
 				if err != nil {
 					log.Warningf(ctx, "failed to marshal details for choosing remove target: %+v", err)
 				}
-				return exist, string(detailsBytes), nil
+				return roachpb.ReplicationTarget{
+					StoreID: exist.StoreID, NodeID: exist.NodeID,
+				}, string(detailsBytes), nil
 			}
 		}
 	}
 
-	return roachpb.ReplicaDescriptor{}, "", errors.New("could not select an appropriate replica to be removed")
+	return roachpb.ReplicationTarget{}, "", errors.New("could not select an appropriate replica to be removed")
 }
 
 // RemoveVoter returns a suitable replica to remove from the provided replica
@@ -977,11 +1005,18 @@ func (a Allocator) RemoveVoter(
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
-) (roachpb.ReplicaDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(voterCandidates))
+	for i, exist := range voterCandidates {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
+
 	return a.removeTarget(
 		ctx,
 		conf,
-		roachpb.MakeReplicaSet(voterCandidates).ReplicationTargets(),
+		candidateStoreList,
 		existingVoters,
 		existingNonVoters,
 		voterTarget,
@@ -1001,11 +1036,18 @@ func (a Allocator) RemoveNonVoter(
 	existingVoters []roachpb.ReplicaDescriptor,
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options scorerOptions,
-) (roachpb.ReplicaDescriptor, string, error) {
+) (roachpb.ReplicationTarget, string, error) {
+	// Retrieve store descriptors for the provided candidates from the StorePool.
+	candidateStoreIDs := make(roachpb.StoreIDSlice, len(nonVoterCandidates))
+	for i, exist := range nonVoterCandidates {
+		candidateStoreIDs[i] = exist.StoreID
+	}
+	candidateStoreList, _, _ := a.storePool.getStoreListFromIDs(candidateStoreIDs, storeFilterNone)
+
 	return a.removeTarget(
 		ctx,
 		conf,
-		roachpb.MakeReplicaSet(nonVoterCandidates).ReplicationTargets(),
+		candidateStoreList,
 		existingVoters,
 		existingNonVoters,
 		nonVoterTarget,
@@ -1024,6 +1066,13 @@ func (a Allocator) rebalanceTarget(
 	options scorerOptions,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
 	sl, _, _ := a.storePool.getStoreList(filter)
+
+	// If we're considering a rebalance due to an `AdminScatterRequest`, we'd like
+	// to ensure that we're returning a random rebalance target to a new store
+	// that's a reasonable fit for an existing replica. So we might jitter the
+	// existing stats on the stores inside `sl`.
+	sl = options.maybeJitterStoreStats(sl, a.randGen)
+
 	existingReplicas := append(existingVoters, existingNonVoters...)
 
 	zero := roachpb.ReplicationTarget{}
@@ -1082,7 +1131,7 @@ func (a Allocator) rebalanceTarget(
 	// pretty sure we won't want to remove immediately after adding it. If we
 	// would, we don't want to actually rebalance to that target.
 	var target, existingCandidate *candidate
-	var removeReplica roachpb.ReplicaDescriptor
+	var removeReplica roachpb.ReplicationTarget
 	for {
 		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
 		if target == nil {
@@ -1125,6 +1174,7 @@ func (a Allocator) rebalanceTarget(
 			replicaCandidates,
 			existingPlusOneNew,
 			otherReplicaSet,
+			sl,
 			rangeUsageInfo,
 			targetType,
 			options,
@@ -1246,10 +1296,26 @@ func (a Allocator) RebalanceNonVoter(
 	)
 }
 
-func (a *Allocator) scorerOptions() rangeCountScorerOptions {
-	return rangeCountScorerOptions{
+func (a *Allocator) scorerOptions() *rangeCountScorerOptions {
+	return &rangeCountScorerOptions{
 		deterministic:           a.storePool.deterministic,
 		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
+	}
+}
+
+func (a *Allocator) scorerOptionsForScatter() *scatterScorerOptions {
+	return &scatterScorerOptions{
+		rangeCountScorerOptions: rangeCountScorerOptions{
+			deterministic:           a.storePool.deterministic,
+			rangeRebalanceThreshold: 0,
+		},
+		// We set jitter to be equal to the padding around replica-count rebalancing
+		// because we'd like to make it such that rebalances made due to an
+		// `AdminScatter` are roughly in line (but more random than) the rebalances
+		// made by the replicateQueue during normal course of operations. In other
+		// words, we don't want stores that are too far away from the mean to be
+		// affected by the jitter.
+		jitter: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
