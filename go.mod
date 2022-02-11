@@ -163,6 +163,8 @@ require (
 	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
+require github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.1.0 // indirect

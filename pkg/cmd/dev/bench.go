@@ -46,6 +46,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	// `go help testflag`).
 	benchCmd.Flags().String(benchTimeFlag, "", "duration to run each benchmark for")
 	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
+	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 
 	return benchCmd
 }
@@ -63,6 +64,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		count       = mustGetFlagInt(cmd, countFlag)
 		benchTime   = mustGetFlagString(cmd, benchTimeFlag)
 		benchMem    = mustGetFlagBool(cmd, benchMemFlag)
+		testArgs    = mustGetFlagString(cmd, testArgsFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -132,6 +134,13 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	}
 	if benchMem {
 		args = append(args, "--test_arg", "-test.benchmem")
+	}
+	if testArgs != "" {
+		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
+		if err != nil {
+			return err
+		}
+		args = append(args, goTestArgs...)
 	}
 	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
