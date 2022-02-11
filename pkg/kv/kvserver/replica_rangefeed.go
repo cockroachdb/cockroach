@@ -520,7 +520,8 @@ func (r *Replica) populatePrevValsInLogicalOpLogRaftMuLocked(
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp:
+			*enginepb.MVCCAbortTxnOp,
+			*enginepb.MVCCDeleteRangeOp:
 			// Nothing to do.
 			continue
 		default:
@@ -594,7 +595,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp:
+			*enginepb.MVCCAbortTxnOp,
+			*enginepb.MVCCDeleteRangeOp:
 			// Nothing to do.
 			continue
 		default:

@@ -2255,7 +2255,18 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 func experimentalMVCCDeleteRangeUsingTombstoneInternal(
 	ctx context.Context, rw ReadWriter, ms *enginepb.MVCCStats, rangeKey MVCCRangeKey,
 ) error {
-	return rw.ExperimentalPutMVCCRangeKey(rangeKey, nil)
+	if err := rw.ExperimentalPutMVCCRangeKey(rangeKey, nil); err != nil {
+		return err
+	}
+
+	rw.LogLogicalOp(MVCCDeleteRangeOpType, MVCCLogicalOpDetails{
+		Safe:      true,
+		Key:       rangeKey.StartKey,
+		EndKey:    rangeKey.EndKey,
+		Timestamp: rangeKey.Timestamp,
+	})
+
+	return nil
 }
 
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {

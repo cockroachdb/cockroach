@@ -1480,6 +1480,9 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 	case *RangeFeedSSTable:
 		cpySST := *t
 		cpy.MustSetValue(&cpySST)
+	case *RangeFeedDeleteRange:
+		cpyDelRange := *t
+		cpy.MustSetValue(&cpyDelRange)
 	case *RangeFeedError:
 		cpyErr := *t
 		cpy.MustSetValue(&cpyErr)
