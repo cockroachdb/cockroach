@@ -97,6 +97,8 @@ const (
 	// result of the recovery should be committing the abandoned transaction or
 	// aborting it.
 	RecoverTxn
+	// QueryLocks requests the current state of concurrency control's lock table.
+	QueryLocks
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
 	// QueryIntent checks whether the specified intent exists.

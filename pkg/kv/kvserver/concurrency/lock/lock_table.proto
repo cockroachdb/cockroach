@@ -1,0 +1,35 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+syntax = "proto3";
+package cockroach.kv.kvserver.concurrency.lock;
+option go_package = "lock";
+
+import "kv/kvserver/concurrency/lock/locking.proto";
+import "storage/enginepb/mvcc3.proto";
+import "gogoproto/gogo.proto";
+
+// KeyAccessType represents the type of operation that a transaction holding or
+// waiting on a lock intends to carry out, once necessary locks are acquired.
+enum KeyAccessType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  ReadOnly = 0;
+  ReadWrite = 1;
+}
+
+// LockWaiter represents a transaction (or non-transactional operation) that is
+// waiting in the wait queue of readers or writers on an individual lock.
+message LockWaiter {
+  storage.enginepb.TxnMeta waiting_txn = 1;
+  bool active_waiter = 2;
+  KeyAccessType access = 3;
+  // TODO(sarkesian): Incorporate wait start once #76395 merges.
+}

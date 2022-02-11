@@ -12,6 +12,7 @@ syntax = "proto3";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
+import "kv/kvserver/concurrency/lock/lock_table.proto";
 import "kv/kvserver/concurrency/lock/locking.proto";
 import "kv/kvserver/readsummary/rspb/summary.proto";
 import "roachpb/metadata.proto";
@@ -33,6 +34,19 @@ message Span {
   // In such a case, the Span encompasses the key range from Key to EndKey,
   // including Key and excluding EndKey.
   bytes end_key = 4 [(gogoproto.casttype) = "Key"];
+}
+
+// KeyScope defines the type of key and how it is addressed in the keymap,
+// specifically, if the key is a global key or a local key.
+// See pkg/keys/doc.go for more details.
+enum KeyScope {
+  // Global keys include all user keys, system keys, and meta1/meta2 keys.
+  GLOBAL = 0;
+
+  // Local keys refer to range or store specific metadata, which must be
+  // located with the data they refer to but are logically separated from the
+  // standard global key space, such as Raft Log keys or replicated lock keys.
+  LOCAL = 1;
 }
 
 // ValueType defines a set of type constants placed in the "tag" field of Value
@@ -540,6 +554,24 @@ message LockUpdate {
   storage.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
   TransactionStatus status = 3;
   repeated storage.enginepb.IgnoredSeqNumRange ignored_seqnums = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "IgnoredSeqNums"];
+}
+
+// A LockStateInfo represents the metadata of a lock tracked in a replica's
+// lock table.  This includes any current lock holder, as well as waiting
+// readers and writers.
+message LockStateInfo {
+  bytes key = 1 [(gogoproto.casttype) = "Key"];
+  KeyScope scope = 2;
+  LockAcquisition lock_holder = 3;
+  // TODO(sarkesian): Incorporate hold start once #76395 merges.
+  repeated kv.kvserver.concurrency.lock.LockWaiter lock_waiters = 4 [(gogoproto.nullable) = false];
+}
+
+// A LockTableInfo structure represents the current state of a replica's lock
+// table, including metadata on locks currently tracked.
+message LockTableInfo {
+  int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  repeated LockStateInfo locks = 2;
 }
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
