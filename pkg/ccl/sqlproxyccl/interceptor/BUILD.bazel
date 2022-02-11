@@ -14,12 +14,20 @@ go_library(
 
 go_test(
     name = "interceptor_test",
-    srcs = ["interceptor_test.go"],
+    srcs = [
+        "bench_test.go",
+        "interceptor_test.go",
+    ],
     embed = [":interceptor"],
     deps = [
         "//pkg/sql/pgwire/pgwirebase",
+        "//pkg/util/grpcutil",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/stop",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_jackc_chunkreader_v2//:chunkreader",
         "@com_github_jackc_pgproto3_v2//:pgproto3",
         "@com_github_stretchr_testify//require",
     ],
