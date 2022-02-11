@@ -874,23 +874,17 @@ func (s *adminServer) tableDetailsHelper(
 		sessiondata.InternalExecutorOverride{User: userName},
 		fmt.Sprintf("SELECT max(created) AS created FROM [SHOW STATISTICS FOR TABLE %s]", escQualTable),
 	)
-	if row == nil {
-		return nil, s.serverErrorf("table statistics response not available.")
-	}
 	if err = s.maybeHandleNotFoundError(err); err != nil {
 		return nil, err
 	}
-	{
+	if row != nil {
 		scanner := makeResultScanner(cols)
 		const createdCol = "created"
-		noTableStats, _ := scanner.IsNull(row, createdCol)
-		if !noTableStats {
-			var createdTs time.Time
-			if err := scanner.Scan(row, createdCol, &createdTs); err != nil {
-				return nil, err
-			}
-			resp.StatsLastCreatedAt = createdTs
+		var createdTs *time.Time
+		if err := scanner.Scan(row, createdCol, &createdTs); err != nil {
+			return nil, err
 		}
+		resp.StatsLastCreatedAt = createdTs
 	}
 
 	// Marshal SHOW ZONE CONFIGURATION result.
@@ -2971,7 +2965,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 	case *time.Time:
 		s, ok := src.(*tree.DTimestamp)
 		if !ok {
-			return errors.Errorf("source type assertion failed on *time.Time")
+			return errors.Errorf("source type assertion failed")
 		}
 		*d = s.Time
 

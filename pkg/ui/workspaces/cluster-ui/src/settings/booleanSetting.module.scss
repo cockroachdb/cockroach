@@ -1,7 +1,7 @@
 @import "src/core/index.module";
 
 .crl-hover-text {
-  font-weight: inherit;
+  font-size: 12px;
 
   &__dashed-underline {
     color: inherit;
@@ -12,7 +12,8 @@
   }
 
   &__link-text {
-  color: inherit
+  color: inherit;
+  font-size: inherit;
   }
 }
 

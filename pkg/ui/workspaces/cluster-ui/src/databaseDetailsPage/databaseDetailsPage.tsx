@@ -36,7 +36,7 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
-import moment, { Moment } from "moment";
+import { Moment } from "moment";
 import { formatDate } from "antd/es/date-picker/utils";
 
 const cx = classNames.bind(styles);
@@ -364,7 +364,7 @@ export class DatabaseDetailsPage extends React.Component<
           </Tooltip>
         ),
         cell: table =>
-          table.details.statsLastUpdated.isSame(moment.utc("0001-01-01"))
+          !table.details.statsLastUpdated
             ? "No table statistics found"
             : formatDate(
                 table.details.statsLastUpdated,

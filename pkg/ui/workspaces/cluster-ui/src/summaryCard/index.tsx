@@ -36,7 +36,7 @@ interface ISummaryCardItemProps {
 }
 
 interface ISummaryCardItemBoolSettingProps extends ISummaryCardItemProps {
-  toolTipText: React.ReactNode;
+  toolTipText: JSX.Element;
 }
 
 export const SummaryCardItem: React.FC<ISummaryCardItemProps> = ({
@@ -55,37 +55,25 @@ export const SummaryCardItemBoolSetting: React.FC<ISummaryCardItemBoolSettingPro
   value,
   toolTipText,
   className,
-}) =>
-  value ? (
+}) => {
+  const boolValue = value ? "Enabled" : "Disabled";
+  const boolClass = value
+    ? "bool-setting-icon__enabled"
+    : "bool-setting-icon__disabled";
+
+  return (
     <div className={cx("summary--card__item", className)}>
       <h4 className={cx("summary--card__item--label")}>{label}</h4>
       <p className={cx("summary--card__item--value")}>
-        <CircleFilled
-          className={booleanSettingCx("bool-setting-icon__enabled")}
-        />
+        <CircleFilled className={booleanSettingCx(boolClass)} />
         <Tooltip
           placement="bottom"
           title={toolTipText}
           className={cx("crl-hover-text__dashed-underline")}
         >
-          Enabled
-        </Tooltip>
-      </p>
-    </div>
-  ) : (
-    <div className={cx("summary--card__item", className)}>
-      <h4 className={cx("summary--card__item--label")}>{label}</h4>
-      <p className={cx("summary--card__item--value")}>
-        <CircleFilled
-          className={booleanSettingCx("bool-setting-icon__disabled")}
-        />
-        <Tooltip
-          placement="bottom"
-          title={toolTipText}
-          className={cx("crl-hover-text__dashed-underline")}
-        >
-          Disabled
+          {boolValue}
         </Tooltip>
       </p>
     </div>
   );
+};

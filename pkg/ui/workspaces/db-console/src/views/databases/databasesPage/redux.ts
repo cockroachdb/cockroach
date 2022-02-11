@@ -32,7 +32,7 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
-import { selectAutomaticStatsCollectionEnabled } from "oss/src/redux/clusterSettings";
+import { selectAutomaticStatsCollectionEnabled } from "src/redux/clusterSettings";
 
 const { DatabaseDetailsRequest, TableStatsRequest } = cockroach.server.serverpb;
 

@@ -14,6 +14,7 @@ import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import _ from "lodash";
 
+import { Anchor } from "src/anchor";
 import { StackIcon } from "src/icon/stackIcon";
 import { Pagination, ResultsPerPageLabel } from "src/pagination";
 import { BooleanSetting } from "src/settings/booleanSetting";
@@ -31,7 +32,7 @@ import {
   baseHeadingClasses,
   statisticsClasses,
 } from "src/transactionsPage/transactionsPageClasses";
-import { syncHistory } from "../util";
+import { syncHistory, tableStatsClusterSetting } from "src/util";
 import classnames from "classnames/bind";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 
@@ -290,19 +291,6 @@ export class DatabasesPage extends React.Component<
     const displayColumns = this.columns.filter(
       col => col.showByDefault !== false,
     );
-    const tipText = (
-      <span>
-        {" "}
-        Automatic statistics can help improve query performance. Learn how to{" "}
-        <a
-          className={booleanSettingCx("crl-hover-text__link-text")}
-          href="https://www.cockroachlabs.com/docs/stable/cost-based-optimizer#control-automatic-statistics"
-        >
-          manage statistics collection
-        </a>
-        .
-      </span>
-    );
     return (
       <div>
         <div className={baseHeadingClasses.wrapper}>
@@ -310,7 +298,21 @@ export class DatabasesPage extends React.Component<
           <BooleanSetting
             text={"Auto stats collection"}
             enabled={this.props.automaticStatsCollectionEnabled}
-            tooltipText={tipText}
+            tooltipText={
+              <span>
+                {" "}
+                Automatic statistics can help improve query performance. Learn
+                how to{" "}
+                <Anchor
+                  href={tableStatsClusterSetting}
+                  target="_blank"
+                  className={booleanSettingCx("crl-hover-text__link-text")}
+                >
+                  manage statistics collection
+                </Anchor>
+                .
+              </span>
+            }
           />
         </div>
         <section className={sortableTableCx("cl-table-container")}>

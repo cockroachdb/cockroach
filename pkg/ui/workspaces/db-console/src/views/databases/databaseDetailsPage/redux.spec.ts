@@ -28,7 +28,7 @@ import { databaseNameAttr } from "src/util/constants";
 import * as fakeApi from "src/util/fakeApi";
 import { mapStateToProps, mapDispatchToProps } from "./redux";
 import moment from "moment";
-import { makeTimestamp } from "oss/src/views/databases/utils";
+import { makeTimestamp } from "src/views/databases/utils";
 
 function fakeRouteComponentProps(
   key: string,

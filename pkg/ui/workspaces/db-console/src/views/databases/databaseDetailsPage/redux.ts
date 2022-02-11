@@ -34,7 +34,6 @@ import {
   selectIsMoreThanOneNode,
 } from "src/redux/nodes";
 import { getNodesByRegionString } from "../utils";
-import moment from "moment";
 
 const {
   DatabaseDetailsRequest,
@@ -148,10 +147,9 @@ export const mapStateToProps = createSelector(
             userCount: roles.length,
             roles: roles,
             grants: grants,
-            statsLastUpdated: util.TimestampToMoment(
-              details?.data?.stats_last_created_at,
-              moment.utc("0001-01-01"),
-            ),
+            statsLastUpdated: details?.data?.stats_last_created_at
+              ? util.TimestampToMoment(details?.data?.stats_last_created_at)
+              : null,
           },
           stats: {
             loading: !!stats?.inFlight,

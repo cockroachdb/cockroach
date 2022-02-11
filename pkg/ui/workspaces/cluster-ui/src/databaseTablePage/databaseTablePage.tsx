@@ -16,6 +16,7 @@ import _ from "lodash";
 import { Tooltip } from "antd";
 import { Heading } from "@cockroachlabs/ui-components";
 
+import { Anchor } from "src/anchor";
 import { Breadcrumbs } from "src/breadcrumbs";
 import { CaretRight } from "src/icon/caretRight";
 import { StackIcon } from "src/icon/stackIcon";
@@ -27,7 +28,7 @@ import {
   SummaryCardItemBoolSetting,
 } from "src/summaryCard";
 import * as format from "src/util/format";
-import { syncHistory } from "src/util";
+import { syncHistory, tableStatsClusterSetting } from "src/util";
 
 import styles from "./databaseTablePage.module.scss";
 import { commonStyles } from "src/common";
@@ -101,7 +102,7 @@ export interface DatabaseTablePageDataDetails {
   replicaCount: number;
   indexNames: string[];
   grants: Grant[];
-  statsLastUpdated: Moment;
+  statsLastUpdated?: Moment;
 }
 
 export interface DatabaseTablePageIndexStats {
@@ -373,9 +374,7 @@ export class DatabaseTablePage extends React.Component<
                       label="Ranges"
                       value={this.props.stats.rangeCount}
                     />
-                    {!this.props.details.statsLastUpdated.isSame(
-                      this.minDate,
-                    ) && (
+                    {this.props.details.statsLastUpdated && (
                       <SummaryCardItem
                         label="Table Stats Last Updated"
                         value={formatDate(
@@ -392,14 +391,15 @@ export class DatabaseTablePage extends React.Component<
                           {" "}
                           Automatic statistics can help improve query
                           performance. Learn how to{" "}
-                          <a
+                          <Anchor
+                            href={tableStatsClusterSetting}
+                            target="_blank"
                             className={booleanSettingCx(
                               "crl-hover-text__link-text",
                             )}
-                            href="https://www.cockroachlabs.com/docs/stable/cost-based-optimizer#control-automatic-statistics"
                           >
                             manage statistics collection
-                          </a>
+                          </Anchor>
                           .
                         </span>
                       }

@@ -211,7 +211,7 @@ message TableDetailsResponse {
   // zone if executed.
   string configure_zone_statement = 9;
   // stats_last_created_at is the time at which statistics were last created.
-  google.protobuf.Timestamp stats_last_created_at = 10 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  google.protobuf.Timestamp stats_last_created_at = 10 [(gogoproto.stdtime) = true];
 }
 
 // TableStatsRequest is a request for detailed, computationally expensive

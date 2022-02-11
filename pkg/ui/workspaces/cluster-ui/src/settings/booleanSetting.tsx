@@ -24,29 +24,19 @@ export interface BooleanSettingProps {
 
 export function BooleanSetting(props: BooleanSettingProps) {
   const { text, enabled, tooltipText } = props;
-  if (enabled) {
-    return (
-      <div>
-        <CircleFilled className={cx("bool-setting-icon__enabled")} />
-        <Tooltip
-          placement="bottom"
-          title={tooltipText}
-          className={cx("crl-hover-text__dashed-underline")}
-        >
-          {text} - enabled
-        </Tooltip>
-      </div>
-    );
-  }
+  const label = enabled ? "enabled" : "disabled";
+  const boolClass = enabled
+    ? "bool-setting-icon__enabled"
+    : "bool-setting-icon__disabled";
   return (
     <div>
-      <CircleFilled className={cx("bool-setting-icon__disabled")} />
+      <CircleFilled className={cx(boolClass)} />
       <Tooltip
         placement="bottom"
         title={tooltipText}
         className={cx("crl-hover-text__dashed-underline")}
       >
-        {text} - disabled
+        {text} - {label}
       </Tooltip>
     </div>
   );
