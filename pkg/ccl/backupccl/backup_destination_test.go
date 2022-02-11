@@ -281,9 +281,9 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			// - BACKUP INTO collection
 			// - BACKUP INTO LATEST IN collection
 			// - BACKUP INTO full1 IN collection
-			// - BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
-			// - BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
-			// - BACKUP INTO LATEST IN collection, incremental_storage = inc_storage_path
+			// - BACKUP INTO full1 IN collection, incremental_location = inc_storage_path
+			// - BACKUP INTO full1 IN collection, incremental_location = inc_storage_path
+			// - BACKUP INTO LATEST IN collection, incremental_location = inc_storage_path
 			t.Run("collection", func(t *testing.T) {
 				collectionLoc := fmt.Sprintf("nodelocal://1/%s/?AUTH=implicit", t.Name())
 				collectionTo := localizeURI(t, collectionLoc, localities)
@@ -439,7 +439,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					writeManifest(t, expectedDefault)
 				}
 
-				// A remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+				// A remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_location = inc_storage_path
 				{
 					expectedSuffix := "/2020/12/25-060000.00"
 					expectedIncDir := "/20201225/090000.00"
@@ -457,7 +457,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 					firstRemoteBackupChain = append(firstRemoteBackupChain, expectedDefault)
 				}
 
-				// Another remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_storage = inc_storage_path
+				// Another remote incremental into the first full: BACKUP INTO full1 IN collection, incremental_location = inc_storage_path
 				{
 					expectedSuffix := "/2020/12/25-060000.00"
 					expectedIncDir := "/20201225/093000.00"
@@ -474,7 +474,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 				}
 
 				// A remote incremental into the second full backup: BACKUP INTO LATEST IN collection,
-				//incremental_storage = inc_storage_path
+				//incremental_location = inc_storage_path
 				{
 					expectedSuffix := "/2020/12/25-073000.00"
 					expectedIncDir := "/20201225/100000.00"

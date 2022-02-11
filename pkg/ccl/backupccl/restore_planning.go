@@ -1532,7 +1532,7 @@ func restorePlanHook(
 	var incStorageFn func() ([]string, error)
 	if restoreStmt.Options.IncrementalStorage != nil {
 		if restoreStmt.Subdir == nil {
-			err = errors.New("incremental_storage can only be used with the following" +
+			err = errors.New("incremental_location can only be used with the following" +
 				" syntax: 'RESTORE [target] FROM [subdirectory] IN [destination]'")
 			return nil, nil, nil, false, err
 		}
@@ -1604,7 +1604,7 @@ func restorePlanHook(
 
 		// incFrom will contain the directory URIs for incremental backups (i.e.
 		// <prefix>/<subdir>) iff len(From)==1, regardless of the
-		// 'incremental_storage' param. len(From)=1 implies that the user has not
+		// 'incremental_location' param. len(From)=1 implies that the user has not
 		// explicitly passed incremental backups, so we'll have to look for any in
 		// <prefix>/<subdir>. len(incFrom)>1 implies the incremental backups are
 		// locality aware.

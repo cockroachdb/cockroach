@@ -424,8 +424,8 @@ func TestShowBackups(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
 	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
 	// Make 2 remote incremental backups, chaining to the third full backup
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
-	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_storage = $2`, full, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1 WITH incremental_location = $2`, full, remoteInc)
 
 	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
 
@@ -445,7 +445,7 @@ func TestShowBackups(t *testing.T) {
 
 	// check that full and remote incremental backups appear
 	b3 := sqlDBRestore.QueryStr(t,
-		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_storage= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
+		`SELECT * FROM [SHOW BACKUP LATEST IN $1 WITH incremental_location= 'nodelocal://0/foo/inc'] WHERE object_type='table'`, full)
 	require.Equal(t, 3, len(b3))
 
 }

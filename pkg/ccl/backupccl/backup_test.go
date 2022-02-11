@@ -878,7 +878,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	sqlDB.Exec(t, "BACKUP INTO ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO LATEST IN ($1, $2, $3)", collections...)
 	sqlDB.Exec(t, "BACKUP INTO $4 IN ($1, $2, $3)", append(collections, "subdir")...)
-	sqlDB.Exec(t, "BACKUP INTO LATEST IN $4 WITH incremental_storage = ($1, $2, $3)",
+	sqlDB.Exec(t, "BACKUP INTO LATEST IN $4 WITH incremental_location = ($1, $2, $3)",
 		append(incrementals, collections[0])...)
 
 	// Find the subdirectory created by the full BACKUP INTO statement.
@@ -900,7 +900,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 				collections[0], collections[1], collections[2])},
 			{fmt.Sprintf("BACKUP INTO '%s' IN ('%s', '%s', '%s')", "/subdir",
 				collections[0], collections[1], collections[2])},
-			{fmt.Sprintf("BACKUP INTO '%s' IN '%s' WITH incremental_storage = ('%s', '%s', '%s')",
+			{fmt.Sprintf("BACKUP INTO '%s' IN '%s' WITH incremental_location = ('%s', '%s', '%s')",
 				"/subdir", collections[0], incrementals[0],
 				incrementals[1], incrementals[2])},
 		},
@@ -920,7 +920,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 
 	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
 	sqlDB.Exec(t, "RESTORE DATABASE data FROM LATEST IN ($1, $2, "+
-		"$3) WITH incremental_storage = ($4, $5, $6)",
+		"$3) WITH incremental_location = ($4, $5, $6)",
 		append(collections, incrementals[0], incrementals[1], incrementals[2])...)
 
 	// The flavors of BACKUP and RESTORE which automatically resolve the right
@@ -957,7 +957,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s')",
 				resolvedSubdirURIs[0], resolvedSubdirURIs[1],
 				resolvedSubdirURIs[2])},
-			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_storage = ('%s', '%s', '%s')",
+			{fmt.Sprintf("RESTORE DATABASE data FROM ('%s', '%s', '%s') WITH incremental_location = ('%s', '%s', '%s')",
 				resolvedSubdirURIs[0], resolvedSubdirURIs[1], resolvedSubdirURIs[2],
 				resolvedIncURIs[0], resolvedIncURIs[1], resolvedIncURIs[2])},
 		},
@@ -9095,7 +9095,7 @@ func TestRestoreSyntheticPublicSchemaNamespaceEntryCleanupOnFail(t *testing.T) {
 }
 
 // TestBackupRestoreSeperateIncrementalPrefix tests that a backup/restore round
-// trip using the 'incremental_storage' parameter restores the same db as a BR
+// trip using the 'incremental_location' parameter restores the same db as a BR
 // round trip without the parameter.
 func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -9151,11 +9151,13 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 		//  - the restored db with incremental_storage should be called "inc_fkdb"
 		//  - the restored db without it should be called "trad_fkdb
 		sqlDB.Exec(t, "ALTER DATABASE fkdb RENAME TO inc_fkdb")
-		sib := fmt.Sprintf("BACKUP DATABASE inc_fkdb INTO LATEST IN %s WITH incremental_storage = %s", dest, inc)
+		sib := fmt.Sprintf("BACKUP DATABASE inc_fkdb INTO LATEST IN %s WITH incremental_location = %s",
+			dest, inc)
 		sqlDB.Exec(t, sib)
 
 		sqlDB.Exec(t, "ALTER DATABASE inc_fkdb RENAME TO orig_fkdb")
-		sir := fmt.Sprintf("RESTORE DATABASE inc_fkdb FROM LATEST IN %s WITH incremental_storage = %s", dest, inc)
+		sir := fmt.Sprintf("RESTORE DATABASE inc_fkdb FROM LATEST IN %s WITH incremental_location"+
+			" = %s", dest, inc)
 		sqlDB.Exec(t, sir)
 
 		sqlDB.Exec(t, "ALTER DATABASE orig_fkdb RENAME TO trad_fkdb")
