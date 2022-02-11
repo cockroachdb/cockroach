@@ -576,14 +576,7 @@ If problems persist, please see %s.`
 	// Run the rest of the startup process in a goroutine separate from
 	// the main goroutine to avoid preventing proper handling of signals
 	// if we get stuck on something during initialization (#10138).
-	var serverStatusMu struct {
-		syncutil.Mutex
-		// Used to synchronize server startup with server shutdown if something
-		// interrupts the process during initialization (it isn't safe to try to
-		// drain a server that doesn't exist or is in the middle of starting up,
-		// or to start a server after draining has begun).
-		started, draining bool
-	}
+	var serverStatusMu serverStatus
 	var s *server.Server
 	errChan := make(chan error, 1)
 	go func() {
@@ -675,6 +668,41 @@ If problems persist, please see %s.`
 		}
 	}()
 
+	return waitForShutdown(
+		// NB: we delay the access to s, as it is assigned
+		// asynchronously in a goroutine above.
+		func() serverShutdownInterface { return s },
+		stopper, errChan, signalCh,
+		&serverStatusMu)
+}
+
+type serverStatus struct {
+	syncutil.Mutex
+	// Used to synchronize server startup with server shutdown if something
+	// interrupts the process during initialization (it isn't safe to try to
+	// drain a server that doesn't exist or is in the middle of starting up,
+	// or to start a server after draining has begun).
+	started, draining bool
+}
+
+// serverShutdownInterface is the subset of the APIs on a server
+// object that's sufficient to run a server shutdown.
+type serverShutdownInterface interface {
+	AnnotateCtx(context.Context) context.Context
+	Drain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
+}
+
+// waitForShutdown lets the server run asynchronously and waits for
+// shutdown, either due to the server spontaneously shutting down
+// (signaled by stopper), or due to a server error (signaled on
+// errChan), by receiving a signal (signaled by signalCh).
+func waitForShutdown(
+	getS func() serverShutdownInterface,
+	stopper *stop.Stopper,
+	errChan chan error,
+	signalCh chan os.Signal,
+	serverStatusMu *serverStatus,
+) (returnErr error) {
 	// The remainder of the main function executes concurrently with the
 	// start up goroutine started above.
 	//
@@ -684,9 +712,9 @@ If problems persist, please see %s.`
 	// decommission`, or a signal.
 
 	// We'll want to log any shutdown activity against a separate span.
-	// We cannot use s.AnnotateCtx here because s might not have
+	// We cannot use s.AnnotateCtx here because the server might not have
 	// been assigned yet (the goroutine above runs asynchronously).
-	shutdownCtx, shutdownSpan := ambientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
+	shutdownCtx, shutdownSpan := serverCfg.AmbientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
 	defer shutdownSpan.Finish()
 
 	stopWithoutDrain := make(chan struct{}) // closed if interrupted very early
@@ -750,8 +778,7 @@ If problems persist, please see %s.`
 			}
 			// Don't use shutdownCtx because this is in a goroutine that may
 			// still be running after shutdownCtx's span has been finished.
-			drainCtx := s.AnnotateCtx(context.Background())
-			drainCtx = logtags.AddTag(drainCtx, "server drain process", nil)
+			drainCtx := logtags.AddTag(getS().AnnotateCtx(context.Background()), "server drain process", nil)
 
 			// Perform a graceful drain. We keep retrying forever, in
 			// case there are many range leases or some unavailability
@@ -765,7 +792,8 @@ If problems persist, please see %s.`
 			)
 
 			for ; ; prevRemaining = remaining {
-				remaining, _, err = s.Drain(drainCtx, verbose)
+				var err error
+				remaining, _, err = getS().Drain(drainCtx, verbose)
 				if err != nil {
 					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
 					break

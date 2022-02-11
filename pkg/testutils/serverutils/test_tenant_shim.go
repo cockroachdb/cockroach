@@ -123,6 +123,9 @@ type TestTenantInterface interface {
 	// authenticated to access Admin API methods (via a cookie).
 	GetAuthenticatedHTTPClient(isAdmin bool) (http.Client, error)
 
+	// DrainClients shuts down client connections.
+	DrainClients(ctx context.Context) error
+
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing
 	// it by hand each time.

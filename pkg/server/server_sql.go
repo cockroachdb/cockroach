@@ -310,6 +310,9 @@ type sqlServerArgs struct {
 	// settingsStorage is an optional interface to drive storing of settings
 	// data on disk to provide a fresh source of settings upon next startup.
 	settingsStorage settingswatcher.Storage
+
+	// grpc is the RPC service.
+	grpc *grpcServer
 }
 
 type monitorAndMetrics struct {

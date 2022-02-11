@@ -42,8 +42,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
@@ -66,6 +66,8 @@ func trivialQuery(pgURL url.URL) error {
 
 // TestPGWireDrainClient makes sure that in draining mode, the server refuses
 // new connections and allows sessions with ongoing transactions to finish.
+//
+// TODO(knz): This test should also exercise SQL-only servers.
 func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -104,7 +106,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	go func() {
 		defer close(errChan)
 		errChan <- func() error {
-			return s.(*server.TestServer).DrainClients(ctx)
+			return s.DrainClients(ctx)
 		}()
 	}()
 

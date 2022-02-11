@@ -18,6 +18,8 @@ package server
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -31,6 +33,12 @@ type tenantAdminServer struct {
 	log.AmbientContext
 	serverpb.UnimplementedAdminServer
 	sqlServer *SQLServer
+	drain     *drainServer
+
+	// TODO(knz): find a way to avoid using status here,
+	// for example by lifting the services used from admin into
+	// a separate object.
+	status *tenantStatusServer
 }
 
 // We require that `tenantAdminServer` implement
@@ -51,10 +59,17 @@ func (t *tenantAdminServer) RegisterGateway(
 
 var _ grpcGatewayServer = &tenantAdminServer{}
 
-func newTenantAdminServer(ambientCtx log.AmbientContext, sqlServer *SQLServer) *tenantAdminServer {
+func newTenantAdminServer(
+	ambientCtx log.AmbientContext,
+	sqlServer *SQLServer,
+	status *tenantStatusServer,
+	drain *drainServer,
+) *tenantAdminServer {
 	return &tenantAdminServer{
 		AmbientContext: ambientCtx,
 		sqlServer:      sqlServer,
+		drain:          drain,
+		status:         status,
 	}
 }
 
@@ -84,4 +99,52 @@ func (t *tenantAdminServer) Health(
 	return resp, nil
 }
 
-// TODO(knz): add Drain implementation here.
+func (t *tenantAdminServer) dialPod(
+	ctx context.Context, instanceID base.SQLInstanceID, addr string,
+) (serverpb.AdminClient, error) {
+	conn, err := t.sqlServer.execCfg.RPCContext.GRPCDialPod(addr, instanceID, rpc.DefaultClass).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// nb: The server on the pods doesn't implement all the methods of the
+	// `AdminService`. It is up to the caller of `dialPod` to only call
+	// methods that are implemented on the tenant server.
+	return serverpb.NewAdminClient(conn), nil
+}
+
+// Drain puts the node into the specified drain mode(s) and optionally
+// instructs the process to terminate.
+// This method is part of the serverpb.AdminClient interface.
+func (t *tenantAdminServer) Drain(
+	req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer,
+) error {
+	ctx := stream.Context()
+	ctx = t.AnnotateCtx(ctx)
+
+	// Which node is this request for?
+	parsedInstanceID, local, err := t.status.parseInstanceID(req.NodeId)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return err
+		}
+		// This request is for another node. Forward it.
+		// In contrast to many RPC calls we implement around
+		// the server package, the Drain RPC is a *streaming*
+		// RPC. This means that it may have more than one
+		// response. We must forward all of them.
+
+		// Connect to the target node.
+		client, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return serverError(ctx, err)
+		}
+		return delegateDrain(ctx, req, client, stream)
+	}
+
+	return t.drain.handleDrain(ctx, req, stream)
+}

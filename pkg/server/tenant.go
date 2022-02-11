@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
@@ -60,9 +61,49 @@ func StartTenant(
 	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
 	baseCfg BaseConfig,
 	sqlCfg SQLConfig,
-) (sqlServer *SQLServer, err error) {
-	sqlServer, _, _, _, err = startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
-	return
+) (*SQLServerWrapper, error) {
+	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	if err != nil {
+		return nil, err
+	}
+	return &SQLServerWrapper{
+		SQLServer:   sqlServer,
+		authServer:  authServer,
+		drainServer: drainServer,
+		pgAddr:      pgAddr,
+		httpAddr:    httpAddr,
+	}, err
+}
+
+// SQLServerWrapper is a utility struct that encapsulates
+// a SQLServer and its helpers that make it a networked service.
+type SQLServerWrapper struct {
+	*SQLServer
+	authServer  *authenticationServer
+	drainServer *drainServer
+	pgAddr      string
+	httpAddr    string
+}
+
+// Drain idempotently activates the draining mode.
+// Note: new code should not be taught to use this method
+// directly. Use the Drain() RPC instead with a suitably crafted
+// DrainRequest.
+//
+// On failure, the system may be in a partially drained
+// state; the client should either continue calling Drain() or shut
+// down the server.
+//
+// The reporter function, if non-nil, is called for each
+// packet of load shed away from the server during the drain.
+//
+// TODO(knz): This method is currently exported for use by the
+// shutdown code in cli/start.go; however, this is a mis-design. The
+// start code should use the Drain() RPC like quit does.
+func (s *SQLServerWrapper) Drain(
+	ctx context.Context, verbose bool,
+) (remaining uint64, info redact.RedactableString, err error) {
+	return s.drainServer.runDrain(ctx, verbose)
 }
 
 // startTenantInternal is used to build TestServers.
@@ -75,13 +116,14 @@ func startTenantInternal(
 ) (
 	sqlServer *SQLServer,
 	authServer *authenticationServer,
+	drainServer *drainServer,
 	pgAddr string,
 	httpAddr string,
 	_ error,
 ) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	// Inform the server identity provider that we're operating
@@ -90,11 +132,11 @@ func startTenantInternal(
 
 	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 	args.monitorAndMetrics = newRootSQLMemoryMonitor(monitorAndMetricsOptions{
 		memoryPoolSize:          args.MemoryPoolSize,
@@ -134,7 +176,7 @@ func startTenantInternal(
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	{
@@ -148,13 +190,13 @@ func startTenantInternal(
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)
-			return nil, nil, "", "", err
+			return nil, nil, nil, "", "", err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	args.advertiseAddr = baseCfg.AdvertiseAddr
@@ -175,10 +217,12 @@ func startTenantInternal(
 	tenantStatusServer.sqlServer = s
 
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
-	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s)
+	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
+
+	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
 	// TODO(asubiotto): remove this. Right now it is needed to initialize the
 	// SpanResolver.
@@ -204,12 +248,12 @@ func startTenantInternal(
 		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, nil, "", "", err
+			return nil, nil, nil, "", "", err
 		}
 	}
 
@@ -236,7 +280,7 @@ func startTenantInternal(
 		debugServer,     /* handleDebugUnauthenticated */
 		nil,             /* apiServer */
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	connManager := netutil.MakeServer(
@@ -245,7 +289,7 @@ func startTenantInternal(
 		http.HandlerFunc(httpServer.baseHandler), // handler
 	)
 	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	args.recorder.AddNode(
@@ -272,7 +316,7 @@ func startTenantInternal(
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	if err := s.preStart(ctx,
@@ -283,7 +327,7 @@ func startTenantInternal(
 		socketFile,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
@@ -303,7 +347,7 @@ func startTenantInternal(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -311,10 +355,10 @@ func startTenantInternal(
 		s.connManager,
 		s.pgL,
 		socketFile); err != nil {
-		return nil, nil, "", "", err
+		return nil, nil, nil, "", "", err
 	}
 
-	return s, authServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
+	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
 }
 
 func makeTenantSQLServerArgs(
@@ -475,6 +519,11 @@ func makeTenantSQLServerArgs(
 		db,
 	)
 
+	grpcServer := newGRPCServer(rpcContext)
+	// In a SQL-only server, there is no separate node initialization
+	// phase. Start RPC immediately in the operational state.
+	grpcServer.setMode(modeOperational)
+
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
 	return sqlServerArgs{
@@ -482,6 +531,7 @@ func makeTenantSQLServerArgs(
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
+			grpcServer:        grpcServer.Server,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},
@@ -518,6 +568,7 @@ func makeTenantSQLServerArgs(
 		regionsServer:            tenantConnect,
 		costController:           costController,
 		allowSessionRevival:      true,
+		grpc:                     grpcServer,
 	}, nil
 }
 
