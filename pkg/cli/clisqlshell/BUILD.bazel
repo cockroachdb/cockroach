@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/scanner",
         "//pkg/sql/sqlfsm",
         "//pkg/util/envutil",
+        "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_knz_go_libedit//:go-libedit",
     ],
