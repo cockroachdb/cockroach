@@ -336,6 +336,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 	var zKey ZoneKey
 	var zConfig *zonepb.ZoneConfig
 	var numReplicas int
+	var numNeededVoters int
 
 	// Figure out the zone config for whose report the current range is to be
 	// counted. This is the lowest-level zone config covering the range that
@@ -352,6 +353,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 				zConfig = zone
 				if zone.NumReplicas != nil {
 					numReplicas = int(*zone.NumReplicas)
+					numNeededVoters = v.calculateNeededVoters(zone)
 					return true
 				}
 				// We need to continue upwards in search for the NumReplicas.
@@ -361,6 +363,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 			// its NumReplicas yet.
 			if zone.NumReplicas != nil {
 				numReplicas = int(*zone.NumReplicas)
+				numNeededVoters = v.calculateNeededVoters(zone)
 				return true
 			}
 			return false
@@ -375,7 +378,7 @@ func (v *replicationStatsVisitor) visitNewZone(
 			"no zone config with replication attributes found for range: %s", r)
 	}
 
-	v.countRange(ctx, zKey, numReplicas, r)
+	v.countRange(ctx, zKey, numNeededVoters, r)
 	return nil
 }
 
@@ -405,4 +408,17 @@ func (v *replicationStatsVisitor) countRange(
 func zoneChangesReplication(zone *zonepb.ZoneConfig) bool {
 	return (zone.NumReplicas != nil && *zone.NumReplicas != 0) ||
 		zone.Constraints != nil
+}
+
+// calculateNeededVoters determines how many voters are needed which is
+// used to make a calculation that indicates if the replication status is
+// over/under replicated.
+func (v *replicationStatsVisitor) calculateNeededVoters(zone *zonepb.ZoneConfig) int {
+	if zone.NumVoters != nil {
+		return int(*zone.NumVoters)
+	}
+	if zone.NumReplicas != nil {
+		return int(*zone.NumReplicas)
+	}
+	return 0
 }
