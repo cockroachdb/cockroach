@@ -2767,15 +2767,24 @@ message RangeFeedSSTable {
   util.hlc.Timestamp write_ts = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "WriteTS"];
 }
 
+// RangeFeedDeleteRange is a variant of RangeFeedEvent that represents a
+// deletion of the specified key range at the given timestamp using an MVCC
+// range tombstone.
+message RangeFeedDeleteRange {
+  Span               span        = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp   = 2 [(gogoproto.nullable) = false];
+}
+
 // RangeFeedEvent is a union of all event types that may be returned on a
 // RangeFeed response stream.
 message RangeFeedEvent {
   option (gogoproto.onlyone) = true;
 
-  RangeFeedValue      val        = 1;
-  RangeFeedCheckpoint checkpoint = 2;
-  RangeFeedError      error      = 3;
-  RangeFeedSSTable    sst        = 4 [(gogoproto.customname) = "SST"];
+  RangeFeedValue       val          = 1;
+  RangeFeedCheckpoint  checkpoint   = 2;
+  RangeFeedError       error        = 3;
+  RangeFeedSSTable     sst          = 4 [(gogoproto.customname) = "SST"];
+  RangeFeedDeleteRange delete_range = 5;
 }
 
 

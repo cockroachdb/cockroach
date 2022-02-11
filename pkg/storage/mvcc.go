@@ -2471,7 +2471,19 @@ func ExperimentalMVCCDeleteRangeUsingTombstone(
 		value.LocalTimestamp = hlc.ClockTimestamp{}
 	}
 
-	return rw.ExperimentalPutMVCCRangeKey(rangeKey, value)
+	if err := rw.ExperimentalPutMVCCRangeKey(rangeKey, value); err != nil {
+		return err
+	}
+
+	// Record the logical operation, for rangefeed emission.
+	rw.LogLogicalOp(MVCCDeleteRangeOpType, MVCCLogicalOpDetails{
+		Safe:      true,
+		Key:       rangeKey.StartKey,
+		EndKey:    rangeKey.EndKey,
+		Timestamp: rangeKey.Timestamp,
+	})
+
+	return nil
 }
 
 func recordIteratorStats(traceSpan *tracing.Span, iteratorStats IteratorStats) {

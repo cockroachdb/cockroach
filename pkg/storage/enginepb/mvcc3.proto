@@ -335,6 +335,15 @@ message MVCCAbortTxnOp {
     (gogoproto.nullable) = false];
 }
 
+// MVCCDeleteRangeOp corresponds to a range deletion using an MVCC range
+// tombstone.
+message MVCCDeleteRangeOp {
+  bytes              start_key = 1;
+  bytes              end_key   = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+
 // MVCCLogicalOp is a union of all logical MVCC operation types.
 message MVCCLogicalOp {
   option (gogoproto.onlyone) = true;
@@ -345,4 +354,5 @@ message MVCCLogicalOp {
   MVCCCommitIntentOp commit_intent = 4;
   MVCCAbortIntentOp  abort_intent  = 5;
   MVCCAbortTxnOp     abort_txn     = 6;
+  MVCCDeleteRangeOp  delete_range  = 7;
 }

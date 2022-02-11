@@ -473,6 +473,76 @@ func TestMVCCRangeKeyValidate(t *testing.T) {
 	}
 }
 
+func TestFirstRangeKeyAbove(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKVs := []MVCCRangeKeyValue{
+		rangeKV("a", "f", 6, MVCCValue{}),
+		rangeKV("a", "f", 4, MVCCValue{}),
+		rangeKV("a", "f", 3, MVCCValue{}),
+		rangeKV("a", "f", 1, MVCCValue{}),
+	}
+
+	testcases := []struct {
+		ts     int64
+		expect int64
+	}{
+		{0, 1},
+		{1, 1},
+		{2, 3},
+		{3, 3},
+		{4, 4},
+		{5, 6},
+		{6, 6},
+		{7, 0},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d", tc.ts), func(t *testing.T) {
+			rkv, ok := FirstRangeKeyAbove(rangeKVs, hlc.Timestamp{WallTime: tc.ts})
+			if tc.expect == 0 {
+				require.False(t, ok)
+				require.Empty(t, rkv)
+			} else {
+				require.True(t, ok)
+				require.Equal(t, rangeKV("a", "f", int(tc.expect), MVCCValue{}), rkv)
+			}
+		})
+	}
+}
+
+func TestHasRangeKeyBetween(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rangeKVs := []MVCCRangeKeyValue{
+		rangeKV("a", "f", 5, MVCCValue{}),
+		rangeKV("a", "f", 1, MVCCValue{}),
+	}
+
+	testcases := []struct {
+		lower, upper int
+		expect       bool
+	}{
+		{0, 0, false},
+		{0, 1, true},
+		{1, 0, true},
+		{1, 1, true},
+		{0, 2, true},
+		{4, 6, true},
+		{6, 4, true},
+		{5, 5, true},
+		{4, 4, false},
+		{6, 6, false},
+		{2, 4, false},
+		{0, 9, true},
+		{9, 0, true},
+	}
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("%d,%d", tc.lower, tc.upper), func(t *testing.T) {
+			require.Equal(t, tc.expect, HasRangeKeyBetween(rangeKVs, wallTS(tc.lower), wallTS(tc.upper)))
+		})
+	}
+}
+
 func pointKey(key string, ts int) MVCCKey {
 	return MVCCKey{Key: roachpb.Key(key), Timestamp: wallTS(ts)}
 }

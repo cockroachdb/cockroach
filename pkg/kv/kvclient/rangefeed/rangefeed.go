@@ -357,6 +357,12 @@ func (f *RangeFeed) processEvents(
 						"received unexpected rangefeed SST event with no OnSSTable handler")
 				}
 				f.onSSTable(ctx, ev.SST)
+			case ev.DeleteRange != nil:
+				if f.onDeleteRange == nil {
+					return errors.AssertionFailedf(
+						"received unexpected rangefeed DeleteRange event with no OnDeleteRange handler: %s", ev)
+				}
+				f.onDeleteRange(ctx, ev.DeleteRange)
 			case ev.Error != nil:
 				// Intentionally do nothing, we'll get an error returned from the
 				// call to RangeFeed.
