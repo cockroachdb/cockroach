@@ -12,6 +12,8 @@ pkg/kv/bulk/sst_batcher.go | `sz`
 pkg/kv/bulk/sst_batcher.go | `timing`
 pkg/kv/kvserver/closedts/ctpb/service.go | `LAI`
 pkg/kv/kvserver/closedts/ctpb/service.go | `SeqNum`
+pkg/kv/kvserver/concurrency/lock/locking.go | `Durability`
+pkg/kv/kvserver/concurrency/lock/locking.go | `Strength`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
 pkg/kv/kvserver/kvserverpb/raft.go | `SnapshotRequest_Type`
 pkg/roachpb/data.go | `LeaseSequence`
