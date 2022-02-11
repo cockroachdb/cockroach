@@ -25,7 +25,8 @@ import (
 // A CatchUpIterator is an iterator for catchUp-scans.
 type CatchUpIterator struct {
 	storage.SimpleMVCCIterator
-	close func()
+	rangeKeyIter *storage.MVCCRangeKeyIterator
+	close        func()
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader.
@@ -68,6 +69,12 @@ func NewCatchUpIterator(
 		})
 	}
 
+	ret.rangeKeyIter = storage.NewMVCCRangeKeyIterator(reader, storage.MVCCRangeKeyIterOptions{
+		LowerBound:   args.Span.Key,
+		UpperBound:   args.Span.EndKey,
+		MinTimestamp: args.Timestamp,
+	})
+
 	return ret
 }
 
@@ -75,6 +82,9 @@ func NewCatchUpIterator(
 // callback.
 func (i *CatchUpIterator) Close() {
 	i.SimpleMVCCIterator.Close()
+	if i.rangeKeyIter != nil { // can be nil in tests
+		i.rangeKeyIter.Close()
+	}
 	if i.close != nil {
 		i.close()
 	}
@@ -94,6 +104,41 @@ func (i *CatchUpIterator) CatchUpScan(
 	withDiff bool,
 	outputFn outputEventFn,
 ) error {
+	// We emit any MVCC range tombstones first, so that the caller can use them to
+	// potentially discard point keys below them.
+	//
+	// Note that MVCC range tombstones are currently experimental, and will only
+	// be used when storage.CanUseExperimentalMVCCRangeTombstones() is enabled.
+	if i.rangeKeyIter != nil { // can be nil in tests
+		for {
+			if ok, err := i.rangeKeyIter.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+
+			rangeKey, value := i.rangeKeyIter.Key(), i.rangeKeyIter.Value()
+			if len(value) > 0 {
+				// We currently expect all range keys to be tombstones.
+				panic(errors.AssertionFailedf("unexpected non-tombstone range key %s with value %v",
+					rangeKey, value))
+			}
+			if rangeKey.Timestamp.Less(catchUpTimestamp) {
+				continue
+			}
+			err := outputFn(&roachpb.RangeFeedEvent{
+				DelRange: &roachpb.RangeFeedDeleteRange{
+					Span:      roachpb.Span{Key: rangeKey.StartKey, EndKey: rangeKey.EndKey},
+					Timestamp: rangeKey.Timestamp,
+				},
+			})
+			if err != nil {
+				return err
+			}
+			i.rangeKeyIter.Next()
+		}
+	}
+
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
 	// reverse-chronological order. To output in chronological order, store

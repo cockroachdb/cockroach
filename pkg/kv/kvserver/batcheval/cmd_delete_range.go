@@ -49,6 +49,7 @@ func DeleteRange(
 	args := cArgs.Args.(*roachpb.DeleteRangeRequest)
 	h := cArgs.Header
 	reply := resp.(*roachpb.DeleteRangeResponse)
+	ms := cArgs.Stats
 
 	// Use experimental MVCC range tombstone if requested. The caller is expected
 	// to have checked storage.CanUseExperimentalMVCCRangeTombstones() first.
@@ -66,7 +67,17 @@ func DeleteRange(
 		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 		err := storage.ExperimentalMVCCDeleteRangeUsingTombstone(
 			ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.Timestamp, maxIntents)
-		return result.Result{}, err
+		if err != nil {
+			return result.Result{}, err
+		}
+
+		// TODO(erikgrinaker): Range keys aren't currently recorded in Pebble write
+		// batches, which means that they're not considered replicated commands for
+		// Raft, and aren't emitted over rangefeeds. We get around this by making a
+		// trivial change to the stats, which signals that it's a replicated command
+		// after all.
+		ms.LastUpdateNanos = h.Timestamp.WallTime
+		return result.Result{}, nil
 	}
 
 	var timestamp hlc.Timestamp
@@ -78,8 +89,7 @@ func DeleteRange(
 	// can update the Result's AcquiredLocks field.
 	returnKeys := args.ReturnKeys || h.Txn != nil
 	deleted, resumeSpan, num, err := storage.MVCCDeleteRange(
-		ctx, readWriter, cArgs.Stats, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, returnKeys,
-	)
+		ctx, readWriter, ms, args.Key, args.EndKey, h.MaxSpanRequestKeys, timestamp, h.Txn, returnKeys)
 	if err == nil && args.ReturnKeys {
 		reply.Keys = deleted
 	}

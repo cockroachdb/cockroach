@@ -2073,6 +2073,13 @@ func (u *LockUpdate) SetTxn(txn *Transaction) {
 	u.IgnoredSeqNums = txn.IgnoredSeqNums
 }
 
+// Clone returns a copy of the span.
+func (s Span) Clone() Span {
+	s.Key = s.Key.Clone()
+	s.EndKey = s.EndKey.Clone()
+	return s
+}
+
 // EqualValue is Equal.
 //
 // TODO(tbg): remove this passthrough.

@@ -613,6 +613,118 @@ func TestWithOnSSTableCatchesUpIfNotSet(t *testing.T) {
 	require.Equal(t, expectKVs, seenKVs)
 }
 
+// TestWithDeleteRange tests that the rangefeed emits MVCC range tombstones.
+func TestWithOnDeleteRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	srv := tc.Server(0)
+	db := srv.DB()
+
+	_, _, err := tc.SplitRange(roachpb.Key("a"))
+	require.NoError(t, err)
+	require.NoError(t, tc.WaitForFullReplication())
+
+	_, err = tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	require.NoError(t, err)
+	f, err := rangefeed.NewFactory(srv.Stopper(), db, srv.ClusterSettings(), nil)
+	require.NoError(t, err)
+
+	// We lay down a couple of range tombstones and points. The first range
+	// tombstone should not be visible, because initial scans do not emit
+	// tombstones. The second one should be visible, because catchup scans do emit
+	// tombstones. The range tombstone should be ordered after the initial point,
+	// but before the catchup point.
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "c", "d"))
+	require.NoError(t, db.Put(ctx, "foo", "initial"))
+	rangeFeedTS := db.Clock().Now()
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "d", "z"))
+	require.NoError(t, db.Put(ctx, "foo", "catchup"))
+
+	// We start the rangefeed over a narrower span than the DeleteRanges (c-g),
+	// to ensure the DeleteRange event is truncated to the registration span.
+	var once sync.Once
+	checkpointC := make(chan struct{})
+	deleteRangeC := make(chan *roachpb.RangeFeedDeleteRange)
+	rowC := make(chan *roachpb.RangeFeedValue)
+	spans := []roachpb.Span{{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}}
+	r, err := f.RangeFeed(ctx, "test", spans, rangeFeedTS,
+		func(ctx context.Context, e *roachpb.RangeFeedValue) {
+			select {
+			case rowC <- e:
+			case <-ctx.Done():
+			}
+		},
+		rangefeed.WithInitialScan(nil),
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *roachpb.RangeFeedCheckpoint) {
+			once.Do(func() {
+				close(checkpointC)
+			})
+		}),
+		rangefeed.WithOnDeleteRange(func(ctx context.Context, e *roachpb.RangeFeedDeleteRange) {
+			select {
+			case deleteRangeC <- e:
+			case <-ctx.Done():
+			}
+		}),
+	)
+	require.NoError(t, err)
+	defer r.Close()
+
+	// Wait for initial scan. We should see the foo=initial point, but not the
+	// range tombstone.
+	select {
+	case e := <-rowC:
+		require.Equal(t, roachpb.Key("foo"), e.Key)
+		value, err := e.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "initial", string(value))
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+
+	// Wait for catchup scan. We should see the second range tombstone, truncated
+	// to the rangefeed bounds (c-g), and it should be ordered before the point
+	// foo=catchup.
+	select {
+	case e := <-deleteRangeC:
+		require.Equal(t, roachpb.Span{Key: roachpb.Key("d"), EndKey: roachpb.Key("g")}, e.Span)
+		require.NotEmpty(t, e.Timestamp)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+
+	select {
+	case e := <-rowC:
+		require.Equal(t, roachpb.Key("foo"), e.Key)
+		value, err := e.Value.GetBytes()
+		require.NoError(t, err)
+		require.Equal(t, "catchup", string(value))
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+
+	// Wait for checkpoint after catchup scan.
+	select {
+	case <-checkpointC:
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for checkpoint")
+	}
+
+	// Send another DeleteRange, and wait for the rangefeed event. This should
+	// be truncated to the rangefeed bounds (c-g).
+	require.NoError(t, db.ExperimentalDelRangeUsingTombstone(ctx, "a", "z"))
+	select {
+	case e := <-deleteRangeC:
+		require.Equal(t, roachpb.Span{Key: roachpb.Key("c"), EndKey: roachpb.Key("g")}, e.Span)
+		require.NotEmpty(t, e.Timestamp)
+	case <-time.After(3 * time.Second):
+		require.Fail(t, "timed out waiting for DeleteRange event")
+	}
+}
+
 // TestUnrecoverableErrors verifies that unrecoverable internal errors are surfaced
 // to callers.
 func TestUnrecoverableErrors(t *testing.T) {
