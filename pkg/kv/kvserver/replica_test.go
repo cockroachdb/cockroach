@@ -8647,6 +8647,177 @@ func TestRefreshFromBelowGCThreshold(t *testing.T) {
 	})
 }
 
+// TestGCThresholdRacesWithRead performs a GC and a read concurrently on the
+// same key. It ensures that either the read wins the race and observes the
+// correct result or the GC wins the race and the read returns an error. Either
+// result is ok. However, it should never be possible for the read to return
+// without error and without the correct result. This would indicate a bug in
+// the synchronization between reads and GC operations.
+//
+// The test contains a subtest for each of the combinations of the following
+// boolean options:
+//
+// - followerRead: configures whether the read should be served from the
+//     leaseholder replica or from a follower replica.
+//
+// - thresholdFirst: configures whether the GC operation should be split into
+//     two requests, with the first bumping the GC threshold and the second
+//     GCing the expired version. This is how the real MVCC GC queue works.
+//
+func TestGCThresholdRacesWithRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 55293)
+
+	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
+		testutils.RunTrueAndFalse(t, "thresholdFirst", func(t *testing.T, thresholdFirst bool) {
+			if !thresholdFirst {
+				skip.IgnoreLint(t, "the test fails, revealing that it is not safe "+
+					"to bump the GC threshold and to GC individual keys at the same time")
+			}
+
+			ctx := context.Background()
+			tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &StoreTestingKnobs{
+							// Disable the GC queue so the test is the only one issuing GC
+							// requests.
+							DisableGCQueue: true,
+							EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+								// The thresholdFirst = false variants will perform the unsafe
+								// action of bumping the GC threshold at the same time that it
+								// GCs individual keys.
+								AllowGCWithNewThresholdAndKeys: true,
+							},
+						},
+					},
+				},
+			})
+			defer tc.Stopper().Stop(ctx)
+			key := tc.ScratchRange(t)
+			desc := tc.LookupRangeOrFatal(t, key)
+			tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+			var stores []*Store
+			for i := 0; i < tc.NumServers(); i++ {
+				server := tc.Server(i)
+				store, err := server.GetStores().(*Stores).GetStore(server.GetFirstStoreID())
+				require.NoError(t, err)
+				stores = append(stores, store)
+			}
+			writer := stores[0]
+			reader := stores[0]
+			if followerRead {
+				reader = stores[1]
+			}
+
+			now := tc.Server(0).Clock().Now()
+			ts1 := now.Add(1, 0)
+			ts2 := now.Add(2, 0)
+			ts3 := now.Add(3, 0)
+			h1 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts1}
+			h2 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts2}
+			h3 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts3}
+			va := []byte("a")
+			vb := []byte("b")
+
+			// Write two versions of the key:
+			//  k@ts1 -> a
+			//  k@ts2 -> b
+			pArgs := putArgs(key, va)
+			_, pErr := kv.SendWrappedWith(ctx, writer, h1, &pArgs)
+			require.Nil(t, pErr)
+
+			pArgs = putArgs(key, vb)
+			_, pErr = kv.SendWrappedWith(ctx, writer, h2, &pArgs)
+			require.Nil(t, pErr)
+
+			// If the test wants to read from a follower, drop the closed timestamp
+			// duration and then wait until the follower can serve requests at ts1.
+			if followerRead {
+				_, err := tc.ServerConn(0).Exec(
+					`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+				require.NoError(t, err)
+
+				testutils.SucceedsSoon(t, func() error {
+					var ba roachpb.BatchRequest
+					ba.RangeID = desc.RangeID
+					ba.ReadConsistency = roachpb.INCONSISTENT
+					ba.Add(&roachpb.QueryResolvedTimestampRequest{
+						RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+					})
+					br, pErr := reader.Send(ctx, ba)
+					require.Nil(t, pErr)
+					rts := br.Responses[0].GetQueryResolvedTimestamp().ResolvedTS
+					if rts.Less(ts1) {
+						return errors.Errorf("resolved timestamp %s < %s", rts, ts1)
+					}
+					return nil
+				})
+			}
+
+			// Verify that a read @ ts1 returns "a".
+			gArgs := getArgs(key)
+			resp, pErr := kv.SendWrappedWith(ctx, reader, h1, &gArgs)
+			require.Nil(t, pErr)
+			require.NotNil(t, resp)
+			require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+			b, err := resp.(*roachpb.GetResponse).Value.GetBytes()
+			require.Nil(t, err)
+			require.Equal(t, va, b)
+
+			// Perform two actions concurrently:
+			//  1. GC up to ts2. This should remove the k@ts1 version.
+			//  2. Read @ ts1.
+			//
+			// There are two valid results for the read. If it wins the race, it
+			// should succeed and return "a". If it loses the race, it should fail
+			// with a BatchTimestampBeforeGCError error. It should not be possible
+			// for the read to return without error and also without the value "a".
+			// This would indicate a bug in the synchronization between reads and GC
+			// operations.
+			gc := func() {
+				if thresholdFirst {
+					gcReq := gcArgs(key, key.Next())
+					gcReq.Threshold = ts2
+					_, pErr = kv.SendWrappedWith(ctx, writer, h3, &gcReq)
+					require.Nil(t, pErr)
+				}
+
+				gcReq := gcArgs(key, key.Next(), gcKey(key, ts1))
+				if !thresholdFirst {
+					gcReq.Threshold = ts2
+				}
+				_, pErr = kv.SendWrappedWith(ctx, writer, h3, &gcReq)
+				require.Nil(t, pErr)
+			}
+			read := func() {
+				resp, pErr := kv.SendWrappedWith(ctx, reader, h1, &gArgs)
+				if pErr == nil {
+					t.Logf("read won race: %v", resp)
+					require.NotNil(t, resp)
+					require.NotNil(t, resp.(*roachpb.GetResponse).Value)
+					b, err := resp.(*roachpb.GetResponse).Value.GetBytes()
+					require.Nil(t, err)
+					require.Equal(t, va, b)
+				} else {
+					t.Logf("read lost race: %v", pErr)
+					gcErr := &roachpb.BatchTimestampBeforeGCError{}
+					require.ErrorAs(t, pErr.GoError(), &gcErr)
+				}
+			}
+
+			var wg sync.WaitGroup
+			wg.Add(2)
+			go func() { defer wg.Done(); gc() }()
+			go func() { defer wg.Done(); read() }()
+			wg.Wait()
+		})
+	})
+}
+
 func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
