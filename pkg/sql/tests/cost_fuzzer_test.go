@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/lib/pq"
 )
 
 func TestCostFuzzer(t *testing.T) {
@@ -62,6 +63,17 @@ func TestCostFuzzer(t *testing.T) {
 	}
 	defer smither.Close()
 
+	logfile := filepath.Join(outDir, "setup.log")
+	defer func() {
+		// If the test failed, print out the log of create table statements and
+		// mutations so reproductions can be created.
+		if t.Failed() {
+			if err := os.WriteFile(logfile, []byte(strings.Join(setupLog, ";\n\n")+";"), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}()
+
 	runner := sqlutils.MakeSQLRunner(conn)
 	for i := 0; i < 100000; i++ {
 		_, err = conn.Exec("SET testing_optimizer_random_cost_seed = 0")
@@ -75,7 +87,9 @@ func TestCostFuzzer(t *testing.T) {
 			stmt := mutatingSmither.Generate()
 			setupLog = append(setupLog, stmt)
 			if _, err := conn.Exec(stmt); err != nil {
-				// Ignore generation errors.
+				// Errors during execution of randomized mutations are often about
+				// things like inserting into tables with foreign keys that aren't
+				// properly matching. We can put these errors out to pasture.
 				continue
 			}
 		}
@@ -103,11 +117,22 @@ func TestCostFuzzer(t *testing.T) {
 		// Then, run the query with cost perturbation.
 		rows2, err := conn.Query(stmt)
 		if err != nil {
-			// Ignore errors.
-			continue
+			pErr := err.(*pq.Error)
+			if !strings.HasPrefix(string(pErr.Code), "XX") {
+				continue
+			}
+			t.Fatalf(`internal error while running perturbed query: %v
+
+Repro sql (paste into cockroach demo):
+
+\i %s
+SET testing_optimizer_random_cost_seed = %d;
+%s
+;
+`, err, logfile, seed, stmt)
 		}
-		defer rows2.Close()
 		perturbedRows, err := sqlutils.RowsToStrMatrix(rows2)
+		_ = rows2.Close()
 		if err != nil {
 			// Ignore errors.
 			continue
@@ -119,11 +144,6 @@ func TestCostFuzzer(t *testing.T) {
 			perturbedExplain := sqlutils.MatrixToStr(runner.QueryStr(t, "EXPLAIN "+stmt))
 			runner.Exec(t, "SET testing_optimizer_random_cost_seed = 0")
 			unperturbedExplain := sqlutils.MatrixToStr(runner.QueryStr(t, "EXPLAIN "+stmt))
-
-			logfile := filepath.Join(outDir, "setup.log")
-			if err := os.WriteFile(logfile, []byte(strings.Join(setupLog, ";\n\n")+";"), 0644); err != nil {
-				t.Fatal(err)
-			}
 
 			t.Fatalf(
 				`expected unperturbed and perturbed results to be equal:

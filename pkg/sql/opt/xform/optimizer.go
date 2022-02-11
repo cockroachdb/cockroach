@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -97,6 +98,9 @@ type Optimizer struct {
 
 	// JoinOrderBuilder adds new join orderings to the memo.
 	jb JoinOrderBuilder
+
+	// rng is used to randomly disable transformation rules for test scenarios.
+	rng *rand.Rand
 }
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
@@ -113,11 +117,23 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
 	o.f.Init(evalCtx, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
-	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation,
-		evalCtx.SessionData().LocalOnlySessionData.TestingOptimizerRandomCostSeed)
+	seed := evalCtx.SessionData().LocalOnlySessionData.TestingOptimizerRandomCostSeed
+	var rng *rand.Rand
+	if seed != 0 {
+		rng, _ := randutil.NewPseudoRand()
+		rng.Seed(seed)
+		o.rng = rng
+	}
+	o.defaultCoster.Init(evalCtx, o.mem, evalCtx.TestingKnobs.OptimizerCostPerturbation, rng)
 	o.coster = &o.defaultCoster
-	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
-		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
+	disableRuleProbability := evalCtx.TestingKnobs.DisableOptimizerRuleProbability
+	if o.rng != nil && disableRuleProbability == 0 {
+		// We have a user-set random seed for optimizer cost perturbation, so set
+		// the disable rule probability to some non-zero value as well.
+		disableRuleProbability = .3
+	}
+	if disableRuleProbability > 0 {
+		o.disableRules(disableRuleProbability)
 	}
 }
 
@@ -907,6 +923,18 @@ func (o *Optimizer) disableRules(probability float64) {
 		int(opt.NormalizeInConst),
 		// Needed when an index is forced.
 		int(opt.GenerateIndexScans),
+		// The fold null rules are needed to prevent errors like
+		// "expected *DString, found DNull"
+		int(opt.FoldNullBinaryRight),
+		int(opt.FoldNullBinaryLeft),
+		int(opt.FoldNullComparisonRight),
+		int(opt.FoldNullComparisonLeft),
+		// Without PruneAggCols, it's common to receive
+		// "optimizer factory constructor call stack exceeded max depth of 10000"
+		int(opt.PruneAggCols),
+		// Needed to prevent "null rejection requested on non-null column"
+		int(opt.RejectNullsUnderJoinLeft),
+		int(opt.RejectNullsUnderJoinRight),
 		// Needed to prevent "same fingerprint cannot map to different groups."
 		int(opt.PruneJoinLeftCols),
 		int(opt.PruneJoinRightCols),
@@ -921,7 +949,7 @@ func (o *Optimizer) disableRules(probability float64) {
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
-		if rand.Float64() < probability && !essentialRules.Contains(int(i)) {
+		if o.rng.Float64() < probability && !essentialRules.Contains(int(i)) {
 			o.disabledRules.Add(int(i))
 		}
 	}
@@ -952,7 +980,7 @@ func (o *Optimizer) FormatMemo(flags FmtFlags) string {
 // the real computed cost, not the perturbed cost.
 func (o *Optimizer) RecomputeCost() {
 	var c coster
-	c.Init(o.evalCtx, o.mem, 0 /* perturbation */, 0 /* seed */)
+	c.Init(o.evalCtx, o.mem, 0 /* perturbation */, nil /* rng */)
 
 	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
