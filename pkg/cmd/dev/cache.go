@@ -21,7 +21,6 @@ import (
 	"strings"
 	"syscall"
 
-	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/spf13/cobra"
 )
 
@@ -135,13 +134,11 @@ func (d *dev) setUpCache(ctx context.Context) (string, error) {
 
 	log.Printf("Configuring cache...\n")
 
-	if _, err := d.exec.CommandContextSilent(ctx, "bazel", "build", bazelRemoteTarget); err != nil {
-		return "", err
-	}
-	bazelBin, err := d.getBazelBin(ctx)
+	bazelRemoteLoc, err := d.exec.CommandContextSilent(ctx, "bazel", "run", bazelRemoteTarget, "--run_under=//build/bazelutil/whereis")
 	if err != nil {
 		return "", err
 	}
+	bazelRemoteBinary := strings.TrimSpace(string(bazelRemoteLoc))
 
 	// write config file unless already exists
 	cacheDir, err := bazelRemoteCacheDir()
@@ -173,33 +170,6 @@ port: 9867
 	}
 	log.Printf("Using cache configuration file at %s\n", configFile)
 
-	// Unfortunately bazel-remote is a `go_transition_binary` so I have to
-	// do this whole song and dance to find where the binary is. This logic
-	// is mostly copied from `bazci`.
-	output, err := d.exec.CommandContextSilent(ctx, "bazel", "cquery", bazelRemoteTarget, "--output=label_kind")
-	if err != nil {
-		return "", err
-	}
-	configHash := strings.Fields(string(output))[3]
-	configHash = strings.TrimPrefix(configHash, "(")
-	configHash = strings.TrimSuffix(configHash, ")")
-	output, err = d.exec.CommandContextSilent(ctx, "bazel", "config", configHash)
-	if err != nil {
-		return "", err
-	}
-	var binDirForBazelRemote string
-	for _, line := range strings.Split(string(output), "\n") {
-		if strings.Contains(line, "transition directory name fragment") {
-			fragmentLine := strings.Split(line, ":")
-			fragment := strings.TrimSpace(fragmentLine[1])
-			binDirForBazelRemote = filepath.Join(filepath.Dir(bazelBin)+"-"+fragment, filepath.Base(bazelBin))
-			break
-		}
-	}
-	if binDirForBazelRemote == "" {
-		return "", fmt.Errorf("could not find bazel-remote binary; this is a bug")
-	}
-	bazelRemoteBinary := filepath.Join(binDirForBazelRemote, bazelutil.OutputOfBinaryRule(bazelRemoteTarget, false))
 	cmd := exec.Command(bazelRemoteBinary, "--config_file", configFile)
 	stdout, err := os.Create(filepath.Join(cacheDir, "stdout.log"))
 	if err != nil {
