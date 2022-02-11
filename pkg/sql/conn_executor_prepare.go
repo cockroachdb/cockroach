@@ -201,6 +201,7 @@ func (ex *connExecutor) prepare(
 		prepared.PrepareMetadata = querycache.PrepareMetadata{
 			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
 				TypeHints: placeholderHints,
+				Types:     placeholderHints,
 			},
 		}
 		prepared.Statement = stmt.Statement
@@ -221,22 +222,9 @@ func (ex *connExecutor) prepare(
 		return err
 	}
 
-	if txn := ex.state.mu.txn; txn != nil && txn.IsOpen() {
-		// Use the existing transaction.
-		if err := prepare(ctx, txn); err != nil {
-			return nil, err
-		}
-	} else {
-		// Use a new transaction. This will handle retriable errors here rather
-		// than bubbling them up to the connExecutor state machine.
-		if err := ex.server.cfg.DB.Txn(ctx, prepare); err != nil {
-			return nil, err
-		}
-		// Prepare with an implicit transaction will end up creating
-		// a new transaction. Once this transaction is complete,
-		// we can safely release the leases, otherwise we will
-		// incorrectly hold leases for later operations.
-		ex.extraTxnState.descCollection.ReleaseAll(ctx)
+	// Use the existing transaction.
+	if err := prepare(ctx, ex.state.mu.txn); err != nil && origin != PreparedStatementOriginSessionMigration {
+		return nil, err
 	}
 
 	// Account for the memory used by this prepared statement.
