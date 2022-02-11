@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -146,22 +146,15 @@ func indexDetail(desc *descpb.TableDescriptor, indexIdx uint32) string {
 // summary implements the diagramCellType interface.
 func (tr *TableReaderSpec) summary() (string, []string) {
 	details := make([]string, 0, 3)
-	details = append(details, indexDetail(&tr.Table, tr.IndexIdx))
-	tbl := tabledesc.NewUnsafeImmutable(&tr.Table)
+	details = append(details, fmt.Sprintf("%s@%s", tr.FetchSpec.TableName, tr.FetchSpec.IndexName))
 	var b strings.Builder
 	b.WriteString("Columns:")
 	const wrapAt = 100
-	for i, colID := range tr.ColumnIDs {
-		col, err := tbl.FindColumnWithID(colID)
+	for i := range tr.FetchSpec.FetchedColumns {
 		if i > 0 {
 			b.WriteByte(',')
 		}
-		var name string
-		if err != nil {
-			name = fmt.Sprintf("?%d?", colID)
-		} else {
-			name = col.GetName()
-		}
+		name := tr.FetchSpec.FetchedColumns[i].Name
 		if b.Len()+len(name)+1 > wrapAt {
 			details = append(details, b.String())
 			b.Reset()
@@ -173,12 +166,17 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 
 	if len(tr.Spans) > 0 {
 		// only show the first span
-		idx := tbl.ActiveIndexes()[int(tr.IndexIdx)]
-		valDirs := catalogkeys.IndexKeyValDirs(idx)
+		keyDirs := make([]encoding.Direction, len(tr.FetchSpec.KeyAndSuffixColumns))
+		for i := range keyDirs {
+			keyDirs[i] = encoding.Ascending
+			if tr.FetchSpec.KeyAndSuffixColumns[i].Direction == descpb.IndexDescriptor_DESC {
+				keyDirs[i] = encoding.Descending
+			}
+		}
 
 		var spanStr strings.Builder
 		spanStr.WriteString("Spans: ")
-		spanStr.WriteString(catalogkeys.PrettySpan(valDirs, tr.Spans[0], 2))
+		spanStr.WriteString(catalogkeys.PrettySpan(keyDirs, tr.Spans[0], 2))
 
 		if len(tr.Spans) > 1 {
 			spanStr.WriteString(fmt.Sprintf(" and %d other", len(tr.Spans)-1))

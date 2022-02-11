@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -84,10 +85,17 @@ func TestNewColOperatorExpectedTypeSchema(t *testing.T) {
 	defer streamingMemAcc.Close(ctx)
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&spec, keys.SystemSQLCodec,
+		desc, desc.GetPrimaryIndex(),
+		[]descpb.ColumnID{desc.PublicColumns()[0].GetID()},
+	); err != nil {
+		t.Fatal(err)
+	}
 	tr := execinfrapb.TableReaderSpec{
-		Table:     *desc.TableDesc(),
+		FetchSpec: spec,
 		Spans:     make([]roachpb.Span, 1),
-		ColumnIDs: []descpb.ColumnID{desc.PublicColumns()[0].GetID()},
 	}
 	var err error
 	tr.Spans[0].Key, err = randgen.TestingMakePrimaryIndexKey(desc, 0)
