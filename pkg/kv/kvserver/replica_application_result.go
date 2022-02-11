@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -308,6 +309,8 @@ func (r *Replica) handleGCThresholdResult(ctx context.Context, thresh *hlc.Times
 	if thresh.IsEmpty() {
 		return
 	}
+	// TODO(nvanbenschoten): revert before merging.
+	time.Sleep(100 * time.Millisecond)
 	r.mu.Lock()
 	r.mu.state.GCThreshold = thresh
 	r.mu.Unlock()
