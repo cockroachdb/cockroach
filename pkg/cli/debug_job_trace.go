@@ -51,7 +51,8 @@ func runDebugJobTrace(_ *cobra.Command, args []string) (resErr error) {
 
 func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {
 	var traceID int64
-	rows, err := sqlConn.Query(`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`, []driver.Value{jobID})
+	rows, err := sqlConn.Query(context.Background(),
+		`SELECT trace_id FROM crdb_internal.jobs WHERE job_id=$1`, jobID)
 	if err != nil {
 		return traceID, err
 	}
@@ -80,17 +81,10 @@ func getJobTraceID(sqlConn clisqlclient.Conn, jobID int64) (int64, error) {
 }
 
 func constructJobTraceZipBundle(ctx context.Context, sqlConn clisqlclient.Conn, jobID int64) error {
-	maybePrint := func(stmt string) string {
-		if debugCtx.verbose {
-			fmt.Println("querying " + stmt)
-		}
-		return stmt
-	}
-
 	// Check if a timeout has been set for this command.
 	if cliCtx.cmdTimeout != 0 {
-		stmt := fmt.Sprintf(`SET statement_timeout = '%s'`, cliCtx.cmdTimeout)
-		if err := sqlConn.Exec(maybePrint(stmt), nil); err != nil {
+		if err := sqlConn.Exec(context.Background(),
+			`SET statement_timeout = $1`, cliCtx.cmdTimeout.String()); err != nil {
 			return err
 		}
 	}

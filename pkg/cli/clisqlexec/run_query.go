@@ -11,6 +11,7 @@
 package clisqlexec
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -26,9 +27,9 @@ import (
 // RunQuery takes a 'query' with optional 'parameters'.
 // It runs the sql query and returns a list of columns names and a list of rows.
 func (sqlExecCtx *Context) RunQuery(
-	conn clisqlclient.Conn, fn clisqlclient.QueryFn, showMoreChars bool,
+	ctx context.Context, conn clisqlclient.Conn, fn clisqlclient.QueryFn, showMoreChars bool,
 ) ([]string, [][]string, error) {
-	rows, _, err := fn(conn)
+	rows, _, err := fn(ctx, conn)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -41,10 +42,10 @@ func (sqlExecCtx *Context) RunQuery(
 // It runs the sql query and writes output to 'w'.
 // Errors and warnings, if any, are printed to 'ew'.
 func (sqlExecCtx *Context) RunQueryAndFormatResults(
-	conn clisqlclient.Conn, w, ew io.Writer, fn clisqlclient.QueryFn,
+	ctx context.Context, conn clisqlclient.Conn, w, ew io.Writer, fn clisqlclient.QueryFn,
 ) (err error) {
 	startTime := timeutil.Now()
-	rows, isMultiStatementQuery, err := fn(conn)
+	rows, isMultiStatementQuery, err := fn(ctx, conn)
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 			return err
 		}
 
-		sqlExecCtx.maybeShowTimes(conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
+		sqlExecCtx.maybeShowTimes(ctx, conn, w, ew, isMultiStatementQuery, startTime, queryCompleteTime)
 
 		if more, err := rows.NextResultSet(); err != nil {
 			return err
@@ -147,6 +148,7 @@ func (sqlExecCtx *Context) RunQueryAndFormatResults(
 
 // maybeShowTimes displays the execution time if show_times has been set.
 func (sqlExecCtx *Context) maybeShowTimes(
+	ctx context.Context,
 	conn clisqlclient.Conn,
 	w, ew io.Writer,
 	isMultiStatementQuery bool,
@@ -215,7 +217,7 @@ func (sqlExecCtx *Context) maybeShowTimes(
 	}
 
 	// If discrete server/network timings are available, also print them.
-	detailedStats, err := conn.GetLastQueryStatistics()
+	detailedStats, err := conn.GetLastQueryStatistics(ctx)
 	if err != nil {
 		fmt.Fprintln(w, stats.String())
 		fmt.Fprintf(ew, "\nwarning: %v", err)

@@ -300,6 +300,8 @@ func maybeAddProfileSuffix(name string) string {
 func (zc *debugZipContext) dumpTableDataForZip(
 	zr *zipReporter, conn clisqlclient.Conn, base, table, query string,
 ) error {
+	// TODO(knz): This can use context cancellation now that query
+	// cancellation is supported.
 	fullQuery := fmt.Sprintf(`SET statement_timeout = '%s'; %s`, zc.timeout, query)
 	baseName := base + "/" + sanitizeFilename(table)
 
@@ -319,7 +321,9 @@ func (zc *debugZipContext) dumpTableDataForZip(
 			}
 			// Pump the SQL rows directly into the zip writer, to avoid
 			// in-RAM buffering.
-			return sqlExecCtx.RunQueryAndFormatResults(conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
+			return sqlExecCtx.RunQueryAndFormatResults(
+				context.Background(),
+				conn, w, stderr, clisqlclient.MakeQuery(fullQuery))
 		}()
 		if sqlErr != nil {
 			if cErr := zc.z.createError(s, name, sqlErr); cErr != nil {
