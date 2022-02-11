@@ -23,6 +23,7 @@ const (
 	filesFlag    = "files"
 	subtestsFlag = "subtests"
 	configFlag   = "config"
+	showSQLFlag  = "show-sql"
 )
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -44,6 +45,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
 	testLogicCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
+	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
 	testLogicCmd.Flags().String(rewriteFlag, "", "argument to pass to underlying (only applicable for certain tests, e.g. logic and datadriven tests). If unspecified, -rewrite will be passed to the test binary.")
 	testLogicCmd.Flags().String(rewriteArgFlag, "", "additional argument to pass to -rewrite (implies --rewrite)")
 	testLogicCmd.Flags().Lookup(rewriteFlag).NoOptDefVal = "-rewrite"
@@ -66,6 +68,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		subtests    = mustGetFlagString(cmd, subtestsFlag)
 		timeout     = mustGetFlagDuration(cmd, timeoutFlag)
 		verbose     = mustGetFlagBool(cmd, vFlag)
+		showSQL     = mustGetFlagBool(cmd, showSQLFlag)
 	)
 
 	validChoices := []string{"base", "ccl", "opt"}
@@ -113,6 +116,9 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		}
 		if showLogs {
 			args = append(args, "--test_arg", "-show-logs")
+		}
+		if showSQL {
+			args = append(args, "--test_arg", "-show-sql")
 		}
 		if timeout > 0 {
 			args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
