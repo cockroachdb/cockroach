@@ -30,7 +30,10 @@ import (
 // crdbSpan is a span for internal crdb usage. This is used to power SQL session
 // tracing.
 type crdbSpan struct {
+	// tracer is the Tracer that created this span.
 	tracer *Tracer
+	// sp is Span that this crdbSpan is part of.
+	sp *Span
 
 	traceID      tracingpb.TraceID // probabilistically unique
 	spanID       tracingpb.SpanID  // probabilistically unique
