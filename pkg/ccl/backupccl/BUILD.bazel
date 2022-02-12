@@ -142,6 +142,7 @@ go_test(
         "backup_destination_test.go",
         "backup_intents_test.go",
         "backup_rand_test.go",
+        "backup_tenant_test.go",
         "backup_test.go",
         "bench_covering_test.go",
         "bench_test.go",
@@ -167,6 +168,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",

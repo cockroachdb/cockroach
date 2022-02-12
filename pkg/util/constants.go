@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // IsMetamorphicBuild returns whether this build is metamorphic. By build being
@@ -67,7 +68,9 @@ const (
 // The given name is used for logging.
 func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValue int) int {
 	if metamorphicBuild {
-		if rng.Float64() < metamorphicValueProbability {
+		rng.Lock()
+		defer rng.Unlock()
+		if rng.r.Float64() < metamorphicValueProbability {
 			logMetamorphicValue(name, metamorphicValue)
 			return metamorphicValue
 		}
@@ -76,7 +79,10 @@ func ConstantWithMetamorphicTestValue(name string, defaultValue, metamorphicValu
 }
 
 // rng is initialized to a rand.Rand if crdbTestBuild is enabled.
-var rng *rand.Rand
+var rng struct {
+	r *rand.Rand
+	syncutil.Mutex
+}
 
 // DisableMetamorphicEnvVar can be used to disable metamorhpic tests for
 // sub-processes. If it exists and is set to something truthy as defined by
@@ -87,8 +93,8 @@ func init() {
 	if buildutil.CrdbTestBuild {
 		disabled := envutil.EnvOrDefaultBool(DisableMetamorphicEnvVar, false)
 		if !disabled {
-			rng, _ = randutil.NewTestRand()
-			metamorphicBuild = rng.Float64() < metamorphicBuildProbability
+			rng.r, _ = randutil.NewTestRand()
+			metamorphicBuild = rng.r.Float64() < metamorphicBuildProbability
 		}
 	}
 }
@@ -100,10 +106,12 @@ func init() {
 // The given name is used for logging.
 func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) int {
 	if metamorphicBuild {
-		if rng.Float64() < metamorphicValueProbability {
+		rng.Lock()
+		defer rng.Unlock()
+		if rng.r.Float64() < metamorphicValueProbability {
 			ret := min
 			if max > min {
-				ret = int(rng.Int31())%(max-min) + min
+				ret = int(rng.r.Int31())%(max-min) + min
 			}
 			logMetamorphicValue(name, ret)
 			return ret
@@ -118,7 +126,9 @@ func ConstantWithMetamorphicTestRange(name string, defaultValue, min, max int) i
 // The given name is used for logging.
 func ConstantWithMetamorphicTestBool(name string, defaultValue bool) bool {
 	if metamorphicBuild {
-		if rng.Float64() < metamorphicBoolProbability {
+		rng.Lock()
+		defer rng.Unlock()
+		if rng.r.Float64() < metamorphicBoolProbability {
 			ret := !defaultValue
 			logMetamorphicValue(name, ret)
 			return ret
