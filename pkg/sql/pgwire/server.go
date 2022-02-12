@@ -747,16 +747,15 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 		}
 		telemetry.Inc(sqltelemetry.CancelRequestCounter)
-
-		// The connection that issued the cancel is not a SQL session -- it's an
-		// entirely new connection that's created just to send the cancel. There
-		// isn't anything left for the server to do after it handles the
-		// pgwire cancel request.
-		_ = conn.Close()
 	}()
 
 	var backendKeyDataBits uint64
 	backendKeyDataBits, err = buf.GetUint64()
+	// The connection that issued the cancel is not a SQL session -- it's an
+	// entirely new connection that's created just to send the cancel. We close
+	// the connection as soon as possible after reading the data, since there
+	// is nothing to send back to the client.
+	_ = conn.Close()
 	if err != nil {
 		return
 	}
