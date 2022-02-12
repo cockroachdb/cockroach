@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -67,16 +68,19 @@ func (l *limiter) Init(
 			}
 		}
 	}
-	// We use OnWaitStartLocked because otherwise we have a race between the token
-	// bucket noticing that it can't fulfill a request, and AvailableTokens()
-	// accounting for the RUs that are waiting.
-	//
-	// We have a similar problem on finish, but the consequences of overcounting
-	// waiting RUs are not very problematic.
+
+	onWaitFinishFn := func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) {
+		// Log a trace event for requests that waited for a long time.
+		if waitDuration := timeSource.Since(start); waitDuration > time.Second {
+			log.VEventf(ctx, 1, "request waited for RUs for %s", waitDuration.String())
+		}
+	}
+
 	l.qp = quotapool.New(
 		"tenant-side-limiter", l,
 		quotapool.WithTimeSource(timeSource),
 		quotapool.OnWaitStart(onWaitStartFn),
+		quotapool.OnWaitFinish(onWaitFinishFn),
 	)
 }
 

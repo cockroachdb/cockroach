@@ -44,7 +44,7 @@ func (s *instance) ReconfigureTokenBucket(
 	now := s.timeSource.Now()
 	state.update(now)
 	state.Bucket.Reconfigure(
-		availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
+		ctx, tenantID, availableRU, refillRate, maxBurstRU, asOf, asOfConsumedRequestUnits,
 		now, state.Consumption.RU,
 	)
 	if err := h.updateTenantState(state); err != nil {

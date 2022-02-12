@@ -440,11 +440,12 @@ func newJoinReader(
 		}
 	}
 
-	// We will create a memory monitor with at least 8MiB of memory limit since
-	// the join reader doesn't know how to spill to disk. It is most likely that
-	// if the target limit is below 8MiB, then we're in a test scenario and we
-	// don't want to error out.
-	const minMemoryLimit = 8 << 20
+	// We will create a memory monitor with at least 100KiB of memory limit
+	// since the join reader doesn't know how to spill its in-memory state to
+	// disk (separate from the buffered rows). It is most likely that if the
+	// target limit is below 100KiB, then we're in a test scenario and we don't
+	// want to error out.
+	const minMemoryLimit = 100 << 10
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
@@ -463,10 +464,15 @@ func newJoinReader(
 	jr.batchSizeBytes = jr.strategy.getLookupRowsBatchSizeHint(flowCtx.EvalCtx.SessionData())
 
 	if jr.usesStreamer {
+		// When using the Streamer API, we want to limit the batch size hint to
+		// at most a quarter of the workmem limit. Note that it is ok if it is
+		// set to zero since the joinReader will always include at least one row
+		// into the lookup batch.
+		if jr.batchSizeBytes > memoryLimit/4 {
+			jr.batchSizeBytes = memoryLimit / 4
+		}
 		// jr.batchSizeBytes will be used up by the input batch, and we'll give
-		// everything else to the streamer budget. Note that budgetLimit will
-		// always be positive given that memoryLimit is at least 8MiB and
-		// batchSizeBytes is at most 4MiB.
+		// everything else to the streamer budget.
 		jr.streamerInfo.budgetLimit = memoryLimit - jr.batchSizeBytes
 		// We need to use an unlimited monitor for the streamer's budget since
 		// the streamer itself is responsible for staying under the limit.
@@ -478,6 +484,14 @@ func newJoinReader(
 		jr.streamerInfo.maxKeysPerRow, err = jr.desc.KeysPerRow(jr.index.GetID())
 		if err != nil {
 			return nil, err
+		}
+	} else {
+		// When not using the Streamer API, we want to limit the batch size hint
+		// to at most half of the workmem limit. Note that it is ok if it is set
+		// to zero since the joinReader will always include at least one row
+		// into the lookup batch.
+		if jr.batchSizeBytes > memoryLimit/2 {
+			jr.batchSizeBytes = memoryLimit / 2
 		}
 	}
 

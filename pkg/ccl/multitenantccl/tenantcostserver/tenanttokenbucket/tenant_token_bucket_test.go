@@ -9,6 +9,7 @@
 package tenanttokenbucket
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -95,7 +96,7 @@ func (ts *testState) request(t *testing.T, d *datadriven.TestData) string {
 		RequestedRU:         vals.RU,
 		TargetRequestPeriod: parseDuration(t, d, vals.Period),
 	}
-	resp := ts.State.Request(&req)
+	resp := ts.State.Request(context.Background(), &req)
 	return fmt.Sprintf(
 		strings.Join(
 			[]string{
