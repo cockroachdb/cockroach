@@ -3417,7 +3417,11 @@ func TestPausepoints(t *testing.T) {
 				return registry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, rec)
 			}))
 			require.NoError(t, sj.Start(ctx))
-			require.NoError(t, sj.AwaitCompletion(ctx))
+			if tc.expected == jobs.StatusSucceeded {
+				require.NoError(t, sj.AwaitCompletion(ctx))
+			} else {
+				require.Error(t, sj.AwaitCompletion(ctx))
+			}
 			status, err := sj.TestingCurrentStatus(ctx, nil)
 			// Map pause-requested to paused to avoid races.
 			if status == jobs.StatusPauseRequested {

@@ -283,6 +283,9 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 	}
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint("import.after_ingest"); err != nil {
+		return err
+	}
 
 	// If the table being imported into referenced UDTs, ensure that a concurrent
 	// schema change on any of the typeDescs has not modified the type descriptor. If
