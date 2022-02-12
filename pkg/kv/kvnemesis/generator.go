@@ -250,7 +250,8 @@ func NewDefaultConfig() GeneratorConfig {
 }
 
 // GeneratorDataTableID is the table ID that corresponds to GeneratorDataSpan.
-const GeneratorDataTableID = 50
+// This must be a table ID that is not used in a new cluster.
+const GeneratorDataTableID = 100
 
 // GeneratorDataSpan returns a span that contains all of the operations created
 // by this Generator.
