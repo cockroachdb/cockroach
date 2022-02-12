@@ -233,6 +233,12 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 	grp memo.RelExpr, sp *memo.ScanPrivate, tp *memo.TopKPrivate,
 ) {
 	required := tp.Ordering
+	// If the ordering was already optimized out (e.g., there is only one possible
+	// value for what would have been the required ordering), then there is no
+	// benefit to exploring limited top K.
+	if len(required.Columns) == 0 {
+		return
+	}
 	// Iterate over all non-inverted and non-partial secondary indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter

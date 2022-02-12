@@ -2093,3 +2093,30 @@ top-k
  ├── ordering: +2
  └── scan defg
       └── columns: d:1 e:2 f:3 g:4
+
+# Regression testing for #76102.
+exec-ddl
+CREATE TABLE tab_76102 (
+ a INT2 NULL,
+ b INT2 NULL AS (a + NULL) STORED,
+ UNIQUE (a DESC)
+)
+----
+
+# The GROUP BY column can only have one value (NULL), so  we do not benefit from
+# limited TopK, and trying to apply the rule may lead to errors since the
+# required ordering is optimized away in this case.
+opt expect-not=GenerateLimitedTopKScans
+SELECT b FROM tab_76102@tab_76102_a_key GROUP BY b LIMIT 5
+----
+index-join tab_76102
+ ├── columns: b:2
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(2)
+ └── scan tab_76102@tab_76102_a_key
+      ├── columns: rowid:3!null
+      ├── limit: 1
+      ├── flags: force-index=tab_76102_a_key
+      ├── key: ()
+      └── fd: ()-->(3)
