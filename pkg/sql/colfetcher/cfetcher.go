@@ -903,20 +903,14 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			// column is requested) yet, but it is ok for the purposes of the
 			// memory accounting - oids are fixed length values and, thus, have
 			// already been accounted for when the batch was allocated.
-			cf.accountingHelper.AccountForSet(cf.machine.rowIdx)
+			emitBatch := cf.accountingHelper.AccountForSet(cf.machine.rowIdx)
 			cf.machine.rowIdx++
 			cf.shiftState()
 
-			var emitBatch bool
-			if cf.machine.rowIdx >= cf.machine.batch.Capacity() ||
-				(cf.accountingHelper.Allocator.Used() >= cf.memoryLimit) ||
-				(cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint) {
-				// We either
-				//   1. have no more room in our batch, so output it immediately
-				// or
-				//   2. we made it to our limit hint, so output our batch early
-				//      to make sure that we don't bother filling in extra data
-				//      if we don't need to.
+			if cf.machine.limitHint > 0 && cf.machine.rowIdx >= cf.machine.limitHint {
+				// If we made it to our limit hint, so output our batch early to
+				// make sure that we don't bother filling in extra data if we
+				// don't need to.
 				emitBatch = true
 				// Update the limit hint to track the expected remaining rows to
 				// be fetched.

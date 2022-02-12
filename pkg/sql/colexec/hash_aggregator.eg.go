@@ -459,18 +459,16 @@ func getNext_true(op *hashAggregator) coldata.Batch {
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
 			)
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
+			var batchFull bool
+			for op.curOutputBucketIdx < len(op.buckets) && !batchFull {
 				bucket := op.buckets[op.curOutputBucketIdx]
 				for fnIdx, fn := range bucket.fns {
 					fn.SetOutput(op.output.ColVec(fnIdx))
 					fn.Flush(curOutputIdx)
 				}
-				op.accountingHelper.AccountForSet(curOutputIdx)
+				batchFull = op.accountingHelper.AccountForSet(curOutputIdx)
 				curOutputIdx++
 				op.curOutputBucketIdx++
-				if op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
-					break
-				}
 			}
 			if op.curOutputBucketIdx >= len(op.buckets) {
 				if l := op.bufferingState.pendingBatch.Length(); l > 0 {
@@ -604,18 +602,16 @@ func getNext_false(op *hashAggregator) coldata.Batch {
 				op.outputTypes, op.output, len(op.buckets), op.maxOutputBatchMemSize,
 			)
 			curOutputIdx := 0
-			for curOutputIdx < op.output.Capacity() && op.curOutputBucketIdx < len(op.buckets) {
+			var batchFull bool
+			for op.curOutputBucketIdx < len(op.buckets) && !batchFull {
 				bucket := op.buckets[op.curOutputBucketIdx]
 				for fnIdx, fn := range bucket.fns {
 					fn.SetOutput(op.output.ColVec(fnIdx))
 					fn.Flush(curOutputIdx)
 				}
-				op.accountingHelper.AccountForSet(curOutputIdx)
+				batchFull = op.accountingHelper.AccountForSet(curOutputIdx)
 				curOutputIdx++
 				op.curOutputBucketIdx++
-				if op.accountingHelper.Allocator.Used() >= op.maxOutputBatchMemSize {
-					break
-				}
 			}
 			if op.curOutputBucketIdx >= len(op.buckets) {
 				op.state = hashAggregatorDone

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
@@ -24,10 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -279,6 +282,8 @@ func TestSetAccountingHelper(t *testing.T) {
 	for i := range typs {
 		typs[i] = randgen.RandType(rng)
 	}
+	// For Bytes, insert pretty large values.
+	bytesValue := make([]byte, 8*coldata.BytesInitialAllocationFactor)
 
 	var helper colmem.SetAccountingHelper
 	helper.Init(testAllocator, typs)
@@ -301,22 +306,24 @@ func TestSetAccountingHelper(t *testing.T) {
 		}
 		batch, _ = helper.ResetMaybeReallocate(typs, batch, numRows, maxBatchMemSize)
 
-		for rowIdx := 0; rowIdx < batch.Capacity(); rowIdx++ {
+		var rowIdx int
+		for batchFull := false; !batchFull; {
 			for vecIdx, typ := range typs {
 				switch typ.Family() {
 				case types.BytesFamily:
-					// For Bytes, insert pretty large values.
-					v := make([]byte, rng.Intn(8*coldata.BytesInitialAllocationFactor))
-					_, _ = rng.Read(v)
-					batch.ColVec(vecIdx).Bytes().Set(rowIdx, v)
+					bytesValue = bytesValue[:rng.Intn(cap(bytesValue))]
+					_, _ = rng.Read(bytesValue)
+					batch.ColVec(vecIdx).Bytes().Set(rowIdx, bytesValue)
 				default:
 					datum := randgen.RandDatum(rng, typ, false /* nullOk */)
 					converter := colconv.GetDatumToPhysicalFn(typ)
 					coldata.SetValueAt(batch.ColVec(vecIdx), converter(datum), rowIdx)
 				}
 			}
-			helper.AccountForSet(rowIdx)
+			batchFull = helper.AccountForSet(rowIdx)
+			rowIdx++
 		}
+		batch.SetLength(rowIdx)
 
 		// At this point, we have set all rows in the batch and performed the
 		// memory accounting for each set. We no longer have any uninitialized
@@ -373,5 +380,114 @@ func TestEstimateBatchSizeBytes(t *testing.T) {
 			fmt.Println()
 			t.Fatal(errors.Newf("expected %d, actual %d", expected, actual))
 		}
+	}
+}
+
+const bitArraySize = int(unsafe.Sizeof(bitarray.BitArray{}))
+
+func TestAccountForSetDynamicLimiting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, coldata.SetBatchSizeForTests(10))
+
+	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
+	st := cluster.MakeTestingClusterSettings()
+	testMemMonitor := execinfra.NewTestMemMonitor(ctx, st)
+	defer testMemMonitor.Stop(ctx)
+	memAcc := testMemMonitor.MakeBoundAccount()
+	defer memAcc.Close(ctx)
+	evalCtx := tree.MakeTestingEvalContext(st)
+	testColumnFactory := coldataext.NewExtendedColumnFactory(&evalCtx)
+	testAllocator := colmem.NewAllocator(ctx, &memAcc, testColumnFactory)
+
+	const maxValueSize = 128
+	bytesValue := make([]byte, maxValueSize)
+
+	// TODO
+	//numCols := 1
+	//typ := types.VarBit
+	typ := types.Bytes
+	typs := []*types.T{typ}
+
+	var helper colmem.SetAccountingHelper
+	helper.Init(testAllocator, typs)
+
+	var batch coldata.Batch
+	for iteration := 0; iteration < 10; iteration++ {
+		reallocateBatch := true
+		batchCapacity := rng.Intn(coldata.BatchSize()) + 1
+		if batch != nil {
+			// If the batch is already at maximum capacity, it won't get
+			// reallocated.
+			if batch.Capacity() == coldata.BatchSize() {
+				reallocateBatch = false
+				batchCapacity = coldata.BatchSize()
+			} else {
+				batchCapacity = batch.Capacity() * 2
+				if batchCapacity > coldata.BatchSize() {
+					batchCapacity = coldata.BatchSize()
+				}
+			}
+		}
+		maxBatchMemSize := int64(math.MaxInt64)
+		expectedLength := batchCapacity
+		valueSizeBytes := (rng.Intn(maxValueSize/8) + 1) * 8
+		if typ.Family() == types.BitFamily && valueSizeBytes < bitArraySize+8 {
+			valueSizeBytes = bitArraySize + 8
+		}
+		// With 50% chance use a small batch mem size so that the batch is
+		// filled partially.
+		if rng.Float64() < 0.5 {
+			expectedLength = int(float64(batchCapacity) * rng.Float64())
+			if expectedLength == 0 {
+				expectedLength = 1
+			}
+			maxBatchMemSize = int64(valueSizeBytes * expectedLength)
+			// Account for the selection vector as well as the fixed costs of
+			// the data vector.
+			maxBatchMemSize += int64(batchCapacity)*memsize.Int + colmem.EstimateBatchSizeBytes(typs, batchCapacity)
+			// If we use the limit that is smaller than the footprint of the
+			// last batch, the batch won't be reallocated.
+			if memAcc.Used() >= maxBatchMemSize {
+				reallocateBatch = false
+				capacityDiff := batchCapacity - batch.Capacity()
+				maxBatchMemSize -= int64(capacityDiff)*memsize.Int + colmem.EstimateBatchSizeBytes(typs, capacityDiff)
+				batchCapacity = batch.Capacity()
+				// If now the capacity of the batch is smaller than the number
+				// of rows we want to insert, we have to curb our desires too.
+				if expectedLength > batchCapacity {
+					maxBatchMemSize -= int64(valueSizeBytes * (expectedLength - batchCapacity))
+					expectedLength = batchCapacity
+				}
+			}
+		}
+		var reallocated bool
+		batch, reallocated = helper.ResetMaybeReallocate(typs, batch, batchCapacity, maxBatchMemSize)
+		require.Equal(t, reallocateBatch, reallocated)
+
+		var rowIdx int
+		for batchFull := false; !batchFull && rowIdx < expectedLength; {
+			switch typ.Family() {
+			case types.BitFamily:
+				bitLen := uint(8 * (valueSizeBytes - bitArraySize))
+				datum := &tree.DBitArray{BitArray: bitarray.Rand(rng, bitLen)}
+				batch.ColVec(0).Datum().Set(rowIdx, datum)
+			case types.BytesFamily:
+				bytesValue = bytesValue[:valueSizeBytes]
+				_, _ = rng.Read(bytesValue)
+				batch.ColVec(0).Bytes().Set(rowIdx, bytesValue)
+			default:
+				datum := randgen.RandDatum(rng, typ, false /* nullOk */)
+				converter := colconv.GetDatumToPhysicalFn(typ)
+				coldata.SetValueAt(batch.ColVec(0), converter(datum), rowIdx)
+			}
+			batchFull = helper.AccountForSet(rowIdx)
+			rowIdx++
+		}
+		batch.SetLength(rowIdx)
+		require.Equal(t, expectedLength, rowIdx, fmt.Sprintf("expected batch to be full with %d rows, found %d", expectedLength, rowIdx))
+		require.GreaterOrEqualf(t, maxBatchMemSize, memAcc.Used(), fmt.Sprintf("expected actual size of the batch to not exceed the limit"))
 	}
 }

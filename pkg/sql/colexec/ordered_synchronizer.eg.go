@@ -108,7 +108,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 	}
 	o.resetOutput()
 	outputIdx := 0
-	for outputIdx < o.output.Capacity() {
+	for batchFull := false; !batchFull; {
 		if o.Len() == 0 {
 			// All inputs exhausted.
 			break
@@ -239,11 +239,8 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		}
 
 		// Account for the memory of the row we have just set.
-		o.accountingHelper.AccountForSet(outputIdx)
+		batchFull = o.accountingHelper.AccountForSet(outputIdx)
 		outputIdx++
-		if o.accountingHelper.Allocator.Used() >= o.memoryLimit {
-			break
-		}
 	}
 
 	o.output.SetLength(outputIdx)
