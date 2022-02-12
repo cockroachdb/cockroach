@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,7 +32,6 @@ import (
 // span config reconciliation attempt, blocking until it occurs.
 func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 75849, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -99,6 +97,8 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 	}
 }
 
+// TestEnsureSpanConfigReconciliationMultiNode verifies that the span config
+// reconciliation migration works in a multi-node setting.
 func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
