@@ -345,6 +345,9 @@ func (cf *cFetcher) resetBatch() {
 func (cf *cFetcher) Init(
 	allocator *colmem.Allocator, kvFetcherMemAcc *mon.BoundAccount, tableArgs *cFetcherTableArgs,
 ) error {
+	if tableArgs.spec.Version != descpb.IndexFetchSpecVersionInitial {
+		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
+	}
 	cf.kvFetcherMemAcc = kvFetcherMemAcc
 	table := newCTableInfo()
 	nCols := tableArgs.ColIdxMap.Len()

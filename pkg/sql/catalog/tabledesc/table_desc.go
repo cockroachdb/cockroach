@@ -427,6 +427,16 @@ func (desc *wrapper) SystemColumns() []catalog.Column {
 	return desc.getExistingOrNewColumnCache().system
 }
 
+// PublicColumnIDs implements the TableDescriptor interface.
+func (desc *wrapper) PublicColumnIDs() []descpb.ColumnID {
+	cols := desc.PublicColumns()
+	res := make([]descpb.ColumnID, len(cols))
+	for i, c := range cols {
+		res[i] = c.GetID()
+	}
+	return res
+}
+
 // IndexColumns implements the TableDescriptor interface.
 func (desc *wrapper) IndexColumns(idx catalog.Index) []catalog.Column {
 	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {

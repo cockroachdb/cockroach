@@ -123,7 +123,6 @@ func (d *dev) generateDocs(cmd *cobra.Command) error {
 	// Build targets.
 	var args []string
 	args = append(args, "build")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, targets...)
 	err = d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 	if err != nil {
@@ -164,7 +163,6 @@ func (d *dev) generateGo(cmd *cobra.Command) error {
 	// Build targets.
 	var args []string
 	args = append(args, "build")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	args = append(args, "//:go_path")
 	args = append(args, "--show_result=0")
 	err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
@@ -187,8 +185,5 @@ func (d *dev) generateProtobuf(cmd *cobra.Command) error {
 	// The bazel target //pkg/gen:go_proto builds and hoists the protobuf
 	// go files.
 	return d.exec.CommandContextInheritingStdStreams(
-		cmd.Context(), "bazel", append(append([]string{"run"},
-			mustGetRemoteCacheArgs(remoteCacheAddr)...),
-			"//pkg/gen:go_proto")...,
-	)
+		cmd.Context(), "bazel", "run", "//pkg/gen:go_proto")
 }

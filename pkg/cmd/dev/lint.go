@@ -47,7 +47,6 @@ func (d *dev) lint(cmd *cobra.Command, commandLine []string) error {
 	// NOTE the --config=test here. It's very important we compile the test binary with the
 	// appropriate stuff (gotags, etc.)
 	args = append(args, "run", "--config=test", "//build/bazelutil:lint")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
