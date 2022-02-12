@@ -469,6 +469,10 @@ type TableDescriptor interface {
 	// colinfo.AllSystemColumnDescs.
 	SystemColumns() []Column
 
+	// PublicColumnIDs creates a slice of column IDs corresponding to the public
+	// columns.
+	PublicColumnIDs() []descpb.ColumnID
+
 	// IndexColumns returns a slice of Column interfaces containing all
 	// columns present in the specified Index in any capacity.
 	IndexColumns(idx Index) []Column

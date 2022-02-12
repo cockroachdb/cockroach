@@ -46,6 +46,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 	// `go help testflag`).
 	benchCmd.Flags().String(benchTimeFlag, "", "duration to run each benchmark for")
 	benchCmd.Flags().Bool(benchMemFlag, false, "print memory allocations for benchmarks")
+	benchCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 
 	return benchCmd
 }
@@ -63,6 +64,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		count       = mustGetFlagInt(cmd, countFlag)
 		benchTime   = mustGetFlagString(cmd, benchTimeFlag)
 		benchMem    = mustGetFlagBool(cmd, benchMemFlag)
+		testArgs    = mustGetFlagString(cmd, testArgsFlag)
 	)
 
 	// Enumerate all benches to run.
@@ -73,7 +75,6 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	args = append(args, "test")
-	args = append(args, mustGetRemoteCacheArgs(remoteCacheAddr)...)
 	if numCPUs != 0 {
 		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
 	}
@@ -106,10 +107,15 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--nocache_test_results")
 	}
 
+	args = append(args, "--test_arg", "-test.run=-")
 	if filter == "" {
 		args = append(args, "--test_arg", "-test.bench=.")
 	} else {
 		args = append(args, "--test_arg", fmt.Sprintf("-test.bench=%s", filter))
+		// For sharded test packages, it doesn't make much sense to spawn multiple
+		// test processes that don't end up running anything. Default to running
+		// things in a single process if a filter is specified.
+		args = append(args, "--test_sharding_strategy=disabled")
 	}
 	if short {
 		args = append(args, "--test_arg", "-test.short")
@@ -129,17 +135,15 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	if benchMem {
 		args = append(args, "--test_arg", "-test.benchmem")
 	}
-
-	{ // Handle test output flags.
-		testOutputArgs := []string{"--test_output", "errors"}
-		if verbose || showLogs {
-			testOutputArgs = []string{"--test_output", "all"}
+	if testArgs != "" {
+		goTestArgs, err := d.getGoTestArgs(ctx, testArgs)
+		if err != nil {
+			return err
 		}
-		args = append(args, testOutputArgs...)
+		args = append(args, goTestArgs...)
 	}
-
+	args = append(args, d.getTestOutputArgs(false /* stress */, verbose, showLogs)...)
 	args = append(args, additionalBazelArgs...)
-
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
 }

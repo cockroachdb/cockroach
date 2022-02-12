@@ -107,25 +107,24 @@ func TestClusterFlow(t *testing.T) {
 		txn := kv.NewTxnFromProto(ctx, kvDB, tc.Server(0).NodeID(), now, kv.RootTxn, &txnProto)
 		leafInputState := txn.GetLeafTxnInputState(ctx)
 
+		var spec descpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(&spec, keys.SystemSQLCodec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
+			t.Fatal(err)
+		}
+
 		tr1 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(0, 8)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(8, 12)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(12, 100)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}
@@ -401,25 +400,24 @@ func TestTenantClusterFlow(t *testing.T) {
 		txn := kv.NewTxnFromProto(ctx, kvDB, roachpb.NodeID(pods[0].SQLInstanceID()), now, kv.RootTxn, &txnProto)
 		leafInputState := txn.GetLeafTxnInputState(ctx)
 
+		var spec descpb.IndexFetchSpec
+		if err := rowenc.InitIndexFetchSpec(&spec, codec, desc, desc.ActiveIndexes()[1], []descpb.ColumnID{1, 2}); err != nil {
+			t.Fatal(err)
+		}
+
 		tr1 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(0, 8)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr2 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(8, 12)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		tr3 := execinfrapb.TableReaderSpec{
-			Table:     *desc.TableDesc(),
-			IndexIdx:  1,
+			FetchSpec: spec,
 			Spans:     []roachpb.Span{makeIndexSpan(12, 100)},
-			ColumnIDs: []descpb.ColumnID{1, 2},
 		}
 
 		fid := execinfrapb.FlowID{UUID: uuid.MakeV4()}

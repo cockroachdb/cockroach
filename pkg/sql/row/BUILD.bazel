@@ -104,6 +104,7 @@ go_test(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/rowenc",
         "//pkg/sql/rowinfra",
         "//pkg/sql/sem/tree",
         "//pkg/storage",

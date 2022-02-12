@@ -17,7 +17,6 @@ import "gogoproto/gogo.proto";
 import "sql/types/types.proto";
 import "sql/catalog/descpb/structured.proto";
 
-
 // IndexFetchSpec contains the subset of information (from TableDescriptor and
 // IndexDescriptor) that is necessary to decode KVs into SQL keys and values.
 message IndexFetchSpec {
@@ -69,13 +68,16 @@ message IndexFetchSpec {
                                            (gogoproto.casttype) = "ColumnID"];
   }
 
-  // TODO(radu): add versioning once this goes over the wire.
-  //optional uint32 version = 1 [(gogoproto.nullable) = false];
+  // Version is used to allow providing backward compatibility if this spec
+  // changes. The intention is that one day this proto will be passed to KV scan
+  // requests, in which case the DistSQL versioning will not suffice.
+  optional uint32 version = 1 [(gogoproto.nullable) = false];
 
-  optional string table_name = 2 [(gogoproto.nullable) = false];
-  optional uint32 table_id = 3 [(gogoproto.nullable) = false,
+  optional uint32 table_id = 2 [(gogoproto.nullable) = false,
                                 (gogoproto.customname) = "TableID",
                                 (gogoproto.casttype) = "ID"];
+  optional string table_name = 3 [(gogoproto.nullable) = false];
+
   optional string index_name = 4 [(gogoproto.nullable) = false];
 
   optional bool is_secondary_index = 5 [(gogoproto.nullable) = false];

@@ -8,6 +8,8 @@ ARTIFACTS_DIR=/artifacts/meta
 mkdir -p $ARTIFACTS_DIR
 GO_TEST_JSON_OUTPUT_FILE=/artifacts/test.json.txt
 
+echo "TC_SERVER_URL is $TC_SERVER_URL"
+
 bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
 
 BAZEL_BIN=$(bazel info bazel-bin --config ci)

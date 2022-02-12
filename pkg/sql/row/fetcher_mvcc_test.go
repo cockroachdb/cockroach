@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -81,22 +82,22 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, `d`, `parent`)
-	table := row.FetcherTableArgs{
-		Desc:    desc,
-		Index:   desc.GetPrimaryIndex(),
-		Columns: desc.PublicColumns(),
+	var spec descpb.IndexFetchSpec
+	if err := rowenc.InitIndexFetchSpec(
+		&spec, keys.SystemSQLCodec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
+	); err != nil {
+		t.Fatal(err)
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
 		ctx,
-		keys.SystemSQLCodec,
 		false, /* reverse */
 		descpb.ScanLockingStrength_FOR_NONE,
 		descpb.ScanLockingWaitPolicy_BLOCK,
 		0, /* lockTimeout */
 		&tree.DatumAlloc{},
 		nil, /* memMonitor */
-		table,
+		&spec,
 	); err != nil {
 		t.Fatal(err)
 	}

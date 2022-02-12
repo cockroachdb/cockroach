@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -1607,10 +1608,11 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 	}
 
 	// Now run the statement/query.
-	c.exitErr = c.sqlExecCtx.RunQueryAndFormatResults(
-		context.Background(),
-		c.conn, c.iCtx.stdout, c.iCtx.stderr,
-		clisqlclient.MakeQuery(c.concatLines))
+	c.exitErr = c.runWithInterruptableCtx(func(ctx context.Context) error {
+		return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+			c.conn, c.iCtx.stdout, c.iCtx.stderr,
+			clisqlclient.MakeQuery(c.concatLines))
+	})
 	if c.exitErr != nil {
 		if !c.singleStatement {
 			clierror.OutputError(c.iCtx.stderr, c.exitErr, true /*showSeverity*/, false /*verbose*/)
@@ -1640,10 +1642,11 @@ func (c *cliState) doRunStatements(nextState cliStateEnum) cliStateEnum {
 			if strings.Contains(c.iCtx.autoTrace, "kv") {
 				traceType = "kv"
 			}
-			if err := c.sqlExecCtx.RunQueryAndFormatResults(
-				context.Background(),
-				c.conn, c.iCtx.stdout, c.iCtx.stderr,
-				clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType))); err != nil {
+			if err := c.runWithInterruptableCtx(func(ctx context.Context) error {
+				return c.sqlExecCtx.RunQueryAndFormatResults(ctx,
+					c.conn, c.iCtx.stdout, c.iCtx.stderr,
+					clisqlclient.MakeQuery(fmt.Sprintf("SHOW %s TRACE FOR SESSION", traceType)))
+			}); err != nil {
 				clierror.OutputError(c.iCtx.stderr, err, true /*showSeverity*/, false /*verbose*/)
 				if c.exitErr == nil {
 					// Both the query and SET tracing had encountered no error
@@ -1705,6 +1708,9 @@ func NewShell(
 
 // RunInteractive implements the Shell interface.
 func (c *cliState) RunInteractive(cmdIn, cmdOut, cmdErr *os.File) (exitErr error) {
+	finalFn := c.maybeHandleInterrupt()
+	defer finalFn()
+
 	return c.doRunShell(cliStart, cmdIn, cmdOut, cmdErr)
 }
 
@@ -1985,4 +1991,86 @@ func (c *cliState) serverSideParse(sql string) (helpText string, err error) {
 		return helpText, err
 	}
 	return "", nil
+}
+
+func (c *cliState) maybeHandleInterrupt() func() {
+	if !c.cliCtx.IsInteractive {
+		return func() {}
+	}
+	intCh := make(chan os.Signal, 1)
+	signal.Notify(intCh, os.Interrupt)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for {
+			select {
+			case <-intCh:
+				c.iCtx.mu.Lock()
+				cancelFn, doneCh := c.iCtx.mu.cancelFn, c.iCtx.mu.doneCh
+				c.iCtx.mu.Unlock()
+				if cancelFn == nil {
+					// No query currently executing; nothing to do.
+					continue
+				}
+
+				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
+				// Cancel the query's context, which should make the driver
+				// send a cancellation message.
+				cancelFn()
+
+				// Now wait for the shell to process the cancellation.
+				//
+				// If it takes too long (e.g. server has become unresponsive,
+				// or we're connected to a pre-22.1 server which does not
+				// support cancellation), fall back to the previous behavior
+				// which is to interrupt the shell altogether.
+				tooLongTimer := time.After(3 * time.Second)
+			wait:
+				for {
+					select {
+					case <-doneCh:
+						break wait
+					case <-tooLongTimer:
+						fmt.Fprintln(c.iCtx.stderr, "server does not respond to query cancellation; a second interrupt will stop the shell.")
+						signal.Reset(os.Interrupt)
+					}
+				}
+				// Re-arm the signal handler.
+				signal.Notify(intCh, os.Interrupt)
+
+			case <-ctx.Done():
+				// Shell is terminating.
+				return
+			}
+		}
+	}()
+	return cancel
+}
+
+func (c *cliState) runWithInterruptableCtx(fn func(ctx context.Context) error) error {
+	if !c.cliCtx.IsInteractive {
+		return fn(context.Background())
+	}
+	// The cancellation function can be used by the Ctrl+C handler
+	// to cancel this query.
+	ctx, cancel := context.WithCancel(context.Background())
+	// doneCh will be used on the return path to teach the Ctrl+C
+	// handler that the query has been cancelled successfully.
+	doneCh := make(chan struct{})
+	defer func() { close(doneCh) }()
+
+	// Inform the Ctrl+C handler that this query is executing.
+	c.iCtx.mu.Lock()
+	c.iCtx.mu.cancelFn = cancel
+	c.iCtx.mu.doneCh = doneCh
+	c.iCtx.mu.Unlock()
+	defer func() {
+		c.iCtx.mu.Lock()
+		c.iCtx.mu.cancelFn = nil
+		c.iCtx.mu.doneCh = nil
+		c.iCtx.mu.Unlock()
+	}()
+
+	// Now run the query.
+	err := fn(ctx)
+	return err
 }

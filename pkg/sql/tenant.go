@@ -149,6 +149,17 @@ func CreateTenantRecord(
 	// Does it even matter given it'll disappear as soon as tenant starts
 	// reconciling?
 	tenantSpanConfig := execCfg.DefaultZoneConfig.AsSpanConfig()
+	// Make sure to enable rangefeeds; the tenant will need them on its system
+	// tables as soon as it starts up. It's not unsafe/buggy if we didn't do this,
+	// -- the tenant's span config reconciliation process would eventually install
+	// appropriate (rangefeed.enabled = true) configs for its system tables, at
+	// which point subsystems that rely on rangefeeds are able to proceed. All of
+	// this can noticeably slow down pod startup, so we just enable things to
+	// start with.
+	tenantSpanConfig.RangefeedEnabled = true
+	// Make it behave like usual system database ranges, for good measure.
+	tenantSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
+
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
 	toUpsert := []spanconfig.Record{
 		{
