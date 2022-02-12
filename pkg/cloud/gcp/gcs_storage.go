@@ -178,7 +178,11 @@ func (g *gcsStorage) ReadFileAt(
 	object := path.Join(g.prefix, basename)
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
-	defer sp.Finish()
+	defer func() {
+		if sp != nil {
+			sp.Finish()
+		}
+	}()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
 		path.Join(g.prefix, basename))})
 
@@ -206,6 +210,11 @@ func (g *gcsStorage) ReadFileAt(
 		}
 		return nil, 0, err
 	}
+	// Give r ownership of sp. r has captured the ctx.
+	r.SetOnClose(func() {
+		sp.Finish()
+	})
+	sp = nil
 	return r, r.Reader.(*gcs.Reader).Attrs.Size, nil
 }
 

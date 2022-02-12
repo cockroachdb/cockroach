@@ -159,6 +159,9 @@ type ResumingReader struct {
 	Pos          int64                     // How much data was received so far
 	RetryOnErrFn func(error) bool          // custom retry-on-error function
 	ErrFn        func(error) time.Duration // custom error delay picker
+
+	// onClose, if set, is called by Close().
+	onClose func()
 }
 
 var _ io.ReadCloser = &ResumingReader{}
@@ -250,7 +253,15 @@ func (r *ResumingReader) Close() error {
 	if r.Reader != nil {
 		return r.Reader.Close()
 	}
+	if r.onClose != nil {
+		r.onClose()
+		r.onClose = nil
+	}
 	return nil
+}
+
+func (r *ResumingReader) SetOnClose(onClose func()) {
+	r.onClose = onClose
 }
 
 // CheckHTTPContentRangeHeader parses Content-Range header and ensures that
