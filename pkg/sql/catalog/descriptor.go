@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -161,7 +162,7 @@ type Descriptor interface {
 	// describes the set of privileges that users have to use, modify, or delete
 	// the object represented by this descriptor. Each descriptor type may have a
 	// different set of capabilities represented by the PrivilegeDescriptor.
-	GetPrivileges() *descpb.PrivilegeDescriptor
+	GetPrivileges() *catpb.PrivilegeDescriptor
 	// DescriptorType returns the type of this descriptor (like relation, type,
 	// schema, database).
 	DescriptorType() DescriptorType
@@ -203,6 +204,13 @@ type Descriptor interface {
 
 	// ValidateTxnCommit performs pre-commit checks.
 	ValidateTxnCommit(vea ValidationErrorAccumulator, vdg ValidationDescGetter)
+
+	// GetDeclarativeSchemaChangerState returns the state of the declarative
+	// schema change currently operating on this descriptor. It will be nil if
+	// there is no declarative schema change job. Note that it is a clone of
+	// the value on the descriptor. Changes will need to be written back to
+	// the descriptor using SetDeclarativeSchemaChangeState.
+	GetDeclarativeSchemaChangerState() *scpb.DescriptorState
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.
@@ -743,9 +751,9 @@ type TypeDescriptorResolver interface {
 // DefaultPrivilegeDescriptor protos are not accessed and interacted
 // with directly.
 type DefaultPrivilegeDescriptor interface {
-	GetDefaultPrivilegesForRole(descpb.DefaultPrivilegesRole) (*descpb.DefaultPrivilegesForRole, bool)
-	ForEachDefaultPrivilegeForRole(func(descpb.DefaultPrivilegesForRole) error) error
-	GetDefaultPrivilegeDescriptorType() descpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
+	GetDefaultPrivilegesForRole(catpb.DefaultPrivilegesRole) (*catpb.DefaultPrivilegesForRole, bool)
+	ForEachDefaultPrivilegeForRole(func(catpb.DefaultPrivilegesForRole) error) error
+	GetDefaultPrivilegeDescriptorType() catpb.DefaultPrivilegeDescriptor_DefaultPrivilegeDescriptorType
 }
 
 // FilterDescriptorState inspects the state of a given descriptor and returns an

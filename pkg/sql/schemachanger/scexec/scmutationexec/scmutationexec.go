@@ -45,8 +45,8 @@ type Clock interface {
 // CatalogReader describes catalog read operations as required by the mutation
 // visitor.
 type CatalogReader interface {
-	// MustReadImmutableDescriptor reads a descriptor from the catalog by ID.
-	MustReadImmutableDescriptor(ctx context.Context, id descpb.ID) (catalog.Descriptor, error)
+	// MustReadImmutableDescriptors reads descriptors from the catalog by ID.
+	MustReadImmutableDescriptors(ctx context.Context, ids ...descpb.ID) ([]catalog.Descriptor, error)
 
 	// GetFullyQualifiedName gets the fully qualified name from a descriptor ID.
 	GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error)
@@ -58,6 +58,18 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
+}
+
+// MustReadImmutableDescriptor is a shorthand for invoking
+// CatalogReader.MustReadImmutableDescriptors for a single ID.
+func MustReadImmutableDescriptor(
+	ctx context.Context, cr CatalogReader, id descpb.ID,
+) (catalog.Descriptor, error) {
+	descs, err := cr.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], nil
 }
 
 // Partitioner is the interface for adding partitioning to a table descriptor.
@@ -113,11 +125,11 @@ type MutationVisitorStateUpdater interface {
 	AddNewGCJobForIndex(tbl catalog.TableDescriptor, index catalog.Index)
 
 	// AddNewSchemaChangerJob adds a schema changer job.
-	AddNewSchemaChangerJob(jobID jobspb.JobID, targetState scpb.TargetState, current []scpb.Status) error
+	AddNewSchemaChangerJob(jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptors descpb.IDs) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
 	// schema changer job.
-	UpdateSchemaChangerJob(jobID jobspb.JobID, current []scpb.Status, isNonCancelable bool) error
+	UpdateSchemaChangerJob(jobID jobspb.JobID, isNonCancelable bool) error
 
 	// EnqueueEvent will enqueue an event to be written to the event log.
 	EnqueueEvent(id descpb.ID, metadata scpb.TargetMetadata, details eventpb.CommonSQLEventDetails, event eventpb.EventPayload) error
@@ -142,68 +154,86 @@ type visitor struct {
 	p     Partitioner
 }
 
-func (m *visitor) RemoveJobReference(ctx context.Context, reference scop.RemoveJobReference) error {
-	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, reference.JobID, 0)
-}
-
-func (m *visitor) AddJobReference(ctx context.Context, reference scop.AddJobReference) error {
-	return m.swapSchemaChangeJobID(ctx, reference.DescriptorID, 0, reference.JobID)
-}
-
-func (m *visitor) swapSchemaChangeJobID(
-	ctx context.Context, descID descpb.ID, exp, to jobspb.JobID,
+func (m *visitor) RemoveJobStateFromDescriptor(
+	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
-	// TODO(ajwerner): Support all of the descriptor types. We need to write this
-	// to avoid concurrency.
-	d, err := m.cr.MustReadImmutableDescriptor(ctx, descID)
+	{
+		_, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescriptorID)
 
-	// If we're clearing the status, we might have already deleted the
-	// descriptor. Permit that by detecting the prior deletion and
-	// short-circuiting.
-	//
-	// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
-	// an operation which has to happen before deleting the descriptor. If that
-	// were the case, this error would become unexpected.
-	if errors.Is(err, catalog.ErrDescriptorNotFound) && to == 0 {
-		return nil
+		// If we're clearing the status, we might have already deleted the
+		// descriptor. Permit that by detecting the prior deletion and
+		// short-circuiting.
+		//
+		// TODO(ajwerner): Ideally we'd model the clearing of the job dependency as
+		// an operation which has to happen before deleting the descriptor. If that
+		// were the case, this error would become unexpected.
+		if errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
 	}
+
+	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
 	if err != nil {
 		return err
 	}
-	// Short-circuit writing an update if this isn't a table because we'd have
-	// no field to touch.
-	if _, isTable := d.(catalog.TableDescriptor); !isTable {
-		return nil
-	}
-
-	tbl, err := m.s.CheckOutDescriptor(ctx, descID)
-	if err != nil {
-		return err
-	}
-	mut, ok := tbl.(*tabledesc.Mutable)
-	if !ok {
-		return nil
-	}
-	if jobspb.JobID(mut.NewSchemaChangeJobID) != exp {
+	existing := mut.GetDeclarativeSchemaChangerState()
+	if existing == nil {
+		return errors.AssertionFailedf(
+			"expected schema change state with job ID %d on table %d, found none",
+			op.JobID, op.DescriptorID,
+		)
+	} else if existing.JobID != op.JobID {
 		return errors.AssertionFailedf(
 			"unexpected schema change job ID %d on table %d, expected %d",
-			mut.NewSchemaChangeJobID, descID, exp,
+			existing.JobID, op.DescriptorID, op.JobID,
 		)
 	}
-	mut.NewSchemaChangeJobID = int64(to)
+	mut.SetDeclarativeSchemaChangerState(nil)
 	return nil
 }
 
-func (m *visitor) CreateDeclarativeSchemaChangerJob(
-	ctx context.Context, job scop.CreateDeclarativeSchemaChangerJob,
+func (m *visitor) SetJobStateOnDescriptor(
+	ctx context.Context, op scop.SetJobStateOnDescriptor,
 ) error {
-	return m.s.AddNewSchemaChangerJob(job.JobID, job.TargetState, job.Current)
+	mut, err := m.s.CheckOutDescriptor(ctx, op.DescriptorID)
+	if err != nil {
+		return err
+	}
+
+	// TODO(ajwerner): This check here could be used as a check for a concurrent
+	// attempt to place a schema change job on a descriptor. It might deserve
+	// a special error that is not an assertion if we didn't choose to handle
+	// this at a higher level.
+	expected := op.State.JobID
+	if op.Initialize {
+		expected = jobspb.InvalidJobID
+	}
+	scs := mut.GetDeclarativeSchemaChangerState()
+	if scs != nil {
+		if op.Initialize || scs.JobID != expected {
+			return errors.AssertionFailedf(
+				"unexpected schema change job ID %d on table %d, expected %d",
+				scs.JobID, op.DescriptorID, expected,
+			)
+		}
+	}
+	mut.SetDeclarativeSchemaChangerState(op.State.Clone())
+	return nil
+}
+
+func (m *visitor) CreateSchemaChangerJob(
+	ctx context.Context, job scop.CreateSchemaChangerJob,
+) error {
+	return m.s.AddNewSchemaChangerJob(job.JobID, job.Statements, job.Authorization, job.DescriptorIDs)
 }
 
 func (m *visitor) UpdateSchemaChangerJob(
-	ctx context.Context, progress scop.UpdateSchemaChangerJob,
+	ctx context.Context, op scop.UpdateSchemaChangerJob,
 ) error {
-	return m.s.UpdateSchemaChangerJob(progress.JobID, progress.Current, progress.IsNonCancelable)
+	return m.s.UpdateSchemaChangerJob(op.JobID, op.IsNonCancelable)
 }
 
 func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
@@ -336,7 +366,7 @@ func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) er
 	}
 	typ.AddReferencingDescriptorID(op.DescID)
 	// Sanity: Validate that a back reference exists by now.
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
 	if err != nil {
 		return err
 	}
@@ -462,7 +492,7 @@ func (m *visitor) CreateGcJobForDatabase(
 }
 
 func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -494,7 +524,7 @@ func (m *visitor) MarkDescriptorAsDropped(
 func (m *visitor) MarkDescriptorAsDroppedSynthetically(
 	ctx context.Context, op scop.MarkDescriptorAsDroppedSynthetically,
 ) error {
-	desc, err := m.cr.MustReadImmutableDescriptor(ctx, op.DescID)
+	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
 	if err != nil {
 		return err
 	}
@@ -505,7 +535,7 @@ func (m *visitor) MarkDescriptorAsDroppedSynthetically(
 }
 
 func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	descriptor, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	descriptor, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -1034,7 +1064,7 @@ func (m *visitor) DeleteDatabaseSchemaEntry(
 	if err != nil {
 		return err
 	}
-	sc, err := m.cr.MustReadImmutableDescriptor(ctx, op.SchemaID)
+	sc, err := MustReadImmutableDescriptor(ctx, m.cr, op.SchemaID)
 	if err != nil {
 		return err
 	}
@@ -1070,7 +1100,7 @@ func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnCom
 func (m *visitor) RemoveConstraintComment(
 	ctx context.Context, op scop.RemoveConstraintComment,
 ) error {
-	tbl, err := m.cr.MustReadImmutableDescriptor(ctx, op.TableID)
+	tbl, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -1080,7 +1110,7 @@ func (m *visitor) RemoveConstraintComment(
 func (m *visitor) RemoveDatabaseRoleSettings(
 	ctx context.Context, op scop.RemoveDatabaseRoleSettings,
 ) error {
-	db, err := m.cr.MustReadImmutableDescriptor(ctx, op.DatabaseID)
+	db, err := MustReadImmutableDescriptor(ctx, m.cr, op.DatabaseID)
 	if err != nil {
 		return err
 	}

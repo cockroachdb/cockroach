@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -126,7 +127,7 @@ func (n *reparentDatabaseNode) startExec(params runParams) error {
 		ParentID:   n.newParent.ID,
 		Name:       n.db.Name,
 		ID:         id,
-		Privileges: protoutil.Clone(n.db.Privileges).(*descpb.PrivilegeDescriptor),
+		Privileges: protoutil.Clone(n.db.Privileges).(*catpb.PrivilegeDescriptor),
 		Version:    1,
 	}).BuildCreatedMutable()
 	// Add the new schema to the parent database's name map.

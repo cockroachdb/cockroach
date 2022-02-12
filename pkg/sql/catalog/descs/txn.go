@@ -60,17 +60,11 @@ func (cf *CollectionFactory) Txn(
 ) error {
 	// Waits for descriptors that were modified, skipping
 	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs []catalog.Descriptor) error {
+	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
 		// Wait for a single version on leased descriptors.
 		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := false
+			waitForNoVersion := deletedDescs.Contains(ld.ID)
 			// Detect unpublished ones.
-			for _, deletedDesc := range deletedDescs {
-				if deletedDesc.GetID() == ld.ID {
-					waitForNoVersion = true
-					break
-				}
-			}
 			if waitForNoVersion {
 				err := cf.leaseMgr.WaitForNoVersion(ctx, ld.ID, retry.Options{})
 				if err != nil {
@@ -87,12 +81,12 @@ func (cf *CollectionFactory) Txn(
 	}
 	for {
 		var modifiedDescriptors []lease.IDVersion
-		var deletedDescs []catalog.Descriptor
+		var deletedDescs catalog.DescriptorIDSet
 		var descsCol Collection
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			modifiedDescriptors = nil
-			deletedDescs = nil
-			descsCol = cf.MakeCollection(ctx, nil)
+			deletedDescs = catalog.DescriptorIDSet{}
+			descsCol = cf.MakeCollection(ctx, nil /* temporarySchemaProvider */)
 			defer descsCol.ReleaseAll(ctx)
 			if !UnsafeSkipSystemConfigTrigger.Get(&cf.settings.SV) {
 				if err := txn.SetSystemConfigTrigger(cf.leaseMgr.Codec().ForSystemTenant()); err != nil {

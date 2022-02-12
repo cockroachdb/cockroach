@@ -130,6 +130,7 @@ var validationMap = []struct {
 			"RowLevelTTL":                   {status: iSolemnlySwearThisFieldIsValidated},
 			"ExcludeDataFromBackup":         {status: thisFieldReferencesNoObjects},
 			"NextConstraintID":              {status: iSolemnlySwearThisFieldIsValidated},
+			"DeclarativeSchemaChangerState": {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -236,53 +237,56 @@ var validationMap = []struct {
 	{
 		obj: descpb.TypeDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":                     {status: iSolemnlySwearThisFieldIsValidated},
-			"ID":                       {status: iSolemnlySwearThisFieldIsValidated},
-			"Version":                  {status: thisFieldReferencesNoObjects},
-			"ModificationTime":         {status: thisFieldReferencesNoObjects},
-			"DrainingNames":            {status: thisFieldReferencesNoObjects},
-			"ParentID":                 {status: iSolemnlySwearThisFieldIsValidated},
-			"ParentSchemaID":           {status: iSolemnlySwearThisFieldIsValidated},
-			"Kind":                     {status: thisFieldReferencesNoObjects},
-			"ArrayTypeID":              {status: iSolemnlySwearThisFieldIsValidated},
-			"EnumMembers":              {status: iSolemnlySwearThisFieldIsValidated},
-			"Alias":                    {status: iSolemnlySwearThisFieldIsValidated},
-			"State":                    {status: thisFieldReferencesNoObjects},
-			"ReferencingDescriptorIDs": {status: iSolemnlySwearThisFieldIsValidated},
-			"Privileges":               {status: iSolemnlySwearThisFieldIsValidated},
-			"OfflineReason":            {status: thisFieldReferencesNoObjects},
-			"RegionConfig":             {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
+			"Version":                       {status: thisFieldReferencesNoObjects},
+			"ModificationTime":              {status: thisFieldReferencesNoObjects},
+			"DrainingNames":                 {status: thisFieldReferencesNoObjects},
+			"ParentID":                      {status: iSolemnlySwearThisFieldIsValidated},
+			"ParentSchemaID":                {status: iSolemnlySwearThisFieldIsValidated},
+			"Kind":                          {status: thisFieldReferencesNoObjects},
+			"ArrayTypeID":                   {status: iSolemnlySwearThisFieldIsValidated},
+			"EnumMembers":                   {status: iSolemnlySwearThisFieldIsValidated},
+			"Alias":                         {status: iSolemnlySwearThisFieldIsValidated},
+			"State":                         {status: thisFieldReferencesNoObjects},
+			"ReferencingDescriptorIDs":      {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
+			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
+			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
 		obj: descpb.DatabaseDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":              {status: iSolemnlySwearThisFieldIsValidated},
-			"ID":                {status: iSolemnlySwearThisFieldIsValidated},
-			"Version":           {status: thisFieldReferencesNoObjects},
-			"ModificationTime":  {status: thisFieldReferencesNoObjects},
-			"DrainingNames":     {status: thisFieldReferencesNoObjects},
-			"Privileges":        {status: iSolemnlySwearThisFieldIsValidated},
-			"Schemas":           {status: iSolemnlySwearThisFieldIsValidated},
-			"State":             {status: thisFieldReferencesNoObjects},
-			"OfflineReason":     {status: thisFieldReferencesNoObjects},
-			"RegionConfig":      {status: iSolemnlySwearThisFieldIsValidated},
-			"DefaultPrivileges": {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
+			"Version":                       {status: thisFieldReferencesNoObjects},
+			"ModificationTime":              {status: thisFieldReferencesNoObjects},
+			"DrainingNames":                 {status: thisFieldReferencesNoObjects},
+			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"Schemas":                       {status: iSolemnlySwearThisFieldIsValidated},
+			"State":                         {status: thisFieldReferencesNoObjects},
+			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
+			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
+			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
+			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{
 		obj: descpb.SchemaDescriptor{},
 		fieldMap: map[string]validationStatusInfo{
-			"Name":              {status: iSolemnlySwearThisFieldIsValidated},
-			"ID":                {status: iSolemnlySwearThisFieldIsValidated},
-			"State":             {status: thisFieldReferencesNoObjects},
-			"OfflineReason":     {status: thisFieldReferencesNoObjects},
-			"ModificationTime":  {status: thisFieldReferencesNoObjects},
-			"Version":           {status: thisFieldReferencesNoObjects},
-			"DrainingNames":     {status: thisFieldReferencesNoObjects},
-			"ParentID":          {status: iSolemnlySwearThisFieldIsValidated},
-			"Privileges":        {status: iSolemnlySwearThisFieldIsValidated},
-			"DefaultPrivileges": {status: iSolemnlySwearThisFieldIsValidated},
+			"Name":                          {status: iSolemnlySwearThisFieldIsValidated},
+			"ID":                            {status: iSolemnlySwearThisFieldIsValidated},
+			"State":                         {status: thisFieldReferencesNoObjects},
+			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
+			"ModificationTime":              {status: thisFieldReferencesNoObjects},
+			"Version":                       {status: thisFieldReferencesNoObjects},
+			"DrainingNames":                 {status: thisFieldReferencesNoObjects},
+			"ParentID":                      {status: iSolemnlySwearThisFieldIsValidated},
+			"Privileges":                    {status: iSolemnlySwearThisFieldIsValidated},
+			"DefaultPrivileges":             {status: iSolemnlySwearThisFieldIsValidated},
+			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 		},
 	},
 }
@@ -1286,7 +1290,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextFamilyID:     1,
 				NextIndexID:      5,
 				NextConstraintID: 2,
-				Privileges:       descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			}},
 		{`index "sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
@@ -1367,7 +1371,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			}},
 		{`index "new_sec" cannot store virtual column "c3"`,
 			descpb.TableDescriptor{
@@ -1448,7 +1452,7 @@ func TestValidateTableDesc(t *testing.T) {
 				NextColumnID: 4,
 				NextFamilyID: 1,
 				NextIndexID:  5,
-				Privileges:   descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+				Privileges:   catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			}},
 		{`index "sec" cannot store virtual column "v"`,
 			descpb.TableDescriptor{
@@ -1868,7 +1872,7 @@ func TestValidateTableDesc(t *testing.T) {
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {
-			d.desc.Privileges = descpb.NewBasePrivilegeDescriptor(security.RootUserName())
+			d.desc.Privileges = catpb.NewBasePrivilegeDescriptor(security.RootUserName())
 			desc := NewBuilder(&d.desc).BuildImmutableTable()
 			expectedErr := fmt.Sprintf("%s %q (%d): %s", desc.DescriptorType(), desc.GetName(), desc.GetID(), d.err)
 			err := validate.Self(clusterversion.TestingClusterVersion, desc)
@@ -2241,7 +2245,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 			var cb nstree.MutableCatalog
 			cb.UpsertDescriptorEntry(dbdesc.NewBuilder(&descpb.DatabaseDescriptor{ID: 1}).BuildImmutable())
 			for _, otherDesc := range test.otherDescs {
-				otherDesc.Privileges = descpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
+				otherDesc.Privileges = catpb.NewBasePrivilegeDescriptor(security.AdminRoleName())
 				cb.UpsertDescriptorEntry(NewBuilder(&otherDesc).BuildImmutable())
 			}
 			desc := NewBuilder(&test.desc).BuildImmutable()
@@ -2492,7 +2496,7 @@ func TestValidateConstraintID(t *testing.T) {
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC}},
 				NextColumnID: 2,
 				NextFamilyID: 1,
-				Privileges: descpb.NewPrivilegeDescriptor(
+				Privileges: catpb.NewPrivilegeDescriptor(
 					security.PublicRoleName(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
@@ -2519,7 +2523,7 @@ func TestValidateConstraintID(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
-				Privileges: descpb.NewPrivilegeDescriptor(
+				Privileges: catpb.NewPrivilegeDescriptor(
 					security.PublicRoleName(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
@@ -2542,7 +2546,7 @@ func TestValidateConstraintID(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
-				Privileges: descpb.NewPrivilegeDescriptor(
+				Privileges: catpb.NewPrivilegeDescriptor(
 					security.PublicRoleName(),
 					privilege.SchemaPrivileges,
 					privilege.List{},
@@ -2565,7 +2569,7 @@ func TestValidateConstraintID(t *testing.T) {
 				},
 				NextColumnID: 2,
 				NextFamilyID: 1,
-				Privileges: descpb.NewPrivilegeDescriptor(
+				Privileges: catpb.NewPrivilegeDescriptor(
 					security.PublicRoleName(),
 					privilege.SchemaPrivileges,
 					privilege.List{},

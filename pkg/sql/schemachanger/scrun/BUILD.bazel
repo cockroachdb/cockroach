@@ -12,11 +12,12 @@ go_library(
     deps = [
         "//pkg/jobs/jobspb",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan",
-        "//pkg/util/log/logcrash",
+        "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

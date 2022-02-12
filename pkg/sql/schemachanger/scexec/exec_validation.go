@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/errors"
@@ -24,7 +25,9 @@ import (
 func executeValidateUniqueIndex(
 	ctx context.Context, deps Dependencies, op *scop.ValidateUniqueIndex,
 ) error {
-	desc, err := deps.Catalog().MustReadImmutableDescriptor(ctx, op.TableID)
+	desc, err := scmutationexec.MustReadImmutableDescriptor(
+		ctx, deps.Catalog(), op.TableID,
+	)
 	if err != nil {
 		return err
 	}

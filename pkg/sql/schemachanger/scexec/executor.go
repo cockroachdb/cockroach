@@ -27,7 +27,6 @@ func ExecuteStage(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 		return nil
 	}
 	typ := ops[0].Type()
-	log.Infof(ctx, "executing %d ops of type %s", len(ops), typ)
 	switch typ {
 	case scop.MutationType:
 		return executeDescriptorMutationOps(ctx, deps, ops)

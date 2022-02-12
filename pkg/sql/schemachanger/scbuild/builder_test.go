@@ -72,6 +72,7 @@ func TestBuildDataDriven(t *testing.T) {
 							// For setting up a builder inside tests we will ensure that the new schema
 							// changer will allow non-fully implemented operations.
 							sd.NewSchemaChangerMode = sessiondatapb.UseNewSchemaChangerUnsafe
+							sd.ApplicationName = ""
 						}))))
 				},
 			},

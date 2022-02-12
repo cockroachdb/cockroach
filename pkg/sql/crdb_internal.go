@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -4464,7 +4465,7 @@ func collectMarshaledJobMetadataMap(
 			continue
 		}
 		for _, j := range tbl.GetMutationJobs() {
-			referencedJobIDs[jobspb.JobID(j.JobID)] = struct{}{}
+			referencedJobIDs[j.JobID] = struct{}{}
 		}
 	}
 	if len(referencedJobIDs) == 0 {
@@ -4918,7 +4919,7 @@ CREATE TABLE crdb_internal.default_privileges (
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, nil /* all databases */, true, /* requiresPrivileges */
 			func(descriptor catalog.DatabaseDescriptor) error {
-				addRowHelper := func(defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
+				addRowHelper := func(defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
 					role := tree.DNull
 					forAllRoles := tree.DBoolTrue
 					if defaultPrivilegesForRole.IsExplicitRole() {
@@ -4980,13 +4981,13 @@ CREATE TABLE crdb_internal.default_privileges (
 					}
 					return nil
 				}
-				addRowForRole := func(role descpb.DefaultPrivilegesRole) error {
+				addRowForRole := func(role catpb.DefaultPrivilegesRole) error {
 					defaultPrivilegeDescriptor := dbContext.GetDefaultPrivilegeDescriptor()
 					defaultPrivilegesForRole, found := defaultPrivilegeDescriptor.GetDefaultPrivilegesForRole(role)
 					if !found {
 						// If an entry is not found for the role, the role still has
 						// the default set of default privileges.
-						newDefaultPrivilegesForRole := descpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
+						newDefaultPrivilegesForRole := catpb.InitDefaultPrivilegesForRole(role, defaultPrivilegeDescriptor.GetDefaultPrivilegeDescriptorType())
 						defaultPrivilegesForRole = &newDefaultPrivilegesForRole
 					}
 					if err := addRowHelper(*defaultPrivilegesForRole); err != nil {
@@ -4995,7 +4996,7 @@ CREATE TABLE crdb_internal.default_privileges (
 					return nil
 				}
 				if err := forEachRole(ctx, p, func(username security.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
-					role := descpb.DefaultPrivilegesRole{
+					role := catpb.DefaultPrivilegesRole{
 						Role: username,
 					}
 					return addRowForRole(role)
@@ -5004,7 +5005,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 
 				// Handle ForAllRoles outside of forEachRole since it is a pseudo role.
-				role := descpb.DefaultPrivilegesRole{
+				role := catpb.DefaultPrivilegesRole{
 					ForAllRoles: true,
 				}
 				return addRowForRole(role)
