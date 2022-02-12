@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -100,7 +101,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 				Version:             descpb.PrimaryIndexWithStoredColumnsVersion,
 				ConstraintID:        1,
 			},
-			Privileges:       descpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
+			Privileges:       catpb.NewBasePrivilegeDescriptor(security.AdminRoleName()),
 			NextColumnID:     2,
 			NextConstraintID: 2,
 			NextFamilyID:     1,

@@ -101,6 +101,7 @@ func TestPlanDataDriven(t *testing.T) {
 					}
 
 					plan = sctestutils.MakePlan(t, state, scop.EarliestPhase)
+					sctestutils.TruncateJobOps(&plan)
 					validatePlan(t, &plan)
 				})
 
@@ -155,6 +156,7 @@ func validatePlan(t *testing.T, plan *scplan.Plan) {
 			Current:     stage.Before,
 		}
 		truncatedPlan := sctestutils.MakePlan(t, cs, stage.Phase)
+		sctestutils.TruncateJobOps(&truncatedPlan)
 		a := marshalOps(t, plan.TargetState, truncatedPlan.Stages)
 		require.Equalf(t, e, a, "plan mismatch when re-planning %d stage(s) later", i)
 	}
@@ -233,6 +235,11 @@ func marshalOps(t *testing.T, ts scpb.TargetState, stages []scstage.Stage) strin
 		sb.WriteString("  ops:\n")
 		stageOps := ""
 		for _, op := range ops {
+			if setJobStateOp, ok := op.(*scop.SetJobStateOnDescriptor); ok {
+				clone := *setJobStateOp
+				clone.State = scpb.DescriptorState{}
+				op = &clone
+			}
 			opMap, err := scgraphviz.ToMap(op)
 			require.NoError(t, err)
 			data, err := yaml.Marshal(opMap)

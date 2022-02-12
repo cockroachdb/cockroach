@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
@@ -426,8 +426,8 @@ func accumulateDependentDefaultPrivileges(
 	// The func we pass into ForEachDefaultPrivilegeForRole will never
 	// err so no err will be returned.
 	return defaultPrivilegeDescriptor.ForEachDefaultPrivilegeForRole(func(
-		defaultPrivilegesForRole descpb.DefaultPrivilegesForRole) error {
-		role := descpb.DefaultPrivilegesRole{}
+		defaultPrivilegesForRole catpb.DefaultPrivilegesForRole) error {
+		role := catpb.DefaultPrivilegesRole{}
 		if defaultPrivilegesForRole.IsExplicitRole() {
 			role.Role = defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode()
 		} else {
@@ -442,8 +442,8 @@ func accumulateDependentDefaultPrivileges(
 
 func addDependentPrivileges(
 	object tree.AlterDefaultPrivilegesTargetObject,
-	defaultPrivs descpb.PrivilegeDescriptor,
-	role descpb.DefaultPrivilegesRole,
+	defaultPrivs catpb.PrivilegeDescriptor,
+	role catpb.DefaultPrivilegesRole,
 	userNames map[security.SQLUsername][]objectAndType,
 ) {
 	var objectType string

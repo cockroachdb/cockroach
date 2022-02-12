@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,70 +34,70 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
 	testCases := []struct {
-		defaultPrivilegesRole descpb.DefaultPrivilegesRole
+		defaultPrivilegesRole catpb.DefaultPrivilegesRole
 		privileges            privilege.List
 		grantees              []security.SQLUsername
 		targetObject          tree.AlterDefaultPrivilegesTargetObject
 		objectCreator         security.SQLUsername
 	}{
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser},
 			targetObject:          tree.Tables,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Tables,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Sequences,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Types,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Schemas,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.SELECT, privilege.DELETE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Tables,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.SELECT, privilege.DELETE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Sequences,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.USAGE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Types,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			privileges:            privilege.List{privilege.USAGE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Schemas,
@@ -104,56 +105,56 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 		},
 		/* Test cases for ForAllRoles */
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Tables,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Sequences,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Types,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.ALL},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Schemas,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.SELECT, privilege.DELETE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Tables,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.SELECT, privilege.DELETE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Sequences,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.USAGE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Types,
 			objectCreator:         creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			privileges:            privilege.List{privilege.USAGE},
 			grantees:              []security.SQLUsername{fooUser, barUser, bazUser},
 			targetObject:          tree.Schemas,
@@ -162,14 +163,14 @@ func TestGrantDefaultPrivileges(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
 		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.privileges, tc.grantees, tc.targetObject, false /* withGrantOption */, false /*deprecateGrant*/)
 
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &descpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &catpb.PrivilegeDescriptor{},
 		)
 
 		for _, grantee := range tc.grantees {
@@ -191,14 +192,14 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
 	testCases := []struct {
-		defaultPrivilegesRole                                 descpb.DefaultPrivilegesRole
+		defaultPrivilegesRole                                 catpb.DefaultPrivilegesRole
 		grantPrivileges, revokePrivileges, expectedPrivileges privilege.List
 		grantees                                              []security.SQLUsername
 		targetObject                                          tree.AlterDefaultPrivilegesTargetObject
 		objectCreator                                         security.SQLUsername
 	}{
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.SELECT},
 			expectedPrivileges: privilege.List{
@@ -210,7 +211,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			objectCreator: creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.SELECT},
 			expectedPrivileges: privilege.List{
@@ -222,7 +223,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			objectCreator: creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.USAGE},
 			expectedPrivileges: privilege.List{
@@ -233,7 +234,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			objectCreator: creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{Role: creatorUser},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{Role: creatorUser},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.USAGE},
 			expectedPrivileges: privilege.List{
@@ -245,7 +246,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 		},
 		/* Test cases for ForAllRoles */
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.SELECT},
 			expectedPrivileges: privilege.List{
@@ -257,7 +258,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			objectCreator: creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.USAGE},
 			expectedPrivileges: privilege.List{
@@ -268,7 +269,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 			objectCreator: creatorUser,
 		},
 		{
-			defaultPrivilegesRole: descpb.DefaultPrivilegesRole{ForAllRoles: true},
+			defaultPrivilegesRole: catpb.DefaultPrivilegesRole{ForAllRoles: true},
 			grantPrivileges:       privilege.List{privilege.ALL},
 			revokePrivileges:      privilege.List{privilege.USAGE},
 			expectedPrivileges: privilege.List{
@@ -281,7 +282,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
 		defaultPrivileges.GrantDefaultPrivileges(tc.defaultPrivilegesRole, tc.grantPrivileges, tc.grantees, tc.targetObject, false /* withGrantOption */, false /*deprecateGrant*/)
@@ -289,7 +290,7 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &descpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, tc.objectCreator, tc.targetObject, &catpb.PrivilegeDescriptor{},
 		)
 
 		for _, grantee := range tc.grantees {
@@ -305,17 +306,17 @@ func TestRevokeDefaultPrivileges(t *testing.T) {
 func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 	fooUser := security.MakeSQLUsernameFromPreNormalizedString("foo")
-	defaultPrivileges.RevokeDefaultPrivileges(descpb.DefaultPrivilegesRole{
+	defaultPrivileges.RevokeDefaultPrivileges(catpb.DefaultPrivilegesRole{
 		Role: creatorUser,
 	}, privilege.List{privilege.ALL}, []security.SQLUsername{fooUser}, tree.Tables, false /* grantOptionFor */, false /*deprecateGrant*/)
 
 	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-		nonSystemDatabaseID, creatorUser, tree.Tables, &descpb.PrivilegeDescriptor{},
+		nonSystemDatabaseID, creatorUser, tree.Tables, &catpb.PrivilegeDescriptor{},
 	)
 
 	if newPrivileges.AnyPrivilege(fooUser) {
@@ -326,12 +327,12 @@ func TestRevokeDefaultPrivilegesFromEmptyList(t *testing.T) {
 func TestCreatePrivilegesFromDefaultPrivilegesForSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 	newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 		defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-		keys.SystemDatabaseID, creatorUser, tree.Tables, &descpb.PrivilegeDescriptor{},
+		keys.SystemDatabaseID, creatorUser, tree.Tables, &catpb.PrivilegeDescriptor{},
 	)
 
 	if !newPrivileges.Owner().IsNodeUser() {
@@ -342,7 +343,7 @@ func TestCreatePrivilegesFromDefaultPrivilegesForSystemDatabase(t *testing.T) {
 func TestPresetDefaultPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
@@ -350,7 +351,7 @@ func TestPresetDefaultPrivileges(t *testing.T) {
 	for _, targetObject := range targetObjectTypes {
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, creatorUser, targetObject, &descpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, creatorUser, targetObject, &catpb.PrivilegeDescriptor{},
 		)
 
 		if !newPrivileges.CheckPrivilege(creatorUser, privilege.ALL) {
@@ -368,7 +369,7 @@ func TestPresetDefaultPrivileges(t *testing.T) {
 func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_SCHEMA)
+	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
@@ -376,7 +377,7 @@ func TestPresetDefaultPrivilegesInSchema(t *testing.T) {
 	for _, targetObject := range targetObjectTypes {
 		newPrivileges := CreatePrivilegesFromDefaultPrivileges(
 			defaultPrivileges, nil, /* schemaDefaultPrivilegeDescriptor */
-			nonSystemDatabaseID, creatorUser, targetObject, &descpb.PrivilegeDescriptor{},
+			nonSystemDatabaseID, creatorUser, targetObject, &catpb.PrivilegeDescriptor{},
 		)
 
 		// There are no preset privileges on a default privilege descriptor defined
@@ -661,15 +662,15 @@ func TestDefaultPrivileges(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 
-		schemaPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_SCHEMA)
+		schemaPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_SCHEMA)
 		schemaDefaultPrivileges := NewMutableDefaultPrivileges(schemaPrivilegeDescriptor)
 
 		for _, userAndGrant := range tc.userAndGrants {
 			defaultPrivileges.GrantDefaultPrivileges(
-				descpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
+				catpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
 				userAndGrant.grants,
 				[]security.SQLUsername{userAndGrant.user},
 				tc.targetObject, false, /* withGrantOption */
@@ -679,7 +680,7 @@ func TestDefaultPrivileges(t *testing.T) {
 
 		for _, userAndGrant := range tc.userAndGrantsInSchema {
 			schemaDefaultPrivileges.GrantDefaultPrivileges(
-				descpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
+				catpb.DefaultPrivilegesRole{Role: tc.defaultPrivilegesRole},
 				userAndGrant.grants,
 				[]security.SQLUsername{userAndGrant.user},
 				tc.targetObject,
@@ -694,7 +695,7 @@ func TestDefaultPrivileges(t *testing.T) {
 			tc.dbID,
 			tc.objectCreator,
 			tc.targetObject,
-			&descpb.PrivilegeDescriptor{},
+			&catpb.PrivilegeDescriptor{},
 		)
 
 		for _, userAndGrant := range tc.expectedGrantsOnObject {
@@ -733,17 +734,17 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+		defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 		defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 		creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
 		defaultPrivilegesForCreator := defaultPrivileges.defaultPrivilegeDescriptor.
-			FindOrCreateUser(descpb.DefaultPrivilegesRole{
+			FindOrCreateUser(catpb.DefaultPrivilegesRole{
 				Role: creatorUser,
 			})
 
 		defaultPrivileges.RevokeDefaultPrivileges(
-			descpb.DefaultPrivilegesRole{Role: creatorUser},
+			catpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]security.SQLUsername{creatorUser},
 			tc.targetObject, false, /* grantOptionFor */
@@ -753,7 +754,7 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 			t.Errorf("expected role to not have ALL privileges on %s", tc.targetObject)
 		}
 		defaultPrivileges.GrantDefaultPrivileges(
-			descpb.DefaultPrivilegesRole{Role: creatorUser},
+			catpb.DefaultPrivilegesRole{Role: creatorUser},
 			tc.revokeAndGrantPrivileges,
 			[]security.SQLUsername{creatorUser},
 			tc.targetObject, false, /* withGrantOption */
@@ -768,17 +769,17 @@ func TestModifyDefaultDefaultPrivileges(t *testing.T) {
 func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(descpb.DefaultPrivilegeDescriptor_DATABASE)
+	defaultPrivilegeDescriptor := MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE)
 	defaultPrivileges := NewMutableDefaultPrivileges(defaultPrivilegeDescriptor)
 	creatorUser := security.MakeSQLUsernameFromPreNormalizedString("creator")
 
 	defaultPrivilegesForCreator := defaultPrivileges.defaultPrivilegeDescriptor.
-		FindOrCreateUser(descpb.DefaultPrivilegesRole{
+		FindOrCreateUser(catpb.DefaultPrivilegesRole{
 			Role: creatorUser,
 		})
 
 	defaultPrivileges.RevokeDefaultPrivileges(
-		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
 		tree.Types, false, /* grantOptionFor */
@@ -788,7 +789,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 		t.Errorf("expected public to not have USAGE privilege on types")
 	}
 	defaultPrivileges.GrantDefaultPrivileges(
-		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
 		tree.Types, false, /* withGrantOption */
@@ -800,7 +801,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 
 	// Test granting when withGrantOption is true.
 	defaultPrivileges.GrantDefaultPrivileges(
-		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
 		tree.Types, true, /* withGrantOption */
@@ -823,7 +824,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 
 	// Test revoking when grantOptionFor is true.
 	defaultPrivileges.RevokeDefaultPrivileges(
-		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
 		tree.Types, true, /* grantOptionFor */
@@ -842,7 +843,7 @@ func TestModifyDefaultDefaultPrivilegesForPublic(t *testing.T) {
 
 	// Test a complete revoke afterwards.
 	defaultPrivileges.RevokeDefaultPrivileges(
-		descpb.DefaultPrivilegesRole{Role: creatorUser},
+		catpb.DefaultPrivilegesRole{Role: creatorUser},
 		privilege.List{privilege.USAGE},
 		[]security.SQLUsername{security.PublicRoleName()},
 		tree.Types, false, /* grantOptionFor */
@@ -861,7 +862,7 @@ func TestApplyDefaultPrivileges(t *testing.T) {
 	testUser := security.TestUserName()
 
 	testCases := []struct {
-		pd                  *descpb.PrivilegeDescriptor
+		pd                  *catpb.PrivilegeDescriptor
 		user                security.SQLUsername
 		objectType          privilege.ObjectType
 		grantPrivileges     privilege.List
@@ -869,37 +870,37 @@ func TestApplyDefaultPrivileges(t *testing.T) {
 		expectedPrivileges  privilege.List
 		expectedGrantOption privilege.List
 	}{
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.SELECT, privilege.INSERT},
 			privilege.List{privilege.SELECT, privilege.INSERT}},
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.INSERT}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.INSERT}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.CREATE, privilege.SELECT},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT}},
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE, privilege.INSERT}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL}},
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
 			privilege.List{privilege.SELECT},
 			privilege.List{privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
 			privilege.List{privilege.CREATE, privilege.SELECT}},
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.ALL, privilege.CREATE, privilege.SELECT, privilege.INSERT, privilege.UPDATE},
 			privilege.List{privilege.ALL, privilege.SELECT},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL}},
-		{descpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CREATE}, privilege.List{privilege.CREATE}, security.AdminRoleName()),
 			testUser, privilege.Table,
 			privilege.List{privilege.SELECT},
 			privilege.List{privilege.SELECT, privilege.INSERT},
@@ -921,9 +922,9 @@ func TestApplyDefaultPrivileges(t *testing.T) {
 }
 
 func TestUnsetDefaultPrivilegeDescriptorType(t *testing.T) {
-	emptyDefaultPrivilegeDescriptor := descpb.DefaultPrivilegeDescriptor{}
+	emptyDefaultPrivilegeDescriptor := catpb.DefaultPrivilegeDescriptor{}
 
 	// If Type is not set, it should resolve to
-	// descpb.DefaultPrivilegeDescriptor_DATABASE by default.
-	require.Equal(t, emptyDefaultPrivilegeDescriptor.Type, descpb.DefaultPrivilegeDescriptor_DATABASE)
+	// catpb.DefaultPrivilegeDescriptor_DATABASE by default.
+	require.Equal(t, emptyDefaultPrivilegeDescriptor.Type, catpb.DefaultPrivilegeDescriptor_DATABASE)
 }

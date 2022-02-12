@@ -229,7 +229,7 @@ func GetResumeSpans(
 		// know which job it's associated with.
 		for _, job := range tableDesc.GetMutationJobs() {
 			if job.MutationID == mutationID {
-				jobID = jobspb.JobID(job.JobID)
+				jobID = job.JobID
 				break
 			}
 		}

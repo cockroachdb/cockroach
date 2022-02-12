@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -60,7 +61,7 @@ var validTableDesc = &descpb.Descriptor{
 				ConstraintID:        1,
 			},
 			NextIndexID: 2,
-			Privileges: descpb.NewCustomSuperuserPrivilegeDescriptor(
+			Privileges: catpb.NewCustomSuperuserPrivilegeDescriptor(
 				privilege.ReadWriteData, security.NodeUserName()),
 			FormatVersion:  descpb.InterleavedFormatVersion,
 			NextMutationID: 1,

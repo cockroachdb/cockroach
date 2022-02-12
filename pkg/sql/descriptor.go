@@ -176,7 +176,7 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 
 	// Every database must be initialized with the public schema.
 	// Create the SchemaDescriptor.
-	publicSchemaPrivileges := descpb.NewPublicSchemaPrivilegeDescriptor()
+	publicSchemaPrivileges := catpb.NewPublicSchemaPrivilegeDescriptor()
 	publicSchemaDesc := schemadesc.NewBuilder(&descpb.SchemaDescriptor{
 		ParentID:   dbID,
 		Name:       tree.PublicSchema,

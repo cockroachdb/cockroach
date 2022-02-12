@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -178,7 +179,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
-		descpb.NewVirtualTablePrivilegeDescriptor(),
+		catpb.NewVirtualTablePrivilegeDescriptor(),
 		nil,                        /* affected */
 		nil,                        /* semaCtx */
 		nil,                        /* evalCtx */
@@ -255,13 +256,14 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		id,
 		columns,
 		startTime,
-		descpb.NewVirtualTablePrivilegeDescriptor(),
-		nil,
-		nil,
+		catpb.NewVirtualTablePrivilegeDescriptor(),
+		nil, // semaCtx
+		nil, // evalCtx
 		st,
 		tree.PersistencePermanent,
-		false,
-		nil)
+		false, // isMultiRegion
+		nil,   // sc
+	)
 	return mutDesc.TableDescriptor, err
 }
 

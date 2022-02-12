@@ -58,10 +58,10 @@ type MutationVisitor interface {
 	SetIndexName(context.Context, SetIndexName) error
 	DeleteDescriptor(context.Context, DeleteDescriptor) error
 	DeleteDatabaseSchemaEntry(context.Context, DeleteDatabaseSchemaEntry) error
-	RemoveJobReference(context.Context, RemoveJobReference) error
-	AddJobReference(context.Context, AddJobReference) error
-	CreateDeclarativeSchemaChangerJob(context.Context, CreateDeclarativeSchemaChangerJob) error
+	RemoveJobStateFromDescriptor(context.Context, RemoveJobStateFromDescriptor) error
+	SetJobStateOnDescriptor(context.Context, SetJobStateOnDescriptor) error
 	UpdateSchemaChangerJob(context.Context, UpdateSchemaChangerJob) error
+	CreateSchemaChangerJob(context.Context, CreateSchemaChangerJob) error
 	RemoveTableComment(context.Context, RemoveTableComment) error
 	RemoveDatabaseComment(context.Context, RemoveDatabaseComment) error
 	RemoveSchemaComment(context.Context, RemoveSchemaComment) error
@@ -252,23 +252,23 @@ func (op DeleteDatabaseSchemaEntry) Visit(ctx context.Context, v MutationVisitor
 }
 
 // Visit is part of the MutationOp interface.
-func (op RemoveJobReference) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.RemoveJobReference(ctx, op)
+func (op RemoveJobStateFromDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.RemoveJobStateFromDescriptor(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
-func (op AddJobReference) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.AddJobReference(ctx, op)
-}
-
-// Visit is part of the MutationOp interface.
-func (op CreateDeclarativeSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
-	return v.CreateDeclarativeSchemaChangerJob(ctx, op)
+func (op SetJobStateOnDescriptor) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.SetJobStateOnDescriptor(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.
 func (op UpdateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
 	return v.UpdateSchemaChangerJob(ctx, op)
+}
+
+// Visit is part of the MutationOp interface.
+func (op CreateSchemaChangerJob) Visit(ctx context.Context, v MutationVisitor) error {
+	return v.CreateSchemaChangerJob(ctx, op)
 }
 
 // Visit is part of the MutationOp interface.

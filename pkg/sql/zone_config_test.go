@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -50,7 +51,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 			Database: &descpb.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         configID,
-				Privileges: &descpb.PrivilegeDescriptor{},
+				Privileges: &catpb.PrivilegeDescriptor{},
 			},
 		},
 	}

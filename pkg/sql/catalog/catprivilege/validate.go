@@ -12,13 +12,13 @@ package catprivilege
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
 // Validate validates a privilege descriptor.
 func Validate(
-	p descpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
+	p catpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
 ) error {
 	return p.Validate(
 		objectNameKey.GetParentID(),
@@ -30,7 +30,7 @@ func Validate(
 
 // ValidateSuperuserPrivileges validates superuser privileges.
 func ValidateSuperuserPrivileges(
-	p descpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
+	p catpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
 ) error {
 	return p.ValidateSuperuserPrivileges(
 		objectNameKey.GetParentID(),
@@ -41,7 +41,7 @@ func ValidateSuperuserPrivileges(
 }
 
 // ValidateDefaultPrivileges validates default privileges.
-func ValidateDefaultPrivileges(p descpb.DefaultPrivilegeDescriptor) error {
+func ValidateDefaultPrivileges(p catpb.DefaultPrivilegeDescriptor) error {
 	return p.Validate()
 }
 
@@ -50,5 +50,5 @@ func allowedSuperuserPrivileges(objectNameKey catalog.NameKey) privilege.List {
 	if privs != nil {
 		return privs
 	}
-	return descpb.DefaultSuperuserPrivileges
+	return catpb.DefaultSuperuserPrivileges
 }

@@ -506,7 +506,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 				return err
 			}
 			mut.MutationJobs = append(mut.MutationJobs, descpb.TableDescriptor_MutationJob{
-				JobID:      int64(jobID),
+				JobID:      jobID,
 				MutationID: 1,
 			})
 			jobToBlock.Store(jobID)

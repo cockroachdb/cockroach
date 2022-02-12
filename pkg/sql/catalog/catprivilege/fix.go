@@ -12,6 +12,7 @@ package catprivilege
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
@@ -23,13 +24,13 @@ import (
 // instead of ZONECONFIG.
 // Fortunately ZONECONFIG was only valid on TABLES/DB while USAGE is not valid
 // on either so we know if the descriptor was corrupted.
-func MaybeFixUsagePrivForTablesAndDBs(ptr **descpb.PrivilegeDescriptor) bool {
+func MaybeFixUsagePrivForTablesAndDBs(ptr **catpb.PrivilegeDescriptor) bool {
 	if *ptr == nil {
-		*ptr = &descpb.PrivilegeDescriptor{}
+		*ptr = &catpb.PrivilegeDescriptor{}
 	}
 	p := *ptr
 
-	if p.Version > descpb.InitialVersion {
+	if p.Version > catpb.InitialVersion {
 		// InitialVersion is for descriptors that were created in versions 20.1 and
 		// earlier. If the privilege descriptor was created after 20.1, then we
 		// do not have to fix it. Furthermore privilege descriptor versions are
@@ -66,13 +67,13 @@ func MaybeFixUsagePrivForTablesAndDBs(ptr **descpb.PrivilegeDescriptor) bool {
 // * updating version field to Version21_2.
 // MaybeFixPrivileges can be removed after v21.2.
 func MaybeFixPrivileges(
-	ptr **descpb.PrivilegeDescriptor,
+	ptr **catpb.PrivilegeDescriptor,
 	parentID, parentSchemaID descpb.ID,
 	objectType privilege.ObjectType,
 	objectName string,
 ) bool {
 	if *ptr == nil {
-		*ptr = &descpb.PrivilegeDescriptor{}
+		*ptr = &catpb.PrivilegeDescriptor{}
 	}
 	p := *ptr
 	allowedPrivilegesBits := privilege.GetValidPrivilegesForObject(objectType).ToBitField()
@@ -132,8 +133,8 @@ func MaybeFixPrivileges(
 		changed = true
 	}
 
-	if p.Version < descpb.Version21_2 {
-		p.SetVersion(descpb.Version21_2)
+	if p.Version < catpb.Version21_2 {
+		p.SetVersion(catpb.Version21_2)
 		changed = true
 	}
 	return changed
@@ -142,7 +143,7 @@ func MaybeFixPrivileges(
 // MaybeUpdateGrantOptions iterates over the users of the descriptor and checks
 // if they have the GRANT privilege - if so, then set the user's grant option
 // bits equal to the privilege bits.
-func MaybeUpdateGrantOptions(p *descpb.PrivilegeDescriptor) bool {
+func MaybeUpdateGrantOptions(p *catpb.PrivilegeDescriptor) bool {
 	// If admin has grant option bits set, then we know the descriptor was
 	// created by a new binary, so all the other grant options are already
 	// correct. Note that admin always has SELECT on *every* table including

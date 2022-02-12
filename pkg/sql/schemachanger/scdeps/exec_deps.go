@@ -116,9 +116,9 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 var _ scexec.Catalog = (*txnDeps)(nil)
 
 // MustReadImmutableDescriptor implements the scmutationexec.CatalogReader interface.
-func (d *txnDeps) MustReadImmutableDescriptor(
-	ctx context.Context, id descpb.ID,
-) (catalog.Descriptor, error) {
+func (d *txnDeps) MustReadImmutableDescriptors(
+	ctx context.Context, ids ...descpb.ID,
+) ([]catalog.Descriptor, error) {
 	flags := tree.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
@@ -126,7 +126,7 @@ func (d *txnDeps) MustReadImmutableDescriptor(
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
-	return d.descsCollection.GetImmutableDescriptorByID(ctx, d.txn, id, flags)
+	return d.descsCollection.GetImmutableDescriptorsByID(ctx, d.txn, flags, ids...)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
@@ -240,6 +240,7 @@ func (b *catalogChangeBatcher) DeleteName(
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	b.batch.Del(catalogkeys.MakeDescMetadataKey(b.codec, id))
 	b.deletedDescriptors.Add(id)
+	b.descsCollection.AddDeletedDescriptor(id)
 	return nil
 }
 

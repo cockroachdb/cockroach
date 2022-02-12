@@ -13,6 +13,7 @@ package schemadesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -42,8 +43,8 @@ var _ catalog.SchemaDescriptor = public{}
 func (p public) GetParentID() descpb.ID { return descpb.InvalidID }
 func (p public) GetID() descpb.ID       { return keys.PublicSchemaID }
 func (p public) GetName() string        { return tree.PublicSchema }
-func (p public) GetPrivileges() *descpb.PrivilegeDescriptor {
-	return descpb.NewPublicSchemaPrivilegeDescriptor()
+func (p public) GetPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewPublicSchemaPrivilegeDescriptor()
 }
 
 type publicBase struct{}
