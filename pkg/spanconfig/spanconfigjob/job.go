@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -80,20 +81,33 @@ func (r *resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	// timestamp.
 
 	settingValues := &execCtx.ExecCfg().Settings.SV
-	persistCheckpoints := util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+	persistCheckpointsMu := struct {
+		syncutil.Mutex
+		util.EveryN
+	}{}
+
+	persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+
 	reconciliationJobCheckpointInterval.SetOnChange(settingValues, func(ctx context.Context) {
-		persistCheckpoints = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
+		persistCheckpointsMu.Lock()
+		defer persistCheckpointsMu.Unlock()
+		persistCheckpointsMu.EveryN = util.Every(reconciliationJobCheckpointInterval.Get(settingValues))
 	})
 
-	shouldPersistCheckpoint := true
+	checkpointingDisabled := false
 	if knobs := execCtx.ExecCfg().SpanConfigTestingKnobs; knobs != nil && knobs.JobDisablePersistingCheckpoints {
-		shouldPersistCheckpoint = false
+		checkpointingDisabled = true
 	}
 	if err := rc.Reconcile(ctx, hlc.Timestamp{}, func() error {
-		if !shouldPersistCheckpoint {
+		if checkpointingDisabled {
 			return nil
 		}
-		if !persistCheckpoints.ShouldProcess(timeutil.Now()) {
+
+		persistCheckpointsMu.Lock()
+		shouldCheckpoint := persistCheckpointsMu.ShouldProcess(timeutil.Now())
+		persistCheckpointsMu.Unlock()
+
+		if !shouldCheckpoint {
 			return nil
 		}
 
