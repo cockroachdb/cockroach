@@ -11,6 +11,10 @@ gomock(
     library = "//pkg/roachpb",
     package = "roachpbmock",
     self_package = "github.com/cockroachdb/cockroach/pkg/roachpb/roachpbmock",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 go_library(

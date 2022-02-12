@@ -41,7 +41,7 @@ func (d *dev) acceptance(cmd *cobra.Command, _ []string) error {
 	)
 
 	// First we have to build cockroach.
-	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach-short:cockroach-short"}, true)
+	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach-short:cockroach-short"})
 	if err != nil {
 		return err
 	}

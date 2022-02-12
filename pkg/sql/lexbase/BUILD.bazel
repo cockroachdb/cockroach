@@ -42,6 +42,10 @@ genrule(
     exec_tools = [
         "//pkg/sql/lexbase/allkeywords",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the target to auto-generate a list of tokens from the grammar file.
@@ -59,6 +63,10 @@ genrule(
     exec_tools = [
         "//pkg/sql/parser:sql-goyacc",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 # Define the target to auto-generate the list of reserved keywords from the
@@ -73,4 +81,8 @@ genrule(
     cmd = """
           awk -f $(location //pkg/sql/parser:reserved_keywords.awk) < $(location //pkg/sql/parser:sql.y) > $@
     """,
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

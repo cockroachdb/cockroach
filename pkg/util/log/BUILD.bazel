@@ -200,6 +200,10 @@ genrule(
     exec_tools = [
         "//pkg/util/log/gen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 gomock(
@@ -212,4 +216,8 @@ gomock(
     mock_names = {"TestingLogSink": "MockLogSink"},
     package = "log",
     self_package = "github.com/cockroachdb/cockroach/pkg/util/log",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

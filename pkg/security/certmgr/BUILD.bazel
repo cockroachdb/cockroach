@@ -49,4 +49,8 @@ gomock(
     interfaces = ["Cert"],
     library = ":certmgr",
     package = "certmgr",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
