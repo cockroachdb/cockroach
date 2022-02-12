@@ -1,11 +1,46 @@
-load(":gen.bzl", "go_proto_srcs", "hoist_files")
+load(":gen.bzl", "EXPLICIT_SRCS", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
+load(":excluded.bzl", "EXCLUDED_SRCS")
 
-hoist_files(
-    name = "go_proto",
-    data = [":go_proto_srcs"],
-    tags = ["no-remote-exec"],
+filegroup(
+    name = "explicitly_generated",
+    srcs = EXPLICIT_SRCS,
 )
 
-go_proto_srcs(
-    name = "go_proto_srcs",
+filegroup(
+    name = "excluded",
+    srcs = EXCLUDED_SRCS,
+)
+
+execgen()
+
+gomock()
+
+go_proto()
+
+stringer()
+
+optgen()
+
+misc()
+
+docs()
+
+gen(
+    name = "gen",
+    srcs = [
+        ":code",
+        ":docs",
+    ],
+)
+
+gen(
+    name = "code",
+    srcs = [
+        ":execgen",
+        ":go_proto",
+        ":gomock",
+        ":misc",
+        ":optgen",
+        ":stringer",
+    ],
 )

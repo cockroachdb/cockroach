@@ -17,4 +17,5 @@ def gen_interval_btree(name, type, package):
         mv {src_out} $(location {src_out})
         mv {test_out} $(location {test_out})
 """.format(type = type, package = package, src_out = src_out, test_out = test_out),
+        visibility = [":__pkg__", "//pkg/gen:__pkg__"],
     )

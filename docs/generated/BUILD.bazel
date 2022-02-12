@@ -17,6 +17,10 @@ genrule(
     exec_tools = [
         "//pkg/util/log/gen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -30,6 +34,10 @@ genrule(
     """,
     exec_tools = [
         "//pkg/util/log/logconfig:gen",
+    ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
     ],
 )
 
@@ -45,6 +53,10 @@ genrule(
     exec_tools = [
         "//pkg/util/log/eventpb:gen",
     ],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )
 
 genrule(
@@ -52,4 +64,8 @@ genrule(
     outs = ["logformats.md"],
     cmd = "$(location //pkg/cmd/docgen) logformats $(location logformats.md)",
     exec_tools = ["//pkg/cmd/docgen"],
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
 )

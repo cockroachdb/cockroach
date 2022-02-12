@@ -65,4 +65,5 @@ $(location :{template_name}_bin) $(location {lower}_diagram.gv) $(location {lowe
             lower + "_report.txt",
         ],
         exec_tools = [":" + template_name + "_bin"],
+        visibility = [":__pkg__", "//pkg/gen:__pkg__"],
     )
