@@ -51,8 +51,12 @@ func isEmptyKeyTimeRange(
 	// that there is *a* key in the SST that is in the time range. Thus we should
 	// proceed to iteration that actually checks timestamps on each key.
 	iter := readWriter.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		LowerBound: from, UpperBound: to,
-		MinTimestampHint: since.Next() /* make exclusive */, MaxTimestampHint: until,
+		// TODO(erikgrinaker): Make sure TBIs respect range keys too.
+		KeyTypes:         storage.IterKeyTypePointsAndRanges, // revert any range keys as well
+		LowerBound:       from,
+		UpperBound:       to,
+		MinTimestampHint: since.Next(), // exclusive
+		MaxTimestampHint: until,
 	})
 	defer iter.Close()
 	iter.SeekGE(storage.MVCCKey{Key: from})
@@ -78,29 +82,40 @@ func RevertRange(
 
 	args := cArgs.Args.(*roachpb.RevertRangeRequest)
 	reply := resp.(*roachpb.RevertRangeResponse)
-	pd := result.Result{
-		Replicated: kvserverpb.ReplicatedEvalResult{
-			MVCCHistoryMutation: &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
-				Spans: []roachpb.Span{{Key: args.Key, EndKey: args.EndKey}},
-			},
-		},
-	}
 
 	if empty, err := isEmptyKeyTimeRange(
 		readWriter, args.Key, args.EndKey, args.TargetTime, cArgs.Header.Timestamp,
 	); err != nil {
 		return result.Result{}, err
 	} else if empty {
-		log.VEventf(ctx, 2, "no keys to clear in specified time range")
+		log.VEventf(ctx, 2, "no keys to revert in specified time range")
 		return result.Result{}, nil
 	}
 
-	log.VEventf(ctx, 2, "clearing keys with timestamp (%v, %v]", args.TargetTime, cArgs.Header.Timestamp)
+	log.VEventf(ctx, 2, "reverting keys with timestamp (%v, %v]",
+		args.TargetTime, cArgs.Header.Timestamp)
 
-	resume, err := storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
-		args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
-		maxRevertRangeBatchBytes,
-		args.EnableTimeBoundIteratorOptimization)
+	var pd result.Result
+	var resume *roachpb.Span
+	var err error
+	if args.ExperimentalPreserveHistory {
+		const deleteRangeThreshold = 100
+		maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
+		// TODO(erikgrinaker): Write a test for this once MVCC range tombstones are
+		// properly written to batches and replicated.
+		// TODO(erikgrinaker): Test that this records MVCC logical ops correctly.
+		resume, err = storage.ExperimentalMVCCRevertRange(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, cArgs.Header.Timestamp, args.TargetTime, deleteRangeThreshold,
+			cArgs.Header.MaxSpanRequestKeys, maxRevertRangeBatchBytes, maxIntents)
+	} else {
+		resume, err = storage.MVCCClearTimeRange(ctx, readWriter, cArgs.Stats, args.Key, args.EndKey,
+			args.TargetTime, cArgs.Header.Timestamp, cArgs.Header.MaxSpanRequestKeys,
+			maxRevertRangeBatchBytes,
+			args.EnableTimeBoundIteratorOptimization)
+		pd.Replicated.MVCCHistoryMutation = &kvserverpb.ReplicatedEvalResult_MVCCHistoryMutation{
+			Spans: []roachpb.Span{{Key: args.Key, EndKey: args.EndKey}},
+		}
+	}
 	if err != nil {
 		return result.Result{}, err
 	}

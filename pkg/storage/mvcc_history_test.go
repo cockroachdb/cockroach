@@ -69,6 +69,7 @@ import (
 //
 // clear_range     k=<key> end=<key>
 // clear_range_key k=<key> end=<key> [ts=<int>[,<int>]]
+// revert_range    [ts=<int>[,<int>]] k=<key> end=<key> revertTS=<int>[,int] [deleteRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchBytes=<int>]
 //
 // Where `<key>` can be a simple string, or a string
 // prefixed by the following characters:
@@ -427,6 +428,7 @@ var commands = map[string]cmd{
 	"iter_range_keys": {typReadOnly, cmdIterRangeKeys},
 	"merge":           {typDataUpdate, cmdMerge},
 	"put":             {typDataUpdate, cmdPut},
+	"revert_range":    {typDataUpdate, cmdRevertRange},
 	"scan":            {typReadOnly, cmdScan},
 }
 
@@ -604,7 +606,26 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
+	if err := e.engine.ClearMVCCRangeAndIntents(key, endKey); err != nil {
+		return err
+	}
+	iter := NewMVCCRangeKeyIterator(e.engine, MVCCRangeKeyIterOptions{
+		LowerBound: key,
+		UpperBound: endKey,
+	})
+	defer iter.Close()
+	for {
+		if ok, err := iter.Valid(); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+		if err := e.engine.ExperimentalClearMVCCRangeKey(iter.Key()); err != nil {
+			return err
+		}
+		iter.Next()
+	}
+	return nil
 }
 
 func cmdClearRangeKey(e *evalCtx) error {
@@ -811,6 +832,40 @@ func cmdPut(e *evalCtx) error {
 			return e.resolveIntent(rw, key, txn, resolveStatus)
 		}
 		return nil
+	})
+}
+
+func cmdRevertRange(e *evalCtx) error {
+	ts := e.getTs(nil)
+	revertTS := e.getTsWithName(nil, "revertTS")
+	key, endKey := e.getKeyRange()
+
+	deleteRangeThreshold := 100
+	if e.hasArg("deleteRangeThreshold") {
+		e.scanArg("deleteRangeThreshold", &deleteRangeThreshold)
+	}
+
+	maxBatchSize := 1000
+	if e.hasArg("maxBatchSize") {
+		e.scanArg("maxBatchSize", &maxBatchSize)
+	}
+
+	maxBatchBytes := int(1e6)
+	if e.hasArg("maxBatchBytes") {
+		e.scanArg("maxBatchBytes", &maxBatchBytes)
+	}
+
+	return e.withWriter("revertRange", func(rw ReadWriter) error {
+		// TODO(erikgrinaker): handle resume span
+		resumeSpan, err := ExperimentalMVCCRevertRange(e.ctx, rw, nil, key, endKey, ts, revertTS,
+			deleteRangeThreshold, int64(maxBatchSize), int64(maxBatchBytes), 1000)
+		if err != nil {
+			return err
+		}
+		if resumeSpan != nil {
+			e.results.buf.Printf("revert_range: resume span [%s,%s)\n", resumeSpan.Key, resumeSpan.EndKey)
+		}
+		return err
 	})
 }
 
