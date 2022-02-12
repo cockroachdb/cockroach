@@ -487,8 +487,8 @@ func TestZoneChecker(t *testing.T) {
 	}
 	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic
 	// kicks in for mapping keys to zones.
-	dbID := 50
-	t1ID := 51
+	dbID := 100
+	t1ID := 101
 	t1 := table{name: "t1",
 		partitions: []partition{
 			{
