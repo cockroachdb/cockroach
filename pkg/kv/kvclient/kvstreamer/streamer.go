@@ -335,9 +335,6 @@ func NewStreamer(
 		"single Streamer async concurrency",
 		uint64(streamerConcurrencyLimit.Get(&st.SV)),
 	)
-	streamerConcurrencyLimit.SetOnChange(&st.SV, func(ctx context.Context) {
-		s.coordinator.asyncSem.UpdateCapacity(uint64(streamerConcurrencyLimit.Get(&st.SV)))
-	})
 	stopper.AddCloser(s.coordinator.asyncSem.Closer("stopper"))
 	return s
 }
