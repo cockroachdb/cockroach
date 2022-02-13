@@ -303,6 +303,28 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 	},
+	`ttl_range_concurrency`: {
+		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
+			if po.tableDesc.RowLevelTTL == nil {
+				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+			}
+			val, err := DatumAsInt(evalCtx, key, datum)
+			if err != nil {
+				return err
+			}
+			if err := tabledesc.ValidateTTLRangeConcurrency(key, val); err != nil {
+				return err
+			}
+			po.tableDesc.RowLevelTTL.RangeConcurrency = val
+			return nil
+		},
+		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
+			if po.tableDesc.RowLevelTTL != nil {
+				po.tableDesc.RowLevelTTL.RangeConcurrency = 0
+			}
+			return nil
+		},
+	},
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
