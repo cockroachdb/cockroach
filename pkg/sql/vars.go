@@ -1648,13 +1648,13 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
-	`experimental_use_new_schema_changer`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`experimental_use_new_schema_changer`),
+	`use_declarative_schema_changer`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`use_declarative_schema_changer`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			mode, ok := sessiondatapb.NewSchemaChangerModeFromString(s)
 			if !ok {
-				return newVarValueError(`experimental_use_new_schema_changer`, s,
-					"off", "on", "unsafe_always")
+				return newVarValueError(`use_declarative_schema_changer`, s,
+					"off", "on", "unsafe", "unsafe_always")
 			}
 			m.SetUseNewSchemaChanger(mode)
 			return nil
