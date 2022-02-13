@@ -6,6 +6,7 @@ new-server name=s1
 ----
 
 exec-sql
+SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 CREATE DATABASE d;
 CREATE TABLE d.foo (id INT);
@@ -101,6 +102,7 @@ exec-sql
 CREATE TYPE d2.typ AS ENUM ('hello');
 CREATE SCHEMA d2.s;
 CREATE TABLE d2.s.t (id INT);
+SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
 DROP SCHEMA d2.s CASCADE;
 ----

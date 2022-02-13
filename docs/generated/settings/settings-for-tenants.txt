@@ -97,7 +97,6 @@ sql.defaults.experimental_distsql_planning	enumeration	off	default experimental_
 sql.defaults.experimental_enable_unique_without_index_constraints.enabled	boolean	false	default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default
 sql.defaults.experimental_hash_sharded_indexes.enabled	boolean	false	default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default
 sql.defaults.experimental_implicit_column_partitioning.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning
-sql.defaults.experimental_new_schema_changer.enabled	enumeration	off	default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 sql.defaults.experimental_stream_replication.enabled	boolean	false	default value for experimental_stream_replication session setting;enables the ability to setup a replication stream
 sql.defaults.experimental_temporary_tables.enabled	boolean	false	default value for experimental_enable_temp_tables; allows for use of temporary tables by default
 sql.defaults.foreign_key_cascades_limit	integer	10000	default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query
@@ -126,6 +125,7 @@ sql.defaults.transaction_rows_read_err	integer	0	the limit for the number of row
 sql.defaults.transaction_rows_read_log	integer	0	the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_err	integer	0	the limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 sql.defaults.transaction_rows_written_log	integer	0	the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event to SQL_PERF (or SQL_INTERNAL_PERF for internal transactions); use 0 to disable
+sql.defaults.use_declarative_schema_changer	enumeration	on	default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe = 2, unsafe_always = 3]
 sql.defaults.vectorize	enumeration	on	default vectorize mode [on = 0, on = 2, experimental_always = 3, off = 4]
 sql.defaults.zigzag_join.enabled	boolean	true	default value for enable_zigzag_join session setting; allows use of zig-zag join by default
 sql.distsql.max_running_flows	integer	-128	the value - when positive - used as is, or the value - when negative - multiplied by the number of CPUs on a node, to determine the maximum number of concurrent remote flows that can be run on the node

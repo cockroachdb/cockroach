@@ -232,12 +232,12 @@ CREATE INDEX "'t1-esc-index'" ON "'t1-esc'"(name)
 subtest resume-with-diff-tenant-resume-spans
 
 let $schema_changer_state
-SELECT value FROM information_schema.session_variables where variable='experimental_use_new_schema_changer'
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
 # Intentionally, disable the declarative schema changer for this
 # part of the test, since we are pausing jobs intentionally below.
 statement ok
-SET experimental_use_new_schema_changer = 'off'
+SET use_declarative_schema_changer = 'off'
 
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '50ms';
@@ -359,7 +359,7 @@ SET CLUSTER SETTING jobs.registry.interval.cancel = DEFAULT;
 
 # Restore the schema changer state back.
 statement ok
-SET experimental_use_new_schema_changer = $schema_changer_state
+SET use_declarative_schema_changer = $schema_changer_state
 
 subtest test_old_bucket_count_syntax
 
