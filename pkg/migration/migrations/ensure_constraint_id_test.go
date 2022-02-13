@@ -56,7 +56,16 @@ func TestEnsureConstraintIDs(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	// Create table with a primary key constraint.
-	tdb.Exec(t, "CREATE TABLE t(name int primary key)")
+	tdb.Exec(t, "CREATE TABLE dep_t (fk INT8 PRIMARY KEY);")
+	tdb.Exec(t,
+		`CREATE TABLE t (
+	name INT8 PRIMARY KEY,
+	val  INT8 REFERENCES dep_t (fk),
+	val2 INT8 CHECK (val2 > 0)
+);`,
+	)
+	tdb.Exec(t,
+		`CREATE TABLE t_fk_dst (name INT8 PRIMARY KEY, val INT8 REFERENCES t (name));`)
 	// Validate the comments on constraints are blocked.
 	tdb.ExpectErr(t,
 		"pq: cannot comment on constraint",
@@ -64,7 +73,19 @@ func TestEnsureConstraintIDs(t *testing.T) {
 	// Validate that we have a constraint ID due to post deserialization logic
 
 	desc := desctestutils.TestingGetMutableExistingTableDescriptor(s.DB(), c, "defaultdb", "t")
+	// Reset all constraint IDs
 	desc.PrimaryIndex.ConstraintID = 0
+	require.NoError(t, desc.ForeachOutboundFK(func(constraint *descpb.ForeignKeyConstraint) error {
+		constraint.ConstraintID = 0
+		return nil
+	}))
+	require.NoError(t, desc.ForeachInboundFK(func(constraint *descpb.ForeignKeyConstraint) error {
+		constraint.ConstraintID = 0
+		return nil
+	}))
+	for _, check := range desc.GetChecks() {
+		check.ConstraintID = 0
+	}
 	require.NoError(t, s.DB().Put(
 		context.Background(),
 		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, desc.GetID()),
@@ -73,7 +94,7 @@ func TestEnsureConstraintIDs(t *testing.T) {
 	// Validate that the post serialization will recompute the constraint IDs
 	// if they are missing.
 	desc = desctestutils.TestingGetMutableExistingTableDescriptor(s.DB(), c, "defaultdb", "t")
-	require.Equal(t, desc.PrimaryIndex.ConstraintID, descpb.ConstraintID(2))
+	require.Equal(t, desc.PrimaryIndex.ConstraintID, descpb.ConstraintID(4))
 	// If we set both the constraint ID / next value to 0, then we will have
 	// it assigned form scratch.
 	desc.PrimaryIndex.ConstraintID = 0
@@ -84,10 +105,10 @@ func TestEnsureConstraintIDs(t *testing.T) {
 		desc.DescriptorProto(),
 	))
 	// Validate that the descriptor is invalid, since the constraint IDs
-	// are missing.
+	// are missing. Note: Constraint IDs on FKs and other objects will exist.
 	tdb.CheckQueryResults(t,
-		`SELECT strpos(desc_json, 'constraintId') > 0,
-       strpos(desc_json, 'nextConstraintId') > 0
+		`SELECT strpos(desc_json, 'nextConstraintId') > 0,
+       array_length(string_to_array(desc_json, 'constraintId'), 1) > 4
   FROM (
 		SELECT jsonb_pretty(
 				crdb_internal.pb_to_json(
@@ -111,8 +132,8 @@ func TestEnsureConstraintIDs(t *testing.T) {
 	// Validate that the descriptor is invalid, since the constraint IDs
 	// are missing.
 	tdb.CheckQueryResults(t,
-		`SELECT strpos(desc_json, 'constraintId') > 0,
-       strpos(desc_json, 'nextConstraintId') > 0
+		`SELECT strpos(desc_json, 'nextConstraintId') > 0,
+       array_length(string_to_array(desc_json, 'constraintId'), 1) > 4
   FROM (
 		SELECT jsonb_pretty(
 				crdb_internal.pb_to_json(
