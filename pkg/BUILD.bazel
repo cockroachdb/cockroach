@@ -339,6 +339,7 @@ ALL_TESTS = [
     "//pkg/sql/stats:stats_test",
     "//pkg/sql/stmtdiagnostics:stmtdiagnostics_test",
     "//pkg/sql/tests:tests_test",
+    "//pkg/sql/ttl/ttljob:ttljob_test",
     "//pkg/sql/types:types_test",
     "//pkg/sql:sql_test",
     "//pkg/startupmigrations/leasemanager:leasemanager_test",
