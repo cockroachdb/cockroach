@@ -77,7 +77,6 @@ func TestOrdinality(t *testing.T) {
 }
 
 func BenchmarkOrdinality(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
