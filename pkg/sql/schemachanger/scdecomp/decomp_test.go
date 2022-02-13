@@ -52,7 +52,7 @@ func TestBuildDataDriven(t *testing.T) {
 		tdb := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 		// We need to disable the declarative schema changer so that we don't end
 		// up high-fiving ourselves here.
-		tdb.Exec(t, `SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'off'`)
+		tdb.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			return run(ctx, t, d, &execCfg, tdb)

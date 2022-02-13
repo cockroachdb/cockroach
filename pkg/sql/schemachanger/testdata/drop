@@ -866,8 +866,8 @@ upsert descriptor #104
          id: 105
   -    sc:
   -      id: 107
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #107
    schema:
   +  declarativeSchemaChangerState:
@@ -1198,8 +1198,8 @@ upsert descriptor #104
   ...
        public:
          id: 105
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 delete descriptor #107
 delete descriptor #109
 delete descriptor #110
@@ -1323,9 +1323,9 @@ upsert descriptor #104
   ...
        public:
          id: 105
-  -  version: "5"
+  -  version: "7"
   +  state: DROP
-  +  version: "6"
+  +  version: "8"
 upsert descriptor #105
    schema:
   +  declarativeSchemaChangerState:
@@ -1543,8 +1543,8 @@ upsert descriptor #104
   ...
          id: 105
      state: DROP
-  -  version: "6"
-  +  version: "7"
+  -  version: "8"
+  +  version: "9"
 delete descriptor #105
 commit transaction #3
 # end PostCommitPhase
