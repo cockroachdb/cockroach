@@ -4089,7 +4089,7 @@ experimental_enable_hash_sharded_indexes              off                 NULL  
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
-experimental_use_new_schema_changer                   off                 NULL      NULL        NULL        string
+use_declarative_schema_changer                   off                 NULL      NULL        NULL        string
 extra_float_digits                                    0                   NULL      NULL        NULL        string
 force_savepoint_restart                               off                 NULL      NULL        NULL        string
 foreign_key_cascades_limit                            10000               NULL      NULL        NULL        string
@@ -4204,7 +4204,7 @@ experimental_enable_hash_sharded_indexes              off                 NULL  
 experimental_enable_implicit_column_partitioning      off                 NULL  user     NULL      off                 off
 experimental_enable_temp_tables                       off                 NULL  user     NULL      off                 off
 experimental_enable_unique_without_index_constraints  on                  NULL  user     NULL      off                 off
-experimental_use_new_schema_changer                   off                 NULL  user     NULL      off                 off
+use_declarative_schema_changer                   off                 NULL  user     NULL      off                 off
 extra_float_digits                                    0                   NULL  user     NULL      0                   2
 force_savepoint_restart                               off                 NULL  user     NULL      off                 off
 foreign_key_cascades_limit                            10000               NULL  user     NULL      10000               10000
@@ -4314,7 +4314,7 @@ experimental_enable_hash_sharded_indexes              NULL    NULL     NULL     
 experimental_enable_implicit_column_partitioning      NULL    NULL     NULL     NULL        NULL
 experimental_enable_temp_tables                       NULL    NULL     NULL     NULL        NULL
 experimental_enable_unique_without_index_constraints  NULL    NULL     NULL     NULL        NULL
-experimental_use_new_schema_changer                   NULL    NULL     NULL     NULL        NULL
+use_declarative_schema_changer                   NULL    NULL     NULL     NULL        NULL
 extra_float_digits                                    NULL    NULL     NULL     NULL        NULL
 force_savepoint_restart                               NULL    NULL     NULL     NULL        NULL
 foreign_key_cascades_limit                            NULL    NULL     NULL     NULL        NULL
