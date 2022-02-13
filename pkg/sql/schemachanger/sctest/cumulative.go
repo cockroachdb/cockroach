@@ -438,7 +438,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 			t.Run("", func(t *testing.T) {
 				t.Logf("testing backup %d %v", i, b.isRollback)
 				tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName))
-				tdb.Exec(t, "SET experimental_use_new_schema_changer = 'off'")
+				tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 				tdb.Exec(t, fmt.Sprintf("RESTORE DATABASE %s FROM LATEST IN '%s'", dbName, b.url))
 				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 				waitForSchemaChangesToFinish(t, tdb)
@@ -539,7 +539,7 @@ func executeSchemaChangeTxn(
 
 	// Execute the setup statements with the legacy schema changer so that the
 	// declarative schema changer testing knobs don't get used.
-	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'off'")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	for _, stmt := range setup {
 		tdb.Exec(t, stmt.SQL)
 	}
@@ -562,7 +562,7 @@ func executeSchemaChangeTxn(
 			defer func() { _ = conn.Close() }()
 			c <- crdb.Execute(func() (err error) {
 				_, err = conn.ExecContext(
-					ctx, "SET experimental_use_new_schema_changer = 'unsafe_always'",
+					ctx, "SET use_declarative_schema_changer = 'unsafe_always'",
 				)
 				if err != nil {
 					return err
