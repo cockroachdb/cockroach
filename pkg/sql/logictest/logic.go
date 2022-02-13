@@ -1679,7 +1679,7 @@ func (t *logicTest) newCluster(serverArgs TestServerArgs, opts []clusterOpt) {
 
 		if cfg.declarativeSchemaChanger {
 			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.experimental_new_schema_changer.enabled = 'on'",
+				"SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'on'",
 			); err != nil {
 				t.Fatal(err)
 			}

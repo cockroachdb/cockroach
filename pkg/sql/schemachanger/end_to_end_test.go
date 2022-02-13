@@ -336,7 +336,7 @@ func execRolledBackStatements(
 
 	// Execute the setup statements with the legacy schema changer so that the
 	// declarative schema changer testing knobs don't get used.
-	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'off'")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 	for _, stmt := range setup {
 		tdb.Exec(t, stmt.SQL)
 	}
@@ -346,7 +346,7 @@ func execRolledBackStatements(
 	// Execute the tested statements with the declarative schema changer and fail
 	// the test if it all takes too long. This prevents the test suite from
 	// hanging when a regression is introduced.
-	tdb.Exec(t, "SET experimental_use_new_schema_changer = 'unsafe_always'")
+	tdb.Exec(t, "SET use_declarative_schema_changer = 'unsafe_always'")
 	{
 		c := make(chan error, 1)
 		go func() {

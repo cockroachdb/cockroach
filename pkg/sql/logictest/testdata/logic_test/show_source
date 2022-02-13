@@ -64,7 +64,7 @@ experimental_enable_hash_sharded_indexes              off
 experimental_enable_implicit_column_partitioning      off
 experimental_enable_temp_tables                       off
 experimental_enable_unique_without_index_constraints  off
-experimental_use_new_schema_changer                   off
+use_declarative_schema_changer                   off
 extra_float_digits                                    0
 force_savepoint_restart                               off
 foreign_key_cascades_limit                            10000
