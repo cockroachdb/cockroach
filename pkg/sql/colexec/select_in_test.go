@@ -99,7 +99,6 @@ func TestSelectInInt64(t *testing.T) {
 }
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
-	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)

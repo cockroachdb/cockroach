@@ -208,7 +208,6 @@ func TestMaterializerNextErrorAfterConsumerDone(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	defer log.Scope(b).Close(b)
 	types := []*types.T{types.Int, types.Int}
 	nRows := 10000
 	nCols := 2
