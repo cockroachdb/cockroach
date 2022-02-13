@@ -35,8 +35,12 @@ type crdbSpan struct {
 	// sp is Span that this crdbSpan is part of.
 	sp *Span
 
-	traceID      tracingpb.TraceID // probabilistically unique
-	spanID       tracingpb.SpanID  // probabilistically unique
+	traceID tracingpb.TraceID // probabilistically unique
+	spanID  tracingpb.SpanID  // probabilistically unique
+	// parentSpanID indicates the parent at the time when this span was created. 0
+	// if this span didn't have a parent. If crdbSpan.mu.parent is set,
+	// parentSpanID corresponds to it. However, if the parent finishes, or if the
+	// parent is a span from a remote node, crdbSpan.mu.parent will be nil.
 	parentSpanID tracingpb.SpanID
 	operation    string // name of operation associated with the span
 
@@ -328,6 +332,10 @@ func (s *crdbSpan) disableRecording() {
 // TraceID is part of the RegistrySpan interface.
 func (s *crdbSpan) TraceID() tracingpb.TraceID {
 	return s.traceID
+}
+
+func (s *crdbSpan) SpanID() tracingpb.SpanID {
+	return s.spanID
 }
 
 // GetRecording returns the span's recording.

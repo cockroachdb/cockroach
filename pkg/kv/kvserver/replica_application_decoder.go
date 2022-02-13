@@ -160,7 +160,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 					opName,
 					// NB: Nobody is collecting the recording of this span; we have no
 					// mechanism for it.
-					tracing.WithRemoteParent(spanMeta),
+					tracing.WithRemoteParentFromSpanMeta(spanMeta),
 					tracing.WithFollowsFrom(),
 				)
 			}

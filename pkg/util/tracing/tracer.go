@@ -1123,6 +1123,8 @@ child operation: %s, tracer created at:
 
 	s.i.crdb.enableRecording(opts.recordingType())
 
+	s.i.crdb.parentSpanID = opts.parentSpanID()
+
 	var localRoot bool
 	{
 		// If a parent is specified, link the newly created Span to the parent.
@@ -1150,7 +1152,6 @@ child operation: %s, tracer created at:
 				added := parent.addChildLocked(s, !opts.ParentDoesNotCollectRecording)
 				if added {
 					localRoot = false
-					s.i.crdb.parentSpanID = opts.parentSpanID()
 					// We take over the reference in opts.Parent. The child will release
 					// it once when it nils out s.i.crdb.mu.parent (i.e. when either the
 					// parent of the child finish). Note that some methods on opts cannot

@@ -34,7 +34,7 @@ func TestTracingServiceGetSpanRecordings(t *testing.T) {
 		child2 := tracer1.StartSpan("root1.child.detached", tracing.WithParent(child1), tracing.WithDetachedRecording())
 		// Create a span that will be added to the tracers' active span map, but
 		// will share the same traceID as root.
-		child3 := tracer1.StartSpan("root1.remote_child", tracing.WithRemoteParent(child2.Meta()))
+		child3 := tracer1.StartSpan("root1.remote_child", tracing.WithRemoteParentFromSpanMeta(child2.Meta()))
 
 		time.Sleep(10 * time.Millisecond)
 

@@ -50,6 +50,13 @@ func (s *spanInner) TraceID() tracingpb.TraceID {
 	return s.crdb.TraceID()
 }
 
+func (s *spanInner) SpanID() tracingpb.SpanID {
+	if s.isNoop() {
+		return 0
+	}
+	return s.crdb.SpanID()
+}
+
 func (s *spanInner) isNoop() bool {
 	return s.crdb == nil && s.netTr == nil && s.otelSpan == nil
 }
