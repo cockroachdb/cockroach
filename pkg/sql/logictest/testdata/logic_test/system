@@ -1066,7 +1066,7 @@ AND name != 'sql.stats.automatic_collection.enabled'
 AND name NOT LIKE '%sql.defaults.vectorize%'
 AND name NOT LIKE '%sql.testing%'
 AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
-AND name != 'sql.defaults.experimental_new_schema_changer.enabled'
+AND name != 'sql.defaults.use_declarative_schema_changer'
 ORDER BY name
 ----
 cluster.secret
@@ -1085,7 +1085,7 @@ AND name != 'sql.stats.automatic_collection.enabled'
 AND name NOT LIKE '%sql.defaults.vectorize%'
 AND name NOT LIKE '%sql.testing%'
 AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
-AND name NOT LIKE '%sql.defaults.experimental_new_schema_changer.enabled%'
+AND name NOT LIKE '%sql.defaults.use_declarative_schema_changer%'
 ORDER BY name
 ----
 cluster.secret
@@ -1106,7 +1106,7 @@ FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
   'sql.defaults.experimental_distsql_planning',
-  'sql.defaults.experimental_new_schema_changer.enabled')
+  'sql.defaults.use_declarative_schema_changer')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
@@ -1121,7 +1121,7 @@ SELECT name, value
 FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
-  'sql.defaults.experimental_distsql_planning', 'sql.defaults.experimental_new_schema_changer.enabled')
+  'sql.defaults.experimental_distsql_planning', 'sql.defaults.use_declarative_schema_changer')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
