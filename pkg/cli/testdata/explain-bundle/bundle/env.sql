@@ -214,7 +214,7 @@
 --   sql.defaults.experimental_enable_unique_without_index_constraints.enabled = false  (default value for experimental_enable_unique_without_index_constraints session setting;disables unique without index constraints by default)
 --   sql.defaults.experimental_hash_sharded_indexes.enabled = false  (default value for experimental_enable_hash_sharded_indexes; allows for creation of hash sharded indexes by default)
 --   sql.defaults.experimental_implicit_column_partitioning.enabled = false  (default value for experimental_enable_temp_tables; allows for the use of implicit column partitioning)
---   sql.defaults.experimental_new_schema_changer.enabled = off  (default value for experimental_use_new_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe_always = 2])
+--   sql.defaults.use_declarative_schema_changer = off  (default value for use_declarative_schema_changer session setting;disables new schema changer by default [off = 0, on = 1, unsafe_always = 2])
 --   sql.defaults.experimental_stream_replication.enabled = false  (default value for experimental_stream_replication session setting;enables the ability to setup a replication stream)
 --   sql.defaults.experimental_temporary_tables.enabled = false  (default value for experimental_enable_temp_tables; allows for use of temporary tables by default)
 --   sql.defaults.foreign_key_cascades_limit = 10000  (default value for foreign_key_cascades_limit session setting; limits the number of cascading operations that run as part of a single query)

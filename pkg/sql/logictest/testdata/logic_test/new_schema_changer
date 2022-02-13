@@ -1,7 +1,7 @@
 subtest add_column
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET use_declarative_schema_changer = 'on'
 
 statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
@@ -12,7 +12,7 @@ statement error pgcode 0A000 cannot explain a statement which is not supported b
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 EXPLAIN (DDL) ALTER TABLE foo ADD COLUMN j INT
@@ -40,7 +40,7 @@ statement ok
 CREATE TABLE foo (i INT PRIMARY KEY)
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
 BEGIN
@@ -63,7 +63,7 @@ SELECT * FROM foo
 1  2  3
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 DROP TABLE foo;
@@ -152,7 +152,7 @@ CREATE TABLE foo (i INT PRIMARY KEY);
 CREATE TABLE bar (j INT PRIMARY KEY);
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
 BEGIN
@@ -185,7 +185,7 @@ j  b
 3  4
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement error pgcode 0A000 cannot explain a statement which is not supported by the declarative schema changer
 EXPLAIN (DDL) ALTER TABLE bar ALTER COLUMN j TYPE BOOL
@@ -493,10 +493,10 @@ statement ok
 CREATE TABLE p2 (i INT PRIMARY KEY, s STRING)
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 # Basic test -- create and drop a type.
 statement ok
@@ -700,7 +700,7 @@ statement error database "db1" is not empty and RESTRICT was specified
 DROP DATABASE db1 RESTRICT
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe_always'
+SET use_declarative_schema_changer = 'unsafe_always'
 
 # Sanity check: Things are properly executed in post rollback. We should
 # be able to select from tables/views/sequences still
@@ -729,7 +729,7 @@ statement ok
 SELECT 'a'::db1.sc1.typ::string
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 let $desc_count_pre_drop
 select count(*) from system.descriptor
@@ -1016,7 +1016,7 @@ DROP TABLE s1dr;
 subtest event-log
 
 statement ok
-SET experimental_use_new_schema_changer = 'unsafe'
+SET use_declarative_schema_changer = 'unsafe'
 
 statement ok
 set sql_safe_updates=false;
@@ -1327,7 +1327,7 @@ CREATE DATABASE db1;
 user testuser
 
 statement ok
-SET experimental_use_new_schema_changer = 'on'
+SET use_declarative_schema_changer = 'on'
 
 statement error must be owner of schema sc1
 DROP SCHEMA sc1;
