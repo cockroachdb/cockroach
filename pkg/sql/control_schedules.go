@@ -46,9 +46,9 @@ func (n *controlSchedulesNode) FastPathResults() (int, bool) {
 	return n.numRows, true
 }
 
-// jobSchedulerEnv returns JobSchedulerEnv.
-func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
-	if knobs, ok := params.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+// JobSchedulerEnv returns JobSchedulerEnv.
+func JobSchedulerEnv(execCfg *ExecutorConfig) scheduledjobs.JobSchedulerEnv {
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
 			return knobs.JobSchedulerEnv
 		}
@@ -58,7 +58,7 @@ func jobSchedulerEnv(params runParams) scheduledjobs.JobSchedulerEnv {
 
 // loadSchedule loads schedule information.
 func loadSchedule(params runParams, scheduleID tree.Datum) (*jobs.ScheduledJob, error) {
-	env := jobSchedulerEnv(params)
+	env := JobSchedulerEnv(params.ExecCfg())
 	schedule := jobs.NewScheduledJob(env)
 
 	// Load schedule expression.  This is needed for resume command, but we
@@ -98,7 +98,7 @@ func updateSchedule(params runParams, schedule *jobs.ScheduledJob) error {
 
 // deleteSchedule deletes specified schedule.
 func deleteSchedule(params runParams, scheduleID int64) error {
-	env := jobSchedulerEnv(params)
+	env := JobSchedulerEnv(params.ExecCfg())
 	_, err := params.ExecCfg().InternalExecutor.ExecEx(
 		params.ctx,
 		"delete-schedule",

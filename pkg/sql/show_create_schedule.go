@@ -38,7 +38,7 @@ const (
 )
 
 func loadSchedules(params runParams, n *tree.ShowCreateSchedules) ([]*jobs.ScheduledJob, error) {
-	env := jobSchedulerEnv(params)
+	env := JobSchedulerEnv(params.ExecCfg())
 	var schedules []*jobs.ScheduledJob
 	var rows []tree.Datums
 	var cols colinfo.ResultColumns
