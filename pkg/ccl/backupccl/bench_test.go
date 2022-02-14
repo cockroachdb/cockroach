@@ -6,13 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package backupccl_test
+package backupccl
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 )
@@ -22,8 +21,8 @@ func BenchmarkDatabaseBackup(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode,
+		0 /* numAccounts */, InitManualReplication)
 	defer cleanupFn()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
@@ -44,7 +43,7 @@ func BenchmarkDatabaseBackup(b *testing.B) {
 	b.ResetTimer()
 	var unused string
 	var dataSize int64
-	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, backupccl.LocalFoo)).Scan(
+	sqlDB.QueryRow(b, fmt.Sprintf(`BACKUP DATABASE data TO '%s'`, localFoo)).Scan(
 		&unused, &unused, &unused, &unused, &unused, &dataSize,
 	)
 	b.StopTimer()
@@ -56,8 +55,8 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
 
-	_, sqlDB, dir, cleanup := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts*/, backupccl.InitManualReplication)
+	_, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode,
+		0 /* numAccounts*/, InitManualReplication)
 	defer cleanup()
 	sqlDB.Exec(b, `DROP TABLE data.bank`)
 
@@ -74,12 +73,12 @@ func BenchmarkDatabaseRestore(b *testing.B) {
 func BenchmarkEmptyIncrementalBackup(b *testing.B) {
 	const numStatements = 100000
 
-	_, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode,
+		0 /* numAccounts */, InitManualReplication)
 	defer cleanupFn()
 
-	restoreURI := backupccl.LocalFoo + "/restore"
-	fullURI := backupccl.LocalFoo + "/full"
+	restoreURI := localFoo + "/restore"
+	fullURI := localFoo + "/full"
 
 	bankData := bank.FromRows(numStatements).Tables()[0]
 	_, err := sampledataccl.ToBackup(b, bankData, dir, "foo/restore")
@@ -100,7 +99,7 @@ func BenchmarkEmptyIncrementalBackup(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		incrementalDir := backupccl.LocalFoo + fmt.Sprintf("/incremental%d", i)
+		incrementalDir := localFoo + fmt.Sprintf("/incremental%d", i)
 		sqlDB.Exec(b, `BACKUP DATABASE data TO $1 INCREMENTAL FROM $2`, incrementalDir, fullURI)
 	}
 	b.StopTimer()
@@ -113,12 +112,12 @@ func BenchmarkEmptyIncrementalBackup(b *testing.B) {
 func BenchmarkDatabaseFullBackup(b *testing.B) {
 	const numStatements = 100000
 
-	_, sqlDB, dir, cleanupFn := backupccl.BackupRestoreTestSetup(b, backupccl.MultiNode,
-		0 /* numAccounts */, backupccl.InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(b, multiNode,
+		0 /* numAccounts */, InitManualReplication)
 	defer cleanupFn()
 
-	restoreURI := backupccl.LocalFoo + "/restore"
-	fullURI := backupccl.LocalFoo + "/full"
+	restoreURI := localFoo + "/restore"
+	fullURI := localFoo + "/full"
 
 	bankData := bank.FromRows(numStatements).Tables()[0]
 	_, err := sampledataccl.ToBackup(b, bankData, dir, "foo/restore")
@@ -139,7 +138,7 @@ func BenchmarkDatabaseFullBackup(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		backupDir := backupccl.LocalFoo + fmt.Sprintf("/backup%d", i)
+		backupDir := localFoo + fmt.Sprintf("/backup%d", i)
 		sqlDB.Exec(b, `BACKUP DATABASE data TO $1`, backupDir)
 	}
 	b.StopTimer()
