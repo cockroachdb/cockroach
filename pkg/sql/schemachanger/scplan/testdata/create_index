@@ -89,7 +89,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
-  rule: index named after index existence
+  rule: index existence precedes naming
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
@@ -181,7 +181,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
-  rule: index named after index existence
+  rule: index existence precedes naming
 
 ops
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
@@ -284,11 +284,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
+- from: [IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC]
+  to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_AND_WRITE_ONLY]
+  kind: Precedence
+  rule: index partitioning precedes allowing writes
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
-  rule: index named after index existence
+  rule: index existence precedes naming
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
   to:   [IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: partitioning information needs the basic index as created
+  rule: index existence precedes partitioning
