@@ -3542,7 +3542,7 @@ func TestStoreRangeSplitAndMergeWithGlobalReads(t *testing.T) {
 	// Set global reads.
 	zoneConfig := zonepb.DefaultZoneConfig()
 	zoneConfig.GlobalReads = proto.Bool(true)
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(descID), zoneConfig)
+	config.TestingSetZoneConfig(config.ObjectID(descID), zoneConfig)
 
 	// Perform a write to the system config span being watched by
 	// the SystemConfigProvider.
