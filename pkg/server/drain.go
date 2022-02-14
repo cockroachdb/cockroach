@@ -12,6 +12,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -31,21 +32,38 @@ import (
 
 var (
 	queryWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"server.shutdown.query_wait",
 		"the timeout for waiting for active queries to finish during a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		10*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 
 	drainWait = settings.RegisterDurationSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with a drain "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
+			"after changing this setting. --drain-wait is to specify the duration of the "+
+			"whole draining process, while server.shutdown.drain_wait is to set the"+
+			"wait time for health probes to notice that the node is not ready.)",
+		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
+	).WithPublic()
+
+	connectionWait = settings.RegisterDurationSetting(
+		settings.TenantReadOnly,
+		"server.shutdown.connection_wait",
+		"the maximum amount of time a server waits all SQL connections to be "+
+			"closed before proceeding with a drain. "+
+			"When all SQL connections are closed before times out, the server early "+
+			"exits and proceeds to draining range leases. "+
+			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		0*time.Second,
+		settings.NonNegativeDurationWithMaximum(10*time.Hour),
 	).WithPublic()
 )
 
@@ -308,12 +326,25 @@ func (s *drainServer) drainClients(
 	s.grpc.setMode(modeDraining)
 	s.sqlServer.isReady.Set(false)
 
-	// Wait the duration of drainWait.
-	// This will fail load balancer checks and delay draining so that client
-	// traffic can move off this node.
+	// Log the number of connections periodically.
+	if err := s.logActiveConns(ctx); err != nil {
+		log.Ops.Warningf(ctx, "error showing alive SQL connections: %v", err)
+	}
+
+	// Wait for drainUnreadyWait. This will fail load balancer checks and
+	// delay draining so that client traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
-		s.drainSleepFn(drainWait.Get(&s.sqlServer.execCfg.Settings.SV))
+		drainWaitDuration := drainWait.Get(&s.sqlServer.execCfg.Settings.SV)
+		drainWaitLogMessage := fmt.Sprintf(
+			"node is entering the unready state, and the /healthz?ready=1 "+
+				"healthcheck endpoint will report the shutting-down status; proceeding "+
+				"to the next draining phase after %s (configured by cluster setting "+
+				"'server.shutdown.drain_wait')",
+			drainWaitDuration,
+		)
+		log.Ops.Info(ctx, drainWaitLogMessage)
+		s.drainSleepFn(drainWaitDuration)
 	}
 
 	// Drain all SQL connections.
@@ -321,6 +352,9 @@ func (s *drainServer) drainClients(
 	// to self-disconnect. If the timeout is reached, any remaining connections
 	// will be closed.
 	queryMaxWait := queryWait.Get(&s.sqlServer.execCfg.Settings.SV)
+	connectionMaxWait := connectionWait.Get(&s.sqlServer.execCfg.Settings.SV)
+
+	s.sqlServer.pgServer.WaitSqlConnsToClose(ctx, connectionMaxWait)
 	if err := s.sqlServer.pgServer.Drain(ctx, queryMaxWait, reporter); err != nil {
 		return err
 	}
@@ -352,4 +386,22 @@ func (s *drainServer) drainNode(
 	}
 	// Mark the stores of the node as "draining" and drain all range leases.
 	return s.kvServer.node.SetDraining(true /* drain */, reporter, verbose)
+}
+
+// logActiveConns logs the number of active SQL connections every 3 seconds.
+func (s *drainServer) logActiveConns(ctx context.Context) error {
+	return s.stopper.RunAsyncTask(ctx, "log-active-conns", func(ctx context.Context) {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.sqlServer.pgServer.LogActiveConns(ctx)
+			case <-s.stopper.ShouldQuiesce():
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 }
