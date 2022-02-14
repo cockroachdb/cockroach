@@ -603,10 +603,12 @@ func getFilteredBucket(
 
 	// Determine whether this span includes the original upper bound of the
 	// bucket.
-	isSpanEndBoundaryInclusive := filteredSpan.EndBoundary() == constraint.IncludeBoundary
+	isLastColumn := colOffset == filteredSpan.EndKey().Length()-1
+	isSpanEndBoundaryInclusive := !isLastColumn || filteredSpan.EndBoundary() == constraint.IncludeBoundary
 	includesOriginalUpperBound := isSpanEndBoundaryInclusive && cmpSpanEndBucketEnd == 0
 	if iter.desc {
-		isSpanStartBoundaryInclusive := filteredSpan.StartBoundary() == constraint.IncludeBoundary
+		isLastColumn = colOffset == filteredSpan.StartKey().Length()-1
+		isSpanStartBoundaryInclusive := !isLastColumn || filteredSpan.StartBoundary() == constraint.IncludeBoundary
 		includesOriginalUpperBound = isSpanStartBoundaryInclusive && cmpSpanStartBucketStart == 0
 	}
 
