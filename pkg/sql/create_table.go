@@ -1053,7 +1053,7 @@ func CreatePartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Mutable,
+	tableDesc catalog.TableDescriptor,
 	indexDesc descpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
@@ -1071,7 +1071,15 @@ func CreatePartitioning(
 		return nil, newPartitioning, nil
 	}
 	return CreatePartitioningCCL(
-		ctx, st, evalCtx, tableDesc, indexDesc, partBy, allowedNewColumnNames, allowImplicitPartitioning,
+		ctx,
+		st,
+		evalCtx,
+		tableDesc.FindColumnWithName,
+		int(indexDesc.Partitioning.NumImplicitColumns),
+		indexDesc.KeyColumnNames,
+		partBy,
+		allowedNewColumnNames,
+		allowImplicitPartitioning,
 	)
 }
 
@@ -1081,8 +1089,9 @@ var CreatePartitioningCCL = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *tabledesc.Mutable,
-	indexDesc descpb.IndexDescriptor,
+	columnLookupFn func(tree.Name) (catalog.Column, error),
+	oldNumImplicitColumns int,
+	oldKeyColumnNames []string,
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
