@@ -89,7 +89,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
   to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
   kind: Precedence
-  rule: index named after index existence
+  rule: index existence precedes naming
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
