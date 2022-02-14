@@ -13,7 +13,7 @@ go_library(
         "//pkg/util/log/severity",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
     ],
 )
 
@@ -42,7 +42,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_sentry_go//:sentry-go",
+        "@com_github_getsentry_sentry_go//:sentry-go",
         "@com_github_kr_pretty//:pretty",
         "@com_github_pmezard_go_difflib//difflib",
         "@com_github_stretchr_testify//assert",

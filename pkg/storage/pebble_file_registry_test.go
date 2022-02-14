@@ -82,6 +82,11 @@ func TestFileRegistryOps(t *testing.T) {
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 	bazFileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("baz")}
+	// We need a second instance of the first two entries to make kr/pretty's diff algorithm happy.
+	fooFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
+	barFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 
 	require.NoError(t, mem.MkdirAll("/mydb", 0755))
 	registry := &PebbleFileRegistry{FS: mem, DBDir: "/mydb"}
@@ -101,13 +106,13 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// {file3 => foo, file2 => bar}
 	require.NoError(t, registry.MaybeRenameEntry("file1", "file3"))
-	expected["file3"] = fooFileEntry
+	expected["file3"] = fooFileEntry2
 	delete(expected, "file1")
 	checkEquality(t, mem, expected)
 
 	// {file3 => foo, file2 => bar, file4 => bar}
 	require.NoError(t, registry.MaybeLinkEntry("file2", "file4"))
-	expected["file4"] = barFileEntry
+	expected["file4"] = barFileEntry2
 	checkEquality(t, mem, expected)
 
 	// {file3 => foo, file4 => bar}
