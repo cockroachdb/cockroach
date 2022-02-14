@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/keysutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -486,9 +487,10 @@ func TestZoneChecker(t *testing.T) {
 		newZoneKey     ZoneKey
 	}
 	// NB: IDs need to be beyond MaxSystemConfigDescID, otherwise special logic
-	// kicks in for mapping keys to zones.
-	dbID := 50
-	t1ID := 51
+	// kicks in for mapping keys to zones. They also need to not overlap with any
+	// system table IDs.
+	dbID := int(bootstrap.TestingMinUserDescID())
+	t1ID := dbID + 1
 	t1 := table{name: "t1",
 		partitions: []partition{
 			{

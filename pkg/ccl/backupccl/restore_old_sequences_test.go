@@ -71,7 +71,7 @@ func restoreOldSequencesTest(exportDir string) func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		var unused string
 		var importedRows int
-		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, LocalFoo).Scan(
+		sqlDB.QueryRow(t, `RESTORE test.* FROM $1`, localFoo).Scan(
 			&unused, &unused, &unused, &importedRows, &unused, &unused,
 		)
 		const totalRows = 4

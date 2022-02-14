@@ -343,7 +343,7 @@ func TestFilterBucket(t *testing.T) {
 	}
 
 	runTestCase := func(
-		h *Histogram, span *constraint.Span, desc bool,
+		h *Histogram, span *constraint.Span, desc bool, colOffset int,
 	) (actual *cat.HistogramBucket, err error) {
 		defer func() {
 			// Any errors will be propagated as panics.
@@ -364,19 +364,19 @@ func TestFilterBucket(t *testing.T) {
 		// mark the lower bound of the second bucket. Set the iterator to point to
 		// the second bucket.
 		iter.setIdx(1)
-		b := getFilteredBucket(&iter, &keyCtx, span, 0 /* colIdx */)
+		b := getFilteredBucket(&iter, &keyCtx, span, colOffset)
 		roundBucket(b)
 		return b, nil
 	}
 
-	runTest := func(h *Histogram, testData []testCase, typ types.Family) {
+	runTest := func(h *Histogram, testData []testCase, colOffset int, typs ...types.Family) {
 		for _, testCase := range testData {
-			span := constraint.ParseSpan(&evalCtx, testCase.span, typ)
+			span := constraint.ParseSpan(&evalCtx, testCase.span, typs...)
 			ascAndDesc := []constraint.Span{span, makeDescSpan(&span)}
 
 			// Make sure all test cases work with both ascending and descending columns.
 			for i, span := range ascAndDesc {
-				actual, err := runTestCase(h, &span, i == 1 /* desc */)
+				actual, err := runTestCase(h, &span, i == 1 /* desc */, colOffset)
 				if err != nil && !testCase.isError {
 					t.Fatalf("for span %s got error %v", testCase.span, err)
 				} else if err == nil {
@@ -437,7 +437,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.IntFamily)
+		runTest(h, testData, 0 /* colOffset */, types.IntFamily)
 	})
 
 	t.Run("float", func(t *testing.T) {
@@ -472,7 +472,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.FloatFamily)
+		runTest(h, testData, 0 /* colOffset */, types.FloatFamily)
 	})
 
 	t.Run("decimal", func(t *testing.T) {
@@ -509,7 +509,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.DecimalFamily)
+		runTest(h, testData, 0 /* colOffset */, types.DecimalFamily)
 	})
 
 	t.Run("date", func(t *testing.T) {
@@ -542,7 +542,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.DateFamily)
+		runTest(h, testData, 0 /* colOffset */, types.DateFamily)
 	})
 
 	t.Run("timestamp", func(t *testing.T) {
@@ -575,7 +575,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.TimestampFamily)
+		runTest(h, testData, 0 /* colOffset */, types.TimestampFamily)
 	})
 
 	t.Run("time", func(t *testing.T) {
@@ -608,7 +608,7 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h, testData, types.TimeFamily)
+		runTest(h, testData, 0 /* colOffset */, types.TimeFamily)
 	})
 
 	t.Run("timetz", func(t *testing.T) {
@@ -692,8 +692,8 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h1, testData1, types.TimeTZFamily)
-		runTest(h2, testData2, types.TimeTZFamily)
+		runTest(h1, testData1, 0 /* colOffset */, types.TimeTZFamily)
+		runTest(h2, testData2, 0 /* colOffset */, types.TimeTZFamily)
 	})
 
 	t.Run("string-bytes", func(t *testing.T) {
@@ -768,9 +768,9 @@ func TestFilterBucket(t *testing.T) {
 				},
 			}
 
-			runTest(h1, t1, typ.family)
-			runTest(h2, t2, typ.family)
-			runTest(h3, t3, typ.family)
+			runTest(h1, t1, 0 /* colOffset */, typ.family)
+			runTest(h2, t2, 0 /* colOffset */, typ.family)
+			runTest(h3, t3, 0 /* colOffset */, typ.family)
 		}
 	})
 
@@ -827,8 +827,8 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h1, t1, types.UuidFamily)
-		runTest(h2, t2, types.UuidFamily)
+		runTest(h1, t1, 0 /* colOffset */, types.UuidFamily)
+		runTest(h2, t2, 0 /* colOffset */, types.UuidFamily)
 	})
 
 	t.Run("inet", func(t *testing.T) {
@@ -903,9 +903,124 @@ func TestFilterBucket(t *testing.T) {
 			},
 		}
 
-		runTest(h1, t1, types.INetFamily)
-		runTest(h2, t2, types.INetFamily)
-		runTest(h3, t3, types.INetFamily)
+		runTest(h1, t1, 0 /* colOffset */, types.INetFamily)
+		runTest(h2, t2, 0 /* colOffset */, types.INetFamily)
+		runTest(h3, t3, 0 /* colOffset */, types.INetFamily)
+	})
+
+	t.Run("multi-col", func(t *testing.T) {
+		h1 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDInt(0))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDInt(10)},
+		}}
+		t1 := []testCase{
+			{
+				span:     "[/0 - /5/foo)",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 5, DistinctRange: 5, UpperBound: tree.NewDInt(5)},
+			},
+			{
+				span:     "(/2/foo - /9]",
+				expected: &cat.HistogramBucket{NumEq: 1, NumRange: 7, DistinctRange: 7, UpperBound: tree.NewDInt(9)},
+			},
+			{
+				span:     "[/2 - /10/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 8, DistinctRange: 8, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "[/10/ - /10/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "(/10/foo - /10]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "[/10/ - /10/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "[/10/foo - /10]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "[/10/bar - /10/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "(/10/bar - /10/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "[/10/bar - /10/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+			{
+				span:     "(/10/bar - /10/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDInt(10)},
+			},
+		}
+
+		h2 := &Histogram{evalCtx: &evalCtx, col: col, buckets: []cat.HistogramBucket{
+			{NumEq: 0, NumRange: 0, DistinctRange: 0, UpperBound: getPrevUpperBound(tree.NewDString("a"))},
+			{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+		}}
+		t2 := []testCase{
+			{
+				span:     "[/0/a\x00 - /0/b/foo)",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: tree.NewDString("b")},
+			},
+			{
+				span:     "(/0/a\x00/foo - /0/b]",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 4.99, DistinctRange: 4.99, UpperBound: tree.NewDString("b")},
+			},
+			{
+				span:     "(/0/a\x00/foo - /0/c)",
+				expected: &cat.HistogramBucket{NumEq: 0, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "(/0/a\x00/foo - /0/c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/a\x00 - /0/c/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 10, DistinctRange: 10, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/c/ - /0/c/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "(/0/c/foo - /0/c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/c/ - /0/c/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/c/foo - /0/c]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/c/bar - /0/c/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "(/0/c/bar - /0/c/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "[/0/c/bar - /0/c/foo]",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+			{
+				span:     "(/0/c/bar - /0/c/foo)",
+				expected: &cat.HistogramBucket{NumEq: 5, NumRange: 0, DistinctRange: 0, UpperBound: tree.NewDString("c")},
+			},
+		}
+
+		runTest(h1, t1, 0 /* colOffset */)
+		runTest(h2, t2, 1 /* colOffset */)
 	})
 
 }

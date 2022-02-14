@@ -2222,3 +2222,58 @@ select
  │              └── fd: (2)-->(5)
  └── filters
       └── st_coveredby(geom:1, '0101000000000000000000F03F000000000000F03F') [type=bool, outer=(1), immutable, constraints=(/1: (/NULL - ])]
+
+# Regression test for #76485. Ensure that we do not estimate 0 rows
+# when filtering a histogram with a multi-column span.
+
+exec-ddl
+CREATE TABLE t76485 (
+  a INT,
+  b INT,
+  c STRING,
+  INDEX (a, c),
+  INDEX (a, b, c)
+)
+----
+
+exec-ddl
+ALTER TABLE t76485 INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-02-12 23:43:16.318153",
+        "distinct_count": 10,
+        "histo_buckets": [
+            {
+                "distinct_range": 0,
+                "num_eq": 0,
+                "num_range": 0,
+                "upper_bound": "10"
+            },
+            {
+                "distinct_range": 9,
+                "num_eq": 10000,
+                "num_range": 9,
+                "upper_bound": "20"
+            }
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 1,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 10009
+    }
+]'
+----
+
+opt
+SELECT * FROM t76485 WHERE a = 20 AND b = 30 AND c < 'foo';
+----
+scan t76485@t76485_a_b_c_idx
+ ├── columns: a:1(int!null) b:2(int!null) c:3(string!null)
+ ├── constraint: /1/2/3/4: (/20/30/NULL - /20/30/'foo')
+ ├── stats: [rows=9.310865, distinct(1)=1, null(1)=0, avgsize(1)=4, distinct(2)=1, null(2)=0, avgsize(2)=4, distinct(3)=9.31087, null(3)=0, avgsize(3)=4, distinct(1,2)=1, null(1,2)=0, avgsize(1,2)=8, distinct(1-3)=9.31087, null(1-3)=0, avgsize(1-3)=12]
+ │   histogram(1)=  0 9.3109
+ │                <---- 20 -
+ └── fd: ()-->(1,2)
