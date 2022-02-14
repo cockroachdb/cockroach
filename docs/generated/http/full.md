@@ -6193,6 +6193,7 @@ If no NodeIDs are given, it targets the recipient node.
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_ids | [int32](#cockroach.server.serverpb.DecommissionRequest-int32) | repeated |  | [reserved](#support-status) |
 | target_membership | [cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus](#cockroach.server.serverpb.DecommissionRequest-cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus) |  |  | [reserved](#support-status) |
+| num_replica_report | [int32](#cockroach.server.serverpb.DecommissionRequest-int32) |  | The number of decommissioning replicas to be reported. | [reserved](#support-status) |
 
 
 
@@ -6229,6 +6230,21 @@ DecommissionStatusResponse lists decommissioning statuses for a number of NodeID
 | replica_count | [int64](#cockroach.server.serverpb.DecommissionStatusResponse-int64) |  | The number of replicas on the node, computed by scanning meta2 ranges. | [reserved](#support-status) |
 | membership | [cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus](#cockroach.server.serverpb.DecommissionStatusResponse-cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus) |  | The membership status of the given node. | [reserved](#support-status) |
 | draining | [bool](#cockroach.server.serverpb.DecommissionStatusResponse-bool) |  |  | [reserved](#support-status) |
+| reported_replicas | [DecommissionStatusResponse.Replica](#cockroach.server.serverpb.DecommissionStatusResponse-cockroach.server.serverpb.DecommissionStatusResponse.Replica) | repeated | Decommissioning replicas on the given node to be reported. How many replicas are reported is determined by what was specified in the request. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionStatusResponse-cockroach.server.serverpb.DecommissionStatusResponse.Replica"></a>
+#### DecommissionStatusResponse.Replica
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| replica_id | [int32](#cockroach.server.serverpb.DecommissionStatusResponse-int32) |  |  | [reserved](#support-status) |
+| range_id | [int32](#cockroach.server.serverpb.DecommissionStatusResponse-int32) |  |  | [reserved](#support-status) |
 
 
 
@@ -6257,6 +6273,7 @@ specified or, if none are specified, all nodes.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_ids | [int32](#cockroach.server.serverpb.DecommissionStatusRequest-int32) | repeated |  | [reserved](#support-status) |
+| num_replica_report | [int32](#cockroach.server.serverpb.DecommissionStatusRequest-int32) |  | The number of decommissioning replicas to be reported. | [reserved](#support-status) |
 
 
 
@@ -6293,6 +6310,21 @@ DecommissionStatusResponse lists decommissioning statuses for a number of NodeID
 | replica_count | [int64](#cockroach.server.serverpb.DecommissionStatusResponse-int64) |  | The number of replicas on the node, computed by scanning meta2 ranges. | [reserved](#support-status) |
 | membership | [cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus](#cockroach.server.serverpb.DecommissionStatusResponse-cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus) |  | The membership status of the given node. | [reserved](#support-status) |
 | draining | [bool](#cockroach.server.serverpb.DecommissionStatusResponse-bool) |  |  | [reserved](#support-status) |
+| reported_replicas | [DecommissionStatusResponse.Replica](#cockroach.server.serverpb.DecommissionStatusResponse-cockroach.server.serverpb.DecommissionStatusResponse.Replica) | repeated | Decommissioning replicas on the given node to be reported. How many replicas are reported is determined by what was specified in the request. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionStatusResponse-cockroach.server.serverpb.DecommissionStatusResponse.Replica"></a>
+#### DecommissionStatusResponse.Replica
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| replica_id | [int32](#cockroach.server.serverpb.DecommissionStatusResponse-int32) |  |  | [reserved](#support-status) |
+| range_id | [int32](#cockroach.server.serverpb.DecommissionStatusResponse-int32) |  |  | [reserved](#support-status) |
 
 
 
