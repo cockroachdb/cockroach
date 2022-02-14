@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -785,12 +786,12 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 }
 
-// ReadAll is like io.ReadAll except it additionally asks the BoundAccount acct
+// ReadAll is like ioctx.ReadAll except it additionally asks the BoundAccount acct
 // permission, if it is non-nil, it grows its buffer while reading. When the
 // caller releases the returned slice it shrink the bound account by its cap.
-func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, error) {
+func ReadAll(ctx context.Context, r ioctx.ReaderCtx, acct *BoundAccount) ([]byte, error) {
 	if acct == nil {
-		b, err := io.ReadAll(r)
+		b, err := ioctx.ReadAll(ctx, r)
 		return b, err
 	}
 
@@ -828,7 +829,7 @@ func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, erro
 		}
 
 		// Read into our buffer until we get an error.
-		n, err := r.Read(b[len(b):cap(b)])
+		n, err := r.Read(ctx, b[len(b):cap(b)])
 		b = b[:len(b)+n]
 		if err != nil {
 			if err == io.EOF {
