@@ -31,13 +31,14 @@ func registerInconsistency(r registry.Registry) {
 }
 
 func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
+	startOps := option.DefaultStartOpts()
 	// With encryption on, our attempt below to manually introduce an inconsistency
 	// will fail.
-	c.EncryptDefault(false)
+	startOps.RoachtestOpts.DontEncrypt = true
 
 	nodes := c.Range(1, 3)
 	c.Put(ctx, t.Cockroach(), "./cockroach", nodes)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), nodes)
+	c.Start(ctx, t.L(), startOps, install.MakeClusterSettings(), nodes)
 
 	{
 		db := c.Conn(ctx, t.L(), 1)
