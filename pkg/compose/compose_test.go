@@ -35,6 +35,8 @@ var (
 	flagEach      = flag.Duration("each", 10*time.Minute, "individual test timeout")
 	flagTests     = flag.String("tests", ".", "tests within docker compose to run")
 	flagArtifacts = flag.String("artifacts", "", "artifact directory")
+	flagCockroach = flag.String("cockroach", "", "path to the cockroach executable")
+	flagCompare   = flag.String("compare", "", "path to the compare test (only valid for bazel-driven test)")
 )
 
 func copyBin(src, dst string) error {
@@ -60,13 +62,11 @@ func TestComposeCompare(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		origCockroachBin, found := bazel.FindBinary("pkg/cmd/cockroach", "cockroach")
-		if !found {
-			t.Fatal("could not find cockroach binary")
+		if *flagCockroach == "" {
+			t.Fatal("-cockroach not set")
 		}
-		origCompareBin, found := bazel.FindBinary("pkg/compose/compare/compare", "compare_test")
-		if !found {
-			t.Fatal("could not find compare_test binary")
+		if *flagCompare == "" {
+			t.Fatal("-compare not set")
 		}
 		// These binaries are going to be mounted as volumes when we
 		// start up docker-compose, but the files themselves will be
@@ -79,11 +79,11 @@ func TestComposeCompare(t *testing.T) {
 		defer func() { _ = os.RemoveAll(composeBinsDir) }()
 		compareDir = composeBinsDir
 		cockroachBin = filepath.Join(composeBinsDir, "cockroach")
-		err = copyBin(origCockroachBin, cockroachBin)
+		err = copyBin(*flagCockroach, cockroachBin)
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = copyBin(origCompareBin, filepath.Join(composeBinsDir, "compare.test"))
+		err = copyBin(*flagCompare, filepath.Join(composeBinsDir, "compare.test"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,13 @@ func TestComposeCompare(t *testing.T) {
 			}
 		}
 	} else {
-		cockroachBin = "../../../cockroach-linux-2.6.32-gnu-amd64"
+		if *flagCompare != "" {
+			t.Fatal("should not set -compare unless test is driven with Bazel")
+		}
+		cockroachBin = *flagCockroach
+		if cockroachBin == "" {
+			cockroachBin = "../../../cockroach-linux-2.6.32-gnu-amd64"
+		}
 		compareDir = "./compare"
 		dockerComposeYml = filepath.Join("compare", "docker-compose.yml")
 		if *flagArtifacts == "" {
