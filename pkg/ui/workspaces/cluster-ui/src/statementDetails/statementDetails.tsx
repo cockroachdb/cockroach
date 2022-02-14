@@ -708,20 +708,6 @@ export class StatementDetails extends React.Component<
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <Heading type="h5">Statement details</Heading>
-                <div className={summaryCardStylesCx("summary--card__item")}>
-                  <Text>Aggregation Interval (UTC)</Text>
-                  <Text>
-                    {intervalStartTime.format("MMM D, h:mm A")} -{" "}
-                    {intervalEndTime.format(
-                      `${
-                        intervalStartTime.isSame(intervalEndTime, "day")
-                          ? ""
-                          : "MMM D,"
-                      }h:mm A`,
-                    )}
-                  </Text>
-                </div>
-
                 {!isTenant && (
                   <div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
