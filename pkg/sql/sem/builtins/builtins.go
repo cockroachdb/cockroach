@@ -5989,7 +5989,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		),
 	),
 	RehomeRowBuiltinName: makeBuiltin(
-		tree.FunctionProperties{Category: categoryMultiRegion},
+		tree.FunctionProperties{
+			Category:         categoryMultiRegion,
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
