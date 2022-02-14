@@ -75,23 +75,24 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 type flag int
 
 const (
-	isAdmin             flag = 1 << iota // admin cmds don't go through raft, but run on lease holder
-	isRead                               // read-only cmds don't go through raft, but may run on lease holder
-	isWrite                              // write cmds go through raft and must be proposed on lease holder
-	isTxn                                // txn commands may be part of a transaction
-	isLocking                            // locking cmds acquire locks for their transaction
-	isIntentWrite                        // intent write cmds leave intents when they succeed
-	isRange                              // range commands may span multiple keys
-	isReverse                            // reverse commands traverse ranges in descending direction
-	isAlone                              // requests which must be alone in a batch
-	isPrefix                             // requests which, in a batch, must not be split from the following request
-	isUnsplittable                       // range command that must not be split during sending
-	skipsLeaseCheck                      // commands which skip the check that the evaluating replica has a valid lease
-	appliesTSCache                       // commands which apply the timestamp cache and closed timestamp
-	updatesTSCache                       // commands which update the timestamp cache
-	updatesTSCacheOnErr                  // commands which make read data available on errors
-	needsRefresh                         // commands which require refreshes to avoid serializable retries
-	canBackpressure                      // commands which deserve backpressure when a Range grows too large
+	isAdmin                       flag = 1 << iota // admin cmds don't go through raft, but run on lease holder
+	isRead                                         // read-only cmds don't go through raft, but may run on lease holder
+	isWrite                                        // write cmds go through raft and must be proposed on lease holder
+	isTxn                                          // txn commands may be part of a transaction
+	isLocking                                      // locking cmds acquire locks for their transaction
+	isIntentWrite                                  // intent write cmds leave intents when they succeed
+	isRange                                        // range commands may span multiple keys
+	isReverse                                      // reverse commands traverse ranges in descending direction
+	isAlone                                        // requests which must be alone in a batch
+	isPrefix                                       // requests which, in a batch, must not be split from the following request
+	isUnsplittable                                 // range command that must not be split during sending
+	skipsLeaseCheck                                // commands which skip the check that the evaluating replica has a valid lease
+	appliesTSCache                                 // commands which apply the timestamp cache and closed timestamp
+	updatesTSCache                                 // commands which update the timestamp cache
+	updatesTSCacheOnErr                            // commands which make read data available on errors
+	needsRefresh                                   // commands which require refreshes to avoid serializable retries
+	canBackpressure                                // commands which deserve backpressure when a Range grows too large
+	bypassesReplicaCircuitBreaker                  // commands which bypass the replica circuit breaker, i.e. opt out of fail-fast
 )
 
 // flagDependencies specifies flag dependencies, asserted by TestFlagCombinations.
@@ -199,6 +200,13 @@ func NeedsRefresh(args Request) bool {
 // when waiting for a Range to split after it has grown too large.
 func CanBackpressure(args Request) bool {
 	return (args.flags() & canBackpressure) != 0
+}
+
+// BypassesReplicaCircuitBreaker returns whether the command bypasses
+// the per-Replica circuit breakers. These requests will thus hang when
+// addressed to an unavailable range (instead of failing fast).
+func BypassesReplicaCircuitBreaker(args Request) bool {
+	return (args.flags() & bypassesReplicaCircuitBreaker) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -1254,11 +1262,13 @@ func (drr *DeleteRangeRequest) flags() flag {
 
 // Note that ClearRange commands cannot be part of a transaction as
 // they clear all MVCC versions.
-func (*ClearRangeRequest) flags() flag { return isWrite | isRange | isAlone }
+func (*ClearRangeRequest) flags() flag {
+	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
+}
 
 // Note that RevertRange commands cannot be part of a transaction as
 // they clear all MVCC versions above their target time.
-func (*RevertRangeRequest) flags() flag { return isWrite | isRange }
+func (*RevertRangeRequest) flags() flag { return isWrite | isRange | bypassesReplicaCircuitBreaker }
 
 func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLocking)
@@ -1280,7 +1290,12 @@ func (*AdminMergeRequest) flags() flag          { return isAdmin | isAlone }
 func (*AdminTransferLeaseRequest) flags() flag  { return isAdmin | isAlone }
 func (*AdminChangeReplicasRequest) flags() flag { return isAdmin | isAlone }
 func (*AdminRelocateRangeRequest) flags() flag  { return isAdmin | isAlone }
-func (*GCRequest) flags() flag                  { return isWrite | isRange }
+
+func (*GCRequest) flags() flag {
+	// We let GCRequest bypass the circuit breaker because otherwise, the GC queue may
+	// busy loop on an unavailable range, doing lots of work but never making progress.
+	return isWrite | isRange | bypassesReplicaCircuitBreaker
+}
 
 // HeartbeatTxn updates the timestamp cache with transaction records,
 // to avoid checking for them on disk when considering 1PC evaluation.
@@ -1325,16 +1340,18 @@ func (*TransferLeaseRequest) flags() flag {
 	return isWrite | isAlone | skipsLeaseCheck
 }
 func (*ProbeRequest) flags() flag {
-	return isWrite | isAlone | skipsLeaseCheck
+	return isWrite | isAlone | skipsLeaseCheck | bypassesReplicaCircuitBreaker
 }
-func (*RecomputeStatsRequest) flags() flag                { return isWrite | isAlone }
-func (*ComputeChecksumRequest) flags() flag               { return isWrite }
-func (*CheckConsistencyRequest) flags() flag              { return isAdmin | isRange | isAlone }
-func (*ExportRequest) flags() flag                        { return isRead | isRange | updatesTSCache }
+func (*RecomputeStatsRequest) flags() flag   { return isWrite | isAlone }
+func (*ComputeChecksumRequest) flags() flag  { return isWrite }
+func (*CheckConsistencyRequest) flags() flag { return isAdmin | isRange | isAlone }
+func (*ExportRequest) flags() flag {
+	return isRead | isRange | updatesTSCache | bypassesReplicaCircuitBreaker
+}
 func (*AdminScatterRequest) flags() flag                  { return isAdmin | isRange | isAlone }
 func (*AdminVerifyProtectedTimestampRequest) flags() flag { return isAdmin | isRange | isAlone }
 func (r *AddSSTableRequest) flags() flag {
-	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+	flags := isWrite | isRange | isAlone | isUnsplittable | canBackpressure | bypassesReplicaCircuitBreaker
 	if r.SSTTimestampToRequestTimestamp.IsSet() {
 		flags |= appliesTSCache
 	}
