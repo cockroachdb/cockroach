@@ -1603,7 +1603,7 @@ message AdminVerifyProtectedTimestampResponse {
 // inline values) and no tombstones, but this is only fully enforced when
 // WriteAtRequestTimestamp is enabled, for performance. It cannot be used in a
 // transaction, cannot be split across ranges, and must be alone in a batch.
-// 
+//
 // By default, AddSSTable will blindly write the SST contents into Pebble, with
 // fixed MVCC timestamps unaffected by pushes. This can violate many CRDB
 // guarantees, including ACID, serializability and single-key linearizability:
@@ -1658,7 +1658,7 @@ message AddSSTableRequest {
   // only bumped when the values are subsequently read). Use DisallowConflicts
   // or DisallowShadowing in addition to guarantee MVCC correctness and
   // serializability.
-  // 
+  //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
   bool write_at_request_timestamp = 6;
 
@@ -1688,7 +1688,7 @@ message AddSSTableRequest {
   // could pick an MVCC timestamp that's guaranteed to not collide with
   // existing keys, see: https://github.com/cockroachdb/cockroach/issues/73047.
   // However, this would always lead to inaccurate MVCC stats.
-  bool disallow_conflicts = 7; 
+  bool disallow_conflicts = 7;
 
   // DisallowShadowing implies DisallowConflicts, and additionally rejects
   // writing above keys that have an existing/visible value (but will write
@@ -1712,7 +1712,7 @@ message AddSSTableRequest {
   // resumption or retry. The equal value requirement is to avoid unique
   // constraint violations.
   //
-  // If this parameter is used, the value of DisallowShadowing is ignored, so 
+  // If this parameter is used, the value of DisallowShadowing is ignored, so
   // callers may pass both for forward and backwards compatibility.
   //
   // Added in 22.1, so check the MVCCAddSSTable version gate before using.
@@ -2753,7 +2753,8 @@ message TenantConsumption {
   uint64 write_bytes = 5;
   double sql_pods_cpu_seconds = 6 [(gogoproto.customname) = "SQLPodsCPUSeconds"];
   uint64 pgwire_egress_bytes = 7 [(gogoproto.customname) = "PGWireEgressBytes"];
-
+  uint64 external_write_requests = 8;
+  uint64 external_write_bytes = 9;
   // Note: if any fields are changed, the Sub and Add methods must be updated.
 }
 

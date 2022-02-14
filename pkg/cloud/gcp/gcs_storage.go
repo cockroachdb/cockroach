@@ -89,6 +89,8 @@ func (g *gcsStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return g.ioConf
 }
 
+func (s *gcsStorage) RequiresExternalIOAccounting() bool { return true }
+
 func (g *gcsStorage) Settings() *cluster.Settings {
 	return g.settings
 }

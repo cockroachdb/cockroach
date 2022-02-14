@@ -33,6 +33,8 @@ type TenantSideCostController interface {
 	) error
 
 	TenantSideKVInterceptor
+
+	TenantSideExternalIOInterceptor
 }
 
 // ExternalUsage contains information about usage that is not tracked through
@@ -94,6 +96,30 @@ func WithTenantCostControlExemption(ctx context.Context) context.Context {
 // parent contexts was created using WithTenantCostControlExemption.
 func HasTenantCostControlExemption(ctx context.Context) bool {
 	return ctx.Value(exemptCtxValue) != nil
+}
+
+// TenantSideExternalIOInterceptor intercepts external IO Write
+// requests accounting for resource usage.
+//
+// The TenantSideExternalIOInterceptor is installed in the external
+// storage factory.
+type TenantSideExternalIOInterceptor interface {
+	// OnExeternalWriteResponse records the number of bytes
+	// written in an external IO request. We measure this after
+	// the request in case no bytes were sent because of a network
+	// error.
+	//
+	// If the context (or a parent context) was created using
+	// WithTenantCostControlExemption, the method is a no-op.
+	//
+	// TODO(ssd): Perhaps we should extend RequestInfo rather than
+	// passing a direct int64 here.
+	//
+	// TODO(ssd): We may want two methods here like we have for
+	// the KVInterceptor, not just because we may want to block,
+	// but also so that we can track the "request count" at a
+	// higher level than individual write calls.
+	OnExternalWriteResponse(ctx context.Context, bytes int64)
 }
 
 type exemptCtxValueType struct{}

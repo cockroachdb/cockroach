@@ -111,6 +111,8 @@ func (s *azureStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return s.ioConf
 }
 
+func (s *azureStorage) RequiresExternalIOAccounting() bool { return true }
+
 func (s *azureStorage) Settings() *cluster.Settings {
 	return s.settings
 }

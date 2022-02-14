@@ -620,3 +620,18 @@ func (c *tenantSideCostController) OnResponse(
 		c.mu.consumption.RU += float64(c.costCfg.KVReadCost(readBytes))
 	}
 }
+
+// OnExternalWriteResponse is part of the multitenant.TenantSideExternalIOInterceptor interface.
+func (c *tenantSideCostController) OnExternalWriteResponse(ctx context.Context, bytes int64) {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.mu.consumption.ExternalWriteRequests++
+	c.mu.consumption.ExternalWriteBytes += uint64(bytes)
+	c.mu.consumption.RU += float64(c.costCfg.ExternalWriteCost(bytes))
+
+}

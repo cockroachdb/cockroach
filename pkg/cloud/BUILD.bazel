@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "cloud",
     srcs = [
+        "accounting_sink.go",
         "cloud_io.go",
         "external_storage.go",
         "impl_registry.go",
@@ -16,6 +17,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/kv",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/settings",

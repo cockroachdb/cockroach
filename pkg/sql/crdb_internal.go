@@ -1139,7 +1139,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
   max_mem_usage_var   FLOAT,
   max_disk_usage_avg  FLOAT,
   max_disk_usage_var  FLOAT,
-  contention_time_avg FLOAT, 
+  contention_time_avg FLOAT,
   contention_time_var FLOAT
 )
 `,
@@ -1621,7 +1621,7 @@ func populateTransactionsTable(
 const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   query_id         STRING,         -- the cluster-unique ID of the query
-  txn_id           UUID,           -- the unique ID of the query's transaction 
+  txn_id           UUID,           -- the unique ID of the query's transaction
   node_id          INT NOT NULL,   -- the node on which the query is running
   session_id       STRING,         -- the ID of the session
   user_name        STRING,         -- the user running the query
@@ -5432,7 +5432,9 @@ CREATE VIEW crdb_internal.tenant_usage_details AS
     (j->>'writeBytes')::INT8 AS total_write_bytes,
     (j->>'writeRequests')::INT8 AS total_write_requests,
     (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
-    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalWriteBytes')::INT8 AS total_external_write_bytes,
+    (j->>'externalWriteRequests')::INT8 AS total_external_write_requests
   FROM
     (
       SELECT
@@ -5453,5 +5455,7 @@ CREATE VIEW crdb_internal.tenant_usage_details AS
 		{Name: "total_write_requests", Typ: types.Int},
 		{Name: "total_sql_pod_seconds", Typ: types.Float},
 		{Name: "total_pgwire_egress_bytes", Typ: types.Int},
+		{Name: "total_external_write_bytes", Typ: types.Int},
+		{Name: "total_external_write_requests", Typ: types.Int},
 	},
 }

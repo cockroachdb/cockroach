@@ -114,6 +114,8 @@ func (l *localFileStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return l.ioConf
 }
 
+func (l *localFileStorage) RequiresExternalIOAccounting() bool { return false }
+
 func (l *localFileStorage) Settings() *cluster.Settings {
 	return l.settings
 }

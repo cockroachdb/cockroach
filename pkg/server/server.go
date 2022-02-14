@@ -936,7 +936,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.nodeDialer,
 		s.cfg.TestingKnobs,
 		&fileTableInternalExecutor,
-		s.db)
+		s.db,
+		nil, /* costController */
+	)
 
 	// Filter out self from the gossip bootstrap addresses.
 	filtered := s.cfg.FilterGossipBootstrapAddresses(ctx)

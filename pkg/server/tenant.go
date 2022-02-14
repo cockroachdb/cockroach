@@ -342,7 +342,6 @@ func startTenantInternal(
 	}
 
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlInstanceProvider, s.SQLInstanceID())
-
 	if err := args.costController.Start(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
@@ -517,6 +516,7 @@ func makeTenantSQLServerArgs(
 		baseCfg.TestingKnobs,
 		circularInternalExecutor,
 		db,
+		costController,
 	)
 
 	grpcServer := newGRPCServer(rpcContext)
@@ -643,3 +643,5 @@ func (noopTenantSideCostController) OnResponse(
 	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) {
 }
+
+func (noopTenantSideCostController) OnExternalWriteResponse(ctx context.Context, req int64) {}

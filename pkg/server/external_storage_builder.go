@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -37,6 +38,7 @@ type externalStorageBuilder struct {
 	initCalled        bool
 	ie                *sql.InternalExecutor
 	db                *kv.DB
+	costController    multitenant.TenantSideExternalIOInterceptor
 }
 
 func (e *externalStorageBuilder) init(
@@ -47,6 +49,7 @@ func (e *externalStorageBuilder) init(
 	testingKnobs base.TestingKnobs,
 	ie *sql.InternalExecutor,
 	db *kv.DB,
+	cc multitenant.TenantSideExternalIOInterceptor,
 ) {
 	var blobClientFactory blobs.BlobClientFactory
 	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
@@ -58,6 +61,7 @@ func (e *externalStorageBuilder) init(
 	e.conf = conf
 	e.settings = settings
 	e.blobClientFactory = blobClientFactory
+	e.costController = cc
 	e.initCalled = true
 	e.ie = ie
 	e.db = db
@@ -70,7 +74,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db)
+		e.db, e.costController)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -79,5 +83,5 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db, e.costController)
 }

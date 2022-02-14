@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -87,12 +88,13 @@ func ExternalStorageFromURI(
 	user security.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	cc multitenant.TenantSideExternalIOInterceptor,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, cc)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -138,6 +140,7 @@ func MakeExternalStorage(
 	blobClientFactory blobs.BlobClientFactory,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	cc multitenant.TenantSideExternalIOInterceptor,
 ) (ExternalStorage, error) {
 	args := ExternalStorageContext{
 		IOConf:            conf,
@@ -150,7 +153,18 @@ func MakeExternalStorage(
 		return nil, errors.New("external network access is disabled")
 	}
 	if fn, ok := implementations[dest.Provider]; ok {
-		return fn(ctx, args, dest)
+		es, err := fn(ctx, args, dest)
+		if err != nil {
+			return nil, err
+		}
+		if cc == nil || !es.RequiresExternalIOAccounting() {
+			return es, err
+		}
+		return &accountingSink{
+			ExternalStorage: es,
+			costController:  cc,
+		}, nil
 	}
+
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }

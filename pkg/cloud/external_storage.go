@@ -51,6 +51,11 @@ type ExternalStorage interface {
 	// configured options pertaining to an ExternalStorage implementation.
 	ExternalIOConf() base.ExternalIODirConfig
 
+	// RequiresExternalIOAccounting should return true if the
+	// ExternalStorage implementation should be accounted for when
+	// calculating resource usage.
+	RequiresExternalIOAccounting() bool
+
 	// Settings should return the cluster settings used to configure the
 	// ExternalStorage implementation.
 	Settings() *cluster.Settings

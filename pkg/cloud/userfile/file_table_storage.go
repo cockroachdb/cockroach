@@ -184,6 +184,8 @@ func (f *fileTableStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return f.ioConf
 }
 
+func (n *fileTableStorage) RequiresExternalIOAccounting() bool { return false }
+
 func (f *fileTableStorage) Settings() *cluster.Settings {
 	return f.settings
 }
