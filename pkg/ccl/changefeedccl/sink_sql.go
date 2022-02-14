@@ -62,7 +62,7 @@ type sqlSink struct {
 	rowBuf  []interface{}
 	scratch bufalloc.ByteAllocator
 
-	metrics *sliMetrics
+	metrics metricsRecorder
 }
 
 // TODO(dan): Make tableName configurable or based on the job ID or
@@ -70,7 +70,10 @@ type sqlSink struct {
 const sqlSinkTableName = `sqlsink`
 
 func makeSQLSink(
-	u sinkURL, tableName string, targets []jobspb.ChangefeedTargetSpecification, m *sliMetrics,
+	u sinkURL,
+	tableName string,
+	targets []jobspb.ChangefeedTargetSpecification,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	// Swap the changefeed prefix for the sql connection one that sqlSink
 	// expects.
@@ -101,7 +104,7 @@ func makeSQLSink(
 		tableName:  tableName,
 		topicNamer: topicNamer,
 		hasher:     fnv.New32a(),
-		metrics:    m,
+		metrics:    mb(noResourceAccounting),
 	}, nil
 }
 

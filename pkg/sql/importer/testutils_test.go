@@ -269,6 +269,8 @@ func (es *generatorExternalStorage) Conf() roachpb.ExternalStorage {
 	return es.conf
 }
 
+func (es *generatorExternalStorage) RequiresExternalIOAccounting() bool { return false }
+
 func (es *generatorExternalStorage) ReadFile(
 	ctx context.Context, basename string,
 ) (ioctx.ReadCloserCtx, error) {

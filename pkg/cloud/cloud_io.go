@@ -352,7 +352,8 @@ func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src i
 	if err != nil {
 		return errors.Wrap(err, "opening object for writing")
 	}
-	if _, err := io.Copy(w, src); err != nil {
+	_, err = io.Copy(w, src)
+	if err != nil {
 		cancel()
 		return errors.CombineErrors(w.Close(), err)
 	}
