@@ -26,6 +26,7 @@ go_library(
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
