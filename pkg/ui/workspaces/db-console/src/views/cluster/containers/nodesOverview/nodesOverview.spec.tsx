@@ -29,6 +29,7 @@ import { livenessByNodeIDSelector, LivenessStatus } from "src/redux/nodes";
 import { SortSetting } from "@cockroachlabs/cluster-ui";
 
 import NodeLivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
+import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 
 describe("Nodes Overview page", () => {
   describe("Live <NodeList/> section initial state", () => {
@@ -365,6 +366,7 @@ describe("Nodes Overview page", () => {
               {
                 node_id: 2,
                 expiration: { wall_time: Long.fromNumber(Date.now()) },
+                membership: MembershipStatus.DECOMMISSIONED,
               },
               { node_id: 3 },
               { node_id: 4 },
@@ -373,6 +375,7 @@ describe("Nodes Overview page", () => {
               {
                 node_id: 7,
                 expiration: { wall_time: Long.fromNumber(Date.now()) },
+                membership: MembershipStatus.DECOMMISSIONED,
               },
             ],
             statuses: {
@@ -421,7 +424,6 @@ describe("Nodes Overview page", () => {
       it("returns node records with 'decommissioned' status only", () => {
         const expectedDecommissionedNodeIds = [2, 7];
         const records = decommissionedNodesTableDataSelector.resultFunc(
-          partitionedNodes,
           nodeSummary,
         );
 
@@ -437,12 +439,10 @@ describe("Nodes Overview page", () => {
 
       it("returns correct node name", () => {
         const recordsGroupedByRegion = decommissionedNodesTableDataSelector.resultFunc(
-          partitionedNodes,
           nodeSummary,
         );
         recordsGroupedByRegion.forEach(record => {
-          const expectedName = `127.0.0.${record.nodeId}:50945`;
-          assert.equal(record.nodeName, expectedName);
+          assert.equal(record.nodeName, record.nodeId.toString());
         });
       });
     });
