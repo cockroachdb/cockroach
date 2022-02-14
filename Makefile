@@ -408,6 +408,10 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 
 IGNORE_GOVERS :=
 
+
+ifneq ($(TC_BUILD_BRANCH),)
+is-ci := 1
+endif
 # The following section handles building our C/C++ dependencies. These are
 # common because both the root Makefile and protobuf.mk have C dependencies.
 
@@ -1024,6 +1028,8 @@ buildshort: $(COCKROACHSHORT)
 build buildoss buildshort: $(if $(is-cross-compile),,$(DOCGEN_TARGETS))
 build buildshort: $(if $(is-cross-compile),,$(SETTINGS_DOC_PAGES))
 
+build buildoss buildshort: $(if $(is-ci),,gazelle)
+
 # For historical reasons, symlink cockroach to cockroachshort.
 # TODO(benesch): see if it would break anyone's workflow to remove this.
 buildshort:
@@ -1047,6 +1053,10 @@ testbuild:
 	$(xgo) list -tags '$(TAGS)' -f \
 	'$(xgo) test -v $(GOFLAGS) $(GOMODVENDORFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
+
+.PHONY: gazelle
+gazelle:
+	bazel run :gazelle
 
 testshort: override TESTFLAGS += -short
 
