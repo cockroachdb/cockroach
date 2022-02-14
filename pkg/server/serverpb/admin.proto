@@ -476,6 +476,8 @@ message DrainResponse {
 message DecommissionStatusRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The number of decommissioning replicas to be reported.
+  int32 num_replica_report = 2;
 }
 
 // DecommissionRequest requests the server to set the membership status on
@@ -486,10 +488,18 @@ message DecommissionRequest {
   repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
                                (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
   kv.kvserver.liveness.livenesspb.MembershipStatus target_membership = 2;
+  // The number of decommissioning replicas to be reported.
+  int32 num_replica_report = 3;
 }
 
 // DecommissionStatusResponse lists decommissioning statuses for a number of NodeIDs.
 message DecommissionStatusResponse {
+  message Replica {
+    int32 replica_id = 1 [ (gogoproto.customname) = "ReplicaID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+    int32 range_id = 2 [ (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  }
   message Status {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
@@ -499,6 +509,10 @@ message DecommissionStatusResponse {
     // The membership status of the given node.
     kv.kvserver.liveness.livenesspb.MembershipStatus membership = 4;
     bool draining = 5;
+    // Decommissioning replicas on the given node to be reported.
+    // How many replicas are reported is determined by what was specified in the
+    // request.
+    repeated Replica reported_replicas = 6;
   }
   // Status of all affected nodes.
   repeated Status status = 2 [(gogoproto.nullable) = false];
