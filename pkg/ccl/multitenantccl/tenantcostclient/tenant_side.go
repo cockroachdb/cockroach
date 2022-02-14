@@ -49,6 +49,51 @@ var CPUUsageAllowance = settings.RegisterDurationSetting(
 	checkDurationInRange(0, 1000*time.Millisecond),
 )
 
+// ExternalIORUAccountingMode controls whether external ingress and
+// egress bytes are included in RU calculations.
+var ExternalIORUAccountingMode = *settings.RegisterValidatedStringSetting(
+	settings.TenantReadOnly,
+	"tenant_external_io_ru_accounting_mode",
+	"controls how external IO RU accounting behaves; allowed values are 'on' (external IO RUs are accounted for and callers wait for RUs),"+
+		"'nowait' (external IO RUs are accounted for but callers do not wait for RUs),, and 'off'."+
+		", and 'off' (no external IO RU accounting)",
+	"off",
+	func(_ *settings.Values, s string) error {
+		switch s {
+		case "on", "off", "nowait":
+			return nil
+		default:
+			return errors.Errorf("invalid value %q, expected 'on', 'off', or 'nowait'", s)
+		}
+	},
+)
+
+type externalIORUAccountingMode int64
+
+const (
+	// externalIORUAccountingOff means that all calls to the ExternalIORecorder functions are no-ops.
+	externalIORUAccountingOff externalIORUAccountingMode = iota
+	// externalIOAccountOn means that calls to the ExternalIORecorder functions work as documented.
+	externalIORUAccountingOn
+	// externalIOAccountingNoWait means that calls ExternalIORecorder functions that would typically wait
+	// for RUs do not wait for RUs.
+	externalIORUAccountingNoWait
+)
+
+func externalIORUAccountingModeFromString(s string) externalIORUAccountingMode {
+	switch s {
+	case "on":
+		return externalIORUAccountingOn
+	case "off":
+		return externalIORUAccountingOff
+	case "nowait":
+		return externalIORUAccountingNoWait
+	default:
+		// Default to off given an unknown value.
+		return externalIORUAccountingOff
+	}
+}
+
 // checkDurationInRange returns a function used to validate duration cluster
 // settings. Because these values are currently settable by the tenant, we need
 // to restrict the allowed values to avoid possible sabotage of the cost control
@@ -115,6 +160,12 @@ func newTenantSideCostController(
 	c.limiter.Init(timeSource, testInstr, c.lowRUNotifyChan)
 
 	c.costCfg = tenantcostmodel.ConfigFromSettings(&st.SV)
+	c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
+	ExternalIORUAccountingMode.SetOnChange(&st.SV, func(context.Context) {
+		c.modeMu.Lock()
+		defer c.modeMu.Unlock()
+		c.modeMu.externalIORUAccountingMode = externalIORUAccountingModeFromString(ExternalIORUAccountingMode.Get(&st.SV))
+	})
 	return c, nil
 }
 
@@ -159,6 +210,12 @@ type tenantSideCostController struct {
 	sessionID            sqlliveness.SessionID
 	externalUsageFn      multitenant.ExternalUsageFn
 	nextLiveInstanceIDFn multitenant.NextLiveInstanceIDFn
+
+	modeMu struct {
+		syncutil.RWMutex
+
+		externalIORUAccountingMode externalIORUAccountingMode
+	}
 
 	mu struct {
 		syncutil.Mutex
@@ -344,7 +401,6 @@ func (c *tenantSideCostController) shouldReportConsumption() bool {
 func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 	deltaConsumption := c.run.consumption
 	deltaConsumption.Sub(&c.run.lastReportedConsumption)
-
 	var requested float64
 
 	if !c.run.initialRequestCompleted {
@@ -616,4 +672,86 @@ func (c *tenantSideCostController) OnResponse(
 		c.mu.consumption.ReadBytes += uint64(readBytes)
 		c.mu.consumption.RU += float64(c.costCfg.KVReadCost(readBytes))
 	}
+}
+
+func (c *tenantSideCostController) shouldWaitForExternalIORUs() bool {
+	c.modeMu.RLock()
+	defer c.modeMu.RUnlock()
+	return c.modeMu.externalIORUAccountingMode == externalIORUAccountingOn
+}
+
+func (c *tenantSideCostController) shouldAccountForExternalIORUs() bool {
+	c.modeMu.RLock()
+	defer c.modeMu.RUnlock()
+	return c.modeMu.externalIORUAccountingMode != externalIORUAccountingOff
+}
+
+// ExternalIOWriteWait is part of the multitenant.TenantSideExternalIORecorder interface.
+func (c *tenantSideCostController) ExternalIOWriteWait(ctx context.Context, bytes int64) error {
+	if !c.shouldWaitForExternalIORUs() {
+		return nil
+	}
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return nil
+	}
+	ru := c.costCfg.ExternalWriteCost(bytes)
+	return c.limiter.Wait(ctx, ru)
+}
+
+// ExternalIOWriteScucess is part of the multitenant.TenantSideExternalIORecorder interface.
+func (c *tenantSideCostController) ExternalIOWriteSuccess(ctx context.Context, bytes int64) {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return
+	}
+
+	c.mu.Lock()
+	c.mu.consumption.ExternalIOEgressBytes += uint64(bytes)
+	if c.shouldAccountForExternalIORUs() {
+		c.mu.consumption.RU += float64(c.costCfg.ExternalWriteCost(bytes))
+	}
+	c.mu.Unlock()
+}
+
+// ExternalIOWriteFailure is part of the multitenant.TenantSideExternalIORecorder interface.
+//
+// The given byte count should be the number of bytes that were never
+// actually written.
+func (c *tenantSideCostController) ExternalIOWriteFailure(
+	ctx context.Context, used int64, unused int64,
+) {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return
+	}
+	if c.shouldWaitForExternalIORUs() {
+		c.limiter.AddTokens(c.timeSource.Now(), c.costCfg.ExternalWriteCost(unused))
+	}
+
+	// Record the used bytes as successfully consumed.
+	c.mu.Lock()
+	c.mu.consumption.ExternalIOEgressBytes += uint64(used)
+	if c.shouldAccountForExternalIORUs() {
+		c.mu.consumption.RU += float64(c.costCfg.ExternalWriteCost(used))
+	}
+	c.mu.Unlock()
+}
+
+// ExternalIOReadWait is part of the multitenant.TenantSideExternalIORecorder interface. We wait
+// after adding the RUs since these reads already happened.
+func (c *tenantSideCostController) ExternalIOReadWait(ctx context.Context, bytes int64) error {
+	if multitenant.HasTenantCostControlExemption(ctx) {
+		return nil
+	}
+	ru := c.costCfg.ExternalReadCost(bytes)
+	c.mu.Lock()
+	c.mu.consumption.ExternalIOIngressBytes += uint64(bytes)
+	if c.shouldAccountForExternalIORUs() {
+		c.mu.consumption.RU += float64(ru)
+	}
+	c.mu.Unlock()
+
+	if c.shouldWaitForExternalIORUs() {
+		return c.limiter.Wait(ctx, ru)
+	}
+	return nil
+
 }

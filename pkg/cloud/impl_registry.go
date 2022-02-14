@@ -13,6 +13,7 @@ package cloud
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -87,12 +89,13 @@ func ExternalStorageFromURI(
 	user security.SQLUsername,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	conf, err := ExternalStorageConfFromURI(uri, user)
 	if err != nil {
 		return nil, err
 	}
-	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB)
+	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory, ie, kvDB, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -138,6 +141,7 @@ func MakeExternalStorage(
 	blobClientFactory blobs.BlobClientFactory,
 	ie sqlutil.InternalExecutor,
 	kvDB *kv.DB,
+	opts ...ExternalStorageOption,
 ) (ExternalStorage, error) {
 	args := ExternalStorageContext{
 		IOConf:            conf,
@@ -149,8 +153,66 @@ func MakeExternalStorage(
 	if conf.DisableOutbound && dest.Provider != roachpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")
 	}
-	if fn, ok := implementations[dest.Provider]; ok {
-		return fn(ctx, args, dest)
+	for _, o := range opts {
+		o(&args)
 	}
+	if fn, ok := implementations[dest.Provider]; ok {
+		es, err := fn(ctx, args, dest)
+		if err != nil {
+			return nil, err
+		}
+		if args.rwInterceptor != nil {
+			return &rwInterceptingStorage{
+				ExternalStorage: es,
+				rwInterceptor:   args.rwInterceptor,
+			}, nil
+		}
+		return es, nil
+	}
+
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
+}
+
+// A ReadWriterInterceptor providers methods that construct Readers and Writers from given Readers
+// and Writers.
+type ReadWriterInterceptor interface {
+	Reader(context.Context, ExternalStorage, ioctx.ReadCloserCtx) ioctx.ReadCloserCtx
+	Writer(context.Context, ExternalStorage, io.WriteCloser) io.WriteCloser
+}
+
+// rwInterceptingStorage is an ExternalStorage implementation that wraps an ExternalStorage,
+// installing the ReadWriteInterceptor into any returned Reader or Writer.
+type rwInterceptingStorage struct {
+	ExternalStorage
+	rwInterceptor ReadWriterInterceptor
+}
+
+func (r *rwInterceptingStorage) Writer(
+	ctx context.Context, basename string,
+) (io.WriteCloser, error) {
+	inner, err := r.ExternalStorage.Writer(ctx, basename)
+	if err != nil {
+		return nil, err
+	}
+	return r.rwInterceptor.Writer(ctx, r.ExternalStorage, inner), nil
+}
+
+func (r *rwInterceptingStorage) ReadFile(
+	ctx context.Context, basename string,
+) (ioctx.ReadCloserCtx, error) {
+	inner, err := r.ExternalStorage.ReadFile(ctx, basename)
+	if err != nil {
+		return nil, err
+	}
+	return r.rwInterceptor.Reader(ctx, r.ExternalStorage, inner), nil
+}
+
+func (r *rwInterceptingStorage) ReadFileAt(
+	ctx context.Context, basename string, offset int64,
+) (ioctx.ReadCloserCtx, int64, error) {
+	inner, sz, err := r.ExternalStorage.ReadFileAt(ctx, basename, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	return r.rwInterceptor.Reader(ctx, r.ExternalStorage, inner), sz, nil
 }
