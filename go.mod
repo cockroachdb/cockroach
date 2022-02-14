@@ -34,15 +34,14 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go v0.0.0-20200504194139-73ffeee90b62
 	github.com/cockroachdb/crlfmt v0.0.0-20210128092314-b3eff0b87c79
-	github.com/cockroachdb/datadriven v1.0.1-0.20201212195501-e89bf9ee1861
-	github.com/cockroachdb/errors v1.8.4
+	github.com/cockroachdb/datadriven v1.0.1-0.20220214170620-9913f5bc19b7
+	github.com/cockroachdb/errors v1.8.9
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
-	github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
+	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
 	github.com/cockroachdb/pebble v0.0.0-20220202153938-74c112a0ac85
-	github.com/cockroachdb/redact v1.0.9
+	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
-	github.com/cockroachdb/sentry-go v0.6.1-cockroachdb.2
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a
 	github.com/cockroachdb/ttycolor v0.0.0-20180709150743-a1d5aaeb377d
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
@@ -58,6 +57,7 @@ require (
 	github.com/elazarl/go-bindata-assetfs v1.0.0
 	github.com/emicklei/dot v0.15.0
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
+	github.com/getsentry/sentry-go v0.12.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ole/go-ole v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
@@ -96,7 +96,7 @@ require (
 	github.com/klauspost/compress v1.11.9 // indirect
 	github.com/knz/go-libedit v1.10.1
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
-	github.com/kr/pretty v0.2.1
+	github.com/kr/pretty v0.3.0
 	github.com/kr/text v0.2.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lib/pq v1.8.0
@@ -108,7 +108,7 @@ require (
 	github.com/lusis/slack-test v0.0.0-20190426140909-c40012f20018 // indirect
 	github.com/maruel/panicparse v1.1.2-0.20180806203336-f20d4c4d746f
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
-	github.com/mattn/go-isatty v0.0.12
+	github.com/mattn/go-isatty v0.0.14
 	github.com/mattn/goveralls v0.0.2
 	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
@@ -138,27 +138,27 @@ require (
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/twpayne/go-geom v1.3.7-0.20210228220813-9d9885b50d3e
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c
 	github.com/zabawaba99/go-gitignore v0.0.0-20200117185801-39e6bddfb292
 	go.etcd.io/etcd/raft/v3 v3.0.0-20210320072418-e51c697ec6e8
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
+	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/exp v0.0.0-20210212053707-62dc52270d37
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616
+	golang.org/x/net v0.0.0-20211008194852-3b03d305991f
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/perf v0.0.0-20180704124530-6e6d33e29852
-	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
-	golang.org/x/sys v0.0.0-20210217105451-b926d437f341
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
 	golang.org/x/text v0.3.7
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	golang.org/x/tools v0.1.0
+	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324
+	golang.org/x/tools v0.1.3
 	google.golang.org/api v0.30.0
-	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987
-	google.golang.org/grpc v1.31.0
+	google.golang.org/genproto v0.0.0-20210624195500-8bfb893ecb84
+	google.golang.org/grpc v1.38.0
 	google.golang.org/grpc/examples v0.0.0-20210324172016-702608ffae4d // indirect
 	google.golang.org/protobuf v1.26.0
 	gopkg.in/yaml.v2 v2.4.0
