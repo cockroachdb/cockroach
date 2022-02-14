@@ -48,7 +48,8 @@ func runNetworkSanity(ctx context.Context, t test.Test, origC cluster.Cluster, n
 
 	db := c.Conn(ctx, t.L(), 1) // unaffected by toxiproxy
 	defer db.Close()
-	WaitFor3XReplication(t, db)
+	err = WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	// NB: we're generous with latency in this test because we're checking that
 	// the upstream connections aren't affected by latency below, but the fixed
@@ -173,7 +174,8 @@ func runNetworkAuthentication(ctx context.Context, t test.Test, c cluster.Cluste
 	defer db.Close()
 
 	// Wait for up-replication. This will also print a progress message.
-	WaitFor3XReplication(t, db)
+	err = WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	t.L().Printf("creating test user...")
 	_, err = db.Exec(`CREATE USER testuser WITH PASSWORD 'password' VALID UNTIL '2060-01-01'`)
@@ -382,7 +384,8 @@ func runNetworkTPCC(ctx context.Context, t test.Test, origC cluster.Cluster, nod
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
-	WaitFor3XReplication(t, db)
+	err = WaitFor3XReplication(ctx, t, db)
+	require.NoError(t, err)
 
 	duration := time.Hour
 	if c.IsLocal() {

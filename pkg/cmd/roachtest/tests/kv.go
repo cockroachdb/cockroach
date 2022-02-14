@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 const envKVFlags = "ROACHTEST_KV_FLAGS"
@@ -371,13 +372,14 @@ func registerKVQuiescenceDead(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			WaitFor3XReplication(t, db)
+			err := WaitFor3XReplication(ctx, t, db)
+			require.NoError(t, err)
 
 			qps := func(f func()) float64 {
 
 				numInserts := func() float64 {
 					var v float64
-					if err := db.QueryRowContext(
+					if err = db.QueryRowContext(
 						ctx, `SELECT value FROM crdb_internal.node_metrics WHERE name = 'sql.insert.count'`,
 					).Scan(&v); err != nil {
 						t.Fatal(err)
@@ -446,7 +448,8 @@ func registerKVGracefulDraining(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			WaitFor3XReplication(t, db)
+			err := WaitFor3XReplication(ctx, t, db)
+			require.NoError(t, err)
 
 			t.Status("initializing workload")
 
@@ -753,13 +756,14 @@ func registerKVRangeLookups(r registry.Registry) {
 				conns[i].Close()
 			}
 		}()
-		WaitFor3XReplication(t, conns[0])
+		err := WaitFor3XReplication(ctx, t, conns[0])
+		require.NoError(t, err)
 
 		m := c.NewMonitor(ctx, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			defer close(doneWorkload)
 			cmd := "./workload init kv --splits=1000 {pgurl:1}"
-			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
 				return err
 			}
 			close(doneInit)
@@ -772,7 +776,7 @@ func registerKVRangeLookups(r registry.Registry) {
 				concurrency+duration+readPercent+
 				" {pgurl:1-%d}", nodes)
 			start := timeutil.Now()
-			if err := c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
+			if err = c.RunE(ctx, c.Node(nodes+1), cmd); err != nil {
 				return err
 			}
 			end := timeutil.Now()

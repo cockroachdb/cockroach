@@ -12,7 +12,6 @@ package tests
 
 import (
 	"context"
-	gosql "database/sql"
 	"fmt"
 	"regexp"
 	"time"
@@ -66,26 +65,6 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		t.L().Printf("run: %s\n", stmt)
 	}
 
-	waitForReplication := func(db *gosql.DB) {
-		t.Status("waiting for initial up-replication")
-		for {
-			fullReplicated := false
-
-			err = db.QueryRow(
-				// Check if all ranges are fully replicated.
-				"SELECT min(array_length(replicas, 1)) >= $1 FROM crdb_internal.ranges",
-				replicationFactor,
-			).Scan(&fullReplicated)
-			require.NoError(t, err)
-
-			if fullReplicated {
-				break
-			}
-
-			time.Sleep(time.Second)
-		}
-	}
-
 	{
 		db := c.Conn(ctx, t.L(), pinnedNodeID)
 		defer db.Close()
@@ -95,7 +74,8 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 		run(fmt.Sprintf(`ALTER DATABASE system CONFIGURE ZONE USING num_replicas=%d`, replicationFactor))
 
 		// Wait for initial up-replication.
-		waitForReplication(db)
+		err = WaitForReplication(ctx, t, db, replicationFactor)
+		require.NoError(t, err)
 	}
 
 	// Drain the last 5 nodes from the cluster, resulting in immovable leases on
