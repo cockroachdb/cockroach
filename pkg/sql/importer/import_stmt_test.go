@@ -2412,7 +2412,8 @@ func TestImportCSVStmt(t *testing.T) {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
+		_, err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data))
+		require.NoError(t, err)
 
 		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, id2 INT)`)
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO foo CSV DATA ('%s')", userfileURI))
@@ -2428,7 +2429,8 @@ func TestImportCSVStmt(t *testing.T) {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
+		_, err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data))
+		require.NoError(t, err)
 
 		sqlDB.Exec(t, `CREATE TABLE baz (id INT PRIMARY KEY, id2 INT)`)
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO baz CSV DATA ('%s')", userfileURI))
@@ -2551,7 +2553,8 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
 			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, security.TestUserName(), ie, tc.Server(0).DB())
 		require.NoError(t, err)
-		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
+		_, err = cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data)))
+		require.NoError(t, err)
 	}
 
 	t.Run("import-RBAC", func(t *testing.T) {
@@ -3560,7 +3563,8 @@ func TestImportIntoCSV(t *testing.T) {
 		require.NoError(t, err)
 
 		data := []byte("1,2")
-		require.NoError(t, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data)))
+		_, err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(data))
+		require.NoError(t, err)
 
 		sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, id2 INT)")
 		sqlDB.Exec(t, fmt.Sprintf("IMPORT INTO foo (id, id2) CSV DATA ('%s')", userfileURI))
@@ -3627,7 +3631,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 		require.NoError(b, err)
 		content, err := ioctx.ReadAll(ctx, r)
 		require.NoError(b, err)
-		err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content))
+		_, err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content))
 		require.NoError(b, err)
 		numBytes = int64(len(content))
 	} else {

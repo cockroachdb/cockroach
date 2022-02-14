@@ -1270,6 +1270,9 @@ type ExecutorConfig struct {
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+
+	// ExternalIORecorder is used to record external IO when wrunning as a tenant.
+	ExternalIORecorder multitenant.TenantSideExternalIORecorder
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us

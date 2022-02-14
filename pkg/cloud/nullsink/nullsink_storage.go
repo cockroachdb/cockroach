@@ -57,6 +57,8 @@ func (n *nullSinkStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return base.ExternalIODirConfig{}
 }
 
+func (n *nullSinkStorage) RequiresExternalIOAccounting() bool { return false }
+
 func (n *nullSinkStorage) Settings() *cluster.Settings {
 	return nil
 }

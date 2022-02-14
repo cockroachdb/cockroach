@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -570,7 +571,8 @@ func runBackupProcessor(
 			settings: &flowCtx.Cfg.Settings.SV,
 		}
 
-		storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
+		storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest,
+			cloud.WithReadWriterInterceptor(multitenant.NewReadWriteAccounter(flowCtx.Cfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)))
 		if err != nil {
 			return err
 		}

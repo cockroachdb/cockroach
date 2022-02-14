@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -336,7 +337,8 @@ func (rd *restoreDataProcessor) openSSTs(
 	for _, file := range entry.Files {
 		log.VEventf(ctx, 2, "import file %s which starts at %s", file.Path, entry.Span.Key)
 
-		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir)
+		dir, err := rd.flowCtx.Cfg.ExternalStorage(ctx, file.Dir,
+			cloud.WithReadWriterInterceptor(multitenant.NewReadWriteAccounter(rd.flowCtx.Cfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)))
 		if err != nil {
 			return err
 		}
