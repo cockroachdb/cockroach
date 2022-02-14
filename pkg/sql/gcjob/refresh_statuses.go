@@ -15,6 +15,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -98,8 +99,8 @@ func updateStatusForGCElements(
 		if err != nil {
 			return err
 		}
-
-		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, uint32(tableID))
+		v := execCfg.Settings.Version.ActiveVersionOrEmpty(ctx)
+		zoneCfg, err := cfg.GetZoneConfigForObject(execCfg.Codec, v, config.ObjectID(tableID))
 		if err != nil {
 			log.Errorf(ctx, "zone config for desc: %d, err = %+v", tableID, err)
 			return nil
@@ -339,7 +340,8 @@ func refreshTenant(
 	tenID := details.Tenant.ID
 	cfg := execCfg.SystemConfig.GetSystemConfig()
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
-	zoneCfg, err := cfg.GetZoneConfigForObject(keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)), 0)
+	v := execCfg.Settings.Version.ActiveVersionOrEmpty(ctx)
+	zoneCfg, err := cfg.GetZoneConfigForObject(keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)), v, 0)
 	if err == nil {
 		tenantTTLSeconds = zoneCfg.GC.TTLSeconds
 	} else {

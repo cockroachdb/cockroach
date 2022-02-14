@@ -22,11 +22,53 @@ configs version=current offset=43
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
 
-diff offset=50
+diff offset=0
 ----
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
-...
+@@ -1,7 +1,7 @@
+-/Min                                       ttl_seconds=3600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+-/System/NodeLiveness                       ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+-/System/NodeLivenessMax                    database system (host)
+-/System/tsd                                database system (tenant)
+-/System/"tse"                              database system (host)
++/Min                                       ttl_seconds=3600 num_replicas=5
++/System/NodeLiveness                       ttl_seconds=600 num_replicas=5
++/System/NodeLivenessMax                    range system
++/System/tsd                                range default
++/System/"tse"                              range system
+ /Table/SystemConfigSpan/Start              database system (host)
+ /Table/11                                  database system (host)
+@@ -10,11 +10,11 @@
+ /Table/14                                  database system (host)
+ /Table/15                                  database system (host)
+-/Table/16                                  database system (host)
+-/Table/17                                  database system (host)
+-/Table/18                                  database system (host)
++/Table/16                                  range system
++/Table/17                                  range system
++/Table/18                                  range system
+ /Table/19                                  database system (host)
+ /Table/20                                  database system (host)
+ /Table/21                                  database system (host)
+-/Table/22                                  database system (host)
++/Table/22                                  range system
+ /Table/23                                  database system (host)
+ /Table/24                                  database system (host)
+@@ -23,5 +23,5 @@
+ /Table/27                                  ttl_seconds=600 ignore_strict_gc=true num_replicas=5 rangefeed_enabled=true
+ /Table/28                                  database system (host)
+-/Table/29                                  database system (host)
++/Table/29                                  range system
+ /NamespaceTable/30                         database system (host)
+ /NamespaceTable/Max                        database system (host)
+@@ -32,5 +32,5 @@
+ /Table/36                                  database system (host)
+ /Table/37                                  database system (host)
+-/Table/38                                  database system (host)
++/Table/38                                  range system
+ /Table/39                                  database system (host)
+ /Table/40                                  database system (host)
 
 reconcile tenant=11
 ----
@@ -47,7 +89,7 @@ configs version=current offset=43 limit=5
 configs version=legacy offset=43
 ----
 ...
-/Table/50                                  range system
+/Table/50                                  database system (host)
 /Tenant/10                                 database system (tenant)
 /Tenant/11                                 database system (tenant)
 
@@ -56,16 +98,16 @@ diff offset=48 limit=10
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
-+/Tenant/11/Table/4                         database system (tenant)
-+/Tenant/11/Table/5                         database system (tenant)
 +/Tenant/11/Table/6                         database system (tenant)
 +/Tenant/11/Table/7                         database system (tenant)
 +/Tenant/11/Table/11                        database system (tenant)
 +/Tenant/11/Table/12                        database system (tenant)
 +/Tenant/11/Table/13                        database system (tenant)
 +/Tenant/11/Table/14                        database system (tenant)
++/Tenant/11/Table/15                        database system (tenant)
++/Tenant/11/Table/19                        database system (tenant)
++/Tenant/11/Table/20                        database system (tenant)
++/Tenant/11/Table/21                        database system (tenant)
  ...
 
 # Sanity check that new tenant tables show up correctly.
@@ -82,10 +124,6 @@ diff offset=48
 --- gossiped system config span (legacy)
 +++ span config infrastructure (current)
 ...
- /Tenant/10                                 database system (tenant)
- /Tenant/11                                 database system (tenant)
-+/Tenant/11/Table/4                         database system (tenant)
-+/Tenant/11/Table/5                         database system (tenant)
 +/Tenant/11/Table/6                         database system (tenant)
 +/Tenant/11/Table/7                         database system (tenant)
 +/Tenant/11/Table/11                        database system (tenant)

@@ -185,14 +185,14 @@ func completeZoneConfig(
 // an object ID. It does not make any external KV calls to look up additional
 // state.
 func zoneConfigHook(
-	cfg *config.SystemConfig, id config.SystemTenantObjectID,
+	cfg *config.SystemConfig, codec keys.SQLCodec, id config.ObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
 		return cfg.GetValue(key), nil
 	}
 	const mayBeTable = true
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		keys.SystemSQLCodec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable)
+		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {

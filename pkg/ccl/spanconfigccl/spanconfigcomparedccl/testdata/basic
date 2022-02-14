@@ -57,9 +57,9 @@ configs version=legacy offset=41
 ...
 /Table/46                                  database system (host)
 /Table/47                                  database system (host)
-/Table/50                                  range system
-/Table/106                                 num_replicas=7 num_voters=5
-/Table/107                                 num_replicas=7
+/Table/50                                  database system (host)
+/Table/106                                 ignore_strict_gc=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+/Table/107                                 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
 
 # Both subsystems differ slightly with respect to exposed configs ("range
 # system" vs. "database system" as described earlier). This only applies to
@@ -112,12 +112,12 @@ diff
 +/Table/38                                  range system
  /Table/39                                  database system (host)
  /Table/40                                  database system (host)
-@@ -42,5 +42,5 @@
- /Table/46                                  database system (host)
+@@ -43,5 +43,5 @@
  /Table/47                                  database system (host)
--/Table/50                                  range system
-+/Table/50                                  database system (host)
- /Table/106                                 num_replicas=7 num_voters=5
- /Table/107                                 num_replicas=7
+ /Table/50                                  database system (host)
+-/Table/106                                 ignore_strict_gc=true num_replicas=7 num_voters=5 rangefeed_enabled=true
+-/Table/107                                 ignore_strict_gc=true num_replicas=7 rangefeed_enabled=true
++/Table/106                                 num_replicas=7 num_voters=5
++/Table/107                                 num_replicas=7
 
 # vim:ft=diff

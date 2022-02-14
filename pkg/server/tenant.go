@@ -472,8 +472,9 @@ func makeTenantSQLServerArgs(
 		return sqlServerArgs{}, err
 	}
 
-	systemConfigWatcher := systemconfigwatcher.New(
+	systemConfigWatcher := systemconfigwatcher.NewWithAdditionalProvider(
 		keys.MakeSQLCodec(sqlCfg.TenantID), clock, rangeFeedFactory, &baseCfg.DefaultZoneConfig,
+		tenantConnect,
 	)
 
 	circularInternalExecutor := &sql.InternalExecutor{}
