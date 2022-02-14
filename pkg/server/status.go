@@ -2550,7 +2550,6 @@ func (s *statusServer) CancelQueryByKey(
 	ctx context.Context, req *serverpb.CancelQueryByKeyRequest,
 ) (resp *serverpb.CancelQueryByKeyResponse, retErr error) {
 	local := req.SQLInstanceID == s.sqlServer.SQLInstanceID()
-	resp = &serverpb.CancelQueryByKeyResponse{}
 
 	// Acquiring the semaphore here helps protect both the source and destination
 	// nodes. The source node is protected against an attacker causing too much
@@ -2571,13 +2570,14 @@ func (s *statusServer) CancelQueryByKey(
 		// If we acquired the semaphore but the cancellation request failed, then
 		// hold on to the semaphore for longer. This helps mitigate a DoS attack
 		// of random cancellation requests.
-		if !resp.Canceled {
+		if err != nil || (resp != nil && !resp.Canceled) {
 			time.Sleep(1 * time.Second)
 		}
 		alloc.Release()
 	}()
 
 	if local {
+		resp = &serverpb.CancelQueryByKeyResponse{}
 		resp.Canceled, err = s.sessionRegistry.CancelQueryByKey(req.CancelQueryKey)
 		if err != nil {
 			resp.Error = err.Error()
