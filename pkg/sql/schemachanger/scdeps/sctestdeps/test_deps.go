@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -34,13 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -55,6 +55,11 @@ func (s *TestState) AuthorizationAccessor() scbuild.AuthorizationAccessor {
 // CatalogReader implements the scbuild.Dependencies interface.
 func (s *TestState) CatalogReader() scbuild.CatalogReader {
 	return s
+}
+
+// ClusterID implements the scbuild.Dependencies interface.
+func (s *TestState) ClusterID() uuid.UUID {
+	return uuid.Nil
 }
 
 // Codec implements the scbuild.Dependencies interface.
@@ -94,6 +99,27 @@ func (s *TestState) HasAdminRole(ctx context.Context) (bool, error) {
 // HasOwnership implements the scbuild.AuthorizationAccessor interface.
 func (s *TestState) HasOwnership(ctx context.Context, descriptor catalog.Descriptor) (bool, error) {
 	return true, nil
+}
+
+// IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
+func (s *TestState) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
+	if ccl := scdeps.CreatePartitioningCCL; ccl != nil {
+		return ccl
+	}
+	return func(
+		ctx context.Context,
+		st *cluster.Settings,
+		evalCtx *tree.EvalContext,
+		columnLookupFn func(tree.Name) (catalog.Column, error),
+		oldNumImplicitColumns int,
+		oldKeyColumnNames []string,
+		partBy *tree.PartitionBy,
+		allowedNewColumnNames []tree.Name,
+		allowImplicitPartitioning bool,
+	) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
+		newPartitioning.NumColumns = uint32(len(partBy.Fields))
+		return nil, newPartitioning, nil
+	}
 }
 
 var _ scbuild.CatalogReader = (*TestState)(nil)
@@ -644,28 +670,6 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	ve := b.s.catalog.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
 	return ve.CombinedError()
 }
-
-// Partitioner implements the scexec.Dependencies interface.
-func (s *TestState) Partitioner() scmutationexec.Partitioner {
-	return s
-}
-
-// AddPartitioning implements the scmutationexec.Partitioner interface.
-func (s *TestState) AddPartitioning(
-	_ context.Context,
-	tbl *tabledesc.Mutable,
-	index catalog.Index,
-	_ []string,
-	_ []*scpb.ListPartition,
-	_ []*scpb.RangePartitions,
-	_ []tree.Name,
-	_ bool,
-) error {
-	s.LogSideEffectf("skip partitioning index #%d in table #%d", index.GetID(), tbl.GetID())
-	return nil
-}
-
-var _ scmutationexec.Partitioner = (*TestState)(nil)
 
 // IndexSpanSplitter implements the scexec.Dependencies interface.
 func (s *TestState) IndexSpanSplitter() scexec.IndexSpanSplitter {

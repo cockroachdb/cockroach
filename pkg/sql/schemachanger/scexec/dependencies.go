@@ -30,7 +30,6 @@ import (
 // Dependencies contains all the dependencies required by the executor.
 type Dependencies interface {
 	Catalog() Catalog
-	Partitioner() scmutationexec.Partitioner
 	Clock() scmutationexec.Clock
 	TransactionalJobRegistry() TransactionalJobRegistry
 	IndexBackfiller() Backfiller

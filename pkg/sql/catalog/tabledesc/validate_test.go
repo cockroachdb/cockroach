@@ -1016,7 +1016,7 @@ func TestValidateTableDesc(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					ID: 1, Name: "primary", KeyColumnIDs: []descpb.ColumnID{1}, KeyColumnNames: []string{"bar"},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
 					},
 					EncodingType: descpb.PrimaryIndexEncoding,
@@ -2273,7 +2273,7 @@ func TestValidatePartitioning(t *testing.T) {
 		{"at least one of LIST or RANGE partitioning must be used",
 			descpb.TableDescriptor{
 				PrimaryIndex: descpb.IndexDescriptor{
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
 					},
 				},
@@ -2282,9 +2282,9 @@ func TestValidatePartitioning(t *testing.T) {
 		{"PARTITION p1: must contain values",
 			descpb.TableDescriptor{
 				PrimaryIndex: descpb.IndexDescriptor{
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List:       []descpb.PartitioningDescriptor_List{{Name: "p1"}},
+						List:       []catpb.PartitioningDescriptor_List{{Name: "p1"}},
 					},
 				},
 			},
@@ -2292,9 +2292,9 @@ func TestValidatePartitioning(t *testing.T) {
 		{"not enough columns in index for this partitioning",
 			descpb.TableDescriptor{
 				PrimaryIndex: descpb.IndexDescriptor{
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List:       []descpb.PartitioningDescriptor_List{{Name: "p1", Values: [][]byte{{}}}},
+						List:       []catpb.PartitioningDescriptor_List{{Name: "p1", Values: [][]byte{{}}}},
 					},
 				},
 			},
@@ -2304,10 +2304,10 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List:       []descpb.PartitioningDescriptor_List{{}},
-						Range:      []descpb.PartitioningDescriptor_Range{{}},
+						List:       []catpb.PartitioningDescriptor_List{{}},
+						Range:      []catpb.PartitioningDescriptor_Range{{}},
 					},
 				},
 			},
@@ -2318,9 +2318,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List:       []descpb.PartitioningDescriptor_List{{}},
+						List:       []catpb.PartitioningDescriptor_List{{}},
 					},
 				},
 			},
@@ -2331,9 +2331,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List:       []descpb.PartitioningDescriptor_List{{Name: "p1"}},
+						List:       []catpb.PartitioningDescriptor_List{{Name: "p1"}},
 					},
 				},
 			},
@@ -2344,9 +2344,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{{
+						List: []catpb.PartitioningDescriptor_List{{
 							Name: "p1", Values: [][]byte{{}},
 						}},
 					},
@@ -2359,9 +2359,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{
+						List: []catpb.PartitioningDescriptor_List{
 							{Name: "p1", Values: [][]byte{{0x03}}},
 						},
 					},
@@ -2374,9 +2374,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{
+						List: []catpb.PartitioningDescriptor_List{
 							{Name: "p1", Values: [][]byte{{0x03, 0x02, 0x00}}},
 						},
 					},
@@ -2389,9 +2389,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1, 1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						Range: []descpb.PartitioningDescriptor_Range{
+						Range: []catpb.PartitioningDescriptor_Range{
 							{Name: "p1", FromInclusive: []byte{0x03, 0x02}, ToExclusive: []byte{0x03, 0x04}},
 							{Name: "p2", FromInclusive: []byte{0x03, 0x02}, ToExclusive: []byte{0x03, 0x04}},
 						},
@@ -2405,9 +2405,9 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{
+						List: []catpb.PartitioningDescriptor_List{
 							{Name: "p1", Values: [][]byte{{0x03, 0x02}}},
 							{Name: "p1", Values: [][]byte{{0x03, 0x04}}},
 						},
@@ -2421,14 +2421,14 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{{
+						List: []catpb.PartitioningDescriptor_List{{
 							Name:   "p1",
 							Values: [][]byte{{0x03, 0x02}},
-							Subpartitioning: descpb.PartitioningDescriptor{
+							Subpartitioning: catpb.PartitioningDescriptor{
 								NumColumns: 1,
-								List:       []descpb.PartitioningDescriptor_List{{Name: "p1_1", Values: [][]byte{{}}}},
+								List:       []catpb.PartitioningDescriptor_List{{Name: "p1_1", Values: [][]byte{{}}}},
 							},
 						}},
 					},
@@ -2441,16 +2441,16 @@ func TestValidatePartitioning(t *testing.T) {
 				PrimaryIndex: descpb.IndexDescriptor{
 					KeyColumnIDs:        []descpb.ColumnID{1, 1},
 					KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-					Partitioning: descpb.PartitioningDescriptor{
+					Partitioning: catpb.PartitioningDescriptor{
 						NumColumns: 1,
-						List: []descpb.PartitioningDescriptor_List{
+						List: []catpb.PartitioningDescriptor_List{
 							{Name: "p1", Values: [][]byte{{0x03, 0x02}}},
 							{
 								Name:   "p2",
 								Values: [][]byte{{0x03, 0x04}},
-								Subpartitioning: descpb.PartitioningDescriptor{
+								Subpartitioning: catpb.PartitioningDescriptor{
 									NumColumns: 1,
-									List: []descpb.PartitioningDescriptor_List{
+									List: []catpb.PartitioningDescriptor_List{
 										{Name: "p1", Values: [][]byte{{0x03, 0x02}}},
 									},
 								},

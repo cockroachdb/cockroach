@@ -220,55 +220,6 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IndexID: secondaryIndex.IndexID,
 		Name:    string(n.Name),
 	}
-	// Convert partitioning information for the execution
-	// side of things.
-	if n.PartitionByIndex.ContainsPartitions() {
-		listPartitions := make([]*scpb.ListPartition, 0, len(n.PartitionByIndex.List))
-		for _, partition := range n.PartitionByIndex.List {
-			exprs := make([]string, 0, len(partition.Exprs))
-			for _, expr := range partition.Exprs {
-				exprs = append(exprs, expr.String())
-			}
-			listPartition := &scpb.ListPartition{
-				Name: partition.Name.String(),
-				Expr: exprs,
-			}
-			listPartitions = append(listPartitions, listPartition)
-		}
-		rangePartitions := make([]*scpb.RangePartitions, 0, len(n.PartitionByIndex.Range))
-		for _, partition := range n.PartitionByIndex.Range {
-			toExpr := make([]string, 0, len(partition.To))
-			for _, expr := range partition.To {
-				fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-				fmtCtx.FormatNode(expr)
-				toExpr = append(toExpr, fmtCtx.String())
-			}
-			fromExpr := make([]string, 0, len(partition.From))
-			for _, expr := range partition.From {
-				fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-				fmtCtx.FormatNode(expr)
-				fromExpr = append(fromExpr, fmtCtx.String())
-			}
-			rangePartition := &scpb.RangePartitions{
-				Name: partition.Name.String(),
-				To:   toExpr,
-				From: fromExpr,
-			}
-			rangePartitions = append(rangePartitions, rangePartition)
-		}
-		fields := make([]string, 0, len(n.PartitionByIndex.Fields))
-		for _, field := range n.PartitionByIndex.Fields {
-			fields = append(fields, field.String())
-		}
-		partitioning := &scpb.Partitioning{
-			TableID:         rel.GetID(),
-			IndexID:         secondaryIndex.IndexID,
-			Fields:          fields,
-			ListPartitions:  listPartitions,
-			RangePartitions: rangePartitions,
-		}
-		b.EnqueueAdd(partitioning)
-	}
 
 	// KeySuffixColumnIDs is only populated for indexes using the secondary
 	// index encoding. It is the set difference of the primary key minus the
@@ -281,8 +232,39 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 			colIDs.Add(primaryColID)
 		}
 	}
+
+	// Handle partitioning.
+	if n.PartitionByIndex.ContainsPartitions() {
+		addPartitioning(b, n.PartitionByIndex.PartitionBy, rel, secondaryIndex)
+	}
+
 	b.EnqueueAdd(secondaryIndex)
 	b.EnqueueAdd(secondaryIndexName)
+}
+
+func addPartitioning(
+	b BuildCtx, partBy *tree.PartitionBy, rel catalog.TableDescriptor, idx *scpb.SecondaryIndex,
+) {
+	oldKeyColumnNames := make([]string, len(idx.KeyColumnIDs))
+	for i, id := range idx.KeyColumnIDs {
+		col, err := rel.FindColumnWithID(id)
+		onErrPanic(err)
+		oldKeyColumnNames[i] = col.GetName()
+	}
+	_, part := b.CreatePartitioningDescriptor(
+		b,
+		rel.FindColumnWithName,
+		0, /* oldNumImplicitColumns */
+		oldKeyColumnNames,
+		partBy,
+		nil,   /* allowedNewColumnNames */
+		false, /* allowImplicitPartitioning */
+	)
+	b.EnqueueAdd(&scpb.IndexPartitioning{
+		TableID:      rel.GetID(),
+		IndexID:      idx.IndexID,
+		Partitioning: &part,
+	})
 }
 
 // maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation) to

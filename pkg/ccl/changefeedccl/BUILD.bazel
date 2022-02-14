@@ -143,6 +143,7 @@ go_test(
         "validations_test.go",
     ],
     embed = [":changefeedccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/blobs",

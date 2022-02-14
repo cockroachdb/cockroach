@@ -72,39 +72,39 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Namespace:{DescID: 105, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 105}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 106, Name: t1}, ABSENT]
   to:   [Table:{DescID: 106}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 107, Name: v1}, ABSENT]
   to:   [View:{DescID: 107}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 108, Name: v2}, ABSENT]
   to:   [View:{DescID: 108}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 109, Name: v3}, ABSENT]
   to:   [View:{DescID: 109}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 110, Name: v4}, ABSENT]
   to:   [View:{DescID: 110}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 111, Name: typ}, ABSENT]
   to:   [Type:{DescID: 111}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 112, Name: _typ}, ABSENT]
   to:   [Type:{DescID: 112}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 113, Name: v5}, ABSENT]
   to:   [View:{DescID: 113}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [PrimaryIndex:{DescID: 106, IndexID: 1}, VALIDATED]
   to:   [IndexName:{DescID: 106, IndexID: 1, Name: t1_pkey}, ABSENT]
   kind: Precedence
@@ -112,19 +112,19 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Sequence:{DescID: 105}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [Locality:{DescID: 105}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: sq1}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT]
   kind: SameStagePrecedence
@@ -132,19 +132,19 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Table:{DescID: 106}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [DefaultExpression:{DescID: 106, ColumnID: 3}, ABSENT]
   kind: SameStagePrecedence
@@ -152,15 +152,15 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [Locality:{DescID: 106}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [Namespace:{DescID: 106, Name: t1}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [Owner:{DescID: 106}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 105, ReferencedDescID: 106}, ABSENT]
   kind: SameStagePrecedence
@@ -172,23 +172,23 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [UserPrivileges:{DescID: 106, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [UserPrivileges:{DescID: 106, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Table:{DescID: 106}, DROPPED]
   to:   [UserPrivileges:{DescID: 106, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Type:{DescID: 111}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [Type:{DescID: 111}, DROPPED]
   to:   [Namespace:{DescID: 111, Name: typ}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Type:{DescID: 111}, DROPPED]
   to:   [ViewDependsOnType:{DescID: 113, ReferencedDescID: 111}, ABSENT]
   kind: SameStagePrecedence
@@ -196,11 +196,11 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [Type:{DescID: 112}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [Type:{DescID: 112}, DROPPED]
   to:   [Namespace:{DescID: 112, Name: _typ}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Type:{DescID: 112}, DROPPED]
   to:   [ViewDependsOnType:{DescID: 113, ReferencedDescID: 112}, ABSENT]
   kind: SameStagePrecedence
@@ -208,19 +208,19 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 107}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 107}, DROPPED]
   to:   [Locality:{DescID: 107}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 107}, DROPPED]
   to:   [Namespace:{DescID: 107, Name: v1}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 107}, DROPPED]
   to:   [Owner:{DescID: 107}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 107}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 106, ReferencedDescID: 107}, ABSENT]
   kind: SameStagePrecedence
@@ -236,31 +236,31 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 107}, DROPPED]
   to:   [UserPrivileges:{DescID: 107, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 107}, DROPPED]
   to:   [UserPrivileges:{DescID: 107, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 107}, DROPPED]
   to:   [UserPrivileges:{DescID: 107, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 108}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Locality:{DescID: 108}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Namespace:{DescID: 108, Name: v2}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 107, ReferencedDescID: 108}, ABSENT]
   kind: SameStagePrecedence
@@ -276,31 +276,31 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 109}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 109}, DROPPED]
   to:   [Locality:{DescID: 109}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 109}, DROPPED]
   to:   [Namespace:{DescID: 109, Name: v3}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 109}, DROPPED]
   to:   [Owner:{DescID: 109}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 109}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 107, ReferencedDescID: 109}, ABSENT]
   kind: SameStagePrecedence
@@ -312,31 +312,31 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 110}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 110}, DROPPED]
   to:   [Locality:{DescID: 110}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 110}, DROPPED]
   to:   [Namespace:{DescID: 110, Name: v4}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 110}, DROPPED]
   to:   [Owner:{DescID: 110}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 110}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 108, ReferencedDescID: 110}, ABSENT]
   kind: SameStagePrecedence
@@ -348,31 +348,31 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 110}, DROPPED]
   to:   [UserPrivileges:{DescID: 110, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 110}, DROPPED]
   to:   [UserPrivileges:{DescID: 110, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 110}, DROPPED]
   to:   [UserPrivileges:{DescID: 110, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 113}, ABSENT]
   to:   [Schema:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: parent dependencies
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Locality:{DescID: 113}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Namespace:{DescID: 113, Name: v5}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Owner:{DescID: 113}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 110, ReferencedDescID: 113}, ABSENT]
   kind: SameStagePrecedence
@@ -380,15 +380,15 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE

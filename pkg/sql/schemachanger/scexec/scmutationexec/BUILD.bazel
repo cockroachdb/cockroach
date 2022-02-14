@@ -3,7 +3,14 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "scmutationexec",
     srcs = [
+        "column.go",
+        "dependencies.go",
+        "drop.go",
+        "eventlog.go",
         "helpers.go",
+        "index.go",
+        "references.go",
+        "schema_change_job.go",
         "scmutationexec.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",

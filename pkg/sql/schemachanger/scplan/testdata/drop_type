@@ -95,16 +95,16 @@ DROP TYPE defaultdb.typ
 - from: [Namespace:{DescID: 104, Name: typ}, ABSENT]
   to:   [Type:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Namespace:{DescID: 105, Name: _typ}, ABSENT]
   to:   [Type:{DescID: 105}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Type:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: typ}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Type:{DescID: 105}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: _typ}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name

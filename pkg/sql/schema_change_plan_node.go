@@ -60,6 +60,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	scs := p.extendedEvalCtx.SchemaChangerState
 	scs.stmts = append(scs.stmts, p.stmt.SQL)
 	deps := scdeps.NewBuilderDependencies(
+		p.ExecCfg().ClusterID(),
 		p.ExecCfg().Codec,
 		p.Txn(),
 		p.Descriptors(),
@@ -184,7 +185,6 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
-		scdeps.NewPartitioner(execCfg.Settings, evalContext),
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),
