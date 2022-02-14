@@ -832,7 +832,7 @@ project
  │    │    │    ├── fd: ()-->(10), (11)-->(12), (18)-->(20), (25)-->(31), (18)==(9,11,25), (25)==(9,11,18), (11)==(9,18,25), (9)==(11,18,25)
  │    │    │    ├── inner-join (lookup security)
  │    │    │    │    ├── columns: symb:9!null dm_date:10!null dm_s_symb:11!null dm_close:12!null s_symb:25!null s_num_out:31!null
- │    │    │    │    ├── key columns: [11] = [25]
+ │    │    │    │    ├── key columns: [9] = [25]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── fd: ()-->(10), (11)-->(12), (25)-->(31), (11)==(9,25), (25)==(9,11), (9)==(11,25)
  │    │    │    │    ├── inner-join (lookup daily_market)
@@ -1004,7 +1004,7 @@ project
  │    │    │    ├── fd: ()-->(36), (37)-->(38), (44)-->(46), (51)-->(57), (44)==(35,37,51), (51)==(35,37,44), (37)==(35,44,51), (35)==(37,44,51)
  │    │    │    ├── inner-join (lookup security)
  │    │    │    │    ├── columns: symb:35!null dm_date:36!null dm_s_symb:37!null dm_close:38!null s_symb:51!null s_num_out:57!null
- │    │    │    │    ├── key columns: [37] = [51]
+ │    │    │    │    ├── key columns: [35] = [51]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── key: (51)
  │    │    │    │    ├── fd: ()-->(36), (37)-->(38), (51)-->(57), (37)==(35,51), (51)==(35,37), (35)==(37,51)
@@ -1198,7 +1198,7 @@ project
  │    │    │    ├── fd: ()-->(7), (8)-->(9), (15)-->(17), (22)-->(28), (15)==(6,8,22), (22)==(6,8,15), (8)==(6,15,22), (6)==(8,15,22)
  │    │    │    ├── inner-join (lookup security)
  │    │    │    │    ├── columns: symb:6!null dm_date:7!null dm_s_symb:8!null dm_close:9!null s_symb:22!null s_num_out:28!null
- │    │    │    │    ├── key columns: [8] = [22]
+ │    │    │    │    ├── key columns: [6] = [22]
  │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── key: (22)
  │    │    │    │    ├── fd: ()-->(7), (8)-->(9), (22)-->(28), (8)==(6,22), (22)==(6,8), (6)==(8,22)
