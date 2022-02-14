@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -340,7 +341,7 @@ type partition struct {
 	zone *zone
 }
 
-func (p partition) toPartitionDescriptor() descpb.PartitioningDescriptor_Range {
+func (p partition) toPartitionDescriptor() catpb.PartitioningDescriptor_Range {
 	var startKey roachpb.Key
 	for _, val := range p.start {
 		startKey = encoding.EncodeIntValue(startKey, encoding.NoColumnID, int64(val))
@@ -349,7 +350,7 @@ func (p partition) toPartitionDescriptor() descpb.PartitioningDescriptor_Range {
 	for _, val := range p.end {
 		endKey = encoding.EncodeIntValue(endKey, encoding.NoColumnID, int64(val))
 	}
-	return descpb.PartitioningDescriptor_Range{
+	return catpb.PartitioningDescriptor_Range{
 		Name:          p.name,
 		FromInclusive: startKey,
 		ToExclusive:   endKey,

@@ -463,7 +463,7 @@ type MaterializedViewRefresh interface {
 type Partitioning interface {
 
 	// PartitioningDesc returns the underlying protobuf descriptor.
-	PartitioningDesc() *descpb.PartitioningDescriptor
+	PartitioningDesc() *catpb.PartitioningDescriptor
 
 	// DeepCopy returns a deep copy of the receiver.
 	DeepCopy() Partitioning
