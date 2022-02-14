@@ -292,7 +292,7 @@ func (d *dev) getBasicBuildArgs(
 				typ := fields[0]
 				args = append(args, fullTargetName)
 				buildTargets = append(buildTargets, buildTarget{fullName: fullTargetName, kind: typ})
-				if typ == "go_test" {
+				if typ == "go_test" || typ == "go_transition_test" {
 					shouldBuildWithTestConfig = true
 				}
 			}
