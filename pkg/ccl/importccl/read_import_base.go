@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -188,10 +189,10 @@ func readInputFiles(
 				if err != nil {
 					return err
 				}
-				defer raw.Close()
+				defer raw.Close(ctx)
 
 				p := make([]byte, 1)
-				if _, err := raw.Read(p); err != nil && err != io.EOF {
+				if _, err := raw.Read(ctx, p); err != nil && err != io.EOF {
 					// Check that we can read the file. We don't care about content yet,
 					// so we read a single byte and we don't process it in any way.
 					// If the file is empty -- and we can tell that -- that also counts
@@ -228,9 +229,9 @@ func readInputFiles(
 			if err != nil {
 				return err
 			}
-			defer raw.Close()
+			defer raw.Close(ctx)
 
-			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: raw}}
+			src := &fileReader{total: fileSizes[dataFileIndex], counter: byteCounter{r: cloudbase.ReaderCtxAdapter(ctx, raw)}}
 			decompressed, err := decompressingReader(&src.counter, dataFile, format.Compression)
 			if err != nil {
 				return err

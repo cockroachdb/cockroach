@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -3623,14 +3624,14 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 	if uri.Scheme == "nodelocal" {
 		// Write the test data into a file.
 		require.NoError(b, err)
-		numBytes, err = io.Copy(f, r)
+		numBytes, err = io.Copy(f, cloudbase.ReaderCtxAdapter(ctx, r))
 		require.NoError(b, err)
 	} else if uri.Scheme == "userfile" {
 		// Write the test data to userfile storage.
 		userfileStorage, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, uploadBaseURI+testFileBase, security.RootUserName())
 		require.NoError(b, err)
-		content, err := ioutil.ReadAll(r)
+		content, err := cloudbase.ReadAll(ctx, r)
 		require.NoError(b, err)
 		err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content))
 		require.NoError(b, err)
@@ -5744,7 +5745,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 				require.Equal(t, file, path.Join(dirName, logSubdir, fmt.Sprintf("%d.log", i)))
 				content, err := store.ReadFile(ctx, file)
 				require.NoError(t, err)
-				descBytes, err := ioutil.ReadAll(content)
+				descBytes, err := cloudbase.ReadAll(ctx, content)
 				require.NoError(t, err)
 				require.Equal(t, []byte(expectedFileContent[i]), descBytes)
 			}

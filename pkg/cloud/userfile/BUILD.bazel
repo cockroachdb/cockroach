@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudbase",
         "//pkg/cloud/userfile/filetable",
         "//pkg/kv",
         "//pkg/roachpb",

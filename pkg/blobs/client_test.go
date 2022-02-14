@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -191,7 +192,7 @@ func TestBlobClientReadFile(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Check that fetched file content is correct
-			content, err := ioutil.ReadAll(reader)
+			content, err := cloudbase.ReadAll(ctx, reader)
 			if err != nil {
 				t.Fatal(err)
 			}

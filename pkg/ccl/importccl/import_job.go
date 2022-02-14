@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -849,8 +850,8 @@ func parseAndCreateBundleTableDescs(
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}
-	defer raw.Close()
-	reader, err := decompressingReader(raw, files[0], format.Compression)
+	defer raw.Close(ctx)
+	reader, err := decompressingReader(cloudbase.ReaderCtxAdapter(ctx, raw), files[0], format.Compression)
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}

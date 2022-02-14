@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudbase",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",
         "//pkg/settings",

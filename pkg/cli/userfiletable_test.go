@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -366,7 +367,7 @@ func checkUserFileContent(
 	require.NoError(t, err)
 	reader, err := store.ReadFile(ctx, "")
 	require.NoError(t, err)
-	got, err := ioutil.ReadAll(reader)
+	got, err := cloudbase.ReadAll(ctx, reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expectedContent))
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -149,9 +150,9 @@ type csvGenerator struct {
 
 const maxBreakpointPos = math.MaxInt32
 
-var _ io.ReadCloser = &csvGenerator{}
+var _ cloudbase.ReadCloserCtx = &csvGenerator{}
 
-func (csv *csvGenerator) Open() (io.ReadCloser, error) {
+func (csv *csvGenerator) Open() (cloudbase.ReadCloserCtx, error) {
 	csv.rowPos = 0
 	csv.rowOffset = 0
 	csv.maybeInitData()
@@ -162,7 +163,7 @@ func (csv *csvGenerator) Open() (io.ReadCloser, error) {
 // buffer space allows might cause problems for breakpoints (e.g.
 // a breakpoint may block until job progress is updated, but that
 // update would never happen because we're still reading the data).
-func (csv *csvGenerator) Read(p []byte) (n int, err error) {
+func (csv *csvGenerator) Read(ctx context.Context, p []byte) (n int, err error) {
 	n = 0
 	if n < cap(p) && csv.rowPos < len(csv.data) {
 		if csv.rowOffset == 0 {
@@ -181,7 +182,7 @@ func (csv *csvGenerator) Read(p []byte) (n int, err error) {
 	}
 
 	if n == 0 {
-		_ = csv.Close()
+		_ = csv.Close(ctx)
 		err = io.EOF
 	}
 
@@ -215,7 +216,7 @@ func (csv *csvGenerator) handleBreakpoint(idx int) (err error) {
 	return
 }
 
-func (csv *csvGenerator) Close() error {
+func (csv *csvGenerator) Close(ctx context.Context) error {
 	// Execute breakpoint at the end of the stream.
 	_ = csv.handleBreakpoint(maxBreakpointPos)
 	csv.data = nil
@@ -260,13 +261,13 @@ func (es *generatorExternalStorage) Conf() roachpb.ExternalStorage {
 
 func (es *generatorExternalStorage) ReadFile(
 	ctx context.Context, basename string,
-) (io.ReadCloser, error) {
+) (cloudbase.ReadCloserCtx, error) {
 	return es.gen.Open()
 }
 
 func (es *generatorExternalStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (cloudbase.ReadCloserCtx, int64, error) {
 	panic("unimplemented")
 }
 

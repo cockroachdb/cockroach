@@ -15,7 +15,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"path"
 	"sort"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -171,7 +171,7 @@ func containsManifest(ctx context.Context, exportStore cloud.ExternalStorage) (b
 		}
 		return false, err
 	}
-	r.Close()
+	r.Close(ctx)
 	return true, nil
 }
 
@@ -197,7 +197,7 @@ func decompressData(ctx context.Context, mem *mon.BoundAccount, descBytes []byte
 		return nil, err
 	}
 	defer r.Close()
-	return mon.ReadAll(ctx, r, mem)
+	return mon.ReadAll(ctx, cloudbase.ReaderAdapter(r), mem)
 }
 
 // readBackupManifest reads and unmarshals a BackupManifest from filename in
@@ -217,7 +217,7 @@ func readBackupManifest(
 	if err != nil {
 		return BackupManifest{}, 0, err
 	}
-	defer r.Close()
+	defer r.Close(ctx)
 	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
 		return BackupManifest{}, 0, err
@@ -229,8 +229,8 @@ func readBackupManifest(
 	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
 	if err == nil {
 		// If there is a checksum file present, check that it matches.
-		defer checksumFile.Close()
-		checksumFileData, err := ioutil.ReadAll(checksumFile)
+		defer checksumFile.Close(ctx)
+		checksumFileData, err := cloudbase.ReadAll(ctx, checksumFile)
 		if err != nil {
 			return BackupManifest{}, 0, errors.Wrap(err, "reading checksum file")
 		}
@@ -324,7 +324,7 @@ func readBackupPartitionDescriptor(
 	if err != nil {
 		return BackupPartitionDescriptor{}, 0, err
 	}
-	defer r.Close()
+	defer r.Close(ctx)
 	descBytes, err := mon.ReadAll(ctx, r, mem)
 	if err != nil {
 		return BackupPartitionDescriptor{}, 0, err
@@ -382,8 +382,8 @@ func readTableStatistics(
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	statsBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	statsBytes, err := cloudbase.ReadAll(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -1044,8 +1044,8 @@ func readEncryptionOptions(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	defer r.Close()
-	encInfoBytes, err := ioutil.ReadAll(r)
+	defer r.Close(ctx)
+	encInfoBytes, err := cloudbase.ReadAll(ctx, r)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
@@ -1061,7 +1061,7 @@ func writeEncryptionInfoIfNotExists(
 ) error {
 	r, err := dest.ReadFile(ctx, backupEncryptionInfoFile)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		// If the file already exists, then we don't need to create a new one.
 		return nil
 	}
@@ -1102,7 +1102,7 @@ func checkForPreviousBackup(
 	redactedURI := RedactURIForErrorMessage(defaultURI)
 	r, err := exportStore.ReadFile(ctx, backupManifestName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file",
 			redactedURI, backupManifestName)
@@ -1116,7 +1116,7 @@ func checkForPreviousBackup(
 
 	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
 	if err == nil {
-		r.Close()
+		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
 			"%s already contains a %s file (is another operation already in progress?)",
 			redactedURI, backupManifestCheckpointName)

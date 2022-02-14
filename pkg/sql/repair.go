@@ -14,10 +14,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"io/ioutil"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -808,7 +808,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(file)
+	return cloudbase.ReadAll(ctx, file)
 }
 
 func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {

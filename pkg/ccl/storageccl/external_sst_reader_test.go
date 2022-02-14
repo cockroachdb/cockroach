@@ -10,10 +10,9 @@ package storageccl
 
 import (
 	"bytes"
-	"io"
-	"io/ioutil"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -25,10 +24,10 @@ func TestSSTReaderCache(t *testing.T) {
 	const sz, suffix = 100, 10
 	raw := &sstReader{
 		sz:   sizeStat(sz),
-		body: ioutil.NopCloser(bytes.NewReader(nil)),
-		openAt: func(offset int64) (io.ReadCloser, error) {
+		body: cloudbase.NopCloser(cloudbase.ReaderAdapter(bytes.NewReader(nil))),
+		openAt: func(offset int64) (cloudbase.ReadCloserCtx, error) {
 			openCalls++
-			return ioutil.NopCloser(bytes.NewReader(make([]byte, sz-int(offset)))), nil
+			return cloudbase.NopCloser(cloudbase.ReaderAdapter(bytes.NewReader(make([]byte, sz-int(offset))))), nil
 		},
 	}
 

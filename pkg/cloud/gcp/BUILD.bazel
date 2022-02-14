@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudbase",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
@@ -39,6 +40,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
+        "//pkg/cloud/cloudbase",
         "//pkg/cloud/cloudtestutils",
         "//pkg/security",
         "//pkg/settings/cluster",

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -463,7 +464,7 @@ func downloadUserfile(
 	if err != nil {
 		return 0, err
 	}
-	defer remoteFile.Close()
+	defer remoteFile.Close(ctx)
 
 	localDir := path.Dir(dst)
 	if err := os.MkdirAll(localDir, 0700); err != nil {
@@ -477,7 +478,7 @@ func downloadUserfile(
 	}
 	defer localFile.Close()
 
-	return io.Copy(localFile, remoteFile)
+	return io.Copy(localFile, cloudbase.ReaderCtxAdapter(ctx, remoteFile))
 }
 
 func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {

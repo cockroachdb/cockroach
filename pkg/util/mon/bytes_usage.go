@@ -17,6 +17,7 @@ import (
 	"math"
 	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -785,12 +786,12 @@ func (mm *BytesMonitor) adjustBudget(ctx context.Context) {
 	}
 }
 
-// ReadAll is like io.ReadAll except it additionally asks the BoundAccount acct
+// ReadAll is like cloudbase.ReadAll except it additionally asks the BoundAccount acct
 // permission, if it is non-nil, it grows its buffer while reading. When the
 // caller releases the returned slice it shrink the bound account by its cap.
-func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, error) {
+func ReadAll(ctx context.Context, r cloudbase.ReaderCtx, acct *BoundAccount) ([]byte, error) {
 	if acct == nil {
-		b, err := io.ReadAll(r)
+		b, err := cloudbase.ReadAll(ctx, r)
 		return b, err
 	}
 
@@ -828,7 +829,7 @@ func ReadAll(ctx context.Context, r io.Reader, acct *BoundAccount) ([]byte, erro
 		}
 
 		// Read into our buffer until we get an error.
-		n, err := r.Read(b[len(b):cap(b)])
+		n, err := r.Read(ctx, b[len(b):cap(b)])
 		b = b[:len(b)+n]
 		if err != nil {
 			if err == io.EOF {

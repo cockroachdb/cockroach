@@ -27,6 +27,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -455,7 +456,9 @@ func (s *s3Storage) openStreamAt(
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (s *s3Storage) ReadFile(
+	ctx context.Context, basename string,
+) (cloudbase.ReadCloserCtx, error) {
 	reader, _, err := s.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
@@ -463,7 +466,7 @@ func (s *s3Storage) ReadFile(ctx context.Context, basename string) (io.ReadClose
 // ReadFileAt opens a reader at the requested offset.
 func (s *s3Storage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (cloudbase.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})

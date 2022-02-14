@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	cloudbase "github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -30,7 +31,7 @@ type BlobClient interface {
 	// ReadFile fetches the named payload from the requested node,
 	// and stores it in memory. It then returns an io.ReadCloser to
 	// read the contents.
-	ReadFile(ctx context.Context, file string, offset int64) (io.ReadCloser, int64, error)
+	ReadFile(ctx context.Context, file string, offset int64) (cloudbase.ReadCloserCtx, int64, error)
 
 	// Writer opens the named payload on the requested node for writing.
 	Writer(ctx context.Context, file string) (io.WriteCloser, error)
@@ -61,7 +62,7 @@ func newRemoteClient(blobClient blobspb.BlobClient) BlobClient {
 
 func (c *remoteClient) ReadFile(
 	ctx context.Context, file string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (cloudbase.ReadCloserCtx, int64, error) {
 	// Check that file exists before reading from it and get size to return.
 	st, err := c.Stat(ctx, file)
 	if err != nil {
@@ -156,7 +157,7 @@ func NewLocalClient(externalIODir string) (BlobClient, error) {
 
 func (c *localClient) ReadFile(
 	ctx context.Context, file string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (cloudbase.ReadCloserCtx, int64, error) {
 	return c.localStorage.ReadFile(file, offset)
 }
 

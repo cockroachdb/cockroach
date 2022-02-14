@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -58,12 +59,12 @@ type ExternalStorage interface {
 	// ReadFile is shorthand for ReadFileAt with offset 0.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFile(ctx context.Context, basename string) (io.ReadCloser, error)
+	ReadFile(ctx context.Context, basename string) (cloudbase.ReadCloserCtx, error)
 
 	// ReadFileAt returns a Reader for requested name reading at offset.
 	// ErrFileDoesNotExist is raised if `basename` cannot be located in storage.
 	// This can be leveraged for an existence check.
-	ReadFileAt(ctx context.Context, basename string, offset int64) (io.ReadCloser, int64, error)
+	ReadFileAt(ctx context.Context, basename string, offset int64) (cloudbase.ReadCloserCtx, int64, error)
 
 	// Writer returns a writer for the requested name.
 	//

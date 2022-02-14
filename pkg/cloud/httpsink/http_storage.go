@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -106,7 +107,9 @@ func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }
 
-func (h *httpStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (h *httpStorage) ReadFile(
+	ctx context.Context, basename string,
+) (cloudbase.ReadCloserCtx, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
 	stream, _, err := h.ReadFileAt(ctx, basename, 0)
 	return stream, err
@@ -141,7 +144,7 @@ func (h *httpStorage) openStreamAt(
 
 func (h *httpStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (cloudbase.ReadCloserCtx, int64, error) {
 	stream, err := h.openStreamAt(ctx, basename, offset)
 	if err != nil {
 		return nil, 0, err
@@ -169,7 +172,7 @@ func (h *httpStorage) ReadFileAt(
 		return cloud.NewResumingReader(ctx, opener, stream.Body, offset,
 			cloud.IsResumableHTTPError, nil), size, nil
 	}
-	return stream.Body, size, nil
+	return cloudbase.ReadCloserAdapter(stream.Body), size, nil
 }
 
 func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {

@@ -9,6 +9,7 @@ go_library(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/cloud",
+        "//pkg/cloud/cloudbase",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",

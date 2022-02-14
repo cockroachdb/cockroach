@@ -14,13 +14,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/cloudbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudtestutils"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -183,9 +183,9 @@ func TestCompressedGCS(t *testing.T) {
 	reader2, err := s2.ReadFile(context.Background(), "")
 	require.NoError(t, err)
 
-	content1, err := ioutil.ReadAll(reader1)
+	content1, err := cloudbase.ReadAll(ctx, reader1)
 	require.NoError(t, err)
-	content2, err := ioutil.ReadAll(reader2)
+	content2, err := cloudbase.ReadAll(ctx, reader2)
 	require.NoError(t, err)
 
 	require.Equal(t, string(content1), string(content2))
