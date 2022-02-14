@@ -118,12 +118,11 @@ func (s *azureStorage) Settings() *cluster.Settings {
 
 func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.Writer")
-	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.Writer: %s",
 		path.Join(s.prefix, basename))})
-
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		defer sp.Finish()
 		_, err := azblob.UploadStreamToBlockBlob(
 			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
 				BufferSize: 4 << 20,
