@@ -11,23 +11,23 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
-	opRegistry.register((*scpb.Partitioning)(nil),
+	opRegistry.register((*scpb.IndexPartitioning)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				minPhase(scop.PreCommitPhase),
-				emit(func(this *scpb.Partitioning) scop.Op {
+				emit(func(this *scpb.IndexPartitioning) scop.Op {
 					return &scop.AddIndexPartitionInfo{
-						TableID:         this.TableID,
-						IndexID:         this.IndexID,
-						PartitionFields: this.Fields,
-						ListPartitions:  this.ListPartitions,
-						RangePartitions: this.RangePartitions,
+						TableID:      this.TableID,
+						IndexID:      this.IndexID,
+						Partitioning: *protoutil.Clone(this.Partitioning).(*catpb.PartitioningDescriptor),
 					}
 				}),
 			),
@@ -35,7 +35,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Partitioning) scop.Op {
+				emit(func(this *scpb.IndexPartitioning) scop.Op {
 					return notImplemented(this)
 				}),
 			),

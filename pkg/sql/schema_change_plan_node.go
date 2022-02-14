@@ -185,7 +185,6 @@ func newSchemaChangerTxnRunDependencies(
 		scdeps.NewNoOpBackfillTracker(execCfg.Codec),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		execCfg.IndexValidator,
-		scdeps.NewPartitioner(execCfg.Settings, evalContext),
 		scdeps.NewConstantClock(evalContext.GetTxnTimestamp(time.Microsecond).Time),
 		execCfg.DescMetadaUpdaterFactory,
 		NewSchemaChangerEventLogger(txn, execCfg, 1),

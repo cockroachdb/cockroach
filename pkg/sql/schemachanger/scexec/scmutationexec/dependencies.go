@@ -18,9 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -49,20 +47,6 @@ type CatalogReader interface {
 
 	// RemoveSyntheticDescriptor undoes the effects of AddSyntheticDescriptor.
 	RemoveSyntheticDescriptor(id descpb.ID)
-}
-
-// Partitioner is the interface for adding partitioning to a table descriptor.
-type Partitioner interface {
-	AddPartitioning(
-		ctx context.Context,
-		tbl *tabledesc.Mutable,
-		index catalog.Index,
-		partitionFields []string,
-		listPartition []*scpb.ListPartition,
-		rangePartition []*scpb.RangePartitions,
-		allowedNewColumnNames []tree.Name,
-		allowImplicitPartitioning bool,
-	) error
 }
 
 // MutationVisitorStateUpdater is the interface for updating the visitor state.

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -38,6 +39,7 @@ type BuildCtx interface {
 	TreeAnnotator
 
 	TreeContextBuilder
+	IndexPartitioner
 	PrivilegeChecker
 	DescriptorReader
 	NameResolver
@@ -79,7 +81,25 @@ type Dependencies interface {
 
 	// FeatureChecker returns something that checks schema feature flags.
 	FeatureChecker() SchemaFeatureChecker
+
+	// IndexPartitioningCCLCallback returns the CCL callback for creating
+	// partitioning descriptors for indexes.
+	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
 }
+
+// CreatePartitioningCCLCallback is the type of the CCL callback for creating
+// partitioning descriptors for indexes.
+type CreatePartitioningCCLCallback func(
+	ctx context.Context,
+	st *cluster.Settings,
+	evalCtx *tree.EvalContext,
+	columnLookupFn func(tree.Name) (catalog.Column, error),
+	oldNumImplicitColumns int,
+	oldKeyColumnNames []string,
+	partBy *tree.PartitionBy,
+	allowedNewColumnNames []tree.Name,
+	allowImplicitPartitioning bool,
+) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error)
 
 // CatalogReader should implement descriptor resolution, namespace lookups, and
 // all such catalog read operations for the builder. The following contract must
@@ -171,6 +191,22 @@ type TreeContextBuilder interface {
 
 	// EvalCtx returns a new tree.EvalContext.
 	EvalCtx() *tree.EvalContext
+}
+
+// IndexPartitioner is the interface for adding partitioning to an index.
+type IndexPartitioner interface {
+
+	// CreatePartitioningDescriptor delegates to a CCL function for creating
+	// a catpb.PartitioningDescriptor.
+	CreatePartitioningDescriptor(
+		ctx context.Context,
+		columnLookupFn func(tree.Name) (catalog.Column, error),
+		oldNumImplicitColumns int,
+		oldKeyColumnNames []string,
+		partBy *tree.PartitionBy,
+		allowedNewColumnNames []tree.Name,
+		allowImplicitPartitioning bool,
+	) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor)
 }
 
 // PrivilegeChecker exposes convenient privilege-checking methods.

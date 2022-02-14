@@ -138,13 +138,11 @@ object Database
 Database :  DatabaseID
 Database : []DependentObjects
 
-object Partitioning
+object IndexPartitioning
 
-Partitioning :  TableID
-Partitioning :  IndexID
-Partitioning : []Fields
-Partitioning : []ListPartitions
-Partitioning : []RangePartitions
+IndexPartitioning :  TableID
+IndexPartitioning :  IndexID
+IndexPartitioning :  Partitioning
 
 object Namespace
 
@@ -281,8 +279,8 @@ Table <|-- RelationDependedOnBy
 View <|-- RelationDependedOnBy
 Column <|-- SequenceOwnedBy
 Sequence <|-- SequenceOwnedBy
-PrimaryIndex <|-- Partitioning
-SecondaryIndex <|-- Partitioning
+PrimaryIndex <|-- IndexPartitioning
+SecondaryIndex <|-- IndexPartitioning
 Table <|-- Namespace
 View <|-- Namespace
 Sequence <|-- Namespace

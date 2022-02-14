@@ -262,20 +262,6 @@ func (mr *MockDependenciesMockRecorder) IndexValidator() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndexValidator", reflect.TypeOf((*MockDependencies)(nil).IndexValidator))
 }
 
-// Partitioner mocks base method.
-func (m *MockDependencies) Partitioner() scmutationexec.Partitioner {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Partitioner")
-	ret0, _ := ret[0].(scmutationexec.Partitioner)
-	return ret0
-}
-
-// Partitioner indicates an expected call of Partitioner.
-func (mr *MockDependenciesMockRecorder) Partitioner() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Partitioner", reflect.TypeOf((*MockDependencies)(nil).Partitioner))
-}
-
 // PeriodicProgressFlusher mocks base method.
 func (m *MockDependencies) PeriodicProgressFlusher() scexec.PeriodicProgressFlusher {
 	m.ctrl.T.Helper()

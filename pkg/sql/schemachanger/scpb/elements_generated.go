@@ -238,14 +238,14 @@ func ForEachDatabase(
 	})
 }
 
-func (e Partitioning) element() {}
+func (e IndexPartitioning) element() {}
 
-// ForEachPartitioning iterates over nodes of type Partitioning.
-func ForEachPartitioning(
-	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *Partitioning),
+// ForEachIndexPartitioning iterates over nodes of type IndexPartitioning.
+func ForEachIndexPartitioning(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *IndexPartitioning),
 ) {
 	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
-		if e, ok := elem.(*Partitioning); ok {
+		if e, ok := elem.(*IndexPartitioning); ok {
 			elementFunc(status, targetStatus, e)
 		}
 	})

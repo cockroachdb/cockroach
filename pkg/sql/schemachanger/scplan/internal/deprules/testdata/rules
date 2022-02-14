@@ -89,7 +89,7 @@ rules
   to: partitioning-node
   query:
     - $add-idx[Type] IN ['*scpb.PrimaryIndex', '*scpb.SecondaryIndex']
-    - $partitioning[Type] = '*scpb.Partitioning'
+    - $partitioning[Type] = '*scpb.IndexPartitioning'
     - $add-idx[DescID] = $id
     - $partitioning[DescID] = $id
     - $add-idx[IndexID] = $index-id
@@ -111,7 +111,7 @@ rules
   to: partitioning-node
   query:
     - $add-idx[Type] = '*scpb.PrimaryIndex'
-    - $partitioning[Type] = '*scpb.Partitioning'
+    - $partitioning[Type] = '*scpb.IndexPartitioning'
     - $add-idx[DescID] = $id
     - $partitioning[DescID] = $id
     - $add-idx[IndexID] = $id
