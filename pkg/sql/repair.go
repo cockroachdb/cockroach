@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"io/ioutil"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -808,7 +808,7 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	return ioutil.ReadAll(file)
+	return ioctx.ReadAll(ctx, file)
 }
 
 func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []byte) error {

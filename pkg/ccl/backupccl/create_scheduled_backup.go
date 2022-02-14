@@ -564,7 +564,7 @@ func checkForExistingBackupsInCollection(
 	r, err := defaultStore.ReadFile(ctx, latestFileName)
 	if err == nil {
 		// A full backup has already been taken to this location.
-		r.Close()
+		r.Close(ctx)
 		return errors.Newf("backups already created in %s; to ignore existing backups, "+
 			"the schedule can be created with the 'ignore_existing_backups' option",
 			collectionURI)

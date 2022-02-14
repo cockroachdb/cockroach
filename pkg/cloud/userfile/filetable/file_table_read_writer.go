@@ -17,7 +17,6 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -649,7 +649,7 @@ func newFileTableReader(
 	fileTableName, payloadTableName string,
 	ie FileToTableSystemExecutor,
 	offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	// Get file_id from metadata entry in File table.
 	var fileID []byte
 	var sz int64
@@ -704,7 +704,7 @@ func newFileTableReader(
 	}
 
 	if sz == 0 {
-		return ioutil.NopCloser(bytes.NewReader(nil)), 0, nil
+		return ioctx.NopCloser(ioctx.ReaderAdapter(bytes.NewReader(nil))), 0, nil
 	}
 
 	const bufSize = 256 << 10
@@ -764,7 +764,9 @@ func newFileTableReader(
 		return n, nil
 	}
 
-	return ioutil.NopCloser(bufio.NewReaderSize(&reader{fn: fn, pos: offset}, bufSize)), sz, nil
+	return ioctx.NopCloser(ioctx.ReaderAdapter(
+			bufio.NewReaderSize(&reader{fn: fn, pos: offset}, bufSize))),
+		sz, nil
 }
 
 // ReadFile returns the blob for filename using a FileTableReader.
@@ -773,7 +775,7 @@ func newFileTableReader(
 // x rows system, or a scan based interface.
 func (f *FileToTableSystem) ReadFile(
 	ctx context.Context, filename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	return newFileTableReader(
 		ctx, filename, f.username, f.GetFQFileTableName(), f.GetFQPayloadTableName(), f.executor, offset,
 	)
