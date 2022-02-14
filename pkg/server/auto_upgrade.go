@@ -41,7 +41,6 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			if k := s.cfg.TestingKnobs.Server; k != nil {
 				upgradeTestingKnobs := k.(*TestingKnobs)
 				if disable := atomic.LoadInt32(&upgradeTestingKnobs.DisableAutomaticVersionUpgrade); disable == 1 {
-					log.Infof(ctx, "auto upgrade disabled by testing")
 					continue
 				}
 			}
