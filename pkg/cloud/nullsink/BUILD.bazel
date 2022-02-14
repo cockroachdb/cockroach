@@ -11,6 +11,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
+        "//pkg/util/ioctx",
     ],
 )
 

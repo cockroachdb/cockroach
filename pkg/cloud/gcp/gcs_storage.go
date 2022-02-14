@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -167,14 +168,14 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := g.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
 
 func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	object := path.Join(g.prefix, basename)
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
@@ -192,7 +193,7 @@ func (g *gcsStorage) ReadFileAt(
 		nil, // errFn
 	)
 
-	if err := r.Open(); err != nil {
+	if err := r.Open(ctx); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {
 			// Callers of this method sometimes look at the returned error to determine
 			// if file does not exist.  Regardless why we couldn't open the stream

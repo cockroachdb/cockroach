@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -133,14 +134,14 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (s *azureStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := s.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
 
 func (s *azureStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("azure.ReadFileAt: %s",
@@ -177,7 +178,7 @@ func (s *azureStorage) ReadFileAt(
 	}
 	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
 
-	return reader, size, nil
+	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
 func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
@@ -235,6 +236,7 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 	return props.ContentLength(), nil
 }
 
+// Close is part of the cloud.ExternalStorage interface.
 func (s *azureStorage) Close() error {
 	return nil
 }

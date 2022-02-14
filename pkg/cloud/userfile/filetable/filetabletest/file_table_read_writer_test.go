@@ -15,7 +15,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"sort"
 	"testing"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
@@ -169,8 +169,9 @@ func TestReadWriteFile(t *testing.T) {
 		reader, size, err := fileTableReadWriter.ReadFile(ctx, filename, 0)
 		require.NoError(t, err)
 		require.Equal(t, int64(len(expected)), size)
-		got, err := ioutil.ReadAll(reader)
+		got, err := ioctx.ReadAll(ctx, reader)
 		require.NoError(t, err)
+		require.NoError(t, reader.Close(ctx))
 		return bytes.Equal(got, expected)
 	}
 
@@ -355,9 +356,10 @@ func TestUserGrants(t *testing.T) {
 	reader, size, err := fileTableReadWriter.ReadFile(ctx, "file1", 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(expected)), size)
-	got, err := ioutil.ReadAll(reader)
+	got, err := ioctx.ReadAll(ctx, reader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(got, expected))
+	require.NoError(t, reader.Close(ctx))
 
 	// Delete file to test DELETE privilege.
 	require.NoError(t, fileTableReadWriter.DeleteFile(ctx, "file1"))
@@ -528,9 +530,10 @@ func TestDatabaseScope(t *testing.T) {
 	oldDBReader, oldDBSize, err := fileTableReadWriter.ReadFile(ctx, "file1", 0)
 	require.NoError(t, err)
 	require.Equal(t, int64(len(uploadedContent)), oldDBSize)
-	oldDBContent, err := ioutil.ReadAll(oldDBReader)
+	oldDBContent, err := ioctx.ReadAll(ctx, oldDBReader)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(uploadedContent, oldDBContent))
+	require.NoError(t, oldDBReader.Close(ctx))
 
 	// Switch database and attempt to read the file.
 	_, err = sqlDB.Exec(`CREATE DATABASE newdb`)
