@@ -9,6 +9,14 @@ tc_prepare
 
 tc_start_block "Run docker image tests"
 
+echo "*******"
+mypath=$(bazel info bazel-bin --config=crosslinux --config=test)
+bazelInfo=$(bazel info --config=crosslinux --config=test)
+echo "mypath=$mypath"
+echo "bazelInfo=$bazelInfo"
+echo "*******"
+
+
 bazel run \
   //pkg/testutils/docker:docker_test \
   --config=crosslinux --config=test \

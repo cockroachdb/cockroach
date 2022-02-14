@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -82,7 +83,31 @@ func TestSingleNodeDocker(t *testing.T) {
 
 	fsnotifyPath := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))), "docker-fsnotify")
 
-	if err := os.Chmod(filepath.Join(fsnotifyPath, fsnotifyBinName), 0777); err != nil {
+	fmt.Println("------------")
+	err = filepath.Walk(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(pwd)))))),
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if strings.Contains(path, "docker-fsnotify") {
+				fmt.Println(path, info.Size())
+			}
+			return nil
+		})
+	fmt.Println("------------")
+
+	fmt.Println("pwd:", pwd)
+
+	stdout, err := exec.Command("bazel", "info").Output()
+	if err != nil {
+		fmt.Println("stdout", string(stdout))
+		fmt.Println("err:", err)
+		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot get the binary path of docker-fsnotify"))
+	}
+
+	fmt.Println("stdout", string(stdout))
+
+	if err := os.Chmod(filepath.Join(fsnotifyPath, fsnotifyBinName), 0755); err != nil {
 		t.Fatal(errors.NewAssertionErrorWithWrappedErrf(err, "cannot change permission of the binary of docker-fsnotify"))
 	}
 
