@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -55,6 +56,11 @@ func (s *TestState) AuthorizationAccessor() scbuild.AuthorizationAccessor {
 // CatalogReader implements the scbuild.Dependencies interface.
 func (s *TestState) CatalogReader() scbuild.CatalogReader {
 	return s
+}
+
+// ClusterID implements the scbuild.Dependencies interface.
+func (s *TestState) ClusterID() uuid.UUID {
+	return uuid.Nil
 }
 
 // Codec implements the scbuild.Dependencies interface.

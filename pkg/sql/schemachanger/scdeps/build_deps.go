@@ -24,12 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 )
 
 // NewBuilderDependencies returns an scbuild.Dependencies implementation built
 // from the given arguments.
 func NewBuilderDependencies(
+	clusterID uuid.UUID,
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	descsCollection *descs.Collection,
@@ -42,6 +44,7 @@ func NewBuilderDependencies(
 	statements []string,
 ) scbuild.Dependencies {
 	return &buildDeps{
+		clusterID:       clusterID,
 		codec:           codec,
 		txn:             txn,
 		descsCollection: descsCollection,
@@ -56,6 +59,7 @@ func NewBuilderDependencies(
 }
 
 type buildDeps struct {
+	clusterID       uuid.UUID
 	codec           keys.SQLCodec
 	txn             *kv.Txn
 	descsCollection *descs.Collection
@@ -219,6 +223,11 @@ func (d *buildDeps) AuthorizationAccessor() scbuild.AuthorizationAccessor {
 // CatalogReader implements the scbuild.Dependencies interface.
 func (d *buildDeps) CatalogReader() scbuild.CatalogReader {
 	return d
+}
+
+// ClusterID implements the scbuild.Dependencies interface.
+func (d *buildDeps) ClusterID() uuid.UUID {
+	return d.clusterID
 }
 
 // Codec implements the scbuild.Dependencies interface.
