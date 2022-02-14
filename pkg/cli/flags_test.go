@@ -74,7 +74,6 @@ func TestNoLinkForbidden(t *testing.T) {
 		// Sentry and the errors library use go/build to determine
 		// the list of source directories (used to strip the source prefix
 		// in stack trace reports).
-		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/sentry-go",
 		"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors/withstack",
 	)
 }
