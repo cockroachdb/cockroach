@@ -16,6 +16,7 @@ import "github.com/cockroachdb/cockroach/pkg/settings"
 var MaxSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	`sql.contention.txn_id_cache.max_size`,
-	"the maximum byte size TxnID cache will use",
+	"the maximum byte size TxnID cache will use. Set it to zero to disable "+
+		"txn id cache",
 	64*1024*1024, // 64 MB
 ).WithPublic()
