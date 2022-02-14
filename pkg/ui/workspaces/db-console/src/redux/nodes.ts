@@ -306,6 +306,9 @@ function isNoConnection(
 
 // nodeDisplayNameByIDSelector provides a unique, human-readable display name
 // for each node.
+
+// This function will never be passed decommissioned nodes because
+// #56529 removed a node's status entry once it's decommissioned.
 export const nodeDisplayNameByIDSelector = createSelector(
   nodeStatusesSelector,
   livenessStatusByNodeIDSelector,
