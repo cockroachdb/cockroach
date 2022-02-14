@@ -117,6 +117,12 @@ func applyMethodsAndVerify(
 			}
 			continue
 		case copySlice, appendSlice:
+			if m == appendSlice && selfReferencingSources {
+				// AppendSlice with selfReferencingSources is only supported
+				// when srcStartIdx == srcEndIdx, so we skip this method to
+				// avoid whittling down our destination slice.
+				continue
+			}
 			// Generate a length-inclusive destIdx.
 			destIdx := rng.Intn(n + 1)
 			srcStartIdx := rng.Intn(sourceN)
@@ -136,10 +142,6 @@ func applyMethodsAndVerify(
 			} else {
 				b1.AppendSlice(b1Source, destIdx, srcStartIdx, srcEndIdx)
 				b2 = append(b2[:destIdx], b2Source[srcStartIdx:srcEndIdx]...)
-				if selfReferencingSources {
-					b1Source = b1
-					b2Source = b2
-				}
 				numNewVals = srcEndIdx - srcStartIdx
 			}
 			// Deep copy the copied/appended byte slices.
