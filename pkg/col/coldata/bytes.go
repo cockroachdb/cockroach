@@ -309,6 +309,9 @@ func (b *Bytes) CopySlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
 // AppendSlice appends srcStartIdx inclusive and srcEndIdx exclusive []byte
 // values from src into the receiver starting at destIdx.
 func (b *Bytes) AppendSlice(src *Bytes, destIdx, srcStartIdx, srcEndIdx int) {
+	if b == src && srcStartIdx != srcEndIdx {
+		panic("AppendSlice when b == src is only supported when srcStartIdx == srcEndIdx")
+	}
 	if b.isWindow {
 		panic("AppendSlice is called on a window into Bytes")
 	}
