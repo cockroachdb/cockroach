@@ -91,6 +91,10 @@ type (
 	// FeatureChecker contains operations for checking if a schema change
 	// feature is allowed by the database administrator.
 	FeatureChecker = scbuildstmt.SchemaFeatureChecker
+
+	// CreatePartitioningCCLCallback is the function type for the CCL callback
+	// which creates partition descriptors for indexes.
+	CreatePartitioningCCLCallback = scbuildstmt.CreatePartitioningCCLCallback
 )
 
 type elementState struct {

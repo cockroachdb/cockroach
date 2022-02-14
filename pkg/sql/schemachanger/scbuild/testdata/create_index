@@ -60,16 +60,16 @@ CREATE INDEX id3
     indexId: 2
     name: id3
     tableId: 104
-- [[Partitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
+- [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:
-    fields:
-    - id
     indexId: 2
-    listPartitions:
-    - expr:
-      - "1"
-      name: p1
-    rangePartitions: []
+    partitioning:
+      list:
+      - name: p1
+        subpartitioning: {}
+        values:
+        - AwI=
+      numColumns: 1
     tableId: 104
 - [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT]
   details:

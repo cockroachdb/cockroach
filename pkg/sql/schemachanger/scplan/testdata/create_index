@@ -188,7 +188,7 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
 ----
 PreCommitPhase stage 1 of 1 with 4 MutationType ops
   transitions:
-    [[Partitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
@@ -205,13 +205,18 @@ PreCommitPhase stage 1 of 1 with 4 MutationType ops
       TableID: 104
     *scop.AddIndexPartitionInfo
       IndexID: 2
-      ListPartitions:
-      - name: p1
-        expr:
-        - "1"
-      PartitionFields:
-      - id
-      RangePartitions: []
+      Partitioning:
+        List:
+        - name: p1
+          values:
+          - - 3
+            - 2
+          subpartitioning:
+            numcolumns: 0
+            numimplicitcolumns: 0
+            list: []
+            range: []
+        NumColumns: 1
       TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
@@ -284,6 +289,6 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money) PARTITION BY LIST (i
   kind: Precedence
   rule: index named after index existence
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
-  to:   [Partitioning:{DescID: 104, IndexID: 2}, PUBLIC]
+  to:   [IndexPartitioning:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: Precedence
   rule: partitioning information needs the basic index as created
