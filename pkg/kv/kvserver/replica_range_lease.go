@@ -1236,14 +1236,17 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					}
 
 					if pErr != nil {
-						switch tErr := pErr.GetDetail().(type) {
-						case *roachpb.AmbiguousResultError:
+						goErr := pErr.GoError()
+						switch {
+						case errors.HasType(goErr, (*roachpb.AmbiguousResultError)(nil)):
 							// This can happen if the RequestLease command we sent has been
 							// applied locally through a snapshot: the RequestLeaseRequest
 							// cannot be reproposed so we get this ambiguity.
 							// We'll just loop around.
 							return nil
-						case *roachpb.LeaseRejectedError:
+						case errors.HasType(goErr, (*roachpb.LeaseRejectedError)(nil)):
+							var tErr *roachpb.LeaseRejectedError
+							errors.As(goErr, &tErr)
 							if tErr.Existing.OwnedBy(r.store.StoreID()) {
 								// The RequestLease command we sent was rejected because another
 								// lease was applied in the meantime, but we own that other
