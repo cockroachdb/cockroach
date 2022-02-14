@@ -201,13 +201,3 @@ nogo(
         ] + STATICCHECK_CHECKS,
     }),
 )
-
-go_path(
-    name = "go_path",
-    # TODO(ricky): change back to 'link' when possible, see
-    # https://github.com/cockroachdb/cockroach/issues/75094
-    mode = "copy",
-    deps = [
-        "//pkg/cmd/cockroach-short",
-    ],
-)
