@@ -55,7 +55,6 @@ func NewExecutorDependencies(
 	backfillTracker scexec.BackfillTracker,
 	backfillFlusher scexec.PeriodicProgressFlusher,
 	indexValidator scexec.IndexValidator,
-	partitioner scmutationexec.Partitioner,
 	clock scmutationexec.Clock,
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
@@ -77,7 +76,6 @@ func NewExecutorDependencies(
 		commentUpdaterFactory:   commentUpdaterFactory,
 		periodicProgressFlusher: backfillFlusher,
 		statements:              statements,
-		partitioner:             partitioner,
 		user:                    user,
 		sessionData:             sessionData,
 		clock:                   clock,
@@ -316,7 +314,6 @@ func (d *txnDeps) SetResumeSpans(
 
 type execDeps struct {
 	txnDeps
-	partitioner             scmutationexec.Partitioner
 	clock                   scmutationexec.Clock
 	commentUpdaterFactory   scexec.DescriptorMetadataUpdaterFactory
 	backfiller              scexec.Backfiller
@@ -336,11 +333,6 @@ var _ scexec.Dependencies = (*execDeps)(nil)
 // Catalog implements the scexec.Dependencies interface.
 func (d *execDeps) Catalog() scexec.Catalog {
 	return d
-}
-
-// Partitioner implements the scexec.Dependencies interface.
-func (d *execDeps) Partitioner() scmutationexec.Partitioner {
-	return d.partitioner
 }
 
 // IndexBackfiller implements the scexec.Dependencies interface.

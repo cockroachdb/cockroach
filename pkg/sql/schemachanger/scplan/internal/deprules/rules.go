@@ -197,7 +197,7 @@ func init() {
 		addNode, partitioningNode,
 		screl.MustQuery(
 			addIdx.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-			partitioning.Type((*scpb.Partitioning)(nil)),
+			partitioning.Type((*scpb.IndexPartitioning)(nil)),
 			id.Entities(screl.DescID, addIdx, partitioning),
 			indexID.Entities(screl.IndexID, addIdx, partitioning),
 
@@ -220,7 +220,7 @@ func init() {
 		addNode, partitioningNode,
 		screl.MustQuery(
 			addIdx.Type((*scpb.PrimaryIndex)(nil)),
-			partitioning.Type((*scpb.Partitioning)(nil)),
+			partitioning.Type((*scpb.IndexPartitioning)(nil)),
 			id.Entities(screl.DescID, addIdx, partitioning),
 			id.Entities(screl.IndexID, addIdx, partitioning),
 
