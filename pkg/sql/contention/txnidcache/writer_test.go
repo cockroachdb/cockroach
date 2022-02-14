@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 type blackHoleSink struct {
@@ -71,11 +72,12 @@ func BenchmarkWriter(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 
 	run := func(b *testing.B, sink messageSink, numOfConcurrentWriter int) {
 		starter := make(chan struct{})
 
-		w := newWriter(sink)
+		w := newWriter(st, sink)
 
 		b.ResetTimer()
 		b.SetBytes(messageBlockSize * entrySize)
@@ -148,4 +150,51 @@ func BenchmarkWriter(b *testing.B) {
 			}
 		})
 	}
+}
+
+type counterSink struct {
+	numOfRecord int
+}
+
+var _ messageSink = &counterSink{}
+
+func (c *counterSink) push(block *messageBlock) {
+	for i := 0; i < messageBlockSize; i++ {
+		if !block[i].valid() {
+			break
+		}
+		c.numOfRecord++
+	}
+}
+
+func TestTxnIDCacheCanBeDisabledViaClusterSetting(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+
+	sink := &counterSink{}
+	w := newWriter(st, sink)
+	w.Record(ResolvedTxnID{
+		TxnID: uuid.FastMakeV4(),
+	})
+
+	w.Flush()
+	require.Equal(t, 1, sink.numOfRecord)
+
+	// This should disable txn id cache.
+	IsEnabled.Override(ctx, &st.SV, false)
+
+	w.Record(ResolvedTxnID{
+		TxnID: uuid.FastMakeV4(),
+	})
+	w.Flush()
+	require.Equal(t, 1, sink.numOfRecord)
+
+	// This should re-enable txn id cache.
+	IsEnabled.Override(ctx, &st.SV, true)
+
+	w.Record(ResolvedTxnID{
+		TxnID: uuid.FastMakeV4(),
+	})
+	w.Flush()
+	require.Equal(t, 2, sink.numOfRecord)
 }

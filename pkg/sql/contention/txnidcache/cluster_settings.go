@@ -19,3 +19,11 @@ var MaxSize = settings.RegisterByteSizeSetting(
 	"the maximum byte size TxnID cache will use",
 	64*1024*1024, // 64 MB
 ).WithPublic()
+
+// IsEnabled is used to turn on/off the txn id cache.
+var IsEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.contention.txn_id_cache.enabled",
+	"whether the txn id cache is enabled",
+	true, // defaultValue
+).WithPublic()
