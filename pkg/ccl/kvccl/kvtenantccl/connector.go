@@ -468,7 +468,10 @@ func (c *Connector) GetSpanConfigRecords(
 			return err
 		}
 
-		records = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		if err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		return nil, err
