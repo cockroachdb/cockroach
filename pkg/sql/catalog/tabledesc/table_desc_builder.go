@@ -705,7 +705,7 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 		}
 	}
 	for i := range desc.OutboundFKs {
-		fk := desc.OutboundFKs[i]
+		fk := &desc.OutboundFKs[i]
 		if fk.ConstraintID == 0 {
 			fk.ConstraintID = nextConstraintID()
 		}
