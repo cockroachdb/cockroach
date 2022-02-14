@@ -379,7 +379,7 @@ func updateZoneConfig(zone *zonepb.ZoneConfig, change ChangeZoneType) {
 }
 
 func updateZoneConfigInEnv(ctx context.Context, env *Env, change ChangeZoneType) error {
-	return env.UpdateZoneConfig(ctx, GeneratorDataTableID, func(zone *zonepb.ZoneConfig) {
+	return env.UpdateZoneConfig(ctx, int(GeneratorDataTableID), func(zone *zonepb.ZoneConfig) {
 		updateZoneConfig(zone, change)
 	})
 }
