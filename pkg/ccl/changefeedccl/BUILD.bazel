@@ -57,6 +57,7 @@ go_library(
         "//pkg/kv/kvserver/closedts",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",

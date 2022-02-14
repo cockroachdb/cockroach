@@ -28,6 +28,10 @@ func parseNullURL(_ cloud.ExternalStorageURIContext, _ *url.URL) (roachpb.Extern
 	return roachpb.ExternalStorage{Provider: roachpb.ExternalStorageProvider_null}, nil
 }
 
+// NullRequiresExternalIOAccounting is the return falues for
+// (*nullSinkStorage).RequiresExternalIOAccounting. This is exposed for testing.
+var NullRequiresExternalIOAccounting = false
+
 // MakeNullSinkStorageURI returns a valid null sink URI.
 func MakeNullSinkStorageURI(path string) string {
 	return fmt.Sprintf("null:///%s", path)
@@ -55,6 +59,10 @@ func (n *nullSinkStorage) Conf() roachpb.ExternalStorage {
 
 func (n *nullSinkStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return base.ExternalIODirConfig{}
+}
+
+func (n *nullSinkStorage) RequiresExternalIOAccounting() bool {
+	return NullRequiresExternalIOAccounting
 }
 
 func (n *nullSinkStorage) Settings() *cluster.Settings {

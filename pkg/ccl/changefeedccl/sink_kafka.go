@@ -92,7 +92,7 @@ type kafkaSink struct {
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
-	metrics      *sliMetrics
+	metrics      metricsRecorder
 
 	stats kafkaStats
 
@@ -643,7 +643,7 @@ func makeKafkaSink(
 	u sinkURL,
 	targets []jobspb.ChangefeedTargetSpecification,
 	opts map[string]string,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -668,7 +668,7 @@ func makeKafkaSink(
 		ctx:            ctx,
 		kafkaCfg:       config,
 		bootstrapAddrs: u.Host,
-		metrics:        m,
+		metrics:        mb(requiresResourceAccounting),
 		topics:         topics,
 	}
 
