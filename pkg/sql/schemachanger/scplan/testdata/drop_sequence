@@ -185,19 +185,19 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - from: [Namespace:{DescID: 104, Name: sq1}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: descriptor can only be cleaned up once the name is drained
+  rule: name must drain before descriptor deletion
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Locality:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: sq1}, ABSENT]
   kind: Precedence
-  rule: namespace needs descriptor to be dropped
+  rule: descriptor must be dropped before draining name
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [RelationDependedOnBy:{DescID: 104, ReferencedDescID: 105}, ABSENT]
   kind: SameStagePrecedence
@@ -209,12 +209,12 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Username: admin}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Username: public}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Username: root}, ABSENT]
   kind: Precedence
-  rule: table deps removal happens after table marked as dropped
+  rule: relation drop precedes relation deps removal

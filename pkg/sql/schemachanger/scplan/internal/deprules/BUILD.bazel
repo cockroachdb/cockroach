@@ -5,7 +5,8 @@ go_library(
     srcs = [
         "helpers.go",
         "registry.go",
-        "rules.go",
+        "rules_drop.go",
+        "rules_index_and_column.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/deprules",
     visibility = ["//visibility:public"],

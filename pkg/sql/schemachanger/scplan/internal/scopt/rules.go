@@ -27,13 +27,25 @@ func init() {
 	registerNoOpEdges(
 		depNode, // source node of op edge to mark as no-op.
 		screl.MustQuery(
-			relation.Type((*scpb.Table)(nil), (*scpb.View)(nil), (*scpb.Sequence)(nil)),
-			dep.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil),
-				(*scpb.IndexName)(nil), (*scpb.Column)(nil), (*scpb.ColumnName)(nil),
-				(*scpb.ForeignKeyBackReference)(nil), (*scpb.ForeignKey)(nil),
-				(*scpb.CheckConstraint)(nil), (*scpb.UniqueConstraint)(nil),
-				(*scpb.ConstraintName)(nil), (*scpb.Owner)(nil),
-				(*scpb.Locality)(nil), (*scpb.UserPrivileges)(nil)),
+			relation.Type(
+				(*scpb.Table)(nil),
+				(*scpb.View)(nil),
+				(*scpb.Sequence)(nil)),
+			dep.Type(
+				(*scpb.PrimaryIndex)(nil),
+				(*scpb.SecondaryIndex)(nil),
+				(*scpb.IndexName)(nil),
+				(*scpb.Column)(nil),
+				(*scpb.ColumnName)(nil),
+				(*scpb.ForeignKeyBackReference)(nil),
+				(*scpb.ForeignKey)(nil),
+				(*scpb.CheckConstraint)(nil),
+				(*scpb.UniqueConstraint)(nil),
+				(*scpb.ConstraintName)(nil),
+				(*scpb.Owner)(nil),
+				(*scpb.Locality)(nil),
+				(*scpb.UserPrivileges)(nil),
+			),
 			id.Entities(screl.DescID, relation, dep),
 
 			// If the relation is in any drop state in the current phase,
