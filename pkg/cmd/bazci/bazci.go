@@ -211,7 +211,6 @@ func getBuildInfo(args parsedArgs) (buildInfo, error) {
 			// We can find it by finding the location of the binary
 			// and munging it a bit.
 			args := []string{fullTarget, "-c", compilationMode, "--run_under=realpath"}
-			args = append(args, configArgList()...)
 			runOutput, err := runBazelReturningStdout("run", args...)
 			if err != nil {
 				return buildInfo{}, err
