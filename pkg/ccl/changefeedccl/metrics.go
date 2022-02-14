@@ -51,6 +51,7 @@ type AggMetrics struct {
 	BackfillCount   *aggmetric.AggGauge
 	ErrorRetries    *aggmetric.AggCounter
 	AdmitLatency    *aggmetric.AggHistogram
+	RunningCount    *aggmetric.AggGauge
 
 	// There is always at least 1 sliMetrics created for defaultSLI scope.
 	mu struct {
@@ -74,6 +75,7 @@ type sliMetrics struct {
 	ErrorRetries    *aggmetric.Counter
 	AdmitLatency    *aggmetric.Histogram
 	BackfillCount   *aggmetric.Gauge
+	RunningCount    *aggmetric.Gauge
 }
 
 // sinkDoesNotCompress is a sentinel value indicating the sink
@@ -182,13 +184,6 @@ var (
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
-	metaChangefeedRunning = metric.Metadata{
-		Name:        "changefeed.running",
-		Help:        "Number of currently running changefeeds, including sinkless",
-		Measurement: "Changefeeds",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	metaChangefeedCheckpointHistNanos = metric.Metadata{
 		Name:        "changefeed.checkpoint_hist_nanos",
 		Help:        "Time spent checkpointing changefeed progress",
@@ -277,6 +272,12 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedRunning := metric.Metadata{
+		Name:        "changefeed.running",
+		Help:        "Number of currently running changefeeds, including sinkless",
+		Measurement: "Changefeeds",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
 	// retain significant figures of 2.
@@ -297,6 +298,7 @@ func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
 		AdmitLatency: b.Histogram(metaAdmitLatency, histogramWindow,
 			admitLatencyMaxValue.Nanoseconds(), 1),
 		BackfillCount: b.Gauge(metaChangefeedBackfillCount),
+		RunningCount:  b.Gauge(metaChangefeedRunning),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -351,6 +353,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ErrorRetries:    a.ErrorRetries.AddChild(scope),
 		AdmitLatency:    a.AdmitLatency.AddChild(scope),
 		BackfillCount:   a.BackfillCount.AddChild(scope),
+		RunningCount:    a.RunningCount.AddChild(scope),
 	}
 
 	a.mu.sliMetrics[scope] = sm
@@ -366,7 +369,6 @@ type Metrics struct {
 	ResolvedMessages    *metric.Counter
 	QueueTimeNanos      *metric.Counter
 	CheckpointHistNanos *metric.Histogram
-	Running             *metric.Gauge
 	FrontierUpdates     *metric.Counter
 	ThrottleMetrics     cdcutils.Metrics
 
@@ -397,7 +399,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		QueueTimeNanos:    metric.NewCounter(metaEventQueueTime),
 		CheckpointHistNanos: metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow,
 			changefeedCheckpointHistMaxLatency.Nanoseconds(), 2),
-		Running:         metric.NewGauge(metaChangefeedRunning),
 		FrontierUpdates: metric.NewCounter(metaChangefeedFrontierUpdates),
 		ThrottleMetrics: cdcutils.MakeMetrics(histogramWindow),
 	}
