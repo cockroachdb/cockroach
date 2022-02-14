@@ -2307,6 +2307,7 @@ func (s *adminServer) decommissionStatusHelper(
 	// Get the number of replicas on each node. We *may* not need all of them,
 	// but that would be more complicated than seems worth it right now.
 	nodeIDs := req.NodeIDs
+	numReplicaReport := req.NumReplicaReport
 
 	// If no nodeIDs given, use all nodes.
 	if len(nodeIDs) == 0 {
@@ -2317,6 +2318,24 @@ func (s *adminServer) decommissionStatusHelper(
 		for _, status := range ns.Nodes {
 			nodeIDs = append(nodeIDs, status.Desc.NodeID)
 		}
+	}
+
+	// If the client specified a number of decommissioning replicas to report,
+	// prepare to get decommissioning replicas to report to the operator.
+	// numReplicaReport is the number of replicas reported for each node.
+	var replicasToReport map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica
+	if numReplicaReport > 0 {
+		log.Ops.Warning(ctx, "possible decommission stall detected; reporting decommissioning replicas")
+		replicasToReport = make(map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica)
+	}
+
+	isDecommissioningNode := func(n roachpb.NodeID) bool {
+		for _, nodeID := range nodeIDs {
+			if n == nodeID {
+				return true
+			}
+		}
+		return false
 	}
 
 	// Compute the replica counts for the target nodes only. This map doubles as
@@ -2336,6 +2355,24 @@ func (s *adminServer) decommissionStatusHelper(
 						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 					}
 					for _, r := range rangeDesc.Replicas().Descriptors() {
+						if numReplicaReport > 0 {
+							if len(replicasToReport[r.NodeID]) < int(numReplicaReport) {
+								if isDecommissioningNode(r.NodeID) {
+									replicasToReport[r.NodeID] = append(replicasToReport[r.NodeID],
+										&serverpb.DecommissionStatusResponse_Replica{
+											ReplicaID: r.ReplicaID,
+											RangeID:   rangeDesc.RangeID,
+										},
+									)
+									log.Ops.Warningf(ctx,
+										"n%d still has replica id %d for range r%d",
+										r.NodeID,
+										r.ReplicaID,
+										rangeDesc.RangeID,
+									)
+								}
+							}
+						}
 						if _, ok := replicaCounts[r.NodeID]; ok {
 							replicaCounts[r.NodeID]++
 						}
@@ -2373,15 +2410,15 @@ func (s *adminServer) decommissionStatusHelper(
 			return nil, errors.Newf("unable to get liveness for %d", nodeID)
 		}
 		nodeResp := serverpb.DecommissionStatusResponse_Status{
-			NodeID:       l.NodeID,
-			ReplicaCount: replicaCounts[l.NodeID],
-			Membership:   l.Membership,
-			Draining:     l.Draining,
+			NodeID:           l.NodeID,
+			ReplicaCount:     replicaCounts[l.NodeID],
+			Membership:       l.Membership,
+			Draining:         l.Draining,
+			ReportedReplicas: replicasToReport[l.NodeID],
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
 		}
-
 		res.Status = append(res.Status, nodeResp)
 	}
 
@@ -2420,7 +2457,7 @@ func (s *adminServer) Decommission(
 		return &serverpb.DecommissionStatusResponse{}, nil
 	}
 
-	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs, NumReplicaReport: req.NumReplicaReport})
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
