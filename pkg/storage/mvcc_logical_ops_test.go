@@ -118,7 +118,7 @@ func TestMVCCOpLogWriter(t *testing.T) {
 			}
 			exp := []enginepb.MVCCLogicalOp{
 				makeOp(&enginepb.MVCCWriteValueOp{
-					Key:       testKey1,
+					Key:       testKey1.Clone(),
 					Timestamp: hlc.Timestamp{Logical: 1},
 				}),
 				makeOp(&enginepb.MVCCWriteIntentOp{
@@ -139,12 +139,12 @@ func TestMVCCOpLogWriter(t *testing.T) {
 				}),
 				makeOp(&enginepb.MVCCCommitIntentOp{
 					TxnID:     txn1.ID,
-					Key:       testKey1,
+					Key:       testKey1.Clone(),
 					Timestamp: hlc.Timestamp{Logical: 4},
 				}),
 				makeOp(&enginepb.MVCCCommitIntentOp{
 					TxnID:     txn1.ID,
-					Key:       testKey2,
+					Key:       testKey2.Clone(),
 					Timestamp: hlc.Timestamp{Logical: 4},
 				}),
 				makeOp(&enginepb.MVCCWriteIntentOp{
