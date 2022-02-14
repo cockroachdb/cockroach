@@ -80,7 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
