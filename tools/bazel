@@ -47,7 +47,7 @@ fi
 # ranges that changed and see if they fall in an import block.
 if [[ -n "${ALWAYS_RUN_GAZELLE}" ]]; then
     case "${1:-}" in
-    build|coverage|cquery|fetch|mobile-install|print_action|query|run|test)
+    build|test)
         "$BAZEL_REAL" run //:gazelle
         echo "done running gazelle" 1>&2
         ;;

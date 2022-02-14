@@ -55,6 +55,8 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // ATTENTION: After changing this value in a unit test, you probably want to
@@ -134,6 +136,24 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	MetaPGWireCancelTotal = metric.Metadata{
+		Name:        "sql.pgwire_cancel.total",
+		Help:        "Counter of the number of pgwire query cancel requests",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaPGWireCancelIgnored = metric.Metadata{
+		Name:        "sql.pgwire_cancel.ignored",
+		Help:        "Counter of the number of pgwire query cancel requests that were ignored due to rate limiting",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaPGWireCancelSuccessful = metric.Metadata{
+		Name:        "sql.pgwire_cancel.successful",
+		Help:        "Counter of the number of pgwire query cancel requests that were successful",
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
@@ -231,26 +251,32 @@ type Server struct {
 
 // ServerMetrics is the set of metrics for the pgwire server.
 type ServerMetrics struct {
-	BytesInCount   *metric.Counter
-	BytesOutCount  *metric.Counter
-	Conns          *metric.Gauge
-	NewConns       *metric.Counter
-	ConnLatency    *metric.Histogram
-	ConnMemMetrics sql.BaseMemoryMetrics
-	SQLMemMetrics  sql.MemoryMetrics
+	BytesInCount                *metric.Counter
+	BytesOutCount               *metric.Counter
+	Conns                       *metric.Gauge
+	NewConns                    *metric.Counter
+	ConnLatency                 *metric.Histogram
+	PGWireCancelTotalCount      *metric.Counter
+	PGWireCancelIgnoredCount    *metric.Counter
+	PGWireCancelSuccessfulCount *metric.Counter
+	ConnMemMetrics              sql.BaseMemoryMetrics
+	SQLMemMetrics               sql.MemoryMetrics
 }
 
 func makeServerMetrics(
 	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
 ) ServerMetrics {
 	return ServerMetrics{
-		BytesInCount:   metric.NewCounter(MetaBytesIn),
-		BytesOutCount:  metric.NewCounter(MetaBytesOut),
-		Conns:          metric.NewGauge(MetaConns),
-		NewConns:       metric.NewCounter(MetaNewConns),
-		ConnLatency:    metric.NewLatency(MetaConnLatency, histogramWindow),
-		ConnMemMetrics: sql.MakeBaseMemMetrics("conns", histogramWindow),
-		SQLMemMetrics:  sqlMemMetrics,
+		BytesInCount:                metric.NewCounter(MetaBytesIn),
+		BytesOutCount:               metric.NewCounter(MetaBytesOut),
+		Conns:                       metric.NewGauge(MetaConns),
+		NewConns:                    metric.NewCounter(MetaNewConns),
+		ConnLatency:                 metric.NewLatency(MetaConnLatency, histogramWindow),
+		PGWireCancelTotalCount:      metric.NewCounter(MetaPGWireCancelTotal),
+		PGWireCancelIgnoredCount:    metric.NewCounter(MetaPGWireCancelIgnored),
+		PGWireCancelSuccessfulCount: metric.NewCounter(MetaPGWireCancelSuccessful),
+		ConnMemMetrics:              sql.MakeBaseMemMetrics("conns", histogramWindow),
+		SQLMemMetrics:               sqlMemMetrics,
 	}
 }
 
@@ -742,33 +768,38 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 // logged so that an operator can be aware of any possibly malicious requests.
 func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
-	var err error
-	defer func() {
+	s.metrics.PGWireCancelTotalCount.Inc(1)
+
+	resp, err := func() (*serverpb.CancelQueryByKeyResponse, error) {
+		backendKeyDataBits, err := buf.GetUint64()
+		// The connection that issued the cancel is not a SQL session -- it's an
+		// entirely new connection that's created just to send the cancel. We close
+		// the connection as soon as possible after reading the data, since there
+		// is nothing to send back to the client.
+		_ = conn.Close()
 		if err != nil {
-			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+			return nil, err
 		}
+		cancelKey := pgwirecancel.BackendKeyData(backendKeyDataBits)
+		// The request is forwarded to the appropriate node.
+		req := &serverpb.CancelQueryByKeyRequest{
+			SQLInstanceID:  cancelKey.GetSQLInstanceID(),
+			CancelQueryKey: cancelKey,
+		}
+		resp, err := s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
+		if len(resp.Error) > 0 {
+			err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
+		}
+		return resp, err
 	}()
 
-	var backendKeyDataBits uint64
-	backendKeyDataBits, err = buf.GetUint64()
-	// The connection that issued the cancel is not a SQL session -- it's an
-	// entirely new connection that's created just to send the cancel. We close
-	// the connection as soon as possible after reading the data, since there
-	// is nothing to send back to the client.
-	_ = conn.Close()
-	if err != nil {
-		return
-	}
-	cancelKey := pgwirecancel.BackendKeyData(backendKeyDataBits)
-	// The request is forwarded to the appropriate node.
-	req := &serverpb.CancelQueryByKeyRequest{
-		SQLInstanceID:  cancelKey.GetSQLInstanceID(),
-		CancelQueryKey: cancelKey,
-	}
-	var resp *serverpb.CancelQueryByKeyResponse
-	resp, err = s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
-	if len(resp.Error) > 0 {
-		err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
+	if resp != nil && resp.Canceled {
+		s.metrics.PGWireCancelSuccessfulCount.Inc(1)
+	} else if err != nil {
+		if status := status.Convert(err); status.Code() == codes.ResourceExhausted {
+			s.metrics.PGWireCancelIgnoredCount.Inc(1)
+		}
+		log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 	}
 }
 

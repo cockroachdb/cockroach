@@ -23,13 +23,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
 // NewBuilderDependencies returns an scbuild.Dependencies implementation built
 // from the given arguments.
 func NewBuilderDependencies(
+	clusterID uuid.UUID,
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	descsCollection *descs.Collection,
@@ -42,6 +46,7 @@ func NewBuilderDependencies(
 	statements []string,
 ) scbuild.Dependencies {
 	return &buildDeps{
+		clusterID:       clusterID,
 		codec:           codec,
 		txn:             txn,
 		descsCollection: descsCollection,
@@ -56,6 +61,7 @@ func NewBuilderDependencies(
 }
 
 type buildDeps struct {
+	clusterID       uuid.UUID
 	codec           keys.SQLCodec
 	txn             *kv.Txn
 	descsCollection *descs.Collection
@@ -209,6 +215,10 @@ func (d *buildDeps) MustGetSchemasForDatabase(
 	return schemas
 }
 
+// CreatePartitioningCCL is the public hook point for the CCL-licensed
+// partitioning creation code.
+var CreatePartitioningCCL scbuild.CreatePartitioningCCLCallback
+
 var _ scbuild.Dependencies = (*buildDeps)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.
@@ -219,6 +229,11 @@ func (d *buildDeps) AuthorizationAccessor() scbuild.AuthorizationAccessor {
 // CatalogReader implements the scbuild.Dependencies interface.
 func (d *buildDeps) CatalogReader() scbuild.CatalogReader {
 	return d
+}
+
+// ClusterID implements the scbuild.Dependencies interface.
+func (d *buildDeps) ClusterID() uuid.UUID {
+	return d.clusterID
 }
 
 // Codec implements the scbuild.Dependencies interface.
@@ -249,4 +264,13 @@ func (d *buildDeps) AstFormatter() scbuild.AstFormatter {
 // FeatureChecker implements the scbuild.Dependencies interface.
 func (d *buildDeps) FeatureChecker() scbuild.FeatureChecker {
 	return d.featureChecker
+}
+
+// IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
+func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
+	if CreatePartitioningCCL == nil {
+		panic(sqlerrors.NewCCLRequiredError(errors.New(
+			"creating or manipulating partitions requires a CCL binary")))
+	}
+	return CreatePartitioningCCL
 }

@@ -170,6 +170,7 @@ go_test(
     ],
     data = glob(["testdata/**"]) + ["@cockroach//c-deps:libgeos"],
     embed = [":backupccl"],
+    shard_count = 16,
     deps = [
         "//pkg/base",
         "//pkg/blobs",

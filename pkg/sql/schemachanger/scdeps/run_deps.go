@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -35,7 +34,6 @@ func NewJobRunDependencies(
 	backfiller scexec.Backfiller,
 	rangeCounter RangeCounter,
 	eventLoggerFactory EventLoggerFactory,
-	partitioner scmutationexec.Partitioner,
 	jobRegistry *jobs.Registry,
 	job *jobs.Job,
 	codec keys.SQLCodec,
@@ -53,7 +51,6 @@ func NewJobRunDependencies(
 		backfiller:            backfiller,
 		rangeCounter:          rangeCounter,
 		eventLoggerFactory:    eventLoggerFactory,
-		partitioner:           partitioner,
 		jobRegistry:           jobRegistry,
 		job:                   job,
 		codec:                 codec,
@@ -71,7 +68,6 @@ type jobExecutionDeps struct {
 	db                    *kv.DB
 	internalExecutor      sqlutil.InternalExecutor
 	eventLoggerFactory    func(txn *kv.Txn) scexec.EventLogger
-	partitioner           scmutationexec.Partitioner
 	backfiller            scexec.Backfiller
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory
 	rangeCounter          RangeCounter
@@ -119,7 +115,6 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 			),
 			periodicProgressFlusher: newPeriodicProgressFlusher(d.settings),
 			statements:              d.statements,
-			partitioner:             d.partitioner,
 			user:                    pl.UsernameProto.Decode(),
 			clock:                   NewConstantClock(timeutil.FromUnixMicros(pl.StartedMicros)),
 			commentUpdaterFactory:   d.commentUpdaterFactory,

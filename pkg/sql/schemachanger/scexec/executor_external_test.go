@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,7 +70,6 @@ func (ti testInfra) newExecDeps(
 		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
 		noopIndexValidator{}, /* indexValidator */
-		noopPartitioner{},    /* partitioner */
 		scdeps.NewConstantClock(timeutil.Now()),
 		noopMetadataUpdaterFactory{}, /* commentUpdaterFactory*/
 		noopEventLogger{},            /* eventLogger */
@@ -493,21 +491,6 @@ func (noopIndexValidator) ValidateInvertedIndexes(
 	return nil
 }
 
-type noopPartitioner struct{}
-
-func (noopPartitioner) AddPartitioning(
-	ctx context.Context,
-	tbl *tabledesc.Mutable,
-	index catalog.Index,
-	partitionFields []string,
-	listPartition []*scpb.ListPartition,
-	rangePartition []*scpb.RangePartitions,
-	allowedNewColumnNames []tree.Name,
-	allowImplicitPartitioning bool,
-) error {
-	return nil
-}
-
 type noopEventLogger struct{}
 
 func (noopEventLogger) LogEvent(
@@ -573,6 +556,5 @@ func (noopMetadataUpdater) SwapDescriptorSubComment(
 
 var _ scexec.Backfiller = noopBackfiller{}
 var _ scexec.IndexValidator = noopIndexValidator{}
-var _ scmutationexec.Partitioner = noopPartitioner{}
 var _ scexec.EventLogger = noopEventLogger{}
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
