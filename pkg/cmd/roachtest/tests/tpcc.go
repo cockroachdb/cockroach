@@ -944,7 +944,7 @@ func loadTPCCBench(
 		t.L().Printf("found existing tpcc database\n")
 
 		var curWarehouses int
-		if err := db.QueryRowContext(ctx,
+		if err = db.QueryRowContext(ctx,
 			`SELECT count(*) FROM tpcc.warehouse`,
 		).Scan(&curWarehouses); err != nil {
 			return err
