@@ -2304,6 +2304,23 @@ func (s *adminServer) decommissionStatusHelper(
 		}
 	}
 
+	// If verbosity is set, log decommissioning replicas and print them to the
+	// operator. reportLimit is the number of replicas reported for each node.
+	var replicasToReport map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica
+	const reportLimit = 5
+	if req.Verbose {
+		replicasToReport = make(map[roachpb.NodeID][]*serverpb.DecommissionStatusResponse_Replica)
+	}
+
+	isDecommissioningNode := func(n roachpb.NodeID) bool {
+		for _, nodeID := range nodeIDs {
+			if n == nodeID {
+				return true
+			}
+		}
+		return false
+	}
+
 	// Compute the replica counts for the target nodes only. This map doubles as
 	// a lookup table to check whether we care about a given node.
 	var replicaCounts map[roachpb.NodeID]int64
@@ -2321,6 +2338,18 @@ func (s *adminServer) decommissionStatusHelper(
 						return errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 					}
 					for _, r := range rangeDesc.Replicas().Descriptors() {
+						if req.Verbose {
+							if len(replicasToReport[r.NodeID]) <= reportLimit {
+								if isDecommissioningNode(r.NodeID) {
+									replicasToReport[r.NodeID] = append(replicasToReport[r.NodeID],
+										&serverpb.DecommissionStatusResponse_Replica{
+											ReplicaID: r.ReplicaID,
+											RangeID:   rangeDesc.RangeID,
+										},
+									)
+								}
+							}
+						}
 						if _, ok := replicaCounts[r.NodeID]; ok {
 							replicaCounts[r.NodeID]++
 						}
@@ -2362,11 +2391,11 @@ func (s *adminServer) decommissionStatusHelper(
 			ReplicaCount: replicaCounts[l.NodeID],
 			Membership:   l.Membership,
 			Draining:     l.Draining,
+			Replicas:     replicasToReport[l.NodeID],
 		}
 		if l.IsLive(s.server.clock.Now().GoTime()) {
 			nodeResp.IsLive = true
 		}
-
 		res.Status = append(res.Status, nodeResp)
 	}
 
@@ -2405,7 +2434,7 @@ func (s *adminServer) Decommission(
 		return &serverpb.DecommissionStatusResponse{}, nil
 	}
 
-	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
+	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs, Verbose: req.Verbose})
 }
 
 // DataDistribution returns a count of replicas on each node for each table.
