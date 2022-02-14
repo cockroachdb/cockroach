@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -810,7 +811,7 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 
 			size := exporter.Len()
 
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(exporter.Bytes())); err != nil {
+			if err := multitenant.WriteFileAccounted(ctx, sp.flowCtx.Cfg.ExternalIORecorder, es, filename, exporter.Bytes()); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{

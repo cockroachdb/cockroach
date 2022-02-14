@@ -364,11 +364,11 @@ func writeNewLatestFile(
 	// to the base directory as well the progress directory. That way if
 	// an old node resumes a backup, it doesn't have to start over.
 	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		err := cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
+		_, err := cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
 		if err != nil {
 			return err
 		}
 	}
-
-	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
+	_, err := cloud.WriteFile(ctx, exportStore, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix))
+	return err
 }

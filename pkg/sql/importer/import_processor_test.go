@@ -122,7 +122,6 @@ func TestConverterFlushesBatches(t *testing.T) {
 				if err != nil {
 					t.Fatalf("makeInputConverter() error = %v", err)
 				}
-
 				group := ctxgroup.WithContext(ctx)
 				group.Go(func() error {
 					defer close(kvCh)
