@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/redact"
 )
 
@@ -55,6 +56,11 @@ type Dependencies interface {
 	CatalogReader() CatalogReader
 	AuthorizationAccessor() AuthorizationAccessor
 
+	// ClusterID returns the ID of the cluster.
+	// So far this is used only to build a tree.EvalContext, for the purpose
+	// of checking whether CCL features are enabled.
+	ClusterID() uuid.UUID
+
 	// Codec returns the current session data, as in execCfg.
 	// So far this is used only to build a tree.EvalContext.
 	Codec() keys.SQLCodec
@@ -68,8 +74,10 @@ type Dependencies interface {
 	// Statements returns the statements behind this schema change.
 	Statements() []string
 
+	// AstFormatter returns something that can format AST nodes.
 	AstFormatter() AstFormatter
 
+	// FeatureChecker returns something that checks schema feature flags.
 	FeatureChecker() SchemaFeatureChecker
 }
 
