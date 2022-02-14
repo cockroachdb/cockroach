@@ -140,6 +140,9 @@ func (r *Replica) sendWithoutRangeID(
 
 	// Circuit breaker handling.
 	ctx, cancel := context.WithCancel(ctx)
+	if canBypassReplicaCircuitBreakerForBatch(ba) {
+		ctx = withBypassCircuitBreakerMarker(ctx)
+	}
 	tok, brSig, err := r.breaker.Register(ctx, cancel)
 	if err != nil {
 		return nil, roachpb.NewError(err)

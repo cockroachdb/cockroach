@@ -1391,6 +1391,7 @@ func (r *Replica) checkExecutionCanProceed(
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
+	log.Eventf(ctx, "execution canproceed: %+v", st)
 
 	// Is there a merge in progress? We intentionally check this last to let requests error out
 	// for other reasons first, in case callers don't require this replica to service the request.

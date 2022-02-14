@@ -12,6 +12,7 @@ package kvserver_test
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -32,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -366,6 +370,90 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 }
 
+func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := setupCircuitBreakerTest(t)
+	defer tc.Stopper().Stop(context.Background())
+
+	// Put the lease on n1 but then trip the breaker with the probe
+	// disabled, i.e. it will stay tripped.
+	require.NoError(t, tc.Write(n1))
+	tc.SetProbeEnabled(n1, false)
+	tc.Report(n1, errors.New("boom"))
+
+	exemptRequests := []func() roachpb.Request{
+		func() roachpb.Request { return &roachpb.ExportRequest{ReturnSST: true} },
+		func() roachpb.Request {
+			sstFile := &storage.MemFile{}
+			sst := storage.MakeIngestionSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), sstFile)
+			defer sst.Close()
+			require.NoError(t, sst.LogData([]byte("hello")))
+			require.NoError(t, sst.Finish())
+
+			addReq := &roachpb.AddSSTableRequest{
+				Data:           sstFile.Data(),
+				IngestAsWrites: true,
+			}
+			return addReq
+		},
+		func() roachpb.Request {
+			return &roachpb.RevertRangeRequest{TargetTime: tc.Servers[0].Clock().Now()}
+		},
+		func() roachpb.Request {
+			return &roachpb.GCRequest{}
+		},
+		func() roachpb.Request {
+			return &roachpb.ClearRangeRequest{}
+		},
+		func() roachpb.Request {
+			return &roachpb.ProbeRequest{}
+		},
+	}
+
+	for _, reqFn := range exemptRequests {
+		req := reqFn()
+		t.Run(fmt.Sprintf("with-existing-lease/%s", req.Method()), func(t *testing.T) {
+			require.NoError(t, tc.Send(n1, req))
+		})
+	}
+	for _, reqFn := range exemptRequests {
+		req := reqFn()
+		t.Run(fmt.Sprintf("with-acquire-lease/%s", req.Method()), func(t *testing.T) {
+			resumeHeartbeats := tc.ExpireAllLeases(t, pauseHeartbeats)
+			resumeHeartbeats() // intentionally resume right now so that lease can be acquired
+			require.NoError(t, tc.Send(n1, req))
+		})
+	}
+
+	resumeHeartbeats := tc.ExpireAllLeases(t, pauseHeartbeats)
+	defer resumeHeartbeats() // can't acquire leases until test ends
+
+	for _, reqFn := range exemptRequests {
+		req := reqFn()
+		if req.Method() == roachpb.Probe {
+			// Probe does not require the lease, and is the most-tested of the bunch
+			// already. We don't have to test it again here, which would require undue
+			// amounts of special-casing below.
+			continue
+		}
+		t.Run(fmt.Sprintf("with-unavailable-lease/%s", req.Method()), func(t *testing.T) {
+			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Millisecond)
+			defer cancel()
+			const maxWait = 5 * time.Second
+			tBegin := timeutil.Now()
+			err := tc.SendCtx(ctx, n1, req)
+			t.Log(err) // usually: [NotLeaseHolderError] lease acquisition canceled because context canceled
+			require.Error(t, err)
+			require.Error(t, ctx.Err())
+			// Make sure we didn't run into the "long" timeout inside of SendCtx but
+			// actually terminated as a result of our ctx cancelling.
+			require.Less(t, timeutil.Since(tBegin), maxWait)
+		})
+	}
+}
+
 // Test infrastructure below.
 
 func makeBreakerToggleable(b *circuit.Breaker) (setProbeEnabled func(bool)) {
@@ -534,23 +622,37 @@ func (cbt *circuitBreakerTest) ExpireAllLeases(t *testing.T, pauseHeartbeats boo
 	}
 }
 
-func (*circuitBreakerTest) sendViaRepl(repl *kvserver.Replica, req roachpb.Request) error {
+func (cbt *circuitBreakerTest) Send(idx int, req roachpb.Request) error {
+	return cbt.SendCtx(context.Background(), idx, req)
+
+}
+
+func (cbt *circuitBreakerTest) SendCtx(ctx context.Context, idx int, req roachpb.Request) error {
 	var ba roachpb.BatchRequest
+	repl := cbt.repls[idx]
 	ba.RangeID = repl.Desc().RangeID
 	ba.Timestamp = repl.Clock().Now()
 	ba.Add(req)
-	ctx, cancel := context.WithTimeout(context.Background(), testutils.DefaultSucceedsSoonDuration)
+	if h := req.Header(); len(h.Key) == 0 {
+		h.Key = repl.Desc().StartKey.AsRawKey()
+		if roachpb.IsRange(req) {
+			h.EndKey = repl.Desc().EndKey.AsRawKey()
+		}
+		req.SetHeader(h)
+	}
+	parCtx := ctx
+	ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
 	// Tag the breaker with the request. Once Send returns, we'll check that it's
 	// no longer tracked by the breaker. This gives good coverage that we're not
 	// going to leak memory.
 	ctx = context.WithValue(ctx, req, struct{}{})
 
-	defer cancel()
 	_, pErr := repl.Send(ctx, ba)
 	// If our context got canceled, return an opaque error regardless of presence or
 	// absence of actual error. This makes sure we don't accidentally pass tests as
 	// a result of our context cancellation.
-	if err := ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil && parCtx.Err() == nil {
 		pErr = roachpb.NewErrorf("timed out waiting for batch response: %v", pErr)
 	}
 	{
@@ -568,6 +670,11 @@ func (*circuitBreakerTest) sendViaRepl(repl *kvserver.Replica, req roachpb.Reque
 	}
 
 	return pErr.GoError()
+}
+
+func (cbt *circuitBreakerTest) WriteDS(idx int) error {
+	put := roachpb.NewPut(cbt.repls[idx].Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
+	return cbt.sendViaDistSender(cbt.Servers[idx].DistSender(), put)
 }
 
 func (*circuitBreakerTest) sendViaDistSender(ds *kvcoord.DistSender, req roachpb.Request) error {
@@ -596,15 +703,6 @@ func (*circuitBreakerTest) RequireIsNotLeaseholderError(t *testing.T, err error)
 	require.True(t, ok, "%+v", err)
 }
 
-func (cbt *circuitBreakerTest) Write(idx int) error {
-	return cbt.writeViaRepl(cbt.repls[idx].Replica)
-}
-
-func (cbt *circuitBreakerTest) WriteDS(idx int) error {
-	put := roachpb.NewPut(cbt.repls[idx].Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
-	return cbt.sendViaDistSender(cbt.Servers[idx].DistSender(), put)
-}
-
 // SetSlowThreshold sets the SlowReplicationThreshold for requests sent through the
 // test harness (i.e. via Write) to the provided duration. The zero value restores
 // the default.
@@ -612,16 +710,14 @@ func (cbt *circuitBreakerTest) SetSlowThreshold(dur time.Duration) {
 	cbt.slowThresh.Store(dur)
 }
 
-func (cbt *circuitBreakerTest) Read(idx int) error {
-	return cbt.readViaRepl(cbt.repls[idx].Replica)
-}
-
-func (cbt *circuitBreakerTest) writeViaRepl(repl *kvserver.Replica) error {
+func (cbt *circuitBreakerTest) Write(idx int) error {
+	repl := cbt.repls[idx]
 	put := roachpb.NewPut(repl.Desc().StartKey.AsRawKey(), roachpb.MakeValueFromString("hello"))
-	return cbt.sendViaRepl(repl, put)
+	return cbt.Send(idx, put)
 }
 
-func (cbt *circuitBreakerTest) readViaRepl(repl *kvserver.Replica) error {
+func (cbt *circuitBreakerTest) Read(idx int) error {
+	repl := cbt.repls[idx]
 	get := roachpb.NewGet(repl.Desc().StartKey.AsRawKey(), false /* forUpdate */)
-	return cbt.sendViaRepl(repl, get)
+	return cbt.Send(idx, get)
 }

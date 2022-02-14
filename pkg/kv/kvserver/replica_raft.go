@@ -1128,6 +1128,7 @@ func (r *Replica) refreshProposalsLocked(
 	}
 
 	var maxSlowProposalDurationRequest *roachpb.BatchRequest
+	// TODO(tbg): don't track exempt requests for tripping the breaker?
 	var maxSlowProposalDuration time.Duration
 	var slowProposalCount int64
 	var reproposals pendingCmdSlice

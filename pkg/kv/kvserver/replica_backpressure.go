@@ -108,6 +108,19 @@ func canBackpressureBatch(ba *roachpb.BatchRequest) bool {
 	return false
 }
 
+// canBypassReplicaCircuitBreakerForBatch returns whether the provided
+// BatchRequest bypasses the per-Replica circuit breaker. This is the
+// case if any request in the batch is requesting to do so.
+func canBypassReplicaCircuitBreakerForBatch(ba *roachpb.BatchRequest) bool {
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		if roachpb.CanBypassReplicaCircuitBreaker(req) {
+			return true
+		}
+	}
+	return false
+}
+
 // shouldBackpressureWrites returns whether writes to the range should be
 // subject to backpressure. This is based on the size of the range in
 // relation to the split size. The method returns true if the range is more
