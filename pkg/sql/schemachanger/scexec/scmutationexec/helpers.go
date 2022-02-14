@@ -11,11 +11,82 @@
 package scmutationexec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/errors"
 )
+
+func (m *visitor) checkOutTable(ctx context.Context, id descpb.ID) (*tabledesc.Mutable, error) {
+	desc, err := m.s.CheckOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*tabledesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapTableDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.Mutable, error) {
+	desc, err := m.s.CheckOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*dbdesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapDatabaseDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+// Stop the linter from complaining.
+var _ = ((*visitor)(nil)).checkOutDatabase
+
+func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc.Mutable, error) {
+	desc, err := m.s.CheckOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*schemadesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapSchemaDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+// Stop the linter from complaining.
+var _ = ((*visitor)(nil)).checkOutSchema
+
+func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mutable, error) {
+	desc, err := m.s.CheckOutDescriptor(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	mut, ok := desc.(*typedesc.Mutable)
+	if !ok {
+		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
+	}
+	return mut, nil
+}
+
+// MustReadImmutableDescriptor is a shorthand for invoking
+// CatalogReader.MustReadImmutableDescriptors for a single ID.
+func MustReadImmutableDescriptor(
+	ctx context.Context, cr CatalogReader, id descpb.ID,
+) (catalog.Descriptor, error) {
+	descs, err := cr.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], nil
+}
 
 func mutationStateChange(
 	tbl *tabledesc.Mutable, f MutationSelector, exp, next descpb.DescriptorMutation_State,
