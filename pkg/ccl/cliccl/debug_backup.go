@@ -279,12 +279,12 @@ func newBlobFactory(ctx context.Context, dialing roachpb.NodeID) (blobs.BlobClie
 }
 
 func externalStorageFromURIFactory(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user security.SQLUsername, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	defaultSettings := &cluster.Settings{}
 	defaultSettings.SV.Init(ctx, nil /* opaque */)
 	return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{},
-		defaultSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/)
+		defaultSettings, newBlobFactory, user, nil /*Internal Executor*/, nil /*kvDB*/, opts...)
 }
 
 func getManifestFromURI(ctx context.Context, path string) (backupccl.BackupManifest, error) {

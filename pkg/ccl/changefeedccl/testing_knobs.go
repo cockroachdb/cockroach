@@ -34,6 +34,8 @@ type TestingKnobs struct {
 	ShouldSkipResolved func(resolved *jobspb.ResolvedSpan) bool
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs kvfeed.TestingKnobs
+
+	NullSinkIsExternalIOAccounted bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
