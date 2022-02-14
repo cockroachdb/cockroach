@@ -6132,7 +6132,8 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			},
 			Info: `Returns the region of the connection's current node as defined by
 the locality flag on node startup. Returns an error if no region is set.`,
-			Volatility: tree.VolatilityStable,
+			Volatility:       tree.VolatilityStable,
+			DistsqlBlocklist: true,
 		},
 	),
 	"crdb_internal.validate_multi_region_zone_configs": makeBuiltin(
