@@ -8,6 +8,7 @@ go_library(
         "builder_state.go",
         "descriptor_reader.go",
         "event_log_state.go",
+        "index_partitioner.go",
         "name_resolver.go",
         "privilege_checker.go",
         "table_element_id_generator.go",
@@ -19,6 +20,7 @@ go_library(
     deps = [
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catconstants",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/faketreeeval",
@@ -47,6 +49,7 @@ go_test(
     deps = [
         ":scbuild",
         "//pkg/base",
+        "//pkg/ccl/utilccl",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",

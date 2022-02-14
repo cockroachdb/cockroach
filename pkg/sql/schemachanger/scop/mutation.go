@@ -289,11 +289,9 @@ type RemoveSequenceOwnedBy struct {
 // an index
 type AddIndexPartitionInfo struct {
 	mutationOp
-	TableID         descpb.ID
-	IndexID         descpb.IndexID
-	PartitionFields []string
-	ListPartitions  []*scpb.ListPartition
-	RangePartitions []*scpb.RangePartitions
+	TableID      descpb.ID
+	IndexID      descpb.IndexID
+	Partitioning catpb.PartitioningDescriptor
 }
 
 // LogEvent logs an event for a given descriptor.

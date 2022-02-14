@@ -67,7 +67,8 @@ go_test(
         "//pkg/sql/schemachanger/scdeps",
         "//pkg/sql/schemachanger/scdeps/sctestdeps",
         "//pkg/sql/schemachanger/scdeps/sctestutils",
-        "//pkg/sql/schemachanger/scexec/scmutationexec",
+        # scmutationexec is required to build the generated output of mock_scexec
+        "//pkg/sql/schemachanger/scexec/scmutationexec",  # keep
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/sem/catid",  # keep

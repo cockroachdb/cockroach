@@ -209,16 +209,8 @@ func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPar
 	if err != nil {
 		return err
 	}
-	return m.p.AddPartitioning(
-		ctx,
-		tbl,
-		index,
-		op.PartitionFields,
-		op.ListPartitions,
-		op.RangePartitions,
-		nil,  /* allowedNewColumnNames */
-		true, /* allowImplicitPartitioning */
-	)
+	index.IndexDesc().Partitioning = op.Partitioning
+	return nil
 }
 
 func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error {
