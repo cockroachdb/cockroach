@@ -156,10 +156,11 @@ func makeGCSStorage(
 }
 
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "gcs.Writer")
+	_, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.Writer: %s",
 		path.Join(g.prefix, basename))})
+
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0

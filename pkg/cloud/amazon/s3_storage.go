@@ -400,16 +400,15 @@ func (s *s3Storage) Settings() *cluster.Settings {
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
-	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
-
 	uploader, err := s.getUploader(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
+	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
+		defer sp.Finish()
 		// Upload the file to S3.
 		// TODO(dt): test and tune the uploader parameters.
 		_, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
