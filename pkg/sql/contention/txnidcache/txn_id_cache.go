@@ -145,7 +145,7 @@ func NewTxnIDCache(st *cluster.Settings, metrics *Metrics) *Cache {
 		return MaxSize.Get(&st.SV) / entrySize
 	} /* capacity */)
 
-	t.writer = newWriter(t)
+	t.writer = newWriter(st, t)
 	return t
 }
 
