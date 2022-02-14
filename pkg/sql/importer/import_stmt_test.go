@@ -3640,8 +3640,7 @@ func benchUserUpload(b *testing.B, uploadBaseURI string) {
 		require.NoError(b, err)
 		content, err := ioctx.ReadAll(ctx, r)
 		require.NoError(b, err)
-		err = cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content))
-		require.NoError(b, err)
+		require.NoError(b, cloud.WriteFile(ctx, userfileStorage, "", bytes.NewReader(content)))
 		numBytes = int64(len(content))
 	} else {
 		b.Fatal(errors.New("benchmarking unsupported URI scheme"))

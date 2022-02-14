@@ -103,6 +103,8 @@ func (h *httpStorage) ExternalIOConf() base.ExternalIODirConfig {
 	return h.ioConf
 }
 
+func (h *httpStorage) RequiresExternalIOAccounting() bool { return true }
+
 func (h *httpStorage) Settings() *cluster.Settings {
 	return h.settings
 }

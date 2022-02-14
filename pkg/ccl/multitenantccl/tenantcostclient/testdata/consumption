@@ -7,6 +7,8 @@ Reads:  0 requests (0 bytes)
 Writes:  0 requests (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 read bytes=1024000
 ----
@@ -18,6 +20,8 @@ Reads:  1 requests (1024000 bytes)
 Writes:  0 requests (0 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 write bytes=1024
 ----
@@ -29,6 +33,8 @@ Reads:  1 requests (1024000 bytes)
 Writes:  1 requests (1024 bytes)
 SQL Pods CPU seconds:  0.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 cpu
 1s
@@ -41,6 +47,8 @@ Reads:  1 requests (1024000 bytes)
 Writes:  1 requests (1024 bytes)
 SQL Pods CPU seconds:  1.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 write bytes=4096
 ----
@@ -58,6 +66,8 @@ Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  1.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 cpu
 1h
@@ -70,6 +80,8 @@ Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  3601.00
 PGWire egress:  0 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
 
 pgwire-egress
 12345
@@ -82,3 +94,77 @@ Reads:  2 requests (1089536 bytes)
 Writes:  3 requests (9216 bytes)
 SQL Pods CPU seconds:  3601.00
 PGWire egress:  12345 bytes
+ExternalIO egress: 0 bytes
+ExternalIO ingress: 0 bytes
+
+disable-external-ru-accounting
+----
+
+external-egress bytes=10
+----
+
+usage
+----
+RU:  3601158.74
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
+PGWire egress:  12345 bytes
+ExternalIO egress: 10 bytes
+ExternalIO ingress: 0 bytes
+
+external-egress bytes=10 unused=5
+----
+
+usage
+----
+RU:  3601158.74
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
+PGWire egress:  12345 bytes
+ExternalIO egress: 15 bytes
+ExternalIO ingress: 0 bytes
+
+external-ingress bytes=10
+----
+
+usage
+----
+RU:  3601158.74
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
+PGWire egress:  12345 bytes
+ExternalIO egress: 15 bytes
+ExternalIO ingress: 10 bytes
+
+
+enable-external-ru-accounting
+----
+
+external-egress bytes=1024000
+----
+
+usage
+----
+RU:  3601159.71
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
+PGWire egress:  12345 bytes
+ExternalIO egress: 1024015 bytes
+ExternalIO ingress: 10 bytes
+
+external-ingress bytes=1024000
+----
+
+usage
+----
+RU:  3601160.69
+Reads:  2 requests (1089536 bytes)
+Writes:  3 requests (9216 bytes)
+SQL Pods CPU seconds:  3601.00
+PGWire egress:  12345 bytes
+ExternalIO egress: 1024015 bytes
+ExternalIO ingress: 1024010 bytes

@@ -36,6 +36,11 @@ type TestingKnobs struct {
 	// FeedKnobs are kvfeed testing knobs.
 	FeedKnobs     kvfeed.TestingKnobs
 	DistflowKnobs changefeeddist.TestingKnobs
+	// NullSinkIsExternalIOAccounted controls whether we record
+	// tenant usage for the null sink. By default the null sink is
+	// not accounted but it is useful to treat it as accounted in
+	// tests.
+	NullSinkIsExternalIOAccounted bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

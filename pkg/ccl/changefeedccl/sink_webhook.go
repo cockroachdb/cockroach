@@ -80,7 +80,7 @@ type webhookSink struct {
 	workerGroup ctxgroup.Group
 	exitWorkers func() // Signaled to shut down all workers.
 	eventsChans []chan []messagePayload
-	metrics     *sliMetrics
+	metrics     metricsRecorder
 }
 
 type webhookSinkPayload struct {
@@ -249,7 +249,7 @@ func makeWebhookSink(
 	opts map[string]string,
 	parallelism int,
 	source timeutil.TimeSource,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	if u.Scheme != changefeedbase.SinkSchemeWebhookHTTPS {
 		return nil, errors.Errorf(`this sink requires %s`, changefeedbase.SinkSchemeHTTPS)
@@ -300,7 +300,7 @@ func makeWebhookSink(
 		exitWorkers: cancel,
 		parallelism: parallelism,
 		ts:          source,
-		metrics:     m,
+		metrics:     mb(requiresResourceAccounting),
 	}
 
 	var err error

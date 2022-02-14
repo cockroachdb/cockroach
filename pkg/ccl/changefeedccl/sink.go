@@ -68,7 +68,7 @@ func getSink(
 	timestampOracle timestampLowerBoundOracle,
 	user security.SQLUsername,
 	jobID jobspb.JobID,
-	m *sliMetrics,
+	m metricsRecorder,
 ) (Sink, error) {
 	u, err := url.Parse(feedCfg.SinkURI)
 	if err != nil {
@@ -87,6 +87,13 @@ func getSink(
 		return makeSink()
 	}
 
+	metricsBuilder := func(recordingRequired bool) metricsRecorder {
+		if recordingRequired {
+			return maybeWrapMetrics(ctx, m, serverCfg.ExternalIORecorder)
+		}
+		return m
+	}
+
 	newSink := func() (Sink, error) {
 		if feedCfg.SinkURI == "" {
 			return &bufferSink{metrics: m}, nil
@@ -94,15 +101,19 @@ func getSink(
 
 		switch {
 		case u.Scheme == changefeedbase.SinkSchemeNull:
-			return makeNullSink(sinkURL{URL: u}, m)
+			nullIsAccounted := false
+			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
+				nullIsAccounted = knobs.NullSinkIsExternalIOAccounted
+			}
+			return makeNullSink(sinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), feedCfg.Opts, m)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), feedCfg.Opts, metricsBuilder)
 			})
 		case isWebhookSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
 				return makeWebhookSink(ctx, sinkURL{URL: u}, feedCfg.Opts,
-					defaultWorkerCount(), timeutil.DefaultTimeSource{}, m)
+					defaultWorkerCount(), timeutil.DefaultTimeSource{}, metricsBuilder)
 			})
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
@@ -113,12 +124,12 @@ func getSink(
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
 				return makeCloudStorageSink(
 					ctx, sinkURL{URL: u}, serverCfg.NodeID.SQLInstanceID(), serverCfg.Settings,
-					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, m,
+					feedCfg.Opts, timestampOracle, serverCfg.ExternalStorageFromURI, user, metricsBuilder,
 				)
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), m)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), metricsBuilder)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
@@ -298,7 +309,7 @@ type bufferSink struct {
 	alloc   tree.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
-	metrics *sliMetrics
+	metrics metricsRecorder
 }
 
 // EmitRow implements the Sink interface.
@@ -374,12 +385,12 @@ func (s *bufferSink) getTopicDatum(t TopicDescriptor) *tree.DString {
 
 type nullSink struct {
 	ticker  *time.Ticker
-	metrics *sliMetrics
+	metrics metricsRecorder
 }
 
 var _ Sink = (*nullSink)(nil)
 
-func makeNullSink(u sinkURL, m *sliMetrics) (Sink, error) {
+func makeNullSink(u sinkURL, m metricsRecorder) (Sink, error) {
 	var pacer *time.Ticker
 	if delay := u.consumeParam(`delay`); delay != "" {
 		pace, err := time.ParseDuration(delay)
