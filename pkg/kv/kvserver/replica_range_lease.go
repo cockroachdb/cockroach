@@ -1275,8 +1275,8 @@ func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 					return nil
 				case <-slowTimer.C:
 					slowTimer.Read = true
-					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
-						base.SlowRequestThreshold)
+					log.Warningf(ctx, "have been waiting %s attempting to acquire lease (%d attempts)",
+						base.SlowRequestThreshold, attempt)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
 					defer func() {
 						r.store.metrics.SlowLeaseRequests.Dec(1)
