@@ -60,9 +60,10 @@ var _ joinReaderSpanGenerator = &multiSpanGenerator{}
 var _ joinReaderSpanGenerator = &localityOptimizedSpanGenerator{}
 
 type defaultSpanGenerator struct {
-	spanBuilder *span.Builder
-	numKeyCols  int
-	lookupCols  []uint32
+	spanBuilder  *span.Builder
+	spanSplitter span.Splitter
+	numKeyCols   int
+	lookupCols   []uint32
 
 	indexKeyRow rowenc.EncDatumRow
 	// keyToInputRowIndices maps a lookup span key to the input row indices that
@@ -133,12 +134,12 @@ func (g *defaultSpanGenerator) generateSpans(
 		}
 		if g.keyToInputRowIndices == nil {
 			// Index join.
-			g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+			g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 				g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
 		} else {
 			inputRowIndices := g.keyToInputRowIndices[string(generatedSpan.Key)]
 			if inputRowIndices == nil {
-				g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+				g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 					g.scratchSpans, generatedSpan, len(g.lookupCols), containsNull)
 			}
 			g.keyToInputRowIndices[string(generatedSpan.Key)] = append(inputRowIndices, i)
@@ -222,7 +223,8 @@ func (s spanRowIndices) memUsage() int64 {
 // In this case, the multiSpanGenerator would generate two spans for each input
 // row: [/'east'/<val_a> - /'east'/<val_a>] [/'west'/<val_a> - /'west'/<val_a>].
 type multiSpanGenerator struct {
-	spanBuilder *span.Builder
+	spanBuilder  *span.Builder
+	spanSplitter span.Splitter
 
 	// indexColInfos stores info about the values that each index column can
 	// take on in the spans produced by the multiSpanGenerator. See the comment
@@ -344,6 +346,7 @@ func (g *multiSpanGenerator) maxLookupCols() int {
 // spans.
 func (g *multiSpanGenerator) init(
 	spanBuilder *span.Builder,
+	spanSplitter span.Splitter,
 	numKeyCols int,
 	numInputCols int,
 	exprHelper *execinfrapb.ExprHelper,
@@ -351,6 +354,7 @@ func (g *multiSpanGenerator) init(
 	memAcc *mon.BoundAccount,
 ) error {
 	g.spanBuilder = spanBuilder
+	g.spanSplitter = spanSplitter
 	g.numInputCols = numInputCols
 	g.keyToInputRowIndices = make(map[string][]int)
 	g.tableOrdToIndexOrd = tableOrdToIndexOrd
@@ -671,7 +675,7 @@ func (g *multiSpanGenerator) generateSpans(
 				if g.inequalityColIdx != -1 {
 					g.scratchSpans = append(g.scratchSpans, *generatedSpan)
 				} else {
-					g.scratchSpans = g.spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+					g.scratchSpans = g.spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 						g.scratchSpans, *generatedSpan, len(g.indexColInfos), false /* containsNull */)
 				}
 			}
@@ -748,7 +752,9 @@ type localityOptimizedSpanGenerator struct {
 // close()d.
 func (g *localityOptimizedSpanGenerator) init(
 	localSpanBuilder *span.Builder,
+	localSpanSplitter span.Splitter,
 	remoteSpanBuilder *span.Builder,
+	remoteSpanSplitter span.Splitter,
 	numKeyCols int,
 	numInputCols int,
 	localExprHelper *execinfrapb.ExprHelper,
@@ -758,12 +764,12 @@ func (g *localityOptimizedSpanGenerator) init(
 	remoteSpanGenMemAcc *mon.BoundAccount,
 ) error {
 	if err := g.localSpanGen.init(
-		localSpanBuilder, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
+		localSpanBuilder, localSpanSplitter, numKeyCols, numInputCols, localExprHelper, tableOrdToIndexOrd, localSpanGenMemAcc,
 	); err != nil {
 		return err
 	}
 	if err := g.remoteSpanGen.init(
-		remoteSpanBuilder, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
+		remoteSpanBuilder, remoteSpanSplitter, numKeyCols, numInputCols, remoteExprHelper, tableOrdToIndexOrd, remoteSpanGenMemAcc,
 	); err != nil {
 		return err
 	}

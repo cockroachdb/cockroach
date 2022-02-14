@@ -101,7 +101,7 @@ func TestSpanAssembler(t *testing.T) {
 							converter := colconv.NewAllVecToDatumConverter(len(typs))
 
 							builder := span.MakeBuilder(&evalCtx, keys.TODOSQLCodec, testTable, testTable.GetPrimaryIndex())
-							builder.SetNeededColumns(neededColumns)
+							splitter := span.MakeSplitter(testTable, testTable.GetPrimaryIndex(), neededColumns)
 
 							colBuilder := NewColSpanAssembler(
 								keys.TODOSQLCodec, testAllocator, testTable,
@@ -143,7 +143,7 @@ func TestSpanAssembler(t *testing.T) {
 									}
 									rows[i] = row
 								}
-								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, builder, rows, len(typs))...)
+								oracleSpans = append(oracleSpans, spanGeneratorOracle(t, builder, splitter, rows, len(typs))...)
 							}
 
 							if len(oracleSpans) != len(testSpans) {
@@ -168,7 +168,11 @@ func TestSpanAssembler(t *testing.T) {
 // spanGeneratorOracle extracts the logic from joinreader_span_generator.go that
 // pertains to index joins.
 func spanGeneratorOracle(
-	t *testing.T, spanBuilder *span.Builder, rows []rowenc.EncDatumRow, lookupCols int,
+	t *testing.T,
+	spanBuilder *span.Builder,
+	spanSplitter span.Splitter,
+	rows []rowenc.EncDatumRow,
+	lookupCols int,
 ) roachpb.Spans {
 	var spans roachpb.Spans
 	for _, inputRow := range rows {
@@ -176,7 +180,7 @@ func spanGeneratorOracle(
 		if err != nil {
 			t.Fatal(err)
 		}
-		spans = spanBuilder.MaybeSplitSpanIntoSeparateFamilies(
+		spans = spanSplitter.MaybeSplitSpanIntoSeparateFamilies(
 			spans, generatedSpan, lookupCols, containsNull)
 	}
 	return spans
