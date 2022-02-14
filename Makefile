@@ -1371,13 +1371,13 @@ UI_OSS_MANIFESTS := $(subst .ccl,.oss,$(UI_CCL_MANIFESTS))
 # files. Normally, Make would run the recipe twice if dist/FOO.js and
 # FOO-manifest.js were both out-of-date. [0]
 #
-# XXX: Ideally we'd scope the dependency on $(UI_PROTOS*) to the appropriate
-# protos DLLs, but Make v3.81 has a bug that causes the dependency to be ignored
-# [1]. We're stuck with this workaround until Apple decides to update the
-# version of Make they ship with macOS or we require a newer version of Make.
-# Such a requirement would need to be strictly enforced, as the way this fails
-# is extremely subtle and doesn't present until the web UI is loaded in the
-# browser.
+# TODO(irfansharif): Ideally we'd scope the dependency on $(UI_PROTOS*) to the
+# appropriate protos DLLs, but Make v3.81 has a bug that causes the dependency
+# to be ignored [1]. We're stuck with this workaround until Apple decides to
+# update the version of Make they ship with macOS or we require a newer version
+# of Make. Such a requirement would need to be strictly enforced, as the way
+# this fails is extremely subtle and doesn't present until the web UI is loaded
+# in the browser.
 #
 # [0]: https://stackoverflow.com/a/3077254/1122351
 # [1]: http://savannah.gnu.org/bugs/?19108
