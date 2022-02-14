@@ -741,12 +741,12 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 // attacker) will not know if the cancellation attempt succeeded. Errors are
 // logged so that an operator can be aware of any possibly malicious requests.
 func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
+	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	var err error
 	defer func() {
 		if err != nil {
 			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 		}
-		telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	}()
 
 	var backendKeyDataBits uint64
