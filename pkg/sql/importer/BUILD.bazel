@@ -43,6 +43,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/telemetry",

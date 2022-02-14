@@ -227,7 +227,8 @@ func writeNewEncryptionInfoToBackup(
 	if err != nil {
 		return err
 	}
-	return cloud.WriteFile(ctx, dest, newEncryptionInfoFile, bytes.NewReader(buf))
+	_, err = cloud.WriteFile(ctx, dest, newEncryptionInfoFile, bytes.NewReader(buf))
+	return err
 }
 
 func init() {

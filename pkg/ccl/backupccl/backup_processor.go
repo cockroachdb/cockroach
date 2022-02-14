@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -575,6 +576,7 @@ func runBackupProcessor(
 			return err
 		}
 
+		storage = multitenant.NewExternalStorageWithAccounting(storage, flowCtx.Cfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)
 		sink, err := makeSSTSink(ctx, sinkConf, storage, memAcc)
 		if err != nil {
 			return err

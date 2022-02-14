@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -124,6 +125,7 @@ func newFileUploadMachine(
 	if err != nil {
 		return nil, err
 	}
+	store = multitenant.NewExternalStorageWithAccounting(store, execCfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)
 
 	err = checkIfFileExists(ctx, c, dest, n.Table.Table())
 	if err != nil {

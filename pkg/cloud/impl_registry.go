@@ -152,5 +152,6 @@ func MakeExternalStorage(
 	if fn, ok := implementations[dest.Provider]; ok {
 		return fn(ctx, args, dest)
 	}
+
 	return nil, errors.Errorf("unsupported external destination type: %s", dest.Provider.String())
 }

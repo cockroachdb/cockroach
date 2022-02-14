@@ -479,7 +479,7 @@ func writeBackupManifest(
 			return err
 		}
 	} else {
-		if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+		if _, err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
 			return err
 		}
 	}
@@ -495,7 +495,7 @@ func writeBackupManifest(
 			return errors.Wrap(err, "writing manifest checksum")
 		}
 	} else {
-		if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+		if _, err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
 			return errors.Wrap(err, "writing manifest checksum")
 		}
 	}
@@ -582,8 +582,8 @@ func writeBackupPartitionDescriptor(
 			return err
 		}
 	}
-
-	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+	_, err = cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+	return err
 }
 
 // writeTableStatistics writes a StatsTable object to a file of the filename
@@ -611,7 +611,8 @@ func writeTableStatistics(
 			return err
 		}
 	}
-	return cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(statsBuf))
+	_, err = cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(statsBuf))
+	return err
 }
 
 func loadBackupManifests(
@@ -1174,7 +1175,7 @@ func writeEncryptionInfoIfNotExists(
 	if err != nil {
 		return err
 	}
-	if err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
+	if _, err := cloud.WriteFile(ctx, dest, backupEncryptionInfoFile, bytes.NewReader(buf)); err != nil {
 		return err
 	}
 	return nil
@@ -1288,11 +1289,11 @@ func writeNewCheckpointFile(
 	// to the base directory as well the progress directory. That way if
 	// an old node resumes a backup, it doesn't have to start over.
 	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
-		err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+		_, err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
 		if err != nil {
 			return err
 		}
 	}
-
-	return cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+	_, err := cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
+	return err
 }

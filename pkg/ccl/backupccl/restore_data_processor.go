@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -335,6 +336,7 @@ func (rd *restoreDataProcessor) openSSTs(
 		if err != nil {
 			return err
 		}
+		dir = multitenant.NewExternalStorageWithAccounting(dir, rd.flowCtx.Cfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)
 		dirs = append(dirs, dir)
 
 		// TODO(pbardea): When memory monitoring is added, send the currently

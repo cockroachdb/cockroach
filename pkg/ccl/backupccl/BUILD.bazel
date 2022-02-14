@@ -60,6 +60,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
+        "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
         "//pkg/security",

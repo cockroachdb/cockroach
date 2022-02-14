@@ -520,7 +520,7 @@ func showData(
 		if err != nil {
 			return errors.Wrapf(err, "unable to open store to write files: %s", debugBackupArgs.destination)
 		}
-		if err = cloud.WriteFile(ctx, store, file, bytes.NewReader(buf.Bytes())); err != nil {
+		if _, err = cloud.WriteFile(ctx, store, file, bytes.NewReader(buf.Bytes())); err != nil {
 			_ = store.Close()
 			return err
 		}

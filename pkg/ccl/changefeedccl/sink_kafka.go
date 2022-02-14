@@ -92,7 +92,7 @@ type kafkaSink struct {
 	stopWorkerCh chan struct{}
 	worker       sync.WaitGroup
 	scratch      bufalloc.ByteAllocator
-	metrics      *sliMetrics
+	metrics      metricsRecorder
 
 	// Only synchronized between the client goroutine and the worker goroutine.
 	mu struct {
@@ -651,7 +651,7 @@ func makeKafkaSink(
 	u sinkURL,
 	targets []jobspb.ChangefeedTargetSpecification,
 	opts map[string]string,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
 	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
@@ -669,7 +669,7 @@ func makeKafkaSink(
 		kafkaCfg:       config,
 		bootstrapAddrs: u.Host,
 		topics:         makeTopicsMap(kafkaTopicPrefix, kafkaTopicName, targets),
-		metrics:        m,
+		metrics:        mb(true),
 	}
 
 	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {

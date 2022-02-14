@@ -9,6 +9,7 @@
 package changefeedccl
 
 import (
+	"context"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -61,6 +63,20 @@ type AggMetrics struct {
 		sliMetrics map[string]*sliMetrics
 	}
 }
+
+type metricsRecorderBuilder func(requiresCostAccounting bool) metricsRecorder
+
+type metricsRecorder interface {
+	recordEmittedMessages() recordEmittedMessagesCallback
+	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
+	recordResolvedCallback() func()
+	recordFlushRequestCallback() func()
+	getBackfillCallback() func() func()
+	getBackfillRangeCallback() func(int64) (func(), func())
+}
+
+var _ metricsRecorder = (*sliMetrics)(nil)
+var _ metricsRecorder = (*wrappingCostController)(nil)
 
 // MetricStruct implements metric.Struct interface.
 func (a *AggMetrics) MetricStruct() {}
@@ -172,6 +188,57 @@ func (m *sliMetrics) getBackfillRangeCallback() func(int64) (func(), func()) {
 		}
 		return
 	}
+}
+
+type wrappingCostController struct {
+	ctx      context.Context
+	inner    metricsRecorder
+	recorder multitenant.TenantSideExternalIORecorder
+}
+
+func maybeWrapMetrics(
+	ctx context.Context, inner metricsRecorder, recorder multitenant.TenantSideExternalIORecorder,
+) metricsRecorder {
+	if recorder == nil {
+		return inner
+	}
+	return &wrappingCostController{ctx: ctx, inner: inner, recorder: recorder}
+}
+
+func (w *wrappingCostController) recordEmittedMessages() recordEmittedMessagesCallback {
+	innerCallback := w.inner.recordEmittedMessages()
+	return func(numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int) {
+		w.recordEmittedBatch(time.Time{}, numMessages, mvcc, bytes, compressedBytes)
+		innerCallback(numMessages, mvcc, bytes, compressedBytes)
+	}
+}
+
+func (w *wrappingCostController) recordEmittedBatch(
+	_ time.Time, _ int, _ hlc.Timestamp, bytes int, compressedBytes int,
+) {
+	if compressedBytes == sinkDoesNotCompress {
+		compressedBytes = bytes
+	}
+	// NB: We don't Wait for RUs for changefeeds; but, this call may put the RU limiter in debt which
+	// will impact future KV requests.
+	w.recorder.ExternalIOWriteSuccess(w.ctx, int64(compressedBytes))
+}
+func (w *wrappingCostController) recordResolvedCallback() func() {
+	// TODO(ssd): We don't count resolved messages currently. These messages should be relatively
+	// small and the error here is further in the favor of the user.
+	return w.inner.recordResolvedCallback()
+}
+
+func (w *wrappingCostController) recordFlushRequestCallback() func() {
+	return w.inner.recordFlushRequestCallback()
+}
+
+func (w *wrappingCostController) getBackfillCallback() func() func() {
+	return w.inner.getBackfillCallback()
+}
+
+func (w *wrappingCostController) getBackfillRangeCallback() func(int64) (func(), func()) {
+	return w.inner.getBackfillRangeCallback()
 }
 
 const (
@@ -416,7 +483,7 @@ type Metrics struct {
 // MetricStruct implements the metric.Struct interface.
 func (*Metrics) MetricStruct() {}
 
-// getSLIMetrics retursn SLIMeterics associated with the specified scope.
+// getSLIMetrics returns SLIMeterics associated with the specified scope.
 func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 	return m.AggMetrics.getOrCreateScope(scope)
 }

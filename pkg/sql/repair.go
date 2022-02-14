@@ -11,14 +11,13 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -799,15 +798,17 @@ func (p *planner) ExternalReadFile(ctx context.Context, uri string) ([]byte, err
 		return nil, err
 	}
 
-	conn, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
 	if err != nil {
 		return nil, err
 	}
 
-	file, err := conn.ReadFile(ctx, "")
+	store = multitenant.NewExternalStorageWithAccounting(store, p.ExecCfg().ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)
+	file, err := store.ReadFile(ctx, "")
 	if err != nil {
 		return nil, err
 	}
+
 	return ioctx.ReadAll(ctx, file)
 }
 
@@ -816,9 +817,10 @@ func (p *planner) ExternalWriteFile(ctx context.Context, uri string, content []b
 		return err
 	}
 
-	conn, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
+	store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, uri, p.User())
 	if err != nil {
 		return err
 	}
-	return cloud.WriteFile(ctx, conn, "", bytes.NewReader(content))
+
+	return multitenant.WriteFileAccounted(ctx, p.ExecCfg().ExternalIORecorder, store, "", content)
 }

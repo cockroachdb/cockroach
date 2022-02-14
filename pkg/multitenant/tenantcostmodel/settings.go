@@ -74,6 +74,30 @@ var (
 		settings.PositiveFloat,
 	)
 
+	externalIOEgressCostPerMB = settings.RegisterFloatSetting(
+		settings.TenantWritable,
+		"tenant_cost_model.external_io_egress_per_megabyte",
+		"cost of a read from external storage in Request Units per MB",
+		// TODO(ssd): I've left this zero since it seems like
+		// a policy decicion and also since setting it to zero
+		// ensures that external writes don't compete with
+		// other traffic for RUs.
+		0.0,
+		settings.NonNegativeFloat,
+	)
+
+	externalIOIngressCostPerMB = settings.RegisterFloatSetting(
+		settings.TenantWritable,
+		"tenant_cost_model.external_io_ingress_per_megabyte",
+		"cost of a write to external storage in Request Units per MB",
+		// TODO(ssd): I've left this zero since it seems like
+		// a policy decicion and also since setting it to zero
+		// ensures that external writes don't compete with
+		// other traffic for RUs.
+		0.0,
+		settings.NonNegativeFloat,
+	)
+
 	// List of config settings, used by SetOnChange.
 	configSettings = [...]settings.NonMaskedSetting{
 		readRequestCost,
@@ -82,6 +106,8 @@ var (
 		writeCostPerMB,
 		podCPUSecondCost,
 		pgwireEgressCostPerMB,
+		externalIOEgressCostPerMB,
+		externalIOIngressCostPerMB,
 	}
 )
 
@@ -90,12 +116,14 @@ const perMBToPerByte = float64(1) / (1024 * 1024)
 // ConfigFromSettings constructs a Config using the cluster setting values.
 func ConfigFromSettings(sv *settings.Values) Config {
 	return Config{
-		KVReadRequest:    RU(readRequestCost.Get(sv)),
-		KVReadByte:       RU(readCostPerMB.Get(sv) * perMBToPerByte),
-		KVWriteRequest:   RU(writeRequestCost.Get(sv)),
-		KVWriteByte:      RU(writeCostPerMB.Get(sv) * perMBToPerByte),
-		PodCPUSecond:     RU(podCPUSecondCost.Get(sv)),
-		PGWireEgressByte: RU(pgwireEgressCostPerMB.Get(sv) * perMBToPerByte),
+		KVReadRequest:         RU(readRequestCost.Get(sv)),
+		KVReadByte:            RU(readCostPerMB.Get(sv) * perMBToPerByte),
+		KVWriteRequest:        RU(writeRequestCost.Get(sv)),
+		KVWriteByte:           RU(writeCostPerMB.Get(sv) * perMBToPerByte),
+		PodCPUSecond:          RU(podCPUSecondCost.Get(sv)),
+		PGWireEgressByte:      RU(pgwireEgressCostPerMB.Get(sv) * perMBToPerByte),
+		ExternalIOIngressByte: RU(externalIOEgressCostPerMB.Get(sv)),
+		ExternalIOEgressByte:  RU(externalIOIngressCostPerMB.Get(sv) * perMBToPerByte),
 	}
 }
 
@@ -103,12 +131,14 @@ func ConfigFromSettings(sv *settings.Values) Config {
 // setting values.
 func DefaultConfig() Config {
 	return Config{
-		KVReadRequest:    RU(readRequestCost.Default()),
-		KVReadByte:       RU(readCostPerMB.Default() * perMBToPerByte),
-		KVWriteRequest:   RU(writeRequestCost.Default()),
-		KVWriteByte:      RU(writeCostPerMB.Default() * perMBToPerByte),
-		PodCPUSecond:     RU(podCPUSecondCost.Default()),
-		PGWireEgressByte: RU(pgwireEgressCostPerMB.Default() * perMBToPerByte),
+		KVReadRequest:         RU(readRequestCost.Default()),
+		KVReadByte:            RU(readCostPerMB.Default() * perMBToPerByte),
+		KVWriteRequest:        RU(writeRequestCost.Default()),
+		KVWriteByte:           RU(writeCostPerMB.Default() * perMBToPerByte),
+		PodCPUSecond:          RU(podCPUSecondCost.Default()),
+		PGWireEgressByte:      RU(pgwireEgressCostPerMB.Default() * perMBToPerByte),
+		ExternalIOIngressByte: RU(externalIOEgressCostPerMB.Default() * perMBToPerByte),
+		ExternalIOEgressByte:  RU(externalIOIngressCostPerMB.Default() * perMBToPerByte),
 	}
 }
 

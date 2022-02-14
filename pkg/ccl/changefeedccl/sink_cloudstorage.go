@@ -302,7 +302,7 @@ type cloudStorageSink struct {
 	dataFileTs        string
 	dataFilePartition string
 	prevFilename      string
-	metrics           *sliMetrics
+	metrics           metricsRecorder
 }
 
 const sinkCompressionGzip = "gzip"
@@ -329,7 +329,7 @@ func makeCloudStorageSink(
 	timestampOracle timestampLowerBoundOracle,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	user security.SQLUsername,
-	m *sliMetrics,
+	mb metricsRecorderBuilder,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
 	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
@@ -355,7 +355,6 @@ func makeCloudStorageSink(
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
 		jobSessionID: sessID,
-		metrics:      m,
 	}
 
 	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
@@ -406,7 +405,7 @@ func makeCloudStorageSink(
 	if s.es, err = makeExternalStorageFromURI(ctx, u.String(), user); err != nil {
 		return nil, err
 	}
-
+	s.metrics = mb(s.es.RequiresExternalIOAccounting())
 	return s, nil
 }
 
@@ -486,7 +485,8 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	if log.V(1) {
 		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
-	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
+	_, err = cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
+	return err
 }
 
 // flushTopicVersions flushes all open files for the provided topic up to and
@@ -583,7 +583,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.prevFilename = filename
 	compressedBytes := file.buf.Len()
-	if err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
+	if _, err := cloud.WriteFile(ctx, s.es, filepath.Join(s.dataFilePartition, filename), bytes.NewReader(file.buf.Bytes())); err != nil {
 		return err
 	}
 	file.recordMetrics(file.numMessages, file.oldestMVCC, file.rawSize, compressedBytes)
