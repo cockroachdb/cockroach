@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -54,7 +55,7 @@ func TestWatcher(t *testing.T) {
 		s0.Stopper(),
 		s0.ClusterSettings(),
 	)
-	err := w.Start(ctx)
+	err := w.Start(ctx, s0.SystemTableIDResolver().(catalog.SystemTableIDResolver))
 	require.NoError(t, err)
 	// WaitForStart should return immediately.
 	err = w.WaitForStart(ctx)
@@ -147,7 +148,7 @@ func TestWatcherWaitForVersion(t *testing.T) {
 	)
 
 	// Start should go in async mode and wait for the version.
-	err := w.Start(ctx)
+	err := w.Start(ctx, s0.SystemTableIDResolver().(catalog.SystemTableIDResolver))
 	require.NoError(t, err)
 
 	// Allow upgrade, wait for the table to be created.
