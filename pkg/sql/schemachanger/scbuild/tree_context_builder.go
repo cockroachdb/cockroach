@@ -36,6 +36,7 @@ func (b buildCtx) SemaCtx() *tree.SemaContext {
 // EvalCtx implements the scbuildstmt.TreeContextBuilder interface.
 func (b buildCtx) EvalCtx() *tree.EvalContext {
 	return &tree.EvalContext{
+		ClusterID:          b.ClusterID(),
 		SessionDataStack:   sessiondata.NewStack(b.SessionData()),
 		Context:            b.Context,
 		Planner:            &faketreeeval.DummyEvalPlanner{},
