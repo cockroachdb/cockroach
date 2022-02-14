@@ -230,8 +230,12 @@ func (w *Watcher) startRangeFeed(ctx context.Context) error {
 }
 
 // WaitForStart waits until the rangefeed is set up. Returns an error if the
-// rangefeed setup failed, or if the cluster version does not support tenant
-// settings.
+// rangefeed setup failed.
+//
+// If the cluster version does not support tenant settings, returns immediately
+// with no error. Note that it is still legal to call GetTenantOverrides and
+// GetAllTenantOverrides in this state. When the cluster version is upgraded,
+// the settings will start being updated.
 func (w *Watcher) WaitForStart(ctx context.Context) error {
 	// Fast path check.
 	select {
@@ -245,7 +249,8 @@ func (w *Watcher) WaitForStart(ctx context.Context) error {
 	if !w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
 		// If this happens, then we are running new tenant code against a host
 		// cluster that was not fully upgraded.
-		log.Warningf(ctx, "tenant waiting for host cluster version upgrade")
+		log.Warningf(ctx, "tenant requested settings before host cluster version upgrade")
+		return nil
 	}
 	select {
 	case <-w.startCh:
