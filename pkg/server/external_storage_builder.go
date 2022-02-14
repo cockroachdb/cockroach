@@ -64,20 +64,20 @@ func (e *externalStorageBuilder) init(
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
-	ctx context.Context, dest roachpb.ExternalStorage,
+	ctx context.Context, dest roachpb.ExternalStorage, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie,
-		e.db)
+		e.db, opts...)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
-	ctx context.Context, uri string, user security.SQLUsername,
+	ctx context.Context, uri string, user security.SQLUsername, opts ...cloud.ExternalStorageOption,
 ) (cloud.ExternalStorage, error) {
 	if !e.initCalled {
 		return nil, errors.New("cannot create external storage before init")
 	}
-	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db)
+	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory, user, e.ie, e.db, opts...)
 }

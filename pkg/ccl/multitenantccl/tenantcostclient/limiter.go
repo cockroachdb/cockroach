@@ -110,6 +110,20 @@ func (l *limiter) RemoveTokens(now time.Time, delta tenantcostmodel.RU) {
 	})
 }
 
+// AddTokens add tokens to the bucket.
+//
+// Tokens are added when we consumed token in advance of an operation
+// but then that operation failed or consumed fewer resources than
+// expected.
+func (l *limiter) AddTokens(now time.Time, delta tenantcostmodel.RU) {
+	l.qp.Update(func(res quotapool.Resource) (shouldNotify bool) {
+		l.tb.AddTokens(now, delta)
+		// Notify the head of the queue; the new tokens might
+		// allow the request to go through earlier.
+		return true
+	})
+}
+
 // Reconfigure is used to call tokenBucket.Reconfigure under the pool's lock.
 func (l *limiter) Reconfigure(now time.Time, args tokenBucketReconfigureArgs) {
 	l.qp.Update(func(quotapool.Resource) (shouldNotify bool) {

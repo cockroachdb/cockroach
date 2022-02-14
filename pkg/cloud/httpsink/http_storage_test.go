@@ -170,10 +170,10 @@ func TestPutHttp(t *testing.T) {
 
 		const file = "file"
 		var content = []byte("contents")
-		if err := cloud.WriteFile(ctx, s, file, bytes.NewReader(content)); err != nil {
+		if _, err := cloud.WriteFile(ctx, s, file, bytes.NewReader(content)); err != nil {
 			t.Fatal(err)
 		}
-		if err := cloud.WriteFile(ctx, s, badHeadResponse, bytes.NewReader(content)); err != nil {
+		if _, err := cloud.WriteFile(ctx, s, badHeadResponse, bytes.NewReader(content)); err != nil {
 			t.Fatal(err)
 		}
 		if sz, err := s.Size(ctx, file); err != nil {

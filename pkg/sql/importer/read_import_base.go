@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -98,7 +99,17 @@ func runImport(
 			inputs = spec.Uri
 		}
 
-		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, flowCtx.Cfg.ExternalStorage,
+		makeExternalStorage := func(ctx context.Context, dest roachpb.ExternalStorage, opts ...cloud.ExternalStorageOption) (cloud.ExternalStorage, error) {
+			defaultOpts := []cloud.ExternalStorageOption{
+				cloud.WithReadWriterInterceptor(multitenant.NewReadWriteAccounter(flowCtx.Cfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)),
+			}
+			store, err := flowCtx.Cfg.ExternalStorage(ctx, dest, append(defaultOpts, opts...)...)
+			if err != nil {
+				return nil, err
+			}
+			return store, nil
+		}
+		return conv.readFiles(ctx, inputs, spec.ResumePos, spec.Format, makeExternalStorage,
 			spec.User())
 	})
 
@@ -278,7 +289,7 @@ func readInputFiles(
 						return err
 					}
 					defer rejectedStorage.Close()
-					if err := cloud.WriteFile(ctx, rejectedStorage, "", bytes.NewReader(buf)); err != nil {
+					if _, err := cloud.WriteFile(ctx, rejectedStorage, "", bytes.NewReader(buf)); err != nil {
 						return err
 					}
 					return nil

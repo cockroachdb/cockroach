@@ -163,7 +163,7 @@ func CheckExportStore(
 		for i := 0; i < 10; i++ {
 			name := fmt.Sprintf("%s-%d", sampleName, i)
 			payload := []byte(strings.Repeat(sampleBytes, i))
-			if err := cloud.WriteFile(ctx, s, name, bytes.NewReader(payload)); err != nil {
+			if _, err := cloud.WriteFile(ctx, s, name, bytes.NewReader(payload)); err != nil {
 				t.Fatal(err)
 			}
 
@@ -199,7 +199,7 @@ func CheckExportStore(
 		testingFilename := "testing-123"
 
 		// Write some random data (random so it doesn't compress).
-		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader(testingContent)); err != nil {
+		if _, err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader(testingContent)); err != nil {
 			t.Fatal(err)
 		}
 
@@ -248,7 +248,7 @@ func CheckExportStore(
 	}
 	t.Run("read-single-file-by-uri", func(t *testing.T) {
 		const testingFilename = "A"
-		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
+		if _, err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, appendPath(t, storeURI, testingFilename), clientFactory,
@@ -276,7 +276,7 @@ func CheckExportStore(
 			user, ie, kvDB, testSettings)
 		defer singleFile.Close()
 
-		if err := cloud.WriteFile(ctx, singleFile, "", bytes.NewReader([]byte("bbb"))); err != nil {
+		if _, err := cloud.WriteFile(ctx, singleFile, "", bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
 
@@ -301,7 +301,7 @@ func CheckExportStore(
 	// (based on the storage system) could not be found.
 	t.Run("file-does-not-exist", func(t *testing.T) {
 		const testingFilename = "A"
-		if err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
+		if _, err := cloud.WriteFile(ctx, s, testingFilename, bytes.NewReader([]byte("aaa"))); err != nil {
 			t.Fatal(err)
 		}
 		singleFile := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
@@ -375,7 +375,7 @@ func CheckListFilesCanonical(
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	for _, fileName := range fileNames {
 		file := storeFromURI(ctx, t, storeURI, clientFactory, user, ie, kvDB, testSettings)
-		if err := cloud.WriteFile(ctx, file, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
+		if _, err := cloud.WriteFile(ctx, file, fileName, bytes.NewReader([]byte("bbb"))); err != nil {
 			t.Fatal(err)
 		}
 		_ = file.Close()
@@ -497,7 +497,8 @@ func uploadData(
 		ctx, dest, base.ExternalIODirConfig{}, testSettings,
 		nil, nil, nil)
 	require.NoError(t, err)
-	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
+	_, err = cloud.WriteFile(ctx, s, basename, bytes.NewReader(data))
+	require.NoError(t, err)
 	return data, func() {
 		defer s.Close()
 		_ = s.Delete(ctx, basename)

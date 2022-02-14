@@ -17,6 +17,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -120,7 +122,8 @@ func newFileUploadMachine(
 		return nil, err
 	}
 
-	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User())
+	store, err := c.p.execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, dest, c.p.User(),
+		cloud.WithReadWriterInterceptor(multitenant.NewReadWriteAccounter(execCfg.ExternalIORecorder, multitenant.DefaultBytesAllowedBeforeAccounting)))
 	if err != nil {
 		return nil, err
 	}

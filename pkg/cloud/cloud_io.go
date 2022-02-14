@@ -330,7 +330,9 @@ func (s *backgroundPipe) Close() error {
 
 // WriteFile is a helper for writing the content of a Reader to the given path
 // of an ExternalStorage.
-func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src io.Reader) error {
+func WriteFile(
+	ctx context.Context, dest ExternalStorage, basename string, src io.Reader,
+) (int64, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, fmt.Sprintf("%s.WriteFile", dest.Conf().Provider.String()))
 	defer span.Finish()
@@ -341,11 +343,12 @@ func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src i
 
 	w, err := dest.Writer(ctx, basename)
 	if err != nil {
-		return errors.Wrap(err, "opening object for writing")
+		return 0, errors.Wrap(err, "opening object for writing")
 	}
-	if _, err := io.Copy(w, src); err != nil {
+	n, err := io.Copy(w, src)
+	if err != nil {
 		cancel()
-		return errors.CombineErrors(w.Close(), err)
+		return n, errors.CombineErrors(w.Close(), err)
 	}
-	return errors.Wrap(w.Close(), "closing object")
+	return n, errors.Wrap(w.Close(), "closing object")
 }

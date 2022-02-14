@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -272,7 +273,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 
 			size := writer.Len()
 
-			if err := cloud.WriteFile(ctx, es, filename, bytes.NewReader(writer.Bytes())); err != nil {
+			if err := multitenant.WriteFileAccounted(ctx, sp.flowCtx.Cfg.ExternalIORecorder, es, filename, writer.Bytes()); err != nil {
 				return err
 			}
 			res := rowenc.EncDatumRow{
