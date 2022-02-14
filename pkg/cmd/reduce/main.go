@@ -56,6 +56,7 @@ var (
 	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
 	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	tlp             = flags.Bool("tlp", false, "last two non-empty lines in file are equivalent queries returning different results, -file is required")
 )
 
 const description = `
@@ -80,12 +81,12 @@ func main() {
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		usage()
 	}
-	if *contains == "" {
-		fmt.Printf("%s: -contains must be provided\n\n", os.Args[0])
+	if (*tlp && (*file == "" || *contains != "")) || (!*tlp && *contains == "") {
+		fmt.Printf("%s: either -contains or -tlp and -file must be provided\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions)
+	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,8 +94,12 @@ func main() {
 }
 
 func reduceSQL(
-	binary, contains string, file *string, workers int, verbose bool, chunkReductions int,
+	binary, contains string, file *string, workers int, verbose bool, chunkReductions int, tlp bool,
 ) (string, error) {
+	const tlpFailureError = "TLP_FAILURE"
+	if tlp {
+		contains = tlpFailureError
+	}
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
@@ -123,8 +128,60 @@ func reduceSQL(
 		}
 	}
 
+	inputString := string(input)
+	var tlpCheck string
+
+	// If TLP check is requested, then we remove the last two queries from the
+	// input (each query is expected to be a single line before pretty-printing)
+	// which we use then to construct a special TLP check query that results in
+	// an error if two removed queries return different results.
+	//
+	// We do not just include the TLP check query into the input string because
+	// the reducer would then reduce the check query itself, making the
+	// reduction meaningless.
+	if tlp {
+		removeSemicolonIfLast := func(s string) string {
+			if len(s) == 0 {
+				return s
+			}
+			if s[len(s)-1] != ';' {
+				return s
+			}
+			return s[:len(s)-1]
+		}
+		var unpartitioned, partitioned string
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		for partitioned == "" {
+			if lines[lineIdx] != "" {
+				partitioned = removeSemicolonIfLast(lines[lineIdx])
+			}
+			lineIdx--
+		}
+		for unpartitioned == "" {
+			if lines[lineIdx] != "" {
+				unpartitioned = removeSemicolonIfLast(lines[lineIdx])
+			}
+			lineIdx--
+		}
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// tlpCheck is a query that will result in an error with tlpFailureError
+		// error message when unpartitioned and partitioned queries return
+		// different results (which is the case when there are rows in one
+		// result set that are not present in the other).
+		tlpCheck = fmt.Sprintf(`
+SELECT CASE
+  WHEN
+    (SELECT count(*) FROM ((%[1]s) EXCEPT ALL (%[2]s))) != 0
+  OR
+    (SELECT count(*) FROM ((%[2]s) EXCEPT ALL (%[1]s))) != 0
+  THEN
+    crdb_internal.force_error('', '%[3]s')
+  END;`, unpartitioned, partitioned, tlpFailureError)
+	}
+
 	// Pretty print the input so the file size comparison is useful.
-	inputSQL, err := reducesql.Pretty(string(input))
+	inputSQL, err := reducesql.Pretty(inputString)
 	if err != nil {
 		return "", err
 	}
@@ -133,6 +190,13 @@ func reduceSQL(
 	if verbose {
 		logger = log.New(os.Stderr, "", 0)
 		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		if tlp {
+			prettyTLPCheck, err := reducesql.Pretty(tlpCheck)
+			if err != nil {
+				return "", err
+			}
+			logger.Printf("\nTLP check query:\n%s\n\n", prettyTLPCheck)
+		}
 	}
 
 	var chunkReducer reduce.ChunkReducer
@@ -153,6 +217,9 @@ func reduceSQL(
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}
+		// If -tlp was not specified, this is a noop, if it was specified, then
+		// we append the special TLP check query.
+		sql += tlpCheck
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {
