@@ -182,14 +182,15 @@ func (g *gcsStorage) ReadFileAt(
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
 		path.Join(g.prefix, basename))})
 
-	r := &cloud.ResumingReader{
-		Ctx: ctx,
-		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	r := cloud.NewResumingReader(ctx,
+		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
-		},
-		RetryOnErrFn: cloud.IsResumableHTTPError,
-		Pos:          offset,
-	}
+		}, // opener
+		nil, //  reader
+		offset,
+		cloud.IsResumableHTTPError,
+		nil, // errFn
+	)
 
 	if err := r.Open(); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {

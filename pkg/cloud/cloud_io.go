@@ -153,12 +153,13 @@ type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
 
 // ResumingReader is a reader which retries reads in case of a transient errors.
 type ResumingReader struct {
-	Ctx          context.Context           // Reader context
-	Opener       ReaderOpenerAt            // Get additional content
-	Reader       io.ReadCloser             // Currently opened reader
-	Pos          int64                     // How much data was received so far
-	RetryOnErrFn func(error) bool          // custom retry-on-error function
-	ErrFn        func(error) time.Duration // custom error delay picker
+	Ctx          context.Context  // Reader context
+	Opener       ReaderOpenerAt   // Get additional content
+	Reader       io.ReadCloser    // Currently opened reader
+	Pos          int64            // How much data was received so far
+	RetryOnErrFn func(error) bool // custom retry-on-error function
+	// ErrFn injects a delay between retries on errors. nil means no delay.
+	ErrFn func(error) time.Duration
 }
 
 var _ io.ReadCloser = &ResumingReader{}
