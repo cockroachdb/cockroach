@@ -211,7 +211,16 @@ type Server struct {
 		// cancel the associated connection. The corresponding key is a channel
 		// that is closed when the connection is done.
 		connCancelMap cancelChanMap
-		draining      bool
+		// draining is set true when server starts draining any SQL connections that
+		// are without query in flight. Remaining SQL connections will be closed as
+		// soon as their queries finish. After the timeout set by
+		// server.shutdown.query_wait, all connections will be closed regardless any
+		// queries in flight.
+		draining bool
+		// rejectingNewSqlConn is set true when the server does not accept new
+		// SQL connections, e.g. when the draining process enters the phase whose
+		// duration is specified by the server.shutdown.connection_wait.
+		rejectingNewSqlConn bool
 	}
 
 	auth struct {
@@ -411,8 +420,8 @@ func (s *Server) Metrics() (res []interface{}) {
 	}
 }
 
-// Drain prevents new connections from being served and waits for drainWait for
-// open connections to terminate before canceling them.
+// waitSqlQueryDraining prevents new connections from being served and waits for
+// queryWait for open SQL connections to terminate before canceling them.
 // An error will be returned when connections that have been canceled have not
 // responded to this cancellation and closed themselves in time. The server
 // will remain in draining state, though open connections may continue to
@@ -425,10 +434,10 @@ func (s *Server) Metrics() (res []interface{}) {
 // to report work that needed to be done and which may or may not have
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
-func (s *Server) Drain(
-	ctx context.Context, drainWait time.Duration, reporter func(int, redact.SafeString),
+func (s *Server) waitSqlQueryDraining(
+	ctx context.Context, queryWait time.Duration, reporter func(int, redact.SafeString),
 ) error {
-	return s.drainImpl(ctx, drainWait, cancelMaxWait, reporter)
+	return s.drainImpl(ctx, queryWait, cancelMaxWait, reporter)
 }
 
 // Undrain switches the server back to the normal mode of operation in which
@@ -447,6 +456,105 @@ func (s *Server) setDrainingLocked(drain bool) bool {
 	}
 	s.mu.draining = drain
 	return true
+}
+
+// setRejectingSqlConnLocked sets the server's rejectingNewSqlConn state and
+// returns whether the state changed (i.e. reject != s.mu.rejectingNewSqlConn).
+// s.mu must be locked.
+func (s *Server) setRejectingSqlConnLocked(reject bool) bool {
+	if s.mu.rejectingNewSqlConn == reject {
+		return false
+	}
+	s.mu.rejectingNewSqlConn = reject
+	return true
+}
+
+// DisallowNewSQLConn disallow new connections to the server.
+func (s *Server) DisallowNewSQLConn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setRejectingSqlConnLocked(true)
+}
+
+// GetConnCancelMapLen returns the length of connCancelMap of the server.
+// s.mu must be locked.
+// This is a helper function when the server waits the SQL connections to be
+// closed. During this period, the server listens to the status of all
+// connections, and early exits this draining phase if there remains no active
+// SQL connections.
+func (s *Server) GetConnCancelMapLen() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.mu.connCancelMap)
+}
+
+// LogActiveConns logs the number of active connections.
+func (s *Server) LogActiveConns(ctx context.Context) {
+	log.Ops.Info(ctx, fmt.Sprintf("number of active connections: %d\n", s.GetConnCancelMapLen()))
+}
+
+// WaitSqlDraining waits for SQL connections and queries to be closed.
+// It consecutively triggers the waiting periods with maximum lengths determined
+// by connectionWait and queryWait.
+func (s *Server) WaitSqlDraining(
+	ctx context.Context,
+	connectionWait time.Duration,
+	queryWait time.Duration,
+	reporter func(int, redact.SafeString),
+) error {
+	s.waitSqlConnDraining(ctx, connectionWait)
+	if err := s.waitSqlQueryDraining(ctx, queryWait, reporter); err != nil {
+		return err
+	}
+	return nil
+}
+
+// waitSqlConnDraining waits for SQL connections to be closed for the
+// duration of connectionWait.
+// During the connectionWait period, no new SQL connections are allowed, and as
+// soon as all existing SQL connections are closed, the server early exits this
+// draining phase.
+func (s *Server) waitSqlConnDraining(ctx context.Context, connectionWait time.Duration) {
+
+	// If we're already draining the SQL connections, we don't need to wait again.
+	if s.IsDraining() {
+		return
+	}
+
+	connectionWaitLogMessage := fmt.Sprintf(
+		"waiting for SQL connections to be closed, no new SQL connections "+
+			"allowed now. The server will proceed to the next draining phase once all "+
+			"SQL connections are closed or after timeout for %s, whichever earlier. "+
+			"(This timeout duration is set by cluster setting "+
+			"\"server.shutdown.connection_wait\") ",
+		connectionWait,
+	)
+	log.Ops.Info(ctx, connectionWaitLogMessage)
+
+	s.DisallowNewSQLConn()
+
+	timer := time.NewTimer(connectionWait)
+	defer timer.Stop()
+
+	// Check the number of remaining connections every 2 seconds.
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		// Connection wait times out, force exit.
+		case <-timer.C:
+			return
+		case <-ticker.C:
+			// We wait till all SQL connections are closed, or connection_wait timeouts.
+			if s.GetConnCancelMapLen() == 0 {
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			}
+		}
+	}
 }
 
 // drainImpl drains the SQL clients.
@@ -497,6 +605,16 @@ func (s *Server) drainImpl(
 		// Report progress to the Drain RPC.
 		reporter(len(connCancelMap), "SQL clients")
 	}
+
+	queryWaitLogMessage := fmt.Sprintf(
+		"draining remaining SQL connections that are without queries in "+
+			"flight. The server will proceed to the next draining phase once all "+
+			"SQL queries finish or after after timeout for %s, whichever earlier. "+
+			"(This timeout duration is set by cluster setting "+
+			"\"server.shutdown.query_wait\")",
+		queryWait,
+	)
+	log.Ops.Info(ctx, queryWaitLogMessage)
 
 	// Spin off a goroutine that waits for all connections to signal that they
 	// are done and reports it on allConnsDone. The main goroutine signals this
@@ -1172,19 +1290,20 @@ func (s *Server) maybeUpgradeToSecureConn(
 }
 
 // registerConn registers the incoming connection to the map of active connections,
-// which can be canceled by a concurrent server drain. It also returns
-// the current draining status of the server.
+// which can be canceled by a concurrent server drain. It also returns a boolean
+// variable rejectingNewSqlConn, which shows if the server is rejecting new SQL
+// connections.
 //
 // The onCloseFn() callback must be called at the end of the
 // connection by the caller.
 func (s *Server) registerConn(
 	ctx context.Context,
-) (newCtx context.Context, draining bool, onCloseFn func()) {
+) (newCtx context.Context, rejectingNewSqlConn bool, onCloseFn func()) {
 	onCloseFn = func() {}
 	newCtx = ctx
 	s.mu.Lock()
-	draining = s.mu.draining
-	if !draining {
+	rejectingNewSqlConn = s.mu.rejectingNewSqlConn
+	if !rejectingNewSqlConn {
 		var cancel context.CancelFunc
 		newCtx, cancel = contextutil.WithCancel(ctx)
 		done := make(chan struct{})
@@ -1199,11 +1318,11 @@ func (s *Server) registerConn(
 	}
 	s.mu.Unlock()
 
-	// If the Server is draining, we will use the connection only to send an
-	// error, so we don't count it in the stats. This makes sense since
-	// DrainClient() waits for that number to drop to zero,
+	// If the server is rejecting new SQL connection, we will use the connection
+	// only to send an error, so we don't count it in the stats. This makes sense
+	// since DrainClient() waits for that number to drop to zero,
 	// so we don't want it to oscillate unnecessarily.
-	if !draining {
+	if !rejectingNewSqlConn {
 		s.metrics.NewConns.Inc(1)
 		s.metrics.Conns.Inc(1)
 		prevOnCloseFn := onCloseFn

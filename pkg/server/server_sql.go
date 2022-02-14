@@ -157,9 +157,12 @@ type SQLServer struct {
 	// SQL listeners in AcceptClients().
 	connManager netutil.Server
 
-	// set to true when the server has started accepting client conns.
-	// Used by health checks.
-	acceptingClients syncutil.AtomicBool
+	// TODO (janexing): Is the health checkpoint /health?ready=1 only used by
+	// load balancers?
+	// isReady is set to true when the server has started accepting
+	// client's SQL connections via a load balancer.
+	// It is set false when the server starts the draining process.
+	isReady syncutil.AtomicBool
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1332,7 +1335,7 @@ func (s *SQLServer) startServeSQL(
 		}
 	}
 
-	s.acceptingClients.Set(true)
+	s.isReady.Set(true)
 
 	return nil
 }
