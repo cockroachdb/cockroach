@@ -182,6 +182,29 @@ func (tb *tokenBucket) RemoveTokens(now time.Time, amount tenantcostmodel.RU) {
 	tb.maybeNotify(now)
 }
 
+// AddTokens increases the amount of tokens currently available.
+func (tb *tokenBucket) AddTokens(now time.Time, amount tenantcostmodel.RU) {
+	tb.update(now)
+	if amount >= 0 {
+		tb.addTokens(amount)
+	}
+	tb.maybeNotify(now)
+}
+
+func (tb *tokenBucket) addTokens(amount tenantcostmodel.RU) {
+	if tb.debt > 0 {
+		if tb.debt >= amount {
+			tb.debt -= amount
+		} else {
+			tb.available += amount - tb.debt
+			tb.debt = 0
+		}
+		tb.calculateDebtRate()
+	} else {
+		tb.available += amount
+	}
+}
+
 type tokenBucketReconfigureArgs struct {
 	NewTokens tenantcostmodel.RU
 
@@ -204,17 +227,7 @@ func (tb *tokenBucket) Reconfigure(now time.Time, args tokenBucketReconfigureArg
 	tb.rate = args.NewRate
 	tb.notifyThreshold = args.NotifyThreshold
 	if args.NewTokens > 0 {
-		if tb.debt > 0 {
-			if tb.debt >= args.NewTokens {
-				tb.debt -= args.NewTokens
-			} else {
-				tb.available += args.NewTokens - tb.debt
-				tb.debt = 0
-			}
-			tb.calculateDebtRate()
-		} else {
-			tb.available += args.NewTokens
-		}
+		tb.addTokens(args.NewTokens)
 	}
 	tb.maybeNotify(now)
 }

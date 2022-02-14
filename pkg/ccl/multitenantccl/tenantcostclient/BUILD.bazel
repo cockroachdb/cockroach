@@ -41,8 +41,11 @@ go_test(
     embed = [":tenantcostclient"],
     deps = [
         "//pkg/base",
+        "//pkg/blobs",
         "//pkg/ccl",
+        "//pkg/ccl/changefeedccl",
         "//pkg/ccl/utilccl",
+        "//pkg/cloud/nodelocal",
         "//pkg/keys",
         "//pkg/kv/kvclient/kvtenant",
         "//pkg/multitenant",
@@ -53,6 +56,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/testutils",
@@ -67,6 +71,7 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

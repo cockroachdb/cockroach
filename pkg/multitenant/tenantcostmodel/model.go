@@ -37,6 +37,8 @@ type RU float64
 //
 //  - CPU usage on the tenant's SQL pods.
 //
+//  - Writes to external storage services such as S3.
+//
 type Config struct {
 	// KVReadRequest is the baseline cost of a KV read.
 	KVReadRequest RU
@@ -56,6 +58,14 @@ type Config struct {
 	// PGWireEgressByte is the cost of transferring one byte from a SQL pod to the
 	// client.
 	PGWireEgressByte RU
+
+	// ExternalIOEgressByte is the cost of transferring one
+	// byte from a SQL pod to external services.
+	ExternalIOEgressByte RU
+
+	// ExternalIOIngressByte is the cost of transferring one
+	// byte from an external service into the SQL pod.
+	ExternalIOIngressByte RU
 }
 
 // KVReadCost calculates the cost of a KV read operation.
@@ -66,6 +76,16 @@ func (c *Config) KVReadCost(bytes int64) RU {
 // KVWriteCost calculates the cost of a KV write operation.
 func (c *Config) KVWriteCost(bytes int64) RU {
 	return c.KVWriteRequest + RU(bytes)*c.KVWriteByte
+}
+
+// ExternalWriteCost calculates the cost of an external write operation.
+func (c *Config) ExternalWriteCost(bytes int64) RU {
+	return RU(bytes) * c.ExternalIOEgressByte
+}
+
+// ExternalReadCost calculates the cost of an external read operation.
+func (c *Config) ExternalReadCost(bytes int64) RU {
+	return RU(bytes) * c.ExternalIOIngressByte
 }
 
 // RequestCost returns the portion of the cost that can be calculated upfront:
