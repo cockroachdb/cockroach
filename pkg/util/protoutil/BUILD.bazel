@@ -33,6 +33,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/storage/enginepb",
         "@com_github_gogo_protobuf//proto",

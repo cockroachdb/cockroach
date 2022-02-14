@@ -362,17 +362,17 @@ func (w index) CreatedAt() time.Time {
 
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
-	desc *descpb.PartitioningDescriptor
+	desc *catpb.PartitioningDescriptor
 }
 
 // PartitioningDesc returns the underlying protobuf descriptor.
-func (p partitioning) PartitioningDesc() *descpb.PartitioningDescriptor {
+func (p partitioning) PartitioningDesc() *catpb.PartitioningDescriptor {
 	return p.desc
 }
 
 // DeepCopy returns a deep copy of the receiver.
 func (p partitioning) DeepCopy() catalog.Partitioning {
-	return &partitioning{desc: protoutil.Clone(p.desc).(*descpb.PartitioningDescriptor)}
+	return &partitioning{desc: protoutil.Clone(p.desc).(*catpb.PartitioningDescriptor)}
 }
 
 // FindPartitionByName recursively searches the partitioning for a partition

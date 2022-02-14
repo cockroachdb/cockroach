@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -155,8 +156,8 @@ func createPartitioningImpl(
 	allowedNewColumnNames []tree.Name,
 	numImplicitColumns int,
 	colOffset int,
-) (descpb.PartitioningDescriptor, error) {
-	partDesc := descpb.PartitioningDescriptor{}
+) (catpb.PartitioningDescriptor, error) {
+	partDesc := catpb.PartitioningDescriptor{}
 	if partBy == nil {
 		return partDesc, nil
 	}
@@ -203,7 +204,7 @@ func createPartitioningImpl(
 	}
 
 	for _, l := range partBy.List {
-		p := descpb.PartitioningDescriptor_List{
+		p := catpb.PartitioningDescriptor_List{
 			Name: string(l.Name),
 		}
 		for _, expr := range l.Exprs {
@@ -217,7 +218,7 @@ func createPartitioningImpl(
 		if l.Subpartition != nil {
 			newColOffset := colOffset + int(partDesc.NumColumns)
 			if numImplicitColumns > 0 {
-				return descpb.PartitioningDescriptor{}, unimplemented.New(
+				return catpb.PartitioningDescriptor{}, unimplemented.New(
 					"PARTITION BY SUBPARTITION",
 					"implicit column partitioning on a subpartition is not yet supported",
 				)
@@ -241,7 +242,7 @@ func createPartitioningImpl(
 	}
 
 	for _, r := range partBy.Range {
-		p := descpb.PartitioningDescriptor_Range{
+		p := catpb.PartitioningDescriptor_Range{
 			Name: string(r.Name),
 		}
 		var err error
@@ -339,7 +340,7 @@ func createPartitioning(
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
+) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
 		return nil, newPartitioning, err
@@ -398,7 +399,7 @@ func createPartitioning(
 		0, /* colOffset */
 	)
 	if err != nil {
-		return nil, descpb.PartitioningDescriptor{}, err
+		return nil, catpb.PartitioningDescriptor{}, err
 	}
 	return newImplicitCols, newPartitioning, err
 }

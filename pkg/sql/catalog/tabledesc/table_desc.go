@@ -14,6 +14,7 @@ package tabledesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -183,7 +184,7 @@ func UpdateIndexPartitioning(
 	idx *descpb.IndexDescriptor,
 	isIndexPrimary bool,
 	newImplicitCols []catalog.Column,
-	newPartitioning descpb.PartitioningDescriptor,
+	newPartitioning catpb.PartitioningDescriptor,
 ) bool {
 	oldNumImplicitCols := int(idx.Partitioning.NumImplicitColumns)
 	isNoOp := oldNumImplicitCols == len(newImplicitCols) && idx.Partitioning.Equal(newPartitioning)
