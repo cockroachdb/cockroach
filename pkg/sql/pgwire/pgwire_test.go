@@ -1921,7 +1921,6 @@ var _ pgx.Logger = pgxTestLogger{}
 func TestCancelRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 76493)
 
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		params := base.TestServerArgs{Insecure: insecure}
