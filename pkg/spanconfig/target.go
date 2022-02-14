@@ -10,7 +10,10 @@
 
 package spanconfig
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
+)
 
 // Target specifies the target of an associated span configuration.
 type Target struct {
@@ -20,14 +23,14 @@ type Target struct {
 }
 
 // MakeTarget returns a new Target.
-func MakeTarget(t roachpb.SpanConfigTarget) Target {
+func MakeTarget(t roachpb.SpanConfigTarget) (Target, error) {
 	switch t.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return MakeTargetFromSpan(*t.GetSpan())
+		return MakeTargetFromSpan(*t.GetSpan()), nil
 		// TODO(arul): Add a case here for SpanConfigTarget_SystemTarget once we've
 		// taught and tested the KVAccessor to work with system targets.
 	default:
-		panic("cannot handle target")
+		return Target{}, errors.AssertionFailedf("unknown type of system target %v", t)
 	}
 }
 
@@ -203,15 +206,19 @@ func RecordsToEntries(records []Record) []roachpb.SpanConfigEntry {
 
 // EntriesToRecords converts a list of roachpb.SpanConfigEntries
 // (received over the wire) to a list of Records.
-func EntriesToRecords(entries []roachpb.SpanConfigEntry) []Record {
+func EntriesToRecords(entries []roachpb.SpanConfigEntry) ([]Record, error) {
 	records := make([]Record, 0, len(entries))
 	for _, entry := range entries {
+		target, err := MakeTarget(entry.Target)
+		if err != nil {
+			return nil, err
+		}
 		records = append(records, Record{
-			Target: MakeTarget(entry.Target),
+			Target: target,
 			Config: entry.Config,
 		})
 	}
-	return records
+	return records, nil
 }
 
 // TargetsToProtos converts a list of targets to a list of
@@ -226,10 +233,14 @@ func TargetsToProtos(targets []Target) []roachpb.SpanConfigTarget {
 
 // TargetsFromProtos converts a list of roachpb.SpanConfigTargets
 // (received over the wire) to a list of Targets.
-func TargetsFromProtos(protoTargtets []roachpb.SpanConfigTarget) []Target {
-	targets := make([]Target, 0, len(protoTargtets))
-	for _, t := range protoTargtets {
-		targets = append(targets, MakeTarget(t))
+func TargetsFromProtos(protoTargets []roachpb.SpanConfigTarget) ([]Target, error) {
+	targets := make([]Target, 0, len(protoTargets))
+	for _, t := range protoTargets {
+		target, err := MakeTarget(t)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
 	}
-	return targets
+	return targets, nil
 }
