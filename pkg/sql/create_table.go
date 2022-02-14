@@ -1058,7 +1058,7 @@ func CreatePartitioning(
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
+) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
 	if partBy == nil {
 		if indexDesc.Partitioning.NumImplicitColumns > 0 {
 			return nil, newPartitioning, unimplemented.Newf(
@@ -1095,8 +1095,8 @@ var CreatePartitioningCCL = func(
 	partBy *tree.PartitionBy,
 	allowedNewColumnNames []tree.Name,
 	allowImplicitPartitioning bool,
-) (newImplicitCols []catalog.Column, newPartitioning descpb.PartitioningDescriptor, err error) {
-	return nil, descpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
+) (newImplicitCols []catalog.Column, newPartitioning catpb.PartitioningDescriptor, err error) {
+	return nil, catpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
