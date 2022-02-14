@@ -152,8 +152,8 @@ func TestGetLargestID(t *testing.T) {
 
 	type testCase struct {
 		values    []roachpb.KeyValue
-		largest   config.SystemTenantObjectID
-		maxID     config.SystemTenantObjectID
+		largest   config.ObjectID
+		maxID     config.ObjectID
 		pseudoIDs []uint32
 		errStr    string
 	}
@@ -208,12 +208,12 @@ func TestGetLargestID(t *testing.T) {
 		func() testCase {
 			ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
 			descIDs := ms.DescriptorIDs()
-			maxDescID := config.SystemTenantObjectID(descIDs[len(descIDs)-1])
+			maxDescID := config.ObjectID(descIDs[len(descIDs)-1])
 			kvs, _ /* splits */ := ms.GetInitialValues()
 			pseudoIDs := keys.PseudoTableIDs
 			const pseudoIDIsMax = false // NOTE: change to false if adding new system not pseudo objects.
 			if pseudoIDIsMax {
-				maxDescID = config.SystemTenantObjectID(keys.MaxPseudoTableID)
+				maxDescID = config.ObjectID(keys.MaxPseudoTableID)
 			}
 			return testCase{kvs, maxDescID, 0, pseudoIDs, ""}
 		}(),
@@ -547,7 +547,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	ctx := context.Background()
 	testCases := []struct {
 		key        roachpb.RKey
-		expectedID config.SystemTenantObjectID
+		expectedID config.ObjectID
 	}{
 		{roachpb.RKeyMin, keys.MetaRangesID},
 		{roachpb.RKey(keys.Meta1Prefix), keys.MetaRangesID},
@@ -575,7 +575,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 
 		// Non-gossiped system tables should refer to themselves.
 		{tkey(keys.LeaseTableID), keys.LeaseTableID},
-		{tkey(uint32(systemschema.JobsTable.GetID())), config.SystemTenantObjectID(systemschema.JobsTable.GetID())},
+		{tkey(uint32(systemschema.JobsTable.GetID())), config.ObjectID(systemschema.JobsTable.GetID())},
 		{tkey(keys.LocationsTableID), keys.LocationsTableID},
 		{tkey(keys.NamespaceTableID), keys.NamespaceTableID},
 
@@ -586,8 +586,8 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		{tkey(keys.LivenessRangesID), keys.SystemDatabaseID},
 
 		// User tables should refer to themselves.
-		{tkey(bootstrap.TestingUserDescID(0)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(0))},
-		{tkey(bootstrap.TestingUserDescID(22)), config.SystemTenantObjectID(bootstrap.TestingUserDescID(22))},
+		{tkey(bootstrap.TestingUserDescID(0)), config.ObjectID(bootstrap.TestingUserDescID(0))},
+		{tkey(bootstrap.TestingUserDescID(22)), config.ObjectID(bootstrap.TestingUserDescID(22))},
 		{roachpb.RKeyMax, keys.RootNamespaceID},
 
 		// Secondary tenant tables should refer to the TenantsRangesID.
@@ -610,9 +610,9 @@ func TestGetZoneConfigForKey(t *testing.T) {
 		Values: kvs,
 	}
 	for tcNum, tc := range testCases {
-		var objectID config.SystemTenantObjectID
+		var objectID config.ObjectID
 		config.ZoneConfigHook = func(
-			_ *config.SystemConfig, id config.SystemTenantObjectID,
+			_ *config.SystemConfig, codec keys.SQLCodec, id config.ObjectID,
 		) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
 			objectID = id
 			return cfg.DefaultZoneConfig, nil, false, nil
@@ -622,7 +622,7 @@ func TestGetZoneConfigForKey(t *testing.T) {
 			t.Errorf("#%d: GetSpanConfigForKey(%v) got error: %v", tcNum, tc.key, err)
 		}
 		if objectID != tc.expectedID {
-			t.Errorf("#%d: GetZoneConfigForKey(%v) got %d; want %d", tcNum, tc.key, objectID, tc.expectedID)
+			t.Errorf("#%d: GetSpanConfigForKey(%v) got %d; want %d", tcNum, tc.key, objectID, tc.expectedID)
 		}
 	}
 }

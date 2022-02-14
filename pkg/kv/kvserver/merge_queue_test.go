@@ -47,8 +47,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 		return keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(offset))
 	}
 
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(0)), *zonepb.NewZoneConfig())
-	config.TestingSetZoneConfig(config.SystemTenantObjectID(bootstrap.TestingUserDescID(1)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(0)), *zonepb.NewZoneConfig())
+	config.TestingSetZoneConfig(config.ObjectID(bootstrap.TestingUserDescID(1)), *zonepb.NewZoneConfig())
 
 	type testCase struct {
 		startKey, endKey []byte

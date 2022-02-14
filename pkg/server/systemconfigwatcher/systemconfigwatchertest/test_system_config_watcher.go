@@ -15,10 +15,14 @@ package systemconfigwatchertest
 import (
 	"context"
 	gosql "database/sql"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -40,7 +44,7 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	// Shorten the closed timestamp duration as a cheeky way to check the
@@ -49,19 +53,32 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10 ms'")
 
 	t.Run("system", func(t *testing.T) {
-		runTest(t, s, sqlDB)
+		runTest(t, s, sqlDB, nil)
 	})
 	if !skipSecondary {
 		t.Run("secondary", func(t *testing.T) {
 			tenant, tenantDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
 				TenantID: serverutils.TestTenantID(),
 			})
-			runTest(t, tenant, tenantDB)
+			// We expect the secondary tenant to see the host tenant's view of a few
+			// keys. We need to plumb that expectation into the test.
+			runTest(t, tenant, tenantDB, func(t *testing.T) []roachpb.KeyValue {
+				return kvtenant.GossipSubscriptionSystemConfigMask.Apply(
+					config.SystemConfigEntries{
+						Values: getSystemConfig(ctx, t, keys.SystemSQLCodec, kvDB),
+					},
+				).Values
+			})
 		})
 	}
 }
 
-func runTest(t *testing.T, s serverutils.TestTenantInterface, sqlDB *gosql.DB) {
+func runTest(
+	t *testing.T,
+	s serverutils.TestTenantInterface,
+	sqlDB *gosql.DB,
+	extraRows func(t *testing.T) []roachpb.KeyValue,
+) {
 	ctx := context.Background()
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -74,23 +91,16 @@ func runTest(t *testing.T, s serverutils.TestTenantInterface, sqlDB *gosql.DB) {
 		default:
 		}
 	}
-	getSystemConfig := func(t *testing.T) []roachpb.KeyValue {
-		var ba roachpb.BatchRequest
-		ba.Add(roachpb.NewScan(
-			append(execCfg.Codec.TenantPrefix(), keys.SystemConfigSpan.Key...),
-			append(execCfg.Codec.TenantPrefix(), keys.SystemConfigSpan.EndKey...),
-			false, // forUpdate
-		))
-		br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
-		require.NoError(t, pErr.GoError())
-		return br.Responses[0].GetScan().Rows
-	}
 	checkEqual := func(t *testing.T) error {
 		rs := r.GetSystemConfig()
 		if rs == nil {
 			return errors.New("nil config")
 		}
-		sc := getSystemConfig(t)
+		sc := getSystemConfig(ctx, t, execCfg.Codec, kvDB)
+		if extraRows != nil {
+			sc = append(sc, extraRows(t)...)
+			sort.Sort(roachpb.KeyValueByKey(sc))
+		}
 		if !assert.Equal(noopT{}, sc, rs.Values) {
 			return errors.Errorf("mismatch: %v", pretty.Diff(sc, rs.Values))
 		}
@@ -106,6 +116,20 @@ func runTest(t *testing.T, s serverutils.TestTenantInterface, sqlDB *gosql.DB) {
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY)")
 	<-rc
 	waitForEqual(t)
+}
+
+func getSystemConfig(
+	ctx context.Context, t *testing.T, codec keys.SQLCodec, kvDB *kv.DB,
+) []roachpb.KeyValue {
+	var ba roachpb.BatchRequest
+	ba.Add(roachpb.NewScan(
+		append(codec.TenantPrefix(), keys.SystemConfigSpan.Key...),
+		append(codec.TenantPrefix(), keys.SystemConfigSpan.EndKey...),
+		false, // forUpdate
+	))
+	br, pErr := kvDB.NonTransactionalSender().Send(ctx, ba)
+	require.NoError(t, pErr.GoError())
+	return br.Responses[0].GetScan().Rows
 }
 
 type noopT struct{}
