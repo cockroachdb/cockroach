@@ -287,7 +287,7 @@ func (t *tenantStatusServer) CancelQueryByKey(
 		// If we acquired the semaphore but the cancellation request failed, then
 		// hold on to the semaphore for longer. This helps mitigate a DoS attack
 		// of random cancellation requests.
-		if !resp.Canceled {
+		if err != nil || (resp != nil && !resp.Canceled) {
 			time.Sleep(1 * time.Second)
 		}
 		alloc.Release()
