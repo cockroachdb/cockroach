@@ -7,20 +7,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "buildutil",
     srcs = select({
-        "//build/toolchains:opt_crdb_test": [":gen-crdb-test-on"],
-        "//build/toolchains:opt": [":gen-crdb-test-off"],
-        "//conditions:default": ["crdb_test_dyn.go"],
+        "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
+        "//conditions:default": [":gen-crdb-test-off"],
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil",
     visibility = ["//visibility:public"],
-    x_defs = select({
-        # opt builds will get either crdb_test_on.go or crdb_test_off.go.
-        # dbg and fastbuild builds will get crdb_test_dyn.go, in which case we
-        # want to set the crdbTestString variable at link-time.
-        "//build/toolchains:dbg_crdb_test": {"crdbTestString": "y"},
-        "//build/toolchains:fastbuild_crdb_test": {"crdbTestString": "y"},
-        "//conditions:default": {},
-    }),
 )
 
 REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
