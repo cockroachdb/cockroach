@@ -369,15 +369,19 @@ func (r *incrementalReconciler) reconcile(
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
 
-			// Process the DescriptorUpdates and identify all descriptor IDs that
-			// require translation.
+			// Process the SQLUpdates and identify all descriptor IDs that require
+			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
+			// instruct the translator to generate all records that apply to
+			// spanconfig.SystemTargets as well.
+			//
+			// TODO(adityamaru): Conditionally set the bool to true to generate system
+			// span configurations.
+			var generateSystemSpanConfigurations bool
 			var allIDs descpb.IDs
 			for _, update := range sqlUpdates {
 				if update.IsDescriptorUpdate() {
 					allIDs = append(allIDs, update.GetDescriptorUpdate().ID)
 				}
-				// TODO(adityamaru): Set the bool that tells the translator to emit
-				// SystemSpanConfigs.
 			}
 
 			// TODO(irfansharif): Would it be easier to just have the translator
@@ -390,7 +394,7 @@ func (r *incrementalReconciler) reconcile(
 				return err
 			}
 
-			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs)
+			entries, _, err := r.sqlTranslator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
 			if err != nil {
 				return err
 			}
