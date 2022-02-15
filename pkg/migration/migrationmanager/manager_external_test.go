@@ -68,7 +68,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -201,7 +201,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -319,7 +319,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          versions[0].Version,
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -401,7 +401,7 @@ func TestPauseMigration(t *testing.T) {
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				MigrationManager: &migration.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -521,7 +521,7 @@ func TestPrecondition(t *testing.T) {
 	}
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          v0.Version,
 		},
 		// Inject a migration which would run to upgrade the cluster.
