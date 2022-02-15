@@ -119,6 +119,8 @@ func TestDataDriven(t *testing.T) {
 		}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			var generateSystemSpanConfigs bool
+			var descIDs []descpb.ID
 			switch d.Cmd {
 			case "exec-sql":
 				tenant.Exec(d.Input)
@@ -130,36 +132,37 @@ func TestDataDriven(t *testing.T) {
 				return output
 
 			case "translate":
-				// Parse the args to get the object ID we're looking to
+				// Parse the args to get the descriptor ID we're looking to
 				// translate.
-				var objID descpb.ID
 				switch {
 				case d.HasArg("named-zone"):
 					var zone string
 					d.ScanArgs(t, "named-zone", &zone)
 					namedZoneID, found := zonepb.NamedZones[zonepb.NamedZone(zone)]
 					require.Truef(t, found, "unknown named zone: %s", zone)
-					objID = descpb.ID(namedZoneID)
+					descIDs = []descpb.ID{descpb.ID(namedZoneID)}
 				case d.HasArg("id"):
 					var scanID int
 					d.ScanArgs(t, "id", &scanID)
-					objID = descpb.ID(scanID)
+					descIDs = []descpb.ID{descpb.ID(scanID)}
 				case d.HasArg("database"):
 					var dbName string
 					d.ScanArgs(t, "database", &dbName)
 					if d.HasArg("table") {
 						var tbName string
 						d.ScanArgs(t, "table", &tbName)
-						objID = tenant.LookupTableByName(ctx, dbName, tbName).GetID()
+						descIDs = []descpb.ID{tenant.LookupTableByName(ctx, dbName, tbName).GetID()}
 					} else {
-						objID = tenant.LookupDatabaseByName(ctx, dbName).GetID()
+						descIDs = []descpb.ID{tenant.LookupDatabaseByName(ctx, dbName).GetID()}
 					}
+				case d.HasArg("system-span-configurations"):
+					generateSystemSpanConfigs = true
 				default:
 					d.Fatalf(t, "insufficient/improper args (%v) provided to translate", d.CmdArgs)
 				}
 
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				records, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID})
+				records, _, err := sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {
 					return records[i].Target.Less(records[j].Target)
@@ -167,8 +170,16 @@ func TestDataDriven(t *testing.T) {
 
 				var output strings.Builder
 				for _, record := range records {
-					output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
+					switch {
+					case record.Target.IsSpanTarget():
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
+					case record.Target.IsSystemTarget():
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSystemTarget(),
+							spanconfigtestutils.PrintSystemSpanConfigDiffedAgainstDefault(record.Config)))
+					default:
+						panic("unsupported target type")
+					}
 				}
 				return output.String()
 
