@@ -64,36 +64,42 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 			mvs.descriptorGCJobs[dbID] = nil
 		}
 	}
-	if len(mvs.descriptorGCJobs) > 0 ||
-		mvs.dbGCJobs.Len() > 0 {
-		for parentID := range mvs.descriptorGCJobs {
-			job := jobspb.SchemaChangeGCDetails{
-				Tables: mvs.descriptorGCJobs[parentID],
+	var dbIDs catalog.DescriptorIDSet
+	for dbID := range mvs.descriptorGCJobs {
+		dbIDs.Add(dbID)
+	}
+	for _, dbID := range dbIDs.Ordered() {
+		job := jobspb.SchemaChangeGCDetails{
+			Tables: mvs.descriptorGCJobs[dbID],
+		}
+		// Check if the database is also being cleaned up at the same time.
+		if mvs.dbGCJobs.Contains(dbID) {
+			job.ParentID = dbID
+		}
+		jobName := func() string {
+			var tableIDs catalog.DescriptorIDSet
+			for _, table := range mvs.descriptorGCJobs[dbID] {
+				tableIDs.Add(table.ID)
 			}
-			// Check if the database is also being cleaned up at the same time.
-			if mvs.dbGCJobs.Contains(parentID) {
-				job.ParentID = parentID
-			}
-			jobName := func() string {
-				if len(mvs.descriptorGCJobs[parentID]) == 1 &&
-					job.ParentID == descpb.InvalidID {
-					return fmt.Sprintf("dropping descriptor %d", mvs.descriptorGCJobs[parentID][0].ID)
-				}
-				var sb strings.Builder
+			var sb strings.Builder
+			if tableIDs.Len() == 1 {
+				sb.WriteString("dropping descriptor")
+			} else {
 				sb.WriteString("dropping descriptors")
-				for _, table := range mvs.descriptorGCJobs[parentID] {
-					sb.WriteString(fmt.Sprintf(" %d", table.ID))
-				}
-				if job.ParentID != descpb.InvalidID {
-					sb.WriteString(fmt.Sprintf(" and parent database %d", job.ParentID))
-				}
-				return sb.String()
 			}
-			record := createGCJobRecord(jobName(), security.NodeUserName(), job)
-			record.JobID = deps.TransactionalJobRegistry().MakeJobID()
-			if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
-				return err
+			tableIDs.ForEach(func(tableID descpb.ID) {
+				sb.WriteString(fmt.Sprintf(" %d", tableID))
+			})
+			if job.ParentID != descpb.InvalidID {
+				sb.WriteString(fmt.Sprintf(" and parent database %d", job.ParentID))
 			}
+			return sb.String()
+		}
+
+		record := createGCJobRecord(jobName(), security.NodeUserName(), job)
+		record.JobID = deps.TransactionalJobRegistry().MakeJobID()
+		if err := deps.TransactionalJobRegistry().CreateJob(ctx, record); err != nil {
+			return err
 		}
 	}
 	for tableID, indexes := range mvs.indexGCJobs {
