@@ -171,6 +171,7 @@ func (c *Connector) Start(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+
 	if err := c.rpcContext.Stopper.RunAsyncTask(bgCtx, "connector-settings", func(ctx context.Context) {
 		ctx = c.AnnotateCtx(ctx)
 		ctx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(ctx)
@@ -185,8 +186,10 @@ func (c *Connector) Start(ctx context.Context) error {
 	for gossipStartupCh != nil || settingsStartupCh != nil {
 		select {
 		case <-gossipStartupCh:
+			log.Infof(ctx, "kv connector gossip subscription started")
 			gossipStartupCh = nil
 		case <-settingsStartupCh:
+			log.Infof(ctx, "kv connector tenant settings started")
 			settingsStartupCh = nil
 		case <-ctx.Done():
 			return ctx.Err()
