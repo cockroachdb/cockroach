@@ -42,6 +42,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // Mutable wraps a database descriptor and provides methods
@@ -49,10 +53,6 @@ type immutable struct {
 type Mutable struct {
 	immutable
 	ClusterVersion *immutable
-
-	// changed represents whether or not the descriptor was changed
-	// after RunPostDeserializationChanges.
-	changed bool
 }
 
 // SafeMessage makes immutable a SafeMessager.
@@ -147,7 +147,16 @@ func (desc *immutable) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.DatabaseDesc())
+	return newBuilder(desc.DatabaseDesc(), desc.isUncommittedVersion, true)
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.DatabaseDesc(), desc.IsUncommittedVersion(),
+		desc.HasPostDeserializationChanges())
 }
 
 // IsMultiRegion implements the DatabaseDescriptor interface.
@@ -381,9 +390,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	imm := NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
-	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
-	return imm
+	return desc.NewBuilder().BuildImmutable()
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -460,7 +467,7 @@ func (desc *Mutable) SetPlacement(placement descpb.DataPlacement) {
 
 // HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
-func (desc *Mutable) HasPostDeserializationChanges() bool {
+func (desc *immutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }
 

@@ -72,10 +72,6 @@ type Mutable struct {
 	// ClusterVersion represents the version of the type descriptor read
 	// from the store.
 	ClusterVersion *immutable
-
-	// changed represents whether or not the descriptor was changed
-	// after RunPostDeserializationChanges.
-	changed bool
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
@@ -96,6 +92,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // UpdateCachedFieldsOnModifiedMutable refreshes the immutable field by
@@ -185,8 +185,18 @@ func (desc *immutable) ByteSize() int64 {
 }
 
 // NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(),
+		desc.HasPostDeserializationChanges())
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TypeDesc())
+	return newBuilder(desc.TypeDesc(), desc.IsUncommittedVersion(),
+		desc.HasPostDeserializationChanges())
 }
 
 // PrimaryRegionName implements the TypeDescriptor interface.
@@ -316,9 +326,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	imm := NewBuilder(desc.TypeDesc()).BuildImmutableType()
-	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
-	return imm
+	return desc.NewBuilder().(TypeDescriptorBuilder).BuildImmutableType()
 }
 
 // IsNew implements the MutableDescriptor interface.
@@ -925,6 +933,12 @@ func (desc *immutable) HasPendingSchemaChanges() bool {
 	}
 }
 
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *immutable) HasPostDeserializationChanges() bool {
+	return desc.changed
+}
+
 // GetIDClosure implements the TypeDescriptor interface.
 func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
@@ -991,12 +1005,6 @@ func GetTypeDescriptorClosure(typ *types.T) (map[descpb.ID]struct{}, error) {
 		ret[id] = struct{}{}
 	}
 	return ret, nil
-}
-
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *Mutable) HasPostDeserializationChanges() bool {
-	return desc.changed
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
