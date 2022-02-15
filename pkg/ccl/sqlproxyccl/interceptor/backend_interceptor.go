@@ -20,8 +20,8 @@ type BackendInterceptor pgInterceptor
 
 // NewBackendInterceptor creates a BackendInterceptor. bufSize must be at least
 // the size of a pgwire message header.
-func NewBackendInterceptor(src io.Reader, dst io.Writer, bufSize int) (*BackendInterceptor, error) {
-	pgi, err := newPgInterceptor(src, dst, bufSize)
+func NewBackendInterceptor(src io.Reader, bufSize int) (*BackendInterceptor, error) {
+	pgi, err := newPgInterceptor(src, bufSize)
 	if err != nil {
 		return nil, err
 	}
@@ -35,13 +35,6 @@ func NewBackendInterceptor(src io.Reader, dst io.Writer, bufSize int) (*BackendI
 func (bi *BackendInterceptor) PeekMsg() (typ pgwirebase.ClientMessageType, size int, err error) {
 	byteType, size, err := (*pgInterceptor)(bi).PeekMsg()
 	return pgwirebase.ClientMessageType(byteType), size, err
-}
-
-// WriteMsg writes the given bytes to the writer dst.
-//
-// See pgInterceptor.WriteMsg for more information.
-func (bi *BackendInterceptor) WriteMsg(data pgproto3.FrontendMessage) (n int, err error) {
-	return (*pgInterceptor)(bi).WriteMsg(data.Encode(nil))
 }
 
 // ReadMsg decodes the current pgwire message and returns a FrontendMessage.
@@ -61,11 +54,6 @@ func (bi *BackendInterceptor) ReadMsg() (msg pgproto3.FrontendMessage, err error
 // decoding, and advances the interceptor to the next message.
 //
 // See pgInterceptor.ForwardMsg for more information.
-func (bi *BackendInterceptor) ForwardMsg() (n int, err error) {
-	return (*pgInterceptor)(bi).ForwardMsg()
-}
-
-// Close closes the interceptor, and prevents further operations on it.
-func (bi *BackendInterceptor) Close() {
-	(*pgInterceptor)(bi).Close()
+func (bi *BackendInterceptor) ForwardMsg(dst io.Writer) (n int, err error) {
+	return (*pgInterceptor)(bi).ForwardMsg(dst)
 }

@@ -27,18 +27,24 @@ func TestFrontendInterceptor(t *testing.T) {
 
 	q := (&pgproto3.ReadyForQuery{TxStatus: 'I'}).Encode(nil)
 
+	buildSrc := func(t *testing.T, count int) *bytes.Buffer {
+		t.Helper()
+		src := new(bytes.Buffer)
+		_, err := src.Write(q)
+		require.NoError(t, err)
+		return src
+	}
+
 	t.Run("bufSize too small", func(t *testing.T) {
-		fi, err := interceptor.NewFrontendInterceptor(nil /* src */, nil /* dst */, 1)
+		fi, err := interceptor.NewFrontendInterceptor(nil /* src */, 1 /* bufSize */)
 		require.Error(t, err)
 		require.Nil(t, fi)
 	})
 
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
-		src := new(bytes.Buffer)
-		_, err := src.Write(q)
-		require.NoError(t, err)
+		src := buildSrc(t, 1)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, nil /* dst */, 16)
+		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
 		require.NoError(t, err)
 		require.NotNil(t, fi)
 
@@ -46,39 +52,12 @@ func TestFrontendInterceptor(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, pgwirebase.ServerMsgReady, typ)
 		require.Equal(t, 6, size)
-
-		fi.Close()
-		typ, size, err = fi.PeekMsg()
-		require.EqualError(t, err, interceptor.ErrInterceptorClosed.Error())
-		require.Equal(t, pgwirebase.ServerMessageType(0), typ)
-		require.Equal(t, 0, size)
-	})
-
-	t.Run("WriteMsg writes data to dst", func(t *testing.T) {
-		dst := new(bytes.Buffer)
-		fi, err := interceptor.NewFrontendInterceptor(nil /* src */, dst, 10)
-		require.NoError(t, err)
-		require.NotNil(t, fi)
-
-		// This is a frontend interceptor, so writing goes to the client.
-		toSend := &pgproto3.ReadyForQuery{TxStatus: 'I'}
-		n, err := fi.WriteMsg(toSend)
-		require.NoError(t, err)
-		require.Equal(t, 6, n)
-		require.Equal(t, 6, dst.Len())
-
-		fi.Close()
-		n, err = fi.WriteMsg(toSend)
-		require.EqualError(t, err, interceptor.ErrInterceptorClosed.Error())
-		require.Equal(t, 0, n)
 	})
 
 	t.Run("ReadMsg decodes the message correctly", func(t *testing.T) {
-		src := new(bytes.Buffer)
-		_, err := src.Write(q)
-		require.NoError(t, err)
+		src := buildSrc(t, 1)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, nil /* dst */, 16)
+		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
 		require.NoError(t, err)
 		require.NotNil(t, fi)
 
@@ -87,31 +66,19 @@ func TestFrontendInterceptor(t *testing.T) {
 		rmsg, ok := msg.(*pgproto3.ReadyForQuery)
 		require.True(t, ok)
 		require.Equal(t, byte('I'), rmsg.TxStatus)
-
-		fi.Close()
-		msg, err = fi.ReadMsg()
-		require.EqualError(t, err, interceptor.ErrInterceptorClosed.Error())
-		require.Nil(t, msg)
 	})
 
 	t.Run("ForwardMsg forwards data to dst", func(t *testing.T) {
-		src := new(bytes.Buffer)
-		_, err := src.Write(q)
-		require.NoError(t, err)
+		src := buildSrc(t, 1)
 		dst := new(bytes.Buffer)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, dst, 16)
+		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
 		require.NoError(t, err)
 		require.NotNil(t, fi)
 
-		n, err := fi.ForwardMsg()
+		n, err := fi.ForwardMsg(dst)
 		require.NoError(t, err)
 		require.Equal(t, 6, n)
 		require.Equal(t, 6, dst.Len())
-
-		fi.Close()
-		n, err = fi.ForwardMsg()
-		require.EqualError(t, err, interceptor.ErrInterceptorClosed.Error())
-		require.Equal(t, 0, n)
 	})
 }
