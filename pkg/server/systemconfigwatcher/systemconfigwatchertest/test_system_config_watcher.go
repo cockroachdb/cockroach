@@ -40,7 +40,13 @@ func TestSystemConfigWatcher(t *testing.T, skipSecondary bool) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			// Test runs against SQL server, so no need to create the default
+			// SQL server.
+			DisableDefaultSQLServer: true,
+		},
+	)
 	defer s.Stopper().Stop(ctx)
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	// Shorten the closed timestamp duration as a cheeky way to check the

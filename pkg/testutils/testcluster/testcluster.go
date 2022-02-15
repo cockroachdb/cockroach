@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"net"
 	"reflect"
 	"runtime"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -301,11 +303,35 @@ func (tc *TestCluster) Start(t testing.TB) {
 		errCh = make(chan error, nodes)
 	}
 
+	// Determine if we should probabilistically start a SQL server for the
+	// cluster.
+	const probabilityOfStartingTestTenant = 0.5
+	probabilisticallyStartTestSQLServer := true
+	startedTestSQLServer := true
+	if rand.Float32() > probabilityOfStartingTestTenant {
+		probabilisticallyStartTestSQLServer = false
+	}
+
 	disableLBS := false
 	for i := 0; i < nodes; i++ {
 		// Disable LBS if any server has a very low scan interval.
 		if tc.serverArgs[i].ScanInterval > 0 && tc.serverArgs[i].ScanInterval <= 100*time.Millisecond {
 			disableLBS = true
+		}
+
+		// If we're not probabilistically starting the test SQL server, disable
+		// its start and set the "started" flag accordingly. We need to do this
+		// with two separate if checks because the DisableDefaultSQLServer flag
+		// could have been set coming into this function by the caller.
+		if !probabilisticallyStartTestSQLServer {
+			tc.Servers[i].Cfg.DisableDefaultSQLServer = true
+		}
+		if tc.Servers[i].Cfg.DisableDefaultSQLServer {
+			if startedTestSQLServer && i > 0 {
+				t.Fatal(errors.Newf("starting only some nodes with a test SQL server is not"+
+					"currently supported - attempted to disable SQL sever on node %d", i))
+			}
+			startedTestSQLServer = false
 		}
 
 		if tc.clusterArgs.ParallelStart {
@@ -314,6 +340,17 @@ func (tc *TestCluster) Start(t testing.TB) {
 			}(i)
 		} else {
 			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
+				if strings.Contains(err.Error(), "requires a CCL binary") {
+					if i != 0 {
+						t.Fatal(errors.Newf("failed to start server on node %d due to lack of "+
+							"CCL binary after server started successfully on previous nodes", i))
+					}
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+				}
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -326,6 +363,13 @@ func (tc *TestCluster) Start(t testing.TB) {
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
+				if strings.Contains(err.Error(), "requires a CCL binary") {
+					for j := 0; j < nodes; j++ {
+						tc.Servers[j].Stopper().Stop(context.TODO())
+					}
+					tc.Stopper().Stop(context.TODO())
+					skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+				}
 				t.Fatal(err)
 			}
 		}
@@ -333,7 +377,10 @@ func (tc *TestCluster) Start(t testing.TB) {
 		tc.WaitForNStores(t, tc.NumServers(), tc.Servers[0].Gossip())
 	}
 
-	if tc.clusterArgs.ReplicationMode == base.ReplicationManual {
+	// No need to disable the merge queue for SQL servers, as they don't have
+	// access to that cluster setting (and ALTER TABLE ... SPLIT AT is not
+	// supported in SQL servers either).
+	if !startedTestSQLServer && tc.clusterArgs.ReplicationMode == base.ReplicationManual {
 		// We've already disabled the merge queue via testing knobs above, but ALTER
 		// TABLE ... SPLIT AT will throw an error unless we also disable merges via
 		// the cluster setting.
@@ -414,6 +461,10 @@ func (tc *TestCluster) AddAndStartServer(t testing.TB, serverArgs base.TestServe
 	}
 
 	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
+		if strings.Contains(err.Error(), "requires a CCL binary") {
+			tc.Stopper().Stop(context.TODO())
+			skip.IgnoreLint(t, "skipping due to lack of CCL binary")
+		}
 		t.Fatal(err)
 	}
 }

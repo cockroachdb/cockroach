@@ -53,6 +53,9 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 	skip.UnderRace(t, "partitionedStreamClient can't work under race")
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{
+		// Need to disable the SQL server until tenant-level restore is
+		// supported. Tracked with #76378.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

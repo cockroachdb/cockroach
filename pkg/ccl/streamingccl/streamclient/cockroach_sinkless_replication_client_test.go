@@ -55,7 +55,14 @@ func TestSinklessReplicationClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer log.Scope(t).Close(t)
-	h, cleanup := streamingtest.NewReplicationHelper(t, base.TestServerArgs{})
+	h, cleanup := streamingtest.NewReplicationHelper(t,
+		base.TestServerArgs{
+			// Need to disable the SQL server here as the test below tries
+			// to enable streaming and streaming isn't yet supported at the
+			// tenant level.
+			DisableDefaultSQLServer: true,
+		},
+	)
 	defer cleanup()
 
 	ctx := context.Background()

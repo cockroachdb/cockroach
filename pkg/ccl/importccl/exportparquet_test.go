@@ -175,8 +175,10 @@ func TestRandomParquetExports(t *testing.T) {
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
+			// Test fails under default tenant, more investigation is required.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             dbName,
+			ExternalIODir:           dir,
 		},
 	}
 	ctx := context.Background()
@@ -240,8 +242,10 @@ func TestBasicParquetTypes(t *testing.T) {
 	dbName := "baz"
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
+			// Test fails under default tenant, more investigation is required.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             dbName,
+			ExternalIODir:           dir,
 		},
 	}
 	ctx := context.Background()

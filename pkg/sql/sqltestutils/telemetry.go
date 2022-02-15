@@ -88,6 +88,13 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		defer cloudinfo.Disable()()
 
 		var test telemetryTest
+
+		// Disable the default SQL server as this test is validating that we're
+		// getting a locality optimized search plan, which is not currently
+		// supported in tenants. Tracked with #76378.
+		for i := 0; i < len(serverArgs); i++ {
+			serverArgs[i].DisableDefaultSQLServer = true
+		}
 		test.Start(t, serverArgs)
 		defer test.Close()
 

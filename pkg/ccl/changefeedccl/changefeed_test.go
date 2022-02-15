@@ -4308,9 +4308,12 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 
 	tc := serverutils.StartNewTestCluster(t, 4, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			UseDatabase:   "test",
-			Knobs:         knobs,
-			ExternalIODir: sinkDir,
+			// Test uses SPLIT AT, which isn't currently supported for
+			// non-system SQL servers.
+			DisableDefaultSQLServer: true,
+			UseDatabase:             "test",
+			Knobs:                   knobs,
+			ExternalIODir:           sinkDir,
 		}})
 	defer tc.Stopper().Stop(context.Background())
 
@@ -5077,6 +5080,8 @@ func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Test fails with SQL server. More investigation is required.
+		DisableDefaultSQLServer: true,
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},

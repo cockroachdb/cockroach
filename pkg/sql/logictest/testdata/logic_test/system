@@ -1055,9 +1055,9 @@ GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
 # This is somewhat surprising.
-# The expectations are different on tenants because of the
-# kv.range_merge_queue_enabled setting.
-skipif config 3node-tenant
+# With probabilistic SQL server creation, we have to filter out
+# kv.range_merge.queue_enabled, since it will only be set in cases
+# where a SQL server is not allocated.
 query T
 SELECT name
 FROM system.settings
@@ -1067,11 +1067,11 @@ AND name NOT LIKE '%sql.defaults.vectorize%'
 AND name NOT LIKE '%sql.testing%'
 AND name NOT LIKE '%sql.defaults.experimental_distsql_planning%'
 AND name != 'sql.defaults.experimental_new_schema_changer.enabled'
+AND name != 'kv.range_merge.queue_enabled'
 ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
-kv.range_merge.queue_enabled
 sql.crdb_internal.table_row_statistics.as_of_time
 sql.stats.automatic_collection.min_stale_rows
 version
@@ -1097,20 +1097,19 @@ version
 statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
-# The expectations are different on tenants because of the
-# kv.range_merge_queue_enabled setting.
-skipif config 3node-tenant
+# Have to exclude kv.range_merge.queue_enabled as it is not accessible
+# to SQL servers.
 query TT
 SELECT name, value
 FROM system.settings
 WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret',
   'sql.stats.automatic_collection.enabled', 'sql.defaults.vectorize',
   'sql.defaults.experimental_distsql_planning',
-  'sql.defaults.experimental_new_schema_changer.enabled')
+  'sql.defaults.experimental_new_schema_changer.enabled',
+  'kv.range_merge.queue_enabled')
 ORDER BY name
 ----
 diagnostics.reporting.enabled                      true
-kv.range_merge.queue_enabled                       false
 somesetting                                        somevalue
 sql.crdb_internal.table_row_statistics.as_of_time  -1µs
 sql.stats.automatic_collection.min_stale_rows      5
