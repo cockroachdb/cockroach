@@ -198,6 +198,7 @@ func TestFailedTypeSchemaChangeRetriesTransparently(t *testing.T) {
 
 	// Create a type.
 	_, err := sqlDB.Exec(`
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE d;
 CREATE TYPE d.t AS ENUM();
 `)
