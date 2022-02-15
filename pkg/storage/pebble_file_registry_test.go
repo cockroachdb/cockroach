@@ -78,6 +78,11 @@ func TestFileRegistryOps(t *testing.T) {
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 	bazFileEntry :=
 		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("baz")}
+	// We need a second instance of the first two entries to make kr/pretty's diff algorithm happy.
+	fooFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte("foo")}
+	barFileEntry2 :=
+		&enginepb.FileEntry{EnvType: enginepb.EnvType_Store, EncryptionSettings: []byte("bar")}
 
 	expected := make(map[string]*enginepb.FileEntry)
 
@@ -119,7 +124,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// {file1 => foo, file3 => foo, file2 => bar}
 	require.NoError(t, registry.MaybeCopyEntry("file1", "file3"))
-	expected["file3"] = fooFileEntry
+	expected["file3"] = fooFileEntry2
 	checkEquality()
 
 	// {file3 => foo, file2 => bar}
@@ -129,7 +134,7 @@ func TestFileRegistryOps(t *testing.T) {
 
 	// {file3 => foo, file2 => bar, file4 => bar}
 	require.NoError(t, registry.MaybeLinkEntry("file2", "file4"))
-	expected["file4"] = barFileEntry
+	expected["file4"] = barFileEntry2
 	checkEquality()
 
 	// {file3 => foo, file4 => bar}
