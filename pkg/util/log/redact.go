@@ -205,3 +205,13 @@ func TestingSetRedactable(redactableLogs bool) (cleanup func()) {
 		}
 	}
 }
+
+// SafeOperational is a transparent wrapper around `redact.Safe` that
+// acts as documentation for *why* the object is being marked as safe.
+// In this case, the intent is to label this piece of information as
+// "operational" data which is helpful for telemetry and operator
+// actions. Typically, this includes schema structure and information
+// about internals that is *not* user data or derived from user data.
+func SafeOperational(s interface{}) redact.SafeValue {
+	return redact.Safe(s)
+}

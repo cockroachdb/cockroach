@@ -181,7 +181,7 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			s.metrics.CurConnCount.Inc(1)
 			defer s.metrics.CurConnCount.Dec(1)
 			remoteAddr := conn.RemoteAddr()
-			ctxWithTag := logtags.AddTag(ctx, "client", remoteAddr)
+			ctxWithTag := logtags.AddTag(ctx, "client", log.SafeOperational(remoteAddr))
 			if err := s.connHandler(ctxWithTag, conn); err != nil {
 				log.Infof(ctxWithTag, "connection error: %v", err)
 			}
