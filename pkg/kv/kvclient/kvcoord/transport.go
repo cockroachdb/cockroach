@@ -67,10 +67,8 @@ type Transport interface {
 	SendNext(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 	// NextInternalClient returns the InternalClient to use for making RPC
-	// calls. Returns a context.Context which should be used when making RPC
-	// calls on the returned server (This context is annotated to mark this
-	// request as in-process and bypass ctx.Peer checks).
-	NextInternalClient(context.Context) (context.Context, roachpb.InternalClient, error)
+	// calls.
+	NextInternalClient(context.Context) (rpc.RestrictedInternalClient, error)
 
 	// NextReplica returns the replica descriptor of the replica to be tried in
 	// the next call to SendNext. MoveToFront will cause the return value to
@@ -182,7 +180,7 @@ func (gt *grpcTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
-	ctx, iface, err := gt.NextInternalClient(ctx)
+	iface, err := gt.NextInternalClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +191,10 @@ func (gt *grpcTransport) SendNext(
 
 // NB: nodeID is unused, but accessible in stack traces.
 func (gt *grpcTransport) sendBatch(
-	ctx context.Context, nodeID roachpb.NodeID, iface roachpb.InternalClient, ba roachpb.BatchRequest,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	iface rpc.RestrictedInternalClient,
+	ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context
@@ -232,7 +233,7 @@ func (gt *grpcTransport) sendBatch(
 // RPCs.
 func (gt *grpcTransport) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
 	gt.nextReplicaIdx++
 	return gt.nodeDialer.DialInternalClient(ctx, r.NodeID, gt.class)
@@ -360,7 +361,7 @@ func (s *senderTransport) SendNext(
 
 func (s *senderTransport) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	panic("unimplemented")
 }
 

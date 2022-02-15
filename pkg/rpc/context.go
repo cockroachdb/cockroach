@@ -353,7 +353,7 @@ type Context struct {
 
 	rpcCompression bool
 
-	localInternalClient roachpb.InternalClient
+	localInternalClient RestrictedInternalClient
 
 	conns syncmap.Map
 
@@ -597,7 +597,7 @@ func (rpcCtx *Context) Metrics() *Metrics {
 // https://github.com/cockroachdb/cockroach/pull/73309
 func (rpcCtx *Context) GetLocalInternalClientForAddr(
 	target string, nodeID roachpb.NodeID,
-) roachpb.InternalClient {
+) RestrictedInternalClient {
 	if target == rpcCtx.Config.AdvertiseAddr && nodeID == rpcCtx.NodeID.Get() {
 		return rpcCtx.localInternalClient
 	}
@@ -608,6 +608,8 @@ type internalClientAdapter struct {
 	server roachpb.InternalServer
 }
 
+var _ RestrictedInternalClient = internalClientAdapter{}
+
 // Batch implements the roachpb.InternalClient interface.
 func (a internalClientAdapter) Batch(
 	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
@@ -615,56 +617,34 @@ func (a internalClientAdapter) Batch(
 	// Mark this as originating locally, which is useful for the decision about
 	// memory allocation tracking.
 	ba.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
-	return a.server.Batch(ctx, ba)
+	// Create a new context from the existing one with the "local request" field set.
+	// This tells the handler that this is an in-process request, bypassing ctx.Peer checks.
+	return a.server.Batch(grpcutil.NewLocalRequestContext(ctx), ba)
 }
 
-// RangeLookup implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) RangeLookup(
-	ctx context.Context, rl *roachpb.RangeLookupRequest, _ ...grpc.CallOption,
-) (*roachpb.RangeLookupResponse, error) {
-	return a.server.RangeLookup(ctx, rl)
-}
+// RangeFeed implements the roachpb.InternalClient interface.
+func (a internalClientAdapter) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/RangeFeed")
+	rfAdapter := rangeFeedClientAdapter{
+		respStreamClientAdapter: makeRespStreamClientAdapter(grpcutil.NewLocalRequestContext(ctx)),
+	}
 
-// Join implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) Join(
-	ctx context.Context, req *roachpb.JoinNodeRequest, _ ...grpc.CallOption,
-) (*roachpb.JoinNodeResponse, error) {
-	return a.server.Join(ctx, req)
-}
+	// Mark this as originating locally.
+	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
+	go func() {
+		defer cancel()
+		defer sp.Finish()
+		err := a.server.RangeFeed(args, rfAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		rfAdapter.errC <- err
+	}()
 
-// ResetQuorum is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) ResetQuorum(
-	ctx context.Context, req *roachpb.ResetQuorumRequest, _ ...grpc.CallOption,
-) (*roachpb.ResetQuorumResponse, error) {
-	return a.server.ResetQuorum(ctx, req)
-}
-
-// TokenBucket is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) TokenBucket(
-	ctx context.Context, in *roachpb.TokenBucketRequest, opts ...grpc.CallOption,
-) (*roachpb.TokenBucketResponse, error) {
-	return a.server.TokenBucket(ctx, in)
-}
-
-// GetSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GetSpanConfigs(
-	ctx context.Context, req *roachpb.GetSpanConfigsRequest, _ ...grpc.CallOption,
-) (*roachpb.GetSpanConfigsResponse, error) {
-	return a.server.GetSpanConfigs(ctx, req)
-}
-
-// GetAllSystemSpanConfigsThatApply is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GetAllSystemSpanConfigsThatApply(
-	ctx context.Context, req *roachpb.GetAllSystemSpanConfigsThatApplyRequest, _ ...grpc.CallOption,
-) (*roachpb.GetAllSystemSpanConfigsThatApplyResponse, error) {
-	return a.server.GetAllSystemSpanConfigsThatApply(ctx, req)
-}
-
-// UpdateSpanConfigs is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) UpdateSpanConfigs(
-	ctx context.Context, req *roachpb.UpdateSpanConfigsRequest, _ ...grpc.CallOption,
-) (*roachpb.UpdateSpanConfigsResponse, error) {
-	return a.server.UpdateSpanConfigs(ctx, req)
+	return rfAdapter, nil
 }
 
 type respStreamClientAdapter struct {
@@ -744,121 +724,8 @@ func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
 var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
 var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
 
-// RangeFeed implements the roachpb.InternalClient interface.
-func (a internalClientAdapter) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
-) (roachpb.Internal_RangeFeedClient, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/RangeFeed")
-	rfAdapter := rangeFeedClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
-	}
-
-	// Mark this as originating locally.
-	args.AdmissionHeader.SourceLocation = roachpb.AdmissionHeader_LOCAL
-	go func() {
-		defer cancel()
-		defer sp.Finish()
-		err := a.server.RangeFeed(args, rfAdapter)
-		if err == nil {
-			err = io.EOF
-		}
-		rfAdapter.errC <- err
-	}()
-
-	return rfAdapter, nil
-}
-
-type gossipSubscriptionClientAdapter struct {
-	respStreamClientAdapter
-}
-
-// roachpb.Internal_GossipSubscriptionServer methods.
-func (a gossipSubscriptionClientAdapter) Recv() (*roachpb.GossipSubscriptionEvent, error) {
-	e, err := a.recvInternal()
-	if err != nil {
-		return nil, err
-	}
-	return e.(*roachpb.GossipSubscriptionEvent), nil
-}
-
-// roachpb.Internal_GossipSubscriptionServer methods.
-func (a gossipSubscriptionClientAdapter) Send(e *roachpb.GossipSubscriptionEvent) error {
-	return a.sendInternal(e)
-}
-
-var _ roachpb.Internal_GossipSubscriptionClient = gossipSubscriptionClientAdapter{}
-var _ roachpb.Internal_GossipSubscriptionServer = gossipSubscriptionClientAdapter{}
-
-// GossipSubscription is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) GossipSubscription(
-	ctx context.Context, args *roachpb.GossipSubscriptionRequest, _ ...grpc.CallOption,
-) (roachpb.Internal_GossipSubscriptionClient, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	ctx, sp := tracing.ChildSpan(ctx, "/cockroach.roachpb.Internal/GossipSubscription")
-	gsAdapter := gossipSubscriptionClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
-	}
-
-	go func() {
-		defer cancel()
-		defer sp.Finish()
-		err := a.server.GossipSubscription(args, gsAdapter)
-		if err == nil {
-			err = io.EOF
-		}
-		gsAdapter.errC <- err
-	}()
-
-	return gsAdapter, nil
-}
-
-type tenantSettingsClientAdapter struct {
-	respStreamClientAdapter
-}
-
-// roachpb.Internal_TenantSettingsServer methods.
-func (a tenantSettingsClientAdapter) Recv() (*roachpb.TenantSettingsEvent, error) {
-	e, err := a.recvInternal()
-	if err != nil {
-		return nil, err
-	}
-	return e.(*roachpb.TenantSettingsEvent), nil
-}
-
-// roachpb.Internal_TenantSettingsServer methods.
-func (a tenantSettingsClientAdapter) Send(e *roachpb.TenantSettingsEvent) error {
-	return a.sendInternal(e)
-}
-
-var _ roachpb.Internal_TenantSettingsClient = tenantSettingsClientAdapter{}
-var _ roachpb.Internal_TenantSettingsServer = tenantSettingsClientAdapter{}
-
-// TenantSettings is part of the roachpb.InternalClient interface.
-func (a internalClientAdapter) TenantSettings(
-	ctx context.Context, args *roachpb.TenantSettingsRequest, _ ...grpc.CallOption,
-) (roachpb.Internal_TenantSettingsClient, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	gsAdapter := tenantSettingsClientAdapter{
-		respStreamClientAdapter: makeRespStreamClientAdapter(ctx),
-	}
-
-	go func() {
-		defer cancel()
-		err := a.server.TenantSettings(args, gsAdapter)
-		if err == nil {
-			err = io.EOF
-		}
-		gsAdapter.errC <- err
-	}()
-
-	return gsAdapter, nil
-}
-
-var _ roachpb.InternalClient = internalClientAdapter{}
-
 // IsLocal returns true if the given InternalClient is local.
-func IsLocal(iface roachpb.InternalClient) bool {
+func IsLocal(iface RestrictedInternalClient) bool {
 	_, ok := iface.(internalClientAdapter)
 	return ok // internalClientAdapter is used for local connections.
 }
