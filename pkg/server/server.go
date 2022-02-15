@@ -1475,6 +1475,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// been run so it is safe to upgrade to the binary's current version.
 	s.startAttemptUpgrade(ctx)
 
+	if err := s.node.tenantSettingsWatcher.Start(ctx); err != nil {
+		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
+	}
+
 	if err := s.kvProber.Start(ctx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")
 	}
