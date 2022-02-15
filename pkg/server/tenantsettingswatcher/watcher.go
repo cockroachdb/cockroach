@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -85,11 +87,11 @@ func New(
 // Otherwise, Start sets up a background task that waits for the right version
 // and starts the rangefeed when appropriate. WaitUntilStarted can be used to
 // wait for the rangefeed setup.
-func (w *Watcher) Start(ctx context.Context) error {
+func (w *Watcher) Start(ctx context.Context, sysTableResolver catalog.SystemTableIDResolver) error {
 	w.startCh = make(chan struct{})
 	if w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
 		// We are not in a mixed-version scenario; start the rangefeed now.
-		w.startErr = w.startRangeFeed(ctx)
+		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
 		close(w.startCh)
 		return w.startErr
 	}
@@ -107,7 +109,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 	// Now check the version again, in case the version changed just before
 	// SetOnChange.
 	if w.st.Version.IsActive(ctx, clusterversion.TenantSettingsTable) {
-		w.startErr = w.startRangeFeed(ctx)
+		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
 		close(w.startCh)
 		return w.startErr
 	}
@@ -119,7 +121,7 @@ func (w *Watcher) Start(ctx context.Context) error {
 			return
 		}
 		log.Infof(ctx, "tenantsettingswatcher can now start")
-		w.startErr = w.startRangeFeed(ctx)
+		w.startErr = w.startRangeFeed(ctx, sysTableResolver)
 		if w.startErr != nil {
 			// We are not equipped to handle this error asynchronously.
 			log.Warningf(ctx, "error starting tenantsettingswatcher rangefeed: %v", w.startErr)
@@ -132,10 +134,14 @@ func (w *Watcher) Start(ctx context.Context) error {
 // error will be returned if the initial table scan hits an error, the context
 // is canceled or the stopper is stopped prior to the initial data being
 // retrieved.
-func (w *Watcher) startRangeFeed(ctx context.Context) error {
-	// TODO(radu): retrieve this ID correctly.
-	const tableID = 50
-	tenantSettingsTablePrefix := keys.SystemSQLCodec.TablePrefix(tableID)
+func (w *Watcher) startRangeFeed(
+	ctx context.Context, sysTableResolver catalog.SystemTableIDResolver,
+) error {
+	tableID, err := sysTableResolver.LookupSystemTableID(ctx, systemschema.TenantSettingsTable.GetName())
+	if err != nil {
+		return err
+	}
+	tenantSettingsTablePrefix := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 	tenantSettingsTableSpan := roachpb.Span{
 		Key:    tenantSettingsTablePrefix,
 		EndKey: tenantSettingsTablePrefix.PrefixEnd(),
