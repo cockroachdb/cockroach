@@ -36,7 +36,8 @@ type databaseDescriptorBuilder struct {
 	original      *descpb.DatabaseDescriptor
 	maybeModified *descpb.DatabaseDescriptor
 
-	changed bool
+	isUncommittedVersion bool
+	changes              catalog.PostDeserializationChanges
 }
 
 var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
@@ -44,8 +45,19 @@ var _ DatabaseDescriptorBuilder = &databaseDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // database descriptors.
 func NewBuilder(desc *descpb.DatabaseDescriptor) DatabaseDescriptorBuilder {
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		catalog.PostDeserializationChanges{})
+}
+
+func newBuilder(
+	desc *descpb.DatabaseDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) DatabaseDescriptorBuilder {
 	return &databaseDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.DatabaseDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -82,10 +94,14 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() {
 		descpb.InvalidID,
 		privilege.Database,
 		ddb.maybeModified.GetName())
-	removedSelfEntryInSchemas := maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(ddb.maybeModified.Privileges)
-	ddb.changed = privsChanged || removedSelfEntryInSchemas || addedGrantOptions ||
-		removedIncompatibleDatabasePrivs || createdDefaultPrivileges
+
+	if privsChanged || addedGrantOptions || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+		ddb.changes.Add(catalog.UpgradedPrivileges)
+	}
+	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
+		ddb.changes.Add(catalog.RemovedSelfEntryInSchemas)
+	}
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -146,7 +162,11 @@ func (ddb *databaseDescriptorBuilder) BuildImmutableDatabase() catalog.DatabaseD
 	if desc == nil {
 		desc = ddb.original
 	}
-	return &immutable{DatabaseDescriptor: *desc}
+	return &immutable{
+		DatabaseDescriptor:   *desc,
+		isUncommittedVersion: ddb.isUncommittedVersion,
+		changes:              ddb.changes,
+	}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -161,9 +181,12 @@ func (ddb *databaseDescriptorBuilder) BuildExistingMutableDatabase() *Mutable {
 		ddb.maybeModified = protoutil.Clone(ddb.original).(*descpb.DatabaseDescriptor)
 	}
 	return &Mutable{
-		immutable:      immutable{DatabaseDescriptor: *ddb.maybeModified},
+		immutable: immutable{
+			DatabaseDescriptor:   *ddb.maybeModified,
+			changes:              ddb.changes,
+			isUncommittedVersion: ddb.isUncommittedVersion,
+		},
 		ClusterVersion: &immutable{DatabaseDescriptor: *ddb.original},
-		changed:        ddb.changed,
 	}
 }
 
@@ -180,8 +203,11 @@ func (ddb *databaseDescriptorBuilder) BuildCreatedMutableDatabase() *Mutable {
 		desc = ddb.original
 	}
 	return &Mutable{
-		immutable: immutable{DatabaseDescriptor: *desc},
-		changed:   ddb.changed,
+		immutable: immutable{
+			DatabaseDescriptor:   *desc,
+			changes:              ddb.changes,
+			isUncommittedVersion: ddb.isUncommittedVersion,
+		},
 	}
 }
 

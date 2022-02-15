@@ -181,6 +181,7 @@ func CheckTwoVersionInvariant(
 	// the current provisional commit timestamp for this transaction then if this
 	// transaction ends up committing then there won't have been any created
 	// in the meantime.
+
 	count, err := lease.CountLeases(ctx, ie, descs, txn.ProvisionalCommitTimestamp())
 	if err != nil {
 		return false, err

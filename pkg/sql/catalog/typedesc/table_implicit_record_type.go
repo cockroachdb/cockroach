@@ -328,6 +328,11 @@ func (v TableImplicitRecordType) NumReferencingDescriptors() int { return 0 }
 // GetReferencingDescriptorID implements the TypeDescriptorInterface.
 func (v TableImplicitRecordType) GetReferencingDescriptorID(_ int) descpb.ID { return 0 }
 
+// GetPostDeserializationChanges implements the Descriptor interface.
+func (v TableImplicitRecordType) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return catalog.PostDeserializationChanges{}
+}
+
 func (v TableImplicitRecordType) panicNotSupported(message string) {
 	panic(errors.AssertionFailedf("implicit table record type for table %q: not supported: %s", v.GetName(), message))
 }
