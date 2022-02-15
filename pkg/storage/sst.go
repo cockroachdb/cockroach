@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -225,7 +226,9 @@ func CheckSSTConflicts(
 // is returned to protect against accidental inclusion of intents or inline
 // values. Tombstones are also rejected opportunistically, since we're iterating
 // over the entire SST anyway.
-func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([]byte, error) {
+func UpdateSSTTimestamps(
+	ctx context.Context, st *cluster.Settings, sst []byte, from, to hlc.Timestamp, concurrency int,
+) ([]byte, error) {
 	sstOut := &MemFile{}
 	sstOut.Buffer.Grow(len(sst))
 	if concurrency > 0 && !from.IsEmpty() {
@@ -237,7 +240,7 @@ func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([
 		if _, err := sstable.RewriteKeySuffixes(sst,
 			opts,
 			sstOut,
-			MakeIngestionWriterOptions(),
+			MakeIngestionWriterOptions(ctx, st),
 			encodeMVCCTimestampSuffix(from), encodeMVCCTimestampSuffix(to),
 			concurrency,
 		); err != nil {
@@ -245,7 +248,7 @@ func UpdateSSTTimestamps(sst []byte, from, to hlc.Timestamp, concurrency int) ([
 		}
 		return sstOut.Bytes(), nil
 	}
-	writer := MakeIngestionSSTWriter(sstOut)
+	writer := MakeIngestionSSTWriter(ctx, st, sstOut)
 	defer writer.Close()
 
 	iter, err := NewMemSSTIterator(sst, false)

@@ -34,20 +34,25 @@ import (
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//		system-target {source=1,target=20}
+//		system-target {source=1,target=1}
+//		system-target {source=20,target=20}
 //      ----
 //
 // 		kvaccessor-update
 // 		delete [c,e)
 // 		upsert [c,d):C
 // 		upsert [d,e):D
+// 		delete {source=1,target=1}
+// 		upsert {source=1,target=1}:A
 //      ----
 //
 // They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
-// respectively. For kvaccessor-get, each listed span is added to the set of
-// spans being read. For kvaccessor-update, the lines prefixed with "delete"
-// count towards the spans being deleted, and for "upsert" they correspond to
+// respectively. For kvaccessor-get, each listed target is added to the set of
+// targets being read. For kvaccessor-update, the lines prefixed with "delete"
+// count towards the targets being deleted, and for "upsert" they correspond to
 // the span config entries being upserted. See
-// spanconfigtestutils.Parse{Span,Config,SpanConfigEntry} for more details.
+// spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more details.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -77,7 +82,9 @@ func TestDataDriven(t *testing.T) {
 
 				var output strings.Builder
 				for _, record := range records {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(record)))
+					output.WriteString(fmt.Sprintf(
+						"%s\n", spanconfigtestutils.PrintSpanConfigRecord(t, record),
+					))
 				}
 				return output.String()
 			case "kvaccessor-update":

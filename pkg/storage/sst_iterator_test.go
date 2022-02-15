@@ -11,11 +11,13 @@
 package storage
 
 import (
+	"context"
 	"io/ioutil"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -75,8 +77,10 @@ func TestSSTIterator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sst := MakeIngestionSSTWriter(sstFile)
+	sst := MakeIngestionSSTWriter(ctx, st, sstFile)
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
 	for i := 0; i < 10; i++ {

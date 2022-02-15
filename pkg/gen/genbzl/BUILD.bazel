@@ -2,7 +2,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
 
 go_library(
     name = "genbzl_lib",
-    srcs = ["main.go"],
+    srcs = [
+        "main.go",
+        "target.go",
+        "targets.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/gen/genbzl",
     visibility = ["//visibility:private"],
     deps = [

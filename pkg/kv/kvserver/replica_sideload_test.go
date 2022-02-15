@@ -706,7 +706,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	// Put a sideloaded proposal on the Range.
 	key, val := "don't", "care"
-	origSSTData, _ := MakeSSTable(key, val, hlc.Timestamp{}.Add(0, 1))
+	origSSTData, _ := MakeSSTable(ctx, key, val, hlc.Timestamp{}.Add(0, 1))
 	{
 
 		var addReq roachpb.AddSSTableRequest

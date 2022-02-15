@@ -1583,8 +1583,10 @@ func runCheckSSTConflicts(b *testing.B, numEngineKeys, numVersions, numSstKeys i
 	// The engine contains keys numbered key-1, key-2, key-3, etc, while
 	// the SST contains keys numbered key-11, key-21, etc., that fit in
 	// between the engine keys without colliding.
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sstWriter := MakeIngestionSSTWriter(sstFile)
+	sstWriter := MakeIngestionSSTWriter(ctx, st, sstFile)
 	var sstStart, sstEnd MVCCKey
 	for i := 0; i < numSstKeys; i++ {
 		keyNum := int((float64(i) / float64(numSstKeys)) * float64(numEngineKeys))

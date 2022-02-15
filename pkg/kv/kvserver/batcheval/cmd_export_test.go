@@ -434,6 +434,7 @@ func TestExportGCThreshold(t *testing.T) {
 // exportUsingGoIterator uses the legacy implementation of export, and is used
 // as an oracle to check the correctness of pebbleExportToSst.
 func exportUsingGoIterator(
+	ctx context.Context,
 	filter roachpb.MVCCFilter,
 	startTime, endTime hlc.Timestamp,
 	startKey, endKey roachpb.Key,
@@ -441,7 +442,9 @@ func exportUsingGoIterator(
 	reader storage.Reader,
 ) ([]byte, error) {
 	memFile := &storage.MemFile{}
-	sst := storage.MakeIngestionSSTWriter(memFile)
+	sst := storage.MakeIngestionSSTWriter(
+		ctx, cluster.MakeTestingClusterSettings(), memFile,
+	)
 	defer sst.Close()
 
 	var skipTombstones bool
@@ -569,7 +572,7 @@ func assertEqualKVs(
 
 		// Run the oracle which is a legacy implementation of pebbleExportToSst
 		// backed by an MVCCIncrementalIterator.
-		expected, err := exportUsingGoIterator(filter, startTime, endTime,
+		expected, err := exportUsingGoIterator(ctx, filter, startTime, endTime,
 			startKey, endKey, enableTimeBoundIteratorOptimization, e)
 		if err != nil {
 			t.Fatalf("Oracle failed to export provided key range.")

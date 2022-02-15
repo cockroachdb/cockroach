@@ -111,6 +111,7 @@ type metaTestRunner struct {
 	nameToGenerator map[string]*opGenerator
 	ops             []opRun
 	weights         []int
+	st              *cluster.Settings
 }
 
 func (m *metaTestRunner) init() {

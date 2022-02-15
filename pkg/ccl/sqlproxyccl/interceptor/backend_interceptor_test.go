@@ -45,7 +45,7 @@ func TestBackendInterceptor(t *testing.T) {
 		typ, size, err := bi.PeekMsg()
 		require.NoError(t, err)
 		require.Equal(t, pgwirebase.ClientMsgSimpleQuery, typ)
-		require.Equal(t, 9, size)
+		require.Equal(t, 14, size)
 
 		bi.Close()
 		typ, size, err = bi.PeekMsg()

@@ -41,15 +41,37 @@ type SystemTarget struct {
 	TargetTenantID *roachpb.TenantID
 }
 
-// MakeSystemTarget constructs, validates, and returns a new SystemTarget.
-func MakeSystemTarget(
-	sourceTenantID roachpb.TenantID, targetTenantID *roachpb.TenantID,
+// MakeTenantTarget constructs, validates, and returns a new SystemTarget that
+// targets the physical keyspace of the targetTenantID.
+func MakeTenantTarget(
+	sourceTenantID roachpb.TenantID, targetTenantID roachpb.TenantID,
 ) (SystemTarget, error) {
 	t := SystemTarget{
 		SourceTenantID: sourceTenantID,
-		TargetTenantID: targetTenantID,
+		TargetTenantID: &targetTenantID,
 	}
 	return t, t.validate()
+}
+
+// MakeSystemTargetFromProto constructs a SystemTarget from a
+// roachpb.SystemSpanConfigTarget and validates it.
+func MakeSystemTargetFromProto(proto *roachpb.SystemSpanConfigTarget) (SystemTarget, error) {
+	if proto.SourceTenantID == roachpb.SystemTenantID && proto.TargetTenantID == nil {
+		return MakeClusterTarget(), nil
+	} else if proto.TargetTenantID == nil {
+		return SystemTarget{},
+			errors.Newf("secondary tenant %s cannot target the entire cluster", proto.SourceTenantID)
+	}
+
+	return MakeTenantTarget(proto.SourceTenantID, *proto.TargetTenantID)
+}
+
+// MakeClusterTarget returns a new system target that targets the entire cluster.
+// Only the host tenant is allowed to target the entire cluster.
+func MakeClusterTarget() SystemTarget {
+	return SystemTarget{
+		SourceTenantID: roachpb.SystemTenantID,
+	}
 }
 
 // targetsEntireCluster returns true if the target applies to all ranges in the
@@ -68,11 +90,11 @@ func (st SystemTarget) encode() roachpb.Span {
 		k = keys.SystemSpanConfigEntireKeyspace
 	} else if st.SourceTenantID == roachpb.SystemTenantID {
 		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigHostOnTenantKeyspace, st.TargetTenantID.InternalValue,
+			keys.SystemSpanConfigHostOnTenantKeyspace, st.TargetTenantID.ToUint64(),
 		)
 	} else {
 		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.SourceTenantID.InternalValue,
+			keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.SourceTenantID.ToUint64(),
 		)
 	}
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
@@ -121,7 +143,7 @@ func (st SystemTarget) less(ot SystemTarget) bool {
 			return false
 		}
 
-		return st.TargetTenantID.InternalValue < ot.TargetTenantID.InternalValue
+		return st.TargetTenantID.ToUint64() < ot.TargetTenantID.ToUint64()
 	}
 
 	if st.SourceTenantID == roachpb.SystemTenantID {
@@ -130,17 +152,24 @@ func (st SystemTarget) less(ot SystemTarget) bool {
 		return false
 	}
 
-	return st.SourceTenantID.InternalValue < ot.SourceTenantID.InternalValue
+	return st.SourceTenantID.ToUint64() < ot.SourceTenantID.ToUint64()
 }
 
 // equal returns true iff the receiver is equal to the supplied system target.
 func (st SystemTarget) equal(ot SystemTarget) bool {
-	return st.SourceTenantID == ot.SourceTenantID && st.TargetTenantID == ot.TargetTenantID
+	return st.SourceTenantID.Equal(ot.SourceTenantID) && st.TargetTenantID.Equal(ot.TargetTenantID)
 }
 
 // String returns a pretty printed version of a system target.
 func (st SystemTarget) String() string {
-	return fmt.Sprintf("{system target source: %s target: %s}", st.SourceTenantID, st.TargetTenantID)
+	if st.targetsEntireCluster() {
+		return "{cluster}"
+	}
+	return fmt.Sprintf(
+		"{source=%d,target=%d}",
+		st.SourceTenantID.ToUint64(),
+		st.TargetTenantID.ToUint64(),
+	)
 }
 
 // decodeSystemTarget converts the given span into a SystemTarget. An error is
@@ -153,7 +182,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 	}
 	switch {
 	case bytes.Equal(span.Key, keys.SystemSpanConfigEntireKeyspace):
-		return MakeSystemTarget(roachpb.SystemTenantID, nil /* targetTenantID */)
+		return MakeClusterTarget(), nil
 	case bytes.HasPrefix(span.Key, keys.SystemSpanConfigHostOnTenantKeyspace):
 		// System span config was applied by the host tenant over a secondary
 		// tenant's entire keyspace.
@@ -163,7 +192,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 			return SystemTarget{}, err
 		}
 		tenID := roachpb.MakeTenantID(tenIDRaw)
-		return MakeSystemTarget(roachpb.SystemTenantID, &tenID)
+		return MakeTenantTarget(roachpb.SystemTenantID, tenID)
 	case bytes.HasPrefix(span.Key, keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace):
 		// System span config was applied by a secondary tenant over its entire
 		// keyspace.
@@ -173,7 +202,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 			return SystemTarget{}, err
 		}
 		tenID := roachpb.MakeTenantID(tenIDRaw)
-		return MakeSystemTarget(tenID, &tenID)
+		return MakeTenantTarget(tenID, tenID)
 	default:
 		return SystemTarget{},
 			errors.AssertionFailedf("span %s did not conform to SystemTarget encoding", span)

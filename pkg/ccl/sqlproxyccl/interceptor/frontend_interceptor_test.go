@@ -45,7 +45,7 @@ func TestFrontendInterceptor(t *testing.T) {
 		typ, size, err := fi.PeekMsg()
 		require.NoError(t, err)
 		require.Equal(t, pgwirebase.ServerMsgReady, typ)
-		require.Equal(t, 1, size)
+		require.Equal(t, 6, size)
 
 		fi.Close()
 		typ, size, err = fi.PeekMsg()

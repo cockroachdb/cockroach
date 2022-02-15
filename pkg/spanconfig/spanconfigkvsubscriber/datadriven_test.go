@@ -181,7 +181,7 @@ func TestDataDriven(t *testing.T) {
 
 				var output strings.Builder
 				for _, record := range records {
-					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(record)))
+					output.WriteString(fmt.Sprintf("%s\n", spanconfigtestutils.PrintSpanConfigRecord(t, record)))
 				}
 				return output.String()
 

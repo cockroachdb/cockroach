@@ -877,7 +877,9 @@ func (r *Replica) applySnapshot(
 	}(timeutil.Now())
 
 	unreplicatedSSTFile := &storage.MemFile{}
-	unreplicatedSST := storage.MakeIngestionSSTWriter(unreplicatedSSTFile)
+	unreplicatedSST := storage.MakeIngestionSSTWriter(
+		ctx, r.ClusterSettings(), unreplicatedSSTFile,
+	)
 	defer unreplicatedSST.Close()
 
 	// Clearing the unreplicated state.
@@ -1111,7 +1113,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemFile{}
-		subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
+		subsumedReplSST := storage.MakeIngestionSSTWriter(
+			ctx, r.ClusterSettings(), subsumedReplSSTFile,
+		)
 		defer subsumedReplSST.Close()
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -1167,7 +1171,9 @@ func (r *Replica) clearSubsumedReplicaDiskData(
 	for i := range keyRanges {
 		if totalKeyRanges[i].End.Compare(keyRanges[i].End) > 0 {
 			subsumedReplSSTFile := &storage.MemFile{}
-			subsumedReplSST := storage.MakeIngestionSSTWriter(subsumedReplSSTFile)
+			subsumedReplSST := storage.MakeIngestionSSTWriter(
+				ctx, r.ClusterSettings(), subsumedReplSSTFile,
+			)
 			defer subsumedReplSST.Close()
 			if err := storage.ClearRangeWithHeuristic(
 				r.store.Engine(),
