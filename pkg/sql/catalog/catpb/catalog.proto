@@ -204,4 +204,6 @@ message RowLevelTTL {
   optional string deletion_cron = 4 [(gogoproto.nullable)=false];
   // ScheduleID is the ID of the row-level TTL job schedules.
   optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
+  // RangeConcurrency is the number of ranges to process at a time.
+  optional int64 range_concurrency = 6 [(gogoproto.nullable)=false];
 }

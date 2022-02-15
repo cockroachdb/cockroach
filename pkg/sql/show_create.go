@@ -194,6 +194,9 @@ func ShowCreateTable(
 		if cron := ttl.DeletionCron; cron != "" {
 			storageParams = append(storageParams, fmt.Sprintf(`ttl_job_cron = '%s'`, cron))
 		}
+		if rc := ttl.RangeConcurrency; rc != 0 {
+			storageParams = append(storageParams, fmt.Sprintf(`ttl_range_concurrency = %d`, rc))
+		}
 	}
 	if exclude := desc.GetExcludeDataFromBackup(); exclude {
 		storageParams = append(storageParams, `exclude_data_from_backup = true`)
