@@ -2888,3 +2888,66 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "status: 403 Forbidden")
 }
+
+func TestStatusAPIListSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	appName := "test_sessions_api"
+	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
+
+	getSessionWithTestAppName := func(response *serverpb.ListSessionsResponse) *serverpb.Session {
+		require.NotEmpty(t, response.Sessions)
+		for _, s := range response.Sessions {
+			if s.ApplicationName == appName {
+				return &s
+			}
+		}
+		t.Errorf("expected to find session with app name %s", appName)
+		return nil
+	}
+
+	userNoAdmin := authenticatedUserNameNoAdmin()
+	var resp serverpb.ListSessionsResponse
+	// Non-admin without VIEWWACTIVITY or VIEWACTIVITYREDACTED should work and fetch user's own sessions.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NoError(t, err)
+
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	thirdServerSQL.Exec(t, "SELECT 1")
+	err = getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session := getSessionWithTestAppName(&resp)
+	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+
+	// Grant VIEWACTIVITY, VIEWACTIVITYREDACTED should take precedence.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", userNoAdmin.Normalized()))
+	thirdServerSQL.Exec(t, "SELECT 1, 1")
+	err = getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, appName, session.ApplicationName)
+	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, "SELECT _, _", session.LastActiveQueryNoConstants)
+
+	// Remove VIEWACTIVITYREDCATED. User should now see full query.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", userNoAdmin.Normalized()))
+	thirdServerSQL.Exec(t, "SELECT 2")
+	err = getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	session = getSessionWithTestAppName(&resp)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT 2", session.LastActiveQuery)
+}
