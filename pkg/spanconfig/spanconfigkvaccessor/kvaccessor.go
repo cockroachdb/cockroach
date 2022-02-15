@@ -43,7 +43,7 @@ type KVAccessor struct {
 	settings    *cluster.Settings
 
 	// configurationsTableFQN is typically 'system.public.span_configurations',
-	// but left configurable ease-of-testing.
+	// but left configurable for ease-of-testing.
 	configurationsTableFQN string
 }
 
@@ -433,13 +433,22 @@ func validateUpdateArgs(toDelete []spanconfig.Target, toUpsert []spanconfig.Reco
 				continue
 			}
 
-			curSpan := targets[i].GetSpan()
-			prevSpan := targets[i-1].GetSpan()
-
-			if curSpan.Overlaps(prevSpan) {
-				return errors.AssertionFailedf("overlapping spans %s and %s in same list",
-					prevSpan, curSpan)
+			curTarget := targets[i]
+			prevTarget := targets[i-1]
+			if curTarget.IsSpanTarget() && prevTarget.IsSpanTarget() {
+				if curTarget.GetSpan().Overlaps(prevTarget.GetSpan()) {
+					return errors.AssertionFailedf("overlapping spans %s and %s in same list",
+						prevTarget.GetSpan(), curTarget.GetSpan())
+				}
 			}
+
+			if curTarget.IsSystemTarget() && prevTarget.IsSystemTarget() && curTarget.Equal(prevTarget) {
+				return errors.AssertionFailedf("duplicate system targets %s in the same list",
+					prevTarget.GetSystemTarget())
+			}
+
+			// We're dealing with different types of target; no
+			// duplication/overlapping is possible.
 		}
 	}
 

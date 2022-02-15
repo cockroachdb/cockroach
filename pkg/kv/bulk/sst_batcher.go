@@ -237,7 +237,7 @@ func (b *SSTBatcher) Reset(ctx context.Context) error {
 	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
 	// in the cluster can support it. Until then, for backward compatibility,
 	// create SSTs in the leveldb format ("backup" ones).
-	b.sstWriter = storage.MakeIngestionSSTWriter(b.sstFile)
+	b.sstWriter = storage.MakeIngestionSSTWriter(ctx, b.settings, b.sstFile)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
 	b.batchEndValue = b.batchEndValue[:0]
@@ -611,7 +611,7 @@ func createSplitSSTable(
 	settings *cluster.Settings,
 ) (*sstSpan, *sstSpan, error) {
 	sstFile := &storage.MemFile{}
-	w := storage.MakeIngestionSSTWriter(sstFile)
+	w := storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 	defer w.Close()
 
 	split := false
@@ -641,7 +641,7 @@ func createSplitSSTable(
 				disallowShadowingBelow: disallowShadowingBelow,
 			}
 			*sstFile = storage.MemFile{}
-			w = storage.MakeIngestionSSTWriter(sstFile)
+			w = storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
 			split = true
 			first = nil
 			last = nil

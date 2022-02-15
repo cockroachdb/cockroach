@@ -239,6 +239,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
     display: "Closed timestamp LAI - side transport (centralized state)",
     compareToLeader: false,
   },
+  {
+    variable: "circuitBreakerError",
+    display: "Circuit Breaker Error",
+    compareToLeader: false,
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -853,6 +858,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
             FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
             ? "range-table__cell--warning"
             : "",
+        ),
+        circuitBreakerError: this.createContent(
+          info.state.circuit_breaker_error,
         ),
       });
     });

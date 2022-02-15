@@ -1027,6 +1027,10 @@
       "type": "object",
       "title": "RangeProblems describes issues reported by a range. For internal use only.",
       "properties": {
+        "circuit_breaker_error": {
+          "type": "boolean",
+          "x-go-name": "CircuitBreakerError"
+        },
         "leader_not_lease_holder": {
           "type": "boolean",
           "x-go-name": "LeaderNotLeaseHolder"
