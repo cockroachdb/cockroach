@@ -177,6 +177,7 @@
 /pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
 /pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
 /pkg/cmd/reduce/             @cockroachdb/sql-queries
+/pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
 /pkg/cmd/roachprod/          @cockroachdb/dev-inf
 /pkg/cmd/roachprod-stress/   @cockroachdb/test-eng

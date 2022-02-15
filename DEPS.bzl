@@ -201,6 +201,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_andygrunwald_go_jira",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/andygrunwald/go-jira",
+        sha256 = "89fc3ece1f9d367e211845ef4f33bed49273af58fdf65c561eb67903d3b72979",
+        strip_prefix = "github.com/andygrunwald/go-jira@v1.14.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/andygrunwald/go-jira/com_github_andygrunwald_go_jira-v1.14.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_antihax_optional",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/antihax/optional",
@@ -3259,6 +3269,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_golang_jwt_jwt",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/golang-jwt/jwt",
+        sha256 = "28d6dd7cc77d0a960699196e9c2170731f65d624d675888d2ababe7e8a422955",
+        strip_prefix = "github.com/golang-jwt/jwt@v3.2.2+incompatible",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/golang-jwt/jwt/com_github_golang_jwt_jwt-v3.2.2+incompatible.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_golang_jwt_jwt_v4",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/golang-jwt/jwt/v4",
@@ -4485,6 +4505,16 @@ def go_deps():
         strip_prefix = "github.com/jonboulle/clockwork@v0.1.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jonboulle/clockwork/com_github_jonboulle_clockwork-v0.1.0.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_jordan_wright_email",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/jordan-wright/email",
+        sha256 = "6d35fa83ea02cfacd0e1ba9c9061381b963215cef84c8bf83ad5944cb304c390",
+        strip_prefix = "github.com/jordan-wright/email@v4.0.1-0.20210109023952-943e75fe5223+incompatible",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jordan-wright/email/com_github_jordan_wright_email-v4.0.1-0.20210109023952-943e75fe5223+incompatible.zip",
         ],
     )
     go_repository(
@@ -7331,6 +7361,16 @@ def go_deps():
         strip_prefix = "github.com/toqueteos/webbrowser@v1.2.0",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/toqueteos/webbrowser/com_github_toqueteos_webbrowser-v1.2.0.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_trivago_tgo",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/trivago/tgo",
+        sha256 = "795b3a41901f6b694195d6be9c6e7730a971fbc0ec4cd236e73cc845aca6cb7e",
+        strip_prefix = "github.com/trivago/tgo@v1.0.7",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/trivago/tgo/com_github_trivago_tgo-v1.0.7.zip",
         ],
     )
     go_repository(
