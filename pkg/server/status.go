@@ -185,6 +185,11 @@ func (b *baseStatusServer) getLocalSessions(
 		}
 	}
 
+	hasViewActivityRedacted, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return nil, err
+	}
+
 	// The empty username means "all sessions".
 	showAll := reqUsername.Undefined()
 
@@ -195,6 +200,16 @@ func (b *baseStatusServer) getLocalSessions(
 	for _, session := range sessions {
 		if reqUsername.Normalized() != session.Username && !showAll {
 			continue
+		}
+
+		if !isAdmin && hasViewActivityRedacted && (sessionUser != reqUsername) {
+			// Remove queries with constants if user doesn't have correct privileges.
+			// Note that users can have both VIEWACTIVITYREDACTED and VIEWACTIVITY,
+			// with the former taking precedence.
+			for _, query := range session.ActiveQueries {
+				query.Sql = ""
+			}
+			session.LastActiveQuery = ""
 		}
 
 		userSessions = append(userSessions, session)
