@@ -243,12 +243,14 @@ func (p *pgInterceptor) ensureNextNBytes(n int) error {
 	return err
 }
 
-var _ io.Writer = &errPanicWriter{}
+var _ io.Writer = &errWriter{}
 
-// errPanicWriter is an io.Writer that panics whenever a Write call is made.
-type errPanicWriter struct{}
+// errWriter is an io.Writer that fails whenever a Write call is made. This is
+// used within ReadMsg for both BackendInterceptor and FrontendInterceptor.
+// Since it's just a Read, Write calls should not be made.
+type errWriter struct{}
 
 // Write implements the io.Writer interface.
-func (w *errPanicWriter) Write(p []byte) (int, error) {
-	panic("unexpected Write call")
+func (w *errWriter) Write(p []byte) (int, error) {
+	return 0, errors.AssertionFailedf("unexpected Write call")
 }
