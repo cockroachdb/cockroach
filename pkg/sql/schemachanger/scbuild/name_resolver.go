@@ -117,6 +117,10 @@ func (b buildCtx) ResolveRelation(
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
 	if rel.IsVirtualTable() {
+		if prefix.Schema.GetName() == catconstants.PgCatalogName {
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+				"%s is a system catalog", tree.ErrNameString(rel.GetName())))
+		}
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
 	}
