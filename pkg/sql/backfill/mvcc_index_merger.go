@@ -95,77 +95,70 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 		return
 	}
 
-	var err error
-	go func() {
-		defer close(progCh)
-
-		// stopProgress will be closed when there is no more progress to report.
-		stopProgress := make(chan struct{})
-		g := ctxgroup.WithContext(ctx)
-		g.GoCtx(func(ctx context.Context) error {
-			tick := time.NewTicker(indexBackfillMergeProgressReportInterval)
-			defer tick.Stop()
-			done := ctx.Done()
-			for {
-				select {
-				case <-done:
-					return ctx.Err()
-				case <-stopProgress:
-					return nil
-				case <-tick.C:
-					pushProgress()
-				}
+	// stopProgress will be closed when there is no more progress to report.
+	stopProgress := make(chan struct{})
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		tick := time.NewTicker(indexBackfillMergeProgressReportInterval)
+		defer tick.Stop()
+		done := ctx.Done()
+		for {
+			select {
+			case <-done:
+				return ctx.Err()
+			case <-stopProgress:
+				return nil
+			case <-tick.C:
+				pushProgress()
 			}
-		})
+		}
+	})
 
-		g.GoCtx(func(ctx context.Context) error {
-			defer close(stopProgress)
+	g.GoCtx(func(ctx context.Context) error {
+		defer close(stopProgress)
+		// TODO(rui): some room for improvement on single threaded
+		// implementation, e.g. run merge for spec spans in parallel.
+		for i := range ibm.spec.Spans {
+			sp := ibm.spec.Spans[i]
+			idx := ibm.spec.SpanIdx[i]
 
-			// TODO(rui): some room for improvement on single threaded
-			// implementation, e.g. run merge for spec spans in parallel.
-			for i := range ibm.spec.Spans {
-				sp := ibm.spec.Spans[i]
-				idx := ibm.spec.SpanIdx[i]
-
-				key := sp.Key
-				for key != nil {
-					nextKey, err := ibm.Merge(ctx, ibm.evalCtx.Codec, ibm.desc, ibm.spec.TemporaryIndexes[idx], ibm.spec.AddedIndexes[idx],
-						key, sp.EndKey, ibm.spec.ChunkSize)
-					if err != nil {
-						return err
-					}
-
-					completedSpan := roachpb.Span{}
-					if nextKey == nil {
-						completedSpan.Key = key
-						completedSpan.EndKey = sp.EndKey
-					} else {
-						completedSpan.Key = key
-						completedSpan.EndKey = nextKey
-					}
-
-					mu.Lock()
-					mu.completedSpans = append(mu.completedSpans, completedSpan)
-					mu.completedSpanIdx = append(mu.completedSpanIdx, idx)
-					mu.Unlock()
-
-					if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
-						if knobs != nil && knobs.PushesProgressEveryChunk {
-							pushProgress()
-						}
-					}
-
-					key = nextKey
-				}
-
+			key := sp.Key
+			for key != nil {
+				nextKey, err := ibm.Merge(ctx, ibm.evalCtx.Codec, ibm.desc, ibm.spec.TemporaryIndexes[idx], ibm.spec.AddedIndexes[idx],
+					key, sp.EndKey, ibm.spec.ChunkSize)
 				if err != nil {
 					return err
 				}
+
+				completedSpan := roachpb.Span{}
+				if nextKey == nil {
+					completedSpan.Key = key
+					completedSpan.EndKey = sp.EndKey
+				} else {
+					completedSpan.Key = key
+					completedSpan.EndKey = nextKey
+				}
+
+				mu.Lock()
+				mu.completedSpans = append(mu.completedSpans, completedSpan)
+				mu.completedSpanIdx = append(mu.completedSpanIdx, idx)
+				mu.Unlock()
+
+				if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+					if knobs != nil && knobs.PushesProgressEveryChunk {
+						pushProgress()
+					}
+				}
+
+				key = nextKey
 			}
+		}
+		return nil
+	})
 
-			return nil
-		})
-
+	var err error
+	go func() {
+		defer close(progCh)
 		err = g.Wait()
 	}()
 
@@ -174,7 +167,6 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context) {
 		if p.CompletedSpans != nil {
 			log.VEventf(ctx, 2, "sending coordinator completed spans: %+v", p.CompletedSpans)
 		}
-
 		ibm.output.Push(nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &p})
 	}
 

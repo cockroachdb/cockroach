@@ -183,6 +183,11 @@ func createSchemaChangeJobsFromMutations(
 		spanList := make([]jobspb.ResumeSpanList, mutationCount)
 		for i := range spanList {
 			mut := tableDesc.Mutations[idx+i]
+			// Index mutations with UseDeletePreservingEncoding are
+			// used as temporary indexes that are merged back into
+			// newly added indexes. Their resume spans are based on
+			// the index span itself since we iterate over the
+			// temporary index during the merge process.
 			if idx := mut.GetIndex(); idx != nil && idx.UseDeletePreservingEncoding {
 				spanList[i] = jobspb.ResumeSpanList{ResumeSpans: []roachpb.Span{tableDesc.IndexSpan(codec, idx.ID)}}
 			} else {
