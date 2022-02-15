@@ -72,7 +72,7 @@ func TestSpanConfigUpdateAppliedToReplica(t *testing.T) {
 	deleted, added := spanConfigStore.Apply(
 		ctx,
 		false, /* dryrun */
-		spanconfig.Addition(spanconfig.MakeSpanTarget(span), conf),
+		spanconfig.Addition(spanconfig.MakeTargetFromSpan(span), conf),
 	)
 	require.Empty(t, deleted)
 	require.Len(t, added, 1)

@@ -163,7 +163,7 @@ func CreateTenantRecord(
 	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
 	toUpsert := []spanconfig.Record{
 		{
-			Target: spanconfig.MakeSpanTarget(roachpb.Span{
+			Target: spanconfig.MakeTargetFromSpan(roachpb.Span{
 				Key:    tenantPrefix,
 				EndKey: tenantPrefix.Next(),
 			}),
@@ -461,7 +461,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 
 		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
 		records, err := scKVAccessor.GetSpanConfigRecords(
-			ctx, []spanconfig.Target{spanconfig.MakeSpanTarget(tenantSpan)},
+			ctx, []spanconfig.Target{spanconfig.MakeTargetFromSpan(tenantSpan)},
 		)
 		if err != nil {
 			return err

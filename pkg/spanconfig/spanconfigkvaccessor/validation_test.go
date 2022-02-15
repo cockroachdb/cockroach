@@ -36,7 +36,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 		},
 		{
 			toDelete: []spanconfig.Target{
-				spanconfig.MakeSpanTarget(
+				spanconfig.MakeTargetFromSpan(
 					roachpb.Span{Key: roachpb.Key("a")}, // empty end key in delete list
 				),
 			},
@@ -45,7 +45,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 		{
 			toUpsert: []spanconfig.Record{
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("a")}, // empty end key in update list
 					),
 				},
@@ -55,7 +55,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 		{
 			toUpsert: []spanconfig.Record{
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
 					),
 				},
@@ -64,7 +64,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 		},
 		{
 			toDelete: []spanconfig.Target{
-				spanconfig.MakeSpanTarget(
+				spanconfig.MakeTargetFromSpan(
 					roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("a")}, // invalid span; end < start
 				),
 			},
@@ -73,20 +73,20 @@ func TestValidateUpdateArgs(t *testing.T) {
 		{
 			toDelete: []spanconfig.Target{
 				// overlapping spans in the same list.
-				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
-				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}),
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")}),
 			},
 			expErr: "overlapping spans {a-c} and {b-c} in same list",
 		},
 		{
 			toUpsert: []spanconfig.Record{ // overlapping spans in the same list
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
 					),
 				},
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 					),
 				},
@@ -97,16 +97,16 @@ func TestValidateUpdateArgs(t *testing.T) {
 			// Overlapping spans in different lists.
 			toDelete: []spanconfig.Target{
 				// Overlapping spans in the same list.
-				spanconfig.MakeSpanTarget(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
+				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 			},
 			toUpsert: []spanconfig.Record{
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 					),
 				},
 				{
-					Target: spanconfig.MakeSpanTarget(
+					Target: spanconfig.MakeTargetFromSpan(
 						roachpb.Span{Key: roachpb.Key("b"), EndKey: roachpb.Key("c")},
 					),
 				},

@@ -461,18 +461,17 @@ func (c *Connector) GetSpanConfigRecords(
 	ctx context.Context, targets []spanconfig.Target,
 ) (records []spanconfig.Record, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		spans := make([]roachpb.Span, 0, len(targets))
-		for _, target := range targets {
-			spans = append(spans, *target.GetSpan())
-		}
 		resp, err := c.GetSpanConfigs(ctx, &roachpb.GetSpanConfigsRequest{
-			Spans: spans,
+			Targets: spanconfig.TargetsToProtos(targets),
 		})
 		if err != nil {
 			return err
 		}
 
-		records = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		records, err = spanconfig.EntriesToRecords(resp.SpanConfigEntries)
+		if err != nil {
+			return err
+		}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -485,18 +484,10 @@ func (c *Connector) GetSpanConfigRecords(
 func (c *Connector) UpdateSpanConfigRecords(
 	ctx context.Context, toDelete []spanconfig.Target, toUpsert []spanconfig.Record,
 ) error {
-	spansToDelete := make([]roachpb.Span, 0, len(toDelete))
-	for _, toDel := range toDelete {
-		spansToDelete = append(spansToDelete, roachpb.Span(toDel))
-	}
-
-	entriesToUpsert := spanconfig.RecordsToSpanConfigEntries(toUpsert)
-
 	return c.withClient(ctx, func(ctx context.Context, c *client) error {
-
 		_, err := c.UpdateSpanConfigs(ctx, &roachpb.UpdateSpanConfigsRequest{
-			ToDelete: spansToDelete,
-			ToUpsert: entriesToUpsert,
+			ToDelete: spanconfig.TargetsToProtos(toDelete),
+			ToUpsert: spanconfig.RecordsToEntries(toUpsert),
 		})
 		return err
 	})

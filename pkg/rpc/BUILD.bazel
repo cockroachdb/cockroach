@@ -98,6 +98,7 @@ go_test(
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/settings/cluster",
+        "//pkg/spanconfig",
         "//pkg/testutils",
         "//pkg/testutils/skip",
         "//pkg/util",

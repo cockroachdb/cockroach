@@ -71,11 +71,11 @@ func TestPreSeedSpanConfigsWrittenWhenActive(t *testing.T) {
 
 	{
 		records, err := scKVAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			spanconfig.MakeSpanTarget(tenantSpan),
+			spanconfig.MakeTargetFromSpan(tenantSpan),
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 
 	tenantID := roachpb.MakeTenantID(10)
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	tenantTarget := spanconfig.MakeSpanTarget(
+	tenantTarget := spanconfig.MakeTargetFromSpan(
 		roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
 	)
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
@@ -144,7 +144,7 @@ func TestSeedTenantSpanConfigs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }
 
@@ -175,7 +175,7 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 
 	tenantID := roachpb.MakeTenantID(10)
 	tenantPrefix := keys.MakeTenantPrefix(tenantID)
-	tenantTarget := spanconfig.MakeSpanTarget(
+	tenantTarget := spanconfig.MakeTargetFromSpan(
 		roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.PrefixEnd()},
 	)
 	tenantSeedSpan := roachpb.Span{Key: tenantPrefix, EndKey: tenantPrefix.Next()}
@@ -200,7 +200,7 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 
 	// Ensure the cluster version bump goes through successfully.
@@ -215,6 +215,6 @@ func TestSeedTenantSpanConfigsWithExistingEntry(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, records, 1)
-		require.Equal(t, *records[0].Target.GetSpan(), tenantSeedSpan)
+		require.Equal(t, records[0].Target.GetSpan(), tenantSeedSpan)
 	}
 }

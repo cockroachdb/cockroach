@@ -270,7 +270,7 @@ func (f *fullReconciler) reconcile(
 func (f *fullReconciler) fetchExistingSpanConfigs(
 	ctx context.Context,
 ) (*spanconfigstore.Store, error) {
-	var target spanconfig.Target
+	var targets []spanconfig.Target
 	if f.codec.ForSystemTenant() {
 		// The system tenant governs all system keys (meta, liveness, timeseries
 		// ranges, etc.) and system tenant tables.
@@ -278,28 +278,36 @@ func (f *fullReconciler) fetchExistingSpanConfigs(
 		// TODO(irfansharif): Should we include the scratch range here? Some
 		// tests make use of it; we may want to declare configs over it and have
 		// it considered all the same.
-		target = spanconfig.MakeSpanTarget(roachpb.Span{
+		//
+		// We don't want to request configs that are part of the
+		// SystemSpanConfigSpan, as the host tenant reserves that part of the
+		// keyspace to translate and persist SystemSpanConfigs. At the level of the
+		// reconciler we shouldn't be requesting these configs directly, instead,
+		// they should be targeted through SystemSpanConfigTargets instead.
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
 			Key:    keys.EverythingSpan.Key,
+			EndKey: keys.SystemSpanConfigSpan.Key,
+		}))
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
+			Key:    keys.TableDataMin,
 			EndKey: keys.TableDataMax,
-		})
+		}))
 		if f.knobs.ConfigureScratchRange {
-			target.EndKey = keys.ScratchRangeMax
+			sp := targets[1].GetSpan()
+			targets[1] = spanconfig.MakeTargetFromSpan(roachpb.Span{Key: sp.Key, EndKey: keys.ScratchRangeMax})
 		}
 	} else {
 		// Secondary tenants govern everything prefixed by their tenant ID.
 		tenPrefix := keys.MakeTenantPrefix(f.tenID)
-		target = spanconfig.MakeSpanTarget(roachpb.Span{
+		targets = append(targets, spanconfig.MakeTargetFromSpan(roachpb.Span{
 			Key:    tenPrefix,
 			EndKey: tenPrefix.PrefixEnd(),
-		})
+		}))
 	}
-
 	store := spanconfigstore.New(roachpb.SpanConfig{})
 	{
 		// Fully populate the store with KVAccessor contents.
-		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, []spanconfig.Target{
-			target,
-		})
+		records, err := f.kvAccessor.GetSpanConfigRecords(ctx, targets)
 		if err != nil {
 			return nil, err
 		}
@@ -398,7 +406,7 @@ func (r *incrementalReconciler) reconcile(
 					Key:    r.codec.TablePrefix(uint32(missingID)),
 					EndKey: r.codec.TablePrefix(uint32(missingID)).PrefixEnd(),
 				}
-				updates = append(updates, spanconfig.Deletion(spanconfig.MakeSpanTarget(tableSpan)))
+				updates = append(updates, spanconfig.Deletion(spanconfig.MakeTargetFromSpan(tableSpan)))
 			}
 
 			toDelete, toUpsert := r.storeWithKVContents.Apply(ctx, false /* dryrun */, updates...)
