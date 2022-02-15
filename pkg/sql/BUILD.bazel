@@ -381,6 +381,7 @@ go_library(
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlfsm",
+        "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlstats",
         "//pkg/sql/sqlstats/persistedsqlstats",
