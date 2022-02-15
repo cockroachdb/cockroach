@@ -1093,9 +1093,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if ex.server.cfg.TestingKnobs.OnTxnRetry != nil && ex.extraTxnState.autoRetryReason != nil {
 		ex.server.cfg.TestingKnobs.OnTxnRetry(ex.extraTxnState.autoRetryReason, planner.EvalContext())
 	}
+	var distribute DistributionType
+	if distributePlan.WillDistribute() {
+		distribute = DistributionTypeSystemTenantOnly
+	} else {
+		distribute = DistributionTypeNone
+	}
 	ex.sessionTracing.TraceExecStart(ctx, "distributed")
 	stats, err := ex.execWithDistSQLEngine(
-		ctx, planner, stmt.AST.StatementReturnType(), res, distributePlan.WillDistribute(), progAtomic,
+		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
 	if res.Err() == nil {
 		// numTxnRetryErrors is the number of times an error will be injected if
@@ -1352,7 +1358,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planner *planner,
 	stmtType tree.StatementReturnType,
 	res RestrictedCommandResult,
-	distribute bool,
+	distribute DistributionType,
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
 	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
@@ -1372,7 +1378,8 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distribute)
+	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
+		planner.txn, distribute)
 	planCtx.stmtType = recv.stmtType
 	if ex.server.cfg.TestingKnobs.TestingSaveFlows != nil {
 		planCtx.saveFlows = ex.server.cfg.TestingKnobs.TestingSaveFlows(planner.stmt.SQL)

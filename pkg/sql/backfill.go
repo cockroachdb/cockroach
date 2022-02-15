@@ -971,8 +971,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return err
 		}
 		evalCtx = createSchemaChangeEvalCtx(ctx, sc.execCfg, txn.ReadTimestamp(), descriptors)
-		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
-			true /* distribute */)
+		planCtx = sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil, /* planner */
+			txn, DistributionTypeSystemTenantOnly)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, readAsOf, chunkSize, addedIndexes)
@@ -1264,7 +1264,8 @@ func (sc *SchemaChanger) distColumnBackfill(
 			)
 			defer recv.Release()
 
-			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn, true /* distribute */)
+			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+				DistributionTypeSystemTenantOnly)
 			spec, err := initColumnBackfillerSpec(*tableDesc.TableDesc(), duration, chunkSize, readAsOf)
 			if err != nil {
 				return err

@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -327,17 +326,11 @@ func (dsp *DistSQLPlanner) setupFlows(
 			// Skip this node.
 			continue
 		}
-		if !evalCtx.Codec.ForSystemTenant() {
-			// A tenant server should never find itself distributing flows.
-			// NB: we wouldn't hit this in practice but if we did the actual
-			// error would be opaque.
-			return nil, nil, nil, errorutil.UnsupportedWithMultiTenancy(47900)
-		}
 		req := setupReq
 		req.Flow = *flowSpec
 		runReq := runnerRequest{
 			ctx:           ctx,
-			nodeDialer:    dsp.nodeDialer,
+			nodeDialer:    dsp.podNodeDialer,
 			flowReq:       &req,
 			sqlInstanceID: nodeID,
 			resultChan:    resultChan,
@@ -1238,7 +1231,14 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	distributeSubquery := getPlanDistribution(
 		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, subqueryPlan.plan,
 	).WillDistribute()
-	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributeSubquery)
+	var distribute DistributionType
+	if distributeSubquery {
+		distribute = DistributionTypeSystemTenantOnly
+	} else {
+		distribute = DistributionTypeNone
+	}
+	subqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
+		distribute)
 	subqueryPlanCtx.stmtType = tree.Rows
 	if planner.instrumentation.ShouldSaveFlows() {
 		subqueryPlanCtx.saveFlows = subqueryPlanCtx.getDefaultSaveFlowsFunc(ctx, planner, planComponentTypeSubquery)
@@ -1580,7 +1580,14 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	distributePostquery := getPlanDistribution(
 		ctx, planner, planner.execCfg.NodeID, planner.SessionData().DistSQLMode, postqueryPlan,
 	).WillDistribute()
-	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn, distributePostquery)
+	var distribute DistributionType
+	if distributePostquery {
+		distribute = DistributionTypeSystemTenantOnly
+	} else {
+		distribute = DistributionTypeNone
+	}
+	postqueryPlanCtx := dsp.NewPlanningCtx(ctx, evalCtx, planner, planner.txn,
+		distribute)
 	postqueryPlanCtx.stmtType = tree.Rows
 	postqueryPlanCtx.ignoreClose = true
 	if planner.instrumentation.ShouldSaveFlows() {

@@ -45,7 +45,7 @@ func BenchmarkFlowSetup(b *testing.B) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	dsp := execCfg.DistSQLPlanner
 	for _, vectorize := range []bool{true, false} {
-		for _, distribute := range []bool{true, false} {
+		for _, distribute := range []sql.DistributionType{sql.DistributionTypeSystemTenantOnly, sql.DistributionTypeNone} {
 			b.Run(fmt.Sprintf("vectorize=%t/distribute=%t", vectorize, distribute), func(b *testing.B) {
 				vectorizeMode := sessiondatapb.VectorizeOff
 				if vectorize {

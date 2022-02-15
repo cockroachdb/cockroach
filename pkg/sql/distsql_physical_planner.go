@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -124,7 +125,29 @@ type DistSQLPlanner struct {
 	nodeDescs kvcoord.NodeDescStore
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
+
+	// sqlInstanceProvider has information about SQL instances in a non-system
+	// tenant environment.
+	sqlInstanceProvider sqlinstance.Provider
+
+	// codec allows the DistSQLPlanner to determine whether it is creating plans
+	// for a system tenant or non-system tenant.
+	codec keys.SQLCodec
 }
+
+// DistributionType is an enum defining when a plan should be distributed.
+type DistributionType int
+
+const (
+	// DistributionTypeNone does not distribute a plan across multiple instances.
+	DistributionTypeNone = iota
+	// DistributionTypeAlways distributes a plan across multiple instances whether
+	// it is a system tenant or non-system tenant.
+	DistributionTypeAlways
+	// DistributionTypeSystemTenantOnly only distributes a plan if it is for a
+	// system tenant. Plans on non-system tenants are not distributed.
+	DistributionTypeSystemTenantOnly
+)
 
 // ReplicaOraclePolicy controls which policy the physical planner uses to choose
 // a replica for a given range. It is exported so that it may be overwritten
@@ -155,6 +178,8 @@ func NewDistSQLPlanner(
 	isAvailable func(base.SQLInstanceID) bool,
 	nodeDialer *nodedialer.Dialer,
 	podNodeDialer *nodedialer.Dialer,
+	codec keys.SQLCodec,
+	sqlInstanceProvider sqlinstance.Provider,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
 		planVersion:          planVersion,
@@ -174,6 +199,8 @@ func NewDistSQLPlanner(
 		nodeDescs:             nodeDescs,
 		rpcCtx:                rpcCtx,
 		metadataTestTolerance: execinfra.NoExplain,
+		sqlInstanceProvider:   sqlInstanceProvider,
+		codec:                 codec,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -3970,14 +3997,17 @@ func checkScanParallelizationIfLocal(
 
 // NewPlanningCtx returns a new PlanningCtx. When distribute is false, a
 // lightweight version PlanningCtx is returned that can be used when the caller
-// knows plans will only be run on one node. It is coerced to false on SQL
-// SQL tenants (in which case only local planning is supported), regardless of
-// the passed-in value. planner argument can be left nil.
+// knows plans will only be run on one node. On SQL tenants, the plan is only
+// distributed if tenantDistributionEnabled is true. planner argument can be
+// left nil.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
-	ctx context.Context, evalCtx *extendedEvalContext, planner *planner, txn *kv.Txn, distribute bool,
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	planner *planner,
+	txn *kv.Txn,
+	distributionType DistributionType,
 ) *PlanningCtx {
-	// Tenants can not distribute plans.
-	distribute = distribute && evalCtx.Codec.ForSystemTenant()
+	distribute := distributionType == DistributionTypeAlways || (distributionType == DistributionTypeSystemTenantOnly && evalCtx.Codec.ForSystemTenant())
 	planCtx := &PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,

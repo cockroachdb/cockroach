@@ -314,6 +314,8 @@ func startConnExecutor(
 			func(base.SQLInstanceID) bool { return true }, // everybody is available
 			nil, /* nodeDialer */
 			nil, /* podNodeDialer */
+			keys.SystemSQLCodec,
+			nil, /* sqlInstanceProvider */
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},

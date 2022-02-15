@@ -117,7 +117,7 @@ func (r *StmtBufReader) AdvanceOne() {
 // interface{} so that external packages can call NewInternalPlanner and pass
 // the result) and executes a sql statement through the DistSQLPlanner.
 func (dsp *DistSQLPlanner) Exec(
-	ctx context.Context, localPlanner interface{}, sql string, distribute bool,
+	ctx context.Context, localPlanner interface{}, sql string, distribute DistributionType,
 ) error {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
@@ -146,7 +146,8 @@ func (dsp *DistSQLPlanner) Exec(
 	defer recv.Release()
 
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distribute)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()
