@@ -70,4 +70,7 @@ const (
 	FinalRegrIntercept      = AggregatorSpec_FINAL_REGR_INTERCEPT
 	FinalRegrR2             = AggregatorSpec_FINAL_REGR_R2
 	FinalRegrSlope          = AggregatorSpec_FINAL_REGR_SLOPE
+	FinalCovarSamp          = AggregatorSpec_FINAL_COVAR_SAMP
+	FinalCorr               = AggregatorSpec_FINAL_CORR
+	FinalSqrdiff            = AggregatorSpec_FINAL_SQRDIFF
 )
