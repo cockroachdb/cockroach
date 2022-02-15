@@ -1132,9 +1132,9 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 			}
 		}
 		if idx.Primary() {
-			if idx.GetVersion() != descpb.LatestPrimaryIndexDescriptorVersion {
+			if idx.GetVersion() != descpb.PrimaryIndexWithStoredColumnsVersion {
 				return errors.AssertionFailedf("primary index %q has invalid version %d, expected %d",
-					idx.GetName(), idx.GetVersion(), descpb.LatestPrimaryIndexDescriptorVersion)
+					idx.GetName(), idx.GetVersion(), descpb.PrimaryIndexWithStoredColumnsVersion)
 			}
 			if idx.IndexDesc().EncodingType != descpb.PrimaryIndexEncoding {
 				return errors.AssertionFailedf("primary index %q has invalid encoding type %d in proto, expected %d",
@@ -1144,12 +1144,6 @@ func (desc *wrapper) validateTableIndexes(columnNames map[string]descpb.ColumnID
 		// Ensure that index column ID subsets are well formed.
 		if idx.GetVersion() < descpb.StrictIndexColumnIDGuaranteesVersion {
 			continue
-		}
-		if !idx.Primary() && idx.Public() {
-			if idx.GetVersion() == descpb.PrimaryIndexWithStoredColumnsVersion {
-				return errors.AssertionFailedf("secondary index %q has invalid version %d which is for primary indexes",
-					idx.GetName(), idx.GetVersion())
-			}
 		}
 		slices := []struct {
 			name  string
