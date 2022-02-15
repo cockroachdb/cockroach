@@ -518,7 +518,7 @@ func setupShardedIndex(
 		if anyColumnIsPartitioningField(columns, partitionAllBy) {
 			return nil, nil, pgerror.New(
 				pgcode.FeatureNotSupported,
-				"partitioning field cannot be hash sharded index key column",
+				`hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
 			)
 		}
 	}

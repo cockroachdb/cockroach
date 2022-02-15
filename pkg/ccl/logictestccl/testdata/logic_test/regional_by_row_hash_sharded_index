@@ -15,23 +15,23 @@ CREATE TABLE t_regional (
   b INT
 ) LOCALITY REGIONAL BY ROW;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE INDEX ON t_regional (crdb_region, b) USING HASH;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE UNIQUE INDEX ON t_regional (crdb_region, b) USING HASH;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 ALTER TABLE t_regional ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk) USING HASH;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE TABLE t_regional_bad (
   pk INT PRIMARY KEY,
   b INT,
   INDEX (crdb_region, b) USING HASH
 ) LOCALITY REGIONAL BY ROW;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE TABLE t_regional_bad (
   pk INT,
   b INT,

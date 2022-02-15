@@ -43,13 +43,13 @@ CREATE TABLE t_partition_all (
    PARTITION us_east VALUES IN (('new york'))
 );
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE INDEX ON t_partition_all (b, c) USING HASH;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE UNIQUE INDEX ON t_partition_all (b, c) USING HASH;
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 ALTER TABLE t_partition_all ALTER PRIMARY KEY USING COLUMNS (b) USING HASH;
 
 statement error hash sharded indexes don't support explicit partitioning with PARTITION BY
@@ -82,7 +82,7 @@ CREATE TABLE t_idx_hashed_bad (
   )
 );
 
-statement error partitioning field cannot be hash sharded index key column
+statement error hash sharded index cannot be created if any of the specified index columns is featured as implicit partitioning field with "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"
 CREATE TABLE t_idx_hashed_bad (
   a INT PRIMARY KEY,
   b STRING,
