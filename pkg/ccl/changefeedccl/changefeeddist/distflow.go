@@ -47,7 +47,7 @@ func StartDistChangefeed(
 	dsp := execCtx.DistSQLPlanner()
 	evalCtx := execCtx.ExtendedEvalContext()
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, noTxn,
-		execCtx.ExecCfg().Codec.ForSystemTenant() /* distribute */)
+		sql.DistributionTypeSystemTenantOnly)
 
 	var spanPartitions []sql.SpanPartition
 	if details.SinkURI == `` {

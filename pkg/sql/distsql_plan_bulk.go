@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/errors"
 )
 
 // SetupAllNodesPlanning creates a planCtx and sets up the planCtx.NodeStatuses
@@ -23,8 +24,19 @@ import (
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	distribute := evalCtx.Codec.ForSystemTenant()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
+	if dsp.codec.ForSystemTenant() {
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg)
+	}
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg)
+}
+
+// setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
+// in a system tenant.
+func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
+	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		DistributionTypeAlways)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
@@ -54,4 +66,32 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
 	return planCtx, nodes, nil
+}
+
+// setupAllNodesPlanningTenant creates a planCtx and returns all nodes available
+// in a non-system tenant.
+func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
+	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
+	if dsp.sqlInstanceProvider == nil {
+		return nil, nil, errors.New("sql instance provider not available in multi-tenant environment")
+	}
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		DistributionTypeAlways)
+	pods, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	sqlInstanceIDs := make([]base.SQLInstanceID, len(pods))
+	for i, pod := range pods {
+		sqlInstanceIDs[i] = pod.InstanceID
+	}
+	// Shuffle node order so that multiple IMPORTs done in parallel will not
+	// identically schedule CSV reading. For example, if there are 3 nodes and 4
+	// files, the first node will get 2 files while the other nodes will each get 1
+	// file. Shuffling will make that first node random instead of always the same.
+	rand.Shuffle(len(sqlInstanceIDs), func(i, j int) {
+		sqlInstanceIDs[i], sqlInstanceIDs[j] = sqlInstanceIDs[j], sqlInstanceIDs[i]
+	})
+	return planCtx, sqlInstanceIDs, nil
 }
