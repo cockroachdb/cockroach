@@ -1,0 +1,306 @@
+setup
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE REGION FAILURE;
+----
+...
++database {0 0 multi_region_test_db} -> 104
++object {104 106 crdb_internal_region} -> 105
++schema {104 0 public} -> 106
++object {104 106 _crdb_internal_region} -> 107
+
+test
+DROP DATABASE multi_region_test_db CASCADE
+----
+checking for feature: DROP DATABASE
+begin transaction #1
+# begin StatementPhase
+## StatementPhase stage 1 of 1 with 7 MutationType ops
+delete comment for descriptor #106 of type SchemaCommentType
+delete comment for descriptor #104 of type DatabaseCommentType
+delete role settings for database on #104
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 12 MutationType ops
+create job #1: "schema change job"
+  descriptor IDs: [104 105 106 107]
+delete object namespace entry {104 106 crdb_internal_region} -> 105
+delete object namespace entry {104 106 _crdb_internal_region} -> 107
+upsert descriptor #104
+   database:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - ABSENT
+  +    - DROPPED
+  +    - ABSENT
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  +        statement: DROP DATABASE multi_region_test_db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 5
+  +    - 7
+  +    - 8
+  +    - 9
+  +    targets:
+  +    - elementProto:
+  +        schemaEntry:
+  +          databaseId: 104
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        database:
+  +          databaseId: 104
+  +          dependentObjects:
+  +          - 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          databaseId: 104
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        databaseRoleSetting:
+  +          databaseId: 104
+  +          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 104
+     modificationTime: {}
+  ...
+       regionEnumId: 105
+       survivalGoal: REGION_FAILURE
+  -  schemas:
+  -    public:
+  -      id: 106
+  -  version: "1"
+  +  schemas: {}
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #105
+   type:
+     arrayTypeId: 107
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  +        statement: DROP DATABASE multi_region_test_db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 0
+  +    - 1
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 105
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 105
+  +          name: crdb_internal_region
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     enumMembers:
+     - logicalRepresentation: us-east1
+  ...
+     regionConfig:
+       primaryRegion: us-east1
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #106
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  +        statement: DROP DATABASE multi_region_test_db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 4
+  +    - 6
+  +    targets:
+  +    - elementProto:
+  +        schema:
+  +          dependentObjects:
+  +          - 105
+  +          - 107
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        schemaComment:
+  +          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  +            when doing decomposition
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 2
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+     id: 106
+     modificationTime: {}
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #107
+  ...
+       family: ArrayFamily
+       oid: 100107
+  +  declarativeSchemaChangerState:
+  +    authorization: {}
+  +    currentStatuses:
+  +    - DROPPED
+  +    - ABSENT
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  +        statement: DROP DATABASE multi_region_test_db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks:
+  +    - 2
+  +    - 3
+  +    targets:
+  +    - elementProto:
+  +        type:
+  +          typeId: 107
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        namespace:
+  +          databaseId: 104
+  +          descriptorId: 107
+  +          name: _crdb_internal_region
+  +          schemaId: 106
+  +      metadata:
+  +        sourceElementId: 3
+  +        subWorkId: 2
+  +      targetStatus: ABSENT
+     id: 107
+     kind: ALIAS
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+# end PreCommitPhase
+commit transaction #1
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 15 MutationType ops
+create job #2: "GC for dropping descriptors and parent database 104"
+  descriptor IDs: []
+write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
+write *eventpb.DropType to event log for descriptor #107: DROP DATABASE ‹multi_region_test_db› CASCADE
+update progress of schema change job #1
+set schema change job #1 to non-cancellable
+delete database namespace entry {0 0 multi_region_test_db} -> 104
+delete schema namespace entry {104 0 public} -> 106
+upsert descriptor #104
+   database:
+  -  declarativeSchemaChangerState:
+  -    authorization: {}
+  -    currentStatuses:
+  -    - ABSENT
+  -    - DROPPED
+  -    - ABSENT
+  -    - ABSENT
+  -    jobId: "1"
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  -        statement: DROP DATABASE multi_region_test_db CASCADE
+  -        statementTag: DROP DATABASE
+  -    targetRanks:
+  -    - 5
+  -    - 7
+  -    - 8
+  -    - 9
+  -    targets:
+  -    - elementProto:
+  -        schemaEntry:
+  -          databaseId: 104
+  -          schemaId: 106
+  -      metadata:
+  -        sourceElementId: 2
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        database:
+  -          databaseId: 104
+  -          dependentObjects:
+  -          - 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseComment:
+  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
+  -            when doing decomposition
+  -          databaseId: 104
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        databaseRoleSetting:
+  -          databaseId: 104
+  -          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+     id: 104
+     modificationTime: {}
+  ...
+       survivalGoal: REGION_FAILURE
+     state: DROP
+  -  version: "2"
+  +  version: "3"
+delete descriptor #105
+delete descriptor #106
+delete descriptor #107
+commit transaction #3
+# end PostCommitPhase
