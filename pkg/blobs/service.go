@@ -30,6 +30,7 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"google.golang.org/grpc/codes"
@@ -56,8 +57,8 @@ func (s *Service) GetStream(req *blobspb.GetRequest, stream blobspb.Blob_GetStre
 	if err != nil {
 		return err
 	}
-	defer content.Close()
-	return streamContent(stream, content)
+	defer content.Close(stream.Context())
+	return streamContent(stream.Context(), stream, content)
 }
 
 // PutStream implements the gRPC service.
@@ -71,7 +72,7 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 		return errors.New("no filename in metadata")
 	}
 	reader := newPutStreamReader(stream)
-	defer reader.Close()
+	defer reader.Close(stream.Context())
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
@@ -80,7 +81,7 @@ func (s *Service) PutStream(stream blobspb.Blob_PutStreamServer) error {
 		cancel()
 		return err
 	}
-	if _, err := io.Copy(w, reader); err != nil {
+	if _, err := io.Copy(w, ioctx.ReaderCtxAdapter(stream.Context(), reader)); err != nil {
 		cancel()
 		return errors.CombineErrors(w.Close(), err)
 	}

@@ -115,6 +115,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/interval",
+        "//pkg/util/ioctx",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/metric",

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -182,7 +181,7 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 		},
 	}
 
@@ -213,17 +212,16 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	var newVersion = clusterversion.TestingBinaryVersion
 	var oldVersion = prev(newVersion)
 
-	knobs := base.TestingKnobs{
-		Server: &server.TestingKnobs{
-			BinaryVersionOverride:          oldVersion,
-			DisableAutomaticVersionUpgrade: 1,
-		},
-	}
-
+	disableUpgradeCh := make(chan struct{})
 	rawTC := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual, // speeds up test
 		ServerArgs: base.TestServerArgs{
-			Knobs: knobs,
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					BinaryVersionOverride:          oldVersion,
+					DisableAutomaticVersionUpgrade: disableUpgradeCh,
+				},
+			},
 		},
 	})
 	defer rawTC.Stopper().Stop(ctx)
@@ -247,7 +245,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
 		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
 	}
-	atomic.StoreInt32(&knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade, 0)
+	close(disableUpgradeCh)
 
 	// Check the cluster version is still oldVersion.
 	curVersion := tc.getVersionFromSelect(0)
@@ -415,7 +413,7 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 	// Start by running v0.
 	knobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          v0,
 		},
 		// Inject a migration which would run to upgrade the cluster.

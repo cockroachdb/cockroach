@@ -17,6 +17,7 @@ go_test(
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//oserror",

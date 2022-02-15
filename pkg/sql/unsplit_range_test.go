@@ -319,7 +319,7 @@ func TestUnsplitRanges(t *testing.T) {
 		params, _ := tests.CreateTestServerParams()
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
-			DisableAutomaticVersionUpgrade: 1,
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          clusterversion.ByKey(tc.binaryVersion),
 		}
 

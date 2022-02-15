@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// reduce reduces SQL passed over stdin using cockroach demo. The input is
-// simplified such that the contains argument is present as an error during SQL
-// execution. Run `make bin/reduce` to compile the reduce program.
+// reduce reduces SQL passed from the input file using cockroach demo. The input
+// file is simplified such that -contains argument is present as an error during
+// SQL execution. Run `make bin/reduce` to compile the reduce program.
 package main
 
 import (
@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
@@ -50,19 +49,24 @@ var (
 	}()
 	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
-	file            = flags.String("file", "", "the path to a file containing a SQL query to reduce")
+	file            = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
 	verbose         = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
 	contains        = flags.String("contains", "", "error regex to search for")
 	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
 	workers         = flags.Int("goroutines", goroutines, "number of worker goroutines (defaults to NumCPU/3")
 	chunkReductions = flags.Int("chunk", 0, "number of consecutive chunk reduction failures allowed before halting chunk reduction (default 0)")
+	tlp             = flags.Bool("tlp", false, "last two non-empty lines in file are equivalent queries returning different results")
 )
 
 const description = `
 The reduce utility attempts to simplify SQL that produces an error in
-CockroachDB. The problematic SQL, passed via standard input, is
+CockroachDB. The problematic SQL, specified via -file flag, is
 repeatedly reduced as long as it produces an error in the CockroachDB
 demo that matches the provided -contains regex.
+
+An alternative mode of operation is enabled by specifying -tlp option:
+in such case the last two queries in the file must be equivalent and
+produce different results.
 
 The following options are available:
 
@@ -80,12 +84,16 @@ func main() {
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		usage()
 	}
-	if *contains == "" {
-		fmt.Printf("%s: -contains must be provided\n\n", os.Args[0])
+	if *file == "" {
+		fmt.Printf("%s: -file must be provided\n\n", os.Args[0])
+		usage()
+	}
+	if *contains == "" && !*tlp {
+		fmt.Printf("%s: either -contains must be provided or -tlp flag specified\n\n", os.Args[0])
 		usage()
 	}
 	reducesql.LogUnknown = *unknown
-	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions)
+	out, err := reduceSQL(*binary, *contains, file, *workers, *verbose, *chunkReductions, *tlp)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,38 +101,72 @@ func main() {
 }
 
 func reduceSQL(
-	binary, contains string, file *string, workers int, verbose bool, chunkReductions int,
+	binary, contains string, file *string, workers int, verbose bool, chunkReductions int, tlp bool,
 ) (string, error) {
+	const tlpFailureError = "TLP_FAILURE"
+	if tlp {
+		contains = tlpFailureError
+	}
 	containsRE, err := regexp.Compile(contains)
 	if err != nil {
 		return "", err
 	}
-	var input []byte
-	{
-		if file == nil {
-			done := make(chan struct{}, 1)
-			go func() {
-				select {
-				case <-done:
-				case <-time.After(5 * time.Second):
-					log.Fatal("timeout waiting for input on stdin")
-				}
-			}()
-			input, err = ioutil.ReadAll(os.Stdin)
-			done <- struct{}{}
-			if err != nil {
-				return "", err
+	input, err := ioutil.ReadFile(*file)
+	if err != nil {
+		return "", err
+	}
+
+	inputString := string(input)
+	var tlpCheck string
+
+	// If TLP check is requested, then we remove the last two queries from the
+	// input (each query is expected to be delimited by empty lines) which we
+	// use then to construct a special TLP check query that results in an error
+	// if two removed queries return different results.
+	//
+	// We do not just include the TLP check query into the input string because
+	// the reducer would then reduce the check query itself, making the
+	// reduction meaningless.
+	if tlp {
+		lines := strings.Split(string(input), "\n")
+		lineIdx := len(lines) - 1
+		// findPreviousQuery return the query preceding lineIdx without a
+		// semicolon. Queries are expected to be delimited with empty lines.
+		findPreviousQuery := func() string {
+			// Skip empty lines.
+			for lines[lineIdx] == "" {
+				lineIdx--
 			}
-		} else {
-			input, err = ioutil.ReadFile(*file)
-			if err != nil {
-				return "", err
+			lastQueryLineIdx := lineIdx
+			// Now skip over all lines comprising the query.
+			for lines[lineIdx] != "" {
+				lineIdx--
 			}
+			// lineIdx right now points at an empty line before the query.
+			query := strings.Join(lines[lineIdx+1:lastQueryLineIdx+1], " ")
+			// Remove the semicolon.
+			return query[:len(query)-1]
 		}
+		partitioned := findPreviousQuery()
+		unpartitioned := findPreviousQuery()
+		inputString = strings.Join(lines[:lineIdx], "\n")
+		// tlpCheck is a query that will result in an error with tlpFailureError
+		// error message when unpartitioned and partitioned queries return
+		// different results (which is the case when there are rows in one
+		// result set that are not present in the other).
+		tlpCheck = fmt.Sprintf(`
+SELECT CASE
+  WHEN
+    (SELECT count(*) FROM ((%[1]s) EXCEPT ALL (%[2]s))) != 0
+  OR
+    (SELECT count(*) FROM ((%[2]s) EXCEPT ALL (%[1]s))) != 0
+  THEN
+    crdb_internal.force_error('', '%[3]s')
+  END;`, unpartitioned, partitioned, tlpFailureError)
 	}
 
 	// Pretty print the input so the file size comparison is useful.
-	inputSQL, err := reducesql.Pretty(string(input))
+	inputSQL, err := reducesql.Pretty(inputString)
 	if err != nil {
 		return "", err
 	}
@@ -133,6 +175,13 @@ func reduceSQL(
 	if verbose {
 		logger = log.New(os.Stderr, "", 0)
 		logger.Printf("input SQL pretty printed, %d bytes -> %d bytes\n", len(input), len(inputSQL))
+		if tlp {
+			prettyTLPCheck, err := reducesql.Pretty(tlpCheck)
+			if err != nil {
+				return "", err
+			}
+			logger.Printf("\nTLP check query:\n%s\n\n", prettyTLPCheck)
+		}
 	}
 
 	var chunkReducer reduce.ChunkReducer
@@ -153,6 +202,9 @@ func reduceSQL(
 		if !strings.HasSuffix(sql, ";") {
 			sql += ";"
 		}
+		// If -tlp was not specified, this is a noop, if it was specified, then
+		// we append the special TLP check query.
+		sql += tlpCheck
 		cmd.Stdin = strings.NewReader(sql)
 		out, err := cmd.CombinedOutput()
 		switch {

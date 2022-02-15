@@ -188,13 +188,12 @@ var queueAdditionOnSystemConfigUpdateBurst = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
-// leaseTransferWait limits the amount of time a drain command waits for lease
-// and Raft leadership transfers.
+// leaseTransferWait is the timeout for a single iteration of draining range leases.
 var leaseTransferWait = func() *settings.DurationSetting {
 	s := settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		leaseTransferWaitSettingName,
-		"the amount of time a server waits to transfer range leases before proceeding with the rest of the shutdown process "+
+		"the timeout for a single iteration of the range lease transfer phase of draining "+
 			"(note that the --drain-wait parameter for cockroach node drain may need adjustment "+
 			"after changing this setting)",
 		5*time.Second,
@@ -1354,6 +1353,10 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
 // When called with 'false', returns to the normal mode of operation.
+//
+// Note: this code represents ONE round of draining. This code is iterated on
+// indefinitely until all leases are transferred away.
+// This iteration can be found here: pkg/cli/start.go, pkg/cli/quit.go.
 //
 // The reporter callback, if non-nil, is called on a best effort basis
 // to report work that needed to be done and which may or may not have

@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/url"
 	"path"
@@ -49,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -1060,8 +1060,8 @@ func parseAvroOptions(
 			if err != nil {
 				return err
 			}
-			defer raw.Close()
-			schemaBytes, err := ioutil.ReadAll(raw)
+			defer raw.Close(ctx)
+			schemaBytes, err := ioctx.ReadAll(ctx, raw)
 			if err != nil {
 				return err
 			}

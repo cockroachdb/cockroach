@@ -15,6 +15,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
+        "//pkg/util/ioctx",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
     ],

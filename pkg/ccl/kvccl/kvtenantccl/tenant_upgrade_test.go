@@ -58,7 +58,7 @@ func TestTenantUpgrade(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
 				},
 			},
@@ -210,7 +210,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.TestingBinaryMinSupportedVersion,
 				},
 			},

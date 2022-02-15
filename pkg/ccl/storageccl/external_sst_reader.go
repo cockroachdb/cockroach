@@ -11,7 +11,6 @@ package storageccl
 import (
 	"context"
 	"io"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
@@ -41,6 +41,9 @@ var remoteSSTSuffixCacheSize = settings.RegisterByteSizeSetting(
 
 // ExternalSSTReader returns opens an SST in external storage, optionally
 // decrypting with the supplied parameters, and returns iterator over it.
+//
+// ctx is captured and used throughout the life of the returned iterator, until
+// the iterator's Close() method is called.
 func ExternalSSTReader(
 	ctx context.Context,
 	e cloud.ExternalStorage,
@@ -49,7 +52,7 @@ func ExternalSSTReader(
 ) (storage.SimpleMVCCIterator, error) {
 	// Do an initial read of the file, from the beginning, to get the file size as
 	// this is used e.g. to read the trailer.
-	var f io.ReadCloser
+	var f ioctx.ReadCloserCtx
 	var sz int64
 
 	const maxAttempts = 3
@@ -62,8 +65,8 @@ func ExternalSSTReader(
 	}
 
 	if !remoteSSTs.Get(&e.Settings().SV) {
-		content, err := ioutil.ReadAll(f)
-		f.Close()
+		content, err := ioctx.ReadAll(ctx, f)
+		f.Close(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -77,9 +80,10 @@ func ExternalSSTReader(
 	}
 
 	raw := &sstReader{
+		ctx:  ctx,
 		sz:   sizeStat(sz),
 		body: f,
-		openAt: func(offset int64) (io.ReadCloser, error) {
+		openAt: func(offset int64) (ioctx.ReadCloserCtx, error) {
 			reader, _, err := e.ReadFileAt(ctx, basename, offset)
 			return reader, err
 		},
@@ -90,7 +94,7 @@ func ExternalSSTReader(
 	if encryption != nil {
 		r, err := decryptingReader(raw, encryption.Key)
 		if err != nil {
-			f.Close()
+			f.Close(ctx)
 			return nil, err
 		}
 		reader = r
@@ -98,7 +102,7 @@ func ExternalSSTReader(
 		// We only explicitly buffer the suffix of the file when not decrypting as
 		// the decrypting reader has its own internal block buffer.
 		if err := raw.readAndCacheSuffix(remoteSSTSuffixCacheSize.Get(&e.Settings().SV)); err != nil {
-			f.Close()
+			f.Close(ctx)
 			return nil, err
 		}
 	}
@@ -113,10 +117,12 @@ func ExternalSSTReader(
 }
 
 type sstReader struct {
+	// ctx is captured at construction time and used for I/O operations.
+	ctx    context.Context
 	sz     sizeStat
-	openAt func(int64) (io.ReadCloser, error)
+	openAt func(int64) (ioctx.ReadCloserCtx, error)
 	// body and pos are mutated by calls to ReadAt and Close.
-	body io.ReadCloser
+	body ioctx.ReadCloserCtx
 	pos  int64
 
 	readPos int64 // readPos is used to transform Read() to ReadAt(readPos).
@@ -134,8 +140,9 @@ type sstReader struct {
 // Close implements io.Closer.
 func (r *sstReader) Close() error {
 	r.pos = 0
+	r.ctx = nil
 	if r.body != nil {
-		return r.body.Close()
+		return r.body.Close(r.ctx)
 	}
 	return nil
 }
@@ -166,8 +173,8 @@ func (r *sstReader) readAndCacheSuffix(size int64) error {
 	if err != nil {
 		return err
 	}
-	defer reader.Close()
-	read, err := ioutil.ReadAll(reader)
+	defer reader.Close(r.ctx)
+	read, err := ioctx.ReadAll(r.ctx, reader)
 	if err != nil {
 		return err
 	}
@@ -207,7 +214,7 @@ func (r *sstReader) ReadAt(p []byte, offset int64) (int, error) {
 	}
 
 	var err error
-	for n := 0; read < len(p); n, err = r.body.Read(p[read:]) {
+	for n := 0; read < len(p); n, err = r.body.Read(r.ctx, p[read:]) {
 		read += n
 		if err != nil {
 			break

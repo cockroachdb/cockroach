@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
@@ -463,7 +464,7 @@ func downloadUserfile(
 	if err != nil {
 		return 0, err
 	}
-	defer remoteFile.Close()
+	defer remoteFile.Close(ctx)
 
 	localDir := path.Dir(dst)
 	if err := os.MkdirAll(localDir, 0700); err != nil {
@@ -477,7 +478,7 @@ func downloadUserfile(
 	}
 	defer localFile.Close()
 
-	return io.Copy(localFile, remoteFile)
+	return io.Copy(localFile, ioctx.ReaderCtxAdapter(ctx, remoteFile))
 }
 
 func deleteUserFile(ctx context.Context, conn clisqlclient.Conn, glob string) ([]string, error) {

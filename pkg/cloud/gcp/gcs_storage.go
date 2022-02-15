@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
@@ -155,10 +156,11 @@ func makeGCSStorage(
 }
 
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "gcs.Writer")
+	_, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.Writer: %s",
 		path.Join(g.prefix, basename))})
+
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 	if !gcsChunkingEnabled.Get(&g.settings.SV) {
 		w.ChunkSize = 0
@@ -167,14 +169,14 @@ func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteClose
 }
 
 // ReadFile is shorthand for ReadFileAt with offset 0.
-func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
+func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (ioctx.ReadCloserCtx, error) {
 	reader, _, err := g.ReadFileAt(ctx, basename, 0)
 	return reader, err
 }
 
 func (g *gcsStorage) ReadFileAt(
 	ctx context.Context, basename string, offset int64,
-) (io.ReadCloser, int64, error) {
+) (ioctx.ReadCloserCtx, int64, error) {
 	object := path.Join(g.prefix, basename)
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
@@ -182,16 +184,17 @@ func (g *gcsStorage) ReadFileAt(
 	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
 		path.Join(g.prefix, basename))})
 
-	r := &cloud.ResumingReader{
-		Ctx: ctx,
-		Opener: func(ctx context.Context, pos int64) (io.ReadCloser, error) {
+	r := cloud.NewResumingReader(ctx,
+		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
 			return g.bucket.Object(object).NewRangeReader(ctx, pos, -1)
-		},
-		RetryOnErrFn: cloud.IsResumableHTTPError,
-		Pos:          offset,
-	}
+		}, // opener
+		nil, //  reader
+		offset,
+		cloud.IsResumableHTTPError,
+		nil, // errFn
+	)
 
-	if err := r.Open(); err != nil {
+	if err := r.Open(ctx); err != nil {
 		if errors.Is(err, gcs.ErrObjectNotExist) {
 			// Callers of this method sometimes look at the returned error to determine
 			// if file does not exist.  Regardless why we couldn't open the stream

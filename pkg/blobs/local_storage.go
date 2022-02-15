@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/blobs/blobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,7 +134,7 @@ func (l *LocalStorage) Writer(ctx context.Context, filename string) (io.WriteClo
 // ReadFile prepends IO dir to filename and reads the content of that local file.
 func (l *LocalStorage) ReadFile(
 	filename string, offset int64,
-) (res io.ReadCloser, size int64, err error) {
+) (res ioctx.ReadCloserCtx, size int64, err error) {
 	fullPath, err := l.prependExternalIODir(filename)
 	if err != nil {
 		return nil, 0, err
@@ -161,7 +162,7 @@ func (l *LocalStorage) ReadFile(
 			return nil, 0, errors.Errorf("seek to offset %d returned %d", offset, ret)
 		}
 	}
-	return f, fi.Size(), nil
+	return ioctx.ReadCloserAdapter(f), fi.Size(), nil
 }
 
 // List prepends IO dir to pattern and glob matches all local files against that pattern.
