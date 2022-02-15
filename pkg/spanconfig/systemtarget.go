@@ -90,11 +90,11 @@ func (st SystemTarget) encode() roachpb.Span {
 		k = keys.SystemSpanConfigEntireKeyspace
 	} else if st.SourceTenantID == roachpb.SystemTenantID {
 		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigHostOnTenantKeyspace, st.TargetTenantID.InternalValue,
+			keys.SystemSpanConfigHostOnTenantKeyspace, st.TargetTenantID.ToUint64(),
 		)
 	} else {
 		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.SourceTenantID.InternalValue,
+			keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.SourceTenantID.ToUint64(),
 		)
 	}
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
@@ -143,7 +143,7 @@ func (st SystemTarget) less(ot SystemTarget) bool {
 			return false
 		}
 
-		return st.TargetTenantID.InternalValue < ot.TargetTenantID.InternalValue
+		return st.TargetTenantID.ToUint64() < ot.TargetTenantID.ToUint64()
 	}
 
 	if st.SourceTenantID == roachpb.SystemTenantID {
@@ -152,7 +152,7 @@ func (st SystemTarget) less(ot SystemTarget) bool {
 		return false
 	}
 
-	return st.SourceTenantID.InternalValue < ot.SourceTenantID.InternalValue
+	return st.SourceTenantID.ToUint64() < ot.SourceTenantID.ToUint64()
 }
 
 // equal returns true iff the receiver is equal to the supplied system target.
