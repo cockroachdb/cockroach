@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-// reduce reduces SQL passed over stdin using cockroach demo. The input is
-// simplified such that the contains argument is present as an error during SQL
-// execution. Run `make bin/reduce` to compile the reduce program.
+// reduce reduces SQL passed from the input file using cockroach demo. The input
+// file is simplified such that -contains argument is present as an error during
+// SQL execution. Run `make bin/reduce` to compile the reduce program.
 package main
 
 import (
@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/reduce/reduce/reducesql"
@@ -50,7 +49,7 @@ var (
 	}()
 	flags           = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	binary          = flags.String("binary", "./cockroach", "path to cockroach binary")
-	file            = flags.String("file", "", "the path to a file containing a SQL query to reduce")
+	file            = flags.String("file", "", "the path to a file containing SQL queries to reduce; required")
 	verbose         = flags.Bool("v", false, "print progress to standard output and the original test case output if it is not interesting")
 	contains        = flags.String("contains", "", "error regex to search for")
 	unknown         = flags.Bool("unknown", false, "print unknown types during walk")
@@ -60,7 +59,7 @@ var (
 
 const description = `
 The reduce utility attempts to simplify SQL that produces an error in
-CockroachDB. The problematic SQL, passed via standard input, is
+CockroachDB. The problematic SQL, specified via -file flag, is
 repeatedly reduced as long as it produces an error in the CockroachDB
 demo that matches the provided -contains regex.
 
@@ -78,6 +77,10 @@ func usage() {
 func main() {
 	flags.Usage = usage
 	if err := flags.Parse(os.Args[1:]); err != nil {
+		usage()
+	}
+	if *file == "" {
+		fmt.Printf("%s: -file must be provided\n\n", os.Args[0])
 		usage()
 	}
 	if *contains == "" {
@@ -99,28 +102,9 @@ func reduceSQL(
 	if err != nil {
 		return "", err
 	}
-	var input []byte
-	{
-		if file == nil {
-			done := make(chan struct{}, 1)
-			go func() {
-				select {
-				case <-done:
-				case <-time.After(5 * time.Second):
-					log.Fatal("timeout waiting for input on stdin")
-				}
-			}()
-			input, err = ioutil.ReadAll(os.Stdin)
-			done <- struct{}{}
-			if err != nil {
-				return "", err
-			}
-		} else {
-			input, err = ioutil.ReadFile(*file)
-			if err != nil {
-				return "", err
-			}
-		}
+	input, err := ioutil.ReadFile(*file)
+	if err != nil {
+		return "", err
 	}
 
 	// Pretty print the input so the file size comparison is useful.
