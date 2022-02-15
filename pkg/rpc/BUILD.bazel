@@ -18,6 +18,7 @@ go_library(
         "keepalive.go",
         "metrics.go",
         "pg.go",
+        "restricted_internal_client.go",
         "snappy.go",
         "tls.go",
     ],
