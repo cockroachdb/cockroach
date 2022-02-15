@@ -77,6 +77,11 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 	}
 
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
+	_, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
+`)
+	require.NoError(t, err)
 	defer server.Stopper().Stop(context.Background())
 
 	getRevisionsForTest := func(setupSQL, schemaChangeSQL, dataSQL string, deletePreservingEncoding bool) ([]kvclient.VersionedValues, []byte, error) {
