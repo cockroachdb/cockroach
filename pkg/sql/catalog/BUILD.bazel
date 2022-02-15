@@ -9,6 +9,7 @@ go_library(
         "descriptor_id_set.go",
         "errors.go",
         "schema.go",
+        "system_table.go",
         "table_col_map.go",
         "table_col_set.go",
         "table_elements.go",
