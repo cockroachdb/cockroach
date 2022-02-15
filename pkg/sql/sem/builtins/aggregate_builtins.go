@@ -239,6 +239,38 @@ var aggregates = map[string]builtinDefinition{
 		)),
 	),
 
+	"final_corr": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCorrAggregate,
+			"Calculates the correlation coefficient of the selected values in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	"final_covar_samp": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload([]*types.T{types.DecimalArray}, types.Float, newFinalCovarSampAggregate,
+			"Calculates the sample covariance of the selected values in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
+	// The input signature is: SQRDIFF, SUM, COUNT
+	"final_sqrdiff": makePrivate(makeBuiltin(aggProps(),
+		makeAggOverload(
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
+			types.Decimal,
+			newDecimalFinalSqrdiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
+			tree.VolatilityImmutable,
+		),
+		makeAggOverload(
+			[]*types.T{types.Float, types.Float, types.Int},
+			types.Float,
+			newFloatFinalSqrdiffAggregate,
+			"Calculates the sum of squared differences from the mean of the selected values in final stage.",
+			tree.VolatilityImmutable,
+		),
+	)),
+
 	"transition_regression_aggregate": makePrivate(makeTransitionRegressionAggregateBuiltin()),
 
 	"covar_samp": makeRegressionAggregateBuiltin(
@@ -1202,6 +1234,8 @@ var _ tree.AggregateFunc = &stExtentAgg{}
 var _ tree.AggregateFunc = &regressionAccumulatorDecimalBase{}
 var _ tree.AggregateFunc = &finalRegressionAccumulatorDecimalBase{}
 var _ tree.AggregateFunc = &covarPopAggregate{}
+var _ tree.AggregateFunc = &finalCorrAggregate{}
+var _ tree.AggregateFunc = &finalCovarSampAggregate{}
 var _ tree.AggregateFunc = &finalCovarPopAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXXAggregate{}
 var _ tree.AggregateFunc = &finalRegrSXYAggregate{}
@@ -2166,6 +2200,33 @@ func (a *regressionAccumulatorDecimalBase) covarPopLastStage() (tree.Datum, erro
 	return mapToDFloat(&a.tmp, a.ed.Err())
 }
 
+// corrLastStage represents SQL:2003 correlation coefficient.
+func (a *regressionAccumulatorDecimalBase) corrLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalOne) < 0 {
+		return tree.DNull, nil
+	}
+
+	if a.sxx.Cmp(decimalZero) == 0 || a.syy.Cmp(decimalZero) == 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sxy / math.Sqrt(a.sxx*a.syy)
+	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sqrt(&a.tmp, a.ed.Mul(&a.tmp, &a.sxx, &a.syy)))
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
+// covarSampLastStage computes sample covariance from the precalculated
+// transition values.
+func (a *regressionAccumulatorDecimalBase) covarSampLastStage() (tree.Datum, error) {
+	if a.n.Cmp(decimalTwo) < 0 {
+		return tree.DNull, nil
+	}
+
+	// a.sxy / (a.n - 1)
+	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sub(&a.tmp, &a.n, decimalOne))
+	return mapToDFloat(&a.tmp, a.ed.Err())
+}
+
 // regrSXXLastStage computes sum of squares of the independent variable from the
 // precalculated transition values.
 func (a *regressionAccumulatorDecimalBase) regrSXXLastStage() (tree.Datum, error) {
@@ -2276,7 +2337,7 @@ func (a *regressionAccumulatorDecimalBase) regressionSlopeLastStage() (tree.Datu
 
 type finalRegressionAccumulatorDecimalBase struct {
 	regressionAccumulatorDecimalBase
-	otherTransitionValues [regrFieldsTotal]*apd.Decimal
+	otherTransitionValues [regrFieldsTotal]apd.Decimal
 }
 
 // Add combines two regression aggregate base values. It should only be used
@@ -2301,7 +2362,7 @@ func (a *finalRegressionAccumulatorDecimalBase) Add(
 			return nil
 		}
 		v := tree.MustBeDDecimal(d)
-		a.otherTransitionValues[i] = &v.Decimal
+		a.otherTransitionValues[i].Set(&v.Decimal)
 	}
 
 	return a.combine(ctx)
@@ -2312,23 +2373,23 @@ func (a *finalRegressionAccumulatorDecimalBase) Add(
 // See https://github.com/postgres/postgres/blob/49407dc32a2931550e4ff1dea314b6a25afdfc35/src/backend/utils/adt/float.c#L3401.
 func (a *finalRegressionAccumulatorDecimalBase) combine(ctx context.Context) error {
 	if a.n.Cmp(decimalZero) == 0 {
-		a.n = *a.otherTransitionValues[0]
-		a.sx = *a.otherTransitionValues[1]
-		a.sxx = *a.otherTransitionValues[2]
-		a.sy = *a.otherTransitionValues[3]
-		a.syy = *a.otherTransitionValues[4]
-		a.sxy = *a.otherTransitionValues[5]
+		a.n.Set(&a.otherTransitionValues[0])
+		a.sx.Set(&a.otherTransitionValues[1])
+		a.sxx.Set(&a.otherTransitionValues[2])
+		a.sy.Set(&a.otherTransitionValues[3])
+		a.syy.Set(&a.otherTransitionValues[4])
+		a.sxy.Set(&a.otherTransitionValues[5])
 		return nil
 	} else if a.otherTransitionValues[0].Cmp(decimalZero) == 0 {
 		return nil
 	}
 
-	n2 := a.otherTransitionValues[0]
-	sx2 := a.otherTransitionValues[1]
-	sxx2 := a.otherTransitionValues[2]
-	sy2 := a.otherTransitionValues[3]
-	syy2 := a.otherTransitionValues[4]
-	sxy2 := a.otherTransitionValues[5]
+	n2 := &a.otherTransitionValues[0]
+	sx2 := &a.otherTransitionValues[1]
+	sxx2 := &a.otherTransitionValues[2]
+	sy2 := &a.otherTransitionValues[3]
+	syy2 := &a.otherTransitionValues[4]
+	sxy2 := &a.otherTransitionValues[5]
 
 	/*
 	 * The transition values combine using a generalization of the
@@ -2460,17 +2521,25 @@ func newCorrAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tree.A
 
 // Result implements tree.AggregateFunc interface.
 func (a *corrAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalOne) < 0 {
-		return tree.DNull, nil
-	}
+	return a.corrLastStage()
+}
 
-	if a.sxx.Cmp(decimalZero) == 0 || a.syy.Cmp(decimalZero) == 0 {
-		return tree.DNull, nil
-	}
+// finalCorrAggregate represents SQL:2003 correlation coefficient.
+type finalCorrAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
 
-	// a.sxy / math.Sqrt(a.sxx*a.syy)
-	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sqrt(&a.tmp, a.ed.Mul(&a.tmp, &a.sxx, &a.syy)))
-	return mapToDFloat(&a.tmp, a.ed.Err())
+func newFinalCorrAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+	return &finalCorrAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalCorrAggregate) Result() (tree.Datum, error) {
+	return a.corrLastStage()
 }
 
 // covarPopAggregate represents population covariance.
@@ -2510,8 +2579,6 @@ func (a *finalRegressionAccumulatorDecimalBase) Reset(ctx context.Context) {
 		singleDatumAggregateBase: a.singleDatumAggregateBase,
 		ed:                       a.ed,
 	}
-	a.otherTransitionValues = [regrFieldsTotal]*apd.Decimal{}
-
 	a.reset(ctx)
 }
 
@@ -2599,13 +2666,27 @@ func newCovarSampAggregate(_ []*types.T, ctx *tree.EvalContext, _ tree.Datums) t
 
 // Result implements tree.AggregateFunc interface.
 func (a *covarSampAggregate) Result() (tree.Datum, error) {
-	if a.n.Cmp(decimalTwo) < 0 {
-		return tree.DNull, nil
-	}
+	return a.covarSampLastStage()
+}
 
-	// a.sxy / (a.n - 1)
-	a.ed.Quo(&a.tmp, &a.sxy, a.ed.Sub(&a.tmp, &a.n, decimalOne))
-	return mapToDFloat(&a.tmp, a.ed.Err())
+// finalCovarSampAggregate represents sample covariance.
+type finalCovarSampAggregate struct {
+	finalRegressionAccumulatorDecimalBase
+}
+
+func newFinalCovarSampAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &finalCovarSampAggregate{
+		finalRegressionAccumulatorDecimalBase{
+			regressionAccumulatorDecimalBase: makeRegressionAccumulatorDecimalBase(ctx),
+		},
+	}
+}
+
+// Result implements tree.AggregateFunc interface.
+func (a *finalCovarSampAggregate) Result() (tree.Datum, error) {
+	return a.covarSampLastStage()
 }
 
 // regressionAvgXAggregate represents SQL:2003 average of the independent
@@ -3434,6 +3515,10 @@ func (a *intSqrDiffAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 	return a.agg.Add(ctx, &a.tmpDec)
 }
 
+func (a *intSqrDiffAggregate) intermediateResult() (tree.Datum, error) {
+	return a.agg.intermediateResult()
+}
+
 func (a *intSqrDiffAggregate) Result() (tree.Datum, error) {
 	return a.agg.Result()
 }
@@ -3586,12 +3671,36 @@ func (a *decimalSqrDiffAggregate) Add(
 	return a.ed.Err()
 }
 
-func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
+func (a *decimalSqrDiffAggregate) intermediateResult() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 	dd := &tree.DDecimal{}
 	dd.Set(&a.sqrDiff)
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Decimal.Reduce(&dd.Decimal)
+	return dd, nil
+}
+
+func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
+	res, err := a.intermediateResult()
+	if err != nil || res == tree.DNull {
+		return res, err
+	}
+
+	dd := res.(*tree.DDecimal)
+	// Sqrdiff calculation is used in variance and var_pop as one of intermediate
+	// results. We want the intermediate results to be as precise as possible.
+	// That's why sqrdiff uses IntermediateCtx, but due to operations reordering
+	// in distributed mode the result might be different (see issue #13689,
+	// PR #18701). By rounding the end result to the DecimalCtx precision we avoid
+	// such inconsistencies.
+	_, err = tree.DecimalCtx.Round(&dd.Decimal, &a.sqrDiff)
+	if err != nil {
+		return nil, err
+	}
 	// Remove trailing zeros. Depending on the order in which the input
 	// is processed, some number of trailing zeros could be added to the
 	// output. Remove them so that the results are the same regardless of order.
@@ -3615,6 +3724,18 @@ func (a *decimalSqrDiffAggregate) Close(ctx context.Context) {
 // Size is part of the tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Size() int64 {
 	return sizeOfDecimalSqrDiffAggregate
+}
+
+func newFloatFinalSqrdiffAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newFloatSumSqrDiffs()
+}
+
+func newDecimalFinalSqrdiffAggregate(
+	_ []*types.T, ctx *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return newDecimalSumSqrDiffs(ctx)
 }
 
 type floatSumSqrDiffsAggregate struct {
@@ -3787,11 +3908,29 @@ func (a *decimalSumSqrDiffsAggregate) Add(
 	return a.ed.Err()
 }
 
-func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
+func (a *decimalSumSqrDiffsAggregate) intermediateResult() (tree.Datum, error) {
 	if a.count.Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
 	dd := &tree.DDecimal{Decimal: a.sqrDiff}
+	return dd, nil
+}
+
+func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
+	res, err := a.intermediateResult()
+	if err != nil || res == tree.DNull {
+		return res, err
+	}
+
+	dd := res.(*tree.DDecimal)
+	_, err = tree.DecimalCtx.Round(&dd.Decimal, &dd.Decimal)
+	if err != nil {
+		return nil, err
+	}
+	// Remove trailing zeros. Depending on the order in which the input
+	// is processed, some number of trailing zeros could be added to the
+	// output. Remove them so that the results are the same regardless of order.
+	dd.Reduce(&dd.Decimal)
 	return dd, nil
 }
 
@@ -3822,6 +3961,9 @@ type decimalSqrDiff interface {
 	tree.AggregateFunc
 	Count() *apd.Decimal
 	Tmp() *apd.Decimal
+	// intermediateResult returns the current value of the accumulation without
+	// rounding.
+	intermediateResult() (tree.Datum, error)
 }
 
 type floatVarianceAggregate struct {
@@ -3903,7 +4045,7 @@ func (a *decimalVarianceAggregate) Result() (tree.Datum, error) {
 	if a.agg.Count().Cmp(decimalTwo) < 0 {
 		return tree.DNull, nil
 	}
-	sqrDiff, err := a.agg.Result()
+	sqrDiff, err := a.agg.intermediateResult()
 	if err != nil {
 		return nil, err
 	}
@@ -4021,7 +4163,7 @@ func (a *decimalVarPopAggregate) Result() (tree.Datum, error) {
 	if a.agg.Count().Cmp(decimalOne) < 0 {
 		return tree.DNull, nil
 	}
-	sqrDiff, err := a.agg.Result()
+	sqrDiff, err := a.agg.intermediateResult()
 	if err != nil {
 		return nil, err
 	}
