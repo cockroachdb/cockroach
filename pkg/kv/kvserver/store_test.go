@@ -2091,6 +2091,7 @@ func TestStoreScanInconsistentResolvesIntents(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var intercept atomic.Value
+	intercept.Store(uuid.Nil)
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
