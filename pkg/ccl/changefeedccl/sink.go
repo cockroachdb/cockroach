@@ -109,7 +109,7 @@ func getSink(
 			return makeNullSink(sinkURL{URL: u}, m)
 		case u.Scheme == changefeedbase.SinkSchemeKafka:
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
-				return makeKafkaSink(ctx, sinkURL{URL: u}, feedCfg.Targets, feedCfg.Opts, m)
+				return makeKafkaSink(ctx, sinkURL{URL: u}, AllTargets(feedCfg), feedCfg.Opts, m)
 			})
 		case isWebhookSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.WebhookValidOptions, func() (Sink, error) {
@@ -119,7 +119,7 @@ func getSink(
 		case isPubsubSink(u):
 			// TODO: add metrics to pubsubsink
 			return validateOptionsAndMakeSink(changefeedbase.PubsubValidOptions, func() (Sink, error) {
-				return MakePubsubSink(ctx, u, feedCfg.Opts, feedCfg.Targets)
+				return MakePubsubSink(ctx, u, feedCfg.Opts, AllTargets(feedCfg))
 			})
 		case isCloudStorageSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.CloudStorageValidOptions, func() (Sink, error) {
@@ -130,7 +130,7 @@ func getSink(
 			})
 		case u.Scheme == changefeedbase.SinkSchemeExperimentalSQL:
 			return validateOptionsAndMakeSink(changefeedbase.SQLValidOptions, func() (Sink, error) {
-				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, feedCfg.Targets, m)
+				return makeSQLSink(sinkURL{URL: u}, sqlSinkTableName, AllTargets(feedCfg), m)
 			})
 		case u.Scheme == "":
 			return nil, errors.Errorf(`no scheme found for sink URL %q`, feedCfg.SinkURI)
