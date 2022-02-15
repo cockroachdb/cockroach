@@ -20,10 +20,12 @@ go_library(
     deps = [
         "//pkg/ccl/sqlproxyccl/denylist",
         "//pkg/ccl/sqlproxyccl/idle",
+        "//pkg/ccl/sqlproxyccl/interceptor",
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb",
         "//pkg/security/certmgr",
+        "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/util/contextutil",
         "//pkg/util/grpcutil",

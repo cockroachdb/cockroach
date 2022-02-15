@@ -9,7 +9,6 @@
 package sqlproxyccl
 
 import (
-	"io"
 	"net"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -79,46 +78,4 @@ var SendErrToClient = func(conn net.Conn, err error) {
 		return
 	}
 	_, _ = conn.Write(toPgError(err).Encode(nil))
-}
-
-// ConnectionCopy does a bi-directional copy between the backend and frontend
-// connections. It terminates when one of connections terminate.
-func ConnectionCopy(crdbConn, conn net.Conn) error {
-	errOutgoing := make(chan error, 1)
-	errIncoming := make(chan error, 1)
-
-	go func() {
-		_, err := io.Copy(crdbConn, conn)
-		errOutgoing <- err
-	}()
-	go func() {
-		_, err := io.Copy(conn, crdbConn)
-		errIncoming <- err
-	}()
-
-	select {
-	// NB: when using pgx, we see a nil errIncoming first on clean connection
-	// termination. Using psql I see a nil errOutgoing first. I think the PG
-	// protocol stipulates sending a message to the server at which point the
-	// server closes the connection (errIncoming), but presumably the client
-	// gets to close the connection once it's sent that message, meaning either
-	// case is possible.
-	case err := <-errIncoming:
-		if err == nil {
-			return nil
-		} else if codeErr := (*codeError)(nil); errors.As(err, &codeErr) &&
-			codeErr.code == codeExpiredClientConnection {
-			return codeErr
-		} else if ne := (net.Error)(nil); errors.As(err, &ne) && ne.Timeout() {
-			return newErrorf(codeIdleDisconnect, "terminating connection due to idle timeout: %v", err)
-		} else {
-			return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
-		}
-	case err := <-errOutgoing:
-		// The incoming connection got closed.
-		if err != nil {
-			return newErrorf(codeClientDisconnected, "copying from target server to client: %v", err)
-		}
-		return nil
-	}
 }
