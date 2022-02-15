@@ -1,0 +1,26 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tenantsettingswatcher",
+    srcs = [
+        "doc.go",
+        "overrides_store.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/util/syncutil",
+    ],
+)
+
+go_test(
+    name = "tenantsettingswatcher_test",
+    srcs = ["overrides_store_test.go"],
+    embed = [":tenantsettingswatcher"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/settings",
+    ],
+)
