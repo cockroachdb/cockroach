@@ -284,6 +284,31 @@ func PrintSpanConfigRecord(t *testing.T, record spanconfig.Record) string {
 	return fmt.Sprintf("%s:%s", PrintTarget(t, record.Target), PrintSpanConfig(record.Config))
 }
 
+// PrintSystemSpanConfigDiffedAgainstDefault is a helper function that diffs the
+// given config against the default system span config that applies to
+// spanconfig.SystemTargets, and returns a string for the mismatched fields.
+func PrintSystemSpanConfigDiffedAgainstDefault(conf roachpb.SpanConfig) string {
+	if conf.Equal(roachpb.TestingDefaultSystemSpanConfiguration()) {
+		return "default system span config"
+	}
+
+	var diffs []string
+	defaultSystemTargetConf := roachpb.TestingDefaultSystemSpanConfiguration()
+	if !reflect.DeepEqual(conf.GCPolicy.ProtectionPolicies, defaultSystemTargetConf.GCPolicy.ProtectionPolicies) {
+		sort.Slice(conf.GCPolicy.ProtectionPolicies, func(i, j int) bool {
+			lhs := conf.GCPolicy.ProtectionPolicies[i].ProtectedTimestamp
+			rhs := conf.GCPolicy.ProtectionPolicies[j].ProtectedTimestamp
+			return lhs.Less(rhs)
+		})
+		timestamps := make([]string, 0, len(conf.GCPolicy.ProtectionPolicies))
+		for _, pts := range conf.GCPolicy.ProtectionPolicies {
+			timestamps = append(timestamps, strconv.Itoa(int(pts.ProtectedTimestamp.WallTime)))
+		}
+		diffs = append(diffs, fmt.Sprintf("pts=[%s]", strings.Join(timestamps, " ")))
+	}
+	return strings.Join(diffs, " ")
+}
+
 // PrintSpanConfigDiffedAgainstDefaults is a helper function that diffs the given
 // config against RANGE {DEFAULT, SYSTEM} and the config for the system database
 // (as expected on both kinds of tenants), and returns a string for the
