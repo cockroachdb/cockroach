@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -158,6 +159,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderStressRace(t, "TODO(ssd) test times outs under race")
 
 	// protects mergeNotification, writesPopulated
 	var mu syncutil.Mutex

@@ -188,7 +188,7 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 
 // FlushFractionCompleted writes out the fraction completed.
 func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error {
-	// TODO(rui): The backfiller currently doesn't have a good way to report the
+	// TODO(#76365): The backfiller currently doesn't have a good way to report the
 	// total progress of mutations that occur in multiple stages that
 	// independently report progress. So fraction tracking of the merge will be
 	// unimplemented for now and the progress fraction will report only the
