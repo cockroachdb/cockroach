@@ -164,6 +164,7 @@ func (zc *debugZipContext) collectCPUProfiles(
 }
 
 // New comment commit_1_amended
+// New comment commit_2
 func (zc *debugZipContext) collectPerNodeData(
 	ctx context.Context, node serverpb.NodeDetails, livenessByNodeID nodeLivenesses,
 ) error {
