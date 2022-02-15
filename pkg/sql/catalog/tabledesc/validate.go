@@ -176,6 +176,13 @@ func (desc *wrapper) ValidateCrossReferences(
 	}
 
 	// Check foreign keys.
+	if desc.HasRowLevelTTL() && (len(desc.OutboundFKs) > 0 || len(desc.InboundFKs) > 0) {
+		vea.Report(unimplemented.NewWithIssuef(
+			76407,
+			`foreign keys to/from table with TTL "%s" are not permitted`,
+			desc.Name,
+		))
+	}
 	for i := range desc.OutboundFKs {
 		vea.Report(desc.validateOutboundFK(&desc.OutboundFKs[i], vdg))
 	}
