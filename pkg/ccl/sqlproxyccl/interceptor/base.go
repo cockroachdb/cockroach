@@ -22,6 +22,12 @@ import (
 // length itself).
 const pgHeaderSizeBytes = 5
 
+// defaultBufferSize is the default buffer size for the interceptor. 8K was
+// chosen to match Postgres' send and receive buffer sizes.
+//
+// See: https://github.com/postgres/postgres/blob/249d64999615802752940e017ee5166e726bc7cd/src/backend/libpq/pqcomm.c#L134-L135.
+const defaultBufferSize = 2 << 13 // 8K
+
 // ErrSmallBuffer indicates that the requested buffer for the interceptor is
 // too small.
 var ErrSmallBuffer = errors.New("buffer is too small")
@@ -58,17 +64,18 @@ type pgInterceptor struct {
 }
 
 // newPgInterceptor creates a new instance of the interceptor with an internal
-// buffer of bufSize bytes. bufSize must be at least the size of a pgwire
-// message header.
-func newPgInterceptor(src io.Reader, bufSize int) (*pgInterceptor, error) {
-	// The internal buffer must be able to fit the header.
+// buffer of bufSize bytes. If bufSize is smaller than 5 bytes, the interceptor
+// will default to an 8K buffer size.
+func newPgInterceptor(src io.Reader, bufSize int) *pgInterceptor {
+	// The internal buffer must be able to fit the header. If bufSize is smaller
+	// than 5 bytes, just default to 8K, or else the interceptor is unusable.
 	if bufSize < pgHeaderSizeBytes {
-		return nil, ErrSmallBuffer
+		bufSize = defaultBufferSize
 	}
 	return &pgInterceptor{
 		src: src,
 		buf: make([]byte, bufSize),
-	}, nil
+	}
 }
 
 // PeekMsg returns the header of the current pgwire message without advancing
