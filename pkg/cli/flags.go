@@ -526,6 +526,7 @@ func init() {
 		// Engine flags.
 		varFlag(f, cacheSizeValue, cliflags.Cache)
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		varFlag(f, tsdbSizeValue, cliflags.TSDBMem)
 		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
@@ -986,6 +987,7 @@ func init() {
 
 		// Engine flags.
 		varFlag(f, sqlSizeValue, cliflags.SQLMem)
+		varFlag(f, tsdbSizeValue, cliflags.TSDBMem)
 		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 		// the stores flag has been parsed and the storage device that a percentage
 		// refers to becomes known.
