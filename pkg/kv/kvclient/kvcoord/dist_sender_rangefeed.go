@@ -466,14 +466,14 @@ func (ds *DistSender) singleRangeFeed(
 		}
 
 		args.Replica = transport.NextReplica()
-		clientCtx, client, err := transport.NextInternalClient(ctx)
+		client, err := transport.NextInternalClient(ctx)
 		if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			continue
 		}
 
 		log.VEventf(ctx, 3, "attempting to create a RangeFeed over replica %s", args.Replica)
-		stream, err := client.RangeFeed(clientCtx, &args)
+		stream, err := client.RangeFeed(ctx, &args)
 		if err != nil {
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			if grpcutil.IsAuthError(err) {
