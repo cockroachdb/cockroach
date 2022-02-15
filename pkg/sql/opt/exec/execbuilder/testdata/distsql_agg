@@ -59,7 +59,11 @@ EXPLAIN (DISTSQL) SELECT
   regr_avgy(a, b),
   regr_intercept(a, b),
   regr_r2(a, b),
-  regr_slope(a, b)
+  regr_slope(a, b),
+  regr_count(a, b),
+  covar_samp(a, b),
+  corr(a, b),
+  sqrdiff(a)
 FROM data GROUP BY b
 ----
 distribution: full
@@ -73,7 +77,7 @@ vectorized: true
       table: data@data_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsmUFvskoXx_fvp5jMir4ZozOAbV3BY6khseADtLfNTUNQJtZcy3gBG5um3_1mUBGsD6PFRRcsKnMO8z9zev7Ob9F-wOTfOexB43E01E0LSDem67m_hxfANYZG3wNjBIK3qRRcIDBmbO4HUSj5fLVNsDiPJ2wZpdnW12C1fs6i7JmkYUjfCks_CV4XxXjBNuHydfv0Z5tqb0E8C6IJ3QY7MQ-2yhWL_WA6lfzxe0qTvJ3_80Zn6abxWboJs7azaMLyKgiMLxCI6TT2k9VqL34vx-_lOHibrvYT5R2zKKXxhC7SUjYm5bJztqDrDLh17DsQBmkABo59PwK_nsAYIhixkFrBK01g72-IIYIEIihDBBWIoAqfEVzEbEKThMV8y0cmMMMV7HUQnEWLZcrTzwhOWExh7wOms3ROYQ96wXhOHRqENG53IIIhTYPZPDuGd6HxD3_xD32HCPbZfPkaJT3AW0Ug-wbwBx89f85SiKC7CPiWVhuDIAoBBix9oTF8_kSQLdNdI0kaTCns4U90fLP6dBrTaZCyuK2We9X4PHTrybdsz7fuh0NJIxe8m_s7ScN81bfvLW-z_mXbQ1-3biRNzkPb2UTZRt-x_3IlHt7pjxvVnWltVu5v58a8vd1G93e-mdd-tB1fHwwkTclKm976IHUb8XOywHN0yzU907Z8xxg4huvypT4YOMZA9wxJw4j_DuXB7WYxfgcvQfKyNwYMnz93wyV_HO6uzjJicUhjGpYqZVUqxo87Xw7enz_O509KU5LLDiglB9TS1m5uwGVuwBVf3ZqWPvRd7-bGeJC0a6QRtK5bfOGP7FHp5c6ozm7vg-6YutU3DpR50J0vNXJ7MS75i0nRYFyo0rfzOljZpbnnvvv4eDD7dCj7dCirPwwOldAfBod2m5ZnOH1j5B1455BDhw7tkbHNOzQKadwDGkZAI21NRkBTENBUBLQuAtolAtoVAtr15gd3-D6-4AJM8g8uxMpGhbkcZyteAPMKmMtJJs_O4irCVYSriPpHnMjn_cZbrMUWbazu7Tx8tlI6Gx_PXXxG7rZxq02-QV5Bu4Wr323Ieyp58TnJixvyNuT96eQlx9OPnJN-pNWWv0E_QbuF63fZ0O9U-pFz0o809Gvo99PpJx9PP_mc9JNbbeUb9BO0W7h-Vw39TqWffE76yQ39Gvr9dPopx9NPOSf9lFZb_Qb9BO0Wrt91Q79T6aeck35KQ7-Gfj-dfoJ_YTg0WbAooUf9RbHDbwQNp3R9fRK2jCd0FLNJdsw6tDNdlghpkq7f4nVgRutXvMGiGO-LcVFMSmJ8mrhbR3xdR4xr9Y3VajWpnLdcLZarzepWu6VUqtVqsVrH6mqxwOpqscDqarHIaoFaYHW3jtWXleKrarOu6phVLRaYVS0WmFUtFpklUAvMuq5jFhZQVITRehytB9J6JK2J0nosxbVgigU0VQSmfcHpSaZVq0WmVatFplWrhaYJ5CLTvkC10rTnz__9FwAA__8pRYXf
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsmVFvokoUx9_vp5jME70ZozOgtT7BWmpIFFygvW1uGoIy65prwQVsbDb97jcDiGBdRotv5aEy5zD_M8fz7_we2t8w-rWCA6g-TseKpgPhVrNs6_v4CljqWB3aYIaA-7oQ3CsEZkGwclzfExy22iWCMI_nwcaPk60v7jZ9Lv3kGcWeR18LSydyX9bFeB1k4eZl93SWWbVXN1y6_pzugr2YBTvlNggdd7EQnNlbTKO8nb9Zo8s4a3wZZ2HSdhLNg7wKArMrBEK6CJ1ouz2I38rxWzl2Xxfbw0R5x9KPaTin67iUDUm57CpY01ImG2qaSXtNv_4uE4a7dfQr9JY_fgjuFbgzjQnw3NgFI9O4n4JvT2AGEfQDj-ruC43g4F-IIYIEIihCBCWIYBc-I7gOgzmNoiBkW34nAs3bwkEHwaW_3sQs_YzgPAgpHPyG8TJeUTiAtjtbUZO6Hg3bHYigR2N3uUqOYV3I7MNZ_0ffIILDYLV58aMBYG0jkPz2sAezjT2XMUTQWrtsS6uNget7AIMg_klD-PyOYLCJ941EsbugcIDf0enNKotFSBduHITtbrlXmc1D0Z8c3bAd_X48FmRyxbq5nwgyZquhca_b2fqbYYwdRb8VZDEPDTOLko2OafxjCSycKI-ZaqLp2cr6bt5qd3e76H7iaHntR8N0lNFIkKWktGanB3V3ETsnCWxT0S3N1gzdMdWRqVoWWyqjkamOFFsVZIzYdygPbj-L2Rv46UY_D8aA4fP7frjkj8Pd19n4QejRkHqlSkmVivHjzoeDD-eP8_mT0pTEsgNSyYFuaWsvN-A6N6DPVnearowdy769VR8E-QbJBKV1iy-cqTEtvdwb1dnvfVBMTdGH6pEyD4r5oUZuL8YlfzEpGowLVYZGXgdL-zTz3LEeH49mn45ln45llYfRsRLKw-jYbk23VXOoTu0j70xy7NCxMVXL-fT7WMpkepg3zXImvyaF-ZnU92g4ADJGQCZtWURAlhCQuwjIPQTkawTkPgLyTfaDO2wfWzABJvkHE2IpU2Emx8mKFcCsAmZyksiTs5iKMBVhKrI7kCQfTEX6f6SUeNmLpAetYN3G3YOdx8-WSmfj03GOL4jzNm61ySeAzmm3QJReA_RzgY4vCXTcAL0B-hcFOjkdquSSUCWttvgJqHLaLdzq6waq50KVXBKqpIFqA9UvClXxdKiKl4Sq2GpLn4Aqp93Cre43UD0XquIloSo2UG2g-kWhKp0OVemSUJVa7e4noMppt3CrbxqongtV6ZJQlRqoNlD9olDl_NfJpNE68CN60l9rO-yiUW9B01sZBZtwTqdhME-OSUMj0SUJj0Zx-hangeanr1iDRTE-FOOimJTE-Dxxr474po4Y1-obd6vVpHLeYrVYrDarV-2WVKnuVou7dayuFnOsrhZzrK4W86zmqDlW9-pYfV0p7leb1a9jVrWYY1a1mGNWtZhnFkfNMeumjlmYQ1EeRutxtB5I65G0JkrrsRTXginm0FTimPYBp2eZVq3mmVat5plWreaaxpHzTPsA1UrTnt__-j8AAP__B0P_tA==
 
 
 statement ok
@@ -271,7 +275,7 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy0lGFr4jAYx9_fp
 # Regression aggregate functions have two local, and one final stage aggregations.
 # Calculation and rendering are happening at the end.
 query T
-EXPLAIN (DISTSQL) SELECT covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c) FROM data
+EXPLAIN (DISTSQL) SELECT covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a) FROM data
 ----
 distribution: full
 vectorized: true
@@ -283,13 +287,13 @@ vectorized: true
       table: data@data_pkey
       spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJy8ld9ro04Uxd-_f4XcpwQmmFHTHz5F8rVByCZZldKyBJnVixvWOu44KSkl__uiLjS6VoOl-1J6j3M8h4-XySvkvxIwwX7YrixnrYz-dzzf-7oaK569she-EvJnJoKMZyNGlHBMFIGxCPLjsTG_1OeX-sye42NTqJ_YpxJFiJmsqUKrvzbhGVaKcuduvigRkwwIpDzCNXvCHMxvQIGABgR0IGAAgRnsCGSCh5jnXBRHXkuDEx3BnBLYp9lBFvKOQMgFgvkKci8TBBN89j1BF1mEQp0CgQgl2ydlTBE9L_4E2U98AQILnhye0txUin5AwMtYMU1UqrA0UqjC5Q8UsDsR4Af5lplLFiOY9EQu72XFscCYSS7UWb2W71prz_GdzTpw7aVre17xr7VcuvbS8u3RnJK5Nn63hfZui7fwQ8pFhAKjWvLu1N2TNvjdOWtrFSw295YbbDfb0ZyOgfxRi-aB9_DQJj62iI8tonW_bPFb98uWs87at92FvfX_fuRqLXmrzdYu5fcw6jWM9PIlo8OWTKUTVRuwZj3Nzj7f1SeumXY5H20gH22i6gP49DQ743P9iXz0y_noA_noE9UYwKen2Rmfm0_kY1zOxxjIx5ioswF8epqd8bn9R9d4SwsX84ynOTau8_Y3T4trHqMYq9-EnB9EiFvBwzKmGjelrxQizGX1lFaDk1aPioLnZtpp1mpm2jRr3ck90Xqn2-g2Gx_pPes0X3UnX30k-brTfNOdfPOR5NvubzXtWZPuJWtm707__Q4AAP__FG54SQ==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVV9vok4Uff99CnKfMBmD_LF_eJJYNCQW7ED7a7MxZBamrFnL0AEbm8bvvgG6VVwKBl98IXPPzOGcOfcm8wHp6wp0MB_nM8OyBfHGcj33btYTXHNmjj0hYG-E-wlLRIKEoIcETiPup5vNQf1erd-rNXmLNodA9cQyzigPaJJVUK5Uf7tiCa0gAVvHX5TSa0pekh3C-d91-srD5fOzSHrCBDu3QkgyAghiFlKbvNAU9B8gAwIFEKiAQAMEQ1ggSDgLaJoynh_5KAhWuAF9gGAZJ-sshxcIAsYp6B-QLbMVBR088nNFMSUh5dIAEIQ0I8tVIZNLj_KPn_ym74BgzFbrlzjVhdwrIHATkld9SRZIHAqywLJflMNii4Cts51mmpGIgi5v0fG-jCjiNCIZ49KwasvDhu1anuXYPjan2HTdfGlMp9icGp4pjmQ0Unq5Xefe9nzs_O-Keene4RtrMhFHclHd336uimPF-jvjyrfGd37XMeMh5TSsmF1sm68mH0Q-sWxj5o-dBwP7c2f-6bBE88v67uNjHfhUAz7VgMbDtIZvPExrzlq2Z-KxOff-3cJKjd7MmZu7cHO6WPZh_1KucVu91djBuAJ8tUlFIw2Nht-3Ra20RT5-zuVucy7JfUnpMOktzvbG4eK8Jl05PlKlY6RKX1I7RNribC_Sy_OKVD0-UrVjpGpf0jpE2uJsL9Kr84pUOz5SrWOkWl8adoi0xdlepNfnFWnL24xpmrA4pQdPXf2fB_kTSMOIlu9lytY8oHPOgkKmLJ2CVwAhTbNyVy4LKy63coP7ZLmRrFTI8iFZaVZukVYb2VozWTvF97CRfNGsfHGK8mUj-apZ-eoU5evmXg1axqR5yA61F9v__gQAAP__Qgnbvw==
 
 
 # Test various combinations of aggregation functions and verify that the
 # aggregation processors are set up correctly.
 query T
-EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(c), avg(d), stddev(a), stddev_samp(a), stddev_pop(a), variance(b), var_samp(b), var_pop(b), sum(a+b+c::INT+d), covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c) FROM data
+EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(c), avg(d), stddev(a), stddev_samp(a), stddev_pop(a), variance(b), var_samp(b), var_pop(b), sum(a+b+c::INT+d), covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a)  FROM data
 ----
 distribution: full
 vectorized: true
@@ -303,11 +307,11 @@ vectorized: true
           table: data@data_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVt1vsjoYvz9_RfNcYazBAjrHVYljhsQXfYF32XJiTAeNxxwHnIJmy7L__aTgF4ahickuvIA8X78-H7-26Sdk_63ABPt5OrYcFykPjh_4v8ct5NtjexigbP2msBZGbLNQXlu40MOtHkk9jyK-KUJKcZ6xt_RYT5NS3TCxZHHIi2U2TJSBO0VG7dZXFIba6LWF2ig0TccNBlKU2cJkF8swkmUIvhDz7P39RP-o6h9VnW0W76eGasQyzrkIeZpXrEKrLrtKUl5a0KM3-YUiljPAECcRd9kbz8D8Gwhg0ACDDhgMwNCDGYZUJCHPskTIkM8C4ETvYHYxLON0nUvzDEOYCA7mJ-TLfMXBhIC9rrjHWcSF2gUMEc_ZclWkkamp_M3Tf_kHYBgmq_VbnJmIYfSKUYhRBBj8lElbRyWIxREiKMn_4QIweDyOuDARNdqKQkmbaq021bfDx4gSjKiGEdUxogbMvjAk6_xQaZazBQeTfOHLu7EWC8EXLE-E2qs24__5pVCtJeuVki6l4eSPG2zlwmrspd6Rv5D9396D8_i4XWPr0SqewzpESoFnub4TOBN37tkjz_Z9KVqjkWePrMBWqIZlwu_61r7t-9DuOk5ExAWPKr3OvponQ7o1oyH74ndDmjuNw9lH9KX26LjWeO4HDw_2k0LvMCWYDk4d8-lkWuN8sjzHcoe2Qu-xHIpecZWgI09ZbvcQNJzswwg5mOXQ5_7zc631pc76Ume1nkZ1S1hPo7poxw1sb2hPgxqfp9UlHU-m9s6-PzHF0VDLk4ER7am0jxG9234DjOj99iNd-ZPxRJ4lIiFEYkhP_iSMSAyRICIRWvfbPadX9hy5_OYg19wcKumo2g_cHWf6OToh_Zu6O7TLedSu4lHrqPoP8HimnyMe726KR_1yHvWreNQ7qvEDPJ7p54jHwU3xaFzOo3EVj0ZH7f0Aj2f6OeLx_qZ4PPMW9XiWJnHGT95m9St35ZuNRwtePvCyZC1CPhVJWKQp1UmBKwwRz_LSS0rFiUuXLPAYTBrBWgVMTsFac-YzqfVGtNEMNq6pu9cI7jdn7l-T-a4RPGjOPLgm830zV90z26R5k53mnn399X8AAAD__7oiopI=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzcVs1uqzgU3s9TWF4RxRGxIWnKyiilEVIacoHb6dUoQi74ZqJJgWtI1Krqu48M-YGIkkiRuugCdP6-c3zOZ1t-h9mfNTSg9TSfmvYMKHe253s_ph3gWVNr7INs86KwDgJsu1SeO6jQw50eST2PIr4tQkoxyNhLWtXTpFS3TKxYHPIizZaJMnCvyKh9fkVhoAueO6ALQsOwZ_5IirJamOxjGQJyGYIvRZC9vp7ob3X9ra6z7fL11FCPWMU5FyFP85pVkHradZLymiVMNvEBUq61nMbeIsRezv6IaPX7t8I64N51HkDEcgYRjJOIz9gLz6DxD8QQQQIR1CCCOkRwABcIpiIJeZYlQoa8FwA7eoVGH8FVnG5yaV4gGCaCQ-Md5qt8zaEBffa85i5nERdqHyIY8Zyt1kUZWZrKX5D-x98gguNkvXmJMwMwBJ4RCBGIIIJeyqStp2LA4ghgkOT_cgERdHkccWEAqncVheIuJZ0u1XbEIUAxApQgQDUEqA4XHwgmm_y40ixnSw4N_IEu78ZcLgVfsjwR6qDejPfzQaGkI9crJU1KY-fnzN_JhVU_SIOKv5C9H-6dfX-_y7HzkJrnmAdLyXfNmWf7tjMLXGviWp4nRXMyca2J6VsKJagsWCQLXOdvT-l8Ogby6RiO3W_iRERc8KjW-uKjfVC43zApfOhlP7PAbp3VIWIotXt7Zk4Dz7-7sx4VeoMoRnR06gjmzrzB-Wi6tjkbWwq9RXJGWs1Vgiqecrn9Y9DYOYRhfDRLDgLv6anR-qvJ-qvJaj5OmlKYj5OmaHvmW-7YmvsNPpc0FZ06c2tvP8wUk9P2PPPhpL-x47p1y2FjVkZ8OJPF4VPLs4cAHah0iAC92X0jBOjt7sN9-ZPxWJ5WLCFYYvBA_iQMSwyWICwRRCJIUUEiiESQz0-4Vtva-PL7Cl9zX6m4p5IvuLHO9FM5iMPvfGORy2klV9FKeqr2BbSe6adC6813plW7nFbtKlq1nqp_Aa1n-qnQOvrOtOqX06pfRaveUwdfQOuZfiq03n5nWs-8nl2epUmc8ZPnY3PmvnxW8mjJyzdolmxEyOciCYsypeoUuMIQ8SwvvbhU7Lh0yQVWwbgVTGpgfAom7ZXPlNZa0Xo7WL9m3YNW8LC98vCayjet4FF75dE1lW_bueqf2Sbtm-y09uLjr_8DAAD__04d4bI=
 
 
 query T
-EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d), covar_pop(b, d), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(b, c), regr_intercept(a, b), regr_r2(b, c), regr_slope(a, c) FROM data
+EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d), covar_pop(b, d), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(b, c), regr_intercept(a, b), regr_r2(b, c), regr_slope(a, c), sqrdiff(a), regr_count(a, b), covar_samp(b, c), corr(a, c) FROM data
 ----
 distribution: full
 vectorized: true
@@ -321,7 +325,7 @@ vectorized: true
           table: data@data_pkey
           spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsV11v6jgQfd9fYc2TEUbgfADNkyOaokg0cJNctlcrhExisWhpkk0Coqr631cOFAhLAxLq7Utfgn3mjMczc2yZV8j-XYIB1tNoYNoOwve253s_BjXkWQOr56Ns9Yx5jaDnRYRn8pdvcFAjKIhXUY7DGkF8PccYc1RHsxqqo8AwbMfvyqG0ZnkYivXOTNCapwseBQLvaDtWEK95Ok3iBM9IAaRink6zzQZzgoLD_KU8fynP-Xq-OQVe5Ip7YBHlIg1Ekkva7B1NlRIpW8aJ2K6DHtzhIwp5zoFAFIfC4c8iA-MvoEBAAQIqENCAgA4TAkkaByLL4lRSXgsHO9yA0SKwiJJVLuEJgSBOBRivkC_ypQADfD5bClfwUKTNFhAIRc4XyyKMDM3kZ5r8I16AQC9erp6jzEAyAYICgkIg4CVcYo0mRTwKEUVx_rdIgYArolCkBmJaHWNG60yp1Zm6axFBBUKk9R2UGEEFqEoDTN4IxKv8sPss53MBBn0j12dozuepmPM8Tpt6OUHv5yNmWg0IPNoOZnoxMp8wa8tRb_jT8afu8E8Py2lBpnvDbuz9cO_thwfMlD1HOeIoJY6656hHnGLsu6bj2b49dKau1Xctz5NDs993rb7pW5jphHWuImpku_1rVryOqBFZmo96oXzYi0MLVlGchiIVYan-k7fqbtHWmXbRfbuUfbve6zq1ZT21fZX1El4k-2A75mDq-ff31hizDmFdwu4OhrHp2qbTszCjLcIoJYwqB2tvODbd6Wg4woyqB1hWbeo9PWFGtf-hv86hv86h5rh_bglz3Jds_QS2Hd9ye9ZICrF9YnOVMw7eYDiy3tffH83SeSOI6U3WJoh1CGLyON7JI9mSH0mkkkkllUou1eVH0mnnQ3moJXnQ6y8jestl1KSNpvJF19GFHI8E3v6-jj75OlKu15tyk96URlP9Ir1dyPFIb51vvX2y3tTr9abepDe10dS-SG8XcjzSW_dbb5-sN-16vWk36U1rNPUv0tuFHI_0dvett9_4vD_TC1dkSRxl4uSZf37llnz-i3Autv8VsniVBmKUxkERZjsdFn4FEIos31rpdmJHW5Pc4LEzrXRWSs701FmpjnwhtFrprVU7a7fsW690bldHbt8SuVPp3K2O3L0l8l11r1oXZFItstPYk7c__gsAAP__hfJalg==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsV8uO4jgU3c9XWF4ZYQTOA6isHFEpFIkKdJJmqjVCyCRuBg0kaScgSq3695ETXmGogMSCWdQG7HPPffkeW8pvmP5aQgNab6OBaTsAPdue730b1IBnDayeD9L1CrEaBqtFhGbyn21RUMMgiNdRhsIaBmwzRwgxUAezGqiDwDBsx-_KpbSmWRjyzc6MwYaJBYsCjna0HSuIN0xMkzhBM5wDgs_FNN1uEcMgOO7fy_v38p5t5ttz4F1GPACLKOMi4EkmabM9KpQSKV3GCd_HSX-JcPHzZ34GubVofOde1J2yVbKPEMRCFL7gxR2-gpBlDGIYxSF32Iqn0PgLEoihAjFUIYYaxFCHEwwTEQc8TWMhKb9zBzvcQqOF4SJK1pmEJxgGseDQ-A2zRbbk0IA-my25y1nIRbMFMQx5xhbLPI1MTeXPNPmHv0MMe_FyvYpSA8jqMQgwCCGGXsIk1mgSwKIQEBBnf3MBMXR5FHJhAKrVEaKkTpVanaq78WKQI1ha96DEMMhBVRrg5APDeJ0dq08zNufQIB_49g7N-VzwOcti0dTLDXrfXxHVahDDV9tBVM9X5huibbnqDb87_tQd_ukhuc3J5GDYrb1v7rP98oKocuAoJxylxFEPHPWEk69913Q827eHztS1-q7leXJp9vuu1Td9C1Ed085NRA0X5d8S8TaihoujOfShnVSv1T6dkvLplI7DWUexCLngYWkyk4_qOZLWhUGSwyCVwyD3Jz61d7Xuzl8v4fkxvNiOOZh6_vOzNUa0g2kX06ejYWy6tun0LERJC1NCMCXK0dobjk13OhqOECXqEZbnOfXe3hAl2n_QH5fQH5dQc9y_FMIc9yVbP4Ntx7fcnjWSEm2f2VzlgoM3GI6scvzDqEkHU9lr97xXz3wdlWP1hq67j3K4-qX7jAHVm7SNAe1gQOV1f5JXviV_JJFIJpFUIrlElz-STiSfdHcxiPRSWp_qTi3pjtz-_pF73r8maTSVB72AV3o8uTntrxfwYS-gcrsSlbuUqDSa6oOUeKXHEyV2vpT4MCWqtytRvUuJaqOpPUiJV3o8UWL3S4kPU6J2uxK1u5SoNZr6g5R4pccTJT59KfF_8X1yYUouT5M4SvnZd8rlyC35_cLDOS8-dtJ4LQI-EnGQpym2w9wvB0KeZoWVFBs7KkyywFNnUumslJzJubNSnflKarXSW6t21u6pW690bldnbt-TuVPp3K3O3L0n81P1rFpXZFItsvPck48__g0AAP___M2gmQ==
 
 
 # Verify that local and final aggregation is correctly shared and de-duplicated.
