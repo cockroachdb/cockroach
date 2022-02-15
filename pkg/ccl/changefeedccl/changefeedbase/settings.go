@@ -167,3 +167,12 @@ var EventMemoryMultiplier = settings.RegisterFloatSetting(
 		return nil
 	},
 )
+
+// ProtectTimestampInterval controls the frequency of protected timestamp record updates
+var ProtectTimestampInterval = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.protect_timestamp_interval",
+	"controls how often the changefeed forwards its protected timestamp to the highwater mark",
+	10*time.Minute,
+	settings.PositiveDuration,
+)
