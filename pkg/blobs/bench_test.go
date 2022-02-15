@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 )
 
@@ -96,7 +97,7 @@ func benchmarkStreamingReadFile(b *testing.B, tc *benchmarkTestCase) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		if _, err := io.Copy(w, reader); err != nil {
+		if _, err := io.Copy(w, ioctx.ReaderCtxAdapter(ctx, reader)); err != nil {
 			b.Fatal(errors.CombineErrors(err, w.Close()))
 		}
 		if err := w.Close(); err != nil {

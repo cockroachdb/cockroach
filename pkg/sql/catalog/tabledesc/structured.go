@@ -2448,6 +2448,11 @@ func (desc *wrapper) GetRowLevelTTL() *descpb.TableDescriptor_RowLevelTTL {
 	return desc.RowLevelTTL
 }
 
+// HasRowLevelTTL implements the TableDescriptor interface.
+func (desc *wrapper) HasRowLevelTTL() bool {
+	return desc.RowLevelTTL != nil
+}
+
 // GetExcludeDataFromBackup implements the TableDescriptor interface.
 func (desc *wrapper) GetExcludeDataFromBackup() bool {
 	return desc.ExcludeDataFromBackup

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
@@ -153,15 +154,15 @@ type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, error)
 
 // ResumingReader is a reader which retries reads in case of a transient errors.
 type ResumingReader struct {
-	Ctx          context.Context           // Reader context
-	Opener       ReaderOpenerAt            // Get additional content
-	Reader       io.ReadCloser             // Currently opened reader
-	Pos          int64                     // How much data was received so far
-	RetryOnErrFn func(error) bool          // custom retry-on-error function
-	ErrFn        func(error) time.Duration // custom error delay picker
+	Opener       ReaderOpenerAt   // Get additional content
+	Reader       io.ReadCloser    // Currently opened reader
+	Pos          int64            // How much data was received so far
+	RetryOnErrFn func(error) bool // custom retry-on-error function
+	// ErrFn injects a delay between retries on errors. nil means no delay.
+	ErrFn func(error) time.Duration
 }
 
-var _ io.ReadCloser = &ResumingReader{}
+var _ ioctx.ReadCloserCtx = &ResumingReader{}
 
 // NewResumingReader returns a ResumingReader instance.
 func NewResumingReader(
@@ -173,7 +174,6 @@ func NewResumingReader(
 	errFn func(error) time.Duration,
 ) *ResumingReader {
 	r := &ResumingReader{
-		Ctx:          ctx,
 		Opener:       opener,
 		Reader:       reader,
 		Pos:          pos,
@@ -188,20 +188,20 @@ func NewResumingReader(
 }
 
 // Open opens the reader at its current offset.
-func (r *ResumingReader) Open() error {
-	return DelayedRetry(r.Ctx, "ResumingReader.Opener", r.ErrFn, func() error {
+func (r *ResumingReader) Open(ctx context.Context) error {
+	return DelayedRetry(ctx, "ResumingReader.Opener", r.ErrFn, func() error {
 		var readErr error
-		r.Reader, readErr = r.Opener(r.Ctx, r.Pos)
+		r.Reader, readErr = r.Opener(ctx, r.Pos)
 		return readErr
 	})
 }
 
-// Read implements io.Reader.
-func (r *ResumingReader) Read(p []byte) (int, error) {
+// Read implements ioctx.ReaderCtx.
+func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 	var lastErr error
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
-			lastErr = r.Open()
+			lastErr = r.Open(ctx)
 		}
 
 		if lastErr == nil {
@@ -214,12 +214,12 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 		}
 
 		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(r.Ctx, "Read err: %s", lastErr)
+			log.Errorf(ctx, "Read err: %s", lastErr)
 		}
 
 		// Use the configured retry-on-error decider to check for a resumable error.
 		if r.RetryOnErrFn(lastErr) {
-			span := tracing.SpanFromContext(r.Ctx)
+			span := tracing.SpanFromContext(ctx)
 			retryEvent := &roachpb.RetryTracingEvent{
 				Operation:     "ResumingReader.Reader.Read",
 				AttemptNumber: int32(retries + 1),
@@ -229,7 +229,7 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 			if retries >= maxNoProgressReads {
 				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
 			}
-			log.Errorf(r.Ctx, "Retry IO: error %s", lastErr)
+			log.Errorf(ctx, "Retry IO: error %s", lastErr)
 			lastErr = nil
 			if r.Reader != nil {
 				r.Reader.Close()
@@ -246,7 +246,7 @@ func (r *ResumingReader) Read(p []byte) (int, error) {
 }
 
 // Close implements io.Closer.
-func (r *ResumingReader) Close() error {
+func (r *ResumingReader) Close(ctx context.Context) error {
 	if r.Reader != nil {
 		return r.Reader.Close()
 	}

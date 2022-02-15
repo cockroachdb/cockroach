@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -849,8 +850,8 @@ func parseAndCreateBundleTableDescs(
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}
-	defer raw.Close()
-	reader, err := decompressingReader(raw, files[0], format.Compression)
+	defer raw.Close(ctx)
+	reader, err := decompressingReader(ioctx.ReaderCtxAdapter(ctx, raw), files[0], format.Compression)
 	if err != nil {
 		return tableDescs, schemaDescs, err
 	}

@@ -10,7 +10,6 @@ package backupccl
 
 import (
 	"context"
-	"io/ioutil"
 	"net/url"
 	"path"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -316,7 +316,7 @@ func readLatestFile(
 		}
 		return "", pgerror.WithCandidateCode(err, pgcode.Io)
 	}
-	latest, err := ioutil.ReadAll(latestFile)
+	latest, err := ioctx.ReadAll(ctx, latestFile)
 	if err != nil {
 		return "", err
 	}

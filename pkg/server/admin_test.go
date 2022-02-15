@@ -1396,13 +1396,13 @@ func TestHealthAPI(t *testing.T) {
 	})
 
 	// Make the SQL listener appear unavailable. Verify that health fails after that.
-	ts.sqlServer.acceptingClients.Set(false)
+	ts.sqlServer.isReady.Set(false)
 	var resp serverpb.HealthResponse
 	err := getAdminJSONProto(s, "health?ready=1", &resp)
 	if err == nil {
 		t.Error("server appears ready even though SQL listener is not")
 	}
-	ts.sqlServer.acceptingClients.Set(true)
+	ts.sqlServer.isReady.Set(true)
 	err = getAdminJSONProto(s, "health?ready=1", &resp)
 	if err != nil {
 		t.Errorf("server not ready after SQL listener is ready again: %v", err)
