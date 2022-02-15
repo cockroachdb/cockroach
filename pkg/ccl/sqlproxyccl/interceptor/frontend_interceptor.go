@@ -47,8 +47,8 @@ func (fi *FrontendInterceptor) ReadMsg() (msg pgproto3.BackendMessage, err error
 	if err != nil {
 		return nil, err
 	}
-	// errPanicWriter is used here because Receive must not Write.
-	return pgproto3.NewFrontend(newChunkReader(msgBytes), &errPanicWriter{}).Receive()
+	// errWriter is used here because Receive must not Write.
+	return pgproto3.NewFrontend(newChunkReader(msgBytes), &errWriter{}).Receive()
 }
 
 // ForwardMsg sends the current pgwire message to the destination without any
