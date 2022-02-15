@@ -520,7 +520,7 @@ func initHandshakeHelper(
 			go func(peerAddress string) {
 				defer handshaker.wg.Done()
 
-				peerCtx := logtags.AddTag(ctx, "peer", peerAddress)
+				peerCtx := logtags.AddTag(ctx, "peer", log.SafeOperational(peerAddress))
 				log.Ops.Infof(peerCtx, "starting handshake client for peer")
 				handshaker.runClient(peerCtx, peerAddress, addr.String())
 			}(peerAddress)

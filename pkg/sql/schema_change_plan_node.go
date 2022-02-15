@@ -41,7 +41,7 @@ func (p *planner) FormatAstAsRedactableString(
 ) redact.RedactableString {
 	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
 		statement,
-		annotations)
+		annotations, tree.FmtSimple)
 }
 
 // SchemaChange provides the planNode for the new schema changer.
