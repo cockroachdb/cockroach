@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1477,6 +1478,9 @@ type TTLTestingKnobs struct {
 	// AOSTDuration changes the AOST timestamp duration to add to the
 	// current time.
 	AOSTDuration *time.Duration
+	// MockDescriptorVersionDuringDelete is a version to mock the delete descriptor
+	// as during delete.
+	MockDescriptorVersionDuringDelete *descpb.DescriptorVersion
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
