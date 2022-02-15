@@ -2237,6 +2237,95 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	close(waitUntilRevert)
 }
 
+// TestDropIndexNoRevert tests that failed DROP INDEX requests are not
+// reverted.
+func TestDropIndexNoRevert(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+
+	_, err := sqlDB.Exec(`
+CREATE TABLE t (pk INT PRIMARY KEY, b int, c int);
+CREATE INDEX index_to_drop ON t (b);
+INSERT INTO t VALUES (1, 1, 1), (2, 2, 1);
+`)
+	require.NoError(t, err)
+
+	txn, err := sqlDB.Begin()
+	require.NoError(t, err)
+
+	_, err = txn.Exec("DROP INDEX index_to_drop")
+	require.NoError(t, err)
+
+	// This CREATE INDEX should fail on commit because of a
+	// duplicate key violation.
+	_, err = txn.Exec("CREATE UNIQUE INDEX ON t (c)")
+	require.NoError(t, err)
+
+	err = txn.Commit()
+	require.Error(t, err)
+
+	// Index is dropped even though the commit failed.
+	r := sqlDB.QueryRow("SELECT DISTINCT(index_name) FROM [SHOW INDEXES FROM t] WHERE index_name = $1", "index_to_drop")
+	var n string
+	require.EqualError(t, r.Scan(&n), "sql: no rows in result set")
+}
+
+// TestOldRevertedDropIndexesAreIgnored tests previously reverted DROP
+// INDEX mutations are no longer respected. That is, we continue to
+// DROP the index when the job is resumed.
+func TestOldRevertedDropIndexesAreIgnored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	params, _ := tests.CreateTestServerParams()
+
+	var (
+		server serverutils.TestServerInterface
+		sqlDB  *gosql.DB
+		kvDB   *kv.DB
+	)
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobspb.JobID) error {
+				mut := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+				for _, m := range mut.AllMutations() {
+					if m.Adding() && m.AsIndex() != nil {
+						// Make this schema change addition look like a rollback from a failed DROP
+						mut.Mutations[m.MutationOrdinal()].Rollback = true
+					}
+				}
+				require.NoError(t, kvDB.Put(
+					context.Background(),
+					catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, mut.GetID()),
+					mut.DescriptorProto(),
+				))
+				return nil
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	server, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.Background())
+
+	_, err := sqlDB.Exec("CREATE DATABASE test; CREATE TABLE test.t (pk INT PRIMARY KEY, b int)")
+	require.NoError(t, err)
+
+	// This create index is mutated above to look like it was the
+	// result of a rollback.
+	_, err = sqlDB.Exec("CREATE INDEX pretend_drop_revert ON test.t (b)")
+	require.NoError(t, err)
+
+	// Index should never get added because the revert should be
+	// dropped.
+	r := sqlDB.QueryRow("SELECT DISTINCT(index_name) FROM [SHOW INDEXES FROM test.t] WHERE index_name = $1", "pretend_drop_revert")
+	var n string
+	require.EqualError(t, r.Scan(&n), "sql: no rows in result set")
+
+}
+
 // TestVisibilityDuringPrimaryKeyChange tests visibility of different indexes
 // during the primary key change process.
 func TestVisibilityDuringPrimaryKeyChange(t *testing.T) {
