@@ -27,13 +27,6 @@ load(":optgen.bzl", "OPTGEN_SRCS")
 load(":misc.bzl", "MISC_SRCS")
 load(":docs.bzl", "DOCS_SRCS")
 
-
-# TODO(ajwerner): Use the all variable combined with genquery to construct
-# a test to show that all of the generated files in the repo are represented
-# here. Of course, this will rely on actually representing all of the generated
-# file here.
-EXPLICIT_SRCS = PROTOBUF_SRCS + GOMOCK_SRCS + STRINGER_SRCS + EXECGEN_SRCS + OPTGEN_SRCS + DOCS_SRCS
-
 # GeneratedFileInfo provides two pieces of information to the _hoist_files
 # rule. It provides the set of files to be hoisted via the generated_files
 # field and it provides a list of commands to run to clean up potentially
@@ -147,7 +140,7 @@ chmod 0644 {dst}\
 set -euo pipefail
 
 {cleanup_tasks}
-{cmds}\
+{cmds}
 """
   cleanup_tasks = []
   cmds = []
