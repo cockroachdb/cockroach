@@ -33,10 +33,8 @@ func TestSimpleProxy(t *testing.T) {
 	toServer := new(bytes.Buffer)
 
 	// Create client and server interceptors.
-	clientInt, err := interceptor.NewBackendInterceptor(fromClient, bufferSize)
-	require.NoError(t, err)
-	serverInt, err := interceptor.NewFrontendInterceptor(fromServer, bufferSize)
-	require.NoError(t, err)
+	clientInt := interceptor.NewBackendInterceptor(fromClient, bufferSize)
+	serverInt := interceptor.NewFrontendInterceptor(fromServer, bufferSize)
 
 	t.Run("client to server", func(t *testing.T) {
 		// Client sends a list of SQL queries.

@@ -29,28 +29,20 @@ func TestNewPgInterceptor(t *testing.T) {
 
 	reader, _ := io.Pipe()
 
-	// Negative buffer size.
-	pgi, err := newPgInterceptor(reader, -1 /* bufSize */)
-	require.EqualError(t, err, ErrSmallBuffer.Error())
-	require.Nil(t, pgi)
-
-	// Small buffer size.
-	pgi, err = newPgInterceptor(reader, pgHeaderSizeBytes-1)
-	require.EqualError(t, err, ErrSmallBuffer.Error())
-	require.Nil(t, pgi)
-
-	// Buffer that fits the header exactly.
-	pgi, err = newPgInterceptor(reader, pgHeaderSizeBytes)
-	require.NoError(t, err)
-	require.NotNil(t, pgi)
-	require.Len(t, pgi.buf, pgHeaderSizeBytes)
-
-	// Normal buffer size.
-	pgi, err = newPgInterceptor(reader, 1024 /* bufSize */)
-	require.NoError(t, err)
-	require.NotNil(t, pgi)
-	require.Len(t, pgi.buf, 1024)
-	require.Equal(t, reader, pgi.src)
+	for _, tc := range []struct {
+		bufSize           int
+		normalizedBufSize int
+	}{
+		{-1, defaultBufferSize},
+		{pgHeaderSizeBytes - 1, defaultBufferSize},
+		{pgHeaderSizeBytes, pgHeaderSizeBytes},
+		{1024, 1024},
+	} {
+		pgi := newPgInterceptor(reader, tc.bufSize)
+		require.NotNil(t, pgi)
+		require.Len(t, pgi.buf, tc.normalizedBufSize)
+		require.Equal(t, reader, pgi.src)
+	}
 }
 
 func TestPGInterceptor_PeekMsg(t *testing.T) {
@@ -59,8 +51,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 	t.Run("read_error", func(t *testing.T) {
 		r := iotest.ErrReader(errors.New("read error"))
 
-		pgi, err := newPgInterceptor(r, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(r, 10 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.EqualError(t, err, "read error")
@@ -75,8 +66,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		_, err := buf.Write(data[:])
 		require.NoError(t, err)
 
-		pgi, err := newPgInterceptor(buf, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 10 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.EqualError(t, err, ErrProtocolError.Error())
@@ -92,8 +82,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		_, err := buf.Write(data[:])
 		require.NoError(t, err)
 
-		pgi, err := newPgInterceptor(buf, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 10 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.EqualError(t, err, ErrProtocolError.Error())
@@ -109,8 +98,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		_, err := buf.Write(data[:])
 		require.NoError(t, err)
 
-		pgi, err := newPgInterceptor(buf, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 10 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.EqualError(t, err, ErrProtocolError.Error())
@@ -128,8 +116,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		_, err := buf.Write(data[:])
 		require.NoError(t, err)
 
-		pgi, err := newPgInterceptor(buf, 5 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 5 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.NoError(t, err)
@@ -141,8 +128,7 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 	t.Run("successful", func(t *testing.T) {
 		buf := buildSrc(t, 1)
 
-		pgi, err := newPgInterceptor(buf, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 10 /* bufSize */)
 
 		typ, size, err := pgi.PeekMsg()
 		require.NoError(t, err)
@@ -168,8 +154,7 @@ func TestPGInterceptor_ReadMsg(t *testing.T) {
 		// Use a LimitReader to allow PeekMsg to read 5 bytes, then update src
 		// back to the original version.
 		src := &errReadWriter{r: buf, count: 2}
-		pgi, err := newPgInterceptor(io.LimitReader(src, 5), 32 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(io.LimitReader(src, 5), 32 /* bufSize */)
 
 		// Call PeekMsg here to populate internal buffer with header.
 		typ, size, err := pgi.PeekMsg()
@@ -195,8 +180,7 @@ func TestPGInterceptor_ReadMsg(t *testing.T) {
 		// testSelect1Bytes has 14 bytes, but only 6 bytes within internal
 		// buffer, so overflow.
 		src := &errReadWriter{r: buf, count: 2}
-		pgi, err := newPgInterceptor(src, 6 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(src, 6 /* bufSize */)
 
 		msg, err := pgi.ReadMsg()
 		require.EqualError(t, err, io.ErrClosedPipe.Error())
@@ -211,8 +195,7 @@ func TestPGInterceptor_ReadMsg(t *testing.T) {
 
 		// Set buffer's size to be a multiple of the message so that we'll
 		// always hit the case where the message fits.
-		pgi, err := newPgInterceptor(buf, len(testSelect1Bytes)*3)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, len(testSelect1Bytes)*3)
 
 		c := 0
 		n := testing.AllocsPerRun(count-1, func() {
@@ -246,8 +229,7 @@ func TestPGInterceptor_ReadMsg(t *testing.T) {
 
 		// Set the buffer to be large enough to fit more bytes than the header,
 		// but not the entire message.
-		pgi, err := newPgInterceptor(buf, 7 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 7 /* bufSize */)
 
 		c := 0
 		n := testing.AllocsPerRun(count-1, func() {
@@ -286,8 +268,7 @@ func TestPGInterceptor_ForwardMsg(t *testing.T) {
 		dst := new(bytes.Buffer)
 		dstWriter := &errReadWriter{w: dst, count: 1}
 
-		pgi, err := newPgInterceptor(src, 32 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(src, 32 /* bufSize */)
 
 		n, err := pgi.ForwardMsg(dstWriter)
 		require.EqualError(t, err, io.ErrClosedPipe.Error())
@@ -306,8 +287,7 @@ func TestPGInterceptor_ForwardMsg(t *testing.T) {
 
 		// testSelect1Bytes has 14 bytes, but only 6 bytes within internal
 		// buffer, so partially buffered.
-		pgi, err := newPgInterceptor(src, 6 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(src, 6 /* bufSize */)
 
 		n, err := pgi.ForwardMsg(dstWriter)
 		require.EqualError(t, err, io.ErrClosedPipe.Error())
@@ -324,8 +304,7 @@ func TestPGInterceptor_ForwardMsg(t *testing.T) {
 
 		// Set buffer's size to be a multiple of the message so that we'll
 		// always hit the case where the message fits.
-		pgi, err := newPgInterceptor(src, len(testSelect1Bytes)*3)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(src, len(testSelect1Bytes)*3)
 
 		// Forward all the messages, and ensure 0 allocations.
 		n := testing.AllocsPerRun(count-1, func() {
@@ -349,8 +328,7 @@ func TestPGInterceptor_ForwardMsg(t *testing.T) {
 
 		// Set the buffer to be large enough to fit more bytes than the header,
 		// but not the entire message.
-		pgi, err := newPgInterceptor(src, 7 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(src, 7 /* bufSize */)
 
 		n := testing.AllocsPerRun(count-1, func() {
 			n, err := pgi.ForwardMsg(dst)
@@ -376,8 +354,7 @@ func TestPGInterceptor_readSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := bytes.NewBufferString("foobarbazz")
-	pgi, err := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
-	require.NoError(t, err)
+	pgi := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
 
 	// No reads to internal buffer.
 	require.Equal(t, 0, pgi.readSize())
@@ -395,8 +372,7 @@ func TestPGInterceptor_writeSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	buf := bytes.NewBufferString("foobarbazz")
-	pgi, err := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
-	require.NoError(t, err)
+	pgi := newPgInterceptor(iotest.OneByteReader(buf), 10 /* bufSize */)
 
 	// No writes to internal buffer.
 	require.Equal(t, 10, pgi.writeSize())
@@ -414,8 +390,7 @@ func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("invalid n", func(t *testing.T) {
-		pgi, err := newPgInterceptor(nil /* src */, 8 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(nil /* src */, 8 /* bufSize */)
 
 		require.EqualError(t, pgi.ensureNextNBytes(-1),
 			"invalid number of bytes -1 for buffer size 8")
@@ -426,8 +401,7 @@ func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 	t.Run("buffer already has n bytes", func(t *testing.T) {
 		buf := bytes.NewBufferString("foobarbaz")
 
-		pgi, err := newPgInterceptor(iotest.OneByteReader(buf), 8 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(iotest.OneByteReader(buf), 8 /* bufSize */)
 
 		// Read "foo" into buffer".
 		require.NoError(t, pgi.ensureNextNBytes(3))
@@ -448,8 +422,7 @@ func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 	t.Run("bytes are realigned", func(t *testing.T) {
 		buf := bytes.NewBufferString("foobarbazcar")
 
-		pgi, err := newPgInterceptor(iotest.OneByteReader(buf), 9 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(iotest.OneByteReader(buf), 9 /* bufSize */)
 
 		// Read "foobarb" into buffer.
 		require.NoError(t, pgi.ensureNextNBytes(7))
@@ -470,8 +443,7 @@ func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 		// if there was a Read call.
 		buf := bytes.NewBufferString("foobarbaz")
 
-		pgi, err := newPgInterceptor(buf, 10 /* bufSize */)
-		require.NoError(t, err)
+		pgi := newPgInterceptor(buf, 10 /* bufSize */)
 
 		// Request for only 1 byte.
 		require.NoError(t, pgi.ensureNextNBytes(1))
@@ -480,7 +452,7 @@ func TestPGInterceptor_ensureNextNBytes(t *testing.T) {
 		require.Equal(t, "foobarbaz", string(pgi.buf[pgi.readPos:pgi.writePos]))
 
 		// Should be a no-op.
-		_, err = buf.WriteString("car")
+		_, err := buf.WriteString("car")
 		require.NoError(t, err)
 		require.NoError(t, pgi.ensureNextNBytes(9))
 		require.Equal(t, 3, buf.Len())

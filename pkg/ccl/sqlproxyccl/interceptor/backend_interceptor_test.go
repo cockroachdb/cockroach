@@ -35,17 +35,15 @@ func TestBackendInterceptor(t *testing.T) {
 		return src
 	}
 
-	t.Run("bufSize too small", func(t *testing.T) {
-		bi, err := interceptor.NewBackendInterceptor(nil /* src */, 1 /* bufSize */)
-		require.Error(t, err)
-		require.Nil(t, bi)
+	t.Run("small bufSize", func(t *testing.T) {
+		bi := interceptor.NewBackendInterceptor(nil /* src */, 1 /* bufSize */)
+		require.NotNil(t, bi)
 	})
 
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
 		src := buildSrc(t, 1)
 
-		bi, err := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		bi := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
 		require.NotNil(t, bi)
 
 		typ, size, err := bi.PeekMsg()
@@ -56,8 +54,7 @@ func TestBackendInterceptor(t *testing.T) {
 
 	t.Run("WriteMsg writes data to dst", func(t *testing.T) {
 		dst := new(bytes.Buffer)
-		bi, err := interceptor.NewBackendInterceptor(nil /* src */, 10 /* bufSize */)
-		require.NoError(t, err)
+		bi := interceptor.NewBackendInterceptor(nil /* src */, 10 /* bufSize */)
 		require.NotNil(t, bi)
 
 		// This is a backend interceptor, so writing goes to the server.
@@ -71,8 +68,7 @@ func TestBackendInterceptor(t *testing.T) {
 	t.Run("ReadMsg decodes the message correctly", func(t *testing.T) {
 		src := buildSrc(t, 1)
 
-		bi, err := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		bi := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
 		require.NotNil(t, bi)
 
 		msg, err := bi.ReadMsg()
@@ -86,8 +82,7 @@ func TestBackendInterceptor(t *testing.T) {
 		src := buildSrc(t, 1)
 		dst := new(bytes.Buffer)
 
-		bi, err := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		bi := interceptor.NewBackendInterceptor(src, 16 /* bufSize */)
 		require.NotNil(t, bi)
 
 		n, err := bi.ForwardMsg(dst)
