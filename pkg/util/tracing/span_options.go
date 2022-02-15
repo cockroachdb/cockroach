@@ -254,8 +254,8 @@ type remoteParent SpanMeta
 // WithRemoteParentFromTraceInfo will not allocate (whereas
 // WithRemoteParentFromSpanMeta allocates).
 func WithRemoteParentFromSpanMeta(parent SpanMeta) SpanOption {
-	if parent.sterile {
-		return remoteParent{}
+	if parent.Empty() || parent.sterile {
+		return nil
 	}
 	return (remoteParent)(parent)
 }

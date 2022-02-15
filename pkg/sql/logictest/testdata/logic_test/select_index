@@ -673,3 +673,33 @@ SELECT k FROM t47976 WHERE
   (a > 4 OR b <= 5.23 OR c IN (1, 2, 3)) AND
   (a = 12 OR b = 15.23 OR c = 14) AND
   (a > 58 OR b < 0 OR c >= 13)
+
+# Regression test for incorrectly splitting a lookup row (with NULL values not
+# in the lookup key) into family spans (#76289).
+statement ok
+CREATE TABLE t76289_1 (
+  pk1 DECIMAL NOT NULL, pk2 INT8 NOT NULL, c1 INT8, c2 INT8,
+  PRIMARY KEY (pk1, pk2),
+  UNIQUE (pk2),
+  FAMILY fam_c1 (c1), FAMILY fam_c2 (pk1, pk2, c2)
+);
+INSERT INTO t76289_1 (pk1, pk2, c1) VALUES (1:::DECIMAL, 0:::INT8, 0:::INT8);
+
+query I
+SELECT c2 FROM t76289_1 WHERE pk2 = 0;
+----
+NULL
+
+statement ok
+CREATE TABLE t76289_2 (
+  pk1 DECIMAL NOT NULL, pk2 INT8 NOT NULL, c1 INT8, c2 INT8,
+  PRIMARY KEY (pk1, pk2),
+  INDEX (pk2),
+  FAMILY fam_c1 (c1), FAMILY fam_c2 (pk1, pk2, c2)
+);
+INSERT INTO t76289_2 (pk1, pk2, c1) VALUES (1:::DECIMAL, 0:::INT8, 0:::INT8);
+
+query I
+SELECT c2 FROM t76289_2@t76289_2_pk2_idx WHERE pk2 = 0;
+----
+NULL
