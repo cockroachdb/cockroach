@@ -36,6 +36,7 @@ type RegionConfig struct {
 	primaryRegion        catpb.RegionName
 	regionEnumID         descpb.ID
 	placement            descpb.DataPlacement
+	superRegions         []descpb.DatabaseDescriptor_SuperRegion
 }
 
 // SurvivalGoal returns the survival goal configured on the RegionConfig.
@@ -90,6 +91,10 @@ func (r *RegionConfig) IsPlacementRestricted() bool {
 	return r.placement == descpb.DataPlacement_RESTRICTED
 }
 
+func (r *RegionConfig) SuperRegions() []descpb.DatabaseDescriptor_SuperRegion {
+	return r.superRegions
+}
+
 // MakeRegionConfigOption is an option for MakeRegionConfig
 type MakeRegionConfigOption func(r *RegionConfig)
 
@@ -108,6 +113,7 @@ func MakeRegionConfig(
 	survivalGoal descpb.SurvivalGoal,
 	regionEnumID descpb.ID,
 	placement descpb.DataPlacement,
+	superRegions []descpb.DatabaseDescriptor_SuperRegion,
 	opts ...MakeRegionConfigOption,
 ) RegionConfig {
 	ret := RegionConfig{
@@ -116,6 +122,7 @@ func MakeRegionConfig(
 		survivalGoal:  survivalGoal,
 		regionEnumID:  regionEnumID,
 		placement:     placement,
+		superRegions:  superRegions,
 	}
 	for _, opt := range opts {
 		opt(&ret)

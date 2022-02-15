@@ -102,6 +102,7 @@ func initializeMultiRegionMetadata(
 		survivalGoal,
 		regionEnumID,
 		placement,
+		nil, /* superRegions */
 	)
 	if err := multiregion.ValidateRegionConfig(regionConfig); err != nil {
 		return nil, err

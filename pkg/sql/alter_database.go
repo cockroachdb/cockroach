@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -1263,7 +1264,6 @@ func (p *planner) AlterDatabaseAddSuperRegion(
 }
 
 func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
-	fmt.Println("alterDatabaseAddSuperRegion")
 	// If the database is not a multi-region database, a super region cannot
 	// be added.
 	if !n.desc.IsMultiRegion() {
@@ -1301,7 +1301,26 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 			}
 		}
 		if !found {
-			return errors.New(fmt.Sprintf("region %s not part of database", region))
+			return errors.Newf("region %s not part of database", region)
+		}
+	}
+
+	regionSet := make(map[string]struct{})
+	for _, region := range n.n.Regions {
+		regionSet[string(region)] = struct{}{}
+	}
+
+	// Ensure that the super region name is not already used and that
+	// the super regions don't overlap.
+	for _, superRegion := range n.desc.RegionConfig.SuperRegions {
+		if superRegion.SuperRegionName == string(n.n.SuperRegionName) {
+			return errors.Newf("super region %s already exists", superRegion.SuperRegionName)
+		}
+
+		for _, region := range superRegion.Regions {
+			if _, found := regionSet[region]; found {
+				return errors.Newf("region %s is already defined in super region %s", region, superRegion.SuperRegionName)
+			}
 		}
 	}
 
@@ -1310,6 +1329,8 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		regions[i] = string(region)
 	}
 
+	sort.Strings(regions)
+
 	n.desc.RegionConfig.SuperRegions = append(n.desc.RegionConfig.SuperRegions,
 		descpb.DatabaseDescriptor_SuperRegion{
 			SuperRegionName: string(n.n.SuperRegionName),
@@ -1317,18 +1338,33 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		},
 	)
 
+	if err := params.p.writeNonDropDatabaseChange(params.ctx, n.desc, "update super regions"); err != nil {
+		return err
+	}
+
+	regionConfig, err := SynthesizeRegionConfig(params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors())
+	if err != nil {
+		return err
+	}
 	// Update the zone configs.
 	// For existing regional tables, the zone configuration should be applied
 	// at the table level.
 	// For existing regional by row tables, the zone configurations should be
 	// applied at the partition level.
+	if err := ApplyZoneConfigFromDatabaseRegionConfig(
+		params.ctx,
+		n.desc.ID,
+		regionConfig,
+		params.p.txn,
+		params.p.execCfg,
+	); err != nil {
+		return err
+	}
 
-	fmt.Printf("%v\n", n.desc.RegionConfig.SuperRegions)
-
-	if err := params.p.writeNonDropDatabaseChange(
+	// Update all regional and regional by row tables.
+	if err := params.p.updateZoneConfigsForTables(
 		params.ctx,
 		n.desc,
-		tree.AsStringWithFQNames(n.n, params.Ann()),
 	); err != nil {
 		return err
 	}

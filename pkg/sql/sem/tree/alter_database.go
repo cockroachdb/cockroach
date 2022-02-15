@@ -124,4 +124,15 @@ var _ Statement = &AlterDatabaseAddSuperRegion{}
 
 // Format implements the NodeFormatter interface.
 func (node *AlterDatabaseAddSuperRegion) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER DATABASE ")
+	ctx.FormatNode(&node.DatabaseName)
+	ctx.WriteString(" ADD SUPER REGION ")
+	ctx.FormatNode(&node.SuperRegionName)
+	ctx.WriteString(" VALUES ")
+	for i, region := range node.Regions {
+		if i != 0 {
+			ctx.WriteString(",")
+		}
+		ctx.FormatNode(&region)
+	}
 }

@@ -453,6 +453,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			regionConfig,
 			desc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+			applyZoneConfigForMultiRegionTableWithSuperRegion(regionConfig.SuperRegions()),
 		); err != nil {
 			return err
 		}

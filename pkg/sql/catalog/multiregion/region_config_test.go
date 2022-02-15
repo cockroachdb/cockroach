@@ -40,6 +40,7 @@ func TestValidateRegionConfig(t *testing.T) {
 				descpb.SurvivalGoal_ZONE_FAILURE,
 				descpb.InvalidID,
 				descpb.DataPlacement_DEFAULT,
+				nil, /* superRegions */
 			),
 		},
 		{
@@ -51,7 +52,8 @@ func TestValidateRegionConfig(t *testing.T) {
 				"region_b",
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
-				descpb.DataPlacement_DEFAULT,
+				descpb.DataPlacement_DEFAULT, nil, /* superRegions */
+
 			),
 		},
 		{
@@ -62,6 +64,7 @@ func TestValidateRegionConfig(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
 				descpb.DataPlacement_DEFAULT,
+				nil, /* superRegions */
 			),
 		},
 		{
@@ -72,6 +75,7 @@ func TestValidateRegionConfig(t *testing.T) {
 				descpb.SurvivalGoal_REGION_FAILURE,
 				validRegionEnumID,
 				descpb.DataPlacement_RESTRICTED,
+				nil, /* superRegions */
 			),
 		},
 	}

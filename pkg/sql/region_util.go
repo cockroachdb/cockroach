@@ -515,6 +515,153 @@ func dropZoneConfigsForMultiRegionIndexes(
 	}
 }
 
+func applySuperRegionToZoneConfig(
+	zoneConfig *zonepb.ZoneConfig,
+	numVoters, numReplicas int32,
+	superRegions []descpb.DatabaseDescriptor_SuperRegion,
+	primaryRegion string,
+) {
+	for _, superRegion := range superRegions {
+		subRegions := superRegion.Regions
+
+		// Check if the mainRegion is in the super region.
+		inSuperRegion := false
+		for _, region := range subRegions {
+			if region == primaryRegion {
+				inSuperRegion = true
+			}
+		}
+
+		if inSuperRegion {
+			// If we have 3 or more regions in the super region, to survive a region
+			// failure where we have 2 replicas in the main region, we need 5 replicas
+			// such that we can ensure quorum can be achieved within the main region
+			// and 1 other region.
+			if len(subRegions) >= 3 && numReplicas <= 5 {
+				numReplicas = 5
+			}
+
+			// Always explicitly set the NumReplicas on the zone config so that we
+			// can set the constraints per replica below.
+			zoneConfig.NumReplicas = &numReplicas
+
+			replicasPerRegion := make(map[string]int32)
+			// Always allocate at least 2 replicas to the primary region.
+			const minNumReplicasForPrimaryRegion = 2
+			replicasPerRegion[primaryRegion] = minNumReplicasForPrimaryRegion
+
+			// TODO(richardjcai): Can we be smarter about this and not change the
+			//    zoneconfig if it already applies to the super region
+			//    and try to only update the constraint instead of overwriting it.
+			// Randomly distribute the constraints within the regions specified
+			// in the super region.
+			extraReplicas := (numReplicas - minNumReplicasForPrimaryRegion) % int32(len(subRegions))
+			for _, region := range subRegions {
+				replicasToAllocate := (numReplicas - minNumReplicasForPrimaryRegion) / int32(len(subRegions))
+				if extraReplicas > 0 {
+					replicasToAllocate += 1
+					extraReplicas -= 1
+				}
+				replicasPerRegion[region] += replicasToAllocate
+			}
+
+			zoneConfig.Constraints = nil
+			// Make sure constraints are sorted on region name for consistency.
+			for _, region := range subRegions {
+				zoneConfig.Constraints = append(zoneConfig.Constraints, zonepb.ConstraintsConjunction{
+					NumReplicas: replicasPerRegion[region],
+					Constraints: []zonepb.Constraint{makeRequiredConstraintForRegion(catpb.RegionName(region))},
+				})
+			}
+		}
+	}
+}
+
+func applyZoneConfigForMultiRegionTableWithSuperRegion(
+	superRegions []descpb.DatabaseDescriptor_SuperRegion,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zoneConfig zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		table catalog.TableDescriptor,
+	) (bool, zonepb.ZoneConfig, error) {
+		numVoters, numReplicas := getNumVotersAndNumReplicas(regionConfig)
+
+		localityConfig := *table.GetLocalityConfig()
+		localityZoneConfig, err := zoneConfigForMultiRegionTable(
+			localityConfig,
+			regionConfig,
+		)
+
+		// If the primary region is the same as the databases, grab the databases'
+		// zoneconfig.
+		if localityZoneConfig.Equal(zonepb.NewZoneConfig()) {
+			dbZoneConfig, err := zoneConfigForMultiRegionDatabase(regionConfig)
+			if err != nil {
+				panic(err)
+			}
+			localityZoneConfig = &dbZoneConfig
+		}
+
+		if err != nil {
+			return false, zonepb.ZoneConfig{}, err
+		}
+
+		// Wipe out the subzone multi-region fields before we copy over the
+		// multi-region fields to the zone config down below. We have to do this to
+		// handle the case where users have set a zone config on an index and we're
+		// ALTERing to a table locality that doesn't lay down index zone
+		// configurations (e.g. GLOBAL or REGIONAL BY TABLE). Since the user will
+		// have to override to perform the ALTER, we want to wipe out the index
+		// zone config so that the user won't have to override again the next time
+		// the want to ALTER the table locality.
+		zoneConfig.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
+		zoneConfig.CopyFromZone(*localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
+
+		if table.IsLocalityRegionalByTable() {
+			// tableRegion can return tree.PrimaryRegionNotSpecifiedName, in this
+			// case we must refer to the primary region of the database.
+			tableRegion, err := table.GetRegionalByTableRegion()
+			if tree.Name(tableRegion) == tree.PrimaryRegionNotSpecifiedName {
+				tableRegion = regionConfig.PrimaryRegion()
+			}
+			if err != nil {
+				panic(err)
+			}
+
+			applySuperRegionToZoneConfig(&zoneConfig, numVoters, numReplicas, superRegions, string(tableRegion))
+		}
+
+		if table.IsLocalityRegionalByRow() {
+			indexes := table.NonDropIndexes()
+			var indexIDs []int32
+			for _, idx := range indexes {
+				indexIDs = append(indexIDs, int32(idx.GetID()))
+			}
+			for _, indexID := range indexIDs {
+				for _, region := range regionConfig.Regions() {
+					zc, err := zoneConfigForMultiRegionPartition(region, regionConfig)
+					if err != nil {
+						return false, zoneConfig, err
+					}
+					applySuperRegionToZoneConfig(&zc, numVoters, numReplicas, superRegions, string(region))
+					// We can no longer rely on inherited constraints after updating
+					// the constraints for the super region.
+					zc.InheritedConstraints = false
+					zoneConfig.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(indexID),
+						PartitionName: string(region),
+						Config:        zc,
+					})
+				}
+			}
+		}
+
+		return true, zoneConfig, nil
+	}
+}
+
 // isPlaceholderZoneConfigForMultiRegion returns whether a given zone config
 // should be marked as a placeholder config for a multi-region object.
 // See zonepb.IsSubzonePlaceholder for why this is necessary.
@@ -663,6 +810,7 @@ func prepareZoneConfigForMultiRegionTable(
 	if !rewriteZoneConfig {
 		return nil, nil
 	}
+
 	if err := newZoneConfig.Validate(); err != nil {
 		return nil, pgerror.Wrap(
 			err,
@@ -817,6 +965,7 @@ func (p *planner) updateZoneConfigsForTables(
 					regionConfig,
 					tbDesc,
 					ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,
+					applyZoneConfigForMultiRegionTableWithSuperRegion(regionConfig.SuperRegions()),
 				)
 			}
 			return nil
@@ -1178,6 +1327,7 @@ func SynthesizeRegionConfig(
 		dbDesc.GetRegionConfig().SurvivalGoal,
 		regionEnumID,
 		dbDesc.GetRegionConfig().Placement,
+		dbDesc.GetRegionConfig().SuperRegions,
 		multiregion.WithTransitioningRegions(transitioningRegionNames),
 	)
 
@@ -1450,6 +1600,14 @@ func (v *zoneConfigForMultiRegionValidatorExistingMultiRegionObject) getExpected
 ) (zonepb.ZoneConfig, error) {
 	_, expectedZoneConfig, err := ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes(
 		*zonepb.NewZoneConfig(),
+		v.regionConfig,
+		desc,
+	)
+	if err != nil {
+		return zonepb.ZoneConfig{}, err
+	}
+	_, expectedZoneConfig, err = applyZoneConfigForMultiRegionTableWithSuperRegion(v.regionConfig.SuperRegions())(
+		expectedZoneConfig,
 		v.regionConfig,
 		desc,
 	)
@@ -1844,6 +2002,7 @@ func (p *planner) validateZoneConfigForMultiRegionTable(
 				mismatch.Field,
 			)
 		}
+
 		return zoneConfigForMultiRegionValidator.newMismatchFieldError(
 			descType,
 			name,
