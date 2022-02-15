@@ -12,6 +12,7 @@ package sql
 
 import (
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/errors"
 )
 
@@ -108,16 +110,37 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 	planCtx *PlanningCtx, spec execinfrapb.IndexBackfillMergerSpec, spans [][]roachpb.Span,
 ) (*PhysicalPlan, error) {
 
-	var indexSpans []roachpb.Span
-	var spanIdxs []interface{}
-
+	var n int
+	for _, sp := range spans {
+		for range sp {
+			n++
+		}
+	}
+	indexSpans := make([]roachpb.Span, 0, n)
+	spanIdxs := make([]spanAndIndex, 0, n)
+	spanIdxTree := interval.NewTree(interval.ExclusiveOverlapper)
 	for i := range spans {
 		for j := range spans[i] {
 			indexSpans = append(indexSpans, spans[i][j])
-			spanIdxs = append(spanIdxs, i)
+			spanIdxs = append(spanIdxs, spanAndIndex{Span: spans[i][j], idx: i})
+			if err := spanIdxTree.Insert(&spanIdxs[len(spanIdxs)-1], true /* fast */); err != nil {
+				return nil, err
+			}
+
 		}
 	}
-	spanPartitions, idxByPartition, err := dsp.PartitionSpansWithUserData(planCtx, indexSpans, spanIdxs)
+	spanIdxTree.AdjustRanges()
+	getIndex := func(sp roachpb.Span) (idx int) {
+		if !spanIdxTree.DoMatching(func(i interval.Interface) (done bool) {
+			idx = i.(*spanAndIndex).idx
+			return true
+		}, sp.AsRange()) {
+			panic(errors.AssertionFailedf("no matching index found for span: %s", sp))
+		}
+		return idx
+	}
+
+	spanPartitions, err := dsp.PartitionSpans(planCtx, indexSpans)
 	if err != nil {
 		return nil, err
 	}
@@ -129,12 +152,8 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 		*ibm = spec
 
 		ibm.Spans = sp.Spans
-		for j := range idxByPartition[i] {
-			idx, ok := idxByPartition[i][j].(int)
-			if !ok {
-				return nil, errors.Errorf("Unexpected non-int type for idx %v", idxByPartition[i][j])
-			}
-			ibm.SpanIdx = append(ibm.SpanIdx, int32(idx))
+		for _, sp := range ibm.Spans {
+			ibm.SpanIdx = append(ibm.SpanIdx, int32(getIndex(sp)))
 		}
 
 		proc := physicalplan.Processor{
@@ -152,3 +171,13 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 	dsp.FinalizePlan(planCtx, p)
 	return p, nil
 }
+
+type spanAndIndex struct {
+	roachpb.Span
+	idx int
+}
+
+var _ interval.Interface = (*spanAndIndex)(nil)
+
+func (si *spanAndIndex) Range() interval.Range { return si.AsRange() }
+func (si *spanAndIndex) ID() uintptr           { return uintptr(unsafe.Pointer(si)) }
