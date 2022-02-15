@@ -146,7 +146,8 @@ func (dsp *DistSQLPlanner) Exec(
 	defer recv.Release()
 
 	evalCtx := p.ExtendedEvalContext()
-	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn, distribute)
+	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p, p.txn,
+		distribute, false /* tenantDistributionEnabled */)
 	planCtx.stmtType = recv.stmtType
 
 	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.main, recv)()

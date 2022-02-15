@@ -307,8 +307,8 @@ func runPlanInsidePlan(params runParams, plan *planComponents, resultWriter rowR
 		params.ctx, &plannerCopy, plannerCopy.execCfg.NodeID, plannerCopy.SessionData().DistSQLMode, plan.main,
 	)
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.NewPlanningCtx(
-		params.ctx, evalCtx, &plannerCopy, params.p.txn, distributePlan.WillDistribute(),
-	)
+		params.ctx, evalCtx, &plannerCopy, params.p.txn,
+		distributePlan.WillDistribute(), false /* tenantDistributionEnabled */)
 	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.stmtType = recv.stmtType

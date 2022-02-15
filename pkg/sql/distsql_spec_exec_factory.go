@@ -68,9 +68,8 @@ func newDistSQLSpecExecFactory(p *planner, planningMode distSQLPlanningMode) exe
 	}
 	distribute := e.singleTenant && e.planningMode != distSQLLocalOnlyPlanning
 	evalCtx := p.ExtendedEvalContext()
-	e.planCtx = e.dsp.NewPlanningCtx(
-		evalCtx.Context, evalCtx, e.planner, e.planner.txn, distribute,
-	)
+	e.planCtx = e.dsp.NewPlanningCtx(evalCtx.Context, evalCtx, e.planner,
+		e.planner.txn, distribute, false /* tenantDistributionEnabled */)
 	return e
 }
 

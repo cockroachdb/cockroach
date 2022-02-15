@@ -227,8 +227,8 @@ func getReplicationStreamSpec(
 	// Partition the spans with SQLPlanner
 	var noTxn *kv.Txn
 	dsp := jobExecCtx.DistSQLPlanner()
-	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(), nil /* planner */, noTxn,
-		true /* distribute */)
+	planCtx := dsp.NewPlanningCtx(evalCtx.Ctx(), jobExecCtx.ExtendedEvalContext(),
+		nil /* planner */, noTxn, true /* distribute */, false /* tenantDistributionEnabled */)
 
 	replicatedSpans := j.Details().(jobspb.StreamReplicationDetails).Spans
 	spans := make([]roachpb.Span, 0, len(replicatedSpans))

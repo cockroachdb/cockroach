@@ -913,7 +913,7 @@ func TestPartitionSpans(t *testing.T) {
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-			}, nil /* planner */, nil /* txn */, true /* distribute */)
+			}, nil, nil, true /* distribute */, false /* tenantDistributionEnabled */)
 			var spans []roachpb.Span
 			for _, s := range tc.spans {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
@@ -1097,7 +1097,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 				EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-			}, nil /* planner */, nil /* txn */, true /* distribute */)
+			}, nil, nil, true /* distribute */, false /* tenantDistributionEnabled */)
 			partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
@@ -1196,7 +1196,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), &extendedEvalContext{
 		EvalContext: tree.EvalContext{Codec: keys.SystemSQLCodec},
-	}, nil /* planner */, nil /* txn */, true /* distribute */)
+	}, nil, nil, true /* distribute */, false /* tenantDistributionEnabled */)
 	partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)

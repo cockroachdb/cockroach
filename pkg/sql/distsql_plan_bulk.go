@@ -16,15 +16,36 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/errors"
 )
+
+type distSQLTenantPlanner interface {
+	SetupAllNodesPlanning(
+		ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+	) (*PlanningCtx, []base.SQLInstanceID, error)
+}
+
+type singleTenantPlanner struct {
+	*DistSQLPlanner
+}
+
+type multiTenantPlanner struct {
+	*DistSQLPlanner
+}
 
 // SetupAllNodesPlanning creates a planCtx and sets up the planCtx.NodeStatuses
 // map for all nodes. It returns all nodes that can be used for planning.
 func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	distribute := evalCtx.Codec.ForSystemTenant()
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil /* txn */, distribute)
+	return dsp.distSQLTenantPlanner.SetupAllNodesPlanning(ctx, evalCtx, execCfg)
+}
+
+func (dsp *singleTenantPlanner) SetupAllNodesPlanning(
+	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		true /* distribute */, true /* tenantDistributionEnabled */)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer(47900)
 	if err != nil {
@@ -54,4 +75,23 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 		nodes[i], nodes[j] = nodes[j], nodes[i]
 	})
 	return planCtx, nodes, nil
+}
+
+func (dsp *multiTenantPlanner) SetupAllNodesPlanning(
+	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
+) (*PlanningCtx, []base.SQLInstanceID, error) {
+	if dsp.sqlInstanceProvider == nil {
+		return nil, nil, errors.New("sql instance provider not available in multi-tenant environment")
+	}
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
+		true /* distribute */, true /* tenantDistributionEnabled */)
+	pods, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	sqlInstanceIDs := make([]base.SQLInstanceID, len(pods), len(pods))
+	for i, pod := range pods {
+		sqlInstanceIDs[i] = pod.InstanceID
+	}
+	return planCtx, sqlInstanceIDs, nil
 }

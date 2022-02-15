@@ -107,7 +107,9 @@ func newPlanningCtxForExplainPurposes(
 	subqueryPlans []subquery,
 	distribution physicalplan.PlanDistribution,
 ) *PlanningCtx {
-	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p, params.p.txn, distribution.WillDistribute())
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx,
+		params.p, params.p.txn, distribution.WillDistribute(),
+		false /* tenantDistributionEnabled */)
 	planCtx.ignoreClose = true
 	planCtx.planner.curPlan.subqueryPlans = subqueryPlans
 	for i := range planCtx.planner.curPlan.subqueryPlans {

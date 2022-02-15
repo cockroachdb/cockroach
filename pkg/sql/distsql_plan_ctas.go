@@ -31,7 +31,8 @@ func PlanAndRunCTAS(
 	out execinfrapb.ProcessorCoreUnion,
 	recv *DistSQLReceiver,
 ) {
-	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner, txn, !isLocal)
+	planCtx := dsp.NewPlanningCtx(ctx, planner.ExtendedEvalContext(), planner,
+		txn, !isLocal, false /* tenantDistributionEnabled */)
 	planCtx.stmtType = tree.Rows
 
 	physPlan, cleanup, err := dsp.createPhysPlan(planCtx, in)
