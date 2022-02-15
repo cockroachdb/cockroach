@@ -56,6 +56,8 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 		return
 	case descpb.TypeDescriptor_ENUM:
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
+	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		// Keep going.
 	default:
 		panic(errors.AssertionFailedf("unexpected kind %s for type %q", typ.GetKind(), typ.GetName()))
 	}
