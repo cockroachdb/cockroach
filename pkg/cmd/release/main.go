@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"html/template"
 	"os"
@@ -24,7 +23,6 @@ var (
 	qualifyBucket       string
 	qualifyObjectPrefix string
 	releaseBucket       string
-	releaseBranch       string
 	releaseObjectPrefix string
 	releaseSeries       string
 	smtpUser            string
@@ -113,13 +111,13 @@ func run() error {
 		Long: "Get release blocker details for a particular release branch and communicate via email",
 		RunE: getReleaseBlockersWrapper,
 	}
-	cmdGetBlockers.Flags().StringVar(&releaseBranch, "release-branch", "", "release branch")
+	cmdGetBlockers.Flags().StringVar(&releaseSeries, "release-series", "", "major release series")
 	cmdGetBlockers.Flags().StringVar(&smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
 	cmdGetBlockers.Flags().StringVar(&smtpHost, "smtp-host", "", "SMTP host")
 	cmdGetBlockers.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
 	cmdGetBlockers.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
 	if err := setRequiredFlags(cmdGetBlockers, []string{
-		"release-branch",
+		"release-series",
 		"smtp-user",
 		"smtp-host",
 		"smtp-port",
@@ -165,11 +163,31 @@ func getReleaseBlockersWrapper(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	return getReleaseBlockers(githubToken.value, smtpPassword.value, releaseBranch)
+	return getReleaseBlockers(githubToken.value, smtpPassword.value, releaseSeries)
 }
 
-func getReleaseBlockers(githubToken, smtpPassword, releaseBranch string) error {
-	return errors.New("not yet implemented")
+func getReleaseBlockers(githubToken, smtpPassword, releaseSeries string) error {
+	// TODO(celia) -- get blockers for `releaseBranch`
+
+	nextReleaseVersion := "v99.9.9"
+
+	args := emailReleaseBlockerArgs{
+		Version: nextReleaseVersion,
+		// TODO(celia) - add blockers here
+	}
+	opts := smtpOpts{
+		from:     fmt.Sprintf("Justin Beaver <%s>", smtpUser),
+		host:     smtpHost,
+		port:     smtpPort,
+		user:     smtpUser,
+		password: smtpPassword,
+		to:       emailAddresses,
+	}
+	fmt.Println("Sending email")
+	if err := sendmail(emailReleaseBlockerTextTemplate, emailReleaseBlockerHTMLTemplate, args, opts); err != nil {
+		return fmt.Errorf("cannot send email: %w", err)
+	}
+	return nil
 }
 
 func pickSHAWrapper(_ *cobra.Command, _ []string) error {
@@ -216,7 +234,7 @@ func pickSHA(jiraUsername, jiraToken, smtpPassword string) error {
 		fmt.Sprintf("https://github.com/cockroachdb/cockroach/compare/%s...%s",
 			nextRelease.prevReleaseVersion,
 			nextRelease.buildInfo.SHA))
-	args := emailArgs{
+	args := emailSHASelectedArgs{
 		Version:          nextRelease.nextReleaseVersion,
 		SHA:              nextRelease.buildInfo.SHA,
 		TrackingIssue:    trackingIssue.Key,

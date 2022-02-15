@@ -45,12 +45,31 @@ Release Engineering</p>
 </html>
 `
 
+const emailReleaseBlockerTextTemplate = `
+Hello! These are the blockers for {{ .Version }}:
+
+  - blocker 1
+  - blocker 2
+  - ...
+
+Thanks
+Release Engineering
+`
+
+// TODO(celia) - make HTML-version of this template
+const emailReleaseBlockerHTMLTemplate = emailSHASelectedTextTemplate
+
 type emailSHASelectedArgs struct {
 	Version          string
 	SHA              string
 	TrackingIssue    string
 	TrackingIssueURL htmltemplate.URL
 	DiffURL          htmltemplate.URL
+}
+
+type emailReleaseBlockerArgs struct {
+	Version string
+	// TODO(celia) - add blockers here
 }
 
 type smtpOpts struct {
