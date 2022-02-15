@@ -123,6 +123,7 @@ func TestEnsureConstraintIDs(t *testing.T) {
 			`);`,
 		[][]string{{"false", "false"}},
 	)
+	log.Infof(ctx, "okay about to upgrade")
 	// Migrate to the new cluster version.
 	tdb.Exec(t, `SET CLUSTER SETTING version = $1`,
 		clusterversion.ByKey(tabledesc.ConstraintIDsAddedToTableDescsVersion).String())
