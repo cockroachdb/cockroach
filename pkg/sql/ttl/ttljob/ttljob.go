@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -83,10 +84,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		return err
 	}
 
+	var initialVersion descpb.DescriptorVersion
+
 	// TODO(#75428): feature flag check, ttl pause check.
 	// TODO(#75428): only allow ascending order PKs for now schema side.
-	// TODO(#75428): detect if the table has a schema change, in particular,
-	// a PK change, a DROP TTL or a DROP TABLE should early exit the job.
 	var ttlSettings descpb.TableDescriptor_RowLevelTTL
 	var pkColumns []string
 	var pkTypes []*types.T
@@ -101,6 +102,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		)
 		if err != nil {
 			return err
+		}
+		initialVersion = desc.GetVersion()
+		// If the AOST timestamp is before the latest descriptor timestamp, exit
+		// early as the delete will not work.
+		if desc.GetModificationTime().GoTime().After(aost.Time) {
+			return errors.Newf("found a recent schema change on the table, aborting")
 		}
 		pkColumns = desc.GetPrimaryIndex().IndexDesc().KeyColumnNames
 		for _, id := range desc.GetPrimaryIndex().IndexDesc().KeyColumnIDs {
@@ -147,6 +154,8 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					ctx,
 					p.ExecCfg(),
 					details,
+					p.ExtendedEvalContext().Descs,
+					initialVersion,
 					r.startPK,
 					r.endPK,
 					pkColumns,
@@ -214,6 +223,8 @@ func runTTLOnRange(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details jobspb.RowLevelTTLDetails,
+	descriptors *descs.Collection,
+	tableVersion descpb.DescriptorVersion,
 	startPK tree.Datums,
 	endPK tree.Datums,
 	pkColumns []string,
@@ -263,6 +274,25 @@ func runTTLOnRange(
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				// If we detected a schema change here, the delete will not succeed
+				// (the SELECT still will because of the AOST). Early exit here.
+				desc, err := descriptors.GetImmutableTableByID(
+					ctx,
+					txn,
+					details.TableID,
+					tree.ObjectLookupFlagsWithRequired(),
+				)
+				if err != nil {
+					return err
+				}
+				version := desc.GetVersion()
+				if mockVersion := execCfg.TTLTestingKnobs.MockDescriptorVersionDuringDelete; mockVersion != nil {
+					version = *mockVersion
+				}
+				if version != tableVersion {
+					return errors.Newf("table has had a schema change since the job has started, aborting")
+				}
+
 				// TODO(#75428): configure admission priority
 				return deleteBuilder.run(ctx, ie, txn, deleteBatch)
 			}); err != nil {

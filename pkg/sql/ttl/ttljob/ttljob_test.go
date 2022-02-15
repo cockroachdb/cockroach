@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -52,7 +53,9 @@ type rowLevelTTLTestJobTestHelper struct {
 	executeSchedules func() error
 }
 
-func newRowLevelTTLTestJobTestHelper(t *testing.T) (*rowLevelTTLTestJobTestHelper, func()) {
+func newRowLevelTTLTestJobTestHelper(
+	t *testing.T, testingKnobs sql.TTLTestingKnobs,
+) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
 			jobstest.UseSystemTables,
@@ -77,15 +80,13 @@ func newRowLevelTTLTestJobTestHelper(t *testing.T) (*rowLevelTTLTestJobTestHelpe
 		},
 	}
 
-	var zeroDuration time.Duration
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: knobs,
-			TTL: &sql.TTLTestingKnobs{
-				AOSTDuration: &zeroDuration,
-			},
+			TTL:              &testingKnobs,
 		},
 	}
+
 	s, db, kvDB := serverutils.StartServer(t, args)
 	require.NotNil(t, th.cfg)
 	th.kvDB = kvDB
@@ -97,11 +98,13 @@ func newRowLevelTTLTestJobTestHelper(t *testing.T) (*rowLevelTTLTestJobTestHelpe
 	}
 }
 
-func (h *rowLevelTTLTestJobTestHelper) waitForSuccessfulScheduledJob(t *testing.T) {
+func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
+	t *testing.T, expectedStatus jobs.Status, expectedErrorStr string,
+) {
 	query := fmt.Sprintf(
 		`SELECT status, error FROM [SHOW JOBS] 
 		WHERE job_id IN (
-			SELECT job_id FROM %s
+			SELECT id FROM %s
 			WHERE created_by_id IN (SELECT schedule_id FROM %s WHERE executor_type = 'scheduled-row-level-ttl-executor')
 		)`,
 		h.env.SystemJobsTableName(),
@@ -119,11 +122,72 @@ func (h *rowLevelTTLTestJobTestHelper) waitForSuccessfulScheduledJob(t *testing.
 			return errors.Wrapf(err, "expected to scan row for a job, got")
 		}
 
-		if status != string(jobs.StatusSucceeded) {
-			return errors.Newf("expected status %s, got %s (error: %s)", jobs.StatusSucceeded, status, errorStr)
+		if status != string(expectedStatus) {
+			return errors.Newf("expected status %s, got %s (error: %s)", expectedStatus, status, errorStr)
+		}
+		if expectedErrorStr != "" && expectedErrorStr != errorStr {
+			return errors.Newf("expected error string %s, got %s", expectedErrorStr, errorStr)
 		}
 		return nil
 	})
+}
+
+func (h *rowLevelTTLTestJobTestHelper) waitForSuccessfulScheduledJob(t *testing.T) {
+	h.waitForScheduledJob(t, jobs.StatusSucceeded, "")
+}
+
+// TestRowLevelTTLJobRandomEntries tests that row-level TTL errors as appropriate
+// when there is a schema change..
+func TestRowLevelTTLJobSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	createTable := `CREATE TABLE t (
+	id INT PRIMARY KEY
+) WITH (ttl_expire_after = '10 minutes', ttl_range_concurrency = 2);
+ALTER TABLE t SPLIT AT VALUES (1), (2);
+INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, now() - '1 month');`
+
+	mockVersion := descpb.DescriptorVersion(0)
+	testCases := []struct {
+		desc                              string
+		expectedTTLError                  string
+		aostDuration                      time.Duration
+		mockDescriptorVersionDuringDelete *descpb.DescriptorVersion
+	}{
+		{
+			desc:             "schema change too recent to start TTL job",
+			expectedTTLError: "found a recent schema change on the table, aborting",
+			aostDuration:     -48 * time.Hour,
+		},
+		{
+			desc:             "schema change during job",
+			expectedTTLError: "error during row deletion: table has had a schema change since the job has started, aborting",
+			aostDuration:     time.Duration(0),
+			// We cannot use a schema change to change the version in this test as
+			// we overtook the job adoption method, which means schema changes get
+			// blocked and may not run.
+			mockDescriptorVersionDuringDelete: &mockVersion,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+				AOSTDuration:                      &tc.aostDuration,
+				MockDescriptorVersionDuringDelete: tc.mockDescriptorVersionDuringDelete,
+			})
+			defer cleanupFunc()
+
+			th.sqlDB.Exec(t, createTable)
+
+			// Force the schedule to execute.
+			th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
+			require.NoError(t, th.executeSchedules())
+
+			th.waitForScheduledJob(t, jobs.StatusFailed, tc.expectedTTLError)
+		})
+	}
 }
 
 // TestRowLevelTTLJobRandomEntries inserts random entries into a given table
@@ -161,7 +225,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 		},
 		{
-			desc: "one column pk, concurrent",
+			desc: "one column pk, concurrentSchemaChange",
 			createTable: `CREATE TABLE tbl (
 	id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 	text TEXT
@@ -183,7 +247,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 		},
 		{
-			desc: "three column pk, concurrent",
+			desc: "three column pk, concurrentSchemaChange",
 			createTable: `CREATE TABLE tbl (
 	id UUID DEFAULT gen_random_uuid(),
 	other_col INT,
@@ -196,7 +260,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numSplits:         10,
 		},
 		{
-			desc: "three column pk, concurrent with index",
+			desc: "three column pk, concurrentSchemaChange with index",
 			createTable: `CREATE TABLE tbl (
 	id UUID DEFAULT gen_random_uuid(),
 	other_col INT,
@@ -242,7 +306,10 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			// Log to make it slightly easier to reproduce a random config.
 			t.Logf("test case: %#v", tc)
 
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t)
+			var zeroDuration time.Duration
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(t, sql.TTLTestingKnobs{
+				AOSTDuration: &zeroDuration,
+			})
 			defer cleanupFunc()
 
 			th.sqlDB.Exec(t, tc.createTable)
