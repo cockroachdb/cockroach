@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -2655,14 +2656,49 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 			}
 
 			if idx := m.AsIndex(); m.Adding() && m.DeleteOnly() && idx != nil {
-				// TODO (issue #76507): also pre-split partitioned hash sharded index.
-				if idx.IsSharded() && idx.GetPartitioning().PartitioningDesc().NumImplicitColumns == 0 {
+				if idx.IsSharded() {
+					var partitionKeyPrefixes []roachpb.Key
+					partitioning := idx.GetPartitioning()
+					partitioning.ForEachList(
+						func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
+							for _, tupleBytes := range values {
+								_, key, err := rowenc.DecodePartitionTuple(
+									&tree.DatumAlloc{},
+									sc.execCfg.Codec,
+									tableDesc,
+									idx,
+									partitioning,
+									tupleBytes,
+									tree.Datums{},
+								)
+								if err != nil {
+									return nil
+								}
+								partitionKeyPrefixes = append(partitionKeyPrefixes, key)
+							}
+							return nil
+						},
+					)
+
 					splitAtShards := calculateSplitAtShards(maxHashShardedIndexRangePreSplit.Get(&sc.settings.SV), idx.GetSharded().ShardBuckets)
-					for _, shard := range splitAtShards {
-						keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
-						splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
-						if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
-							return err
+					if len(partitionKeyPrefixes) == 0 {
+						// If there is no partitioning on the index, only pre-split on
+						// selected shard boundaries.
+						for _, shard := range splitAtShards {
+							keyPrefix := sc.execCfg.Codec.IndexPrefix(uint32(tableDesc.GetID()), uint32(idx.GetID()))
+							splitKey := encoding.EncodeVarintAscending(keyPrefix, shard)
+							if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+								return err
+							}
+						}
+					} else {
+						for _, partPrefix := range partitionKeyPrefixes {
+							for _, shard := range splitAtShards {
+								splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
+								if err := sc.db.SplitAndScatter(ctx, splitKey, hour); err != nil {
+									return err
+								}
+							}
 						}
 					}
 				}
