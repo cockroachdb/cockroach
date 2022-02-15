@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/hashicorp/go-uuid"
 )
 
 // CreateRoleNode creates entries in the system.users table.
@@ -143,15 +143,17 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 			"a role/user named %s already exists", n.roleName.Normalized())
 	}
 
+	newUUID, _ := uuid.GenerateUUID()
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
-		fmt.Sprintf("insert into %s values ($1, $2, $3)", sessioninit.UsersTableName),
+		fmt.Sprintf("insert into %s values ($1, $2, $3, $4)", sessioninit.UsersTableName),
 		n.roleName,
 		hashedPassword,
 		n.isRole,
+		newUUID,
 	)
 
 	if err != nil {
@@ -169,7 +171,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	}
 
 	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
+		qargs := []interface{}{n.roleName, newUUID}
 
 		if value != nil {
 			isNull, val, err := value()

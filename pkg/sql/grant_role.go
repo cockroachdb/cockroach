@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -162,10 +163,11 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 }
 
 func (n *GrantRoleNode) startExec(params runParams) error {
+	fmt.Printf("start")
 	opName := "grant-role"
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "roleId", "memberId") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "roleId", "memberId")`
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`
@@ -173,17 +175,37 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		// admin option: false, do not clear it from existing memberships.
 		memberStmt += ` DO NOTHING`
 	}
+	ruids, err := ToSQLIDs(n.roles, params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil)
+	fmt.Printf("ruid %s", ruids)
+	if err != nil {
+		return err
+	}
+	muids, err := ToSQLIDs(n.members, params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("muid %s", ruids)
 
 	var rowsAffected int
 	for _, r := range n.roles {
+		ruid, _ := ruids[r]
+		//if err != nil {
+		//	return err
+		//}
+
 		for _, m := range n.members {
+			muid, _ := muids[m]
+			//if err != nil {
+			//	return err
+			//}
+
 			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
 				sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 				memberStmt,
-				r.Normalized(), m.Normalized(), n.adminOption,
+				r.Normalized(), m.Normalized(), n.adminOption, ruid, muid,
 			)
 			if err != nil {
 				return err
@@ -201,6 +223,7 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	}
 
 	n.run.rowsAffected += rowsAffected
+	fmt.Printf("the actual update end")
 
 	return nil
 }

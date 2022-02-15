@@ -209,6 +209,10 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 	}
+	roleID, err := GetUserID(params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, n.roleName)
+	if err != nil {
+		return err
+	}
 
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := n.roleOptions.GetSQLStmts(sqltelemetry.AlterRole)
@@ -217,7 +221,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	for stmt, value := range stmts {
-		qargs := []interface{}{n.roleName}
+		qargs := []interface{}{n.roleName, roleID.String()}
 
 		if value != nil {
 			isNull, val, err := value()
@@ -415,12 +419,17 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return nil
 	}
 
+	roleID, err := GetUserID(params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, roleName)
+	if err != nil {
+		return err
+	}
+
 	var deleteQuery = fmt.Sprintf(
-		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2`,
+		`DELETE FROM %s WHERE database_id = $1 AND role_name = $2 AND role_id = $3`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 	var upsertQuery = fmt.Sprintf(
-		`UPSERT INTO %s (database_id, role_name, settings) VALUES ($1, $2, $3)`,
+		`UPSERT INTO %s (database_id, role_name, settings, role_id) VALUES ($1, $2, $3, $4)`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
 
@@ -438,6 +447,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				deleteQuery,
 				n.dbDescID,
 				roleName,
+				roleID.String(),
 			)
 		} else {
 			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
@@ -449,6 +459,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				n.dbDescID,
 				roleName,
 				newSettings,
+				roleID.String(),
 			)
 		}
 		if internalExecErr != nil {

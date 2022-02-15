@@ -158,7 +158,7 @@ statement ok
 GRANT testrole TO testuser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member    isAdmin
 admin     root      true
@@ -187,7 +187,7 @@ GRANT testrole to child_role;
 GRANT testuser TO child_role;
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member      isAdmin
 admin     root        true
@@ -248,7 +248,7 @@ true
 
 # Dropping users/roles deletes all their memberships.
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member     isAdmin
 admin     root       true
@@ -314,7 +314,7 @@ statement ok
 CREATE USER testuser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member     isAdmin
 admin     root       true
@@ -324,7 +324,7 @@ statement ok
 DROP ROLE testrole
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member     isAdmin
 admin     root       true
@@ -452,7 +452,7 @@ testuser
 user root
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -470,7 +470,7 @@ statement ok
 DROP ROLE rolec
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -524,7 +524,7 @@ statement ok
 GRANT rolea,roleb TO testuser WITH ADMIN OPTION
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -539,7 +539,7 @@ GRANT rolea,roleb TO root WITH ADMIN OPTION
 user root
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -609,7 +609,7 @@ REVOKE roleb FROM root
 user root
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -621,7 +621,7 @@ statement ok
 REVOKE rolea, roleb FROM testuser, root
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -632,7 +632,7 @@ statement ok
 GRANT roLea,rOleB TO tEstUSER WITH ADMIN OPTION
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -643,7 +643,7 @@ statement ok
 REVOKE roleA, roleB FROM TestUser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role   member    isAdmin
 admin  root      true
@@ -678,7 +678,7 @@ GRANT admin TO newgroup
 user testuser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member    isAdmin
 admin     newgroup  false
@@ -706,7 +706,7 @@ CREATE SCHEMA db2.s1;
 user testuser
 
 statement error user testuser does not have SELECT privilege on relation role_members
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 
 # This doesn't error because testuser has CREATE privilege on db2.public.
 statement ok
@@ -718,7 +718,7 @@ CREATE TABLE db2.s1.foo (k int);
 user root
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member    isAdmin
 admin     root      true
@@ -803,7 +803,7 @@ statement ok
 DROP USER testuser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member    isAdmin
 admin     root      true
@@ -861,7 +861,7 @@ statement ok
 CREATE USER testuser
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role        member     isAdmin
 admin       root       true
@@ -937,7 +937,7 @@ statement ok
 CREATE ROLE IF NOT EXISTS rolewithoutcreate2 WITH NOCREATEROLE
 
 query TTB colnames
-SELECT * FROM system.role_members
+SELECT role, member, "isAdmin" FROM system.role_members
 ----
 role      member    isAdmin
 admin     root      true
@@ -1054,14 +1054,14 @@ statement ok
 CREATE ROLE rolewithlogin LOGIN
 
 query TTT
-SELECT * FROM system.role_options
+SELECT username, option, value FROM system.role_options
 ----
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
 
 query TTT
-SELECT * FROM system.role_options
+SELECT username, option, value FROM system.role_options
 ----
 rolewithnologin  NOLOGIN  NULL
 
@@ -1069,7 +1069,7 @@ statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 
 query TTT
-SELECT * FROM system.role_options
+SELECT username, option, value FROM system.role_options
 ----
 rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
 rolewithnologin  NOLOGIN      NULL
@@ -1078,7 +1078,7 @@ statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
 
 query TTT
-SELECT * FROM system.role_options
+SELECT username, option, value FROM system.role_options
 ----
 rolewithlogin    VALID UNTIL  NULL
 rolewithnologin  NOLOGIN      NULL
@@ -1087,7 +1087,7 @@ statement ok
 DROP ROLE rolewithlogin
 
 query TTT
-SELECT * FROM system.role_options
+SELECT username, option, value FROM system.role_options
 ----
 rolewithnologin  NOLOGIN  NULL
 
