@@ -571,7 +571,7 @@ func (b *builderState) ResolveRelation(
 func (b *builderState) resolveRelation(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) *cachedDesc {
-	_, rel := b.cr.MayResolveTable(b.ctx, *name)
+	prefix, rel := b.cr.MayResolveTable(b.ctx, *name)
 	if rel == nil {
 		if p.IsExistenceOptional {
 			return nil
@@ -579,6 +579,10 @@ func (b *builderState) resolveRelation(
 		panic(sqlerrors.NewUndefinedRelationError(name))
 	}
 	if rel.IsVirtualTable() {
+		if prefix.Schema.GetName() == catconstants.PgCatalogName {
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+				"%s is a system catalog", tree.ErrNameString(rel.GetName())))
+		}
 		panic(pgerror.Newf(pgcode.WrongObjectType,
 			"%s is a virtual object and cannot be modified", tree.ErrNameString(rel.GetName())))
 	}
