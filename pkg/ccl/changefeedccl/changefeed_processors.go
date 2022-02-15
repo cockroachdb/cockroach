@@ -159,7 +159,7 @@ func newChangeAggregatorProcessor(
 	}
 
 	var err error
-	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.Targets); err != nil {
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, AllTargets(ca.spec.Feed)); err != nil {
 		return nil, err
 	}
 
@@ -345,7 +345,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 	if schemaChangePolicy == changefeedbase.OptSchemaChangePolicyIgnore {
 		sf = schemafeed.DoNothingSchemaFeed
 	} else {
-		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, ca.spec.Feed.Targets,
+		sf = schemafeed.New(ctx, cfg, schemaChangeEvents, AllTargets(ca.spec.Feed),
 			initialHighWater, &ca.metrics.SchemaFeedMetrics)
 	}
 
@@ -358,7 +358,7 @@ func (ca *changeAggregator) makeKVFeedCfg(
 		Gossip:             cfg.Gossip,
 		Spans:              spans,
 		BackfillCheckpoint: ca.spec.Checkpoint.Spans,
-		Targets:            ca.spec.Feed.Targets,
+		Targets:            AllTargets(ca.spec.Feed),
 		Metrics:            &ca.metrics.KVFeedMetrics,
 		OnBackfillCallback: ca.sliMetrics.getBackfillCallback(),
 		MM:                 ca.kvFeedMemMon,
@@ -1085,7 +1085,7 @@ func newChangeFrontierProcessor(
 		cf.freqEmitResolved = emitNoResolved
 	}
 
-	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.Targets); err != nil {
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, AllTargets(spec.Feed)); err != nil {
 		return nil, err
 	}
 
@@ -1454,7 +1454,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 
 	recordID := progress.ProtectedTimestampRecord
 	if recordID == uuid.Nil {
-		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, cf.spec.Feed.Targets, highWater, progress)
+		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
 		if err := pts.Protect(ctx, txn, ptr); err != nil {
 			return err
 		}

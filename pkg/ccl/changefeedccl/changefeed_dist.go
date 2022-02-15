@@ -104,7 +104,7 @@ func distChangefeedFlow(
 			spansTS = spansTS.Next()
 		}
 		var err error
-		trackedSpans, err = fetchSpansForTargets(ctx, execCfg, details.Targets, spansTS)
+		trackedSpans, err = fetchSpansForTargets(ctx, execCfg, AllTargets(details), spansTS)
 		if err != nil {
 			return err
 		}
@@ -121,7 +121,7 @@ func distChangefeedFlow(
 func fetchSpansForTargets(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	targets jobspb.ChangefeedTargets,
+	targets []jobspb.ChangefeedTargetSpecification,
 	ts hlc.Timestamp,
 ) ([]roachpb.Span, error) {
 	var spans []roachpb.Span
@@ -133,10 +133,10 @@ func fetchSpansForTargets(
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range targets {
+		for _, table := range targets {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, tableID, flags)
+			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, table.TableID, flags)
 			if err != nil {
 				return err
 			}
