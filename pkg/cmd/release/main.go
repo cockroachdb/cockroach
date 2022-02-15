@@ -114,7 +114,17 @@ func run() error {
 		RunE: getReleaseBlockersWrapper,
 	}
 	cmdGetBlockers.Flags().StringVar(&releaseBranch, "release-branch", "", "release branch")
-	if err := cmdPickSHA.MarkFlagRequired("release-branch"); err != nil {
+	cmdGetBlockers.Flags().StringVar(&smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
+	cmdGetBlockers.Flags().StringVar(&smtpHost, "smtp-host", "", "SMTP host")
+	cmdGetBlockers.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
+	cmdGetBlockers.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
+	if err := setRequiredFlags(cmdGetBlockers, []string{
+		"release-branch",
+		"smtp-user",
+		"smtp-host",
+		"smtp-port",
+		"to",
+	}); err != nil {
 		return err
 	}
 	rootCmd.AddCommand(cmdGetBlockers)
