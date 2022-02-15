@@ -2657,6 +2657,13 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 
 			if idx := m.AsIndex(); m.Adding() && m.DeleteOnly() && idx != nil {
 				if idx.IsSharded() {
+					// Iterate through all partitioning lists to get all possible list
+					// partitioning key prefix. Hash sharded index only allows implicit
+					// partitioning, and implicit partitioning does not support
+					// subpartition. So it's safe not to consider subpartitions. Range
+					// partition is not considered here as well, because it's hard to
+					// predict the sampling points within each range to make the pre-split
+					// on shard boundaries helpful.
 					var partitionKeyPrefixes []roachpb.Key
 					partitioning := idx.GetPartitioning()
 					partitioning.ForEachList(
@@ -2692,6 +2699,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 							}
 						}
 					} else {
+						// If there are partitioning prefixes, pre-split each of them.
 						for _, partPrefix := range partitionKeyPrefixes {
 							for _, shard := range splitAtShards {
 								splitKey := encoding.EncodeVarintAscending(partPrefix, shard)
