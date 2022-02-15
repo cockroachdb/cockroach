@@ -12,6 +12,7 @@ package ttljob
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -55,6 +57,13 @@ var (
 		"default amount of ranges to process at once during a TTL delete",
 		1,
 		settings.PositiveInt,
+	).WithPublic()
+	defaultDeleteRateLimit = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.default_delete_rate_limit",
+		"default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.",
+		0,
+		settings.NonNegativeInt,
 	).WithPublic()
 )
 
@@ -149,6 +158,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	rangeConcurrency := getRangeConcurrency(p.ExecCfg().SV(), ttlSettings)
 	selectBatchSize := getSelectBatchSize(p.ExecCfg().SV(), ttlSettings)
 	deleteBatchSize := getDeleteBatchSize(p.ExecCfg().SV(), ttlSettings)
+	deleteRateLimit := getDeleteRateLimit(p.ExecCfg().SV(), ttlSettings)
+	deleteRateLimiter := quotapool.NewRateLimiter(
+		"ttl",
+		quotapool.Limit(deleteRateLimit),
+		deleteRateLimit,
+	)
 
 	ch := make(chan rangeToProcess, rangeConcurrency)
 	for i := 0; i < rangeConcurrency; i++ {
@@ -165,6 +180,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					pkColumns,
 					selectBatchSize,
 					deleteBatchSize,
+					deleteRateLimiter,
 					*aost,
 				); err != nil {
 					// Continue until channel is fully read.
@@ -223,6 +239,20 @@ func getRangeConcurrency(sv *settings.Values, ttl catpb.RowLevelTTL) int {
 	return int(defaultRangeConcurrency.Get(sv))
 }
 
+func getDeleteRateLimit(sv *settings.Values, ttl catpb.RowLevelTTL) int64 {
+	val := func() int64 {
+		if bs := ttl.DeleteRateLimit; bs != 0 {
+			return bs
+		}
+		return defaultDeleteRateLimit.Get(sv)
+	}()
+	// Put the maximum tokens possible if there is no rate limit.
+	if val == 0 {
+		return math.MaxInt64
+	}
+	return val
+}
+
 func runTTLOnRange(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
@@ -233,6 +263,7 @@ func runTTLOnRange(
 	endPK tree.Datums,
 	pkColumns []string,
 	selectBatchSize, deleteBatchSize int,
+	deleteRateLimiter *quotapool.RateLimiter,
 	aost tree.DTimestampTZ,
 ) error {
 	ie := execCfg.InternalExecutor
@@ -299,6 +330,12 @@ func runTTLOnRange(
 						desc.GetModificationTime().GoTime().Format(time.RFC3339),
 					)
 				}
+
+				tokens, err := deleteRateLimiter.Acquire(ctx, int64(len(deleteBatch)))
+				if err != nil {
+					return err
+				}
+				defer tokens.Consume()
 
 				// TODO(#75428): configure admission priority
 				return deleteBuilder.run(ctx, ie, txn, deleteBatch)

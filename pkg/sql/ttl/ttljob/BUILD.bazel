@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/ctxgroup",
+        "//pkg/util/quotapool",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
