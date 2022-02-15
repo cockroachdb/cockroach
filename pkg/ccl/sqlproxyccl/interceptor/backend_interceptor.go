@@ -46,8 +46,8 @@ func (bi *BackendInterceptor) ReadMsg() (msg pgproto3.FrontendMessage, err error
 	if err != nil {
 		return nil, err
 	}
-	// errPanicWriter is used here because Receive must not Write.
-	return pgproto3.NewBackend(newChunkReader(msgBytes), &errPanicWriter{}).Receive()
+	// errWriter is used here because Receive must not Write.
+	return pgproto3.NewBackend(newChunkReader(msgBytes), &errWriter{}).Receive()
 }
 
 // WriteMsg writes the given bytes to the writer dst. This is just a helper
