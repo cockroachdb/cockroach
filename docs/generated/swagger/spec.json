@@ -1279,6 +1279,12 @@
           "format": "int64",
           "x-go-name": "RangeCount"
         },
+        "stats_last_created_at": {
+          "description": "stats_last_created_at is the time at which statistics were last created.",
+          "type": "string",
+          "format": "date-time",
+          "x-go-name": "StatsLastCreatedAt"
+        },
         "zone_config": {
           "$ref": "#/definitions/ZoneConfig"
         },

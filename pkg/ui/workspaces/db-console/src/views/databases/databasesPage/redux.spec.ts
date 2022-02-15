@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import assert from "assert";
 import { createMemoryHistory } from "history";
 import _ from "lodash";
 import Long from "long";
@@ -22,7 +21,8 @@ import {
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
 import * as fakeApi from "src/util/fakeApi";
-import { mapStateToProps, mapDispatchToProps } from "./redux";
+import { mapDispatchToProps, mapStateToProps } from "./redux";
+import { assertDeepStrictEqual } from "src/test-utils";
 
 class TestDriver {
   private readonly actions: DatabasesPageActions;
@@ -48,15 +48,19 @@ class TestDriver {
     return this.actions.refreshTableStats(database, table);
   }
 
+  async refreshSettings() {
+    return this.actions.refreshSettings();
+  }
+
   assertProperties(expected: DatabasesPageData) {
-    assert.deepEqual(this.properties(), expected);
+    assertDeepStrictEqual(expected, this.properties());
   }
 
   assertDatabaseProperties(
     database: string,
     expected: DatabasesPageDataDatabase,
   ) {
-    assert.deepEqual(this.findDatabase(database), expected);
+    assertDeepStrictEqual(expected, this.findDatabase(database));
   }
 
   assertMissingTableProperties(
@@ -64,9 +68,9 @@ class TestDriver {
     table: string,
     expected: DatabasesPageDataMissingTable,
   ) {
-    assert.deepEqual(
-      this.findMissingTable(this.findDatabase(database), table),
+    assertDeepStrictEqual(
       expected,
+      this.findMissingTable(this.findDatabase(database), table),
     );
   }
 
@@ -91,11 +95,20 @@ describe("Databases Page", function() {
   });
 
   it("starts in a pre-loading state", async function() {
+    fakeApi.stubClusterSettings({
+      key_values: {
+        "sql.stats.automatic_collection.enabled": { value: "true" },
+      },
+    });
+
+    await driver.refreshSettings();
+
     driver.assertProperties({
       loading: false,
       loaded: false,
       databases: [],
       sortSetting: { ascending: true, columnTitle: "name" },
+      automaticStatsCollectionEnabled: true,
       showNodeRegionsColumn: false,
     });
   });
@@ -104,8 +117,14 @@ describe("Databases Page", function() {
     fakeApi.stubDatabases({
       databases: ["system", "test"],
     });
+    fakeApi.stubClusterSettings({
+      key_values: {
+        "sql.stats.automatic_collection.enabled": { value: "true" },
+      },
+    });
 
     await driver.refreshDatabases();
+    await driver.refreshSettings();
 
     driver.assertProperties({
       loading: false,
@@ -134,6 +153,7 @@ describe("Databases Page", function() {
       ],
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
+      automaticStatsCollectionEnabled: true,
     });
   });
 

@@ -346,6 +346,8 @@ EXCLUDED_SRCS = [
   "//pkg/ui/workspaces/cluster-ui:dist/types/sessions/sessionsTableContent.d.ts",
   "//pkg/ui/workspaces/cluster-ui:dist/types/sessions/terminateQueryModal.d.ts",
   "//pkg/ui/workspaces/cluster-ui:dist/types/sessions/terminateSessionModal.d.ts",
+  "//pkg/ui/workspaces/cluster-ui:dist/types/settings/booleanSetting.d.ts",
+  "//pkg/ui/workspaces/cluster-ui:dist/types/settings/index.d.ts",
   "//pkg/ui/workspaces/cluster-ui:dist/types/sortedtable/index.d.ts",
   "//pkg/ui/workspaces/cluster-ui:dist/types/sortedtable/sortedtable.d.ts",
   "//pkg/ui/workspaces/cluster-ui:dist/types/sortedtable/tableHead/index.d.ts",
