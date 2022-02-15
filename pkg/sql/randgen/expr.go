@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/lib/pq/oid"
 )
 
 // randPartialIndexPredicateFromCols creates a partial index expression with a
@@ -203,10 +204,26 @@ func randExpr(
 		}
 
 	case types.StringFamily:
-		typ = types.String
-		expr = &tree.FuncExpr{
-			Func:  tree.WrapFunction("lower"),
-			Exprs: tree.Exprs{tree.NewUnresolvedName(string(x.Name))},
+		switch xTyp.Oid() {
+		case oid.T_char, oid.T_bpchar:
+			// Bugs were introduced in 21.2 that cause incorrect values to be
+			// generated for computed columns that reference columns of type
+			// CHAR or "char", causing incorrect query results. These bugs have
+			// been fixed in more recent releases with the implementation of
+			// assignment casts, but this is far too large of a change to
+			// backport. To prevent rediscovering the same bug repeatedly, we
+			// avoid building computed column expressions that reference CHAR
+			// and "char" types. Instead, we simply created a boolean computed
+			// column with a true expression.
+			typ = types.Bool
+			expr = tree.DBoolTrue
+			nullability = tree.NotNull
+		default:
+			typ = types.String
+			expr = &tree.FuncExpr{
+				Func:  tree.WrapFunction("lower"),
+				Exprs: tree.Exprs{tree.NewUnresolvedName(string(x.Name))},
+			}
 		}
 
 	default:
