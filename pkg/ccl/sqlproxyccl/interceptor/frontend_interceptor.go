@@ -15,18 +15,13 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-// FrontendInterceptor is a client interceptor for the Postgres frontend
-// protocol.
+// FrontendInterceptor is a client interceptor for the Postgres frontend protocol.
 type FrontendInterceptor pgInterceptor
 
-// NewFrontendInterceptor creates a FrontendInterceptor. bufSize must be at
-// least the size of a pgwire message header.
-func NewFrontendInterceptor(src io.Reader, bufSize int) (*FrontendInterceptor, error) {
-	pgi, err := newPgInterceptor(src, bufSize)
-	if err != nil {
-		return nil, err
-	}
-	return (*FrontendInterceptor)(pgi), nil
+// NewFrontendInterceptor creates a FrontendInterceptor using the default buffer
+// size of 8K bytes.
+func NewFrontendInterceptor(src io.Reader) *FrontendInterceptor {
+	return (*FrontendInterceptor)(newPgInterceptor(src, defaultBufferSize))
 }
 
 // PeekMsg returns the header of the current pgwire message without advancing

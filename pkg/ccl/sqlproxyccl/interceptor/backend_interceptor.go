@@ -18,14 +18,10 @@ import (
 // BackendInterceptor is a server int/erceptor for the Postgres backend protocol.
 type BackendInterceptor pgInterceptor
 
-// NewBackendInterceptor creates a BackendInterceptor. bufSize must be at least
-// the size of a pgwire message header.
-func NewBackendInterceptor(src io.Reader, bufSize int) (*BackendInterceptor, error) {
-	pgi, err := newPgInterceptor(src, bufSize)
-	if err != nil {
-		return nil, err
-	}
-	return (*BackendInterceptor)(pgi), nil
+// NewBackendInterceptor creates a BackendInterceptor using the default buffer
+// size of 8K bytes.
+func NewBackendInterceptor(src io.Reader) *BackendInterceptor {
+	return (*BackendInterceptor)(newPgInterceptor(src, defaultBufferSize))
 }
 
 // PeekMsg returns the header of the current pgwire message without advancing
