@@ -698,9 +698,9 @@ memo (optimized, ~53KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  │    └── []
  │         ├── best: (scan dz,cols=(7,8))
  │         └── cost: 1064.42
- ├── G11: (inner-join G2 G14 G4) (inner-join G14 G2 G4) (inner-join G5 G16 G4) (inner-join G16 G5 G4) (inner-join G8 G18 G23) (inner-join G18 G8 G23) (lookup-join G8 G19 abc,keyCols=[5],outCols=(1,2,4,5,10-13)) (merge-join G18 G8 G19 inner-join,+10,+5)
+ ├── G11: (inner-join G2 G14 G4) (inner-join G14 G2 G4) (inner-join G5 G16 G4) (inner-join G16 G5 G4) (inner-join G8 G18 G23) (inner-join G18 G8 G23) (lookup-join G8 G19 abc,keyCols=[2],outCols=(1,2,4,5,10-13)) (merge-join G18 G8 G19 inner-join,+10,+2)
  │    ├── [ordering: +(2|5|10)]
- │    │    ├── best: (merge-join G18="[ordering: +10]" G8="[ordering: +(2|5)]" G19 inner-join,+10,+5)
+ │    │    ├── best: (merge-join G18="[ordering: +10]" G8="[ordering: +(2|5)]" G19 inner-join,+10,+2)
  │    │    └── cost: 6754.79
  │    └── []
  │         ├── best: (inner-join G2 G14 G4)
@@ -713,12 +713,12 @@ memo (optimized, ~53KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  │    └── []
  │         ├── best: (inner-join G2 G10 G21)
  │         └── cost: 2256.88
- ├── G14: (inner-join G5 G18 G23) (inner-join G18 G5 G23) (lookup-join G5 G19 abc,keyCols=[5],outCols=(4,5,10-13)) (merge-join G18 G5 G19 inner-join,+10,+5)
+ ├── G14: (inner-join G5 G18 G25) (inner-join G18 G5 G25) (lookup-join G5 G19 abc,keyCols=[5],outCols=(4,5,10-13)) (merge-join G18 G5 G19 inner-join,+10,+5)
  │    ├── [ordering: +(5|10)]
  │    │    ├── best: (merge-join G18="[ordering: +10]" G5="[ordering: +5]" G19 inner-join,+10,+5)
  │    │    └── cost: 2438.50
  │    └── []
- │         ├── best: (inner-join G5 G18 G23)
+ │         ├── best: (inner-join G5 G18 G25)
  │         └── cost: 2209.17
  ├── G15: (inner-join G5 G10 G7) (inner-join G10 G5 G7)
  │    ├── [ordering: +(5|8)]
@@ -727,12 +727,12 @@ memo (optimized, ~53KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  │    └── []
  │         ├── best: (inner-join G5 G10 G7)
  │         └── cost: 2256.88
- ├── G16: (inner-join G2 G18 G25) (inner-join G18 G2 G25) (lookup-join G2 G19 abc,keyCols=[2],outCols=(1,2,10-13)) (merge-join G18 G2 G19 inner-join,+10,+2)
+ ├── G16: (inner-join G2 G18 G23) (inner-join G18 G2 G23) (lookup-join G2 G19 abc,keyCols=[2],outCols=(1,2,10-13)) (merge-join G18 G2 G19 inner-join,+10,+2)
  │    ├── [ordering: +(2|10)]
  │    │    ├── best: (merge-join G18="[ordering: +10]" G2="[ordering: +2]" G19 inner-join,+10,+2)
  │    │    └── cost: 2438.50
  │    └── []
- │         ├── best: (inner-join G2 G18 G25)
+ │         ├── best: (inner-join G2 G18 G23)
  │         └── cost: 2209.17
  ├── G17: (inner-join G2 G15 G4) (inner-join G15 G2 G4) (inner-join G5 G13 G7) (inner-join G13 G5 G7) (inner-join G8 G10 G7) (inner-join G10 G8 G7)
  │    ├── [ordering: +(2|5|8)]
@@ -759,9 +759,9 @@ memo (optimized, ~53KB, required=[presentation: b:1,x:2,c:4,y:5,d:7,z:8,a:10,b:1
  ├── G27: (variable y)
  ├── G28: (eq G26 G29)
  ├── G29: (variable z)
- ├── G30: (eq G27 G31)
+ ├── G30: (eq G26 G31)
  ├── G31: (variable a)
- └── G32: (eq G26 G31)
+ └── G32: (eq G27 G31)
 
 opt
 SELECT * FROM bx, cy, dz, abc WHERE x = y AND y = z AND z = a
@@ -2449,3 +2449,191 @@ AND EXISTS (SELECT 1 FROM abc WHERE a = y)
 ----
 Rules Applied: 169
 Groups Added: 86
+
+
+# Regression test for #76522. Do not produce query plans where some of the
+# original filters have been omitted.
+
+exec-ddl
+CREATE TABLE t76522_1 (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  PRIMARY KEY (a ASC, b ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t76522_2 (
+  a INT NOT NULL,
+  c INT,
+  should_not_be_eliminated INT,
+  PRIMARY KEY (a ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t76522_3 (
+  a INT NOT NULL,
+  d INT NOT NULL,
+  f INT,
+  g INT,
+  PRIMARY KEY (a ASC, d ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t76522_4 (
+  e INT NOT NULL,
+  f INT,
+  g INT,
+  PRIMARY KEY (e ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t76522_5 (
+  h INT NOT NULL,
+  f INT NOT NULL,
+  g INT NOT NULL,
+  b INT,
+  should_not_be_eliminated INT,
+  c INT,
+  PRIMARY KEY (h ASC, f ASC, g ASC)
+)
+----
+
+# Give t76522_1 many rows where a has many distincts.
+exec-ddl
+ALTER TABLE t76522_1 INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-01-17 12:51:38.433911",
+        "distinct_count": 9161427,
+        "null_count": 0,
+        "row_count": 44484238
+    }
+]'
+----
+
+# Give t76522_2 many rows where a has many distincts.
+exec-ddl
+ALTER TABLE t76522_2 INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-01-17 12:51:38.433911",
+        "distinct_count": 17014025,
+        "null_count": 0,
+        "row_count": 17024553
+    }
+]'
+----
+
+# Give t76522_3 many rows where a has many distincts.
+exec-ddl
+ALTER TABLE t76522_3 INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2022-01-17 12:51:38.433911",
+        "distinct_count": 17187349,
+        "null_count": 0,
+        "row_count": 18138540
+    }
+]'
+----
+
+# Give t76522_4 many rows where e has many distincts.
+exec-ddl
+ALTER TABLE t76522_4 INJECT STATISTICS '[
+    {
+        "columns": [
+            "e"
+        ],
+        "created_at": "2022-01-17 12:51:38.433911",
+        "distinct_count": 346919,
+        "null_count": 0,
+        "row_count": 346109
+    }
+]';
+----
+
+# Give t5 few rows.
+exec-ddl
+ALTER TABLE t76522_5 INJECT STATISTICS '[
+    {
+        "columns": [
+            "h"
+        ],
+        "created_at": "2022-01-17 12:51:38.433911",
+        "distinct_count": 119,
+        "null_count": 0,
+        "row_count": 119
+    }
+]'
+----
+
+# Prior to the fix, these filters were missing from the query plan:
+#
+#   t5.c = t2.c
+#   t2.should_not_be_eliminated = t5.should_not_be_eliminated
+#
+opt
+SELECT
+  t2.a
+FROM
+  t76522_1 AS t1
+  INNER JOIN t76522_2 AS t2 ON t1.a = t2.a
+  INNER JOIN t76522_3 AS t3 ON t1.a = t3.a
+  INNER JOIN t76522_4 AS t4 ON t3.d = t4.e
+  INNER JOIN t76522_5 AS t5 ON
+      t4.f = t5.f
+      AND t4.g = t5.g
+      AND t5.b = t1.b
+      AND t5.c = t2.c
+WHERE
+  t1.a = 123456 AND t2.should_not_be_eliminated = t5.should_not_be_eliminated;
+----
+project
+ ├── columns: a:4!null
+ ├── fd: ()-->(4)
+ └── inner-join (lookup t76522_1 [as=t1])
+      ├── columns: t1.a:1!null t1.b:2!null t2.a:4!null t2.c:5!null t2.should_not_be_eliminated:6!null t3.a:8!null d:9!null e:13!null t4.f:14!null t4.g:15!null t5.f:18!null t5.g:19!null t5.b:20!null t5.should_not_be_eliminated:21!null t5.c:22!null
+      ├── key columns: [4 20] = [1 2]
+      ├── lookup columns are key
+      ├── fd: ()-->(1,4-6,8,21,22), (1)==(4,8), (4)==(1,8), (8)==(1,4), (13)-->(14,15), (9)==(13), (13)==(9), (14)==(18), (18)==(14), (15)==(19), (19)==(15), (2)==(20), (20)==(2), (5)==(22), (22)==(5), (6)==(21), (21)==(6)
+      ├── inner-join (lookup t76522_2 [as=t2])
+      │    ├── columns: t2.a:4!null t2.c:5!null t2.should_not_be_eliminated:6!null t3.a:8!null d:9!null e:13!null t4.f:14!null t4.g:15!null t5.f:18!null t5.g:19!null t5.b:20 t5.should_not_be_eliminated:21!null t5.c:22!null
+      │    ├── key columns: [8] = [4]
+      │    ├── lookup columns are key
+      │    ├── fd: ()-->(4-6,8,21,22), (13)-->(14,15), (14)==(18), (18)==(14), (15)==(19), (19)==(15), (9)==(13), (13)==(9), (5)==(22), (22)==(5), (6)==(21), (21)==(6), (4)==(8), (8)==(4)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: t3.a:8!null d:9!null e:13!null t4.f:14!null t4.g:15!null t5.f:18!null t5.g:19!null t5.b:20 t5.should_not_be_eliminated:21 t5.c:22
+      │    │    ├── fd: ()-->(8), (13)-->(14,15), (14)==(18), (18)==(14), (15)==(19), (19)==(15), (9)==(13), (13)==(9)
+      │    │    ├── scan t76522_5 [as=t5]
+      │    │    │    └── columns: t5.f:18!null t5.g:19!null t5.b:20 t5.should_not_be_eliminated:21 t5.c:22
+      │    │    ├── inner-join (lookup t76522_4 [as=t4])
+      │    │    │    ├── columns: t3.a:8!null d:9!null e:13!null t4.f:14 t4.g:15
+      │    │    │    ├── key columns: [9] = [13]
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── key: (13)
+      │    │    │    ├── fd: ()-->(8), (13)-->(14,15), (9)==(13), (13)==(9)
+      │    │    │    ├── scan t76522_3 [as=t3]
+      │    │    │    │    ├── columns: t3.a:8!null d:9!null
+      │    │    │    │    ├── constraint: /8/9: [/123456 - /123456]
+      │    │    │    │    ├── key: (9)
+      │    │    │    │    └── fd: ()-->(8)
+      │    │    │    └── filters (true)
+      │    │    └── filters
+      │    │         ├── t4.f:14 = t5.f:18 [outer=(14,18), constraints=(/14: (/NULL - ]; /18: (/NULL - ]), fd=(14)==(18), (18)==(14)]
+      │    │         └── t4.g:15 = t5.g:19 [outer=(15,19), constraints=(/15: (/NULL - ]; /19: (/NULL - ]), fd=(15)==(19), (19)==(15)]
+      │    └── filters
+      │         ├── t5.c:22 = t2.c:5 [outer=(5,22), constraints=(/5: (/NULL - ]; /22: (/NULL - ]), fd=(5)==(22), (22)==(5)]
+      │         ├── t2.should_not_be_eliminated:6 = t5.should_not_be_eliminated:21 [outer=(6,21), constraints=(/6: (/NULL - ]; /21: (/NULL - ]), fd=(6)==(21), (21)==(6)]
+      │         └── t2.a:4 = 123456 [outer=(4), constraints=(/4: [/123456 - /123456]; tight), fd=()-->(4)]
+      └── filters
+           └── t1.a:1 = 123456 [outer=(1), constraints=(/1: [/123456 - /123456]; tight), fd=()-->(1)]
