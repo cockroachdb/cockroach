@@ -29,9 +29,6 @@ func TestSchemaChangerSideEffects(t *testing.T) {
 	sctest.EndToEndSideEffects(t, newCluster)
 }
 
-// TestRollback tests that the schema changer job rolls back properly.
-// This data-driven test uses the same input as TestSchemaChangerSideEffects
-// but ignores the expected output.
 func TestRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
