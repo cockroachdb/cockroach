@@ -185,6 +185,11 @@ func (b *baseStatusServer) getLocalSessions(
 		}
 	}
 
+	hasViewActivity, err := b.privilegeChecker.hasRoleOption(ctx, sessionUser, roleoption.VIEWACTIVITY)
+	if err != nil {
+		return nil, err
+	}
+
 	// The empty username means "all sessions".
 	showAll := reqUsername.Undefined()
 
@@ -195,6 +200,14 @@ func (b *baseStatusServer) getLocalSessions(
 	for _, session := range sessions {
 		if reqUsername.Normalized() != session.Username && !showAll {
 			continue
+		}
+
+		if !isAdmin && !hasViewActivity && (sessionUser != reqUsername) {
+			// Remove queries with constants if user doesn't have correct privileges.
+			for _, query := range session.ActiveQueries {
+				query.Sql = ""
+			}
+			session.LastActiveQuery = ""
 		}
 
 		userSessions = append(userSessions, session)

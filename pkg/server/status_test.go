@@ -2890,3 +2890,50 @@ func TestStatusCancelSessionGatewayMetadataPropagation(t *testing.T) {
 	require.NotNil(t, err)
 	require.Contains(t, err.Error(), "status: 403 Forbidden")
 }
+
+func TestStatusAPIListSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	ctx := context.Background()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: params,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	var resp serverpb.ListSessionsResponse
+	// Non-admin without VIEWWACTIVITY or VIEWACTIVITYREDACTED should work and fetch user's own sessions.
+	err := getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+
+	// Grant VIEWACTIVITYREDACTED.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+
+	appName := "testing"
+	thirdServerSQL.Exec(t, fmt.Sprintf(`SET application_name = "%s"`, appName))
+	thirdServerSQL.Exec(t, "SELECT 1")
+
+	err = getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.Sessions)
+
+	session := resp.Sessions[0]
+	require.Equal(t, appName, session.ApplicationName)
+	require.Empty(t, session.LastActiveQuery)
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+
+	// Remove VIEWACTIVITYREDCATED and grant VIEWACTIVITY.
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s NOVIEWACTIVITYREDACTED", authenticatedUserNameNoAdmin().Normalized()))
+	thirdServerSQL.Exec(t, fmt.Sprintf("ALTER USER %s VIEWACTIVITY", authenticatedUserNameNoAdmin().Normalized()))
+
+	// Test again with VIEWACTIVITYREDACTED, we should get the full query with constants.
+	thirdServerSQL.Exec(t, "SELECT 2")
+	err = getStatusJSONProtoWithAdminOption(firstServerProto, "sessions", &resp, false)
+	require.NotEmpty(t, resp.Sessions)
+	session = resp.Sessions[0]
+	require.Equal(t, "SELECT _", session.LastActiveQueryNoConstants)
+	require.Equal(t, "SELECT 2", session.LastActiveQuery)
+}
