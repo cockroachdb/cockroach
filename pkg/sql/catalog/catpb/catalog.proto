@@ -206,4 +206,6 @@ message RowLevelTTL {
   optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
   // RangeConcurrency is the number of ranges to process at a time.
   optional int64 range_concurrency = 6 [(gogoproto.nullable)=false];
+  // DeleteRateLimit is the maximum amount of rows to delete per second.
+  optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
 }

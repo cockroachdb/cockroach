@@ -169,6 +169,7 @@ sql.trace.session_eventlog.enabled	boolean	false	set to true to enable session t
 sql.trace.stmt.enable_threshold	duration	0s	duration beyond which all statements are traced (set to 0 to disable). This applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold.
 sql.trace.txn.enable_threshold	duration	0s	duration beyond which all transactions are traced (set to 0 to disable). This setting is coarser grained thansql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries).
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job
+sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.
 sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
 timeseries.storage.enabled	boolean	true	if set, periodic timeseries data is stored within the cluster; disabling is not recommended unless you are storing the data elsewhere
