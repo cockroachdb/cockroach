@@ -3,6 +3,11 @@
 # the cluster setting to disable auto stats doesn't work:
 # https://github.com/cockroachdb/cockroach/issues/47918
 
+# Disable declarative schema changer for this test.
+statement ok
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
+
 # These test verify that a user's job are visible via
 # crdb_internal.jobs and SHOW JOBS.
 
