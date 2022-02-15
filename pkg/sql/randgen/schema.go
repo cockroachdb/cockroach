@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -184,6 +185,138 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	// Maybe add some storing columns.
 	res, _ := IndexStoringMutator(rng, []tree.Statement{ret})
 	return res[0].(*tree.CreateTable)
+}
+
+func parseCreateStatement(createStmtSQL string) (*tree.CreateTable, error) {
+	var p parser.Parser
+	stmts, err := p.Parse(createStmtSQL)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) != 1 {
+		return nil, errors.Errorf("parsed CreateStatement string yielded more than one parsed statment")
+	}
+	tableStmt, ok := stmts[0].AST.(*tree.CreateTable)
+	if !ok {
+		return nil, errors.Errorf("AST could not be cast to *tree.CreateTable")
+	}
+	return tableStmt, nil
+}
+
+// generateInsertStmtVals generates random data for a string builder thats
+// used after the VALUES keyword in an INSERT statement.
+func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool) string {
+	var valBuilder strings.Builder
+	valBuilder.WriteString("(")
+	comma := ""
+	for j := 0; j < len(colTypes); j++ {
+		valBuilder.WriteString(comma)
+		var d tree.Datum
+		if rand.Intn(10) < 4 {
+			// 40% of the time, use a corner case value
+			d = randInterestingDatum(rng, colTypes[j])
+		}
+		if colTypes[j] == types.RegType {
+			// RandDatum is naive to the constraint that a RegType < len(types.OidToType),
+			// at least before linking and user defined types are added.
+			d = tree.NewDOid(tree.DInt(rand.Intn(len(types.OidToType))))
+		}
+		if d == nil {
+			d = RandDatum(rng, colTypes[j], nullable[j])
+		}
+		valBuilder.WriteString(tree.AsStringWithFlags(d, tree.FmtParsable))
+		comma = ", "
+	}
+	valBuilder.WriteString(")")
+	return valBuilder.String()
+}
+
+// TODO(butler): develop new helper function PopulateDatabaseWithRandData which calls
+// PopulateTableWithRandData on each table in the order of the fk
+// dependency graph.
+
+// PopulateTableWithRandData populates the provided table by executing exactly
+// `numInserts` statements. numRowsInserted <= numInserts because inserting into
+// an arbitrary table can fail for reasons which include:
+//  - UNIQUE or CHECK constraint violation. RandDatum is naive to these constraints.
+//  - Out of range error for a computed INT2 or INT4 column.
+//
+// If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
+// handle this table's schema. Consider increasing numInserts or filing a bug.
+func PopulateTableWithRandData(
+	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
+) (numRowsInserted int, err error) {
+	var createStmtSQL string
+	res := db.QueryRow(fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tableName))
+	err = res.Scan(&createStmtSQL)
+	if err != nil {
+		return 0, errors.Wrapf(err, "table does not exist in db")
+	}
+	createStmt, err := parseCreateStatement(createStmtSQL)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to determine table schema")
+	}
+
+	// Find columns subject to a foreign key constraint
+	var hasFK = map[string]bool{}
+	for _, def := range createStmt.Defs {
+		if fk, ok := def.(*tree.ForeignKeyConstraintTableDef); ok {
+			for _, col := range fk.FromCols {
+				hasFK[col.String()] = true
+			}
+		}
+	}
+
+	// Populate helper objects for insert statement creation and error out if a
+	// column's constraints will make it impossible to execute random insert
+	// statements.
+
+	colTypes := make([]*types.T, 0)
+	nullable := make([]bool, 0)
+	var colNameBuilder strings.Builder
+	comma := ""
+	for _, def := range createStmt.Defs {
+		if col, ok := def.(*tree.ColumnTableDef); ok {
+			if _, ok := hasFK[col.Name.String()]; ok {
+				// Given that this function only populates an individual table without
+				// considering other tables in the database, populating a column with a
+				// foreign key reference with actual data can be nearly impossible. To
+				// make inserts pass more frequently, this function skips populating
+				// columns with a foreign key reference. Sadly, if these columns with
+				// FKs are also NOT NULL, 0 rows will get inserted.
+
+				// TODO(butler): get the unique values from each foreign key reference and
+				// populate the column by sampling the FK's unique values.
+				if col.Nullable.Nullability == tree.Null {
+					continue
+				}
+			}
+			if col.Computed.Computed || col.Hidden {
+				// Cannot insert values into hidden or computed columns, so skip adding
+				// them to the list of columns to insert data into.
+				continue
+			}
+			colTypes = append(colTypes, tree.MustBeStaticallyKnownType(col.Type.(*types.T)))
+			nullable = append(nullable, col.Nullable.Nullability == tree.Null)
+
+			colNameBuilder.WriteString(comma)
+			colNameBuilder.WriteString(col.Name.String())
+			comma = ", "
+		}
+	}
+
+	for i := 0; i < numInserts; i++ {
+		insertVals := generateInsertStmtVals(rng, colTypes, nullable)
+		insertStmt := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s;",
+			tableName,
+			colNameBuilder.String(),
+			insertVals)
+		_, err := db.Exec(insertStmt)
+		if err == nil {
+			numRowsInserted++
+		}
+	}
+	return numRowsInserted, nil
 }
 
 // GenerateRandInterestingTable takes a gosql.DB connection and creates

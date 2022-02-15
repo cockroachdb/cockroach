@@ -381,6 +381,22 @@ func TestJoinOrderBuilder_CalcTES(t *testing.T) {
 			expectedTES:     "ABC",
 			expectedRules:   "",
 		},
+		{ // 20
+			// SELECT * FROM (
+			//   SELECT * FROM (
+			//     SELECT * FROM A
+			//     INNER JOIN B ON A.u = B.u
+			//   ) INNER JOIN C ON B.v = C.v
+			// ) INNER JOIN D ON A.w = D.w
+			rootEdge: testEdge{joinOp: opt.InnerJoinOp, left: "ABC", right: "D", ses: "AD", notNull: "AD"},
+			leftChildEdges: []testEdge{
+				{joinOp: opt.InnerJoinOp, left: "AB", right: "C", ses: "BC", notNull: "BC"},
+				{joinOp: opt.InnerJoinOp, left: "A", right: "B", ses: "AB", notNull: "AB"},
+			},
+			rightChildEdges: []testEdge{},
+			expectedTES:     "AD",
+			expectedRules:   "",
+		},
 	}
 
 	for i, tc := range testCases {

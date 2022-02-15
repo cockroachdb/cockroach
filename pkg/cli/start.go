@@ -185,6 +185,7 @@ func initTraceDir(ctx context.Context, dir string) {
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
+var tsdbSizeValue = newBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
 
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
 	externalIODir := startCtx.externalIODir
@@ -1101,12 +1102,12 @@ func maybeWarnMemorySizes(ctx context.Context) {
 
 	// Check that the total suggested "max" memory is well below the available memory.
 	if maxMemory, err := status.GetTotalMemory(ctx); err == nil {
-		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize
+		requestedMem := serverCfg.CacheSize + serverCfg.MemoryPoolSize + serverCfg.TimeSeriesServerConfig.QueryMemoryMax
 		maxRecommendedMem := int64(.75 * float64(maxMemory))
 		if requestedMem > maxRecommendedMem {
 			log.Ops.Shoutf(ctx, severity.WARNING,
-				"the sum of --max-sql-memory (%s) and --cache (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
-				sqlSizeValue, cacheSizeValue, humanizeutil.IBytes(maxRecommendedMem))
+				"the sum of --max-sql-memory (%s), --cache (%s), and --max-tsdb-memory (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
+				sqlSizeValue, cacheSizeValue, tsdbSizeValue, humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
 }

@@ -254,6 +254,85 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	}
 }
 
+// Verify the txn sees a retryable error without using the handle: Normally the
+// caller uses the txn handle directly, and if there is a retryable error then
+// Send() fails and the handle gets "poisoned", meaning, the coordinator will be
+// in state txnRetryableError instead of txnPending. But sometimes the handle
+// can be idle and aborted by a heartbeat failure. This test verifies that in
+// those cases the state of the handle ends up as txnRetryableError.
+// This is important to verify because if the handle stays in txnPending then
+// GetTxnRetryableErr() returns nil, and PrepareForRetry() will not reset the
+// handle.
+func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a DB with a short heartbeat interval.
+	s := createTestDB(t)
+	defer s.Stop()
+	ctx := context.Background()
+	ambient := s.AmbientCtx
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx: ambient,
+			// Short heartbeat interval.
+			HeartbeatInterval: time.Millisecond,
+			Settings:          s.Cfg.Settings,
+			Clock:             s.Clock,
+			Stopper:           s.Stopper(),
+		},
+		kvcoord.NewDistSenderForLocalTestCluster(
+			ctx,
+			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
+			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+		),
+	)
+	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
+
+	// Create a txn which will be aborted by a high priority txn.
+	txn := kv.NewTxn(ctx, db, 0)
+
+	// We first write to one range, then a high priority txn will abort our txn,
+	// then we will try to read from another range until we see that the
+	// transaction is poisoned because of a heartbeat failure.
+	// Note that if we read from the same range then we will check the AbortSpan
+	// and fail immediately (Send() will fail), even before the heartbeat failure,
+	// which is not the case we want to test here.
+	keyA := roachpb.Key("a")
+	keyC := roachpb.Key("c")
+	splitKey := roachpb.Key("b")
+	require.NoError(t, s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	require.NoError(t, txn.Put(ctx, keyA, "1"))
+
+	{
+		// High priority txn - will abort the other txn.
+		hpTxn := kv.NewTxn(ctx, db, 0)
+		require.NoError(t, hpTxn.SetUserPriority(roachpb.MaxUserPriority))
+		require.NoError(t, hpTxn.Put(ctx, keyA, "hp txn"))
+		require.NoError(t, hpTxn.Commit(ctx))
+	}
+
+	tc := txn.Sender().(*kvcoord.TxnCoordSender)
+
+	// Wait until we know that the handle was poisoned due to a heartbeat failure.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := txn.Get(ctx, keyC)
+		if err == nil {
+			return errors.New("the handle is not poisoned yet")
+		}
+		require.IsType(t, &roachpb.TransactionRetryWithProtoRefreshError{}, err)
+		return nil
+	})
+
+	// At this point the handle should be in state txnRetryableError - verify we
+	// can read the error.
+	pErr := tc.GetTxnRetryableErr(ctx)
+	require.NotNil(t, pErr)
+	require.Equal(t, txn.ID(), pErr.TxnID)
+	// The transaction was aborted, therefore we should have a new transaction ID.
+	require.NotEqual(t, pErr.TxnID, pErr.Transaction.ID)
+}
+
 // getTxn fetches the requested key and returns the transaction info.
 func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Error) {
 	txnMeta := txn.TestingCloneTxn().TxnMeta
@@ -648,6 +727,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		// The test's name.
 		name                  string
 		pErrGen               func(txn *roachpb.Transaction) *roachpb.Error
+		callPrepareForRetry   bool
 		expEpoch              enginepb.TxnEpoch
 		expPri                enginepb.TxnPriority
 		expWriteTS, expReadTS hlc.Timestamp
@@ -705,18 +785,32 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			expReadTS:  plus20,
 		},
 		{
-			// On abort, nothing changes but we get a new priority to use for
-			// the next attempt.
+			// On abort, nothing changes - we are left with a poisoned txn (unless we
+			// call PrepareForRetry as in the next test case).
 			name: "TransactionAbortedError",
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				txn.WriteTimestamp = plus20
 				txn.Priority = 10
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
 			},
-			expNewTransaction: true,
-			expPri:            10,
-			expWriteTS:        plus20,
-			expReadTS:         plus20,
+			expPri:     1,
+			expWriteTS: origTS,
+			expReadTS:  origTS,
+		},
+		{
+			// On abort, reset the txn by calling PrepareForRetry, and then we get a
+			// new priority to use for the next attempt.
+			name: "TransactionAbortedError with PrepareForRetry",
+			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
+				txn.WriteTimestamp = plus20
+				txn.Priority = 10
+				return roachpb.NewErrorWithTxn(&roachpb.TransactionAbortedError{}, txn)
+			},
+			callPrepareForRetry: true,
+			expNewTransaction:   true,
+			expPri:              10,
+			expWriteTS:          plus20,
+			expReadTS:           plus20,
 		},
 		{
 			// On failed push, new epoch begins just past the pushed timestamp.
@@ -806,6 +900,9 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			err := txn.Put(ctx, key, []byte("value"))
 			stopper.Stop(ctx)
 
+			if test.callPrepareForRetry {
+				txn.PrepareForRetry(ctx)
+			}
 			if test.name != "nil" && err == nil {
 				t.Fatalf("expected an error")
 			}
@@ -1931,9 +2028,9 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 			calls = nil
 			firstIter := true
 			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				var err error
 				if firstIter {
 					firstIter = false
-					var err error
 					if write {
 						err = txn.Put(ctx, "consider", "phlebas")
 					} else /* locking read */ {
@@ -1946,7 +2043,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 				if !success {
 					return errors.New("aborting on purpose")
 				}
-				return nil
+				return err
 			}); err == nil != success {
 				t.Fatalf("expected error: %t, got error: %v", !success, err)
 			}

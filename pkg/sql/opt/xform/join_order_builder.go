@@ -30,9 +30,31 @@ import (
 type OnReorderFunc func(
 	join memo.RelExpr,
 	vertexes []memo.RelExpr,
-	edges []memo.FiltersExpr,
-	edgeOps []opt.Operator,
+	edges []OnReorderEdgeParam,
 )
+
+// OnReorderEdgeParam is a struct representing an edge in the join graph. This
+// type is only used for the OnReorderFunc during testing and debugging. See the
+// more efficient edge type that is used in the join reordering algorithm.
+type OnReorderEdgeParam struct {
+	// Op is the original join operator from which the edge was constructed.
+	Op opt.Operator
+	// Filters is the edge's set of join filters
+	Filters memo.FiltersExpr
+	// SES is the edge's syntactic eligibility set.
+	SES []memo.RelExpr
+	// TES is the edge's total eligibility set.
+	TES []memo.RelExpr
+	// Rules is the set of conflict rules of the edge.
+	Rules []OnReorderRuleParam
+}
+
+// OnReorderRuleParam is a struct representing a conflict rule. This type is
+// only used for the OnReorderFunc during testing and debugging. See the more
+// efficient conflictRule type that is used in the join reordering algorithm.
+type OnReorderRuleParam struct {
+	From, To []memo.RelExpr
+}
 
 // OnAddJoinFunc defines the callback function for the NotifyOnAddJoin event
 // supported by JoinOrderBuilder. OnAddJoinFunc is called when JoinOrderBuilder
@@ -906,14 +928,23 @@ func (jb *JoinOrderBuilder) NotifyOnAddJoin(onAddJoin OnAddJoinFunc) {
 // function is nil.
 func (jb *JoinOrderBuilder) callOnReorderFunc(join memo.RelExpr) {
 	// Get a slice with all edges of the join graph.
-	edgeSlice := make([]memo.FiltersExpr, 0, len(jb.edges))
-	edgeOps := make([]opt.Operator, 0, len(jb.edges))
-	for i := range jb.edges {
-		edgeSlice = append(edgeSlice, jb.edges[i].filters)
-		edgeOps = append(edgeOps, jb.edges[i].op.joinType)
+	edges := make([]OnReorderEdgeParam, 0, len(jb.edges))
+	for _, edge := range jb.edges {
+		ep := OnReorderEdgeParam{
+			Op:      edge.op.joinType,
+			Filters: edge.filters,
+			SES:     jb.getRelationSlice(edge.ses),
+			TES:     jb.getRelationSlice(edge.tes),
+		}
+		for _, rule := range edge.rules {
+			ep.Rules = append(ep.Rules, OnReorderRuleParam{
+				From: jb.getRelationSlice(rule.from),
+				To:   jb.getRelationSlice(rule.to),
+			})
+		}
+		edges = append(edges, ep)
 	}
-
-	jb.onReorderFunc(join, jb.getRelationSlice(jb.allVertexes()), edgeSlice, edgeOps)
+	jb.onReorderFunc(join, jb.getRelationSlice(jb.allVertexes()), edges)
 }
 
 // callOnAddJoinFunc calls the onAddJoinFunc callback function. Panics if the
@@ -1328,24 +1359,6 @@ func commute(op opt.Operator) bool {
 //    ON x = a
 //
 func assoc(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the associative property would not lead to
-		// 'orphaned' predicates, where one or more referenced relations are not in
-		// the resulting join's inputs. Take as an example this reordering that
-		// results from applying the associative property:
-		//
-		//    SELECT * FROM (SELECT * FROM xy INNER JOIN ab ON y = a)
-		//    INNER JOIN uv
-		//    ON x = u
-		//    =>
-		//    SELECT * FROM xy
-		//    INNER JOIN (SELECT * FROM ab INNER JOIN uv ON x = u)
-		//    ON y = a
-		//
-		// Note that the x = u predicate references the xy relation, which is not
-		// in that join's inputs. Therefore, this transformation is invalid.
-		return false
-	}
 	return checkProperty(assocTable, edgeA, edgeB)
 }
 
@@ -1368,11 +1381,6 @@ func assoc(edgeA, edgeB *edge) bool {
 //    INNER JOIN ab ON x = a
 //
 func leftAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.rightVertexes) || edgeA.ses.intersects(edgeB.op.rightVertexes) {
-		// Ensure that application of the left-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
 	return checkProperty(leftAsscomTable, edgeA, edgeB)
 }
 
@@ -1397,11 +1405,6 @@ func leftAsscom(edgeA, edgeB *edge) bool {
 //    ON x = a
 //
 func rightAsscom(edgeA, edgeB *edge) bool {
-	if edgeB.ses.intersects(edgeA.op.leftVertexes) || edgeA.ses.intersects(edgeB.op.leftVertexes) {
-		// Ensure that application of the right-asscom property would not lead to
-		// 'orphaned' predicates. See the assoc() comment for why this is necessary.
-		return false
-	}
 	return checkProperty(rightAsscomTable, edgeA, edgeB)
 }
 
