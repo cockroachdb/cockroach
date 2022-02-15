@@ -89,7 +89,11 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 				onErrPanic(err)
 				depViewName, err := b.CatalogReader().GetQualifiedTableNameByID(b.EvalCtx().Context, int64(dep.ID), tree.ResolveRequireViewDesc)
 				onErrPanic(err)
-
+				if dependentDesc.GetParentID() != tbl.GetParentID() {
+					return pgerror.Newf(
+						pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
+						name.Object(), depViewName.FQString())
+				}
 				return pgerror.Newf(
 					pgcode.DependentObjectsStillExist, "cannot drop relation %q because view %q depends on it",
 					name.Object(), depViewName.Object())
