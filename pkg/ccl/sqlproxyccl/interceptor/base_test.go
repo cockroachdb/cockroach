@@ -10,7 +10,9 @@ package interceptor
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
+	"math"
 	"testing"
 	"testing/iotest"
 	"unsafe"
@@ -78,10 +80,11 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		require.Equal(t, 0, size)
 	})
 
-	t.Run("protocol error", func(t *testing.T) {
-		data := make([]byte, 10)
+	t.Run("protocol error/size=0", func(t *testing.T) {
+		var data [10]byte
+
 		buf := new(bytes.Buffer)
-		_, err := buf.Write(data)
+		_, err := buf.Write(data[:])
 		require.NoError(t, err)
 
 		pgi, err := newPgInterceptor(buf, nil /* dst */, 10)
@@ -93,9 +96,64 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		require.Equal(t, 0, size)
 	})
 
+	t.Run("protocol error/size=3", func(t *testing.T) {
+		var data [5]byte
+		binary.BigEndian.PutUint32(data[1:5], uint32(3))
+
+		buf := new(bytes.Buffer)
+		_, err := buf.Write(data[:])
+		require.NoError(t, err)
+
+		pgi, err := newPgInterceptor(buf, nil /* dst */, 10)
+		require.NoError(t, err)
+
+		typ, size, err := pgi.PeekMsg()
+		require.EqualError(t, err, ErrProtocolError.Error())
+		require.Equal(t, byte(0), typ)
+		require.Equal(t, 0, size)
+	})
+
+	t.Run("protocol error/size=math.MaxInt32", func(t *testing.T) {
+		var data [5]byte
+		binary.BigEndian.PutUint32(data[1:5], uint32(math.MaxInt32))
+
+		buf := new(bytes.Buffer)
+		_, err := buf.Write(data[:])
+		require.NoError(t, err)
+
+		pgi, err := newPgInterceptor(buf, nil /* dst */, 10)
+		require.NoError(t, err)
+
+		typ, size, err := pgi.PeekMsg()
+		require.EqualError(t, err, ErrProtocolError.Error())
+		require.Equal(t, byte(0), typ)
+		require.Equal(t, 0, size)
+	})
+
+	t.Run("successful without body", func(t *testing.T) {
+		// Use 4 bytes to indicate no body.
+		var data [5]byte
+		data[0] = 'A'
+		binary.BigEndian.PutUint32(data[1:5], uint32(4))
+
+		buf := new(bytes.Buffer)
+		_, err := buf.Write(data[:])
+		require.NoError(t, err)
+
+		pgi, err := newPgInterceptor(buf, nil /* dst */, 10)
+		require.NoError(t, err)
+
+		typ, size, err := pgi.PeekMsg()
+		require.NoError(t, err)
+		require.Equal(t, byte('A'), typ)
+		require.Equal(t, 5, size)
+		require.Equal(t, 0, buf.Len())
+	})
+
 	t.Run("successful", func(t *testing.T) {
 		buf := new(bytes.Buffer)
-		_, err := buf.Write((&pgproto3.Query{String: "SELECT 1"}).Encode(nil))
+		msgBytes := (&pgproto3.Query{String: "SELECT 1"}).Encode(nil)
+		_, err := buf.Write(msgBytes)
 		require.NoError(t, err)
 
 		pgi, err := newPgInterceptor(buf, nil /* dst */, 10)
@@ -104,14 +162,14 @@ func TestPGInterceptor_PeekMsg(t *testing.T) {
 		typ, size, err := pgi.PeekMsg()
 		require.NoError(t, err)
 		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), typ)
-		require.Equal(t, 9, size)
+		require.Equal(t, len(msgBytes), size)
 		require.Equal(t, 4, buf.Len())
 
 		// Invoking Peek should not advance the interceptor.
 		typ, size, err = pgi.PeekMsg()
 		require.NoError(t, err)
 		require.Equal(t, byte(pgwirebase.ClientMsgSimpleQuery), typ)
-		require.Equal(t, 9, size)
+		require.Equal(t, len(msgBytes), size)
 		require.Equal(t, 4, buf.Len())
 	})
 }
