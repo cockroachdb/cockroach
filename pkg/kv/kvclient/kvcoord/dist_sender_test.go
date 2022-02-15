@@ -169,7 +169,7 @@ func (l *simpleTransportAdapter) SendNext(
 
 func (l *simpleTransportAdapter) NextInternalClient(
 	ctx context.Context,
-) (context.Context, roachpb.InternalClient, error) {
+) (rpc.RestrictedInternalClient, error) {
 	panic("unimplemented")
 }
 
