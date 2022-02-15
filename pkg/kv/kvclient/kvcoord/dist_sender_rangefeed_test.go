@@ -95,7 +95,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				transport.EXPECT().IsExhausted().Return(false)
 				transport.EXPECT().NextReplica().Return(repl)
 				transport.EXPECT().NextInternalClient(gomock.Any()).Return(
-					ctx, nil, grpcstatus.Error(spec.errorCode, ""))
+					nil, grpcstatus.Error(spec.errorCode, ""))
 			}
 			transport.EXPECT().IsExhausted().Return(true)
 			transport.EXPECT().Release()
@@ -123,7 +123,7 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				client.EXPECT().RangeFeed(gomock.Any(), gomock.Any()).Return(stream, nil)
 				transport.EXPECT().IsExhausted().Return(false)
 				transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0])
-				transport.EXPECT().NextInternalClient(gomock.Any()).Return(ctx, client, nil)
+				transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil)
 				transport.EXPECT().Release()
 			}
 

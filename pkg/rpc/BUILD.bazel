@@ -17,6 +17,7 @@ go_library(
         "heartbeat.go",
         "keepalive.go",
         "metrics.go",
+        "restricted_internal_client.go",
         "snappy.go",
         "tls.go",
     ],
