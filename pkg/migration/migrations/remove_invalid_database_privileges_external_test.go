@@ -38,7 +38,7 @@ func TestConvertIncompatibleDatabasePrivilegesToDefaultPrivileges(t *testing.T) 
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.RemoveIncompatibleDatabasePrivileges - 1),
 				},

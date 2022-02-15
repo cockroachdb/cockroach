@@ -44,7 +44,7 @@ func TestEnsureSpanConfigReconciliation(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -120,7 +120,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 		serverArgs[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -133,7 +133,7 @@ func TestEnsureSpanConfigReconciliationMultiNode(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigReconciliation - 1,
 					),
@@ -196,7 +196,7 @@ func TestEnsureSpanConfigSubscription(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
 						clusterversion.EnsureSpanConfigSubscription - 1,
 					),
