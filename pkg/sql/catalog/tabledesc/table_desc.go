@@ -62,12 +62,12 @@ func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDes
 // HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
 func (desc *wrapper) HasPostDeserializationChanges() bool {
-	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
-		desc.postDeserializationChanges.UpgradedFormatVersion ||
-		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
-		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges ||
-		desc.postDeserializationChanges.AddedConstraintIDs
+	for _, b := range desc.postDeserializationChanges {
+		if b {
+			return true
+		}
+	}
+	return false
 }
 
 // ActiveChecks implements the TableDescriptor interface.
@@ -115,7 +115,8 @@ func (desc *wrapper) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TableDesc())
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(),
+		desc.postDeserializationChanges)
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -130,10 +131,7 @@ func (desc *wrapper) IsTemporary() bool {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	if desc.IsUncommittedVersion() {
-		return NewBuilderForUncommittedVersion(desc.TableDesc()).BuildImmutable()
-	}
-	return NewBuilder(desc.TableDesc()).BuildImmutable()
+	return desc.NewBuilder().BuildImmutable()
 }
 
 // IsUncommittedVersion implements the Descriptor interface.

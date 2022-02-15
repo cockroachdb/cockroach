@@ -42,6 +42,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 // Mutable wraps a database descriptor and provides methods
@@ -49,10 +53,6 @@ type immutable struct {
 type Mutable struct {
 	immutable
 	ClusterVersion *immutable
-
-	// changed represents whether or not the descriptor was changed
-	// after RunPostDeserializationChanges.
-	changed bool
 }
 
 // SafeMessage makes immutable a SafeMessager.
@@ -147,7 +147,7 @@ func (desc *immutable) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.DatabaseDesc())
+	return newBuilder(desc.DatabaseDesc(), desc.isUncommittedVersion, true)
 }
 
 // IsMultiRegion implements the DatabaseDescriptor interface.
@@ -460,7 +460,7 @@ func (desc *Mutable) SetPlacement(placement descpb.DataPlacement) {
 
 // HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
 // RunPostDeserializationChanges.
-func (desc *Mutable) HasPostDeserializationChanges() bool {
+func (desc *immutable) HasPostDeserializationChanges() bool {
 	return desc.changed
 }
 

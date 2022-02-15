@@ -40,6 +40,10 @@ type immutable struct {
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
+
+	// changed represents whether or not the descriptor was changed
+	// after RunPostDeserializationChanges.
+	changed bool
 }
 
 func (desc *immutable) SchemaKind() catalog.ResolvedSchemaKind {
@@ -76,10 +80,6 @@ type Mutable struct {
 	immutable
 
 	ClusterVersion *immutable
-
-	// changed represents whether or not the descriptor was changed
-	// after RunPostDeserializationChanges.
-	changed bool
 }
 
 var _ redact.SafeMessager = (*immutable)(nil)
@@ -159,7 +159,7 @@ func (desc *immutable) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.SchemaDesc())
+	return newBuilder(desc.SchemaDesc(), desc.isUncommittedVersion, desc.changed)
 }
 
 // ValidateSelf implements the catalog.Descriptor interface.
@@ -247,6 +247,12 @@ func (desc *immutable) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeD
 	return catprivilege.MakeDefaultPrivileges(defaultPrivilegeDescriptor)
 }
 
+// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
+// RunPostDeserializationChanges.
+func (desc *immutable) HasPostDeserializationChanges() bool {
+	return desc.changed
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
@@ -283,7 +289,7 @@ func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	imm := NewBuilder(desc.SchemaDesc()).BuildImmutable()
+	imm := desc.NewBuilder().BuildImmutable()
 	imm.(*immutable).isUncommittedVersion = desc.IsUncommittedVersion()
 	return imm
 }
@@ -319,12 +325,6 @@ func (desc *Mutable) SetName(name string) {
 // IsUncommittedVersion implements the Descriptor interface.
 func (desc *Mutable) IsUncommittedVersion() bool {
 	return desc.IsNew() || desc.GetVersion() != desc.ClusterVersion.GetVersion()
-}
-
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *Mutable) HasPostDeserializationChanges() bool {
-	return desc.changed
 }
 
 // GetMutableDefaultPrivilegeDescriptor returns a catprivilege.Mutable.

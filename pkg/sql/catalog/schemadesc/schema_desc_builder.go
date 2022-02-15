@@ -28,9 +28,10 @@ type SchemaDescriptorBuilder interface {
 }
 
 type schemaDescriptorBuilder struct {
-	original      *descpb.SchemaDescriptor
-	maybeModified *descpb.SchemaDescriptor
-	changed       bool
+	original             *descpb.SchemaDescriptor
+	maybeModified        *descpb.SchemaDescriptor
+	isUncommittedVersion bool
+	changed              bool
 }
 
 var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
@@ -38,8 +39,16 @@ var _ SchemaDescriptorBuilder = &schemaDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // schema descriptors.
 func NewBuilder(desc *descpb.SchemaDescriptor) SchemaDescriptorBuilder {
+	return newBuilder(desc, false /* isUncommittedVersion */, false /* changed */)
+}
+
+func newBuilder(
+	desc *descpb.SchemaDescriptor, isUncommittedVersion, changed bool,
+) SchemaDescriptorBuilder {
 	return &schemaDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.SchemaDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.SchemaDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changed:              changed,
 	}
 }
 
@@ -60,7 +69,7 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() {
 		sdb.maybeModified.GetName(),
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(sdb.maybeModified.Privileges)
-	sdb.changed = privsChanged || addedGrantOptions
+	sdb.changed = sdb.changed || privsChanged || addedGrantOptions
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -81,7 +90,11 @@ func (sdb *schemaDescriptorBuilder) BuildImmutableSchema() catalog.SchemaDescrip
 	if desc == nil {
 		desc = sdb.original
 	}
-	return &immutable{SchemaDescriptor: *desc}
+	return &immutable{
+		SchemaDescriptor:     *desc,
+		changed:              sdb.changed,
+		isUncommittedVersion: sdb.isUncommittedVersion,
+	}
 }
 
 // BuildExistingMutable implements the catalog.DescriptorBuilder interface.
@@ -96,9 +109,12 @@ func (sdb *schemaDescriptorBuilder) BuildExistingMutableSchema() *Mutable {
 		sdb.maybeModified = protoutil.Clone(sdb.original).(*descpb.SchemaDescriptor)
 	}
 	return &Mutable{
-		immutable:      immutable{SchemaDescriptor: *sdb.maybeModified},
+		immutable: immutable{
+			SchemaDescriptor:     *sdb.maybeModified,
+			changed:              sdb.changed,
+			isUncommittedVersion: sdb.isUncommittedVersion,
+		},
 		ClusterVersion: &immutable{SchemaDescriptor: *sdb.original},
-		changed:        sdb.changed,
 	}
 }
 
@@ -111,7 +127,9 @@ func (sdb *schemaDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescrip
 // which is in the process of being created.
 func (sdb *schemaDescriptorBuilder) BuildCreatedMutableSchema() *Mutable {
 	return &Mutable{
-		immutable: immutable{SchemaDescriptor: *sdb.original},
-		changed:   sdb.changed,
+		immutable: immutable{
+			SchemaDescriptor: *sdb.original,
+			changed:          sdb.changed,
+		},
 	}
 }

@@ -43,17 +43,8 @@ var _ TableDescriptorBuilder = &tableDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // table descriptors.
 func NewBuilder(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	return newBuilder(desc)
-}
-
-// NewBuilderForUncommittedVersion is like NewBuilder but ensures that the
-// uncommitted version flag is set in the built descriptor.
-// This should be used when constructing a new copy of an immutable from an
-// existing descriptor which may have a new version.
-func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescriptorBuilder {
-	b := newBuilder(desc)
-	b.isUncommittedVersion = true
-	return b
+	return newBuilder(desc, false, /* isUncommittedVersion */
+		PostDeserializationTableDescriptorChanges{})
 }
 
 // NewBuilderForFKUpgrade should be used when attempting to upgrade the
@@ -64,7 +55,8 @@ func NewBuilderForUncommittedVersion(desc *descpb.TableDescriptor) TableDescript
 func NewBuilderForFKUpgrade(
 	desc *descpb.TableDescriptor, skipFKsWithNoMatchingTable bool,
 ) TableDescriptorBuilder {
-	b := newBuilder(desc)
+	b := newBuilder(desc, false, /* isUncommittedVersion */
+		PostDeserializationTableDescriptorChanges{})
 	b.skipFKsWithNoMatchingTable = skipFKsWithNoMatchingTable
 	return b
 }
@@ -83,9 +75,15 @@ func NewUnsafeImmutable(desc *descpb.TableDescriptor) catalog.TableDescriptor {
 	return b.BuildImmutableTable()
 }
 
-func newBuilder(desc *descpb.TableDescriptor) *tableDescriptorBuilder {
+func newBuilder(
+	desc *descpb.TableDescriptor,
+	isUncommittedVersion bool,
+	changes PostDeserializationTableDescriptorChanges,
+) *tableDescriptorBuilder {
 	return &tableDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TableDescriptor),
+		original:             protoutil.Clone(desc).(*descpb.TableDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
 }
 
@@ -97,15 +95,17 @@ func (tdb *tableDescriptorBuilder) DescriptorType() catalog.DescriptorType {
 // RunPostDeserializationChanges implements the catalog.DescriptorBuilder
 // interface.
 func (tdb *tableDescriptorBuilder) RunPostDeserializationChanges() {
+	prevChanges := tdb.changes
 	tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TableDescriptor)
 	tdb.changes = maybeFillInDescriptor(tdb.maybeModified)
+	tdb.changes.combineWith(prevChanges)
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
 func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 ) (err error) {
-	tdb.changes.UpgradedForeignKeyRepresentation, err = maybeUpgradeForeignKeyRepresentation(
+	tdb.changes[UpgradedForeignKeyRepresentation], err = maybeUpgradeForeignKeyRepresentation(
 		descLookupFn,
 		tdb.skipFKsWithNoMatchingTable,
 		tdb.maybeModified,
@@ -191,23 +191,23 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 func maybeFillInDescriptor(
 	desc *descpb.TableDescriptor,
 ) (changes PostDeserializationTableDescriptorChanges) {
-	changes.UpgradedFormatVersion = maybeUpgradeFormatVersion(desc)
+	changes[UpgradedFormatVersion] = maybeUpgradeFormatVersion(desc)
 
-	changes.FixedIndexEncodingType = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
-	changes.UpgradedIndexFormatVersion = maybeUpgradePrimaryIndexFormatVersion(desc)
+	changes[FixedIndexEncodingType] = maybeFixPrimaryIndexEncoding(&desc.PrimaryIndex)
+	changes[UpgradedIndexFormatVersion] = maybeUpgradePrimaryIndexFormatVersion(desc)
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
 		isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-		changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+		changes[UpgradedIndexFormatVersion] = changes[UpgradedIndexFormatVersion] || isUpgraded
 	}
 	for i := range desc.Mutations {
 		if idx := desc.Mutations[i].GetIndex(); idx != nil {
 			isUpgraded := maybeUpgradeSecondaryIndexFormatVersion(idx)
-			changes.UpgradedIndexFormatVersion = changes.UpgradedIndexFormatVersion || isUpgraded
+			changes[UpgradedIndexFormatVersion] = changes[UpgradedIndexFormatVersion] || isUpgraded
 		}
 	}
-	changes.UpgradedNamespaceName = maybeUpgradeNamespaceName(desc)
-	changes.RemovedDefaultExprFromComputedColumn = maybeRemoveDefaultExprFromComputedColumns(desc)
+	changes[UpgradedNamespaceName] = maybeUpgradeNamespaceName(desc)
+	changes[RemovedDefaultExprFromComputedColumn] = maybeRemoveDefaultExprFromComputedColumns(desc)
 
 	parentSchemaID := desc.GetUnexposedParentSchemaID()
 	// TODO(richardjcai): Remove this case in 22.2.
@@ -222,9 +222,9 @@ func maybeFillInDescriptor(
 		desc.GetName(),
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(desc.Privileges)
-	changes.UpgradedPrivileges = fixedPrivileges || addedGrantOptions
-	changes.RemovedDuplicateIDsInRefs = maybeRemoveDuplicateIDsInRefs(desc)
-	changes.AddedConstraintIDs = maybeAddConstraintIDs(desc)
+	changes[UpgradedPrivileges] = fixedPrivileges || addedGrantOptions
+	changes[RemovedDuplicateIDsInRefs] = maybeRemoveDuplicateIDsInRefs(desc)
+	changes[AddedConstraintIDs] = maybeAddConstraintIDs(desc)
 	return changes
 }
 
