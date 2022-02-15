@@ -114,4 +114,5 @@ func (t *testServerShim) ScratchRange() (roachpb.Key, error)       { panic(unsup
 func (t *testServerShim) Engines() []storage.Engine                { panic(unsupportedShimMethod) }
 func (t *testServerShim) MetricsRecorder() *status.MetricsRecorder { panic(unsupportedShimMethod) }
 func (t *testServerShim) CollectionFactory() interface{}           { panic(unsupportedShimMethod) }
+func (t *testServerShim) SystemTableIDResolver() interface{}       { panic(unsupportedShimMethod) }
 func (t *testServerShim) SpanConfigKVSubscriber() interface{}      { panic(unsupportedShimMethod) }

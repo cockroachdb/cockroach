@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -63,9 +64,9 @@ func TestRowDecoder(t *testing.T) {
 		)
 	}
 
-	// TODO(radu): get the table ID properly.
-	const tableID = 50
-	k := keys.SystemSQLCodec.TablePrefix(tableID)
+	tableID, err := tc.Server(0).SystemTableIDResolver().(catalog.SystemTableIDResolver).LookupSystemTableID(ctx, "tenant_settings")
+	require.NoError(t, err)
+	k := keys.SystemSQLCodec.TablePrefix(uint32(tableID))
 	rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)
 	require.NoError(t, err)
 	dec := tenantsettingswatcher.MakeRowDecoder()
