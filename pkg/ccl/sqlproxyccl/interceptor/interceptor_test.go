@@ -24,8 +24,6 @@ import (
 func TestSimpleProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const bufferSize = 16
-
 	// These represents connections for client<->proxy and proxy<->server.
 	fromClient := new(bytes.Buffer)
 	toClient := new(bytes.Buffer)
@@ -33,10 +31,8 @@ func TestSimpleProxy(t *testing.T) {
 	toServer := new(bytes.Buffer)
 
 	// Create client and server interceptors.
-	clientInt, err := interceptor.NewBackendInterceptor(fromClient, bufferSize)
-	require.NoError(t, err)
-	serverInt, err := interceptor.NewFrontendInterceptor(fromServer, bufferSize)
-	require.NoError(t, err)
+	clientInt := interceptor.NewBackendInterceptor(fromClient)
+	serverInt := interceptor.NewFrontendInterceptor(fromServer)
 
 	t.Run("client to server", func(t *testing.T) {
 		// Client sends a list of SQL queries.
