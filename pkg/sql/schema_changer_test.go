@@ -710,6 +710,8 @@ func TestDropWhileBackfill(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 
 	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
+SET use_declarative_schema_changer = 'off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
 CREATE UNIQUE INDEX vidx ON t.test (v);
@@ -6831,6 +6833,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		s, db, _ = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -6907,6 +6910,7 @@ func TestRevertingJobsOnDatabasesAndSchemas(t *testing.T) {
 		s, db, _ = serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(ctx)
 		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -7128,6 +7132,9 @@ COMMIT;
 	// Test 3: with concurrent drop and mutations where an insert will
 	// cause the backfill operation to fail.
 	t.Run("concurrent-drop-mutations-insert-fail", func(t *testing.T) {
+		conn1.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+		conn2.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+
 		jobControlMu.Lock()
 		delayJobList = []string{"ALTER TABLE defaultdb.public.t ALTER COLUMN j SET NOT NULL",
 			"ALTER TABLE defaultdb.public.t DROP COLUMN j"}
