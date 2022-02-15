@@ -1218,7 +1218,7 @@ func (ex *connExecutor) handleTxnRowsGuardrails(
 		*alreadyLogged = shouldLog
 	}
 	if shouldLog {
-		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails()
+		commonSQLEventDetails := ex.planner.getCommonSQLEventDetails(redactionOptions{})
 		var event eventpb.EventPayload
 		if ex.executorType == executorTypeInternal {
 			if isRead {

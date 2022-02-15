@@ -141,7 +141,7 @@ const (
 	fmtFormatByteLiterals
 
 	// FmtMarkRedactionNode instructs the pretty printer to redact datums,
-	// constants, and simples names (i.e. Name, UnrestrictedName) from statements.
+	// constants, and simple names (i.e. Name, UnrestrictedName) from statements.
 	FmtMarkRedactionNode
 
 	// FmtSummary instructs the pretty printer to produced a summarized version
@@ -163,6 +163,11 @@ const (
 	// - Show columns up to 15 characters.
 	// - Show condition up to 15 characters.
 	FmtSummary
+
+	// FmtOmitNameRedaction instructs the pretty printer to omit redaction
+	// for simple names (i.e. Name, UnrestrictedName) from statements.
+	// This flag *overrides* `FmtMarkRedactionNode` above.
+	FmtOmitNameRedaction
 )
 
 // PasswordSubstitution is the string that replaces
@@ -651,7 +656,15 @@ func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
 		case *Placeholder:
 			// Placeholders should be printed as placeholder markers.
 			// Deliberately empty so we format as normal.
-		case Datum, Constant, *Name, *UnrestrictedName:
+		case *Name, *UnrestrictedName:
+			if ctx.flags.HasFlags(FmtOmitNameRedaction) {
+				break
+			}
+			ctx.WriteString(string(redact.StartMarker()))
+			v.Format(ctx)
+			ctx.WriteString(string(redact.EndMarker()))
+			return
+		case Datum, Constant:
 			ctx.WriteString(string(redact.StartMarker()))
 			v.Format(ctx)
 			ctx.WriteString(string(redact.EndMarker()))
