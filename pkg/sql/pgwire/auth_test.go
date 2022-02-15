@@ -697,7 +697,7 @@ func TestClientAddrOverride(t *testing.T) {
 					t.Log(e.Tags)
 					if strings.Contains(e.Tags, "client=") {
 						seenClient = true
-						if !strings.Contains(e.Tags, "client="+string(redact.StartMarker())+tc.specialAddr+":"+tc.specialPort+string(redact.EndMarker())) {
+						if !strings.Contains(e.Tags, "client="+tc.specialAddr+":"+tc.specialPort) {
 							t.Fatalf("expected override addr in log tags, got %+v", e)
 						}
 					}
