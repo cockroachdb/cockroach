@@ -8,6 +8,7 @@ go_library(
         "descriptor.go",
         "descriptor_id_set.go",
         "errors.go",
+        "post_derserialization_changes.go",
         "schema.go",
         "table_col_map.go",
         "table_col_set.go",

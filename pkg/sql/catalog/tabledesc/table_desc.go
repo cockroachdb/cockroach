@@ -45,7 +45,7 @@ type wrapper struct {
 	indexCache    *indexCache
 	columnCache   *columnCache
 
-	postDeserializationChanges PostDeserializationTableDescriptorChanges
+	changes catalog.PostDeserializationChanges
 }
 
 // IsUncommittedVersion implements the catalog.Descriptor interface.
@@ -55,19 +55,8 @@ func (*wrapper) IsUncommittedVersion() bool {
 
 // GetPostDeserializationChanges returns the set of changes which occurred to
 // this descriptor post deserialization.
-func (desc *wrapper) GetPostDeserializationChanges() PostDeserializationTableDescriptorChanges {
-	return desc.postDeserializationChanges
-}
-
-// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-// RunPostDeserializationChanges.
-func (desc *wrapper) HasPostDeserializationChanges() bool {
-	return desc.postDeserializationChanges.UpgradedForeignKeyRepresentation ||
-		desc.postDeserializationChanges.UpgradedFormatVersion ||
-		desc.postDeserializationChanges.UpgradedIndexFormatVersion ||
-		desc.postDeserializationChanges.UpgradedNamespaceName ||
-		desc.postDeserializationChanges.UpgradedPrivileges ||
-		desc.postDeserializationChanges.AddedConstraintIDs
+func (desc *wrapper) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return desc.changes
 }
 
 // ActiveChecks implements the TableDescriptor interface.
@@ -115,7 +104,7 @@ func (desc *wrapper) ByteSize() int64 {
 
 // NewBuilder implements the catalog.Descriptor interface.
 func (desc *wrapper) NewBuilder() catalog.DescriptorBuilder {
-	return NewBuilder(desc.TableDesc())
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // GetPrimaryIndexID implements the TableDescriptor interface.
@@ -130,10 +119,15 @@ func (desc *wrapper) IsTemporary() bool {
 
 // ImmutableCopy implements the MutableDescriptor interface.
 func (desc *Mutable) ImmutableCopy() catalog.Descriptor {
-	if desc.IsUncommittedVersion() {
-		return NewBuilderForUncommittedVersion(desc.TableDesc()).BuildImmutable()
-	}
-	return NewBuilder(desc.TableDesc()).BuildImmutable()
+	return desc.NewBuilder().BuildImmutable()
+}
+
+// NewBuilder implements the catalog.Descriptor interface.
+//
+// It overrides the wrapper's implementation to deal with the fact that
+// mutable has overridden the definition of IsUncommittedVersion.
+func (desc *Mutable) NewBuilder() catalog.DescriptorBuilder {
+	return newBuilder(desc.TableDesc(), desc.IsUncommittedVersion(), desc.changes)
 }
 
 // IsUncommittedVersion implements the Descriptor interface.
