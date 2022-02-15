@@ -15,15 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 const (
@@ -46,32 +43,30 @@ func emitResolvedTimestamp(
 	return nil
 }
 
+func shouldProtectTimestamps(codec keys.SQLCodec) bool {
+	// TODO(smiskin): Remove this restriction once tenant based pts are enabled
+	return codec.ForSystemTenant()
+}
+
 // createProtectedTimestampRecord will create a record to protect the spans for
 // this changefeed at the resolved timestamp. The progress struct will be
 // updated to refer to this new protected timestamp record.
 func createProtectedTimestampRecord(
 	ctx context.Context,
 	codec keys.SQLCodec,
-	pts protectedts.Storage,
-	txn *kv.Txn,
 	jobID jobspb.JobID,
 	targets jobspb.ChangefeedTargets,
 	resolved hlc.Timestamp,
 	progress *jobspb.ChangefeedProgress,
-) error {
-	if !codec.ForSystemTenant() {
-		return errors.AssertionFailedf("createProtectedTimestampRecord called on tenant-based changefeed")
-	}
-
+) *ptpb.Record {
 	progress.ProtectedTimestampRecord = uuid.MakeV4()
-	log.VEventf(ctx, 2, "creating protected timestamp %v at %v",
-		progress.ProtectedTimestampRecord, resolved)
 	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
 	targetToProtect := makeTargetToProtect(targets)
-	rec := jobsprotectedts.MakeRecord(
+
+	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", progress.ProtectedTimestampRecord, resolved)
+	return jobsprotectedts.MakeRecord(
 		progress.ProtectedTimestampRecord, int64(jobID), resolved, deprecatedSpansToProtect,
 		jobsprotectedts.Jobs, targetToProtect)
-	return pts.Protect(ctx, txn, rec)
 }
 
 func makeTargetToProtect(targets jobspb.ChangefeedTargets) *ptpb.Target {
