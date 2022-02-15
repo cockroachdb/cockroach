@@ -35,17 +35,10 @@ func TestFrontendInterceptor(t *testing.T) {
 		return src
 	}
 
-	t.Run("bufSize too small", func(t *testing.T) {
-		fi, err := interceptor.NewFrontendInterceptor(nil /* src */, 1 /* bufSize */)
-		require.Error(t, err)
-		require.Nil(t, fi)
-	})
-
 	t.Run("PeekMsg returns the right message type", func(t *testing.T) {
 		src := buildSrc(t, 1)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		fi := interceptor.NewFrontendInterceptor(src)
 		require.NotNil(t, fi)
 
 		typ, size, err := fi.PeekMsg()
@@ -57,8 +50,7 @@ func TestFrontendInterceptor(t *testing.T) {
 	t.Run("ReadMsg decodes the message correctly", func(t *testing.T) {
 		src := buildSrc(t, 1)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		fi := interceptor.NewFrontendInterceptor(src)
 		require.NotNil(t, fi)
 
 		msg, err := fi.ReadMsg()
@@ -72,8 +64,7 @@ func TestFrontendInterceptor(t *testing.T) {
 		src := buildSrc(t, 1)
 		dst := new(bytes.Buffer)
 
-		fi, err := interceptor.NewFrontendInterceptor(src, 16 /* bufSize */)
-		require.NoError(t, err)
+		fi := interceptor.NewFrontendInterceptor(src)
 		require.NotNil(t, fi)
 
 		n, err := fi.ForwardMsg(dst)
