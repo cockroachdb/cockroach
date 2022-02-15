@@ -692,7 +692,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// Only know do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
-	ctx = logtags.AddTag(ctx, "client", connDetails.RemoteAddress)
+	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error

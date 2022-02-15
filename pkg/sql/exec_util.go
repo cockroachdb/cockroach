@@ -3022,10 +3022,10 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 }
 
 func formatStmtKeyAsRedactableString(
-	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations,
+	vt VirtualTabler, rootAST tree.Statement, ann *tree.Annotations, fs tree.FmtFlags,
 ) redact.RedactableString {
 	f := tree.NewFmtCtx(
-		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode,
+		tree.FmtAlwaysQualifyTableNames|tree.FmtMarkRedactionNode|fs,
 		tree.FmtAnnotations(ann),
 		tree.FmtReformatTableNames(hideNonVirtualTableNameFunc(vt)))
 	f.FormatNode(rootAST)
