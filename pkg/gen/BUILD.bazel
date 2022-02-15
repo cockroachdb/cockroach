@@ -1,15 +1,4 @@
-load(":gen.bzl", "EXPLICIT_SRCS", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
-load(":excluded.bzl", "EXCLUDED_SRCS")
-
-filegroup(
-    name = "explicitly_generated",
-    srcs = EXPLICIT_SRCS,
-)
-
-filegroup(
-    name = "excluded",
-    srcs = EXCLUDED_SRCS,
-)
+load(":gen.bzl", "docs", "execgen", "gen", "go_proto", "gomock", "misc", "optgen", "stringer")
 
 execgen()
 
