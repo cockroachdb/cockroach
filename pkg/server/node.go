@@ -534,10 +534,6 @@ func (n *Node) start(
 	// started earlier).
 	n.startGossiping(ctx, n.stopper)
 
-	if err := n.tenantSettingsWatcher.Start(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
-	}
-
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.uninitializedEngines...)
 	for _, e := range allEngines {
