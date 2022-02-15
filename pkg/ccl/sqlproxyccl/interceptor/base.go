@@ -85,9 +85,9 @@ func newPgInterceptor(src io.Reader, dst io.Writer, bufSize int) (*pgInterceptor
 
 // PeekMsg returns the header of the current pgwire message without advancing
 // the interceptor. On return, err == nil if and only if the entire header can
-// be read. Note that size corresponds to the body size, and does not account
-// for the size field itself. This will return ErrProtocolError if the packets
-// are malformed.
+// be read. The returned size corresponds to the entire message size, which
+// includes the header type and body length. This will return ErrProtocolError
+// if the packets are malformed.
 //
 // If the interceptor is closed, PeekMsg returns ErrInterceptorClosed.
 func (p *pgInterceptor) PeekMsg() (typ byte, size int, err error) {
@@ -108,7 +108,9 @@ func (p *pgInterceptor) PeekMsg() (typ byte, size int, err error) {
 		return 0, 0, ErrProtocolError
 	}
 
-	return typ, size - 4, nil
+	// Add 1 to size to account for type. We don't need to add 4 (int length) to
+	// it because size is already inclusive of that.
+	return typ, size + 1, nil
 }
 
 // WriteMsg writes the given bytes to the writer dst. If err != nil and a Write
@@ -148,28 +150,27 @@ func (p *pgInterceptor) ReadMsg() (msg []byte, err error) {
 		return nil, ErrInterceptorClosed
 	}
 
-	// Peek header of the current message for body size.
+	// Peek header of the current message for message size.
 	_, size, err := p.PeekMsg()
 	if err != nil {
 		return nil, err
 	}
-	msgSizeBytes := pgHeaderSizeBytes + size
 
 	// Can the entire message fit into the buffer?
-	if msgSizeBytes <= len(p.buf) {
-		if err := p.ensureNextNBytes(msgSizeBytes); err != nil {
+	if size <= len(p.buf) {
+		if err := p.ensureNextNBytes(size); err != nil {
 			// Possibly due to a timeout or context cancellation.
 			return nil, err
 		}
 
 		// Return a slice to the internal buffer to avoid an allocation here.
-		retBuf := p.buf[p.readPos : p.readPos+msgSizeBytes]
-		p.readPos += msgSizeBytes
+		retBuf := p.buf[p.readPos : p.readPos+size]
+		p.readPos += size
 		return retBuf, nil
 	}
 
 	// Message cannot fit, so we will have to allocate.
-	msg = make([]byte, msgSizeBytes)
+	msg = make([]byte, size)
 
 	// Copy bytes which have already been read.
 	n := copy(msg, p.buf[p.readPos:p.writePos])
@@ -209,7 +210,7 @@ func (p *pgInterceptor) ForwardMsg() (n int, err error) {
 		return 0, ErrInterceptorClosed
 	}
 
-	// Retrieve header of the current message for body size.
+	// Retrieve header of the current message for message size.
 	_, size, err := p.PeekMsg()
 	if err != nil {
 		return 0, err
@@ -217,7 +218,7 @@ func (p *pgInterceptor) ForwardMsg() (n int, err error) {
 
 	// Handle overflows as current message may not fit in the current buffer.
 	startPos := p.readPos
-	endPos := startPos + pgHeaderSizeBytes + size
+	endPos := startPos + size
 	remainingBytes := 0
 	if endPos > p.writePos {
 		remainingBytes = endPos - p.writePos
