@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -1255,6 +1256,9 @@ type ExecutorConfig struct {
 
 	// CollectionFactory is used to construct a descs.Collection.
 	CollectionFactory *descs.CollectionFactory
+
+	// SystemTableIDResolver is used to obtain dynamic IDs for system tables.
+	SystemTableIDResolver catalog.SystemTableIDResolver
 
 	// SpanConfigReconciler is used to drive the span config reconciliation job
 	// and related migrations.

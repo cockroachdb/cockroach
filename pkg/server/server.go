@@ -1475,7 +1475,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// been run so it is safe to upgrade to the binary's current version.
 	s.startAttemptUpgrade(ctx)
 
-	if err := s.node.tenantSettingsWatcher.Start(ctx); err != nil {
+	if err := s.node.tenantSettingsWatcher.Start(ctx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
 

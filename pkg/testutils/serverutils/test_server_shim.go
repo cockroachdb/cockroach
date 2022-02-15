@@ -193,6 +193,9 @@ type TestServerInterface interface {
 	// CollectionFactory returns a *descs.CollectionFactory.
 	CollectionFactory() interface{}
 
+	// SystemTableIDResolver returns a catalog.SystemTableIDResolver.
+	SystemTableIDResolver() interface{}
+
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}

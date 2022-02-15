@@ -1338,6 +1338,11 @@ func (ts *TestServer) CollectionFactory() interface{} {
 	return ts.sqlServer.execCfg.CollectionFactory
 }
 
+// SystemTableIDResolver is part of the TestServerInterface.
+func (ts *TestServer) SystemTableIDResolver() interface{} {
+	return ts.sqlServer.execCfg.SystemTableIDResolver
+}
+
 // SpanConfigKVSubscriber is part of the TestServerInterface.
 func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 	return ts.node.storeCfg.SpanConfigSubscriber
