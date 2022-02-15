@@ -159,7 +159,8 @@ func TestDataDriven(t *testing.T) {
 				}
 
 				sqlTranslator := tenant.SpanConfigSQLTranslator().(spanconfig.SQLTranslator)
-				records, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID})
+				records, _, err := sqlTranslator.Translate(ctx, descpb.IDs{objID},
+					true /* shouldGenerateSystemTargetRecords */)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {
 					return records[i].Target.Less(records[j].Target)
@@ -167,8 +168,13 @@ func TestDataDriven(t *testing.T) {
 
 				var output strings.Builder
 				for _, record := range records {
-					output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
-						spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
+					if record.Target.IsSpanTarget() {
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSpan(),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(record.Config)))
+					} else {
+						output.WriteString(fmt.Sprintf("%-42s %s\n", record.Target.GetSystemTarget(),
+							spanconfigtestutils.PrintSystemTargetSpanConfigDiffedAgainstDefault(record.Config)))
+					}
 				}
 				return output.String()
 

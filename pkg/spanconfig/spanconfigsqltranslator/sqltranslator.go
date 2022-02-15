@@ -56,7 +56,7 @@ func New(
 
 // Translate is part of the spanconfig.SQLTranslator interface.
 func (s *SQLTranslator) Translate(
-	ctx context.Context, ids descpb.IDs,
+	ctx context.Context, ids descpb.IDs, shouldGenerateSystemTargetRecords bool,
 ) ([]spanconfig.Record, hlc.Timestamp, error) {
 	var records []spanconfig.Record
 	// txn used to translate the IDs, so that we can get its commit timestamp
@@ -83,6 +83,13 @@ func (s *SQLTranslator) Translate(
 			return errors.Wrap(err, "failed to get protected timestamp state")
 		}
 		ptsStateReader := newProtectedTimestampStateReader(ctx, ptsState)
+
+		if shouldGenerateSystemTargetRecords {
+			records, err = s.generateSystemTargetRecords(ptsStateReader)
+			if err != nil {
+				return errors.Wrap(err, "failed to generate SystemTarget records")
+			}
+		}
 
 		// For every ID we want to translate, first expand it to descendant leaf
 		// IDs that have span configurations associated for them. We also
@@ -143,6 +150,55 @@ var descLookupFlags = tree.CommonLookupFlags{
 	IncludeOffline: true,
 	// We want consistent reads.
 	AvoidLeased: true,
+}
+
+// generateSystemTargetRecords is responsible for generating all the SpanConfigs
+// that apply to spanconfig.SystemTargets.
+func (s *SQLTranslator) generateSystemTargetRecords(
+	ptsStateReader *protectedTimestampStateReader,
+) ([]spanconfig.Record, error) {
+	tenantPrefix := s.codec.TenantPrefix()
+	_, sourceTenantID, err := keys.DecodeTenantPrefix(tenantPrefix)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]spanconfig.Record, 0)
+
+	// Aggregate cluster target protections for the tenant.
+	clusterProtections := ptsStateReader.getProtectionPoliciesForCluster()
+	if len(clusterProtections) != 0 {
+		var systemTarget spanconfig.SystemTarget
+		var err error
+		if sourceTenantID == roachpb.SystemTenantID {
+			systemTarget = spanconfig.MakeClusterTarget()
+		} else {
+			systemTarget, err = spanconfig.MakeTenantTarget(sourceTenantID, sourceTenantID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		clusterSystemRecord := spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
+			Config: roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{ProtectionPolicies: clusterProtections}}}
+		records = append(records, clusterSystemRecord)
+	}
+
+	// Aggregate tenant target protections.
+	tenantProtections := ptsStateReader.getProtectionPoliciesForTenants()
+	for _, protection := range tenantProtections {
+		tenantProtection := protection
+		systemTarget, err := spanconfig.MakeTenantTarget(sourceTenantID, tenantProtection.tenantID)
+		if err != nil {
+			return nil, err
+		}
+		tenantSystemRecord := spanconfig.Record{
+			Target: spanconfig.MakeTargetFromSystemTarget(systemTarget),
+			Config: roachpb.SpanConfig{GCPolicy: roachpb.GCPolicy{
+				ProtectionPolicies: tenantProtection.protections}},
+		}
+		records = append(records, tenantSystemRecord)
+	}
+	return records, nil
 }
 
 // generateSpanConfigurations generates the span configurations for the given

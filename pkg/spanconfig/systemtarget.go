@@ -24,8 +24,6 @@ import (
 type SystemTarget struct {
 	// SourceTenantID is the ID of the tenant that specified the system span
 	// configuration.
-	// SourceTenantID is the ID of the tenant that specified the system span
-	// configuration.
 	SourceTenantID roachpb.TenantID
 
 	// TargetTenantID is the ID of the tenant that the associated system span

@@ -98,8 +98,11 @@ type KVSubscriber interface {
 type SQLTranslator interface {
 	// Translate generates the span configuration state given a list of
 	// {descriptor, named zone} IDs. Entries are unique, and are omitted for IDs
-	// that don't exist. The timestamp at which the translation is valid is also
-	// returned.
+	// that don't exist.
+	// Additionally, if `shouldGenerateSystemTargetRecords` is set to true,
+	// Translate will generate all the span configurations that apply to
+	// `spanconfig.SystemTargets`. The timestamp at which the translation is valid
+	// is also returned.
 	//
 	// For every ID we first descend the zone configuration hierarchy with the
 	// ID as the root to accumulate IDs of all leaf objects. Leaf objects are
@@ -109,7 +112,8 @@ type SQLTranslator interface {
 	// for each one of these accumulated IDs, we generate <span, config> tuples
 	// by following up the inheritance chain to fully hydrate the span
 	// configuration. Translate also accounts for and negotiates subzone spans.
-	Translate(ctx context.Context, ids descpb.IDs) ([]Record, hlc.Timestamp, error)
+	Translate(ctx context.Context, ids descpb.IDs,
+		shouldGenerateSystemTargetRecords bool) ([]Record, hlc.Timestamp, error)
 }
 
 // FullTranslate translates the entire SQL zone configuration state to the span
@@ -119,7 +123,8 @@ func FullTranslate(ctx context.Context, s SQLTranslator) ([]Record, hlc.Timestam
 	// As RANGE DEFAULT is the root of all zone configurations (including other
 	// named zones for the system tenant), we can construct the entire span
 	// configuration state by starting from RANGE DEFAULT.
-	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID})
+	return s.Translate(ctx, descpb.IDs{keys.RootNamespaceID},
+		true /* shouldGenerateSystemTargetRecords */)
 }
 
 // SQLWatcherHandler is the signature of a handler that can be passed into
