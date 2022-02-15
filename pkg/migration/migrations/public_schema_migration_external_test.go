@@ -44,7 +44,7 @@ func publicSchemaMigrationTest(t *testing.T, ctx context.Context, numTables int)
 			Settings: settings,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					DisableAutomaticVersionUpgrade: 1,
+					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.PublicSchemasWithDescriptors - 1),
 				},
 			},
