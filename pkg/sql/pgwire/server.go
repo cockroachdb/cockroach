@@ -787,7 +787,7 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 			CancelQueryKey: cancelKey,
 		}
 		resp, err := s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
-		if len(resp.Error) > 0 {
+		if resp != nil && len(resp.Error) > 0 {
 			err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
 		}
 		return resp, err
@@ -796,7 +796,7 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 	if resp != nil && resp.Canceled {
 		s.metrics.PGWireCancelSuccessfulCount.Inc(1)
 	} else if err != nil {
-		if status := status.Convert(err); status.Code() == codes.ResourceExhausted {
+		if respStatus := status.Convert(err); respStatus.Code() == codes.ResourceExhausted {
 			s.metrics.PGWireCancelIgnoredCount.Inc(1)
 		}
 		log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
