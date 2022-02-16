@@ -708,6 +708,11 @@ func (s *TestState) CreateJob(ctx context.Context, record jobs.Record) error {
 	return nil
 }
 
+// CheckPausepoint is a no-op.
+func (s *TestState) CheckPausepoint(name string) error {
+	return nil
+}
+
 // UpdateSchemaChangeJob implements the scexec.TransactionalJobRegistry interface.
 func (s *TestState) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, fn scexec.JobUpdateCallback,

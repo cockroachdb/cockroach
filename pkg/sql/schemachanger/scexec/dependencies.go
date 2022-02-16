@@ -107,6 +107,12 @@ type TransactionalJobRegistry interface {
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
 
+	// CheckPausepoint returns a PauseRequestError if the named pause-point is
+	// set.
+	//
+	// See (*jobs.Registry).CheckPausepoint
+	CheckPausepoint(name string) error
+
 	// TODO(ajwerner): Deal with setting the running status to indicate
 	// validating, backfilling, or generally performing metadata changes
 	// and waiting for lease draining.

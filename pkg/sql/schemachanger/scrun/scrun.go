@@ -12,6 +12,7 @@ package scrun
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -101,12 +102,25 @@ func RunSchemaChangesInJob(
 	for i := range sc.Stages {
 		// Execute each stage in its own transaction.
 		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
+			if err := td.TransactionalJobRegistry().CheckPausepoint(
+				pausepointName(state, i),
+			); err != nil {
+				return err
+			}
 			return executeStage(ctx, knobs, td, sc, i, sc.Stages[i])
 		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// pausepointName construct a name for the job execution phase pausepoint.
+func pausepointName(state scpb.CurrentState, i int) string {
+	return fmt.Sprintf(
+		"schemachanger://%s@%s/%d",
+		state.Authorization.UserName, state.Authorization.AppName, i,
+	)
 }
 
 func executeStage(
