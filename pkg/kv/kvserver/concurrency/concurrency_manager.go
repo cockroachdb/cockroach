@@ -566,6 +566,13 @@ func (m *managerImpl) OnReplicaSnapshotApplied() {
 	m.lt.Clear(disable)
 }
 
+// LockTableState implements the StateExporter interface
+func (m *managerImpl) LockTableState(
+	scope spanset.SpanScope, span *roachpb.Span, includeUncontended bool,
+) []roachpb.LockStateInfo {
+	return m.lt.LockTableState(scope, span, includeUncontended)
+}
+
 // LatchMetrics implements the MetricExporter interface.
 func (m *managerImpl) LatchMetrics() LatchMetrics {
 	return m.lm.Metrics()

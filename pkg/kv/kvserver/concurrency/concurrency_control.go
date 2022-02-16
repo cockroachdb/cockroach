@@ -151,6 +151,7 @@ type Manager interface {
 	LockManager
 	TransactionManager
 	RangeStateListener
+	StateExporter
 	MetricExporter
 	TestStateExporter
 }
@@ -290,6 +291,15 @@ type RangeStateListener interface {
 	// OnReplicaSnapshotApplied informs the concurrency manager that its replica
 	// has received a snapshot from another replica in its range.
 	OnReplicaSnapshotApplied()
+}
+
+// StateExporter is concerned with exposing the state of the internal
+// structures of the concurrency manager, such as the lock table.  It is one of
+// the roles of Manager.
+type StateExporter interface {
+	// LockTableState gathers detailed metadata on locks tracked in the lock
+	// table that are part of the provided span (if non-nil) and key scope.
+	LockTableState(scope spanset.SpanScope, span *roachpb.Span, includeUncontended bool) []roachpb.LockStateInfo
 }
 
 // MetricExporter is concerned with providing observability into the state of
@@ -672,6 +682,9 @@ type lockTable interface {
 	// waiting on locks of finalized transactions and telling the caller via
 	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
 	TransactionIsFinalized(*roachpb.Transaction)
+
+	// LockTableState returns detailed metadata on locks managed by the lockTable.
+	LockTableState(scope spanset.SpanScope, span *roachpb.Span, includeUncontended bool) []roachpb.LockStateInfo
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics

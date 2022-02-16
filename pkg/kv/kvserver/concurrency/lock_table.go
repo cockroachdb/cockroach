@@ -1036,6 +1036,93 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 	}
 }
 
+// addLockStateInfo converts receiver into exportable LockStateInfo metadata
+// and adds it to our list for the range, filtering out uncontended locks if
+// includeUncontended is false.
+func (l *lockState) addLockStateInfo(includeUncontended bool, infos *[]roachpb.LockStateInfo) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.isEmptyLock() {
+		return
+	}
+	if !includeUncontended && l.waitingReaders.Len() == 0 && l.queuedWriters.Len() == 0 {
+		return
+	}
+
+	*infos = append(*infos, l.lockStateInfo())
+}
+
+// lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
+// REQUIRES: l.mu is locked.
+func (l *lockState) lockStateInfo() roachpb.LockStateInfo {
+	scope := roachpb.KeyScope_GLOBAL
+	if l.ss == spanset.SpanLocal {
+		scope = roachpb.KeyScope_LOCAL
+	}
+
+	var holder *roachpb.LockAcquisition
+	if l.holder.locked {
+		var txnHolder *enginepb.TxnMeta
+		var durability lock.Durability
+		if l.holder.holder[lock.Unreplicated].txn != nil {
+			txnHolder = l.holder.holder[lock.Unreplicated].txn
+			durability = lock.Unreplicated
+		} else {
+			txnHolder = l.holder.holder[lock.Replicated].txn
+			durability = lock.Replicated
+		}
+		holder = &roachpb.LockAcquisition{
+			Span:       roachpb.Span{Key: l.key},
+			Txn:        *txnHolder,
+			Durability: durability,
+		}
+	}
+
+	waiterCount := l.waitingReaders.Len() + l.queuedWriters.Len()
+	hasReservation := l.reservation != nil && l.reservation.txn != nil
+	if hasReservation {
+		waiterCount++
+	}
+	lockWaiters := make([]lock.LockWaiter, 0, waiterCount)
+
+	// Consider the reservation as the "first waiter" (albeit on an unheld lock).
+	if hasReservation {
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   l.reservation.txn,
+			ActiveWaiter: true,
+			Access:       lock.ReadWrite,
+		})
+	}
+
+	// Next, add waiting readers before writers as they should run first.
+	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		readerGuard := e.Value.(*lockTableGuardImpl)
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   readerGuard.txn,
+			ActiveWaiter: false,
+			Access:       lock.ReadOnly,
+		})
+	}
+
+	// Lastly, add queued writers in order.
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		writerGuard := qg.guard
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   writerGuard.txn,
+			ActiveWaiter: qg.active,
+			Access:       lock.ReadWrite,
+		})
+	}
+
+	return roachpb.LockStateInfo{
+		Key:         l.key,
+		Scope:       scope,
+		LockHolder:  holder,
+		LockWaiters: lockWaiters,
+	}
+}
+
 // addToMetrics adds the receiver's state to the provided metrics struct.
 func (l *lockState) addToMetrics(m *LockTableMetrics) {
 	l.mu.Lock()
@@ -2671,6 +2758,36 @@ func (t *lockTableImpl) Clear(disable bool) {
 	// Also clear the finalized txn cache, since it won't be needed any time
 	// soon and consumes memory.
 	t.finalizedTxnCache.clear()
+}
+
+// LockTableState implements the lockTable interface.
+func (t *lockTableImpl) LockTableState(
+	scope spanset.SpanScope, span *roachpb.Span, includeUncontended bool,
+) []roachpb.LockStateInfo {
+	// Grab tree snapshot to avoid holding read lock during iteration.
+	var snap btree
+	{
+		tree := &t.locks[scope]
+		tree.mu.RLock()
+		snap = tree.Clone()
+		tree.mu.RUnlock()
+	}
+
+	lockTableState := make([]roachpb.LockStateInfo, 0, snap.Len())
+
+	// Iterate over locks and gather metadata
+	iter := snap.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		if span != nil {
+			if l.key.Compare(span.Key) < 0 || (len(span.EndKey) > 0 && span.EndKey.Compare(l.key) < 0) {
+				continue
+			}
+		}
+		l.addLockStateInfo(includeUncontended, &lockTableState)
+	}
+
+	return lockTableState
 }
 
 // Metrics implements the lockTable interface.
