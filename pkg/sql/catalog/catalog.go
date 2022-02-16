@@ -54,9 +54,6 @@ type MutableDescriptor interface {
 	SetDropped()
 	// SetOffline sets the descriptor's state to offline, with the provided reason.
 	SetOffline(reason string)
-	// HasPostDeserializationChanges returns if the MutableDescriptor was changed after running
-	// RunPostDeserializationChanges.
-	HasPostDeserializationChanges() bool
 
 	// SetDeclarativeSchemaChangerState sets the state of the declarative
 	// schema change currently operating on this descriptor.

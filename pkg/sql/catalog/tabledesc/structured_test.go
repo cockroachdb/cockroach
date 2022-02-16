@@ -311,7 +311,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 		desc := b.BuildImmutableTable()
 		changes, err := GetPostDeserializationChanges(desc)
 		require.NoError(t, err)
-		upgraded := changes.UpgradedFormatVersion
+		upgraded := changes.Contains(catalog.UpgradedFormatVersion)
 		if upgraded != test.expUpgrade {
 			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
 		}
@@ -583,7 +583,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 
 			require.NoError(t, err)
 			if test.upgraded == nil {
-				require.Equal(t, PostDeserializationTableDescriptorChanges{}, changes)
+				require.Zero(t, changes)
 				return
 			}
 
@@ -599,7 +599,7 @@ func TestMaybeUpgradeIndexFormatVersion(t *testing.T) {
 			desc2 := b2.BuildImmutableTable()
 			changes2, err := GetPostDeserializationChanges(desc2)
 			require.NoError(t, err)
-			require.Equal(t, PostDeserializationTableDescriptorChanges{}, changes2)
+			require.Zero(t, changes2)
 			require.Equal(t, desc.TableDesc(), desc2.TableDesc())
 		})
 	}
@@ -880,7 +880,7 @@ func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
 		require.NoError(t, validate.Self(clusterversion.TestingClusterVersion, fixed))
 		changes, err := GetPostDeserializationChanges(fixed)
 		require.NoError(t, err)
-		require.True(t, changes.RemovedDefaultExprFromComputedColumn)
+		require.True(t, changes.Contains(catalog.RemovedDefaultExprFromComputedColumn))
 		require.False(t, fixed.PublicColumns()[1].HasDefault())
 	}
 }

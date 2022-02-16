@@ -66,50 +66,6 @@ var ErrMissingColumns = errors.New("table must contain at least 1 column")
 // ErrMissingPrimaryKey indicates a table with no primary key.
 var ErrMissingPrimaryKey = errors.New("table must contain a primary key")
 
-// PostDeserializationTableDescriptorChanges are a set of booleans to indicate
-// which types of upgrades or fixes occurred when filling in the descriptor
-// after deserialization.
-type PostDeserializationTableDescriptorChanges struct {
-	// UpgradedFormatVersion indicates that the FormatVersion was upgraded.
-	UpgradedFormatVersion bool
-
-	// FixedIndexEncodingType indicates that the encoding type of a public index
-	// was fixed.
-	FixedIndexEncodingType bool
-
-	// UpgradedIndexFormatVersion indicates that the format version of at least
-	// one index descriptor was upgraded.
-	UpgradedIndexFormatVersion bool
-
-	// UpgradedForeignKeyRepresentation indicates that the foreign key
-	// representation was upgraded.
-	UpgradedForeignKeyRepresentation bool
-
-	// UpgradedNamespaceName indicates that the table was system.namespace
-	// and it had its name upgraded from "namespace2".
-	//
-	// TODO(ajwerner): Remove this and the associated migration in 22.1 as
-	// this will never be true due to the corresponding long-running migration.
-	UpgradedNamespaceName bool
-
-	// UpgradedPrivileges indicates that the PrivilegeDescriptor version was upgraded.
-	UpgradedPrivileges bool
-
-	// RemovedDefaultExprFromComputedColumn indicates that the table had at least
-	// one computed column which also had a DEFAULT expression, which therefore
-	// had to be removed. See issue #72881 for details.
-	RemovedDefaultExprFromComputedColumn bool
-
-	// RemovedDuplicateIDsInRefs indicates that the table
-	// has redundant IDs in its DependsOn, DependsOnTypes and DependedOnBy
-	// references.
-	RemovedDuplicateIDsInRefs bool
-
-	// AddedConstraintIDs indicates that table descriptors had constraint ID
-	// added.
-	AddedConstraintIDs bool
-}
-
 // DescriptorType returns the type of this descriptor.
 func (desc *wrapper) DescriptorType() catalog.DescriptorType {
 	return catalog.Table
@@ -2115,7 +2071,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 	includeConstraints catalog.MutationPublicationFilter,
 ) (catalog.TableDescriptor, error) {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
-	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+	table := desc.NewBuilder().(TableDescriptorBuilder).BuildExistingMutableTable()
 	mutationID := desc.Mutations[0].MutationID
 	i := 0
 	for _, mutation := range desc.Mutations {
@@ -2142,7 +2098,7 @@ func (desc *wrapper) MakeFirstMutationPublic(
 // MakePublic implements the TableDescriptor interface.
 func (desc *wrapper) MakePublic() catalog.TableDescriptor {
 	// Clone the ImmutableTable descriptor because we want to create an ImmutableCopy one.
-	table := NewBuilder(desc.TableDesc()).BuildExistingMutableTable()
+	table := desc.NewBuilder().(TableDescriptorBuilder).BuildExistingMutableTable()
 	table.State = descpb.DescriptorState_PUBLIC
 	table.Version++
 	return table

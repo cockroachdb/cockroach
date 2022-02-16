@@ -31,7 +31,8 @@ type typeDescriptorBuilder struct {
 	original      *descpb.TypeDescriptor
 	maybeModified *descpb.TypeDescriptor
 
-	changed bool
+	isUncommittedVersion bool
+	changes              catalog.PostDeserializationChanges
 }
 
 var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
@@ -39,9 +40,21 @@ var _ TypeDescriptorBuilder = &typeDescriptorBuilder{}
 // NewBuilder creates a new catalog.DescriptorBuilder object for building
 // type descriptors.
 func NewBuilder(desc *descpb.TypeDescriptor) TypeDescriptorBuilder {
-	return &typeDescriptorBuilder{
-		original: protoutil.Clone(desc).(*descpb.TypeDescriptor),
+	return newBuilder(desc, false, /* isUncommitedVersion */
+		catalog.PostDeserializationChanges{})
+}
+
+func newBuilder(
+	desc *descpb.TypeDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) TypeDescriptorBuilder {
+	b := &typeDescriptorBuilder{
+		original:             protoutil.Clone(desc).(*descpb.TypeDescriptor),
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
 	}
+	return b
 }
 
 // DescriptorType implements the catalog.DescriptorBuilder interface.
@@ -61,7 +74,9 @@ func (tdb *typeDescriptorBuilder) RunPostDeserializationChanges() {
 		tdb.maybeModified.GetName(),
 	)
 	addedGrantOptions := catprivilege.MaybeUpdateGrantOptions(tdb.maybeModified.Privileges)
-	tdb.changed = fixedPrivileges || addedGrantOptions
+	if fixedPrivileges || addedGrantOptions {
+		tdb.changes.Add(catalog.UpgradedPrivileges)
+	}
 }
 
 // RunRestoreChanges implements the catalog.DescriptorBuilder interface.
@@ -80,7 +95,7 @@ func (tdb *typeDescriptorBuilder) BuildImmutableType() catalog.TypeDescriptor {
 	if desc == nil {
 		desc = tdb.original
 	}
-	imm := makeImmutable(desc)
+	imm := makeImmutable(desc, tdb.isUncommittedVersion, tdb.changes)
 	return &imm
 }
 
@@ -95,11 +110,11 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 	if tdb.maybeModified == nil {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	}
-	clusterVersion := makeImmutable(tdb.original)
+	clusterVersion := makeImmutable(tdb.original, false, /* isUncommitedVersion */
+		catalog.PostDeserializationChanges{})
 	return &Mutable{
-		immutable:      makeImmutable(tdb.maybeModified),
+		immutable:      makeImmutable(tdb.maybeModified, false /* isUncommitedVersion */, tdb.changes),
 		ClusterVersion: &clusterVersion,
-		changed:        tdb.changed,
 	}
 }
 
@@ -112,13 +127,20 @@ func (tdb *typeDescriptorBuilder) BuildCreatedMutable() catalog.MutableDescripto
 // which is in the process of being created.
 func (tdb *typeDescriptorBuilder) BuildCreatedMutableType() *Mutable {
 	return &Mutable{
-		immutable: makeImmutable(tdb.original),
-		changed:   tdb.changed,
+		immutable: makeImmutable(tdb.original, tdb.isUncommittedVersion, tdb.changes),
 	}
 }
 
-func makeImmutable(desc *descpb.TypeDescriptor) immutable {
-	immutDesc := immutable{TypeDescriptor: *desc}
+func makeImmutable(
+	desc *descpb.TypeDescriptor,
+	isUncommittedVersion bool,
+	changes catalog.PostDeserializationChanges,
+) immutable {
+	immutDesc := immutable{
+		TypeDescriptor:       *desc,
+		isUncommittedVersion: isUncommittedVersion,
+		changes:              changes,
+	}
 
 	// Initialize metadata specific to the TypeDescriptor kind.
 	switch immutDesc.Kind {

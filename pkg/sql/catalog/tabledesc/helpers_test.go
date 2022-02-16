@@ -59,10 +59,10 @@ func ValidateConstraints(immI catalog.TableDescriptor) error {
 
 func GetPostDeserializationChanges(
 	immI catalog.TableDescriptor,
-) (PostDeserializationTableDescriptorChanges, error) {
+) (catalog.PostDeserializationChanges, error) {
 	imm, ok := immI.(*immutable)
 	if !ok {
-		return PostDeserializationTableDescriptorChanges{}, errors.Errorf("expected immutable descriptor")
+		return catalog.PostDeserializationChanges{}, errors.Errorf("expected immutable descriptor")
 	}
 	return imm.GetPostDeserializationChanges(), nil
 }
