@@ -13,6 +13,7 @@ package kvstreamer
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"math"
 	"runtime"
 	"sort"
@@ -135,7 +136,7 @@ func (r Result) Release(ctx context.Context) {
 		s.budget.releaseLocked(ctx, r.memoryTok.toRelease)
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		s.mu.numUnreleasedResults--
+		s.mu.results.releaseOne()
 		s.signalBudgetIfNoRequestsInProgressLocked()
 	}
 }
@@ -243,12 +244,6 @@ type Streamer struct {
 		// already left requestsToServe queue, but for which we haven't received
 		// the results yet).
 		numRequestsInFlight int
-
-		// numUnreleasedResults tracks the number of Results that have already
-		// been created but haven't been Release()'d yet. This number includes
-		// those that are currently in 'results' in addition to those returned
-		// by GetResults() to the caller which the caller hasn't processed yet.
-		numUnreleasedResults int
 
 		// hasResults is used by the client's goroutine to block until there are
 		// some results to be picked up.
@@ -368,6 +363,7 @@ func (p *inOrderRequestsProvider) Pop() interface{} {
 func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
+	fmt.Printf("enqueued %d requests\n", len(requests))
 	p.requests = requests
 	heap.Init(p)
 	p.hasWork.Signal()
@@ -376,6 +372,7 @@ func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
 	p.Lock()
 	defer p.Unlock()
+	fmt.Printf("added new request for positions %v\n", request.positions)
 	heap.Push(p, request)
 	p.hasWork.Signal()
 }
@@ -395,24 +392,33 @@ func (p *inOrderRequestsProvider) removeFirstLocked() {
 }
 
 // resultsBuffer is not thread-safe.
+// TODO: figure out how to treat unreleased vs buffered results.
 type resultsBuffer interface {
 	// add is responsible for notifying hasResults condition variable if any
 	// Results are available to be returned.
 	add([]Result)
 	get() []Result
 	empty() bool
+	numUnreleased() int
+	releaseOne()
 	reset()
 }
 
 type outOfOrderResultsBuffer struct {
 	s       *Streamer
 	results []Result
+	// numUnreleasedResults tracks the number of Results that have already been
+	// created but haven't been Release()'d yet. This number includes those that
+	// are currently in 'results' in addition to those returned by GetResults()
+	// to the caller which the caller hasn't processed yet.
+	numUnreleasedResults int
 }
 
 var _ resultsBuffer = &outOfOrderResultsBuffer{}
 
 func (b *outOfOrderResultsBuffer) add(results []Result) {
 	b.results = append(b.results, results...)
+	b.numUnreleasedResults += len(results)
 	b.s.mu.hasResults.Signal()
 }
 
@@ -426,12 +432,22 @@ func (b *outOfOrderResultsBuffer) empty() bool {
 	return len(b.results) == 0
 }
 
+func (b *outOfOrderResultsBuffer) numUnreleased() int {
+	return b.numUnreleasedResults
+}
+
+func (b *outOfOrderResultsBuffer) releaseOne() {
+	b.numUnreleasedResults--
+}
+
 func (b *outOfOrderResultsBuffer) reset() {}
 
 type inOrderResultsBuffer struct {
 	s                  *Streamer
 	headOfLinePosition int
 	buffered           []Result
+	// TODO: comment.
+	numUnreleasedResults int
 }
 
 var _ resultsBuffer = &inOrderResultsBuffer{}
@@ -462,28 +478,40 @@ func (b *inOrderResultsBuffer) Pop() interface{} {
 func (b *inOrderResultsBuffer) add(results []Result) {
 	foundHeadOfLine := false
 	for _, r := range results {
+		fmt.Printf("adding a result for position %d of size %d\n", r.position, r.memoryTok.toRelease)
 		heap.Push(b, r)
 		if r.position == b.headOfLinePosition {
 			foundHeadOfLine = true
 		}
 	}
 	if foundHeadOfLine {
+		fmt.Println("found head-of-the-line")
 		b.s.mu.hasResults.Signal()
 	}
 }
 
 func (b *inOrderResultsBuffer) get() []Result {
 	var res []Result
+	fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
 	for len(b.buffered) > 0 && b.buffered[0].position == b.headOfLinePosition {
 		res = append(res, b.buffered[0])
 		heap.Remove(b, 0)
 		b.headOfLinePosition++
 	}
+	b.numUnreleasedResults += len(res)
 	return res
 }
 
 func (b *inOrderResultsBuffer) empty() bool {
 	return len(b.buffered) == 0
+}
+
+func (b *inOrderResultsBuffer) numUnreleased() int {
+	return b.numUnreleasedResults
+}
+
+func (b *inOrderResultsBuffer) releaseOne() {
+	b.numUnreleasedResults--
 }
 
 func (b *inOrderResultsBuffer) reset() {
@@ -810,8 +838,10 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		results := s.mu.results.get()
 		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
 		if len(results) > 0 || allComplete || s.mu.err != nil {
+			fmt.Printf("returning %d results to the client\n", len(results))
 			return results, s.mu.err
 		}
+		fmt.Println("blocking for results")
 		s.mu.hasResults.Wait()
 		// Check whether the Streamer has been canceled or closed while we were
 		// waiting for the results.
@@ -874,7 +904,7 @@ func (s *Streamer) Close() {
 func (s *Streamer) getNumRequestsInProgress() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.mu.numRequestsInFlight + s.mu.numUnreleasedResults
+	return s.mu.numRequestsInFlight + s.mu.results.numUnreleased()
 }
 
 // signalBudgetIfNoRequestsInProgressLocked checks whether there are no requests
@@ -887,7 +917,7 @@ func (s *Streamer) getNumRequestsInProgress() int {
 // The mutex of s must be held.
 func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
 	s.mu.AssertHeld()
-	if s.mu.numRequestsInFlight == 0 && s.mu.numUnreleasedResults == 0 {
+	if s.mu.numRequestsInFlight == 0 && s.mu.results.numUnreleased() == 0 {
 		s.budget.mu.waitForBudget.Signal()
 	}
 }
@@ -1134,6 +1164,10 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// any more responses at the moment.
 			return err
 		}
+		fmt.Printf(
+			"issuing request with positions %v with targetBytes %d, headOfLine=%t\n",
+			singleRangeReqs.positions, targetBytes, headOfLine,
+		)
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
 		w.s.requestsToServe.removeFirstLocked()
 		headOfLine = false
@@ -1567,7 +1601,6 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// partial one. Think more about this.
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
-	w.s.mu.numUnreleasedResults += len(results)
 	w.s.mu.results.add(results)
 }
 

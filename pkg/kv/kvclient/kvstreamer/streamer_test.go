@@ -137,7 +137,7 @@ func TestLargeKeys(t *testing.T) {
 	// process each row on its own.
 	// - 40000 is interesting because a single row already exceeds the buffer
 	// size.
-	for _, blobSize := range []uint64{20000, 40000} {
+	for _, blobSize := range []int{rng.Intn(5000) + 1, rng.Intn(5000) + 5000, rng.Intn(10000) + 10000} {
 		// onlyLarge determines whether only large blobs are inserted or a mix
 		// of large and small blobs.
 		for _, onlyLarge := range []bool{false, true} {
@@ -153,14 +153,14 @@ func TestLargeKeys(t *testing.T) {
 			require.NoError(t, err)
 
 			// Insert a handful of rows.
-			numRows := rng.Intn(3) + 3
+			numRows := rng.Intn(40) + 1
 			for i := 0; i < numRows; i++ {
 				letter := string(byte('a') + byte(i))
 				valueSize := blobSize
 				if !onlyLarge && rng.Float64() < 0.5 {
 					// If we're using a mix of large and small values, with
 					// 50% use a small value now.
-					valueSize = uint64(rng.Intn(10) + 1)
+					valueSize = rng.Intn(10) + 1
 				}
 				_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, repeat($1, $2)", letter, valueSize)
 				require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestLargeKeys(t *testing.T) {
 			// Try two scenarios: one with a single range (so no parallelism
 			// within the Streamer) and another with a random number of ranges
 			// (which might add parallelism within the Streamer).
-			for _, newRangeProbability := range []float64{0, rng.Float64()} {
+			for _, newRangeProbability := range []float64{rng.Float64(), rng.Float64()} {
 				for i := 1; i < numRows; i++ {
 					if rng.Float64() < newRangeProbability {
 						// Create a new range.
@@ -193,10 +193,10 @@ func TestLargeKeys(t *testing.T) {
 						name  string
 						query string
 					}{
-						{
-							name:  "index join no ordering",
-							query: "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1",
-						},
+						//{
+						//	name:  "index join no ordering",
+						//	query: "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1",
+						//},
 						{
 							name:  "index join with ordering",
 							query: "SELECT max(length(blob)) FROM foo@foo_attribute_idx GROUP BY attribute",
@@ -204,8 +204,8 @@ func TestLargeKeys(t *testing.T) {
 					} {
 						t.Run(
 							fmt.Sprintf(
-								"%s/blobSize=%s/onlyLarge=%t/newRangeProbability=%.2f",
-								tc.name, humanize.Bytes(blobSize), onlyLarge, newRangeProbability,
+								"%s/blobSize=%s/onlyLarge=%t/numRows=%d/newRangeProbability=%.2f",
+								tc.name, humanize.Bytes(uint64(blobSize)), onlyLarge, numRows, newRangeProbability,
 							),
 							func(t *testing.T) {
 								_, err = db.Exec(tc.query)
