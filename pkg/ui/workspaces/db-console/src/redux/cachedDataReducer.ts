@@ -27,6 +27,15 @@ import { APIRequestFn } from "src/util/api";
 
 import { PayloadAction, WithRequest } from "src/interfaces/action";
 
+export interface WithPaginationRequest {
+  page_size: number;
+  page_token: string;
+}
+
+export interface WithPaginationResponse {
+  next_page_token: string;
+}
+
 // CachedDataReducerState is used to track the state of the cached data.
 export class CachedDataReducerState<TResponseMessage> {
   data?: TResponseMessage; // the latest data received
@@ -366,4 +375,128 @@ export class KeyedCachedDataReducer<
         return state;
     }
   };
+}
+
+export class CachedDataReducerWithPagination<
+  TRequest extends WithPaginationRequest,
+  TResponseMessage extends WithPaginationResponse,
+  TActionNamespace extends string = string
+> {
+  cachedDataReducer: CachedDataReducer<
+    TRequest,
+    TResponseMessage,
+    TActionNamespace
+  >;
+  constructor(
+    protected apiEndpoint: APIRequestFn<TRequest, TResponseMessage>,
+    public actionNamespace: TActionNamespace,
+    private requestToID: (req: TRequest) => string,
+    protected invalidationPeriod?: moment.Duration,
+    protected requestTimeout?: moment.Duration,
+  ) {
+    this.cachedDataReducer = new CachedDataReducer<
+      TRequest,
+      TResponseMessage,
+      TActionNamespace
+    >(apiEndpoint, actionNamespace, invalidationPeriod, requestTimeout);
+  }
+
+  /**
+   * Redux reducer which processes actions related to the api endpoint query.
+   */
+  reducer = (
+    state = new KeyedCachedDataReducerState<TResponseMessage>(),
+    action: PayloadAction<WithRequest<TResponseMessage, TRequest>>,
+  ): KeyedCachedDataReducerState<TResponseMessage> => {
+    if (_.isNil(action) || _.isNil(action.payload)) {
+      return state;
+    }
+    const now = this.timeSource();
+    switch (action.type) {
+      case this.cachedDataReducer.REQUEST: {
+        const { request } = action.payload;
+        const id = this.requestToID(request);
+        state = _.clone(state);
+        if (!state[id]) {
+          state[id] = new CachedDataReducerState();
+        }
+        state[id].requestedAt = now;
+        state[id].inFlight = true;
+        return state;
+      }
+      case this.cachedDataReducer.RECEIVE: {
+        const { request, data } = action.payload;
+        const id = this.requestToID(request);
+        state = _.clone(state);
+        if (!state[id]) {
+          state[id] = new CachedDataReducerState();
+        }
+        state[id].inFlight = false;
+        state[id].data = data;
+        state[id].setAt = now;
+        state[id].valid = true;
+        state[id].lastError = null;
+        return state;
+      }
+      case this.cachedDataReducer.ERROR:
+      case this.cachedDataReducer.INVALIDATE: {
+        const { request } = action.payload;
+        const id = this.requestToID(request);
+        state = _.clone(state);
+        state[id] = this.cachedDataReducer.reducer(state[id], action);
+        return state;
+      }
+      default:
+        return state;
+    }
+  };
+
+  refresh = <S>(
+    req?: TRequest,
+    stateAccessor = (state: any, r: TRequest) =>
+      state.cachedData[this.actionNamespace][this.requestToID(r)],
+  ): ThunkAction<any, S, any, Action> => {
+    return async (
+      dispatch: ThunkDispatch<S, unknown, Action>,
+      getState: () => S,
+    ) => {
+      const state: CachedDataReducerState<TResponseMessage> = stateAccessor(
+        getState(),
+        req,
+      );
+      if (
+        state &&
+        (state.inFlight || (this.invalidationPeriod && state.valid))
+      ) {
+        return;
+      }
+
+      let hasMoreData = true;
+      while (hasMoreData) {
+        dispatch(this.cachedDataReducer.requestData(req));
+        try {
+          const resp = await this.apiEndpoint(req, this.requestTimeout);
+          hasMoreData = req.page_token !== resp.next_page_token;
+          dispatch(this.cachedDataReducer.receiveData(resp, req));
+          req.page_token = resp.next_page_token;
+        } catch (error) {
+          // duplicate the same error handling as in base CachedDataReducer#refresh method.
+          if (error.message === "Unauthorized") {
+            // TODO(couchand): This is an unpleasant dependency snuck in here...
+            const { location } = createHashHistory();
+            if (location && !location.pathname.startsWith("/login")) {
+              dispatch(push(getLoginPage(location)));
+            }
+          }
+          setTimeout(
+            () => dispatch(this.cachedDataReducer.errorData(error, req)),
+            1000,
+          );
+          break;
+        }
+      }
+    };
+  };
+
+  private timeSource: { (): moment.Moment } = () => moment();
 }
