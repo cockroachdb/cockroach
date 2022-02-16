@@ -76,14 +76,16 @@ type TestCLIParams struct {
 
 	// The store specifications for the in-memory server.
 	StoreSpecs []base.StoreSpec
+
 	// The locality tiers for the in-memory server.
 	Locality roachpb.Locality
 
 	// NoNodelocal, if true, disables node-local external I/O storage.
 	NoNodelocal bool
 
-	// Multitenant, if true, starts the test in multitenant mode.
-	Multitenant bool
+	// TenantArgs will be used to initialize the test tenant. This should
+	// be set when the test needs to run in multitenant mode.
+	TenantArgs *base.TestTenantArgs
 }
 
 // testTempFilePrefix is a sentinel marker to be used as the prefix of a
@@ -159,15 +161,14 @@ func newCLITestWithArgs(params TestCLIParams, argsFn func(args *base.TestServerA
 		log.Infof(context.Background(), "SQL listener at %s", c.ServingSQLAddr())
 	}
 
-	if params.Multitenant {
+	if params.TenantArgs != nil {
 		if c.TestServer == nil {
 			c.fail(errors.AssertionFailedf("multitenant mode for CLI requires a DB server, try setting `NoServer` argument to false"))
 		}
-		tenantArgs := base.TestTenantArgs{TenantID: serverutils.TestTenantID()}
 		if c.Insecure() {
-			tenantArgs.ForceInsecure = true
+			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, tenantArgs)
+		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, *params.TenantArgs)
 	}
 	baseCfg.User = security.NodeUserName()
 
@@ -217,12 +218,11 @@ func (c *TestCLI) RestartServer(params TestCLIParams) {
 	c.TestServer = s.(*server.TestServer)
 	log.Infof(context.Background(), "restarted server at %s / %s",
 		c.ServingRPCAddr(), c.ServingSQLAddr())
-	if params.Multitenant {
-		tenantArgs := base.TestTenantArgs{TenantID: serverutils.TestTenantID()}
+	if params.TenantArgs != nil {
 		if c.Insecure() {
-			tenantArgs.ForceInsecure = true
+			params.TenantArgs.ForceInsecure = true
 		}
-		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, tenantArgs)
+		c.tenant, _ = serverutils.StartTenant(c.t, c.TestServer, *params.TenantArgs)
 		log.Infof(context.Background(), "restarted tenant SQL only server at %s", c.tenant.SQLAddr())
 	}
 }

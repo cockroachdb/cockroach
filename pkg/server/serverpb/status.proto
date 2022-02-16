@@ -601,7 +601,8 @@ enum StacksType {
 
 message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
   StacksType type = 2;
 }
@@ -624,7 +625,8 @@ message File {
 
 message GetFilesRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
   // If list_only is true then the contents of the files will not be populated
   // in the response. Only filenames and sizes will be returned.
@@ -643,7 +645,8 @@ message GetFilesResponse {
 
 message ProfileRequest {
   // node_id is a string so that "local" can be used to specify that no
-  // forwarding is necessary.
+  // forwarding is necessary. node_id translates to a KV node ID on a storage
+  // server and SQL instance ID on a SQL only server.
   string node_id = 1;
 
   enum Type {
