@@ -93,6 +93,46 @@ func TestAlterChangefeedDropTarget(t *testing.T) {
 	t.Run(`kafka`, kafkaTest(testFn))
 }
 
+func TestAlterChangefeedSetDiffOption(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'initial')`)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, testFeed)
+
+		assertPayloads(t, testFeed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}}`,
+		})
+
+		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		sqlDB.Exec(t, `PAUSE JOB $1`, feed.JobID())
+		waitForJobStatus(sqlDB, t, feed.JobID(), `paused`)
+
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET diff = 'true'`, feed.JobID()))
+
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, feed.JobID()))
+		waitForJobStatus(sqlDB, t, feed.JobID(), `running`)
+
+		assertPayloads(t, testFeed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "initial"}, "before": null}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'updated')`)
+		assertPayloads(t, testFeed, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "updated"}, "before": {"a": 0, "b": "initial"}}`,
+		})
+	}
+
+	t.Run(`kafka`, kafkaTest(testFn))
+}
+
 func TestAlterChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

@@ -4312,7 +4312,7 @@ explain_option_list:
 // %Help: ALTER CHANGEFEED - alter an existing changefeed
 // %Category: CCL
 // %Text:
-// ALTER CHANGEFEED <job_id> {{ADD|DROP} <targets...>}...
+// ALTER CHANGEFEED <job_id> {{ADD|DROP <targets...>} | SET <options...>}...
 alter_changefeed_stmt:
   ALTER CHANGEFEED a_expr alter_changefeed_cmds
   {
@@ -4346,6 +4346,12 @@ alter_changefeed_cmd:
   {
     $$.val = &tree.AlterChangefeedDropTarget{
       Targets: $2.targetList(),
+    }
+  }
+| SET kv_option_list
+  {
+    $$.val = &tree.AlterChangefeedSetOptions{
+      Options: $2.kvOptions(),
     }
   }
 
