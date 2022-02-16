@@ -363,6 +363,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    exprgen.Build), applies normalization optimizations, and outputs the tree
 //    without any exploration optimizations applied to it.
 //
+//  - expropt
+//
+//    Builds an expression directly from an opt-gen-like string (see
+//    exprgen.Optimize), applies normalization and exploration optimizations,
+//    and outputs the tree.
+//
 //  - stats-quality [flags]
 //
 //    Fully optimizes the given query and saves the subexpressions as tables
@@ -692,6 +698,14 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "exprnorm":
 		e, err := ot.ExprNorm()
+		if err != nil {
+			return fmt.Sprintf("error: %s\n", err)
+		}
+		ot.postProcess(tb, d, e)
+		return ot.FormatExpr(e)
+
+	case "expropt":
+		e, err := ot.ExprOpt()
 		if err != nil {
 			return fmt.Sprintf("error: %s\n", err)
 		}
@@ -1231,6 +1245,23 @@ func (ot *OptTester) ExprNorm() (opt.Expr, error) {
 	})
 
 	return exprgen.Build(ot.catalog, &f, ot.sql)
+}
+
+// ExprOpt parses the input directly into an expression and runs normalization
+// and exploration; see exprgen.Optimize.
+func (ot *OptTester) ExprOpt() (opt.Expr, error) {
+	o := ot.makeOptimizer()
+	f := o.Factory()
+
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		return !ot.Flags.DisableRules.Contains(int(ruleName))
+	})
+
+	f.NotifyOnAppliedRule(func(ruleName opt.RuleName, source, target opt.Expr) {
+		ot.appliedRules.Add(int(ruleName))
+	})
+
+	return exprgen.Optimize(ot.catalog, o, ot.sql)
 }
 
 // RuleStats performs the optimization and returns statistics about how many
