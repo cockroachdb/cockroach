@@ -26,7 +26,8 @@ import (
 )
 
 type testData struct {
-	contentionpb.ResolvedTxnID
+	blockingTxn       contentionpb.ResolvedTxnID
+	waitingTxn        contentionpb.ResolvedTxnID
 	coordinatorNodeID string
 }
 
@@ -38,44 +39,68 @@ func TestResolver(t *testing.T) {
 	t.Run("normal_resolution", func(t *testing.T) {
 		tcs := []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 100,
 				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 900,
+				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 101,
 				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 901,
+				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 102,
 				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 903,
+				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 200,
 				},
-				coordinatorNodeID: "2",
-			},
-			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				waitingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
-					TxnFingerprintID: 201,
+					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 201,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 905,
+				},
+				coordinatorNodeID: "2",
+			},
+			{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 300,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 906,
 				},
 				coordinatorNodeID: "3",
 			},
@@ -92,40 +117,75 @@ func TestResolver(t *testing.T) {
 		expected = sortResolvedContentionEvents(expected)
 		actual = sortResolvedContentionEvents(actual)
 
-		require.Equal(t, expected, actual)
+		require.Empty(t, resolver.mu.remainingRetries)
 		require.Empty(t, resolver.mu.unresolvedEvents)
+		require.Equal(t, expected, actual)
 	})
 
 	t.Run("retry_after_encountering_provisional_value", func(t *testing.T) {
 		// Reset the status server from previous test.
 		statusServer.clear()
-		activeTxnID := uuid.FastMakeV4()
+		// activeTxnID := uuid.FastMakeV4()
 		tcs := []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 101,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
-				// This is a provisional entry in TxnID Cache, representing that
-				// the transaction is open and its fingerprint ID is not yet
-				// available.
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
-					TxnID:            activeTxnID,
+				blockingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 102,
 				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 903,
+				},
 				coordinatorNodeID: "1",
 			},
+			{
+				blockingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 201,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+				},
+				coordinatorNodeID: "2",
+			},
+			{
+				blockingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: roachpb.InvalidTransactionFingerprintID,
+				},
+				coordinatorNodeID: "2",
+			},
 		}
+		inProgressContentionEventDueToInProgressBlockingTxn := tcs[1]
+		inProgressContentionEventDueToInProgressWaitingTxn := tcs[3]
+		inProgressContentionEventDueToInProgressBlockingAndWaitingTxn := tcs[4]
 
 		populateFakeStatusServerCluster(statusServer, tcs)
 		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
@@ -137,34 +197,44 @@ func TestResolver(t *testing.T) {
 		actual = sortResolvedContentionEvents(actual)
 		require.Equal(t, expected, actual)
 
-		require.Equal(t, 1 /* expected */, len(resolver.mu.unresolvedEvents),
-			"expected resolver to retry resolution for active txns, "+
+		require.Equal(t, 3 /* expected */, len(resolver.mu.unresolvedEvents),
+			"expected resolver to retry resolution for in-progress txns, "+
 				"but it did not")
-		require.True(t, activeTxnID.Equal(resolver.mu.unresolvedEvents[0].BlockingEvent.TxnMeta.ID))
+		require.True(t,
+			inProgressContentionEventDueToInProgressBlockingTxn.blockingTxn.TxnID.Equal(
+				resolver.mu.unresolvedEvents[0].BlockingEvent.TxnMeta.ID))
 		require.Empty(t, resolver.mu.remainingRetries,
 			"expected resolver not to create retry record for active txns, "+
 				"but it did")
 
 		// Create 1 new entry to simulate another new txn that finished execution,
 		// and update the existing entry to have a valid transaction fingerprint id.
-		newTxns := []testData{
+		newData := []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 2000,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
-					TxnID:            activeTxnID,
+				blockingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            inProgressContentionEventDueToInProgressBlockingTxn.blockingTxn.TxnID,
 					TxnFingerprintID: 1000,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            inProgressContentionEventDueToInProgressBlockingTxn.waitingTxn.TxnID,
+					TxnFingerprintID: inProgressContentionEventDueToInProgressBlockingTxn.waitingTxn.TxnFingerprintID,
 				},
 				coordinatorNodeID: "1",
 			},
 		}
-		populateFakeStatusServerCluster(statusServer, newTxns)
-		newInput, newExpected := generateUnresolvedContentionEventsFromTestData(t, newTxns, time.Time{})
+		populateFakeStatusServerCluster(statusServer, newData)
+		newInput, newExpected := generateUnresolvedContentionEventsFromTestData(t, newData, time.Time{})
 		// The txn with 'activeTxnID' is already present in the resolver. Omit it
 		// from the input.
 		newInput = newInput[:1]
@@ -178,10 +248,64 @@ func TestResolver(t *testing.T) {
 		actual = sortResolvedContentionEvents(actual)
 		require.Equal(t, newExpected, actual)
 
-		// Nothing should be left inside the resolver after we are done.
-		require.Empty(t, resolver.mu.unresolvedEvents)
+		// Two other contention events due to in progress txn should continue to retry.
+		require.Equal(t, 2 /* expected */, len(resolver.mu.unresolvedEvents))
 		require.Empty(t, resolver.mu.remainingRetries)
 		require.Empty(t, resolver.mu.resolvedEvents)
+
+		// The inProgressContentionEventDueToInProgressBlockingAndWaitingTxn's
+		// blocking txn finishes executing. However, the waiting txn is still
+		// in-progress, this should cause the resolver to update the txn fingerprint
+		// ID of the blocking txn, and still continue to retry resolution.
+		inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.blockingTxn.TxnFingerprintID = 2001
+		newData = []testData{inProgressContentionEventDueToInProgressBlockingAndWaitingTxn}
+		populateFakeStatusServerCluster(statusServer, newData)
+
+		// We don't expect dequeue() to return anything, since the waiting txn is
+		// still executing.
+		actual, err = resolver.dequeue(ctx)
+		require.NoError(t, err)
+		require.Empty(t, actual)
+
+		require.Equal(t, 2 /* expected */, len(resolver.mu.unresolvedEvents))
+		require.Empty(t, resolver.mu.remainingRetries)
+		require.Empty(t, resolver.mu.resolvedEvents)
+
+		// Even we are retrying without creating retry budget, we should still update
+		// the fields on the contention event.
+		require.Equal(t,
+			roachpb.InvalidTransactionFingerprintID,
+			resolver.mu.unresolvedEvents[1].WaitingTxnFingerprintID)
+		require.Equal(t,
+			inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.blockingTxn.TxnFingerprintID,
+			resolver.mu.unresolvedEvents[1].BlockingTxnFingerprintID,
+			"expected txnID (%s) to have updated blocking txn fingerprint "+
+				"id %d, but it is %d",
+			inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.blockingTxn.TxnID,
+			inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.blockingTxn.TxnFingerprintID,
+			resolver.mu.unresolvedEvents[1].BlockingTxnFingerprintID,
+		)
+
+		// All in-progress transactions finish execution, this means all of their
+		// txn fingerprint IDs become available. This should allow resolver to
+		// completely finishes resolution.
+		inProgressContentionEventDueToInProgressBlockingAndWaitingTxn.waitingTxn.TxnFingerprintID = 2002
+		inProgressContentionEventDueToInProgressWaitingTxn.waitingTxn.TxnFingerprintID = 2003
+		newData = []testData{
+			inProgressContentionEventDueToInProgressBlockingAndWaitingTxn,
+			inProgressContentionEventDueToInProgressWaitingTxn,
+		}
+		populateFakeStatusServerCluster(statusServer, newData)
+
+		_, newExpected = generateUnresolvedContentionEventsFromTestData(t, newData, time.Time{})
+		actual, err = resolver.dequeue(ctx)
+
+		require.NoError(t, err)
+		require.Equal(t, sortResolvedContentionEvents(newExpected), sortResolvedContentionEvents(actual))
+
+		require.Empty(t, resolver.mu.resolvedEvents)
+		require.Empty(t, resolver.mu.remainingRetries)
+		require.Empty(t, resolver.mu.unresolvedEvents)
 	})
 
 	t.Run("retry_after_missing_value", func(t *testing.T) {
@@ -189,23 +313,35 @@ func TestResolver(t *testing.T) {
 		missingTxnID := uuid.FastMakeV4()
 		tcs := []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 101,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 102,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            missingTxnID,
 					TxnFingerprintID: 1000,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
 			},
@@ -214,6 +350,7 @@ func TestResolver(t *testing.T) {
 		// evicted txnID from txnIDCache.
 		populateFakeStatusServerCluster(statusServer, tcs[:2])
 		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
+		missingTxnMissingRetryKey := input[2].Hash()
 
 		resolver.enqueue(input)
 		actual, err := resolver.dequeue(ctx)
@@ -224,7 +361,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t,
 			sortResolvedContentionEvents(expected[:2]), sortResolvedContentionEvents(actual))
 		require.Equal(t, 1, len(resolver.mu.remainingRetries))
-		remainingRetryBudget, foundRetryRecord := resolver.mu.remainingRetries[missingTxnID]
+		remainingRetryBudget, foundRetryRecord := resolver.mu.remainingRetries[missingTxnMissingRetryKey]
 		require.True(t, foundRetryRecord)
 		require.Equal(t, retryBudgetForMissingResult, remainingRetryBudget)
 
@@ -251,30 +388,46 @@ func TestResolver(t *testing.T) {
 		statusServer.clear()
 		tcs := []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 201,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 901,
 				},
 				coordinatorNodeID: "2",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            missingTxnID1,
 					TxnFingerprintID: 301,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 902,
 				},
 				coordinatorNodeID: "3",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 100,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 903,
 				},
 				coordinatorNodeID: "1",
 			},
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            uuid.FastMakeV4(),
 					TxnFingerprintID: 101,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 904,
 				},
 				coordinatorNodeID: "1",
 			},
@@ -287,6 +440,8 @@ func TestResolver(t *testing.T) {
 			"3" /* coordinatorNode */, injectedErr)
 
 		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
+		missingTxnRemainingRetryKey1 := input[1].Hash()
+
 		expected = sortResolvedContentionEvents(expected)
 		expectedWithOnlyResultsFromAvailableNodes := make([]contentionpb.ExtendedContentionEvent, 0, len(expected))
 		for _, event := range expected {
@@ -311,7 +466,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t, 1, len(resolver.mu.remainingRetries),
 			"expected to have a retry record after RPC failure, but the "+
 				"retry record is missing")
-		remainingRetryBudget, found := resolver.mu.remainingRetries[missingTxnID1]
+		remainingRetryBudget, found := resolver.mu.remainingRetries[missingTxnRemainingRetryKey1]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure, remainingRetryBudget)
 
@@ -320,9 +475,13 @@ func TestResolver(t *testing.T) {
 		missingTxnID2 := uuid.FastMakeV4()
 		tcs = []testData{
 			{
-				ResolvedTxnID: contentionpb.ResolvedTxnID{
+				blockingTxn: contentionpb.ResolvedTxnID{
 					TxnID:            missingTxnID2,
 					TxnFingerprintID: 202,
+				},
+				waitingTxn: contentionpb.ResolvedTxnID{
+					TxnID:            uuid.FastMakeV4(),
+					TxnFingerprintID: 905,
 				},
 				coordinatorNodeID: "2",
 			},
@@ -332,6 +491,7 @@ func TestResolver(t *testing.T) {
 		statusServer.setStatusServerError(
 			"2" /* coordinatorNodeID */, injectedErr)
 		input2, expected2 := generateUnresolvedContentionEventsFromTestData(t, tcs, time.Time{})
+		missingTxnRemainingRetryKey2 := input2[0].Hash()
 
 		resolver.enqueue(input2)
 		require.Equal(t, 2, len(resolver.mu.unresolvedEvents))
@@ -339,13 +499,13 @@ func TestResolver(t *testing.T) {
 		require.ErrorIs(t, resolver.resolveLocked(ctx), injectedErr)
 		require.Equal(t, 2, len(resolver.mu.remainingRetries))
 
-		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnID1]
+		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnRemainingRetryKey1]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure-1, remainingRetryBudget,
 			"expect retry budget be decremented after consecutive failures, "+
 				"but it was not")
 
-		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnID2]
+		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnRemainingRetryKey2]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure, remainingRetryBudget)
 
@@ -373,7 +533,7 @@ func sortResolvedContentionEvents(
 	events []contentionpb.ExtendedContentionEvent,
 ) []contentionpb.ExtendedContentionEvent {
 	sort.Slice(events, func(i, j int) bool {
-		return events[i].BlockingTxnFingerprintID < events[j].BlockingTxnFingerprintID
+		return events[i].Hash() < events[j].Hash()
 	})
 	return events
 }
@@ -385,19 +545,27 @@ func generateUnresolvedContentionEventsFromTestData(
 	expected []contentionpb.ExtendedContentionEvent,
 ) {
 	for _, tc := range tcs {
-		event := contentionpb.ExtendedContentionEvent{}
-		event.BlockingEvent.TxnMeta.ID = tc.TxnID
+		inputEvent := contentionpb.ExtendedContentionEvent{}
+		inputEvent.BlockingEvent.TxnMeta.ID = tc.blockingTxn.TxnID
 		coordinatorID, err := strconv.Atoi(tc.coordinatorNodeID)
 		require.NoError(t, err)
-		event.BlockingEvent.TxnMeta.CoordinatorNodeID = int32(coordinatorID)
-		input = append(input, event)
+		inputEvent.BlockingEvent.TxnMeta.CoordinatorNodeID = int32(coordinatorID)
+		inputEvent.WaitingTxnID = tc.waitingTxn.TxnID
+		input = append(input, inputEvent)
 
-		if tc.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
-			resolvedEvent := contentionpb.ExtendedContentionEvent{}
-			resolvedEvent.BlockingEvent = event.BlockingEvent
-			resolvedEvent.BlockingTxnFingerprintID = tc.TxnFingerprintID
-			resolvedEvent.CollectionTs = collectionTs
-			expected = append(expected, resolvedEvent)
+		if tc.blockingTxn.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID &&
+			tc.waitingTxn.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
+			expectedResolvedEvent := contentionpb.ExtendedContentionEvent{}
+
+			expectedResolvedEvent.BlockingEvent = inputEvent.BlockingEvent
+			expectedResolvedEvent.BlockingTxnFingerprintID = tc.blockingTxn.TxnFingerprintID
+
+			expectedResolvedEvent.CollectionTs = collectionTs
+
+			expectedResolvedEvent.WaitingTxnID = inputEvent.WaitingTxnID
+			expectedResolvedEvent.WaitingTxnFingerprintID = tc.waitingTxn.TxnFingerprintID
+
+			expected = append(expected, expectedResolvedEvent)
 		}
 	}
 	return input, expected
@@ -405,6 +573,7 @@ func generateUnresolvedContentionEventsFromTestData(
 
 func populateFakeStatusServerCluster(f fakeStatusServerCluster, tcs []testData) {
 	for _, tc := range tcs {
-		f.setTxnIDEntry(tc.coordinatorNodeID, tc.TxnID, tc.TxnFingerprintID)
+		f.setTxnIDEntry(tc.coordinatorNodeID, tc.blockingTxn.TxnID, tc.blockingTxn.TxnFingerprintID)
+		f.setTxnIDEntry("local", tc.waitingTxn.TxnID, tc.waitingTxn.TxnFingerprintID)
 	}
 }
