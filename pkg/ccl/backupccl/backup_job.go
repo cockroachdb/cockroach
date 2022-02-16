@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -376,6 +377,80 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
 
+	var backupManifest *BackupManifest
+
+	// If planning didn't resolve the external destination, then we need to now.
+	if details.URI == "" {
+		initialDetails := details
+		backupDetails, m, err := getBackupDetailAndManifest(
+			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, details, p.User(),
+		)
+		if err != nil {
+			return err
+		}
+		details = backupDetails
+		backupManifest = &m
+
+		if len(backupManifest.Spans) > 0 && p.ExecCfg().Codec.ForSystemTenant() {
+			protectedtsID := uuid.MakeV4()
+			details.ProtectedTimestampRecord = &protectedtsID
+
+			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return protectTimestampForBackup(
+					ctx, p.ExecCfg(), txn, b.job.ID(), m, details,
+				)
+			}); err != nil {
+				return err
+			}
+		}
+
+		if err := writeBackupManifestCheckpoint(
+			ctx, b.job.ID(), backupDetails, backupManifest, p.ExecCfg(), p.User(),
+		); err != nil {
+			return err
+		}
+
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			return planSchedulePTSChaining(ctx, p.ExecCfg(), txn, &details, b.job.CreatedBy())
+		}); err != nil {
+			return err
+		}
+
+		// The description picked during original planning might still say "LATEST",
+		// if resolving that to the actual directory only just happened above here.
+		// Ideally we'd re-render the description now that we know the subdir, but
+		// we don't have backup AST node anymore to easily call the rendering func.
+		// Instead we can just do a bit of dirty string replacement iff there is one
+		// "INTO 'LATEST' IN" (if there's >1, somenoe has a weird table/db names and
+		// we should just leave the description as-is, since it is just for humans).
+		description := b.job.Payload().Description
+		const unresolvedText = "INTO 'LATEST' IN"
+		if initialDetails.Destination.Subdir == "LATEST" && strings.Count(description, unresolvedText) == 1 {
+			description = strings.ReplaceAll(description, unresolvedText, fmt.Sprintf("INTO '%s' IN", details.Destination.Subdir))
+		}
+
+		// Update the job payload (non-volatile job definition) once, with the now
+		// resolved destination, updated description, etc. If we resume again we'll
+		// skip this whole block so this isn't an excessive update of payload.
+		if err := b.job.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			md.Payload.Description = description
+			ju.UpdatePayload(md.Payload)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// Collect telemetry, once per backup after resolving its destination.
+		lic := utilccl.CheckEnterpriseEnabled(
+			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
+		) != nil
+		collectTelemetry(m, details, details, lic)
+	}
+
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
 	// details.URI.
 	defaultConf, err := cloud.ExternalStorageConfFromURI(details.URI, p.User())
@@ -424,15 +499,19 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	mem := p.ExecCfg().RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	backupManifest, memSize, err := b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
-	if err != nil {
-		return err
-	}
+	var memSize int64
 	defer func() {
 		if memSize != 0 {
 			mem.Shrink(ctx, memSize)
 		}
 	}()
+
+	if backupManifest == nil || util.ConstantWithMetamorphicTestBool("backup-read-manifest", false) {
+		backupManifest, memSize, err = b.readManifestOnResume(ctx, &mem, p.ExecCfg(), defaultStore, details)
+		if err != nil {
+			return err
+		}
+	}
 
 	statsCache := p.ExecCfg().TableStatsCache
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
