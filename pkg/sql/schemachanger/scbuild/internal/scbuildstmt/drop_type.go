@@ -69,7 +69,7 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		if len(dependentNames) > 0 {
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop type %q because other objects (%v) still depend on it.",
+				"cannot drop type %q because other objects (%v) still depend on it",
 				simpleName(b, typeID), dependentNames,
 			))
 		}
