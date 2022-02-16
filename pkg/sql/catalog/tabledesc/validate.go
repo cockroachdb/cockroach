@@ -375,6 +375,11 @@ func validateMutation(m *descpb.DescriptorMutation) error {
 			return errors.AssertionFailedf(
 				"materialized view refresh mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
 		}
+	case *descpb.DescriptorMutation_ModifyRowLevelTTL:
+		if m.Direction == descpb.DescriptorMutation_NONE {
+			return errors.AssertionFailedf(
+				"modify row level TTL mutation in state %s, direction %s", errors.Safe(m.State), errors.Safe(m.Direction))
+		}
 	default:
 		return errors.AssertionFailedf(
 			"mutation in state %s, direction %s, and no column/index descriptor",
@@ -548,13 +553,15 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		desc.validateConstraintIDs(vea)
 	}
 
-	// Ensure that mutations cannot be queued if a primary key change or
-	// an alter column type schema change has either been started in
+	// Ensure that mutations cannot be queued if a primary key change, TTL change
+	// or an alter column type schema change has either been started in
 	// this transaction, or is currently in progress.
 	var alterPKMutation descpb.MutationID
 	var alterColumnTypeMutation descpb.MutationID
+	var modifyTTLMutation descpb.MutationID
 	var foundAlterPK bool
 	var foundAlterColumnType bool
+	var foundModifyTTL bool
 
 	for _, m := range desc.Mutations {
 		// If we have seen an alter primary key mutation, then
@@ -587,6 +594,20 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 			}
 			return
 		}
+		if foundModifyTTL {
+			if modifyTTLMutation == m.MutationID {
+				vea.Report(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot perform other schema changes in the same transaction as a TTL mutation",
+				))
+			} else {
+				vea.Report(pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cannot perform a schema change operation while a TTL change is in progress",
+				))
+			}
+			return
+		}
 		if m.GetPrimaryKeySwap() != nil {
 			foundAlterPK = true
 			alterPKMutation = m.MutationID
@@ -594,6 +615,10 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if m.GetComputedColumnSwap() != nil {
 			foundAlterColumnType = true
 			alterColumnTypeMutation = m.MutationID
+		}
+		if m.GetModifyRowLevelTTL() != nil {
+			foundModifyTTL = true
+			modifyTTLMutation = m.MutationID
 		}
 	}
 

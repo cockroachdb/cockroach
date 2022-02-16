@@ -146,3 +146,10 @@ func (m *visitor) RemoveDatabaseRoleSettings(
 	}
 	return m.s.DeleteDatabaseRoleSettings(ctx, db.(catalog.DatabaseDescriptor))
 }
+
+func (m *visitor) DeleteSchedule(ctx context.Context, op scop.DeleteSchedule) error {
+	if op.ScheduleID != 0 {
+		m.s.DeleteSchedule(op.ScheduleID)
+	}
+	return nil
+}

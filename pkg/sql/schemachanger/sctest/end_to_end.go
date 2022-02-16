@@ -16,6 +16,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -110,13 +111,21 @@ func EndToEndSideEffects(t *testing.T, newCluster NewClusterFunc) {
 					}),
 					sctestdeps.WithStatements(stmt.SQL))
 				execStatementWithTestDeps(ctx, t, deps, stmt)
-				return deps.SideEffectLog()
+				return replaceNonDeterministicOutput(deps.SideEffectLog())
 
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
 	})
+}
+
+// scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
+var scheduleIDRegexp = regexp.MustCompile(`scheduleId: "?[0-9]+"?`)
+
+func replaceNonDeterministicOutput(text string) string {
+	// scheduleIDs change based on execution time, so redact the output.
+	return scheduleIDRegexp.ReplaceAllString(text, "scheduleId: <redacted>")
 }
 
 // Rollback tests that the schema changer job rolls back properly.

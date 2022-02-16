@@ -7444,3 +7444,233 @@ SET experimental_enable_hash_sharded_indexes = on;
 CREATE INDEX idx_test_split_b ON t.test_split (b) USING HASH WITH (bucket_count=8);
 `)
 }
+
+func TestTTLAutomaticColumnSchemaChangeFailures(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	var shouldFail bool
+	failFunc := func() error {
+		if shouldFail {
+			shouldFail = false
+			return errors.AssertionFailedf("fail!")
+		}
+		return nil
+	}
+
+	const (
+		createNonTTLTable = `CREATE DATABASE t;
+	CREATE TABLE t.test (id TEXT PRIMARY KEY);`
+		expectNonTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+)`
+
+		createTTLTable = `CREATE DATABASE t;
+CREATE TABLE t.test (id TEXT PRIMARY KEY) WITH (ttl_expire_after = '10 hours');`
+		expectTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10:00:00':::INTERVAL)`
+	)
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		schemaChange            string
+		knobs                   *sql.SchemaChangerTestingKnobs
+		expectedShowCreateTable string
+		expectSchedule          bool
+	}{
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during add mutation",
+			setup:        createNonTTLTable,
+			schemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeBackfill: failFunc,
+			},
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during modify row-level-ttl mutation",
+			setup:        createNonTTLTable,
+			schemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 hours')`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeModifyRowLevelTTL: failFunc,
+			},
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:         "error during ALTER TABLE ... RESET (ttl) during delete column mutation",
+			setup:        createTTLTable,
+			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeBackfill: failFunc,
+			},
+			expectedShowCreateTable: expectTTLTable,
+			expectSchedule:          true,
+		},
+		{
+			desc:         "error during ALTER TABLE ... SET (ttl_expire_after ...) during modify row-level-ttl mutation",
+			setup:        createTTLTable,
+			schemaChange: `ALTER TABLE t.test RESET (ttl)`,
+			knobs: &sql.SchemaChangerTestingKnobs{
+				RunBeforeModifyRowLevelTTL: failFunc,
+			},
+			expectedShowCreateTable: expectTTLTable,
+			expectSchedule:          true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			params.Knobs.SQLSchemaChanger = tc.knobs
+			s, sqlDB, kvDB := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			_, err := sqlDB.Exec(tc.setup)
+			require.NoError(t, err)
+
+			shouldFail = true
+			defer func() {
+				shouldFail = false
+			}()
+			_, err = sqlDB.Exec(tc.schemaChange)
+			require.Error(t, err)
+
+			// Ensure CREATE TABLE is the same.
+			var actualSchema string
+			require.NoError(t, sqlDB.QueryRow(`SELECT create_statement FROM [SHOW CREATE TABLE t.test]`).Scan(&actualSchema))
+			require.Equal(t, tc.expectedShowCreateTable, actualSchema)
+
+			// Ensure the schedule is still there.
+			desc := desctestutils.TestingGetPublicTableDescriptor(
+				kvDB,
+				keys.SystemSQLCodec,
+				"t",
+				"test",
+			)
+			if tc.expectSchedule {
+				require.NotNil(t, desc.GetRowLevelTTL())
+				require.Greater(t, desc.GetRowLevelTTL().ScheduleID, int64(0))
+
+				// Ensure there is only one schedule and that it belongs to the table.
+				var numSchedules int
+				require.NoError(t, sqlDB.QueryRow(
+					`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE $1`,
+					fmt.Sprintf("row-level-ttl-%d", desc.GetRowLevelTTL().ScheduleID),
+				).Scan(&numSchedules))
+				require.Equal(t, 0, numSchedules)
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.Equal(t, 1, numSchedules)
+			} else {
+				require.Nil(t, desc.GetRowLevelTTL())
+
+				// Ensure there are no schedules.
+				var numSchedules int
+				require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'`).Scan(&numSchedules))
+				require.Equal(t, 0, numSchedules)
+			}
+		})
+	}
+}
+
+func TestSchemaChangeWhileAddingOrDroppingTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		successfulChange        string
+		conflictingSchemaChange string
+		expected                func(uint32) string
+	}{
+		{
+			desc: `during adding TTL`,
+			setup: `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT);`,
+			successfulChange:        `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
+			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int`,
+			expected: func(tableID uint32) string {
+				return fmt.Sprintf(`pq: relation "test" \(%d\): cannot perform a schema change operation while a TTL change is in progress`, tableID)
+			},
+		},
+		{
+			desc: `during dropping TTL`,
+			setup: `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT) WITH (ttl_expire_after = '10 minutes');`,
+			successfulChange:        `ALTER TABLE t.test RESET (ttl)`,
+			conflictingSchemaChange: `ALTER TABLE t.test ADD COLUMN y int`,
+			expected: func(tableID uint32) string {
+				return fmt.Sprintf(`pq: relation "test" \(%d\): cannot perform a schema change operation while a TTL change is in progress`, tableID)
+			},
+		},
+
+		{
+			desc: `TTL change whilst adding column`,
+			setup: `
+CREATE DATABASE t;
+CREATE TABLE t.test (x INT);`,
+			successfulChange:        `ALTER TABLE t.test ADD COLUMN y int`,
+			conflictingSchemaChange: `ALTER TABLE t.test SET (ttl_expire_after = '10 minutes')`,
+			expected: func(tableID uint32) string {
+				return `pq: cannot modify TTL settings while another schema change on the table is being processed`
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			params, _ := tests.CreateTestServerParams()
+			childJobStartNotification := make(chan struct{})
+			waitBeforeContinuing := make(chan struct{})
+			var doOnce sync.Once
+			waitFunc := func() error {
+				doOnce.Do(func() {
+					childJobStartNotification <- struct{}{}
+					<-waitBeforeContinuing
+				})
+				return nil
+			}
+			params.Knobs = base.TestingKnobs{
+				SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+					RunBeforeBackfill:          waitFunc,
+					RunBeforeModifyRowLevelTTL: waitFunc,
+				},
+			}
+
+			s, db, _ := serverutils.StartServer(t, params)
+			sqlDB := sqlutils.MakeSQLRunner(db)
+			ctx := context.Background()
+			defer s.Stopper().Stop(ctx)
+
+			sqlDB.Exec(t, tc.setup)
+
+			tableID := sqlutils.QueryTableID(t, db, "t", "public", "test")
+
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				sqlDB.Exec(t, tc.successfulChange)
+				wg.Done()
+			}()
+
+			<-childJobStartNotification
+
+			expected := tc.expected(tableID)
+			sqlDB.ExpectErr(t, expected, tc.conflictingSchemaChange)
+
+			waitBeforeContinuing <- struct{}{}
+			wg.Wait()
+		})
+	}
+}

@@ -28,16 +28,144 @@ CREATE TABLE public.tbl (
                                                                                             FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
 ) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
 
-statement error  resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
+statement error resetting "ttl_expire_after" is not permitted\nHINT: use `RESET \(ttl_automatic_column\)` to remove the automatic column or use `RESET \(ttl\)` to remove TTL from the table
 ALTER TABLE tbl RESET (ttl_expire_after)
+
+statement error cannot drop column crdb_internal_expiration while row-level TTL is active
+ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
 
 query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 ----
 {ttl_expire_after='00:10:00':::INTERVAL}
 
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
+statement ok
+ALTER TABLE tbl SET (ttl_expire_after = '10 days')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                           id INT8 NOT NULL,
+                                                                                           text STRING NULL,
+                                                                                           crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10 days':::INTERVAL,
+                                                                                           CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                           FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '10 days':::INTERVAL)
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+ALTER TABLE tbl RESET (ttl), RESET (ttl_expire_after)
+
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+BEGIN;
+ALTER TABLE tbl RESET (ttl);
+ALTER TABLE tbl SET (ttl_select_batch_size = 200)
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl RESET (ttl);
+CREATE INDEX tbl_idx ON tbl (text)
+
+statement ok
+ROLLBACK
+
+# Test when we drop the TTL, ensure column is dropped and the scheduled job is removed.
+statement ok
+ALTER TABLE tbl RESET (ttl)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+   id INT8 NOT NULL,
+   text STRING NULL,
+   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+   FAMILY fam_0_id_text_crdb_internal_expiration (id, text)
+)
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+# Ensure schedules are removed on DROP TABLE.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+1
+
 statement ok
 DROP TABLE tbl
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+# Create TTL on a different schema and ensure schedules are removed when dropped.
+statement ok
+CREATE SCHEMA drop_me;
+CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes'::interval);
+CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+2
+
+statement ok
+DROP SCHEMA drop_me CASCADE
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
+
+# Create TTL on a different database and ensure schedules are removed when dropped.
+statement ok
+CREATE DATABASE drop_me;
+USE drop_me;
+CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes'::interval);
+CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+2
+
+statement ok
+USE test;
+DROP DATABASE drop_me CASCADE
+
+query I
+SELECT count(1) FROM [SHOW SCHEDULES]
+WHERE label LIKE 'row-level-ttl-%'
+----
+0
 
 statement error table crdb_internal_expiration has TTL defined, but column crdb_internal_expiration is not a TIMESTAMPTZ
 CREATE TABLE tbl (
@@ -97,7 +225,7 @@ WHERE label = 'row-level-ttl-$table_id'
 query T
 SELECT create_statement FROM [SHOW CREATE SCHEDULE $schedule_id]
 ----
-ALTER TABLE [112 as T] WITH (expire_after = ...)
+ALTER TABLE [120 as T] WITH (expire_after = ...)
 
 statement ok
 DROP TABLE tbl
@@ -264,3 +392,64 @@ CREATE TABLE ttl_become_table (id INT PRIMARY KEY, ref INT REFERENCES ref_table 
 
 statement error foreign keys to/from table with TTL "ttl_become_table" are not permitted
 ALTER TABLE ttl_become_table SET (ttl_expire_after = '10 minutes')
+
+# Create a table without a TTL. Add the TTL to the table and ensure
+# the schedule and TTL is setup correctly.
+statement ok
+DROP TABLE tbl;
+CREATE TABLE tbl (
+   id INT PRIMARY KEY,
+   text TEXT,
+   FAMILY (id, text)
+)
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes'), SET (ttl_select_batch_size = 200)
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+BEGIN;
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+ALTER TABLE tbl RESET (ttl_select_batch_size)
+
+statement ok
+ROLLBACK
+
+
+statement error cannot modify TTL settings while another schema change on the table is being processed
+BEGIN;
+CREATE INDEX tbl_idx ON tbl (text);
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+
+statement ok
+ROLLBACK
+
+statement error cannot perform other schema changes in the same transaction as a TTL mutation
+BEGIN;
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes');
+CREATE INDEX tbl_idx ON tbl (text)
+
+statement ok
+ROLLBACK
+
+statement ok
+ALTER TABLE tbl SET (ttl_expire_after = '10 minutes', ttl_select_batch_size = 200)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tbl]
+----
+CREATE TABLE public.tbl (
+                                                                                                                         id INT8 NOT NULL,
+                                                                                                                         text STRING NULL,
+                                                                                                                         crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                         CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                         FAMILY fam_0_id_text (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 200)
+
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+query TTT
+SELECT schedule_status, recurrence, owner FROM [SHOW SCHEDULES]
+WHERE label = 'row-level-ttl-$table_id'
+----
+ACTIVE  @hourly  root

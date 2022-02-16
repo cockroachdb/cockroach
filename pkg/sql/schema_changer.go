@@ -378,6 +378,27 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 	return sc.backfillQueryIntoTable(ctx, table, table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill")
 }
 
+// maybeUpdateScheduledJobsForRowLevelTTL ensures the scheduled jobs related to the
+// table's row level TTL are appropriately configured.
+func (sc *SchemaChanger) maybeUpdateScheduledJobsForRowLevelTTL(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) error {
+	// Drop the scheduled job if one exists and the table descriptor is being dropped.
+	if tableDesc.Dropped() && tableDesc.GetRowLevelTTL() != nil {
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			scheduleID := tableDesc.GetRowLevelTTL().ScheduleID
+			if scheduleID > 0 {
+				log.Infof(ctx, "dropping TTL schedule %d", scheduleID)
+				return deleteSchedule(ctx, sc.execCfg, txn, scheduleID)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (sc *SchemaChanger) maybeBackfillMaterializedView(
 	ctx context.Context, table catalog.TableDescriptor,
 ) error {
@@ -735,6 +756,10 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 	}
 
 	if err := sc.maybeMakeAddTablePublic(ctx, tableDesc); err != nil {
+		return err
+	}
+
+	if err := sc.maybeUpdateScheduledJobsForRowLevelTTL(ctx, tableDesc); err != nil {
 		return err
 	}
 
@@ -1282,6 +1307,58 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 			if err := scTable.MakeMutationComplete(scTable.Mutations[m.MutationOrdinal()]); err != nil {
 				return err
+			}
+
+			// If we are modifying TTL, then make sure the schedules are created
+			// or dropped as appropriate.
+			if modify := m.AsModifyRowLevelTTL(); modify != nil {
+				if fn := sc.testingKnobs.RunBeforeModifyRowLevelTTL; fn != nil {
+					if err := fn(); err != nil {
+						return err
+					}
+				}
+				if m.Adding() {
+					scTable.RowLevelTTL = modify.RowLevelTTL()
+					shouldCreateScheduledJob := scTable.RowLevelTTL.ScheduleID == 0
+					// Double check the job exists - if it does not, we need to recreate it.
+					if scTable.RowLevelTTL.ScheduleID != 0 {
+						_, err := jobs.LoadScheduledJob(
+							ctx,
+							JobSchedulerEnv(sc.execCfg),
+							scTable.RowLevelTTL.ScheduleID,
+							sc.execCfg.InternalExecutor,
+							txn,
+						)
+						if err != nil {
+							if !jobs.HasScheduledJobNotFoundError(err) {
+								return errors.Wrapf(err, "unknown error fetching existing job for row level TTL in schema changer")
+							}
+							shouldCreateScheduledJob = true
+						}
+					}
+
+					if shouldCreateScheduledJob {
+						j, err := createRowLevelTTLScheduledJob(
+							ctx,
+							sc.execCfg,
+							txn,
+							getOwnerOfDesc(scTable),
+							scTable.GetID(),
+							modify.RowLevelTTL(),
+						)
+						if err != nil {
+							return err
+						}
+						scTable.RowLevelTTL.ScheduleID = j.ScheduleID()
+					}
+				} else if m.Dropped() {
+					if ttl := scTable.RowLevelTTL; ttl != nil {
+						if err := deleteSchedule(ctx, sc.execCfg, txn, ttl.ScheduleID); err != nil {
+							return err
+						}
+					}
+					scTable.RowLevelTTL = nil
+				}
 			}
 
 			if pkSwap := m.AsPrimaryKeySwap(); pkSwap != nil {
@@ -2101,6 +2178,9 @@ type SchemaChangerTestingKnobs struct {
 	// RunAfterHashShardedIndexRangePreSplit is called after index ranges
 	// pre-splitting is done for hash sharded index.
 	RunAfterHashShardedIndexRangePreSplit func(tbl *tabledesc.Mutable, kbDB *kv.DB, codec keys.SQLCodec) error
+
+	// RunBeforeModifyRowLevelTTL is called just before the modify row level TTL is committed.
+	RunBeforeModifyRowLevelTTL func() error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
