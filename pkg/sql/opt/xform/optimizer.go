@@ -99,6 +99,15 @@ type Optimizer struct {
 	jb JoinOrderBuilder
 }
 
+// maxGroupPasses is the maximum allowed number of optimization passes for any
+// single memo group. The groupState.passes field is incremented every time
+// optimizeGroup is called on the group. If a groupState's passes exceeds this
+// limit, there is likely a cycle in the memo where a path exists from a group
+// member's children back to the group member's group. To avoid stack overflows
+// that these memo cycles cause, the optimizer throws an internal error when
+// this limit is reached.
+const maxGroupPasses = 100_000
+
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
 func (o *Optimizer) Init(evalCtx *tree.EvalContext, catalog cat.Catalog) {
@@ -439,6 +448,23 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 	state := o.ensureOptState(grp, required)
 	if state.fullyOptimized {
 		return state
+	}
+
+	state.passes++
+	if state.passes > maxGroupPasses {
+		// If optimizeGroup has been called on a group more than maxGroupPasses
+		// times, there is likely a cycle in the memo. To avoid a stack
+		// overflow, throw an internal error. The formatted memo is included as
+		// an error detail to aid in debugging the cycle.
+		mf := makeMemoFormatter(o, FmtPretty)
+		panic(errors.WithDetail(
+			errors.AssertionFailedf(
+				"memo group optimization passes surpassed limit of %v; "+
+					"there may be a cycle in the memo",
+				maxGroupPasses,
+			),
+			mf.format(),
+		))
 	}
 
 	// Iterate until the group has been fully optimized.
@@ -856,6 +882,10 @@ type groupState struct {
 	// explore is used by the explorer to store intermediate state so that
 	// redundant work is minimized.
 	explore exploreState
+
+	// passes tracks the number of times optimizeGroup has been called on the
+	// group. It is used to detect cycles in the memo. See maxGroupPasses.
+	passes int
 }
 
 // isMemberFullyOptimized returns true if the group member at the given ordinal
