@@ -536,3 +536,16 @@ func ForEachRowLevelTTL(
 		}
 	})
 }
+
+func (e MultiRegionEnumTypeReference) element() {}
+
+// ForEachMultiRegionEnumTypeReference iterates over nodes of type MultiRegionEnumTypeReference.
+func ForEachMultiRegionEnumTypeReference(
+	b ElementStatusIterator, elementFunc func(status, targetStatus Status, element *MultiRegionEnumTypeReference),
+) {
+	b.ForEachElementStatus(func(status, targetStatus Status, elem Element) {
+		if e, ok := elem.(*MultiRegionEnumTypeReference); ok {
+			elementFunc(status, targetStatus, e)
+		}
+	})
+}

@@ -255,15 +255,6 @@ func decomposeDescToElements(b BuildCtx, tbl catalog.Descriptor, targetStatus sc
 func decomposeColumnIntoElements(
 	b BuildCtx, tbl catalog.TableDescriptor, column catalog.Column, targetStatus scpb.Status,
 ) {
-	if column.IsHidden() {
-		return
-	}
-	enqueue(b, targetStatus, &scpb.ColumnName{
-		TableID:  tbl.GetID(),
-		ColumnID: column.GetID(),
-		Name:     column.GetName(),
-	})
-	enqueue(b, targetStatus, columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
 	// Add references for the column types.
 	typeClosure, err := typedesc.GetTypeDescriptorClosure(column.GetType())
 	onErrPanic(err)
@@ -274,6 +265,17 @@ func decomposeColumnIntoElements(
 			TypeID:   typeID,
 		})
 	}
+	// For hidden column only deal with type references, such as crdb_region ones,
+	// which will point to the database enum.
+	if column.IsHidden() {
+		return
+	}
+	enqueue(b, targetStatus, &scpb.ColumnName{
+		TableID:  tbl.GetID(),
+		ColumnID: column.GetID(),
+		Name:     column.GetName(),
+	})
+	enqueue(b, targetStatus, columnDescToElement(tbl, column.ColumnDescDeepCopy(), nil, nil))
 	// Convert any default expressions.
 	decomposeDefaultExprToElements(b, tbl, column, targetStatus)
 	// Deal with computed and on update expressions
@@ -569,6 +571,18 @@ func decomposeTableDescToElements(
 			})
 		}
 	}
+	if tbl.GetMultiRegionEnumDependencyIfExists() {
+		db := b.MustReadDatabase(tbl.GetParentID())
+		multiRegionID, err := db.MultiRegionEnumID()
+		onErrPanic(err)
+		enqueueIfNotExists(b, targetStatus,
+			&scpb.MultiRegionEnumTypeReference{
+				TableID:    tbl.GetID(),
+				DatabaseID: db.GetID(),
+				TypeID:     multiRegionID,
+			})
+	}
+
 	//TODO (fqazi) Computed Expressions / Update expressions can be moved out
 	// of column (similar to the UML).
 	//TODO (fqazi) Type references will later on need better handling.
