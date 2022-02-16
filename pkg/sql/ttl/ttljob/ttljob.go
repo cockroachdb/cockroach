@@ -30,8 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	io_prometheus_client "github.com/prometheus/client_model/go"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -63,12 +66,104 @@ type rowLevelTTLResumer struct {
 	st  *cluster.Settings
 }
 
+// RowLevelTTLMetrics are the row-level TTL job metrics.
+type RowLevelTTLMetrics struct {
+	RangeTotalDuration *metric.Histogram
+	SelectDuration     *metric.Histogram
+	DeleteDuration     *metric.Histogram
+	RowSelections      *metric.Counter
+	RowDeletions       *metric.Counter
+	NumActiveRanges    *metric.Gauge
+}
+
+// MetricStruct implements the metric.Struct interface.
+func (RowLevelTTLMetrics) MetricStruct() {}
+
+func makeRowLevelTTLMetrics(
+	histogramWindowInterval time.Duration, name string, addMetricStructToRegistry func(interface{}),
+) metric.Struct {
+	sigFigs := 2
+	labels := []*metric.LabelPair{
+		{
+			Name:  proto.String("relation"),
+			Value: proto.String(name),
+		},
+	}
+	ret := RowLevelTTLMetrics{
+		RangeTotalDuration: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.range_total_duration",
+				Measurement: "seconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+				Labels:      labels,
+			},
+			histogramWindowInterval,
+			int64(time.Hour.Nanoseconds()),
+			sigFigs,
+		),
+		SelectDuration: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.select_duration",
+				Measurement: "nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+				Labels:      labels,
+			},
+			histogramWindowInterval,
+			int64(time.Minute.Nanoseconds()),
+			sigFigs,
+		),
+		DeleteDuration: metric.NewHistogram(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.delete_duration",
+				Measurement: "nanoseconds",
+				Unit:        metric.Unit_NANOSECONDS,
+				MetricType:  io_prometheus_client.MetricType_HISTOGRAM,
+				Labels:      labels,
+			},
+			histogramWindowInterval,
+			int64(time.Minute.Nanoseconds()),
+			sigFigs,
+		),
+		RowSelections: metric.NewCounter(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.rows_selected",
+				Measurement: "num_rows",
+				Unit:        metric.Unit_COUNT,
+				MetricType:  io_prometheus_client.MetricType_COUNTER,
+				Labels:      labels,
+			},
+		),
+		RowDeletions: metric.NewCounter(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.rows_deleted",
+				Measurement: "num_rows",
+				Unit:        metric.Unit_COUNT,
+				MetricType:  io_prometheus_client.MetricType_COUNTER,
+				Labels:      labels,
+			},
+		),
+		NumActiveRanges: metric.NewGauge(
+			metric.Metadata{
+				Name:        "jobs.row_level_ttl.num_active_ranges",
+				Measurement: "num_active_workers",
+				Unit:        metric.Unit_COUNT,
+				Labels:      labels,
+			},
+		),
+	}
+	addMetricStructToRegistry(ret)
+	return ret
+}
+
 var _ jobs.Resumer = (*rowLevelTTLResumer)(nil)
 
 // Resume implements the jobs.Resumer interface.
 func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
+	descs := p.ExtendedEvalContext().Descs
 	var knobs sql.TTLTestingKnobs
 	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
 		knobs = *ttlKnobs
@@ -94,8 +189,9 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var pkTypes []*types.T
 	var pkDirs []descpb.IndexDescriptor_Direction
 	var ranges []kv.KeyValue
+	var name string
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
+		desc, err := descs.GetImmutableTableByID(
 			ctx,
 			txn,
 			details.TableID,
@@ -127,16 +223,48 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if ttl == nil {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
 		}
+		ttlSettings = *ttl
 
 		ranges, err = kvclient.ScanMetaKVs(ctx, txn, desc.TableSpan(p.ExecCfg().Codec))
 		if err != nil {
 			return err
 		}
-		ttlSettings = *ttl
+
+		_, dbDesc, err := descs.GetImmutableDatabaseByID(
+			ctx,
+			txn,
+			desc.GetParentID(),
+			tree.CommonLookupFlags{
+				Required: true,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		schemaDesc, err := descs.GetImmutableSchemaByID(
+			ctx,
+			txn,
+			desc.GetParentSchemaID(),
+			tree.CommonLookupFlags{
+				Required: true,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		tn := tree.MakeTableNameWithSchema(
+			tree.Name(dbDesc.GetName()),
+			tree.Name(schemaDesc.GetName()),
+			tree.Name(desc.GetName()),
+		)
+		name = tn.FQString()
 		return nil
 	}); err != nil {
 		return err
 	}
+
+	metrics := p.ExecCfg().JobRegistry.MetricsStruct().GetRowLevelTTLMetrics(name).(RowLevelTTLMetrics)
 
 	var rangeDesc roachpb.RangeDescriptor
 	var alloc tree.DatumAlloc
@@ -154,11 +282,13 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	for i := 0; i < rangeConcurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
 			for r := range ch {
-				if err := runTTLOnRange(
+				start := timeutil.Now()
+				err := runTTLOnRange(
 					ctx,
 					p.ExecCfg(),
 					details,
 					p.ExtendedEvalContext().Descs,
+					metrics,
 					initialVersion,
 					r.startPK,
 					r.endPK,
@@ -166,7 +296,9 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 					selectBatchSize,
 					deleteBatchSize,
 					*aost,
-				); err != nil {
+				)
+				metrics.RangeTotalDuration.RecordValue(int64(timeutil.Since(start)))
+				if err != nil {
 					// Continue until channel is fully read.
 					// Otherwise, the keys input will be blocked.
 					for r = range ch {
@@ -228,6 +360,7 @@ func runTTLOnRange(
 	execCfg *sql.ExecutorConfig,
 	details jobspb.RowLevelTTLDetails,
 	descriptors *descs.Collection,
+	metrics RowLevelTTLMetrics,
 	tableVersion descpb.DescriptorVersion,
 	startPK tree.Datums,
 	endPK tree.Datums,
@@ -235,6 +368,9 @@ func runTTLOnRange(
 	selectBatchSize, deleteBatchSize int,
 	aost tree.DTimestampTZ,
 ) error {
+	metrics.NumActiveRanges.Inc(1)
+	defer metrics.NumActiveRanges.Dec(1)
+
 	ie := execCfg.InternalExecutor
 	db := execCfg.DB
 
@@ -263,11 +399,14 @@ func runTTLOnRange(
 
 		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			var err error
+			start := timeutil.Now()
 			expiredRowsPKs, err = selectBuilder.run(ctx, ie, txn)
+			metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
 			return err
 		}); err != nil {
 			return errors.Wrapf(err, "error selecting rows to delete")
 		}
+		metrics.RowSelections.Inc(int64(len(expiredRowsPKs)))
 
 		// Step 2. Delete the rows which have expired.
 
@@ -301,10 +440,14 @@ func runTTLOnRange(
 				}
 
 				// TODO(#75428): configure admission priority
-				return deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				start := timeutil.Now()
+				err = deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				metrics.DeleteDuration.RecordValue(int64(timeutil.Since(start)))
+				return err
 			}); err != nil {
 				return errors.Wrapf(err, "error during row deletion")
 			}
+			metrics.RowDeletions.Inc(int64(len(deleteBatch)))
 		}
 
 		// Step 3. Early exit if necessary.
@@ -368,4 +511,5 @@ func init() {
 			st:  settings,
 		}
 	})
+	jobs.MakeRowLevelTTLMetricsHook = makeRowLevelTTLMetrics
 }
