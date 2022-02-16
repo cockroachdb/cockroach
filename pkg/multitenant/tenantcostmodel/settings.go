@@ -27,7 +27,7 @@ import (
 // from the host cluster.
 var (
 	readRequestCost = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.kv_read_request_cost",
 		"base cost of a read request in Request Units",
 		0.6993,
@@ -35,7 +35,7 @@ var (
 	)
 
 	readCostPerMB = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.kv_read_cost_per_megabyte",
 		"cost of a read in Request Units per MB",
 		107.6563,
@@ -43,7 +43,7 @@ var (
 	)
 
 	writeRequestCost = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.kv_write_request_cost",
 		"base cost of a write request in Request Units",
 		5.7733,
@@ -51,7 +51,7 @@ var (
 	)
 
 	writeCostPerMB = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.kv_write_cost_per_megabyte",
 		"cost of a write in Request Units per MB",
 		2026.3021,
@@ -59,7 +59,7 @@ var (
 	)
 
 	podCPUSecondCost = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.pod_cpu_second_cost",
 		"cost of a CPU-second on the tenant POD in Request Units",
 		1000.0,
@@ -67,7 +67,7 @@ var (
 	)
 
 	pgwireEgressCostPerMB = settings.RegisterFloatSetting(
-		settings.TenantWritable,
+		settings.TenantReadOnly,
 		"tenant_cost_model.pgwire_egress_cost_per_megabyte",
 		"cost of client <-> SQL ingress/egress per MB",
 		878.9063,
