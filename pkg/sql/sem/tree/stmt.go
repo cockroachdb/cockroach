@@ -167,6 +167,7 @@ type CCLOnlyStatement interface {
 	cclOnlyStatement()
 }
 
+var _ CCLOnlyStatement = &AlterBackup{}
 var _ CCLOnlyStatement = &Backup{}
 var _ CCLOnlyStatement = &ShowBackup{}
 var _ CCLOnlyStatement = &Restore{}
@@ -188,6 +189,17 @@ func (*AlterChangefeed) StatementType() StatementType { return TypeDML }
 func (*AlterChangefeed) StatementTag() string { return `ALTER CHANGEFEED` }
 
 func (*AlterChangefeed) cclOnlyStatement() {}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterBackup) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterBackup) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterBackup) StatementTag() string { return "ALTER BACKUP" }
+
+func (*AlterBackup) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterDatabaseOwner) StatementReturnType() StatementReturnType { return DDL }
@@ -1662,6 +1674,7 @@ func (*ValuesClause) StatementTag() string { return "VALUES" }
 
 func (n *AlterChangefeed) String() string                { return AsString(n) }
 func (n *AlterChangefeedCmds) String() string            { return AsString(n) }
+func (n *AlterBackup) String() string                    { return AsString(n) }
 func (n *AlterIndex) String() string                     { return AsString(n) }
 func (n *AlterDatabaseOwner) String() string             { return AsString(n) }
 func (n *AlterDatabaseAddRegion) String() string         { return AsString(n) }

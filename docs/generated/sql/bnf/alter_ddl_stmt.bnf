@@ -10,3 +10,4 @@ alter_ddl_stmt ::=
 	| alter_type_stmt
 	| alter_default_privileges_stmt
 	| alter_changefeed_stmt
+	| alter_backup_stmt

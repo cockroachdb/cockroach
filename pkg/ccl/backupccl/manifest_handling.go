@@ -1037,23 +1037,62 @@ func sanitizeLocalityKV(kv string) string {
 	return string(sanitizedKV)
 }
 
+// readEncryptionOptions takes in a backup location and tries to find
+// and return all encryption option files in the backup. A backup
+// normally only creates one encryption option file, but if the user
+// uses ALTER BACKUP to add new keys, a new encryption option file
+// will be placed side by side with the old one. Since the old file
+// is still valid, as we never want to modify or delete an existing
+// backup, we return both new and old files.
 func readEncryptionOptions(
 	ctx context.Context, src cloud.ExternalStorage,
-) (*jobspb.EncryptionInfo, error) {
-	r, err := src.ReadFile(ctx, backupEncryptionInfoFile)
+) ([]jobspb.EncryptionInfo, error) {
+	files, err := getEncryptionInfoFiles(ctx, src)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not find or read encryption information")
 	}
-	defer r.Close(ctx)
-	encInfoBytes, err := ioctx.ReadAll(ctx, r)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not find or read encryption information")
+	var encInfo []jobspb.EncryptionInfo
+	// The user is more likely to pass in a KMS URI that was used to
+	// encrypt the backup recently, so we iterate the ENCRYPTION-INFO
+	// files from latest to oldest.
+	for i := len(files) - 1; i >= 0; i-- {
+		r, err := src.ReadFile(ctx, files[i])
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		defer r.Close(ctx)
+
+		encInfoBytes, err := ioctx.ReadAll(ctx, r)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not find or read encryption information")
+		}
+		var currentEncInfo jobspb.EncryptionInfo
+		if err := protoutil.Unmarshal(encInfoBytes, &currentEncInfo); err != nil {
+			return nil, err
+		}
+		encInfo = append(encInfo, currentEncInfo)
 	}
-	var encInfo jobspb.EncryptionInfo
-	if err := protoutil.Unmarshal(encInfoBytes, &encInfo); err != nil {
-		return nil, err
+	return encInfo, nil
+}
+
+func getEncryptionInfoFiles(ctx context.Context, dest cloud.ExternalStorage) ([]string, error) {
+	var files []string
+	// Look for all files in dest that start with "/ENCRYPTION-INFO"
+	// and return them.
+	err := dest.List(ctx, "", "", func(p string) error {
+		paths := strings.Split(p, "/")
+		p = paths[len(paths)-1]
+		if match := strings.HasPrefix(p, backupEncryptionInfoFile); match {
+			files = append(files, p)
+		}
+
+		return nil
+	})
+	if len(files) < 1 {
+		return nil, errors.New("no ENCRYPTION-INFO files found")
 	}
-	return &encInfo, nil
+
+	return files, err
 }
 
 func writeEncryptionInfoIfNotExists(
