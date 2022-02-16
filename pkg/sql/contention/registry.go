@@ -255,7 +255,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // AddContentionEvent adds a new ContentionEvent to the Registry.
-func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
+func (r *Registry) AddContentionEvent(event contentionpb.ExtendedContentionEvent) {
+	c := event.BlockingEvent
 	r.globalLock.Lock()
 	defer r.globalLock.Unlock()
 	// Remove the tenant ID prefix if there is any.
@@ -281,7 +282,7 @@ func (r *Registry) AddContentionEvent(c roachpb.ContentionEvent) {
 		v.addContentionEvent(c)
 	}
 
-	r.eventStore.addEvent(c)
+	r.eventStore.addEvent(event)
 }
 
 func serializeTxnCache(txnCache *cache.UnorderedCache) []contentionpb.SingleTxnContention {
