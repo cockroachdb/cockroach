@@ -22,14 +22,11 @@ import (
 // length itself).
 const pgHeaderSizeBytes = 5
 
-// ErrSmallBuffer indicates that the requested buffer for the interceptor is
-// too small.
-var ErrSmallBuffer = errors.New("buffer is too small")
-
-// ErrInterceptorClosed is the returned error whenever the intercept is closed.
-// When this happens, the caller should terminate both dst and src to guarantee
-// correctness.
-var ErrInterceptorClosed = errors.New("interceptor is closed")
+// defaultBufferSize is the default buffer size for the interceptor. 8K was
+// chosen to match Postgres' send and receive buffer sizes.
+//
+// See: https://github.com/postgres/postgres/blob/249d64999615802752940e017ee5166e726bc7cd/src/backend/libpq/pqcomm.c#L134-L135.
+const defaultBufferSize = 2 << 13 // 8K
 
 // ErrProtocolError indicates that the packets are malformed, and are not as
 // expected.
@@ -43,7 +40,6 @@ type pgInterceptor struct {
 	_ util.NoCopy
 
 	src io.Reader
-	dst io.Writer
 
 	// buf stores buffered bytes from src. This may contain one or more pgwire
 	// messages, and messages may be partially buffered.
@@ -61,27 +57,21 @@ type pgInterceptor struct {
 	// was partially buffered, the interceptor will handle that case before
 	// resetting readPos and writePos to 0.
 	readPos, writePos int
-
-	// closed indicates that the interceptor is closed. This will be set to
-	// true whenever there's an error within one of the interceptor's operations
-	// leading to an ambiguity. Once an interceptor is closed, all subsequent
-	// method calls on the interceptor will return ErrInterceptorClosed.
-	closed bool
 }
 
 // newPgInterceptor creates a new instance of the interceptor with an internal
-// buffer of bufSize bytes. bufSize must be at least the size of a pgwire
-// message header.
-func newPgInterceptor(src io.Reader, dst io.Writer, bufSize int) (*pgInterceptor, error) {
-	// The internal buffer must be able to fit the header.
+// buffer of bufSize bytes. If bufSize is smaller than 5 bytes, the interceptor
+// will default to an 8K buffer size.
+func newPgInterceptor(src io.Reader, bufSize int) *pgInterceptor {
+	// The internal buffer must be able to fit the header. If bufSize is smaller
+	// than 5 bytes, just default to 8K, or else the interceptor is unusable.
 	if bufSize < pgHeaderSizeBytes {
-		return nil, ErrSmallBuffer
+		bufSize = defaultBufferSize
 	}
 	return &pgInterceptor{
 		src: src,
-		dst: dst,
 		buf: make([]byte, bufSize),
-	}, nil
+	}
 }
 
 // PeekMsg returns the header of the current pgwire message without advancing
@@ -90,12 +80,11 @@ func newPgInterceptor(src io.Reader, dst io.Writer, bufSize int) (*pgInterceptor
 // includes the header type and body length. This will return ErrProtocolError
 // if the packets are malformed.
 //
-// If the interceptor is closed, PeekMsg returns ErrInterceptorClosed.
+// If err != nil, we are safe to reuse the interceptor. In the case of
+// ErrProtocolError, the interceptor is still usable, though calls to ReadMsg
+// and ForwardMsg will return an error. The bytes are still in the buffer, so
+// the only way is to abandon the interceptor.
 func (p *pgInterceptor) PeekMsg() (typ byte, size int, err error) {
-	if p.closed {
-		return 0, 0, ErrInterceptorClosed
-	}
-
 	if err := p.ensureNextNBytes(pgHeaderSizeBytes); err != nil {
 		// Possibly due to a timeout or context cancellation.
 		return 0, 0, err
@@ -116,43 +105,23 @@ func (p *pgInterceptor) PeekMsg() (typ byte, size int, err error) {
 	return typ, size + 1, nil
 }
 
-// WriteMsg writes the given bytes to the writer dst. If err != nil and a Write
-// was attempted, the interceptor will be closed.
-//
-// If the interceptor is closed, WriteMsg returns ErrInterceptorClosed.
-func (p *pgInterceptor) WriteMsg(data []byte) (n int, err error) {
-	if p.closed {
-		return 0, ErrInterceptorClosed
-	}
-	defer func() {
-		// Close the interceptor if there was an error. Theoretically, we only
-		// need to close here if n > 0, but for consistency with the other
-		// methods, we will do that here too.
-		if err != nil {
-			p.Close()
-		}
-	}()
-	return p.dst.Write(data)
-}
-
 // ReadMsg returns the current pgwire message in bytes. It also advances the
 // interceptor to the next message. On return, the msg field is valid if and
-// only if err == nil. If err != nil and a Read was attempted because the buffer
-// did not have enough bytes, the interceptor will be closed.
+// only if err == nil.
 //
 // The interceptor retains ownership of all the memory returned by ReadMsg; the
 // caller is allowed to hold on to this memory *until* the next moment other
 // methods on the interceptor are called. The data will only be valid until then
-// as well.
+// as well. This may allocate if the message does not fit into the internal
+// buffer, so use with care. If we are using this with the intention of sending
+// it to another connection, we should use ForwardMsg, which does not allocate.
 //
-// If the interceptor is closed, ReadMsg returns ErrInterceptorClosed.
+// WARNING: If err != nil, the caller should abandon the interceptor, as we may
+// be in a corrupted state. This invokes PeekMsg under the hood to know the
+// message length. One optimization that could be done is to invoke PeekMsg
+// manually first before calling this to ensure that we do not return errors
+// when peeking during ReadMsg.
 func (p *pgInterceptor) ReadMsg() (msg []byte, err error) {
-	// Technically this is redundant since PeekMsg will do the same thing, but
-	// we do so here for clarity.
-	if p.closed {
-		return nil, ErrInterceptorClosed
-	}
-
 	// Peek header of the current message for message size.
 	_, size, err := p.PeekMsg()
 	if err != nil {
@@ -179,19 +148,6 @@ func (p *pgInterceptor) ReadMsg() (msg []byte, err error) {
 	n := copy(msg, p.buf[p.readPos:p.writePos])
 	p.readPos += n
 
-	defer func() {
-		// Close the interceptor because we read the data (both buffered and
-		// possibly newer ones) into msg, which is larger than the buffer's
-		// size, and there's no easy way to recover. We could technically fix
-		// some of the situations, especially when no bytes were read, but at
-		// this point, it's likely that the one end of the interceptor is
-		// already gone, or the proxy is shutting down, so there's no point
-		// trying to save a disconnect.
-		if err != nil {
-			p.Close()
-		}
-	}()
-
 	// Read more bytes.
 	if _, err := io.ReadFull(p.src, msg[n:]); err != nil {
 		return nil, err
@@ -200,20 +156,17 @@ func (p *pgInterceptor) ReadMsg() (msg []byte, err error) {
 	return msg, nil
 }
 
-// ForwardMsg sends the current pgwire message to the destination, and advances
-// the interceptor to the next message. On return, n == pgwire message size if
-// and only if err == nil. If err != nil and a Write was attempted, the
-// interceptor will be closed.
+// ForwardMsg sends the current pgwire message to dst, and advances the
+// interceptor to the next message. On return, n == pgwire message size if
+// and only if err == nil.
 //
-// If the interceptor is closed, ForwardMsg returns ErrInterceptorClosed.
-func (p *pgInterceptor) ForwardMsg() (n int, err error) {
-	// Technically this is redundant since PeekMsg will do the same thing, but
-	// we do so here for clarity.
-	if p.closed {
-		return 0, ErrInterceptorClosed
-	}
-
-	// Retrieve header of the current message for message size.
+// WARNING: If err != nil, the caller should abandon the interceptor or dst, as
+// we may be in a corrupted state. This invokes PeekMsg under the hood to know
+// the message length. One optimization that could be done is to invoke PeekMsg
+// manually first before calling this to ensure that we do not return errors
+// when peeking during ForwardMsg.
+func (p *pgInterceptor) ForwardMsg(dst io.Writer) (n int, err error) {
+	// Retrieve header of the current message for body size.
 	_, size, err := p.PeekMsg()
 	if err != nil {
 		return 0, err
@@ -229,21 +182,8 @@ func (p *pgInterceptor) ForwardMsg() (n int, err error) {
 	}
 	p.readPos = endPos
 
-	defer func() {
-		// State may be invalid depending on whether bytes have been written.
-		// To reduce complexity, we'll just close the interceptor, and the
-		// caller should just terminate both ends.
-		//
-		// If src has been closed, the dst state may be invalid. If dst has been
-		// closed, buffered bytes no longer represent the protocol correctly
-		// even if we slurped the remaining bytes for the current message.
-		if err != nil {
-			p.Close()
-		}
-	}()
-
 	// Forward the message to the destination.
-	n, err = p.dst.Write(p.buf[startPos:endPos])
+	n, err = dst.Write(p.buf[startPos:endPos])
 	if err != nil {
 		return n, err
 	}
@@ -256,7 +196,7 @@ func (p *pgInterceptor) ForwardMsg() (n int, err error) {
 
 	// Message was partially buffered, so copy the remaining.
 	if remainingBytes > 0 {
-		m, err := io.CopyN(p.dst, p.src, int64(remainingBytes))
+		m, err := io.CopyN(dst, p.src, int64(remainingBytes))
 		n += int(m)
 		if err != nil {
 			return n, err
@@ -271,27 +211,14 @@ func (p *pgInterceptor) ForwardMsg() (n int, err error) {
 	return n, nil
 }
 
-// Close closes the interceptor, and prevents further operations on it.
-func (p *pgInterceptor) Close() {
-	p.closed = true
-}
-
-// readSize returns the number of bytes read by the interceptor. If the
-// interceptor is closed, this will return 0.
+// readSize returns the number of bytes read by the interceptor.
 func (p *pgInterceptor) readSize() int {
-	if p.closed {
-		return 0
-	}
 	return p.writePos - p.readPos
 }
 
 // writeSize returns the remaining number of bytes that could fit into the
-// internal buffer before needing to be re-aligned. If the interceptor is
-// closed, this will return 0.
+// internal buffer before needing to be re-aligned.
 func (p *pgInterceptor) writeSize() int {
-	if p.closed {
-		return 0
-	}
 	return len(p.buf) - p.writePos
 }
 
@@ -319,12 +246,14 @@ func (p *pgInterceptor) ensureNextNBytes(n int) error {
 	return err
 }
 
-var _ io.Writer = &errPanicWriter{}
+var _ io.Writer = &errWriter{}
 
-// errPanicWriter is an io.Writer that panics whenever a Write call is made.
-type errPanicWriter struct{}
+// errWriter is an io.Writer that fails whenever a Write call is made. This is
+// used within ReadMsg for both BackendInterceptor and FrontendInterceptor.
+// Since it's just a Read, Write calls should not be made.
+type errWriter struct{}
 
 // Write implements the io.Writer interface.
-func (w *errPanicWriter) Write(p []byte) (int, error) {
-	panic("unexpected Write call")
+func (w *errWriter) Write(p []byte) (int, error) {
+	return 0, errors.AssertionFailedf("unexpected Write call")
 }

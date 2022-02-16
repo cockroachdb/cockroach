@@ -18,6 +18,7 @@ import (
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -125,6 +126,9 @@ type TestTenantInterface interface {
 
 	// DrainClients shuts down client connections.
 	DrainClients(ctx context.Context) error
+
+	// SystemConfigProvider provides access to the system config.
+	SystemConfigProvider() config.SystemConfigProvider
 
 	// TODO(irfansharif): We'd benefit from an API to construct a *gosql.DB, or
 	// better yet, a *sqlutils.SQLRunner. We use it all the time, constructing

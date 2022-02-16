@@ -15,20 +15,13 @@ import (
 	"github.com/jackc/pgproto3/v2"
 )
 
-// FrontendInterceptor is a client interceptor for the Postgres frontend
-// protocol.
+// FrontendInterceptor is a client interceptor for the Postgres frontend protocol.
 type FrontendInterceptor pgInterceptor
 
-// NewFrontendInterceptor creates a FrontendInterceptor. bufSize must be at
-// least the size of a pgwire message header.
-func NewFrontendInterceptor(
-	src io.Reader, dst io.Writer, bufSize int,
-) (*FrontendInterceptor, error) {
-	pgi, err := newPgInterceptor(src, dst, bufSize)
-	if err != nil {
-		return nil, err
-	}
-	return (*FrontendInterceptor)(pgi), nil
+// NewFrontendInterceptor creates a FrontendInterceptor using the default buffer
+// size of 8K bytes.
+func NewFrontendInterceptor(src io.Reader) *FrontendInterceptor {
+	return (*FrontendInterceptor)(newPgInterceptor(src, defaultBufferSize))
 }
 
 // PeekMsg returns the header of the current pgwire message without advancing
@@ -40,13 +33,6 @@ func (fi *FrontendInterceptor) PeekMsg() (typ pgwirebase.ServerMessageType, size
 	return pgwirebase.ServerMessageType(byteType), size, err
 }
 
-// WriteMsg writes the given bytes to the writer dst.
-//
-// See pgInterceptor.WriteMsg for more information.
-func (fi *FrontendInterceptor) WriteMsg(data pgproto3.BackendMessage) (n int, err error) {
-	return (*pgInterceptor)(fi).WriteMsg(data.Encode(nil))
-}
-
 // ReadMsg decodes the current pgwire message and returns a BackendMessage.
 // This also advances the interceptor to the next message.
 //
@@ -56,19 +42,14 @@ func (fi *FrontendInterceptor) ReadMsg() (msg pgproto3.BackendMessage, err error
 	if err != nil {
 		return nil, err
 	}
-	// errPanicWriter is used here because Receive must not Write.
-	return pgproto3.NewFrontend(newChunkReader(msgBytes), &errPanicWriter{}).Receive()
+	// errWriter is used here because Receive must not Write.
+	return pgproto3.NewFrontend(newChunkReader(msgBytes), &errWriter{}).Receive()
 }
 
 // ForwardMsg sends the current pgwire message to the destination without any
 // decoding, and advances the interceptor to the next message.
 //
 // See pgInterceptor.ForwardMsg for more information.
-func (fi *FrontendInterceptor) ForwardMsg() (n int, err error) {
-	return (*pgInterceptor)(fi).ForwardMsg()
-}
-
-// Close closes the interceptor, and prevents further operations on it.
-func (fi *FrontendInterceptor) Close() {
-	(*pgInterceptor)(fi).Close()
+func (fi *FrontendInterceptor) ForwardMsg(dst io.Writer) (n int, err error) {
+	return (*pgInterceptor)(fi).ForwardMsg(dst)
 }
