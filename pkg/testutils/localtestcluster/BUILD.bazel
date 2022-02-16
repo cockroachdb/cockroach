@@ -19,6 +19,7 @@ go_library(
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/server/systemconfigwatcher",
         "//pkg/settings/cluster",
         "//pkg/spanconfig/spanconfigkvsubscriber",
         "//pkg/sql/catalog/bootstrap",

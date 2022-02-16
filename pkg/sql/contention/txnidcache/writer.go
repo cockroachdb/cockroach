@@ -11,8 +11,7 @@
 package txnidcache
 
 import (
-	"sync"
-
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -22,22 +21,23 @@ import (
 const shardCount = 16
 
 type writer struct {
+	st *cluster.Settings
+
 	shards [shardCount]*concurrentWriteBuffer
 
-	sink      blockSink
-	blockPool *sync.Pool
+	sink blockSink
 }
 
 var _ Writer = &writer{}
 
-func newWriter(sink blockSink, blockPool *sync.Pool) *writer {
+func newWriter(st *cluster.Settings, sink blockSink) *writer {
 	w := &writer{
-		sink:      sink,
-		blockPool: blockPool,
+		st:   st,
+		sink: sink,
 	}
 
 	for shardIdx := 0; shardIdx < shardCount; shardIdx++ {
-		w.shards[shardIdx] = newConcurrentWriteBuffer(sink, blockPool)
+		w.shards[shardIdx] = newConcurrentWriteBuffer(sink)
 	}
 
 	return w
@@ -45,6 +45,9 @@ func newWriter(sink blockSink, blockPool *sync.Pool) *writer {
 
 // Record implements the Writer interface.
 func (w *writer) Record(resolvedTxnID ResolvedTxnID) {
+	if MaxSize.Get(&w.st.SV) == 0 {
+		return
+	}
 	shardIdx := hashTxnID(resolvedTxnID.TxnID)
 	buffer := w.shards[shardIdx]
 	buffer.Record(resolvedTxnID)

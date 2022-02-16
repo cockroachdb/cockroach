@@ -329,7 +329,7 @@ func New(
 
 	g.mu.Lock()
 	// Add ourselves as a SystemConfig watcher.
-	g.mu.is.registerCallback(KeySystemConfig, g.updateSystemConfig)
+	g.mu.is.registerCallback(KeyDeprecatedSystemConfig, g.updateSystemConfig)
 	// Add ourselves as a node descriptor watcher.
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
@@ -1145,18 +1145,22 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 	}
 }
 
-// GetSystemConfig returns the local unmarshaled version of the system config.
+// DeprecatedGetSystemConfig returns the local unmarshaled version of the system config.
 // Returns nil if the system config hasn't been set yet.
-func (g *Gossip) GetSystemConfig() *config.SystemConfig {
+//
+// TODO(ajwerner): Remove this in 22.2.
+func (g *Gossip) DeprecatedGetSystemConfig() *config.SystemConfig {
 	g.systemConfigMu.RLock()
 	defer g.systemConfigMu.RUnlock()
 	return g.systemConfig
 }
 
-// RegisterSystemConfigChannel registers a channel to signify updates for the
+// DeprecatedRegisterSystemConfigChannel registers a channel to signify updates for the
 // system config. It is notified after registration (if a system config is
 // already set), and whenever a new system config is successfully unmarshaled.
-func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
+//
+// TODO(ajwerner): Remove this in 22.2.
+func (g *Gossip) DeprecatedRegisterSystemConfigChannel() <-chan struct{} {
 	// Create channel that receives new system config notifications.
 	// The channel has a size of 1 to prevent gossip from having to block on it.
 	c := make(chan struct{}, 1)
@@ -1177,7 +1181,7 @@ func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 // channel.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
-	if key != KeySystemConfig {
+	if key != KeyDeprecatedSystemConfig {
 		log.Fatalf(ctx, "wrong key received on SystemConfig callback: %s", key)
 	}
 	cfg := config.NewSystemConfig(g.defaultZoneConfig)

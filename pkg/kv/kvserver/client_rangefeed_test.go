@@ -85,9 +85,6 @@ func TestRangefeedWorksOnSystemRangesUnconditionally(t *testing.T) {
 		junkDescriptor := dbdesc.NewInitial(
 			junkDescriptorID, "junk", security.AdminRoleName())
 		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := txn.SetSystemConfigTrigger(true /* forSystemTenant */); err != nil {
-				return err
-			}
 			return txn.Put(ctx, junkDescriptorKey, junkDescriptor.DescriptorProto())
 		}))
 		after := db.Clock().Now()

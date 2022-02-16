@@ -13,10 +13,10 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -541,13 +541,14 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 // Mark transaction as operating on the system DB if the descriptor id
 // is within the SystemConfig range.
 func (p *planner) maybeSetSystemConfig(id descpb.ID) error {
-	if !descpb.IsSystemConfigID(id) ||
-		descs.UnsafeSkipSystemConfigTrigger.Get(&p.EvalContext().Settings.SV) {
+	if !descpb.IsSystemConfigID(id) || p.execCfg.Settings.Version.IsActive(
+		p.EvalContext().Ctx(), clusterversion.DisableSystemConfigGossipTrigger,
+	) {
 		return nil
 	}
 	// Mark transaction as operating on the system DB.
 	// Only the system tenant marks the SystemConfigTrigger.
-	return p.txn.SetSystemConfigTrigger(p.execCfg.Codec.ForSystemTenant())
+	return p.txn.DeprecatedSetSystemConfigTrigger(p.execCfg.Codec.ForSystemTenant())
 }
 
 // planFlags is used throughout the planning code to keep track of various

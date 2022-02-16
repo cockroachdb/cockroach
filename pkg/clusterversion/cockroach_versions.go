@@ -279,7 +279,10 @@ const (
 	// engine running at the required format major version, as do all other nodes
 	// in the cluster.
 	EnablePebbleFormatVersionBlockProperties
-
+	// DisableSystemConfigGossipTrigger is a follow-up to EnableSpanConfigStore
+	// to disable the data propagation mechanism it and the entire spanconfig
+	// infrastructure obviates.
+	DisableSystemConfigGossipTrigger
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -442,6 +445,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     EnablePebbleFormatVersionBlockProperties,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 64},
+	},
+	{
+		Key:     DisableSystemConfigGossipTrigger,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 66},
 	},
 
 	// *************************************************

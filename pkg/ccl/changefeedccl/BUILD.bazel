@@ -162,6 +162,7 @@ go_test(
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
+        "//pkg/config",
         "//pkg/gossip",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

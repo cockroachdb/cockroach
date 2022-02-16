@@ -77,7 +77,7 @@ type Connector struct {
 		client               *client
 		nodeDescs            map[roachpb.NodeID]*roachpb.NodeDescriptor
 		systemConfig         *config.SystemConfig
-		systemConfigChannels []chan<- struct{}
+		systemConfigChannels map[chan<- struct{}]struct{}
 	}
 
 	settingsMu struct {
@@ -140,6 +140,7 @@ func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 	}
 
 	c.mu.nodeDescs = make(map[roachpb.NodeID]*roachpb.NodeDescriptor)
+	c.mu.systemConfigChannels = make(map[chan<- struct{}]struct{})
 	c.settingsMu.allTenantOverrides = make(map[string]settings.EncodedValue)
 	c.settingsMu.specificOverrides = make(map[string]settings.EncodedValue)
 	return c
@@ -250,7 +251,7 @@ var gossipSubsHandlers = map[string]func(*Connector, context.Context, string, ro
 	// Subscribe to all *NodeDescriptor updates.
 	gossip.MakePrefixPattern(gossip.KeyNodeIDPrefix): (*Connector).updateNodeAddress,
 	// Subscribe to a filtered view of *SystemConfig updates.
-	gossip.KeySystemConfig: (*Connector).updateSystemConfig,
+	gossip.KeyDeprecatedSystemConfig: (*Connector).updateSystemConfig,
 }
 
 var gossipSubsPatterns = func() []string {
@@ -322,7 +323,7 @@ func (c *Connector) updateSystemConfig(ctx context.Context, key string, content 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.mu.systemConfig = cfg
-	for _, c := range c.mu.systemConfigChannels {
+	for c := range c.mu.systemConfigChannels {
 		select {
 		case c <- struct{}{}:
 		default:
@@ -342,20 +343,24 @@ func (c *Connector) GetSystemConfig() *config.SystemConfig {
 
 // RegisterSystemConfigChannel implements the config.SystemConfigProvider
 // interface.
-func (c *Connector) RegisterSystemConfigChannel() <-chan struct{} {
+func (c *Connector) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister func()) {
 	// Create channel that receives new system config notifications. The channel
 	// has a size of 1 to prevent connector from having to block on it.
 	ch := make(chan struct{}, 1)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.mu.systemConfigChannels = append(c.mu.systemConfigChannels, ch)
+	c.mu.systemConfigChannels[ch] = struct{}{}
 
 	// Notify the channel right away if we have a config.
 	if c.mu.systemConfig != nil {
 		ch <- struct{}{}
 	}
-	return ch
+	return ch, func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		delete(c.mu.systemConfigChannels, ch)
+	}
 }
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.

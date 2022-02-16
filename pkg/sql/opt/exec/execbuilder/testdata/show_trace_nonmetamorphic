@@ -232,6 +232,12 @@ ROLLBACK
 
 subtest system_table_lookup
 
+# Read from the table once to remove any intents. This test can be flakey due
+# to the test encountering an intent on system.public.eventlog from previous
+# transactions.
+statement ok
+SELECT * FROM system.public.eventlog;
+
 # We use AOST to bypass the table cache.
 statement ok
 SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off

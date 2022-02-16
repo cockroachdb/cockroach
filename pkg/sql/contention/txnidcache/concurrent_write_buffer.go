@@ -22,6 +22,12 @@ const blockSize = 168
 
 type block [blockSize]ResolvedTxnID
 
+var blockPool = &sync.Pool{
+	New: func() interface{} {
+		return &block{}
+	},
+}
+
 // concurrentWriteBuffer is a data structure that optimizes for concurrent
 // writes and also implements the Writer interface.
 type concurrentWriteBuffer struct {
@@ -33,8 +39,6 @@ type concurrentWriteBuffer struct {
 		block *block
 	}
 
-	blockPool *sync.Pool
-
 	// sink is the flush target that ConcurrentWriteBuffer flushes to once
 	// block is full.
 	sink blockSink
@@ -43,10 +47,9 @@ type concurrentWriteBuffer struct {
 var _ Writer = &concurrentWriteBuffer{}
 
 // newConcurrentWriteBuffer returns a new instance of concurrentWriteBuffer.
-func newConcurrentWriteBuffer(sink blockSink, blockPool *sync.Pool) *concurrentWriteBuffer {
+func newConcurrentWriteBuffer(sink blockSink) *concurrentWriteBuffer {
 	writeBuffer := &concurrentWriteBuffer{
-		sink:      sink,
-		blockPool: blockPool,
+		sink: sink,
 	}
 
 	writeBuffer.guard.block = blockPool.Get().(*block)
@@ -58,7 +61,7 @@ func newConcurrentWriteBuffer(sink blockSink, blockPool *sync.Pool) *concurrentW
 			writeBuffer.sink.push(writeBuffer.guard.block)
 
 			// Resets the block.
-			writeBuffer.guard.block = writeBuffer.blockPool.Get().(*block)
+			writeBuffer.guard.block = blockPool.Get().(*block)
 		} /* onBufferFull */)
 
 	return writeBuffer

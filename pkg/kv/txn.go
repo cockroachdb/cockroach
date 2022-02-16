@@ -386,16 +386,16 @@ func (txn *Txn) RequiredFrontier() hlc.Timestamp {
 	return txn.mu.sender.RequiredFrontier()
 }
 
-// SetSystemConfigTrigger sets the system db trigger to true on this transaction.
+// DeprecatedSetSystemConfigTrigger sets the system db trigger to true on this transaction.
 // This will impact the EndTxnRequest. Note that this method takes a boolean
 // argument indicating whether this transaction is intended for the system
 // tenant. Only transactions for the system tenant need to set the system config
 // trigger which is used to gossip updates to the system config to KV servers.
 // The KV servers need access to an up-to-date system config in order to
 // determine split points and zone configurations.
-func (txn *Txn) SetSystemConfigTrigger(forSystemTenant bool) error {
+func (txn *Txn) DeprecatedSetSystemConfigTrigger(forSystemTenant bool) error {
 	if txn.typ != RootTxn {
-		return errors.AssertionFailedf("SetSystemConfigTrigger() called on leaf txn")
+		return errors.AssertionFailedf("DeprecatedSetSystemConfigTrigger() called on leaf txn")
 	}
 	if !forSystemTenant {
 		return nil

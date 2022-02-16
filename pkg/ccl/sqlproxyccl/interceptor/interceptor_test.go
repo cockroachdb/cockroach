@@ -24,8 +24,6 @@ import (
 func TestSimpleProxy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const bufferSize = 16
-
 	// These represents connections for client<->proxy and proxy<->server.
 	fromClient := new(bytes.Buffer)
 	toClient := new(bytes.Buffer)
@@ -33,10 +31,8 @@ func TestSimpleProxy(t *testing.T) {
 	toServer := new(bytes.Buffer)
 
 	// Create client and server interceptors.
-	clientInt, err := interceptor.NewBackendInterceptor(fromClient, toServer, bufferSize)
-	require.NoError(t, err)
-	serverInt, err := interceptor.NewFrontendInterceptor(fromServer, toClient, bufferSize)
-	require.NoError(t, err)
+	clientInt := interceptor.NewBackendInterceptor(fromClient)
+	serverInt := interceptor.NewFrontendInterceptor(fromServer)
 
 	t.Run("client to server", func(t *testing.T) {
 		// Client sends a list of SQL queries.
@@ -61,13 +57,13 @@ func TestSimpleProxy(t *testing.T) {
 			require.NoError(t, err)
 
 			// Forward message to server.
-			_, err = clientInt.ForwardMsg()
+			_, err = clientInt.ForwardMsg(toServer)
 			require.NoError(t, err)
 
 			if typ == pgwirebase.ClientMsgTerminate {
 				// Right before we terminate, we could also craft a custom
 				// message, and send it to the server.
-				_, err := clientInt.WriteMsg(customQuery)
+				_, err := toServer.Write(customQuery.Encode(nil))
 				require.NoError(t, err)
 				break
 			}
@@ -103,7 +99,7 @@ func TestSimpleProxy(t *testing.T) {
 				// Assuming that we're only interested in small messages, then
 				// we could skip all the large ones.
 				if size > 12 {
-					_, err := serverInt.ForwardMsg()
+					_, err := serverInt.ForwardMsg(toClient)
 					require.NoError(t, err)
 					continue
 				}
@@ -128,11 +124,11 @@ func TestSimpleProxy(t *testing.T) {
 				// the client.
 				dmsg.SecretKey = 100
 
-				_, err = serverInt.WriteMsg(dmsg)
+				_, err = toClient.Write(dmsg.Encode(nil))
 				require.NoError(t, err)
 			default:
 				// Forward message that we're not interested to the client.
-				_, err := serverInt.ForwardMsg()
+				_, err := serverInt.ForwardMsg(toClient)
 				require.NoError(t, err)
 			}
 

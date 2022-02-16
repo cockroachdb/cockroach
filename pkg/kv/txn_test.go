@@ -538,7 +538,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	}
 }
 
-// Test that, if SetSystemConfigTrigger() fails, the systemConfigTrigger has not
+// Test that, if DeprecatedSetSystemConfigTrigger() fails, the systemConfigTrigger has not
 // been set.
 func TestAnchoringErrorNoTrigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -555,7 +555,7 @@ func TestAnchoringErrorNoTrigger(t *testing.T) {
 			return nil, nil
 		}), clock, stopper)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	require.EqualError(t, txn.SetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
+	require.EqualError(t, txn.DeprecatedSetSystemConfigTrigger(true /* forSystemTenant */), "unimplemented")
 	require.False(t, txn.systemConfigTrigger)
 }
 

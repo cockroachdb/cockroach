@@ -194,11 +194,6 @@ func (m *Manager) PublishMultiple(
 				versions[id] = descsToUpdate[id].GetVersion()
 			}
 
-			// This is to write the updated descriptors if we're the system tenant.
-			if err := txn.SetSystemConfigTrigger(m.storage.codec.ForSystemTenant()); err != nil {
-				return err
-			}
-
 			// Run the update closure.
 			if err := update(txn, descsToUpdate); err != nil {
 				return err
@@ -223,7 +218,7 @@ func (m *Manager) PublishMultiple(
 				// descriptor change occurs first in the transaction. This is
 				// necessary to ensure that the System configuration change is
 				// gossiped. See the documentation for
-				// transaction.SetSystemConfigTrigger() for more information.
+				// transaction.DeprecatedSetSystemConfigTrigger() for more information.
 				if err := txn.Run(ctx, b); err != nil {
 					return err
 				}

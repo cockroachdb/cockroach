@@ -904,7 +904,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
-		} else if key == gossip.KeySystemConfig {
+		} else if key == gossip.KeyDeprecatedSystemConfig {
 			if debugCtx.printSystemConfig {
 				var config config.SystemConfigEntries
 				if err := protoutil.Unmarshal(bytes, &config); err != nil {
