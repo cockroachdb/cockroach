@@ -1,4 +1,3 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.6/cockroachdb-statefulset.yaml
 apiVersion: v1
 kind: Service
 metadata:
@@ -55,6 +54,18 @@ spec:
   selector:
     app: cockroachdb
 ---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: cockroachdb-budget
+  labels:
+    app: cockroachdb
+spec:
+  selector:
+    matchLabels:
+      app: cockroachdb
+  maxUnavailable: 1
+---
 apiVersion: apps/v1beta1
 kind: StatefulSet
 metadata:
@@ -81,7 +92,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v21.2.6
+        image: cockroachdb/cockroach:@VERSION@
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 26257

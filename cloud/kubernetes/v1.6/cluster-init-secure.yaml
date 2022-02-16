@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.6/cluster-init-secure.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:

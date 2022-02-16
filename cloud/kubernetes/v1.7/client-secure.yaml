@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/v1.7/client-secure.yaml
 apiVersion: v1
 kind: Pod
 metadata:

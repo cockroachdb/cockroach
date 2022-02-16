@@ -1,24 +1,3 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/performance/cockroachdb-statefulset-secure.yaml
-# This configuration file sets up a secure StatefulSet running CockroachDB with
-# tweaks to make it more performant than our default configuration files. All
-# changes from the default secure configuration have been marked with a comment
-# starting with "NOTE" or "TODO".
-#
-# To use it, customize all the parts of the file labeled "TODO" before running:
-#   kubectl create -f cockroachdb-statefulset-secure.yaml
-#
-# You will then have to approve certificate-signing requests and initialize the
-# cluster as described in the parent directory's README.md file.
-#
-# If you don't see any pods being created, it's possible that your cluster was
-# not able to meet the resource requests asked for, whether it was the amount
-# of CPU, memory, or disk or the disk type. To find information about why pods
-# haven't been created, you can run:
-#   kubectl get events
-#
-# For more information on improving CockroachDB performance in Kubernetes, see
-# our docs:
-# https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -173,17 +152,6 @@ spec:
         app: cockroachdb
     spec:
       serviceAccountName: cockroachdb
-      # NOTE: Running with `hostNetwork: true` means that CockroachDB will use
-      # the host machines' IP address and hostname, and that nothing else on
-      # the machines will be able to use the same ports. This means that only 1
-      # CockroachDB pod will ever be schedulable on the same machine, because
-      # otherwise their ports would conflict.
-      #
-      # If your client pods generate a lot of network traffic to and from the
-      # CockroachDB cluster, you may see a benefit to doing the same thing in
-      # their configurations.
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       # Init containers are run only once in the lifetime of a pod, before
       # it's started up for the first time. It has to exit successfully
       # before the pod's main containers are allowed to start.
@@ -212,10 +180,6 @@ spec:
         volumeMounts:
         - name: certs
           mountPath: /cockroach-certs
-      # NOTE: If you are running clients that generate heavy load, you may find
-      # it useful to copy this anti-affinity policy into the client pods'
-      # configurations as well to avoid running them on the same machines as
-      # CockroachDB and interfering with each other's performance.
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -230,9 +194,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: cockroachdb
-        # NOTE: Always use the most recent version of CockroachDB for the best
-        # performance and reliability.
-        image: cockroachdb/cockroach:v21.2.6
+        image: cockroachdb/cockroach:@VERSION@
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:
@@ -274,12 +236,32 @@ spec:
         env:
         - name: COCKROACH_CHANNEL
           value: kubernetes-secure
+        - name: GOMAXPROCS
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.cpu
+              divisor: "1"
+        - name: MEMORY_LIMIT_MIB
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
+              divisor: "1Mi"
         command:
           - "/bin/bash"
           - "-ecx"
           # The use of qualified `hostname -f` is crucial:
           # Other nodes aren't able to look up the unqualified hostname.
-          - "exec /cockroach/cockroach start --logtostderr --certs-dir /cockroach/cockroach-certs --advertise-host $(hostname -f) --http-addr 0.0.0.0 --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb --cache 25% --max-sql-memory 25%"
+          # Memory caches are set as a fraction of the pod's memory limit.
+          - exec
+            /cockroach/cockroach
+            start
+            --logtostderr
+            --certs-dir /cockroach/cockroach-certs
+            --advertise-host $(hostname -f)
+            --http-addr 0.0.0.0
+            --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
+            --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
+            --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
       # needed for graceful shutdown of a node.
       terminationGracePeriodSeconds: 60
@@ -298,16 +280,6 @@ spec:
     spec:
       accessModes:
         - "ReadWriteOnce"
-      # TODO: This specifically asks for a storage class with the name "ssd". A
-      # storage class of this name doesn't exist by default. See our docs for
-      # more information on how to create an optimized storage class for use here:
-      # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html#disk-type
-      storageClassName: ssd
       resources:
         requests:
-          # TODO: This asks for a fairly large disk by default because on
-          # certain popular clouds there is a direct correlation between disk
-          # size and the IOPS provisioned to the disk. Change this as necessary
-          # to suit your needs, but be aware that smaller disks will typically
-          # mean worse performance.
-          storage: 1024Gi
+          storage: 100Gi
