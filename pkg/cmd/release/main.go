@@ -104,19 +104,20 @@ func run() error {
 	rootCmd := &cobra.Command{Use: "release"}
 	rootCmd.AddCommand(cmdPickSHA)
 
-	cmdGetBlockers := &cobra.Command{
-		Use:   "get-blockers",
+	cmdPostBlockers := &cobra.Command{
+		Use:   "post-blockers",
 		Short: "Get release blocker details for a particular release branch and communicate via email",
 		// TODO: improve Long description
 		Long: "Get release blocker details for a particular release branch and communicate via email",
-		RunE: getReleaseBlockersWrapper,
+		RunE: postReleaseBlockersWrapper,
 	}
-	cmdGetBlockers.Flags().StringVar(&releaseSeries, "release-series", "", "major release series")
-	cmdGetBlockers.Flags().StringVar(&smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
-	cmdGetBlockers.Flags().StringVar(&smtpHost, "smtp-host", "", "SMTP host")
-	cmdGetBlockers.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
-	cmdGetBlockers.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
-	if err := setRequiredFlags(cmdGetBlockers, []string{
+	cmdPostBlockers.Flags().StringVar(&releaseSeries, "release-series", "", "major release series")
+	cmdPostBlockers.Flags().StringVar(&smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
+	cmdPostBlockers.Flags().StringVar(&smtpHost, "smtp-host", "", "SMTP host")
+	cmdPostBlockers.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
+	cmdPostBlockers.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
+	cmdPostBlockers.Flags().BoolVar(&dryRun, "dry-run", false, "use dry run Jira project for issues")
+	if err := setRequiredFlags(cmdPostBlockers, []string{
 		"release-series",
 		"smtp-user",
 		"smtp-host",
@@ -125,7 +126,7 @@ func run() error {
 	}); err != nil {
 		return err
 	}
-	rootCmd.AddCommand(cmdGetBlockers)
+	rootCmd.AddCommand(cmdPostBlockers)
 
 	if err := rootCmd.Execute(); err != nil {
 		return err
@@ -158,22 +159,28 @@ func setRequiredEnvs(requiredEnvs ...osEnv) error {
 	return nil
 }
 
-func getReleaseBlockersWrapper(_ *cobra.Command, _ []string) error {
+func postReleaseBlockersWrapper(_ *cobra.Command, _ []string) error {
 	err := setRequiredEnvs(githubToken, smtpPassword)
 	if err != nil {
 		return err
 	}
-	return getReleaseBlockers(githubToken.value, smtpPassword.value, releaseSeries)
+	return postReleaseBlockers(githubToken.value, smtpPassword.value, releaseSeries)
 }
 
-func getReleaseBlockers(githubToken, smtpPassword, releaseSeries string) error {
-	// TODO(celia) -- get blockers for `releaseBranch`
+func postReleaseBlockers(githubToken, smtpPassword, releaseSeries string) error {
+	ctx := context.Background()
+  client := newGithubClient(ctx, githubToken)
+	openBlockers, err := findOpenBlockers(client, releaseSeries)
+	if err != nil {
+		return fmt.Errorf("was unable to fetch release blockers for releaseSeries %s: %w", releaseSeries, err)
+	}
 
+	// TODO(celia) -- set this
 	nextReleaseVersion := "v99.9.9"
 
-	args := emailReleaseBlockerArgs{
+	args := emailBlockerArgs{
 		Version: nextReleaseVersion,
-		// TODO(celia) - add blockers here
+		ReleaseSeries: releaseSeries,
 	}
 	opts := smtpOpts{
 		from:     fmt.Sprintf("Justin Beaver <%s>", smtpUser),
@@ -184,10 +191,51 @@ func getReleaseBlockers(githubToken, smtpPassword, releaseSeries string) error {
 		to:       emailAddresses,
 	}
 	fmt.Println("Sending email")
-	if err := sendmail(emailReleaseBlockerTextTemplate, emailReleaseBlockerHTMLTemplate, args, opts); err != nil {
-		return fmt.Errorf("cannot send email: %w", err)
+	if len(openBlockers) == 0 {
+		if err := sendmail(emailZeroBlockersTextTemplate, emailZeroBlockerHTMLTemplate, args, opts); err != nil {
+			return fmt.Errorf("cannot send email: %w", err)
+		}
+	} else {
+		args.BlockerListText, err = formatBlockerList(
+			blockerListTextTemplate,
+			templateToText,
+			openBlockers,
+		)
+		if err != nil {
+			return fmt.Errorf("could not render template: %w", err)
+		}
+		args.BlockerListText, err = formatBlockerList(
+			blockerListHTMLTemplate,
+			templateToHTML,
+			openBlockers,
+		)
+		if err != nil {
+			return fmt.Errorf("could not render template: %w", err)
+		}
+		if err := sendmail(emailOpenBlockersTextTemplate, emailOpenBlockerHTMLTemplate, args, opts); err != nil {
+			return fmt.Errorf("cannot send email: %w", err)
+		}
 	}
 	return nil
+}
+
+func formatBlockerList(
+	template string,
+	templateFunc func (templateText string, args interface{}) (string, error),
+	projectBlockers []ProjectBlocker) (string, error) {
+	var blockerList string
+	for _, blockers := range projectBlockers {
+		args := blockerListArgs{
+			ProjectName: blockers.ProjectName,
+			NumBlockers: string(len(blockers.Issues)),
+		}
+		result, err := templateFunc(template, args)
+		if err != nil {
+			return "", err
+		}
+		blockerList = blockerList + result
+	}
+	return blockerList, nil
 }
 
 func pickSHAWrapper(_ *cobra.Command, _ []string) error {
