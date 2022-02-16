@@ -1751,10 +1751,21 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("job with created by fields", func(t *testing.T) {
 		createdByType := "internal_test"
 
+		resumerJob := make(chan *jobs.Job, 1)
+		jobs.RegisterConstructor(
+			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+				return jobs.FakeResumer{
+					OnResume: func(ctx context.Context) error {
+						resumerJob <- j
+						return nil
+					},
+				}
+			})
+
 		jobID := registry.MakeJobID()
 		record := jobs.Record{
-			Details:   jobspb.RestoreDetails{},
-			Progress:  jobspb.RestoreProgress{},
+			Details:   jobspb.BackupDetails{},
+			Progress:  jobspb.BackupProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
 		}
 		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
@@ -1764,6 +1775,11 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, loadedJob.CreatedBy())
 		require.Equal(t, job.CreatedBy(), loadedJob.CreatedBy())
+		registry.TestingNudgeAdoptionQueue()
+		resumedJob := <-resumerJob
+		require.NotNil(t, resumedJob.CreatedBy())
+		require.Equal(t, job.CreatedBy(), resumedJob.CreatedBy())
+
 	})
 }
 
