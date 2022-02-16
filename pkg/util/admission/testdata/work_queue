@@ -4,55 +4,55 @@ init
 set-try-get-return-value v=true
 ----
 
-admit id=1 tenant=53 priority=0 create-time=1 bypass=false
+admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
 ----
 tryGet: returning true
 id 1: admit succeeded
 
 print
 ----
-tenantHeap len: 0
- tenant-id: 53 used: 1
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 53 used: 1, fifo: -128
 
 # tryGet will return false, so work will queue up.
 set-try-get-return-value v=false
 ----
 
 # bypass=true is ignored since not system tenant.
-admit id=2 tenant=53 priority=0 create-time=3 bypass=true
+admit id=2 tenant=53 priority=0 create-time-millis=3 bypass=true
 ----
 tryGet: returning false
 
 print
 ----
-tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 3
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
 
-admit id=3 tenant=53 priority=0 create-time=2 bypass=false
+admit id=3 tenant=53 priority=0 create-time-millis=2 bypass=false
 ----
 
 # Tenant 53 has two waiting requests. The one that arrived second is earlier
-# in the heap because of a smaller create-time.
+# in the heap because of a smaller create-time-millis.
 print
 ----
-tenantHeap len: 1 top tenant: 53
- tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
+closed epoch: 0 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
 
 # Request from tenant 71.
-admit id=4 tenant=71 priority=-128 create-time=4 bypass=false
+admit id=4 tenant=71 priority=-128 create-time-millis=4 bypass=false
 ----
 
 # Another request from tenant 71. This one has higher priority so will be
-# earlier in the heap, even though it has higher create-time.
-admit id=5 tenant=71 priority=0 create-time=5 bypass=false
+# earlier in the heap, even though it has higher create-time-millis.
+admit id=5 tenant=71 priority=0 create-time-millis=5 bypass=false
 ----
 
 # Tenant 71 is the top of the heap since not using any slots.
 print
 ----
-tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
- tenant-id: 71 used: 0 heap: 0: pri: 0, ct: 5 1: pri: -128, ct: 4
+closed epoch: 0 tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 0, fifo: -128 waiting work heap: [0: pri: 0, ct: 5, epoch: 0, qt: 100] [1: pri: -128, ct: 4, epoch: 0, qt: 100]
 
 granted chain-id=5
 ----
@@ -64,9 +64,9 @@ granted: returned true
 # tenant 71.
 print
 ----
-tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 2 1: pri: 0, ct: 3
- tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+closed epoch: 0 tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 2, epoch: 0, qt: 100] [1: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
 
 # Cancel a request from tenant 53.
 cancel-work id=3
@@ -75,9 +75,9 @@ id 3: admit failed
 
 print
 ----
-tenantHeap len: 2 top tenant: 71
- tenant-id: 53 used: 1 heap: 0: pri: 0, ct: 3
- tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+closed epoch: 0 tenantHeap len: 2 top tenant: 71
+ tenant-id: 53 used: 1, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
 
 # The work admitted for tenant 53 is done.
 work-done id=1
@@ -87,23 +87,23 @@ returnGrant
 # Tenant 53 now using fewer slots so it becomes the top of the heap.
 print
 ----
-tenantHeap len: 2 top tenant: 53
- tenant-id: 53 used: 0 heap: 0: pri: 0, ct: 3
- tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 53 used: 0, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
 
 # A request from the system tenant bypasses admission control, but is
 # reflected in the WorkQueue state.
-admit id=6 tenant=1 priority=0 create-time=6 bypass=true
+admit id=6 tenant=1 priority=0 create-time-millis=6 bypass=true
 ----
 tookWithoutPermission
 id 6: admit succeeded
 
 print
 ----
-tenantHeap len: 2 top tenant: 53
- tenant-id: 1 used: 1
- tenant-id: 53 used: 0 heap: 0: pri: 0, ct: 3
- tenant-id: 71 used: 1 heap: 0: pri: -128, ct: 4
+closed epoch: 0 tenantHeap len: 2 top tenant: 53
+ tenant-id: 1 used: 1, fifo: -128
+ tenant-id: 53 used: 0, fifo: -128 waiting work heap: [0: pri: 0, ct: 3, epoch: 0, qt: 100]
+ tenant-id: 71 used: 1, fifo: -128 waiting work heap: [0: pri: -128, ct: 4, epoch: 0, qt: 100]
 
 granted chain-id=7
 ----
@@ -120,10 +120,10 @@ granted: returned true
 # No more waiting requests.
 print
 ----
-tenantHeap len: 0
- tenant-id: 1 used: 1
- tenant-id: 53 used: 1
- tenant-id: 71 used: 2
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 1, fifo: -128
+ tenant-id: 53 used: 1, fifo: -128
+ tenant-id: 71 used: 2, fifo: -128
 
 # Granted returns false.
 granted chain-id=10
@@ -132,7 +132,296 @@ granted: returned false
 
 print
 ----
-tenantHeap len: 0
- tenant-id: 1 used: 1
- tenant-id: 53 used: 1
- tenant-id: 71 used: 2
+closed epoch: 0 tenantHeap len: 0
+ tenant-id: 1 used: 1, fifo: -128
+ tenant-id: 53 used: 1, fifo: -128
+ tenant-id: 71 used: 2, fifo: -128
+
+init
+----
+
+set-try-get-return-value v=false
+----
+
+admit id=1 tenant=53 priority=0 create-time-millis=1 bypass=false
+----
+tryGet: returning false
+
+# Make the request wait long enough that we switch to LIFO.
+advance-time millis=205
+----
+closed epoch: 2 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 0, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+
+print
+----
+closed epoch: 2 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 0, fifo: -128 waiting work heap: [0: pri: 0, ct: 1, epoch: 0, qt: 100]
+
+granted chain-id=5
+----
+continueGrantChain 5
+id 1: admit succeeded
+granted: returned true
+
+print
+----
+closed epoch: 2 tenantHeap len: 0
+ tenant-id: 53 used: 1, fifo: -128
+
+# Switch to LIFO since request waited for 205ms.
+advance-time millis=100
+----
+closed epoch: 3 tenantHeap len: 0
+ tenant-id: 53 used: 1, fifo: 1
+
+admit id=2 tenant=53 priority=0 create-time-millis=50 bypass=false
+----
+tryGet: returning false
+
+admit id=3 tenant=53 priority=0 create-time-millis=399 bypass=false
+----
+
+admit id=4 tenant=53 priority=0 create-time-millis=400 bypass=false
+----
+
+# Two requests are in closed epochs and one is in open epoch.
+print
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 1, fifo: 1 waiting work heap: [0: pri: 0, ct: 399, epoch: 3, qt: 405, lifo-ordering] [1: pri: 0, ct: 50, epoch: 0, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405]
+
+# Latest request in closed epoch is granted.
+granted chain-id=6
+----
+continueGrantChain 6
+id 3: admit succeeded
+granted: returned true
+
+# Older request in closed epoch is granted.
+granted chain-id=7
+----
+continueGrantChain 7
+id 2: admit succeeded
+granted: returned true
+
+# Only request is in open epoch.
+print
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 3, fifo: 1 open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405]
+
+# Add request to closed epoch.
+admit id=5 tenant=53 priority=0 create-time-millis=300 bypass=false
+----
+
+# Add request in open epoch 5 which is different from existing open epoch
+# request that has epoch 4.
+admit id=6 tenant=53 priority=0 create-time-millis=500 bypass=false
+----
+
+# Open epochs heap is ordered in rough FIFO.
+print
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 3, fifo: 1 waiting work heap: [0: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+# Add high priority request in open epoch 5.
+admit id=7 tenant=53 priority=127 create-time-millis=550 bypass=false
+----
+
+# The high priority request goes into the normal heap since it is >= the fifo
+# threshold, and so is still using FIFO ordering.
+print
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 3, fifo: 1 waiting work heap: [0: pri: 127, ct: 550, epoch: 5, qt: 405] [1: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+# Make the request wait for 60ms so we don't switch back to fifo.
+advance-time millis=60
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 3, fifo: 1 waiting work heap: [0: pri: 127, ct: 550, epoch: 5, qt: 405] [1: pri: 0, ct: 300, epoch: 3, qt: 405, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+granted chain-id=8
+----
+continueGrantChain 8
+id 7: admit succeeded
+granted: returned true
+
+granted chain-id=9
+----
+continueGrantChain 9
+id 5: admit succeeded
+granted: returned true
+
+# Add another request to closed epoch that is subject to LIFO ordering.
+admit id=8 tenant=53 priority=0 create-time-millis=350 bypass=false
+----
+
+print
+----
+closed epoch: 3 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 5, fifo: 1 waiting work heap: [0: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405] [1: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+# One request moved from open to closed epoch heap.
+advance-time millis=40
+----
+closed epoch: 4 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 5, fifo: 1 waiting work heap: [0: pri: 0, ct: 400, epoch: 4, qt: 405, lifo-ordering] [1: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+granted chain-id=10
+----
+continueGrantChain 10
+id 4: admit succeeded
+granted: returned true
+
+print
+----
+closed epoch: 4 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 6, fifo: 1 waiting work heap: [0: pri: 0, ct: 350, epoch: 3, qt: 465, lifo-ordering] open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+granted chain-id=11
+----
+continueGrantChain 11
+id 8: admit succeeded
+granted: returned true
+
+print
+----
+closed epoch: 4 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 7, fifo: 1 open epochs heap: [0: pri: 0, ct: 500, epoch: 5, qt: 405]
+
+# Can dequeue from the open epochs heap if nothing else is remaining.
+granted chain-id=12
+----
+continueGrantChain 12
+id 6: admit succeeded
+granted: returned true
+
+print
+----
+closed epoch: 4 tenantHeap len: 0
+ tenant-id: 53 used: 8, fifo: 1
+
+# Add a request for an already closed epoch.
+admit id=9 tenant=53 priority=0 create-time-millis=380 bypass=false
+----
+tryGet: returning false
+
+print
+----
+closed epoch: 4 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 8, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+
+# This time advance means the previous request will see significant queueing.
+advance-time millis=100
+----
+closed epoch: 5 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 8, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+
+# This request in an already closed epoch gets ahead because of higher
+# create-time-millis.
+admit id=10 tenant=53 priority=0 create-time-millis=390 bypass=false
+----
+
+print
+----
+closed epoch: 5 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 8, fifo: 1 waiting work heap: [0: pri: 0, ct: 390, epoch: 3, qt: 605, lifo-ordering] [1: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+
+granted chain-id=12
+----
+continueGrantChain 12
+id 10: admit succeeded
+granted: returned true
+
+print
+----
+closed epoch: 5 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 9, fifo: 1 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+
+# This advance will switch all priorities back to FIFO.
+advance-time millis=100
+----
+closed epoch: 6 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 9, fifo: -128 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering]
+
+admit id=11 tenant=53 priority=0 create-time-millis=610 bypass=false
+----
+
+admit id=12 tenant=53 priority=-128 create-time-millis=615 bypass=false
+----
+
+# When comparing work with LIFO and FIFO marking, with the same priority, we
+# pick LIFO. The lower priority request is ordered at the end even though it
+# has the highest create time.
+print
+----
+closed epoch: 6 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 9, fifo: -128 waiting work heap: [0: pri: 0, ct: 610, epoch: 6, qt: 705] [1: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering] [2: pri: -128, ct: 615, epoch: 6, qt: 705]
+
+granted chain-id=13
+----
+continueGrantChain 13
+id 11: admit succeeded
+granted: returned true
+
+# With the remaining two items, the priority is different, so higher priority
+# is preferred.
+print
+----
+closed epoch: 6 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 10, fifo: -128 waiting work heap: [0: pri: 0, ct: 380, epoch: 3, qt: 505, lifo-ordering] [1: pri: -128, ct: 615, epoch: 6, qt: 705]
+
+granted chain-id=14
+----
+continueGrantChain 14
+id 9: admit succeeded
+granted: returned true
+
+granted chain-id=15
+----
+continueGrantChain 15
+id 12: admit succeeded
+granted: returned true
+
+# Advance time again. Since one of the priority=0 requests experienced high
+# latency, switch that back to LIFO.
+advance-time millis=100
+----
+closed epoch: 7 tenantHeap len: 0
+ tenant-id: 53 used: 12, fifo: 1
+
+# Add a request whose epoch is not closed.
+admit id=13 tenant=53 priority=0 create-time-millis=810 bypass=false
+----
+tryGet: returning false
+
+print
+----
+closed epoch: 7 tenantHeap len: 1 top tenant: 53
+ tenant-id: 53 used: 12, fifo: 1 open epochs heap: [0: pri: 0, ct: 810, epoch: 8, qt: 805]
+
+# Cancel that request.
+cancel-work id=13
+----
+id 13: admit failed
+
+print
+----
+closed epoch: 7 tenantHeap len: 0
+ tenant-id: 53 used: 12, fifo: 1
+
+# Closed epoch advances. The FIFO threshold is not changed since the only
+# request was canceled.
+advance-time millis=100
+----
+closed epoch: 8 tenantHeap len: 0
+ tenant-id: 53 used: 12, fifo: 1
+
+# Closed epoch advances. All priorities are now subject to FIFO.
+advance-time millis=100
+----
+closed epoch: 9 tenantHeap len: 0
+ tenant-id: 53 used: 12, fifo: -128
