@@ -169,6 +169,10 @@ type treeMu struct {
 //                 > lockState.mu
 //                 > lockTableGuardImpl.mu
 type lockTableImpl struct {
+	// The ID of the range to which this replica's lock table belongs.
+	// Used to populate results when querying the lock table.
+	rID roachpb.RangeID
+
 	// Is the lockTable enabled? When enabled, the lockTable tracks locks and
 	// allows requests to queue in wait-queues on these locks. When disabled,
 	// no locks or wait-queues are maintained.
@@ -258,13 +262,16 @@ type lockTableImpl struct {
 
 var _ lockTable = &lockTableImpl{}
 
-func newLockTable(maxLocks int64, timeProvider timeutil.TimeSource) *lockTableImpl {
+func newLockTable(
+	maxLocks int64, rangeID roachpb.RangeID, timeProvider timeutil.TimeSource,
+) *lockTableImpl {
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxLocks / (int64(spanset.NumSpanScope) * 20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
 	lt := &lockTableImpl{
+		rID:          rangeID,
 		maxLocks:     maxLocks,
 		minLocks:     maxLocks / 2,
 		timeProvider: timeProvider,
@@ -1054,6 +1061,93 @@ func (l *lockState) safeFormat(sb *redact.StringBuilder, finalizedTxnCache *txnC
 	}
 	if l.distinguishedWaiter != nil {
 		sb.Printf("   distinguished req: %d\n", redact.Safe(l.distinguishedWaiter.seqNum))
+	}
+}
+
+// collectLockStateInfo converts receiver into exportable LockStateInfo metadata
+// and returns (true, valid LockStateInfo), or (false, empty LockStateInfo) if
+// it was filtered out due to being an empty lock or an uncontended lock (if
+// includeUncontended is false).
+func (l *lockState) collectLockStateInfo(includeUncontended bool) (bool, roachpb.LockStateInfo) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Don't include locks that have neither lock holders, nor reservations, nor
+	// waiting readers/writers.
+	if l.isEmptyLock() {
+		return false, roachpb.LockStateInfo{}
+	}
+
+	// Filter out locks without waiting readers/writers unless explicitly requested.
+	if !includeUncontended && l.waitingReaders.Len() == 0 && l.queuedWriters.Len() == 0 {
+		return false, roachpb.LockStateInfo{}
+	}
+
+	return true, l.lockStateInfo()
+}
+
+// lockStateInfo converts receiver to the roachpb.LockStateInfo structure.
+// REQUIRES: l.mu is locked.
+func (l *lockState) lockStateInfo() roachpb.LockStateInfo {
+	var holder *roachpb.LockAcquisition
+	if l.holder.locked {
+		var txnHolder *enginepb.TxnMeta
+		var durability lock.Durability
+		if l.holder.holder[lock.Unreplicated].txn != nil {
+			txnHolder = l.holder.holder[lock.Unreplicated].txn
+			durability = lock.Unreplicated
+		} else {
+			txnHolder = l.holder.holder[lock.Replicated].txn
+			durability = lock.Replicated
+		}
+		holder = &roachpb.LockAcquisition{
+			Span:       roachpb.Span{Key: l.key},
+			Txn:        *txnHolder,
+			Durability: durability,
+		}
+	}
+
+	waiterCount := l.waitingReaders.Len() + l.queuedWriters.Len()
+	hasReservation := l.reservation != nil && l.reservation.txn != nil
+	if hasReservation {
+		waiterCount++
+	}
+	lockWaiters := make([]lock.LockWaiter, 0, waiterCount)
+
+	// Consider the reservation as the "first waiter" (albeit on an unheld lock).
+	if hasReservation {
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   l.reservation.txn,
+			ActiveWaiter: true,
+			Access:       lock.ReadWrite,
+		})
+	}
+
+	// Next, add waiting readers before writers as they should run first.
+	for e := l.waitingReaders.Front(); e != nil; e = e.Next() {
+		readerGuard := e.Value.(*lockTableGuardImpl)
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   readerGuard.txn,
+			ActiveWaiter: false,
+			Access:       lock.ReadOnly,
+		})
+	}
+
+	// Lastly, add queued writers in order.
+	for e := l.queuedWriters.Front(); e != nil; e = e.Next() {
+		qg := e.Value.(*queuedGuard)
+		writerGuard := qg.guard
+		lockWaiters = append(lockWaiters, lock.LockWaiter{
+			WaitingTxn:   writerGuard.txn,
+			ActiveWaiter: qg.active,
+			Access:       lock.ReadWrite,
+		})
+	}
+
+	return roachpb.LockStateInfo{
+		Key:         l.key,
+		LockHolder:  holder,
+		LockWaiters: lockWaiters,
 	}
 }
 
@@ -2746,6 +2840,75 @@ func (t *lockTableImpl) Clear(disable bool) {
 	// Also clear the finalized txn cache, since it won't be needed any time
 	// soon and consumes memory.
 	t.finalizedTxnCache.clear()
+}
+
+// QueryLockTableState implements the lockTable interface.
+func (t *lockTableImpl) QueryLockTableState(
+	span *roachpb.Span, opts QueryLockTableOptions,
+) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		// If not enabled, don't return any locks from the query.
+		return []roachpb.LockStateInfo{}, QueryLockTableResumeState{}
+	}
+
+	// Grab tree snapshot to avoid holding read lock during iteration.
+	var snap btree
+	{
+		tree := &t.locks[opts.KeyScope]
+		tree.mu.RLock()
+		snap = tree.Clone()
+		tree.mu.RUnlock()
+	}
+
+	lockTableState := make([]roachpb.LockStateInfo, 0, snap.Len())
+	resumeState := QueryLockTableResumeState{}
+	var numLocks int64
+	var numBytes int64
+	var nextKey roachpb.Key
+	var nextByteSize int64
+
+	// Iterate over locks and gather metadata.
+	iter := snap.MakeIter()
+	for iter.First(); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+		if span != nil {
+			if l.key.Compare(span.Key) < 0 || (len(span.EndKey) > 0 && span.EndKey.Compare(l.key) < 0) {
+				continue
+			}
+		}
+
+		if ok, lInfo := l.collectLockStateInfo(opts.IncludeUncontended); ok {
+			nextKey = l.key
+			nextByteSize = int64(lInfo.Size())
+			lInfo.RangeID = t.rID
+
+			// Check if adding the lock would exceed our byte or count limits.
+			if opts.TargetBytes > 0 && (numBytes+nextByteSize) > opts.TargetBytes {
+				resumeState.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+				break
+			} else if opts.MaxLocks > 0 && numLocks >= opts.MaxLocks {
+				resumeState.ResumeReason = roachpb.RESUME_KEY_LIMIT
+				break
+			}
+
+			lockTableState = append(lockTableState, lInfo)
+			numLocks++
+			numBytes += nextByteSize
+		}
+	}
+
+	// If we need to paginate results, set the continuation key in the ResumeSpan.
+	if resumeState.ResumeReason != 0 {
+		resumeState.ResumeNextBytes = nextByteSize
+		resumeState.ResumeSpan = &roachpb.Span{Key: nextKey}
+		if span != nil {
+			resumeState.ResumeSpan.EndKey = span.EndKey
+		}
+	}
+
+	return lockTableState, resumeState
 }
 
 // Metrics implements the lockTable interface.
