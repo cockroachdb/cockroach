@@ -45,7 +45,7 @@ func (ec *evalResult) Var(name Var) interface{} {
 	if !ok {
 		return nil
 	}
-	return ec.slots[n].toInterface()
+	return ec.slots[n].toInterface(false)
 }
 
 // Iterate is part of the PreparedQuery interface.
@@ -187,7 +187,7 @@ func (ec *evalContext) checkFilters() (done bool) {
 		ins := make([]reflect.Value, len(f.input))
 		insI := make([]interface{}, len(f.input))
 		for i, idx := range f.input {
-			inI := ec.slots[idx].typedValue.toInterface()
+			inI := ec.slots[idx].typedValue.toInterface(false)
 			in := reflect.ValueOf(inI)
 			// Note that this will enforce that the type of the input to the filter
 			// matches the expectation by omitting results of the wrong type. This

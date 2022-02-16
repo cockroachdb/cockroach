@@ -62,6 +62,7 @@ type fieldInfo struct {
 	attr            ordinal
 	comparableValue func(unsafe.Pointer) interface{}
 	value           func(unsafe.Pointer) interface{}
+	valuePtr        func(unsafe.Pointer) interface{}
 	isPtr, isEntity bool
 }
 
@@ -220,6 +221,7 @@ func (sb *schemaBuilder) addTypeAttrMapping(a Attr, t reflect.Type, sel string) 
 		vg := makeValueGetter(cur, offset)
 		if isStructPtr {
 			f.value = getPtrValue(vg)
+			f.valuePtr = f.value
 		} else {
 			if isScalarPtr {
 				f.value = func(u unsafe.Pointer) interface{} {
@@ -229,9 +231,13 @@ func (sb *schemaBuilder) addTypeAttrMapping(a Attr, t reflect.Type, sel string) 
 					}
 					return got.Elem().Elem().Interface()
 				}
+				f.valuePtr = getPtrValue(vg)
 			} else {
 				f.value = func(u unsafe.Pointer) interface{} {
 					return vg(u).Elem().Interface()
+				}
+				f.valuePtr = func(u unsafe.Pointer) interface{} {
+					return vg(u).Interface()
 				}
 			}
 		}

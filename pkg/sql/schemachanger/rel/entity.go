@@ -61,7 +61,23 @@ func (sc *Schema) CompareOn(attrs []Attr, a, b interface{}) (less, eq bool) {
 func (sc *Schema) IterateAttributes(
 	entityI interface{}, f func(attribute Attr, value interface{}) error,
 ) (err error) {
+	return sc.iterateAttributes(entityI, false /* pointerValue */, f)
+}
 
+// IterateAttributePointers calls the callback for each defined attribute of
+// the passed entity. If the entity's type is not defined in the schema, an
+// error will be returned. This method differs from IterateAttributes in that
+// the value will be a mutable pointer to the field in the element for scalar
+// values.
+func (sc *Schema) IterateAttributePointers(
+	entityI interface{}, f func(attribute Attr, value interface{}) error,
+) (err error) {
+	return sc.iterateAttributes(entityI, true /* pointerValue */, f)
+}
+
+func (sc *Schema) iterateAttributes(
+	entityI interface{}, pointerValue bool, f func(attribute Attr, value interface{}) error,
+) error {
 	v, err := toEntity(sc, entityI)
 	if err != nil {
 		return err
@@ -78,7 +94,7 @@ func (sc *Schema) IterateAttributes(
 				a, entityI,
 			)
 		} else {
-			err = f(a, tv.toInterface())
+			err = f(a, tv.toInterface(pointerValue))
 		}
 		return err == nil
 	})

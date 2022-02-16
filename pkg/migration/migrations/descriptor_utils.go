@@ -97,9 +97,18 @@ func runPostDeserializationChangesOnAllDescriptors(
 		})
 	}
 
-	query := `SELECT id, length(descriptor) FROM system.descriptor ORDER BY id DESC`
+	// Avoid upgrading certain problematic system descriptors.
+	// Another possibility is to bypass the descs.Collection
+	// infrastructure for them, make sure to do them alone, and
+	// make sure that their upgrade hits the 1PC path.
+	query := `
+  SELECT id, length(descriptor)
+    FROM system.descriptor
+   WHERE id NOT IN ($1, $2)
+ORDER BY id DESC;`
 	rows, err := d.InternalExecutor.QueryIterator(
 		ctx, "retrieve-descriptors-for-upgrade", nil /* txn */, query,
+		keys.LeaseTableID, keys.RangeEventTableID,
 	)
 	if err != nil {
 		return err
