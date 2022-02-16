@@ -326,8 +326,10 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 	}
 	var f *forwarder
 	defer func() {
-		// Only close crdbConn if the forwarder hasn't been started. When the
-		// forwarder has been created, crdbConn is owned by the forwarder.
+		// Only close crdbConn if the forwarder hasn't been started. We want
+		// this here to ensure that we close the idle monitor wrapped
+		// connection. If the forwarder has been created, crdbConn is owned by
+		// the forwarder.
 		if f == nil {
 			_ = crdbConn.Close()
 		}
