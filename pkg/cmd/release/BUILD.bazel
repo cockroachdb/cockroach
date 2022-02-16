@@ -4,6 +4,7 @@ go_library(
     name = "release_lib",
     srcs = [
         "git.go",
+        "github.go",
         "jira.go",
         "mail.go",
         "main.go",
@@ -14,10 +15,12 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "@com_github_andygrunwald_go_jira//:go-jira",
+        "@com_github_google_go_github//v42/github",
         "@com_github_jordan_wright_email//:email",
         "@com_github_masterminds_semver_v3//:semver",
         "@com_github_spf13_cobra//:cobra",
         "@com_google_cloud_go_storage//:storage",
+        "@org_golang_x_oauth2//:oauth2",
     ],
 )
 
