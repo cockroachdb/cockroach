@@ -211,6 +211,10 @@ type Descriptor interface {
 	// the value on the descriptor. Changes will need to be written back to
 	// the descriptor using SetDeclarativeSchemaChangeState.
 	GetDeclarativeSchemaChangerState() *scpb.DescriptorState
+
+	// GetPostDeserializationChanges returns the set of ways the Descriptor
+	// was changed after running RunPostDeserializationChanges.
+	GetPostDeserializationChanges() PostDeserializationChanges
 }
 
 // DatabaseDescriptor encapsulates the concept of a database.

@@ -112,6 +112,9 @@ func (p synthetic) SchemaDesc() *descpb.SchemaDescriptor {
 func (p synthetic) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
 	return nil
 }
+func (p synthetic) GetPostDeserializationChanges() catalog.PostDeserializationChanges {
+	return catalog.PostDeserializationChanges{}
+}
 
 // GetDefaultPrivilegeDescriptor returns a DefaultPrivilegeDescriptor.
 func (p synthetic) GetDefaultPrivilegeDescriptor() catalog.DefaultPrivilegeDescriptor {

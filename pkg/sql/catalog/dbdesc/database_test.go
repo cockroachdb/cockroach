@@ -322,7 +322,8 @@ func TestFixDroppedSchemaName(t *testing.T) {
 	b := NewBuilder(&dbDesc)
 	b.RunPostDeserializationChanges()
 	desc := b.BuildCreatedMutableDatabase()
-	require.Truef(t, desc.HasPostDeserializationChanges(), "expected changes in descriptor, found none")
+	require.Truef(t, desc.GetPostDeserializationChanges().HasChanges(),
+		"expected changes in descriptor, found none")
 	_, ok := desc.Schemas[dbName]
 	require.Falsef(t, ok, "erroneous entry exists")
 }

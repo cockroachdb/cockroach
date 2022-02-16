@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -41,6 +42,9 @@ func lookupDescriptorsUnvalidated(
 		for _, id := range ids {
 			key := catalogkeys.MakeDescMetadataKey(codec, id)
 			b.Get(key)
+		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.Infof(ctx, "looking up unvalidated descriptors by id: %v", ids)
 		}
 	})
 	if err != nil {

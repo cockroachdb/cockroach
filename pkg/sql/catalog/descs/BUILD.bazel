@@ -62,7 +62,6 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
         "//pkg/util/log",
-        "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -105,6 +104,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_lib_pq//oid",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

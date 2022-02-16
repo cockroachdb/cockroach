@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // hydrateTypesInTableDesc installs user defined type metadata in all types.T
@@ -114,14 +113,11 @@ func (tc *Collection) hydrateTypesInTableDesc(
 		}
 
 		// Make a copy of the underlying descriptor before hydration.
-		descBase := protoutil.Clone(t.TableDesc()).(*descpb.TableDescriptor)
-		if err := typedesc.HydrateTypesInTableDescriptor(ctx, descBase, getType); err != nil {
+		mut := t.NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+		if err := typedesc.HydrateTypesInTableDescriptor(ctx, mut.TableDesc(), getType); err != nil {
 			return nil, err
 		}
-		if t.IsUncommittedVersion() {
-			return tabledesc.NewBuilderForUncommittedVersion(descBase).BuildImmutableTable(), nil
-		}
-		return tabledesc.NewBuilder(descBase).BuildImmutableTable(), nil
+		return mut.ImmutableCopy().(catalog.TableDescriptor), nil
 	default:
 		return desc, nil
 	}
