@@ -50,8 +50,6 @@ func testJobsProtectedTimestamp(
 ) {
 	t.Helper()
 
-	runner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 	mkJobRec := func() jobs.Record {
 		return jobs.Record{
 			Description: "testing",
@@ -152,14 +150,22 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	// Now I want to create some artifacts that should get reconciled away and
 	// then make sure that they do and others which should not do not.
 	s0 := tc.Server(0)
+	hostRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	var runner *sqlutils.SQLRunner
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
+	// Also set what tenants see for these settings.
+	// TODO(radu): use ALTER TENANT statement when that is available.
+	hostRunner.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
+		SELECT 0, name, value, "valueType" FROM system.settings
+		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
+
 	t.Run("secondary-tenant", func(t *testing.T) {
 		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := ten10.ExecutorConfig().(sql.ExecutorConfig)
-		runner = sqlutils.MakeSQLRunner(conn10)
+		runner := sqlutils.MakeSQLRunner(conn10)
 		jr := ten10.JobRegistry().(*jobs.Registry)
 		testJobsProtectedTimestamp(ctx, t, runner, jr, &execCfg, ptp, ten10.Clock())
 	})
@@ -167,7 +173,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 	t.Run("system-tenant", func(t *testing.T) {
 		ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
-		runner = sqlutils.MakeSQLRunner(tc.Conns[0])
+		runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 		jr := s0.JobRegistry().(*jobs.Registry)
 		testJobsProtectedTimestamp(ctx, t, runner, jr, &execCfg, ptp, s0.Clock())
 	})
@@ -183,8 +189,6 @@ func testSchedulesProtectedTimestamp(
 ) {
 	t.Helper()
 
-	runner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-	runner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
 	mkScheduledJobRec := func(scheduleLabel string) *jobs.ScheduledJob {
 		j := jobs.NewScheduledJob(scheduledjobs.ProdJobSchedulerEnv)
 		j.SetScheduleLabel(scheduleLabel)
@@ -269,21 +273,29 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 	// Now I want to create some artifacts that should get reconciled away and
 	// then make sure that they do and others which should not do not.
 	s0 := tc.Server(0)
+	hostRunner := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	var runner *sqlutils.SQLRunner
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
+	// Also set what tenants see for these settings.
+	// TODO(radu): use ALTER TENANT statement when that is available.
+	hostRunner.Exec(t, `INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
+		SELECT 0, name, value, "valueType" FROM system.settings
+		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
+
 	t.Run("secondary-tenant", func(t *testing.T) {
 		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := ten10.ExecutorConfig().(sql.ExecutorConfig)
-		runner = sqlutils.MakeSQLRunner(conn10)
+		runner := sqlutils.MakeSQLRunner(conn10)
 		testSchedulesProtectedTimestamp(ctx, t, runner, &execCfg, ptp, ten10.Clock())
 	})
 
 	t.Run("system-tenant", func(t *testing.T) {
 		ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := s0.ExecutorConfig().(sql.ExecutorConfig)
-		runner = sqlutils.MakeSQLRunner(tc.Conns[0])
+		runner := sqlutils.MakeSQLRunner(tc.Conns[0])
 		testSchedulesProtectedTimestamp(ctx, t, runner, &execCfg, ptp, s0.Clock())
 	})
 }

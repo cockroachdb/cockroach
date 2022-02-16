@@ -1,7 +1,7 @@
 // Copyright 2018 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
+// included in the file licenses/BSL.txthttps://github.com/cockroachdb/cockroach/blob/master/pkg/ccl/jobsccl/jobsprotectedtsccl/jobs_protected_ts_test.go#L54.
 //
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
