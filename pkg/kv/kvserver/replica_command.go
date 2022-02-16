@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -56,7 +57,8 @@ const mergeApplicationTimeout = 5 * time.Second
 // timeout to eventually allow Raft log truncation while avoiding snapshot
 // starvation -- even if another snapshot is sent immediately, this still
 // allows truncation up to the new snapshot index.
-const sendSnapshotTimeout = 20 * time.Minute
+var sendSnapshotTimeout = envutil.EnvOrDefaultDuration(
+	"COCKROACH_RAFT_SEND_SNAPSHOT_TIMEOUT", 1*time.Hour)
 
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
