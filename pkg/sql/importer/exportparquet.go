@@ -770,7 +770,11 @@ func (sp *parquetWriterProcessor) Run(ctx context.Context) {
 						if err := ed.EnsureDecoded(typs[i], alloc); err != nil {
 							return err
 						}
-						edNative, err := exporter.parquetColumns[i].encodeFn(ed.Datum)
+
+						// If we're encoding a DOidWrapper, then we want to cast the wrapped datum.
+						// Note that we pass in nil as the first argument since we're not interested
+						// in evaluating the evalCtx's placeholders.
+						edNative, err := exporter.parquetColumns[i].encodeFn(tree.UnwrapDatum(nil, ed.Datum))
 						if err != nil {
 							return err
 						}

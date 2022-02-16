@@ -29,10 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/stretchr/testify/require"
@@ -143,30 +144,50 @@ func validateParquetFile(
 				return err
 			}
 
-			tester := test.datums[i][j]
-			switch tester.ResolvedType().Family() {
-			case types.DateFamily:
-				// pgDate.orig property doesn't matter and can cause the test to fail
-				require.Equal(t, tester.(*tree.DDate).Date.UnixEpochDays(),
-					datum.(*tree.DDate).Date.UnixEpochDays())
-			case types.JsonFamily:
-				// Only the value of the json object matters, not that additional properties
-				require.Equal(t, tester.(*tree.DJSON).JSON.String(),
-					datum.(*tree.DJSON).JSON.String())
-			case types.FloatFamily:
-				if tester.(*tree.DFloat).String() == "NaN" {
-					// NaN != NaN, therefore stringify the comparison.
-					require.Equal(t, "NaN", datum.(*tree.DFloat).String())
-					continue
-				}
-				require.Equal(t, tester, datum)
-			default:
-				require.Equal(t, tester, datum)
-			}
+			// If we're encoding a DOidWrapper, then we want to cast the wrapped datum.
+			// Note that we pass in nil as the first argument since we're not interested
+			// in evaluating the placeholders.
+			validateDatum(t, tree.UnwrapDatum(nil, test.datums[i][j]), tree.UnwrapDatum(nil, datum),
+				test.cols[j].Typ)
 		}
 		i++
 	}
 	return nil
+}
+
+func validateDatum(t *testing.T, expected tree.Datum, actual tree.Datum, typ *types.T) {
+	switch expected.ResolvedType().Family() {
+	case types.ArrayFamily:
+		eArr := expected.(*tree.DArray)
+		aArr := actual.(*tree.DArray)
+		for i := 0; i < eArr.Len(); i++ {
+			validateDatum(t, eArr.Array[i], aArr.Array[i], typ.ArrayContents())
+		}
+	case types.DateFamily:
+		// pgDate.orig property doesn't matter and can cause the test to fail
+		require.Equal(t, expected.(*tree.DDate).Date.UnixEpochDays(),
+			actual.(*tree.DDate).Date.UnixEpochDays())
+	case types.JsonFamily:
+		// Only the value of the json object matters, not that additional properties
+		require.Equal(t, expected.(*tree.DJSON).JSON.String(),
+			actual.(*tree.DJSON).JSON.String())
+	case types.FloatFamily:
+		if typ.Equal(types.Float4) && expected.(*tree.DFloat).String() != "NaN" {
+			// CRDB currently doesn't truncate non NAN float4's correctly, so this
+			// test does it manually :(
+			// https://github.com/cockroachdb/cockroach/issues/73743
+			e := float32(*expected.(*tree.DFloat))
+			a := float32(*expected.(*tree.DFloat))
+			require.Equal(t, e, a)
+		} else {
+			require.Equal(t, expected.String(), actual.String())
+		}
+	case types.DecimalFamily:
+		require.Equal(t, expected.String(), actual.String())
+
+	default:
+		require.Equal(t, expected, actual)
+	}
 }
 
 func TestRandomParquetExports(t *testing.T) {
@@ -175,52 +196,78 @@ func TestRandomParquetExports(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "rand"
-
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
-		},
-	}
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
+	})
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	rng, _ := randutil.NewTestRand()
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-	tableName := "table_1"
-	// TODO (butler): Randomly generate additional table(s) using tools from PR
-	// #75677. The function below only creates a deterministic table with a bunch
-	// of interesting corner case values.
-	err := randgen.GenerateRandInterestingTable(tc.Conns[0], dbName, tableName)
-	require.NoError(t, err)
-
-	s0 := tc.Server(0)
-	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	var tableName string
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
-		// Ensure table only contains columns supported by EXPORT Parquet
-		_, cols, err := ie.QueryRowExWithCols(
-			ctx,
-			"",
-			nil,
-			sessiondata.InternalExecutorOverride{
-				User:     security.RootUserName(),
-				Database: dbName,
-			},
-			fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
-		require.NoError(t, err)
+		var (
+			i           int
+			success     bool
+			tablePrefix = "table"
+			numTables   = 20
+		)
 
-		for _, col := range cols {
-			_, err := importer.NewParquetColumn(col.Typ, "", false)
-			if err != nil {
-				t.Logf("Column type %s not supported in parquet, dropping", col.Typ.String())
-				sqlDB.Exec(t, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+		stmts := randgen.RandCreateTables(rng, tablePrefix, numTables,
+			randgen.PartialIndexMutator,
+			randgen.ForeignKeyMutator,
+		)
+
+		var sb strings.Builder
+		for _, stmt := range stmts {
+			sb.WriteString(tree.SerializeForDisplay(stmt))
+			sb.WriteString(";\n")
+		}
+		sqlDB.Exec(t, sb.String())
+
+		for i = 1; i < numTables; i++ {
+			tableName = tablePrefix + fmt.Sprint(i)
+			numRows, err := randgen.PopulateTableWithRandData(rng, db, tableName, 20)
+			require.NoError(t, err)
+			if numRows > 5 {
+				// Ensure the table only contains columns supported by EXPORT Parquet. If an
+				// unsupported column cannot be dropped, try populating another table
+				if err := func() error {
+					_, cols, err := ie.QueryRowExWithCols(
+						ctx,
+						"",
+						nil,
+						sessiondata.InternalExecutorOverride{
+							User:     security.RootUserName(),
+							Database: dbName},
+						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+					require.NoError(t, err)
+
+					for _, col := range cols {
+						_, err := importer.NewParquetColumn(col.Typ, "", false)
+						if err != nil {
+							_, err = sqlDB.DB.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+							if err != nil {
+								return err
+							}
+						}
+					}
+					return nil
+				}(); err != nil {
+					continue
+				}
+				success = true
+				break
 			}
 		}
+		require.Equal(t, true, success, "test flake: failed to create a random table")
 	}
-
-	// TODO (butler): iterate over random select statements
+	t.Logf("%s", sqlDB.QueryStr(t, `SHOW CREATE TABLE `+tableName))
+	// TODO (msbutler): iterate over random select statements
 	test := parquetTest{
 		filePrefix: tableName,
 		dbName:     dbName,
@@ -229,8 +276,8 @@ func TestRandomParquetExports(t *testing.T) {
 			tableName, tableName),
 	}
 	sqlDB.Exec(t, test.stmt)
-	err = validateParquetFile(t, ctx, ie, test)
-	require.NoError(t, err)
+	err := validateParquetFile(t, ctx, ie, test)
+	require.NoError(t, err, "failed to validate parquet file")
 }
 
 // TestBasicParquetTypes exports a variety of relations into parquet files, and
@@ -242,28 +289,24 @@ func TestBasicParquetTypes(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "baz"
-	params := base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			UseDatabase:   dbName,
-			ExternalIODir: dir,
-		},
-	}
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase:   dbName,
+		ExternalIODir: dir,
+	})
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	// instantiating an internal executor to easily get datums from the table
-	s0 := tc.Server(0)
-	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, 
-false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3.4,false),
-(6, NULL, NULL, 4.5, NULL)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 0.5032135844230652,true),(4, 'Alex', 3, 14.3, NULL), (5, 
+'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
 
 	tests := []parquetTest{
 		{
@@ -323,8 +366,8 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 		{
 			filePrefix: "ints_floats",
 			prep: []string{
-				"CREATE TABLE nums (int_2 INT2, int_4 INT4, int_8 INT8, real_0 REAL, double_0 DOUBLE PRECISION)",
-				"INSERT INTO nums VALUES (2, 2, 2, 3.2, 3.2)",
+				"CREATE TABLE nums (int_2 INT2, int_4 INT4, int_8 INT8, real_0 FLOAT4, double_0 FLOAT8)",
+				"INSERT INTO nums VALUES (2, 2, 2, 2.107109308242798, 2.107109308242798)",
 			},
 			stmt: `EXPORT INTO PARQUET 'nodelocal://0/ints_floats' FROM SELECT * FROM nums`,
 		},
@@ -359,6 +402,6 @@ false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3
 		test.dir = dir
 		test.dbName = dbName
 		err := validateParquetFile(t, ctx, ie, test)
-		require.NoError(t, err)
+		require.NoError(t, err, "failed to validate parquet file")
 	}
 }
