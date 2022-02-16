@@ -72,3 +72,74 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"CommandComplete","CommandTag":"SAVEPOINT"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "DROP TABLE IF EXISTS t"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE IF NOT EXISTS t(a INT8 UNIQUE)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+# Test that a simple query in the middle of the extended protocol
+# causes the earlier statement to commit. Executing the prepared statement
+# again will cause a constraint error.
+send
+Parse {"Name": "S_4", "Query": "INSERT INTO t VALUES(1)"}
+Bind {"PreparedStatement": "S_4"}
+Execute
+Query {"String": "SELECT 1"}
+Bind {"PreparedStatement": "S_4"}
+Execute
+Sync
+----
+
+until ignore=RowDescription
+CommandComplete
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"BindComplete"}
+{"Type":"ErrorResponse","Code":"23505","ConstraintName":"t_a_key"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "SELECT * FROM t"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
