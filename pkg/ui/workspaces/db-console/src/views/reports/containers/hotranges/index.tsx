@@ -24,16 +24,33 @@ const HotRanges = (props: HotRangesProps) => {
   const [hotRanges, setHotRanges] = useState<
     cockroach.server.serverpb.HotRangesResponseV2["ranges"]
   >([]);
-  const requestHotRanges = useCallback(() => {
+  const [pageToken, setPageToken] = useState<string>("");
+  const pageSize = 50;
+
+  const refreshHotRanges = useCallback(() => {
+    setHotRanges([]);
+    setPageToken("");
+  }, []);
+
+  useEffect(() => {
     const request = cockroach.server.serverpb.HotRangesRequest.create({
       node_id: nodeId,
+      page_size: pageSize,
+      page_token: pageToken,
     });
     getHotRanges(request).then(response => {
-      setHotRanges(response.ranges);
+      if (response.ranges.length == 0) {
+        return;
+      }
+      setPageToken(response.next_page_token);
+      setHotRanges([...hotRanges, ...response.ranges]);
       setTime(moment());
     });
-  }, [nodeId]);
-  useEffect(requestHotRanges, [requestHotRanges, nodeId]);
+    // Avoid dispatching request when `hotRanges` list is updated.
+    // This effect should be triggered only when pageToken is changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageToken]);
+
   useEffect(() => {
     setNodeId(nodeIdParam);
   }, [nodeIdParam]);
@@ -46,7 +63,7 @@ const HotRanges = (props: HotRangesProps) => {
     >
       <span>{`Node ID: ${nodeId ?? "All nodes"}`}</span>
       <span>{`Time: ${time.toISOString()}`}</span>
-      <Button onClick={requestHotRanges} intent={"secondary"}>
+      <Button onClick={refreshHotRanges} intent={"secondary"}>
         Refresh
       </Button>
       <pre className="state-json-box">{JSON.stringify(hotRanges, null, 2)}</pre>
