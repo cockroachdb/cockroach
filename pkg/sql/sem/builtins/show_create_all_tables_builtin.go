@@ -217,6 +217,11 @@ func topologicalSort(
 		return nil
 	}
 
+	// Skip IDs that are not in the dependsOn set.
+	if _, exists := dependsOnIDs[tid]; !exists {
+		return nil
+	}
+
 	// Account for memory of map.
 	// The key value entry into the map is only the memory of an int64 since
 	// the value stuct{}{} uses no memory.
