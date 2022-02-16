@@ -64,7 +64,7 @@ func TestEventStore(t *testing.T) {
 	expectedMap := eventSliceToMap(expected)
 
 	for _, event := range input {
-		store.addEvent(event.BlockingEvent)
+		store.addEvent(event)
 	}
 
 	// The contention event should immediately be available to be read from
@@ -134,10 +134,10 @@ func BenchmarkEventStoreIntake(b *testing.B) {
 	b.SetBytes(int64(e.Size()))
 
 	run := func(b *testing.B, store *eventStore, numOfConcurrentWriter int) {
-		input := make([]roachpb.ContentionEvent, 0, b.N)
+		input := make([]contentionpb.ExtendedContentionEvent, 0, b.N)
 		for i := 0; i < b.N; i++ {
-			event := roachpb.ContentionEvent{}
-			event.TxnMeta.ID = uuid.FastMakeV4()
+			event := contentionpb.ExtendedContentionEvent{}
+			event.BlockingEvent.TxnMeta.ID = uuid.FastMakeV4()
 			input = append(input, event)
 		}
 		starter := make(chan struct{})

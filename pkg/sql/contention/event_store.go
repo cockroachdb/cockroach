@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -36,7 +35,7 @@ const (
 
 // eventWriter provides interfaces to write contention event into eventStore.
 type eventWriter interface {
-	addEvent(roachpb.ContentionEvent)
+	addEvent(contentionpb.ExtendedContentionEvent)
 }
 
 // eventReader provides interface to read contention events from eventStore.
@@ -230,15 +229,13 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 }
 
 // addEvent implements the eventWriter interface.
-func (s *eventStore) addEvent(e roachpb.ContentionEvent) {
+func (s *eventStore) addEvent(e contentionpb.ExtendedContentionEvent) {
 	if TxnIDResolutionInterval.Get(&s.st.SV) == 0 {
 		return
 	}
 	s.guard.AtomicWrite(func(writerIdx int64) {
-		s.guard.buffer[writerIdx] = contentionpb.ExtendedContentionEvent{
-			BlockingEvent: e,
-			CollectionTs:  s.timeSrc(),
-		}
+		e.CollectionTs = s.timeSrc()
+		s.guard.buffer[writerIdx] = e
 	})
 }
 
