@@ -1,5 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
+filegroup(
+    name = "testdata",
+    srcs = glob(["testdata/**"]),
+    visibility = ["//visibility:public"],
+)
+
 go_test(
     name = "schemachanger_test",
     size = "medium",
@@ -8,7 +14,7 @@ go_test(
         "main_test.go",
         "schemachanger_test.go",
     ],
-    data = glob(["testdata/**"]),
+    data = [":testdata"],
     deps = [
         "//pkg/base",
         "//pkg/jobs",

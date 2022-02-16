@@ -25,6 +25,13 @@ import (
 
 // Params holds the arguments for planning.
 type Params struct {
+	// InRollback is used to indicate whether we've already been reverted.
+	// Note that when in rollback, there is no turning back and all work is
+	// non-revertible. Theory dictates that this is fine because of how we
+	// had carefully crafted stages to only allow entering rollback while it
+	// remains safe to do so.
+	InRollback bool
+
 	// ExecutionPhase indicates the phase that the plan should be constructed for.
 	ExecutionPhase scop.Phase
 
