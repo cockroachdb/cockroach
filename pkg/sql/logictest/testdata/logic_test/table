@@ -895,3 +895,42 @@ DROP table t1
 
 statement ok
 DROP TYPE t2
+
+# Tests that the collections cache is properly invalidated when uncommitted
+# descriptors are added as observed in #75825.
+subtest collection-improper-release
+
+statement ok
+BEGIN;
+CREATE TABLE tblmodified (price INT8, quantity INT8);
+ALTER TABLE tblmodified ADD CONSTRAINT quan_check CHECK (quantity > 0);
+ALTER TABLE tblmodified ADD CONSTRAINT pr_check CHECK (price > 0);
+
+# Check out the descriptor for tblmodified under the all descriptors cache,
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+quan_check  CHECK ((quantity > 0))  true
+
+# Descriptor is modified, so the cache should be invalidated.
+statement ok
+ALTER TABLE tblmodified DROP CONSTRAINT quan_check;
+
+# If the cache is properly invalidated then we should only see a single
+# constraint.
+query TTB
+SELECT conname,
+       pg_get_constraintdef(c.oid) AS constraintdef,
+       c.convalidated AS valid
+  FROM pg_constraint AS c JOIN pg_class AS t ON c.conrelid = t.oid
+ WHERE c.contype = 'c' AND t.relname = 'tblmodified' ORDER BY conname ASC;
+----
+pr_check    CHECK ((price > 0))     true
+
+statement ok
+COMMIT;

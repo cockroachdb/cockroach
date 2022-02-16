@@ -197,6 +197,9 @@ var _ = (*Collection).HasUncommittedTypes
 // immutably will return a copy of the descriptor in the current state. A deep
 // copy is performed in this call.
 func (tc *Collection) AddUncommittedDescriptor(desc catalog.MutableDescriptor) error {
+	// Invalidate all the cached descriptors since a stale copy of this may be
+	// included.
+	tc.kv.releaseAllDescriptors()
 	return tc.uncommitted.checkIn(desc)
 }
 
