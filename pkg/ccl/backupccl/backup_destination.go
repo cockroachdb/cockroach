@@ -309,7 +309,7 @@ func readLatestFile(
 		return "", err
 	}
 	defer collection.Close()
-	latestFile, err := collection.ReadFile(ctx, latestFileName)
+	latestFile, err := collection.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")

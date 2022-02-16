@@ -64,6 +64,7 @@ const (
 	backupOptAsJSON          = "as_json"
 	backupOptWithDebugIDs    = "debug_ids"
 	backupOptIncStorage      = "incremental_location"
+	progressDirectory        = "progress"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )
@@ -815,7 +816,7 @@ func backupPlanHook(
 			defer defaultStore.Close()
 
 			if err := writeBackupManifest(
-				ctx, p.ExecCfg().Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
+				ctx, p.ExecCfg().Settings, defaultStore, progressDirectory+"/"+tempCheckpointFileNameForJob(jobID),
 				backupDetails.EncryptionOptions, &backupManifest,
 			); err != nil {
 				return errors.Wrapf(err, "writing checkpoint file")

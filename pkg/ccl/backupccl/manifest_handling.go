@@ -86,6 +86,10 @@ const (
 	// latestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
 	latestFileName = "LATEST"
+
+	// latestHistoryDirectory is the directory where all 22.1 and beyond
+	// LATEST files will be stored as we no longer want to overwrite it.
+	latestHistoryDirectory = "latest-history"
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
@@ -699,7 +703,7 @@ func FindPriorBackups(
 func checkForLatestFileInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) (bool, error) {
-	_, err := store.ReadFile(ctx, latestFileName)
+	_, err := store.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
@@ -1114,7 +1118,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
+	r, err = exportStore.ReadFile(ctx, progressDirectory+"/"+backupManifestCheckpointName)
 	if err == nil {
 		r.Close()
 		return pgerror.Newf(pgcode.FileAlreadyExists,

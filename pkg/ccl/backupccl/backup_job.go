@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -230,8 +231,22 @@ func backup(
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
+
+				// Always write checkpoints to the progress folder, but only write
+				// to base directory if we detect that the cluster isn't running
+				// on pure 22.1. This is because older nodes expect checkpoints
+				// in the base directory and will throw an error if it isn't.
+				// TODO (Darryl): Figure out if this is the right way to check for pure 22.1
+				if !settings.Version.IsActive(ctx, clusterversion.Start22_1) {
+					err := writeBackupManifest(
+						ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
+					)
+					if err != nil {
+						log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
+					}
+				}
 				err := writeBackupManifest(
-					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
+					ctx, settings, defaultStore, progressDirectory+"/"+backupManifestCheckpointName, encryption, backupManifest,
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
@@ -540,7 +555,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := cloud.WriteFile(ctx, c, latestFileName, strings.NewReader(suffix)); err != nil {
+		if err := cloud.WriteFile(ctx, c, latestHistoryDirectory+"/"+latestFileName, strings.NewReader(suffix)); err != nil {
 			return err
 		}
 	}
@@ -610,15 +625,19 @@ func (b *backupResumer) readManifestOnResume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
-	desc, memSize, err := readBackupManifest(ctx, mem, defaultStore, backupManifestCheckpointName,
+	// Read in checkpoint from the /progress folder, if it isn't there
+	// because it is an older backup, that is okay because we will
+	// throw an error and restart the backup from scratch.
+	desc, memSize, err := readBackupManifest(ctx, mem, defaultStore, progressDirectory+"/"+backupManifestCheckpointName,
 		details.EncryptionOptions)
 
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
+
 		// Try reading temp checkpoint.
-		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
+		tmpCheckpoint := progressDirectory + "/" + tempCheckpointFileNameForJob(b.job.ID())
 		desc, memSize, err = readBackupManifest(ctx, mem, defaultStore, tmpCheckpoint, details.EncryptionOptions)
 		if err != nil {
 			return nil, 0, err
@@ -626,7 +645,7 @@ func (b *backupResumer) readManifestOnResume(
 
 		// "Rename" temp checkpoint.
 		if err := writeBackupManifest(
-			ctx, cfg.Settings, defaultStore, backupManifestCheckpointName,
+			ctx, cfg.Settings, defaultStore, progressDirectory+"/"+backupManifestCheckpointName,
 			details.EncryptionOptions, &desc,
 		); err != nil {
 			mem.Shrink(ctx, memSize)
@@ -729,7 +748,7 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		return exportStore.Delete(ctx, backupManifestCheckpointName)
+		return exportStore.Delete(ctx, progressDirectory+"/"+backupManifestCheckpointName)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 	}

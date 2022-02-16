@@ -561,7 +561,7 @@ func checkForExistingBackupsInCollection(
 	}
 	defer defaultStore.Close()
 
-	r, err := defaultStore.ReadFile(ctx, latestFileName)
+	r, err := defaultStore.ReadFile(ctx, latestHistoryDirectory+"/"+latestFileName)
 	if err == nil {
 		// A full backup has already been taken to this location.
 		r.Close()

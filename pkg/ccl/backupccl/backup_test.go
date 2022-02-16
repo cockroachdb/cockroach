@@ -1706,7 +1706,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, backupManifestCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, progressDirectory+"/"+backupManifestCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Wrap(err, "error while reading checkpoint")
@@ -1824,10 +1824,10 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		backupDir := dir + "/backup"
-		if err := os.MkdirAll(backupDir, 0755); err != nil {
+		if err := os.MkdirAll(backupDir+"/"+progressDirectory, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := backupDir + "/" + backupManifestCheckpointName
+		checkpointFile := backupDir + "/" + progressDirectory + "/" + backupManifestCheckpointName
 		if err := ioutil.WriteFile(checkpointFile, mockManifest, 0644); err != nil {
 			t.Fatal(err)
 		}
