@@ -104,6 +104,20 @@ func TestStreamerLimitations(t *testing.T) {
 		// responded to.
 		require.Error(t, streamer.Enqueue(ctx, reqs, nil /* enqueueKeys */))
 	})
+
+	t.Run("unexpected RootTxn", func(t *testing.T) {
+		require.Panics(t, func() {
+			NewStreamer(
+				s.DistSenderI().(*kvcoord.DistSender),
+				s.Stopper(),
+				kv.NewTxn(ctx, s.DB(), s.NodeID()),
+				cluster.MakeTestingClusterSettings(),
+				lock.WaitPolicy(0),
+				math.MaxInt64, /* limitBytes */
+				nil,           /* acc */
+			)
+		})
+	})
 }
 
 // TestLargeKeys verifies that the Streamer successfully completes the queries
