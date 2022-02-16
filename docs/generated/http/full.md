@@ -3128,6 +3128,8 @@ of ranges currently considered “hot” by the node(s).
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is possible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.<br><br>If left empty, the request is forwarded to every node in the cluster. | [alpha](#support-status) |
+| page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
+| page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -3234,6 +3236,8 @@ of ranges currently considered “hot” by the node(s).
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is possible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.<br><br>If left empty, the request is forwarded to every node in the cluster. | [alpha](#support-status) |
+| page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
+| page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
 
 
 
@@ -3251,7 +3255,9 @@ HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
 
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
-| ranges | [HotRangesResponseV2.HotRange](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange) | repeated | ranges contain list of hot ranges info that has highest number of QPS. | [reserved](#support-status) |
+| ranges | [HotRangesResponseV2.HotRange](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange) | repeated | Ranges contain list of hot ranges info that has highest number of QPS. | [reserved](#support-status) |
+| errors_by_node_id | [HotRangesResponseV2.ErrorsByNodeIdEntry](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.ErrorsByNodeIdEntry) | repeated | errors contains any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| next_page_token | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | NextPageToken represents next pagination token to request next slice of data. | [reserved](#support-status) |
 
 
 
@@ -3274,6 +3280,104 @@ HotRange message describes a single hot range, ie its QPS, node ID it belongs to
 | replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range. | [reserved](#support-status) |
 | leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range. | [reserved](#support-status) |
 | schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.ErrorsByNodeIdEntry"></a>
+#### HotRangesResponseV2.ErrorsByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  |  |
+
+
+
+
+
+
+## HotRangesV2WithPagination
+
+`POST /_status/v2/hotrangespagination`
+
+
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+HotRangesRequest queries one or more cluster nodes for a list
+of ranges currently considered “hot” by the node(s).
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  | NodeID indicates which node to query for a hot range report. It is possible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.<br><br>If left empty, the request is forwarded to every node in the cluster. | [alpha](#support-status) |
+| page_size | [int32](#cockroach.server.serverpb.HotRangesRequest-int32) |  |  | [reserved](#support-status) |
+| page_token | [string](#cockroach.server.serverpb.HotRangesRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+HotRangesResponseV2 is a response payload returned by `HotRangesV2` service.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ranges | [HotRangesResponseV2.HotRange](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange) | repeated | Ranges contain list of hot ranges info that has highest number of QPS. | [reserved](#support-status) |
+| errors_by_node_id | [HotRangesResponseV2.ErrorsByNodeIdEntry](#cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.ErrorsByNodeIdEntry) | repeated | errors contains any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+| next_page_token | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | NextPageToken represents next pagination token to request next slice of data. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.HotRange"></a>
+#### HotRangesResponseV2.HotRange
+
+HotRange message describes a single hot range, ie its QPS, node ID it belongs to, etc.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| range_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | range_id indicates Range ID that's identified as hot range. | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | node_id indicates the node that contains the current hot range. | [reserved](#support-status) |
+| qps | [double](#cockroach.server.serverpb.HotRangesResponseV2-double) |  | qps (queries per second) shows the amount of queries that interact with current range. | [reserved](#support-status) |
+| table_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | table_name indicates the SQL table that the range belongs to. | [reserved](#support-status) |
+| database_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | database_name indicates on database that has current hot range. | [reserved](#support-status) |
+| index_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | index_name indicates the index name for current range. | [reserved](#support-status) |
+| replica_node_ids | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) | repeated | replica_node_ids specifies the list of node ids that contain replicas with current hot range. | [reserved](#support-status) |
+| leaseholder_node_id | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  | leaseholder_node_id indicates the Node ID that is the current leaseholder for the given range. | [reserved](#support-status) |
+| schema_name | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  | schema_name provides the name of schema (if exists) for table in current range. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.HotRangesResponseV2-cockroach.server.serverpb.HotRangesResponseV2.ErrorsByNodeIdEntry"></a>
+#### HotRangesResponseV2.ErrorsByNodeIdEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [int32](#cockroach.server.serverpb.HotRangesResponseV2-int32) |  |  |  |
+| value | [string](#cockroach.server.serverpb.HotRangesResponseV2-string) |  |  |  |
 
 
 
