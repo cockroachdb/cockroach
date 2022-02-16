@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -61,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -229,8 +232,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		kvDB, keys.SystemSQLCodec, "t", "test")
 
 	// A long running schema change operation runs through
-	// a state machine that increments the version by 3.
-	expectedVersion := tableDesc.Version + 3
+	// a state machine that increments the version by 6.
+	expectedVersion := tableDesc.Version + 6
 
 	// Run some schema change
 	if _, err := sqlDB.Exec(`
@@ -396,10 +399,13 @@ func runSchemaChangeWithOperations(
 
 	wg.Wait() // for schema change to complete.
 
-	// Verify the number of keys left behind in the table to validate schema
-	// change operations. This is wrapped in SucceedsSoon to handle cases where
-	// dropped indexes are expected to be GC'ed immediately after the schema
-	// change completes.
+	// Verify the number of keys left behind in the table to
+	// validate schema change operations. We wait for any SCHEMA
+	// CHANGE GC jobs to complete to ensure our key count doesn't
+	// include keys from a temporary index.
+	if _, err := sqlDB.Exec(`SHOW JOBS WHEN COMPLETE (SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC')`); err != nil {
+		t.Fatal(err)
+	}
 	testutils.SucceedsSoon(t, func() error {
 		return sqltestutils.CheckTableKeyCount(ctx, kvDB, keyMultiple, maxValue+numInserts)
 	})
@@ -505,12 +511,13 @@ func TestRaceWithBackfill(t *testing.T) {
 			backfillNotification = nil
 		}
 	}
+
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 		},
 		// Disable GC job.
-		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
+		// GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { select {} }},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				notifyBackfill()
@@ -1041,12 +1048,11 @@ COMMIT;
 			ctx := context.Background()
 
 			// Verify the number of keys left behind in the table to validate
-			// schema change operations.
-			if err := sqltestutils.CheckTableKeyCount(
-				ctx, kvDB, testCase.expectedNumKeysPerRow, maxValue,
-			); err != nil {
-				t.Fatal(err)
-			}
+			// schema change operations. We expect this to fail until garbage
+			// collection on the temporary index completes.
+			testutils.SucceedsSoon(t, func() error {
+				return sqltestutils.CheckTableKeyCount(ctx, kvDB, testCase.expectedNumKeysPerRow, maxValue)
+			})
 
 			if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 				t.Fatal(err)
@@ -1057,7 +1063,7 @@ COMMIT;
 
 // Add an index and check that it succeeds.
 func addIndexSchemaChange(
-	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int,
+	t *testing.T, sqlDB *gosql.DB, kvDB *kv.DB, maxValue int, numKeysPerRow int, waitFn func(),
 ) {
 	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
 		t.Fatal(err)
@@ -1090,6 +1096,10 @@ func addIndexSchemaChange(
 	}
 
 	ctx := context.Background()
+
+	if waitFn != nil {
+		waitFn()
+	}
 
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, numKeysPerRow, maxValue); err != nil {
 		t.Fatal(err)
@@ -1296,7 +1306,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, nil)
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
@@ -1324,6 +1334,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 	currChunk := 0
 	var numBackfills uint32
 	seenSpan := roachpb.Span{}
+	unblockGC := make(chan struct{})
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			RunBeforeBackfill: func() error {
@@ -1334,6 +1345,16 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			BackfillChunkSize:                maxValue / 10,
 			AlwaysUpdateIndexBackfillDetails: true,
 		},
+		// Block GC Job during the test. The index we add
+		// creates a GC job to clean up the temporary index
+		// used during backfill. If that GC job runs, it will
+		// bump the table version causing an extra backfill
+		// that our assertions don't account for.
+		GCJob: &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error {
+			<-unblockGC
+			t.Log("gc unblocked")
+			return nil
+		}},
 		DistSQL: &execinfra.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
 				currChunk++
@@ -1372,6 +1393,10 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
+	defer func() {
+		t.Log("unblocking GC")
+		close(unblockGC)
+	}()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -1435,23 +1460,23 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
+	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, nil)
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
-		t.Fatalf("expected %d backfills, but seen %d", 2, num)
+		t.Fatalf("expected %d backfills, but saw %d", 2, num)
 	}
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
 	addColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
-		t.Fatalf("expected %d backfills, but seen %d", 2, num)
+		t.Fatalf("expected %d backfills, but saw %d", 2, num)
 	}
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
 	dropColumnSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 	if num := atomic.SwapUint32(&numBackfills, 0); num != 2 {
-		t.Fatalf("expected %d backfills, but seen %d", 2, num)
+		t.Fatalf("expected %d backfills, but saw %d", 2, num)
 	}
 }
 
@@ -2951,8 +2976,9 @@ CREATE TABLE t.test (
 		wg.Done()
 	}()
 
-	// Wait for the new primary index to move to the DELETE_AND_WRITE_ONLY
-	// state, which happens right before backfilling of the index begins.
+	// Wait for the temporary indexes for the new primary indexes
+	// to move to the DELETE_AND_WRITE_ONLY state, which happens
+	// right before backfilling of the index begins.
 	<-backfillNotification
 
 	scanToArray := func(rows *gosql.Rows) []string {
@@ -2973,18 +2999,36 @@ CREATE TABLE t.test (
 	INSERT INTO t.test VALUES (1, 2, 3, NULL, NULL, 6);
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'InitPut /Table/%d/2%%' ORDER BY message;`, tableID))
+		message LIKE '%%Put /Table/%d%%' ORDER BY message;`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected := []string{
-		fmt.Sprintf("InitPut /Table/%d/2/2/0 -> /TUPLE/1:1:Int/1", tableID),
+		// The first CPut's are to the primary index.
+		fmt.Sprintf("CPut /Table/%d/1/1/0 -> /TUPLE/", tableID),
 		// TODO (rohany): this k/v is spurious and should be removed
 		//  when #45343 is fixed.
-		fmt.Sprintf("InitPut /Table/%d/2/2/1/1 -> /INT/2", tableID),
-		fmt.Sprintf("InitPut /Table/%d/2/2/2/1 -> /TUPLE/3:3:Int/3", tableID),
-		fmt.Sprintf("InitPut /Table/%d/2/2/4/1 -> /INT/6", tableID),
+		fmt.Sprintf("CPut /Table/%d/1/1/1/1 -> /INT/2", tableID),
+		fmt.Sprintf("CPut /Table/%d/1/1/2/1 -> /TUPLE/3:3:Int/3", tableID),
+		fmt.Sprintf("CPut /Table/%d/1/1/4/1 -> /INT/6", tableID),
+		// Temporary index that exists during the
+		// backfill. This should have the same number of Puts
+		// as there are CPuts above.
+		fmt.Sprintf("Put /Table/%d/3/2/0 -> /BYTES/0x0a030a1302", tableID),
+		// TODO (rohany): this k/v is spurious and should be removed
+		//  when #45343 is fixed.
+		fmt.Sprintf("Put /Table/%d/3/2/1/1 -> /BYTES/0x0a020104", tableID),
+		fmt.Sprintf("Put /Table/%d/3/2/2/1 -> /BYTES/0x0a030a3306", tableID),
+		fmt.Sprintf("Put /Table/%d/3/2/4/1 -> /BYTES/0x0a02010c", tableID),
+
+		// ALTER PRIMARY KEY makes an additional unique index
+		// based on the old primary key.
+		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038a", tableID),
+
+		// Indexes 2 and 4 which are currently being added
+		// should have no writes because they are in the
+		// BACKFILLING state at this point.
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -2993,18 +3037,31 @@ CREATE TABLE t.test (
 	SET TRACING=on, kv, results;
 	DELETE FROM t.test WHERE y = 2;
 	SET TRACING=off;
-	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Del /Table/%d/2%%' ORDER BY message;`, tableID))
+	SELECT message FROM [SHOW KV TRACE FOR SESSION]
+        WHERE
+		message LIKE 'Del /Table/%[1]d%%' OR
+                message LIKE 'Put (delete) /Table/%[1]d%%'
+        ORDER BY message;`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/3/1", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
+		// Primary index should see this delete.
+		fmt.Sprintf("Del /Table/%d/1/1/0", tableID),
+		fmt.Sprintf("Del /Table/%d/1/1/1/1", tableID),
+		fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+		fmt.Sprintf("Del /Table/%d/1/1/3/1", tableID),
+		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+
+		// The temporary indexes are delete-preserving -- they
+		// should see the delete and issue Puts.
+		fmt.Sprintf("Put (delete) /Table/%d/3/2/0", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/3/2/1/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/3/2/2/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/3/2/3/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/3/2/4/1", tableID),
+		fmt.Sprintf("Put (delete) /Table/%d/5/1/0", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3015,24 +3072,25 @@ CREATE TABLE t.test (
 	UPDATE t.test SET y = 3 WHERE y = 2;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/%d/2%%' OR
-		message LIKE 'Del /Table/%d/2%%' OR
-		message LIKE 'CPut /Table/%d/2%%';`, tableID, tableID, tableID))
+		message LIKE 'Put /Table/%[1]d/%%' OR
+		message LIKE 'Del /Table/%[1]d/%%' OR
+		message LIKE 'CPut /Table/%[1]d/%%';`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		fmt.Sprintf("Del /Table/%d/2/2/0", tableID),
-		fmt.Sprintf("CPut /Table/%d/2/3/0 -> /TUPLE/1:1:Int/1 (expecting does not exist)", tableID),
-		// TODO (rohany): this k/v is spurious and should be removed
-		//  when #45343 is fixed.
-		fmt.Sprintf("Del /Table/%d/2/2/1/1", tableID),
-		fmt.Sprintf("CPut /Table/%d/2/3/1/1 -> /INT/3 (expecting does not exist)", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/2/1", tableID),
-		fmt.Sprintf("CPut /Table/%d/2/3/2/1 -> /TUPLE/3:3:Int/3 (expecting does not exist)", tableID),
-		fmt.Sprintf("Del /Table/%d/2/2/4/1", tableID),
-		fmt.Sprintf("CPut /Table/%d/2/3/4/1 -> /INT/6 (expecting does not exist)", tableID),
+		// The primary index should see the update
+		fmt.Sprintf("Put /Table/%d/1/1/1/1 -> /INT/3", tableID),
+		// The temporary index for the newly added index sees
+		// a Put in all families.
+		fmt.Sprintf("Put /Table/%d/3/3/0 -> /BYTES/0x0a030a1302", tableID),
+		fmt.Sprintf("Put /Table/%d/3/3/1/1 -> /BYTES/0x0a020106", tableID),
+		fmt.Sprintf("Put /Table/%d/3/3/2/1 -> /BYTES/0x0a030a3306", tableID),
+		fmt.Sprintf("Put /Table/%d/3/3/4/1 -> /BYTES/0x0a02010c", tableID),
+		// TODO(ssd): double-check that this trace makes
+		// sense.
+		fmt.Sprintf("Put /Table/%d/5/1/0 -> /BYTES/0x0a02038b", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3042,17 +3100,22 @@ CREATE TABLE t.test (
 	UPDATE t.test SET z = NULL, b = 5, c = NULL WHERE y = 3;
 	SET TRACING=off;
 	SELECT message FROM [SHOW KV TRACE FOR SESSION] WHERE
-		message LIKE 'Put /Table/%d/2%%' OR
-		message LIKE 'Del /Table/%d/2%%' OR
-		message LIKE 'CPut /Table/%d/2%%';`, tableID, tableID, tableID))
+		message LIKE 'Put /Table/%[1]d/%%' OR
+		message LIKE 'Del /Table/%[1]d/%%' OR
+		message LIKE 'CPut /Table/%[1]d/2%%';`, tableID))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	expected = []string{
-		fmt.Sprintf("Del /Table/%d/2/3/2/1", tableID),
-		fmt.Sprintf("CPut /Table/%d/2/3/3/1 -> /INT/5 (expecting does not exist)", tableID),
-		fmt.Sprintf("Del /Table/%d/2/3/4/1", tableID),
+
+		fmt.Sprintf("Del /Table/%d/1/1/2/1", tableID),
+		fmt.Sprintf("Put /Table/%d/1/1/3/1 -> /INT/5", tableID),
+		fmt.Sprintf("Del /Table/%d/1/1/4/1", tableID),
+
+		// TODO(ssd): double-check that this trace makes
+		// sense.
+		fmt.Sprintf("Put /Table/%d/3/3/3/1 -> /BYTES/0x0a02010a", tableID),
 	}
 	require.Equal(t, expected, scanToArray(rows))
 
@@ -3309,7 +3372,10 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 				}
 				return nil
 			},
-			RunAfterBackfillChunk: func() {
+			BulkAdderFlushesEveryBatch: true,
+		},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunAfterIndexBackfill: func() {
 				if backfillCompleteNotification != nil {
 					// Close channel to notify that the schema change
 					// backfill is complete and not finalized.
@@ -3318,8 +3384,8 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 					<-continueSchemaChangeNotification
 				}
 			},
-			BulkAdderFlushesEveryBatch: true,
 		},
+
 		// Disable backfill migrations, we still need the jobs table migration.
 		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
@@ -7673,4 +7739,204 @@ CREATE TABLE t.test (x INT);`,
 			wg.Wait()
 		})
 	}
+}
+
+func TestMixedAddIndexStyleFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.Server = &server.TestingKnobs{
+		DisableAutomaticVersionUpgrade: make(chan struct{}),
+		BinaryVersionOverride:          clusterversion.ByKey(clusterversion.MVCCIndexBackfiller - 1),
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	_, err := sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
+	require.NoError(t, err)
+
+	txn, err := sqlDB.Begin()
+	require.NoError(t, err)
+	_, err = txn.Exec("CREATE INDEX ON t (b)")
+	require.NoError(t, err)
+
+	waitOnce := &sync.Once{}
+	wait := make(chan struct{})
+	s.ClusterSettings().Version.SetOnChange(func(_ context.Context, newVersion clusterversion.ClusterVersion) {
+		if newVersion.IsActive(clusterversion.MVCCIndexBackfiller) {
+			waitOnce.Do(func() { close(wait) })
+		}
+	})
+	close(params.Knobs.Server.(*server.TestingKnobs).DisableAutomaticVersionUpgrade)
+	t.Log("waiting for version change")
+	<-wait
+	_, err = txn.Exec("CREATE INDEX ON t (c)")
+	require.NoError(t, err)
+
+	err = txn.Commit()
+	require.Error(t, err, "expected 1 temporary indexes, but found 2; schema change may have been constructed during cluster version upgrade")
+}
+
+func TestAddIndexResumeAfterSettingFlippedFails(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+
+	changeSetting := make(chan struct{})
+	wait := make(chan struct{})
+	params.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		RunBeforeResume: func(jobID jobspb.JobID) error {
+			close(changeSetting)
+			<-wait
+			return nil
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	errC := make(chan error)
+
+	go func() {
+		_, err := sqlDB.Exec("CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT)")
+		require.NoError(t, err)
+		_, err = sqlDB.Exec("CREATE INDEX ON t (b)")
+		errC <- err
+	}()
+
+	<-changeSetting
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.mvcc_compliant_index_creation.enabled = false")
+	require.NoError(t, err)
+	close(wait)
+
+	require.Error(t, <-errC, "schema change requires MVCC-compliant backfiller, but MVCC-compliant backfiller is not supported")
+}
+
+func TestPauseBeforeRandomDescTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	type testCase struct {
+		name      string
+		setupSQL  string
+		changeSQL string
+		verify    func(t *testing.T, sqlRunner *sqlutils.SQLRunner)
+	}
+
+	// We run the schema change twice. First, to find out how many
+	// sc.txn calls there are, and then a second time that pauses
+	// a random one. By finding the count of txns, we make sure
+	// that we have an equal probability of pausing after each
+	// transaction.
+	getTxnCount := func(t *testing.T, tc testCase) int {
+		var (
+			count       int32 // accessed atomically
+			shouldCount int32 // accessed atomically
+		)
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeDescTxn: func() error {
+					if atomic.LoadInt32(&shouldCount) == 1 {
+						atomic.AddInt32(&count, 1)
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(ctx)
+
+		sqlRunner.Exec(t, tc.setupSQL)
+		atomic.StoreInt32(&shouldCount, 1)
+		sqlRunner.Exec(t, tc.changeSQL)
+		return int(atomic.LoadInt32(&count))
+	}
+
+	runWithPauseAt := func(t *testing.T, tc testCase, pauseAt int) {
+		var (
+			count       int32 // accessed atomically
+			shouldPause int32 // accessed atomically
+			jobID       jobspb.JobID
+		)
+
+		params, _ := tests.CreateTestServerParams()
+		params.Knobs = base.TestingKnobs{
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeResume: func(id jobspb.JobID) error {
+					jobID = id
+					return nil
+				},
+				RunBeforeDescTxn: func() error {
+					if atomic.LoadInt32(&shouldPause) == 0 {
+						return nil
+					}
+					current := int(atomic.AddInt32(&count, 1))
+					if current == pauseAt {
+						atomic.StoreInt32(&shouldPause, 0)
+						return jobs.MarkPauseRequestError(errors.Newf("paused sc.txn call %d", current))
+					}
+					return nil
+				},
+			},
+		}
+		s, sqlDB, _ := serverutils.StartServer(t, params)
+		sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+		defer s.Stopper().Stop(ctx)
+
+		sqlRunner.Exec(t, tc.setupSQL)
+		atomic.StoreInt32(&shouldPause, 1)
+		sqlRunner.ExpectErr(t, ".*paused sc.txn call.*", tc.changeSQL)
+		sqlRunner.Exec(t, "RESUME JOB $1", jobID)
+
+		row := sqlRunner.QueryRow(t, "SELECT status FROM [SHOW JOB WHEN COMPLETE $1]", jobID)
+		var status string
+		row.Scan(&status)
+		require.Equal(t, "succeeded", status)
+		tc.verify(t, sqlRunner)
+	}
+
+	rnd, _ := randutil.NewTestRand()
+	for _, tc := range []testCase{
+		{
+			name: "create index",
+			setupSQL: `
+CREATE TABLE t (pk INT PRIMARY KEY, b INT);
+INSERT INTO t VALUES (1, 1), (2, 2), (3, 3);
+`,
+			changeSQL: "CREATE INDEX on t (b)",
+			verify: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				rows := sqlutils.MatrixToStr(sqlRunner.QueryStr(t, "SELECT * FROM t@t_b_idx"))
+				require.Equal(t, "1, 1\n2, 2\n3, 3\n", rows)
+			},
+		},
+	} {
+		txnCount := getTxnCount(t, tc)
+
+		const testAll = false
+		if testAll {
+			for i := 1; i <= txnCount; i++ {
+				t.Run(fmt.Sprintf("%s_pause_at_txn_%d", tc.name, i), func(t *testing.T) {
+					runWithPauseAt(t, tc, i)
+				})
+			}
+		} else {
+			pauseAt := rnd.Intn(txnCount) + 1
+			t.Run(fmt.Sprintf("%s_pause_at_txn_%d", tc.name, pauseAt), func(t *testing.T) {
+				runWithPauseAt(t, tc, pauseAt)
+
+			})
+		}
+	}
+
 }

@@ -5110,17 +5110,17 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	// the unknown node 99 in evenlyBalanced to verify that requests from
 	// unknown localities don't affect the algorithm.
 	evenlyBalanced := newReplicaStats(clock, localityFn)
-	evenlyBalanced.record(1)
-	evenlyBalanced.record(2)
-	evenlyBalanced.record(3)
+	evenlyBalanced.recordCount(1, 1)
+	evenlyBalanced.recordCount(1, 2)
+	evenlyBalanced.recordCount(1, 3)
 	imbalanced1 := newReplicaStats(clock, localityFn)
 	imbalanced2 := newReplicaStats(clock, localityFn)
 	imbalanced3 := newReplicaStats(clock, localityFn)
 	for i := 0; i < 100*int(MinLeaseTransferStatsDuration.Seconds()); i++ {
-		evenlyBalanced.record(99)
-		imbalanced1.record(1)
-		imbalanced2.record(2)
-		imbalanced3.record(3)
+		evenlyBalanced.recordCount(1, 99)
+		imbalanced1.recordCount(1, 1)
+		imbalanced2.recordCount(1, 2)
+		imbalanced3.recordCount(1, 3)
 	}
 
 	manual.Increment(int64(MinLeaseTransferStatsDuration))

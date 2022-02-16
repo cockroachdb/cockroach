@@ -229,13 +229,13 @@ SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_na
 ----
 4   i3
 9   t_pkey
-10  t_x_key
-11  i1
-12  i2
-13  i4
-14  i5
-15  i6
-16  i7
+11  t_x_key
+13  i1
+15  i2
+17  i4
+19  i5
+21  i6
+23  i7
 
 # Make sure that each index can index join against the new primary key;
 
@@ -384,8 +384,8 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_x_key
-5  i1
+5  t_x_key
+7  i1
 
 query III
 SELECT * FROM t@t_pkey
@@ -839,7 +839,7 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_y_idx
+5  t_y_idx
 
 # Repeat the above test using ALTER PRIMARY KEY.
 
@@ -876,7 +876,7 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 3  t_pkey
-4  t_y_idx
+5  t_y_idx
 
 # Test when multiple indexes get created and destroyed.
 statement ok
@@ -920,9 +920,9 @@ query IT
 SELECT index_id, index_name FROM crdb_internal.table_indexes WHERE descriptor_name = 't' ORDER BY index_id
 ----
 5  t_pkey
-6  i1
-7  i2
-8  i3
+7  i1
+9  i2
+11 i3
 
 # Regression for #45889.
 # Primary key changes on a hash sharded index that just change the bucket
