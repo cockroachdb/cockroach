@@ -25,7 +25,7 @@ func TestTrace(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		init  func(context.Context) (context.Context, *tracing.Span)
-		check func(*testing.T, context.Context, tracing.Recording, *tracing.Tracer)
+		check func(*testing.T, context.Context, *tracing.Span, *tracing.Tracer)
 	}{
 		{
 			name: "verbose",
@@ -35,7 +35,8 @@ func TestTrace(t *testing.T) {
 				ctxWithSpan := tracing.ContextWithSpan(ctx, sp)
 				return ctxWithSpan, sp
 			},
-			check: func(t *testing.T, _ context.Context, rec tracing.Recording, _ *tracing.Tracer) {
+			check: func(t *testing.T, _ context.Context, sp *tracing.Span, _ *tracing.Tracer) {
+				rec := sp.FinishAndGetRecording(tracing.RecordingVerbose)
 				if err := tracing.CheckRecordedSpans(rec, `
 		span: s
 			tags: _verbose=1
@@ -57,7 +58,8 @@ func TestTrace(t *testing.T) {
 				tr.Configure(ctx, &st.SV)
 				return tr.StartSpanCtx(context.Background(), "foo")
 			},
-			check: func(t *testing.T, ctx context.Context, _ tracing.Recording, tr *tracing.Tracer) {
+			check: func(t *testing.T, ctx context.Context, sp *tracing.Span, tr *tracing.Tracer) {
+				defer sp.Finish()
 				// This isn't quite a real end-to-end-check, but it is good enough
 				// to give us confidence that we're really passing log events to
 				// the span, and the tracing package in turn has tests that verify
@@ -84,7 +86,7 @@ func TestTrace(t *testing.T) {
 			log.Event(ctx, "should-not-show-up")
 
 			tr := sp.Tracer()
-			tc.check(t, ctxWithSpan, sp.FinishAndGetRecording(tracing.RecordingVerbose), tr)
+			tc.check(t, ctxWithSpan, sp, tr)
 		})
 	}
 }
