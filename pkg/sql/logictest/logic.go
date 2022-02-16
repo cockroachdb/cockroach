@@ -289,6 +289,10 @@ import (
 //    in the cluster with index N (note this is 0-indexed, while
 //    node IDs themselves are 1-indexed).
 //
+//    A "host-cluster-" prefix can be prepended to the user, which will force
+//    the user session to be against the host cluster (useful for multi-tenant
+//    configurations).
+//
 //  - skipif <mysql/mssql/postgresql/cockroachdb/config CONFIG [ISSUE]>
 //    Skips the following `statement` or `query` if the argument is
 //    postgresql, cockroachdb, or a config matching the currently
@@ -1370,10 +1374,11 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 
 	addr := t.cluster.Server(nodeIdx).ServingSQLAddr()
-	if len(t.tenantAddrs) > 0 {
+	if len(t.tenantAddrs) > 0 && !strings.HasPrefix(user, "host-cluster-") {
 		addr = t.tenantAddrs[nodeIdx]
 	}
-	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(user))
+	pgUser := strings.TrimPrefix(user, "host-cluster-")
+	pgURL, cleanupFunc := sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 	pgURL.Path = "test"
 	db := t.openDB(pgURL)
 
@@ -1392,7 +1397,7 @@ func (t *logicTest) setUser(user string, nodeIdxOverride int) func() {
 	}
 	t.clients[user] = db
 	t.db = db
-	t.user = user
+	t.user = pgUser
 
 	return cleanupFunc
 }

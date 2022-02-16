@@ -1,0 +1,71 @@
+# LogicTest: 3node-tenant
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# TODO(radu): use the new ALTER TENANT statement when it is implemented.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'false', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+
+user host-cluster-root
+
+statement ok
+DELETE FROM system.tenant_settings WHERE tenant_id = 10
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# Set an all-tenant override.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (0, 'sql.notices.enabled', 'false', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+false
+
+user host-cluster-root
+
+# Now set a tenant-specific override which takes precedence.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (10, 'sql.notices.enabled', 'true', 'b')
+
+user root
+
+query B retry
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
+
+user host-cluster-root
+
+# Remove the all-tenant override; should make no difference.
+statement ok
+DELETE FROM system.tenant_settings WHERE tenant_id = 0
+
+user root
+
+query B
+SHOW CLUSTER SETTING sql.notices.enabled
+----
+true
