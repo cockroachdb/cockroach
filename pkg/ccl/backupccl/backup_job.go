@@ -226,6 +226,7 @@ func backup(
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
+
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
 				)
@@ -614,7 +615,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := cloud.WriteFile(ctx, c, latestFileName, strings.NewReader(suffix)); err != nil {
+
+		if err := writeNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
 			return err
 		}
 	}
@@ -690,6 +692,7 @@ func (b *backupResumer) readManifestOnResume(
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
+
 		// Try reading temp checkpoint.
 		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
 		desc, memSize, err = readBackupManifest(ctx, mem, defaultStore, tmpCheckpoint, details.EncryptionOptions)
@@ -707,6 +710,9 @@ func (b *backupResumer) readManifestOnResume(
 		}
 		// Best effort remove temp checkpoint.
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
+			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
+		}
+		if err := defaultStore.Delete(ctx, backupProgressDirectory+"/"+tmpCheckpoint); err != nil {
 			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
 		}
 	}
@@ -801,7 +807,13 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		return exportStore.Delete(ctx, backupManifestCheckpointName)
+		// The checkpoint in the progress folder should always exist for new
+		// directories so try deleting that first.
+		err = exportStore.Delete(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName)
+		if err != nil {
+			return err
+		}
+		return exportStore.Delete(ctx, backupProgressDirectory)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 	}
