@@ -620,7 +620,8 @@ type Options struct {
 }
 
 type makeRequesterFunc func(
-	workKind WorkKind, granter granter, settings *cluster.Settings, opts workQueueOptions) requester
+	_ log.AmbientContext, workKind WorkKind, granter granter, settings *cluster.Settings,
+	opts workQueueOptions) requester
 
 // NewGrantCoordinators constructs GrantCoordinators and WorkQueues for a
 // regular cluster node. Caller is responsible for hooking up
@@ -668,7 +669,7 @@ func NewGrantCoordinators(
 		usedSlotsMetric: metrics.KVUsedSlots,
 	}
 	kvSlotAdjuster.granter = kvg
-	coord.queues[KVWork] = makeRequester(KVWork, kvg, st, makeWorkQueueOptions(KVWork))
+	coord.queues[KVWork] = makeRequester(ambientCtx, KVWork, kvg, st, makeWorkQueueOptions(KVWork))
 	kvg.requester = coord.queues[KVWork]
 	coord.granters[KVWork] = kvg
 
@@ -680,7 +681,7 @@ func NewGrantCoordinators(
 		cpuOverload:          kvSlotAdjuster,
 	}
 	coord.queues[SQLKVResponseWork] = makeRequester(
-		SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
+		ambientCtx, SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
 	tg.requester = coord.queues[SQLKVResponseWork]
 	coord.granters[SQLKVResponseWork] = tg
 
@@ -691,7 +692,7 @@ func NewGrantCoordinators(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	coord.queues[SQLSQLResponseWork] = makeRequester(
+	coord.queues[SQLSQLResponseWork] = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
 	tg.requester = coord.queues[SQLSQLResponseWork]
 	coord.granters[SQLSQLResponseWork] = tg
@@ -703,7 +704,7 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	coord.queues[SQLStatementLeafStartWork] = makeRequester(
+	coord.queues[SQLStatementLeafStartWork] = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
 	sg.requester = coord.queues[SQLStatementLeafStartWork]
 	coord.granters[SQLStatementLeafStartWork] = sg
@@ -715,7 +716,7 @@ func NewGrantCoordinators(
 		cpuOverload:     kvSlotAdjuster,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	coord.queues[SQLStatementRootStartWork] = makeRequester(
+	coord.queues[SQLStatementRootStartWork] = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
 	sg.requester = coord.queues[SQLStatementRootStartWork]
 	coord.granters[SQLStatementRootStartWork] = sg
@@ -766,7 +767,7 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	coord.queues[SQLKVResponseWork] = makeRequester(
+	coord.queues[SQLKVResponseWork] = makeRequester(ambientCtx,
 		SQLKVResponseWork, tg, st, makeWorkQueueOptions(SQLKVResponseWork))
 	tg.requester = coord.queues[SQLKVResponseWork]
 	coord.granters[SQLKVResponseWork] = tg
@@ -778,7 +779,7 @@ func NewGrantCoordinatorSQL(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          sqlNodeCPU,
 	}
-	coord.queues[SQLSQLResponseWork] = makeRequester(
+	coord.queues[SQLSQLResponseWork] = makeRequester(ambientCtx,
 		SQLSQLResponseWork, tg, st, makeWorkQueueOptions(SQLSQLResponseWork))
 	tg.requester = coord.queues[SQLSQLResponseWork]
 	coord.granters[SQLSQLResponseWork] = tg
@@ -790,7 +791,7 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLLeafStartUsedSlots,
 	}
-	coord.queues[SQLStatementLeafStartWork] = makeRequester(
+	coord.queues[SQLStatementLeafStartWork] = makeRequester(ambientCtx,
 		SQLStatementLeafStartWork, sg, st, makeWorkQueueOptions(SQLStatementLeafStartWork))
 	sg.requester = coord.queues[SQLStatementLeafStartWork]
 	coord.granters[SQLStatementLeafStartWork] = sg
@@ -802,7 +803,7 @@ func NewGrantCoordinatorSQL(
 		cpuOverload:     sqlNodeCPU,
 		usedSlotsMetric: metrics.SQLRootStartUsedSlots,
 	}
-	coord.queues[SQLStatementRootStartWork] = makeRequester(
+	coord.queues[SQLStatementRootStartWork] = makeRequester(ambientCtx,
 		SQLStatementRootStartWork, sg, st, makeWorkQueueOptions(SQLStatementRootStartWork))
 	sg.requester = coord.queues[SQLStatementRootStartWork]
 	coord.granters[SQLStatementRootStartWork] = sg
@@ -1247,7 +1248,7 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(storeID int32) *GrantCoo
 	// Share the WorkQueue metrics across all stores.
 	// TODO(sumeer): add per-store WorkQueue state for debug.zip and db console.
 	opts.metrics = &sgc.workQueueMetrics
-	coord.queues[KVWork] = sgc.makeRequesterFunc(KVWork, kvg, sgc.settings, opts)
+	coord.queues[KVWork] = sgc.makeRequesterFunc(sgc.ambientCtx, KVWork, kvg, sgc.settings, opts)
 	kvg.requester = coord.queues[KVWork]
 	coord.granters[KVWork] = kvg
 	coord.ioLoadListener = &ioLoadListener{
