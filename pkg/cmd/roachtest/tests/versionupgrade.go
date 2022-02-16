@@ -85,8 +85,6 @@ func runVersionUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This test uses fixtures and we do not have encrypted fixtures right now.
-	c.EncryptDefault(false)
 
 	// Set the bool within to true to create a new fixture for this test. This
 	// is necessary after every release. For example, the day `master` becomes
@@ -585,7 +583,6 @@ func makeVersionFixtureAndFatal(
 		makeFixtureVersion = ""
 	}
 
-	c.EncryptDefault(false)
 	newVersionUpgradeTest(c,
 		// Start the cluster from a fixture. That fixture's cluster version may
 		// be at the predecessor version (though in practice it's fully up to
