@@ -15,6 +15,7 @@ import moment from "moment";
 import {
   CachedDataReducer,
   CachedDataReducerState,
+  CachedDataReducerWithPagination,
   KeyedCachedDataReducer,
   KeyedCachedDataReducerState,
 } from "./cachedDataReducer";
@@ -99,7 +100,19 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   "databaseDetails",
   databaseRequestToID,
 );
+
+const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
+  req.page_token;
+
+export const hotRangesReducerObj = new CachedDataReducerWithPagination(
+  api.getHotRanges,
+  "hotRanges",
+  hotRangesRequestToID,
+);
+
 export const refreshDatabaseDetails = databaseDetailsReducerObj.refresh;
+
+export const refreshHotRanges = hotRangesReducerObj.refresh;
 
 // NOTE: We encode the db and table name so we can combine them as a string.
 // TODO(maxlang): there's probably a nicer way to do this
@@ -371,6 +384,7 @@ export interface APIReducersState {
     api.StatementDiagnosticsReportsResponseMessage
   >;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
+  hotRanges: KeyedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -408,6 +422,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
+  [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
