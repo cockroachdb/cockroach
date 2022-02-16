@@ -364,6 +364,9 @@ func runListIncrementalCmd(cmd *cobra.Command, args []string) error {
 	// supported and produce identical output:
 	// cockroach debug backup list-incremental nodelocal://self/mybackup/2022/02/10-212843.96
 	// cockroach debug backup list-incremental nodelocal://self/mybackup/incrementals/2022/02/10-212843.96
+	//
+	// TODO(bardin): Support custom incrementals directories, which lack a full
+	// backup nearby.
 	path := args[0]
 	if !strings.Contains(path, "://") {
 		path = nodelocal.MakeLocalStorageURI(path)
