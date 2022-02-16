@@ -16,6 +16,7 @@ go_library(
         "schema.go",
         "synthetic_descriptors.go",
         "system_database_namespace_cache.go",
+        "system_table.go",
         "table.go",
         "temporary_descriptors.go",
         "txn.go",

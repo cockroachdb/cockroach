@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -55,7 +56,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/errors/errorspb"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
@@ -225,6 +225,8 @@ type Node struct {
 
 	tenantUsage multitenant.TenantUsageServer
 
+	tenantSettingsWatcher *tenantsettingswatcher.Watcher
+
 	spanConfigAccessor spanconfig.KVAccessor // powers the span configuration RPCs
 
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
@@ -352,6 +354,7 @@ func NewNode(
 	kvAdmissionQ *admission.WorkQueue,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
+	tenantSettingsWatcher *tenantsettingswatcher.Watcher,
 	spanConfigAccessor spanconfig.KVAccessor,
 ) *Node {
 	var sqlExec *sql.InternalExecutor
@@ -359,17 +362,18 @@ func NewNode(
 		sqlExec = execCfg.InternalExecutor
 	}
 	n := &Node{
-		storeCfg:            cfg,
-		stopper:             stopper,
-		recorder:            recorder,
-		metrics:             makeNodeMetrics(reg, cfg.HistogramWindowInterval),
-		stores:              stores,
-		txnMetrics:          txnMetrics,
-		sqlExec:             sqlExec,
-		clusterID:           clusterID,
-		admissionController: kvserver.MakeKVAdmissionController(kvAdmissionQ, storeGrantCoords),
-		tenantUsage:         tenantUsage,
-		spanConfigAccessor:  spanConfigAccessor,
+		storeCfg:              cfg,
+		stopper:               stopper,
+		recorder:              recorder,
+		metrics:               makeNodeMetrics(reg, cfg.HistogramWindowInterval),
+		stores:                stores,
+		txnMetrics:            txnMetrics,
+		sqlExec:               sqlExec,
+		clusterID:             clusterID,
+		admissionController:   kvserver.MakeKVAdmissionController(kvAdmissionQ, storeGrantCoords),
+		tenantUsage:           tenantUsage,
+		tenantSettingsWatcher: tenantSettingsWatcher,
+		spanConfigAccessor:    spanConfigAccessor,
 	}
 	n.storeCfg.KVAdmissionController = n.admissionController
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -1423,22 +1427,54 @@ func (n *Node) TenantSettings(
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
-	// TODO(radu): implement this. For now we just respond with an initial event
-	// so the tenant can initialize.
-	e := &roachpb.TenantSettingsEvent{
-		Precedence:  roachpb.SpecificTenantOverrides,
-		Incremental: false,
-		Overrides:   nil,
-		Error:       errorspb.EncodedError{},
+	w := n.tenantSettingsWatcher
+	if err := w.WaitForStart(ctx); err != nil {
+		return stream.Send(&roachpb.TenantSettingsEvent{
+			Error: errors.EncodeError(ctx, err),
+		})
 	}
-	if err := stream.Send(e); err != nil {
+
+	send := func(precedence roachpb.TenantSettingsPrecedence, overrides []roachpb.TenantSetting) error {
+		log.VInfof(ctx, 1, "sending precedence %d: %v", precedence, overrides)
+		return stream.Send(&roachpb.TenantSettingsEvent{
+			Precedence:  precedence,
+			Incremental: false,
+			Overrides:   overrides,
+		})
+	}
+
+	allOverrides, allCh := w.GetAllTenantOverrides()
+	if err := send(roachpb.AllTenantsOverrides, allOverrides); err != nil {
 		return err
 	}
-	select {
-	case <-ctxDone:
-		return ctx.Err()
-	case <-n.stopper.ShouldQuiesce():
-		return stop.ErrUnavailable
+
+	tenantOverrides, tenantCh := w.GetTenantOverrides(args.TenantID)
+	if err := send(roachpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-allCh:
+			// All-tenant overrides have changed, send them again.
+			allOverrides, allCh = w.GetAllTenantOverrides()
+			if err := send(roachpb.AllTenantsOverrides, allOverrides); err != nil {
+				return err
+			}
+
+		case <-tenantCh:
+			// Tenant-specific overrides have changed, send them again.
+			tenantOverrides, tenantCh = w.GetTenantOverrides(args.TenantID)
+			if err := send(roachpb.SpecificTenantOverrides, tenantOverrides); err != nil {
+				return err
+			}
+
+		case <-ctxDone:
+			return ctx.Err()
+
+		case <-n.stopper.ShouldQuiesce():
+			return stop.ErrUnavailable
+		}
 	}
 }
 
