@@ -244,10 +244,20 @@ def go_deps():
         name = "com_github_apache_thrift",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/apache/thrift",
-        sha256 = "f9e5418fda5dff9f5e1a892a127472fc621d417b3ee1351e53141509233fb1d5",
-        strip_prefix = "github.com/apache/thrift@v0.15.0",
+        sha256 = "50d5c610df30fa2a6039394d5142382b7d9938870dfb12ef46bddfa3da250893",
+        strip_prefix = "github.com/apache/thrift@v0.16.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/apache/thrift/com_github_apache_thrift-v0.15.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/apache/thrift/com_github_apache_thrift-v0.16.0.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_araddon_dateparse",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/araddon/dateparse",
+        sha256 = "8fe74d5b36a9aa66c1350657009296469f8aa5b6925acd178044cd248023fc5a",
+        strip_prefix = "github.com/araddon/dateparse@v0.0.0-20210429162001-6b43995a97de",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/araddon/dateparse/com_github_araddon_dateparse-v0.0.0-20210429162001-6b43995a97de.zip",
         ],
     )
     go_repository(
@@ -2448,10 +2458,10 @@ def go_deps():
         name = "com_github_fraugster_parquet_go",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/fraugster/parquet-go",
-        sha256 = "66beb8f2218c31ca4ca3d3dbcc91c256f3379750ade924016f4179982446edd7",
-        strip_prefix = "github.com/fraugster/parquet-go@v0.6.1",
+        sha256 = "68aa69311763a3c816552da6b2571272f996bc111237cecbb171dd7d41bb9346",
+        strip_prefix = "github.com/fraugster/parquet-go@v0.8.0",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fraugster/parquet-go/com_github_fraugster_parquet_go-v0.6.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/fraugster/parquet-go/com_github_fraugster_parquet_go-v0.8.0.zip",
         ],
     )
     go_repository(
@@ -5319,10 +5329,10 @@ def go_deps():
         name = "com_github_mattn_go_runewidth",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/mattn/go-runewidth",
-        sha256 = "dab6e7984b913f61d02ac53f5c1875c029e591f3b4d3262dea8e95d8c28bb657",
-        strip_prefix = "github.com/mattn/go-runewidth@v0.0.7",
+        sha256 = "030dcf3ea6cb39b34269f119ee5fe5e9d5834daf409e1f3f48c065a45326f4a6",
+        strip_prefix = "github.com/mattn/go-runewidth@v0.0.10",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.7.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/mattn/go-runewidth/com_github_mattn_go_runewidth-v0.0.10.zip",
         ],
     )
     go_repository(
@@ -6734,6 +6744,16 @@ def go_deps():
         ],
     )
     go_repository(
+        name = "com_github_rivo_uniseg",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/rivo/uniseg",
+        sha256 = "cb701df81f36acfbb2627a78662fdcaa150ee1ac00d0796a7f3eafbdb6218128",
+        strip_prefix = "github.com/rivo/uniseg@v0.1.0",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/rivo/uniseg/com_github_rivo_uniseg-v0.1.0.zip",
+        ],
+    )
+    go_repository(
         name = "com_github_robertkrimen_godocdown",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/robertkrimen/godocdown",
@@ -6921,6 +6941,16 @@ def go_deps():
         strip_prefix = "github.com/sclevine/agouti@v3.0.0+incompatible",
         urls = [
             "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/sclevine/agouti/com_github_sclevine_agouti-v3.0.0+incompatible.zip",
+        ],
+    )
+    go_repository(
+        name = "com_github_scylladb_termtables",
+        build_file_proto_mode = "disable_global",
+        importpath = "github.com/scylladb/termtables",
+        sha256 = "0afd3a75417e6b708c62329cea7f2822162c8bf6ada0de094cdc032461b8f196",
+        strip_prefix = "github.com/scylladb/termtables@v0.0.0-20191203121021-c4c0b6d42ff4",
+        urls = [
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/scylladb/termtables/com_github_scylladb_termtables-v0.0.0-20191203121021-c4c0b6d42ff4.zip",
         ],
     )
     go_repository(
