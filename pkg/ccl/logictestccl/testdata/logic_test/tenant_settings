@@ -69,3 +69,35 @@ query B
 SHOW CLUSTER SETTING sql.notices.enabled
 ----
 true
+
+# Verify that the tenant cannot modify TenantReadOnly settings.
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+statement error only settable by the operator
+SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '45s'
+
+# Verify that even writing to the system table directly doesn't work.
+statement ok
+INSERT INTO system.settings (name, value, "valueType") VALUES ('kv.protectedts.reconciliation.interval', '45s', 'd')
+
+query T
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:05:00
+
+# Verify that we can control it from the operator.
+user host-cluster-root
+
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type)
+  VALUES (10, 'kv.protectedts.reconciliation.interval', '45s', 'd')
+
+user root
+
+query T retry
+SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
+----
+00:00:45
