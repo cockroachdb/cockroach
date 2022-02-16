@@ -62,8 +62,14 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 				schemaDroppedIDs.ForEach(dropIDs.Add)
 			}
 		}
+		// It's possible for descriptors to be corrupted, for example the public
+		// schema may already be dropped (i.e. repair_test has this scenario). In
+		// which case the look-up below will return an invalid ID.
 		var schemaIDs catalog.DescriptorIDSet
-		schemaIDs.Add(db.GetSchemaID(tree.PublicSchema))
+		publicSchemaID := db.GetSchemaID(tree.PublicSchema)
+		if publicSchemaID != descpb.InvalidID {
+			schemaIDs.Add(publicSchemaID)
+		}
 		_ = db.ForEachSchemaInfo(func(id descpb.ID, _ string, isDropped bool) error {
 			if !isDropped {
 				schemaIDs.Add(id)
