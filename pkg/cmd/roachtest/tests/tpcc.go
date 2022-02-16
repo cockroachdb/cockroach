@@ -1049,10 +1049,8 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	// as well.
 	c.Put(ctx, t.Cockroach(), "./cockroach", loadNodes)
 	// Don't encrypt in tpccbench tests.
-	c.EncryptDefault(false)
-	c.EncryptAtRandom(false)
 	startOpts, settings := b.startOpts()
-	startOpts.RoachprodOpts.EncryptedStores = false
+	startOpts.RoachtestOpts.DontEncrypt = true
 	c.Start(ctx, t.L(), startOpts, settings, roachNodes)
 	SetAdmissionControl(ctx, t, c, !b.AdmissionControlDisabled)
 	useHAProxy := b.Chaos
