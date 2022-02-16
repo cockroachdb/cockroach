@@ -25,6 +25,7 @@ go_library(
         "opgen_index_name.go",
         "opgen_index_partitioning.go",
         "opgen_locality.go",
+        "opgen_multiregion_enum_type_reference.go",
         "opgen_namespace.go",
         "opgen_on_update_expr_type_reference.go",
         "opgen_out_foreign_key.go",
