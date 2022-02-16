@@ -61,6 +61,7 @@ message ElementProto {
   ConstraintComment constraint_comment = 39 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, ForeignKey, UniqueConstraint, CheckConstraint\""];
   DatabaseRoleSetting database_role_setting = 40 [(gogoproto.moretags) = "parent:\"Database\""];
   RowLevelTTL row_level_ttl = 41 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
+  MultiRegionEnumTypeReference multi_region_enum = 42 [(gogoproto.moretags) = "parent:\"Table, Database, Type\""];
 }
 
 message Column {
@@ -207,6 +208,12 @@ message ColumnTypeReference {
 message CheckConstraintTypeReference {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 constraint_ordinal = 2;
+  uint32 type_id = 3 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message MultiRegionEnumTypeReference {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 database_id = 2 [(gogoproto.customname) = "DatabaseID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 type_id = 3 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 

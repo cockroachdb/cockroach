@@ -668,6 +668,9 @@ type TableDescriptor interface {
 	// GetExcludeDataFromBackup returns true if the table's row data is configured
 	// to be excluded during backup.
 	GetExcludeDataFromBackup() bool
+	// GetMultiRegionEnumDependencyIfExists returns true if the given table has an "implicit"
+	//// dependency on the multi-region enum.
+	GetMultiRegionEnumDependencyIfExists() bool
 }
 
 // TypeDescriptor will eventually be called typedesc.Descriptor.
