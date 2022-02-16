@@ -146,7 +146,8 @@ func generateScanSpans(
 	if params.InvertedConstraint != nil {
 		return sb.SpansFromInvertedSpans(params.InvertedConstraint, params.IndexConstraint, nil /* scratch */)
 	}
-	return sb.SpansFromConstraint(params.IndexConstraint, params.NeededCols, false /* forDelete */)
+	splitter := span.MakeSplitter(tabDesc, index, params.NeededCols)
+	return sb.SpansFromConstraint(params.IndexConstraint, splitter)
 }
 
 func (ef *execFactory) constructVirtualScan(
@@ -1737,9 +1738,7 @@ func (ef *execFactory) ConstructDeleteRange(
 		return nil, err
 	}
 
-	// Setting the "forDelete" flag includes all column families in case where a
-	// single record is deleted.
-	spans, err := sb.SpansFromConstraint(indexConstraint, needed, true /* forDelete */)
+	spans, err := sb.SpansFromConstraint(indexConstraint, span.NoopSplitter())
 	if err != nil {
 		return nil, err
 	}
