@@ -1038,6 +1038,8 @@ message HotRangesRequest {
   // in the cluster.
   // API: PUBLIC ALPHA
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  int32 page_size = 2 [(gogoproto.nullable) = true];
+  string page_token = 3 [(gogoproto.nullable) = true];
 }
 
 // HotRangesResponse is the payload produced in response
@@ -1161,8 +1163,16 @@ message HotRangesResponseV2 {
     // schema_name provides the name of schema (if exists) for table in current range.
     string schema_name = 9;
   }
-  // ranges contain list of hot ranges info that has highest number of QPS.
+  // Ranges contain list of hot ranges info that has highest number of QPS.
   repeated HotRange ranges = 1;
+  // errors contains any errors that occurred during fan-out calls to other nodes.
+  map<int32, string> errors_by_node_id = 2 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID",
+    (gogoproto.customname) = "ErrorsByNodeID",
+    (gogoproto.nullable) = false
+  ];
+  // NextPageToken represents next pagination token to request next slice of data.
+  string next_page_token = 3 [(gogoproto.nullable) = true];
 }
 
 message RangeRequest {
@@ -1758,6 +1768,14 @@ service Status {
       body : "*"
     };
   }
+
+  rpc HotRangesV2WithPagination(HotRangesRequest) returns (HotRangesResponseV2) {
+    option (google.api.http) = {
+      post : "/_status/v2/hotrangespagination"
+      body : "*"
+    };
+  }
+
 
   rpc Range(RangeRequest) returns (RangeResponse) {
     option (google.api.http) = {
