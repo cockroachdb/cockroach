@@ -539,10 +539,10 @@ func (b *builderState) ResolveEnumType(
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"%q is an implicit array type and cannot be modified", typ.GetName()))
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
+		typeName := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), typ.GetName())
 		// Multi-region enums are not directly modifiable.
-		panic(errors.WithHintf(
-			pgerror.Newf(pgcode.DependentObjectsStillExist,
-				"%q is a multi-region enum and cannot be modified directly", typ.GetName()),
+		panic(errors.WithHintf(pgerror.Newf(pgcode.DependentObjectsStillExist,
+			"%q is a multi-region enum and cannot be modified directly", typeName.FQString()),
 			"try ALTER DATABASE %s DROP REGION %s", prefix.Database.GetName(), typ.GetName()))
 	case descpb.TypeDescriptor_ENUM:
 		b.ensureDescriptor(typ.GetID())
