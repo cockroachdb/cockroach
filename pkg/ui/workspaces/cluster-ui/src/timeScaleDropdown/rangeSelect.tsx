@@ -12,7 +12,7 @@ import React, { useState, useRef } from "react";
 import { Button, Dropdown } from "antd";
 import moment, { Moment } from "moment";
 import { DateRangeMenu } from "src/dateRange";
-import { CaretDown } from "src/icon/caretDown";
+import { CaretDown } from "@cockroachlabs/icons";
 import classNames from "classnames/bind";
 
 import styles from "./rangeSelector.module.scss";
