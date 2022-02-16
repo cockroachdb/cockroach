@@ -53,6 +53,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1065,6 +1067,10 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 		db.Version = 1
 		db.ModificationTime = hlc.Timestamp{}
 
+		if err := rewriteSchemaChangerState(db, descriptorRewrites); err != nil {
+			return err
+		}
+
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 		err := db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
@@ -1130,6 +1136,10 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		typ.Version = 1
 		typ.ModificationTime = hlc.Timestamp{}
 
+		if err := rewriteSchemaChangerState(typ, descriptorRewrites); err != nil {
+			return err
+		}
+
 		typ.ID = rewrite.ID
 		typ.ParentSchemaID = rewrite.ParentSchemaID
 		typ.ParentID = rewrite.ParentID
@@ -1170,6 +1180,85 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 
 		sc.ID = rewrite.ID
 		sc.ParentID = rewrite.ParentID
+
+		if err := rewriteSchemaChangerState(sc, descriptorRewrites); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// rewriteSchemaChangerState handles rewriting any references to IDs stored in
+// the descriptor's declarative schema changer state.
+func rewriteSchemaChangerState(
+	d catalog.MutableDescriptor, descriptorRewrites DescRewriteMap,
+) (err error) {
+	state := d.GetDeclarativeSchemaChangerState()
+	if state == nil {
+		return nil
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Wrap(err, "rewriting declarative schema changer state")
+		}
+	}()
+	for i := 0; i < len(state.Targets); i++ {
+		t := &state.Targets[i]
+		if err := screl.WalkDescIDs(t.Element(), func(id *descpb.ID) error {
+			rewrite, ok := descriptorRewrites[*id]
+			if !ok {
+				return errors.Errorf("missing rewrite for id %d in %T", *id, t)
+			}
+			*id = rewrite.ID
+			return nil
+		}); err != nil {
+			// We'll permit this in the special case of a schema descriptor
+			// database entry.
+			//
+			// TODO(ajwerner,postamar): it's not obvious that this should be its own
+			// element as opposed to just an extension of the namespace table that only
+			// ops know about.
+			switch el := t.Element().(type) {
+			case *scpb.DatabaseSchemaEntry:
+				_, scExists := descriptorRewrites[el.SchemaID]
+				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
+					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+					state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+					state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+					i--
+					continue
+				}
+			}
+			return errors.Wrap(err, "rewriting descriptor ids")
+		}
+
+		if err := screl.WalkExpressions(t.Element(), func(expr *catpb.Expression) error {
+			if *expr == "" {
+				return nil
+			}
+			newExpr, err := rewriteTypesInExpr(string(*expr), descriptorRewrites)
+			if err != nil {
+				return errors.Wrapf(err, "rewriting expression type references: %q", *expr)
+			}
+			newExpr, err = rewriteSequencesInExpr(newExpr, descriptorRewrites)
+			if err != nil {
+				return errors.Wrapf(err, "rewriting expression sequence references: %q", newExpr)
+			}
+			*expr = catpb.Expression(newExpr)
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err := screl.WalkTypes(t.Element(), func(t *types.T) error {
+			return rewriteIDsInTypesT(t, descriptorRewrites)
+		}); err != nil {
+			return errors.Wrap(err, "rewriting user-defined type references")
+		}
+		// TODO(ajwerner): Remember to rewrite views when the time comes. Currently
+		// views are not handled by the declarative schema changer.
+	}
+	if len(state.Targets) == 0 {
+		d.SetDeclarativeSchemaChangerState(nil)
 	}
 	return nil
 }
@@ -1199,6 +1288,9 @@ func RewriteTableDescs(
 			if err := rewriteViewQueryDBNames(table, overrideDB); err != nil {
 				return err
 			}
+		}
+		if err := rewriteSchemaChangerState(table, descriptorRewrites); err != nil {
+			return err
 		}
 
 		table.ID = tableRewrite.ID
@@ -1365,6 +1457,7 @@ func RewriteTableDescs(
 		// lease is obviously bogus (plus the nodeID is relative to backup cluster).
 		table.Lease = nil
 	}
+
 	return nil
 }
 

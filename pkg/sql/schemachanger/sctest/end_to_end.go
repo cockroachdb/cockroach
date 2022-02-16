@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -31,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -43,15 +45,28 @@ type NewClusterFunc func(
 	t *testing.T, knobs *scrun.TestingKnobs,
 ) (_ *gosql.DB, cleanup func())
 
+// SingleNodeCluster is a NewClusterFunc.
+func SingleNodeCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	return db, func() {
+		s.Stopper().Stop(context.Background())
+	}
+}
+
 // EndToEndSideEffects is a data-driven test runner that executes DDL statements in the
 // declarative schema changer injected with test dependencies and compares the
 // accumulated side effects logs with expected results from the data-driven
 // test file.
 //
 // It shares a data-driven format with Rollback.
-func EndToEndSideEffects(t *testing.T, newCluster NewClusterFunc) {
+func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 	ctx := context.Background()
-	datadriven.Walk(t, testutils.TestDataPath(t), func(t *testing.T, path string) {
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Create a test cluster.
 		db, cleanup := newCluster(t, nil /* knobs */)
 		tdb := sqlutils.MakeSQLRunner(db)
@@ -64,7 +79,7 @@ func EndToEndSideEffects(t *testing.T, newCluster NewClusterFunc) {
 				for _, stmt := range stmts {
 					tdb.Exec(t, stmt.SQL)
 				}
-				waitForSchemaChangesToComplete(t, tdb)
+				waitForSchemaChangesToSucceed(t, tdb)
 			}
 
 			switch d.Cmd {
@@ -190,12 +205,25 @@ func prettyNamespaceDump(t *testing.T, tdb *sqlutils.SQLRunner) string {
 	return strings.Join(lines, "\n")
 }
 
-func waitForSchemaChangesToComplete(t *testing.T, tdb *sqlutils.SQLRunner) {
+func waitForSchemaChangesToSucceed(t *testing.T, tdb *sqlutils.SQLRunner) {
+	tdb.CheckQueryResultsRetry(
+		t, schemaChangeWaitQuery(`('succeeded')`), [][]string{},
+	)
+}
+
+func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
+	tdb.CheckQueryResultsRetry(
+		t, schemaChangeWaitQuery(`('succeeded', 'failed')`), [][]string{},
+	)
+}
+
+func schemaChangeWaitQuery(statusInString string) string {
 	q := fmt.Sprintf(
-		`SELECT count(*) FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status <> 'succeeded'`,
+		`SELECT status, job_type, description FROM [SHOW JOBS] WHERE job_type IN ('%s', '%s', '%s') AND status NOT IN %s`,
 		jobspb.TypeSchemaChange,
 		jobspb.TypeTypeSchemaChange,
 		jobspb.TypeNewSchemaChange,
+		statusInString,
 	)
-	tdb.CheckQueryResultsRetry(t, q, [][]string{{"0"}})
+	return q
 }

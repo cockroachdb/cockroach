@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "scbackup",
+    srcs = [
+        "doc.go",
+        "job.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs",
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/sql/schemachanger/scexec",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/screl",
+    ],
+)

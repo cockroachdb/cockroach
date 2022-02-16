@@ -29,6 +29,7 @@ func BuildStages(
 	init scpb.CurrentState, phase scop.Phase, g *scgraph.Graph, scJobIDSupplier func() jobspb.JobID,
 ) []Stage {
 	c := buildContext{
+		rollback:               init.InRollback,
 		g:                      g,
 		scJobIDSupplier:        scJobIDSupplier,
 		isRevertibilityIgnored: true,
@@ -50,6 +51,7 @@ func BuildStages(
 // buildContext contains the global constants for building the stages.
 // Only the BuildStages function mutates it, it's read-only everywhere else.
 type buildContext struct {
+	rollback               bool
 	g                      *scgraph.Graph
 	scJobIDSupplier        func() jobspb.JobID
 	isRevertibilityIgnored bool
@@ -472,7 +474,9 @@ func (bc buildContext) nodes(current []scpb.Status) []*screl.Node {
 }
 
 func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.Status) []scop.Op {
-	descIDs, states := makeDescriptorStates(bc.scJobIDSupplier(), bc.targetState, after)
+	descIDs, states := makeDescriptorStates(
+		bc.scJobIDSupplier(), bc.rollback, bc.targetState, after,
+	)
 	ops := make([]scop.Op, 0, descIDs.Len())
 	descIDs.ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.SetJobStateOnDescriptor{
@@ -485,7 +489,7 @@ func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.
 }
 
 func makeDescriptorStates(
-	jobID jobspb.JobID, ts scpb.TargetState, statuses []scpb.Status,
+	jobID jobspb.JobID, inRollback bool, ts scpb.TargetState, statuses []scpb.Status,
 ) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
 	descIDs := screl.GetDescIDs(ts)
 	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
@@ -517,6 +521,7 @@ func makeDescriptorStates(
 		state.Targets = append(state.Targets, t)
 		state.TargetRanks = append(state.TargetRanks, uint32(i))
 		state.CurrentStatuses = append(state.CurrentStatuses, statuses[i])
+		state.InRollback = inRollback
 	}
 	return descIDs, states
 }
