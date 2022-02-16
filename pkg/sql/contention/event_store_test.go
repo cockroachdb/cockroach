@@ -201,9 +201,13 @@ func randomlyGenerateTestData(testSize int, numOfCoordinator int) []testData {
 	tcs := make([]testData, 0, testSize)
 	for i := 0; i < testSize; i++ {
 		tcs = append(tcs, testData{
-			ResolvedTxnID: contentionpb.ResolvedTxnID{
+			blockingTxn: contentionpb.ResolvedTxnID{
 				TxnID:            uuid.FastMakeV4(),
 				TxnFingerprintID: roachpb.TransactionFingerprintID(math.MaxUint64 - uint64(i)),
+			},
+			waitingTxn: contentionpb.ResolvedTxnID{
+				TxnID:            uuid.FastMakeV4(),
+				TxnFingerprintID: roachpb.TransactionFingerprintID(math.MaxUint64/2 - uint64(i)),
 			},
 			coordinatorNodeID: strconv.Itoa(rand.Intn(numOfCoordinator)),
 		})
