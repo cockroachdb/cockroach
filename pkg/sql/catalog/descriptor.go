@@ -653,7 +653,7 @@ type TableDescriptor interface {
 	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
 	// GetRowLevelTTL returns the row-level TTL config for the table.
-	GetRowLevelTTL() *descpb.TableDescriptor_RowLevelTTL
+	GetRowLevelTTL() *catpb.RowLevelTTL
 	// HasRowLevelTTL returns where there is a row-level TTL config for the table.
 	HasRowLevelTTL() bool
 	// GetExcludeDataFromBackup returns true if the table's row data is configured

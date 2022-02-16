@@ -60,6 +60,7 @@ message ElementProto {
   ColumnComment column_comment = 38 [(gogoproto.moretags) = "parent:\"Column\""];
   ConstraintComment constraint_comment = 39 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, ForeignKey, UniqueConstraint, CheckConstraint\""];
   DatabaseRoleSetting database_role_setting = 40 [(gogoproto.moretags) = "parent:\"Database\""];
+  RowLevelTTL row_level_ttl = 41 [(gogoproto.customname) = "RowLevelTTL", (gogoproto.moretags) = "parent:\"Table\""];
 }
 
 message Column {
@@ -286,6 +287,11 @@ message UserPrivileges {
 message Locality {
   uint32 descriptor_id = 1 [(gogoproto.customname) = "DescriptorID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   cockroach.sql.catalog.catpb.LocalityConfig locality = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.LocalityConfig"];
+}
+
+message RowLevelTTL {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  cockroach.sql.catalog.catpb.RowLevelTTL row_level_ttl = 2 [(gogoproto.customname) = "RowLevelTTL"];
 }
 
 message ColumnName {

@@ -12,8 +12,10 @@ package paramparse
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -184,7 +186,7 @@ var tableParams = map[string]tableParam{
 			if setTrue && po.tableDesc.RowLevelTTL == nil {
 				// Set the base struct, but do not populate it.
 				// An error from runPostChecks will appear if the requisite fields are not set.
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			if !setTrue && po.tableDesc.RowLevelTTL != nil {
 				return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
@@ -192,7 +194,8 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {
-			return unimplemented.NewWithIssue(75428, "unsetting TTL not yet implemented")
+			po.tableDesc.RowLevelTTL = nil
+			return nil
 		},
 	},
 	`ttl_automatic_column`: {
@@ -244,7 +247,7 @@ var tableParams = map[string]tableParam{
 				)
 			}
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
 			return nil
@@ -262,7 +265,7 @@ var tableParams = map[string]tableParam{
 	`ttl_select_batch_size`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			val, err := DatumAsInt(evalCtx, key, datum)
 			if err != nil {
@@ -284,7 +287,7 @@ var tableParams = map[string]tableParam{
 	`ttl_delete_batch_size`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			val, err := DatumAsInt(evalCtx, key, datum)
 			if err != nil {
@@ -306,7 +309,7 @@ var tableParams = map[string]tableParam{
 	`ttl_job_cron`: {
 		onSet: func(ctx context.Context, po *TableStorageParamObserver, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext, key string, datum tree.Datum) error {
 			if po.tableDesc.RowLevelTTL == nil {
-				po.tableDesc.RowLevelTTL = &descpb.TableDescriptor_RowLevelTTL{}
+				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
 			str, err := DatumAsString(evalCtx, key, datum)
 			if err != nil {
@@ -410,6 +413,12 @@ func (po *TableStorageParamObserver) onSet(
 	key string,
 	datum tree.Datum,
 ) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL settings while another schema change on the table is being processed",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onSet(ctx, po, semaCtx, evalCtx, key, datum)
 	}
@@ -418,6 +427,12 @@ func (po *TableStorageParamObserver) onSet(
 
 // onReset implements the StorageParamObserver interface.
 func (po *TableStorageParamObserver) onReset(evalCtx *tree.EvalContext, key string) error {
+	if strings.HasPrefix(key, "ttl_") && len(po.tableDesc.AllMutations()) > 0 {
+		return pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			"cannot modify TTL settings while another schema change on the table is being processed",
+		)
+	}
 	if p, ok := tableParams[key]; ok {
 		return p.onReset(po, evalCtx, key)
 	}

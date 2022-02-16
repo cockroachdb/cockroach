@@ -165,5 +165,11 @@ func dropTableDependents(b BuildCtx, tbl catalog.TableDescriptor, behavior tree.
 			seq := c.MustReadTable(sequenceOwnedBy.SequenceID)
 			cleanSequenceOwnedBy(seq)
 		})
+		if ttl := tbl.GetRowLevelTTL(); ttl != nil {
+			b.EnqueueDrop(&scpb.RowLevelTTL{
+				TableID:     tbl.GetID(),
+				RowLevelTTL: ttl,
+			})
+		}
 	}
 }

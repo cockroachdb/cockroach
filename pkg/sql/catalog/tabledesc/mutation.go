@@ -12,6 +12,7 @@ package tabledesc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -158,6 +159,17 @@ func (c constraintToUpdate) GetConstraintID() descpb.ConstraintID {
 	panic("unknown constraint type")
 }
 
+// modifyRowLevelTTL implements the catalog.ModifyRowLevelTTL interface.
+type modifyRowLevelTTL struct {
+	maybeMutation
+	desc *descpb.ModifyRowLevelTTL
+}
+
+// RowLevelTTL contains the row level TTL config to add or remove.
+func (c modifyRowLevelTTL) RowLevelTTL() *catpb.RowLevelTTL {
+	return c.desc.RowLevelTTL
+}
+
 // primaryKeySwap implements the catalog.PrimaryKeySwap interface.
 type primaryKeySwap struct {
 	maybeMutation
@@ -292,13 +304,14 @@ func (c materializedViewRefresh) TableWithNewIndexes(
 // mutation implements the
 type mutation struct {
 	maybeMutation
-	column          catalog.Column
-	index           catalog.Index
-	constraint      catalog.ConstraintToUpdate
-	pkSwap          catalog.PrimaryKeySwap
-	ccSwap          catalog.ComputedColumnSwap
-	mvRefresh       catalog.MaterializedViewRefresh
-	mutationOrdinal int
+	column            catalog.Column
+	index             catalog.Index
+	constraint        catalog.ConstraintToUpdate
+	pkSwap            catalog.PrimaryKeySwap
+	ccSwap            catalog.ComputedColumnSwap
+	mvRefresh         catalog.MaterializedViewRefresh
+	modifyRowLevelTTL catalog.ModifyRowLevelTTL
+	mutationOrdinal   int
 }
 
 // AsColumn returns the corresponding Column if the mutation is on a column,
@@ -323,6 +336,12 @@ func (m mutation) AsConstraint() catalog.ConstraintToUpdate {
 // is a primary key swap, nil otherwise.
 func (m mutation) AsPrimaryKeySwap() catalog.PrimaryKeySwap {
 	return m.pkSwap
+}
+
+// AsModifyRowLevelTTL returns the corresponding ModifyRowLevelTTL if the
+// mutation is a computed column swap, nil otherwise.
+func (m mutation) AsModifyRowLevelTTL() catalog.ModifyRowLevelTTL {
+	return m.modifyRowLevelTTL
 }
 
 // AsComputedColumnSwap returns the corresponding ComputedColumnSwap if the
@@ -366,6 +385,7 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 	var pkSwaps []primaryKeySwap
 	var ccSwaps []computedColumnSwap
 	var mvRefreshes []materializedViewRefresh
+	var modifyRowLevelTTLs []modifyRowLevelTTL
 	for i, m := range desc.Mutations {
 		mm := maybeMutation{
 			mutationID:         m.MutationID,
@@ -415,6 +435,12 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 				desc:          pb,
 			})
 			backingStructs[i].mvRefresh = &mvRefreshes[len(mvRefreshes)-1]
+		} else if pb := m.GetModifyRowLevelTTL(); pb != nil {
+			modifyRowLevelTTLs = append(modifyRowLevelTTLs, modifyRowLevelTTL{
+				maybeMutation: mm,
+				desc:          pb,
+			})
+			backingStructs[i].modifyRowLevelTTL = &modifyRowLevelTTLs[len(modifyRowLevelTTLs)-1]
 		}
 	}
 	// Populate the c.all slice with Mutation interfaces.
