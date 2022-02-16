@@ -12,5 +12,7 @@ Support status: [alpha](#support-status)
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#string) |  | NodeID indicates which node to query for a hot range report. It is possible to populate any node ID; if the node receiving the request is not the target node, it will forward the request to the target node.<br><br>If left empty, the request is forwarded to every node in the cluster. | [alpha](#support-status) |
+| page_size | [int32](#int32) |  |  | [reserved](#support-status) |
+| page_token | [string](#string) |  |  | [reserved](#support-status) |
 
 
