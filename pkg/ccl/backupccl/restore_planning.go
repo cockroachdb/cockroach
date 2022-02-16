@@ -53,6 +53,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1065,6 +1068,12 @@ func rewriteDatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites DescRe
 		db.Version = 1
 		db.ModificationTime = hlc.Timestamp{}
 
+		if err := rewriteSchemaChangerState(
+			db.DeclarativeSchemaChangerState, descriptorRewrites,
+		); err != nil {
+			return err
+		}
+
 		// Rewrite the name-to-ID mapping for the database's child schemas.
 		newSchemas := make(map[string]descpb.DatabaseDescriptor_SchemaInfo)
 		err := db.ForEachNonDroppedSchema(func(id descpb.ID, name string) error {
@@ -1130,6 +1139,12 @@ func rewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites DescRewriteM
 		typ.Version = 1
 		typ.ModificationTime = hlc.Timestamp{}
 
+		if err := rewriteSchemaChangerState(
+			typ.DeclarativeSchemaChangerState, descriptorRewrites,
+		); err != nil {
+			return err
+		}
+
 		typ.ID = rewrite.ID
 		typ.ParentSchemaID = rewrite.ParentSchemaID
 		typ.ParentID = rewrite.ParentID
@@ -1170,6 +1185,62 @@ func rewriteSchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites DescRe
 
 		sc.ID = rewrite.ID
 		sc.ParentID = rewrite.ParentID
+
+		if err := rewriteSchemaChangerState(
+			sc.DeclarativeSchemaChangerState, descriptorRewrites,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteSchemaChangerState(
+	state *scpb.DescriptorState, descriptorRewrites DescRewriteMap,
+) error {
+	if state == nil {
+		return nil
+	}
+	rewriteID := func(id *descpb.ID) error {
+		rewrite, ok := descriptorRewrites[*id]
+		if !ok {
+			return errors.Errorf("missing table rewrite for table %d", *id)
+		}
+		*id = rewrite.ID
+		return nil
+	}
+	rewriteIDsInSlice := func(ids []descpb.ID) error {
+		for i := range ids {
+			if err := rewriteID(&ids[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, t := range state.Targets {
+		if err := screl.Schema.IterateAttributePointers(t.Element(), func(_ rel.Attr, value interface{}) error {
+			id, ok := value.(*descpb.ID)
+			if !ok {
+				return nil
+			}
+			return rewriteID(id)
+		}); err != nil {
+			return err
+		}
+		var ids []descpb.ID
+		switch e := t.Element().(type) {
+		case *scpb.Database:
+			ids = e.DependentObjects
+		case *scpb.Schema:
+			ids = e.DependentObjects
+		case *scpb.Column:
+			ids = e.UsesSequenceIDs
+		case *scpb.DefaultExpression:
+			ids = e.UsesSequenceIDs
+		}
+		if err := rewriteIDsInSlice(ids); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1199,6 +1270,11 @@ func RewriteTableDescs(
 			if err := rewriteViewQueryDBNames(table, overrideDB); err != nil {
 				return err
 			}
+		}
+		if err := rewriteSchemaChangerState(
+			table.DeclarativeSchemaChangerState, descriptorRewrites,
+		); err != nil {
+			return err
 		}
 
 		table.ID = tableRewrite.ID
@@ -1365,6 +1441,7 @@ func RewriteTableDescs(
 		// lease is obviously bogus (plus the nodeID is relative to backup cluster).
 		table.Lease = nil
 	}
+
 	return nil
 }
 
