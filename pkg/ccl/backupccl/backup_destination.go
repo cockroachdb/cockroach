@@ -175,7 +175,7 @@ func resolveDest(
 			return "", "", "", nil, nil, errors.Wrapf(err, "parsing default backup location %s",
 				priorsURI)
 		}
-		priorURI.Path = joinURLPath(priorURI.Path, prior)
+		priorURI.Path = JoinURLPath(priorURI.Path, prior)
 		prevBackupURIs = append(prevBackupURIs, priorURI.String())
 	}
 	prevBackupURIs = append([]string{plannedBackupURI}, prevBackupURIs...)

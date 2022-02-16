@@ -842,7 +842,7 @@ func resolveBackupManifests(
 			partitionURIs := make([]string, numPartitions)
 			for j := range baseURIs {
 				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
-				u.Path = joinURLPath(u.Path, incSubDir)
+				u.Path = JoinURLPath(u.Path, incSubDir)
 				partitionURIs[j] = u.String()
 			}
 			defaultURIs[i+1] = partitionURIs[0]

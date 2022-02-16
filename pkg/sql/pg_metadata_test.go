@@ -133,7 +133,7 @@ const (
 	testdata            = "testdata" // testdata directory
 	catalogPkg          = "catalog"
 	catconstantsPkg     = "catconstants"
-	constantsGo         = "incrementals.go"
+	constantsGo         = "constants.go"
 	vtablePkg           = "vtable"
 	pgCatalogGo         = "pg_catalog.go"
 	informationSchemaGo = "information_schema.go"

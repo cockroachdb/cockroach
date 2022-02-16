@@ -270,7 +270,7 @@ func showBackupPlanHook(
 				return err
 			}
 			initialPath := parsed.Path
-			parsed.Path = joinURLPath(initialPath, subdir)
+			parsed.Path = JoinURLPath(initialPath, subdir)
 			fullyResolvedDest = parsed.String()
 		}
 

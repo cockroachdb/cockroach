@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -22,22 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-)
-
-// IncrementalsBackupSource describes the location of a set of incremental backups.
-type IncrementalsBackupSource int
-
-// Describes the location of a set of incremental backups.
-const (
-	None IncrementalsBackupSource = iota // Unused.
-	// The old default. Incremental backups go in the same collection as the
-	// full backup they're based on.
-	SameAsFull
-	// The user has specified a custom collection for incremental backups.
-	Custom
-	// The new default. Incremental backups go in the subdirectory "incrementals"
-	// in same collection as the full backup they're based on.
-	Incrementals
 )
 
 // The default subdirectory for incremental backups.
@@ -50,6 +35,8 @@ const (
 	// that can be skipped over quickly.
 	listingDelimDataSlash = "data/"
 )
+
+var BackupSubdirRE = regexp.MustCompile(`(.*)/([0-9]{4}/[0-9]{2}/[0-9]{2}-[0-9]{6}.[0-9]{2}/?)$`)
 
 // FindPriorBackups finds "appended" incremental backups by searching
 // for the subdirectories matching the naming pattern (e.g. YYMMDD/HHmmss.ss).
@@ -93,7 +80,7 @@ func appendPaths(uris []string, tailDir ...string) ([]string, error) {
 			return nil, err
 		}
 		joinArgs := append([]string{parsed.Path}, tailDir...)
-		parsed.Path = joinURLPath(joinArgs...)
+		parsed.Path = JoinURLPath(joinArgs...)
 		retval[i] = parsed.String()
 	}
 	return retval, nil
@@ -112,7 +99,7 @@ func appendPaths(uris []string, tailDir ...string) ([]string, error) {
 // make sure to resolve the paths correctly here. We don't want to accidentally
 // correct an unauthorized file path to an authorized one, then write a backup
 // to an unexpected place or print the wrong error message on a restore.
-func joinURLPath(args ...string) string {
+func JoinURLPath(args ...string) string {
 	argsCopy := make([]string, 0)
 	for _, arg := range args {
 		if len(arg) == 0 {

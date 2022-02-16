@@ -78,7 +78,7 @@ func TestBackupRestoreResolveDestination(t *testing.T) {
 			parsedURI, err := url.Parse(baseURI)
 			require.NoError(t, err)
 			if locality != defaultLocalityValue {
-				parsedURI.Path = joinURLPath(parsedURI.Path, locality)
+				parsedURI.Path = JoinURLPath(parsedURI.Path, locality)
 			}
 			q := parsedURI.Query()
 			q.Add(localityURLParam, locality)

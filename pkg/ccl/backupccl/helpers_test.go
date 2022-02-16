@@ -319,7 +319,7 @@ func makeInsecureHTTPServer(t *testing.T) (string, func()) {
 		srv.Close()
 		t.Fatal(err)
 	}
-	uri.Path = joinURLPath(uri.Path, "testing")
+	uri.Path = JoinURLPath(uri.Path, "testing")
 	return uri.String(), cleanup
 }
 

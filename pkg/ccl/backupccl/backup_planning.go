@@ -252,7 +252,7 @@ func getLocalityAndBaseURI(uri, appendPath string) (string, string, error) {
 	q.Del(localityURLParam)
 	parsedURI.RawQuery = q.Encode()
 
-	parsedURI.Path = joinURLPath(parsedURI.Path, appendPath)
+	parsedURI.Path = JoinURLPath(parsedURI.Path, appendPath)
 
 	baseURI := parsedURI.String()
 	return localityKV, baseURI, nil
