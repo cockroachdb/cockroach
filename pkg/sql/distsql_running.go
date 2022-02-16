@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -452,9 +453,14 @@ func (dsp *DistSQLPlanner) Run(
 				localState.HasConcurrency = localState.HasConcurrency || execinfra.HasParallelProcessors(flow)
 			}
 		}
+	}
+	// Even if planCtx.isLocal is false (which is the case when we think it's
+	// worth distributing the query), we need to go through the processors to
+	// figure out whether any of them have concurrency.
+	if row.CanUseStreamer(ctx, dsp.st) {
 		for _, proc := range plan.Processors {
-			if js := proc.Spec.Core.JoinReader; js != nil {
-				if !js.MaintainOrdering && js.IsIndexJoin() {
+			if jr := proc.Spec.Core.JoinReader; jr != nil {
+				if !jr.MaintainOrdering && jr.IsIndexJoin() {
 					// Index joins when ordering doesn't have to be maintained
 					// are executed via the Streamer API that has concurrency.
 					localState.HasConcurrency = true
