@@ -101,3 +101,21 @@ query T retry
 SHOW CLUSTER SETTING kv.protectedts.reconciliation.interval
 ----
 00:00:45
+
+user host-cluster-root
+
+# Verify that destroying a tenant cleans up any tenant-specific overrides.
+statement ok
+SELECT crdb_internal.create_tenant(1234)
+
+# TODO(radu): replace with ALTER TENANT when it's available.
+statement ok
+INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (1234, 'sql.notices.enabled', 'true', 'b')
+
+statement ok
+SELECT crdb_internal.destroy_tenant(1234, true)
+
+query I
+SELECT count(*) FROM system.tenant_settings WHERE tenant_id = 1234
+----
+0
