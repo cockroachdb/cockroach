@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	goparquet "github.com/fraugster/parquet-go"
 	"github.com/fraugster/parquet-go/parquet"
 	"github.com/stretchr/testify/require"
@@ -142,31 +143,39 @@ func validateParquetFile(
 			if err != nil {
 				return err
 			}
-
-			tester := test.datums[i][j]
-			switch tester.ResolvedType().Family() {
-			case types.DateFamily:
-				// pgDate.orig property doesn't matter and can cause the test to fail
-				require.Equal(t, tester.(*tree.DDate).Date.UnixEpochDays(),
-					datum.(*tree.DDate).Date.UnixEpochDays())
-			case types.JsonFamily:
-				// Only the value of the json object matters, not that additional properties
-				require.Equal(t, tester.(*tree.DJSON).JSON.String(),
-					datum.(*tree.DJSON).JSON.String())
-			case types.FloatFamily:
-				if tester.(*tree.DFloat).String() == "NaN" {
-					// NaN != NaN, therefore stringify the comparison.
-					require.Equal(t, "NaN", datum.(*tree.DFloat).String())
-					continue
-				}
-				require.Equal(t, tester, datum)
-			default:
-				require.Equal(t, tester, datum)
-			}
+			validateDatum(t,test.datums[i][j],datum)
 		}
 		i++
 	}
 	return nil
+}
+
+func validateDatum(t *testing.T,expected tree.Datum,actual tree.Datum){
+	switch expected.ResolvedType().Family() {
+	case types.ArrayFamily:
+		eArr := expected.(*tree.DArray)
+		aArr := actual.(*tree.DArray)
+		for i:=0;i<eArr.Len();i++{
+			validateDatum(t,eArr.Array[i],aArr.Array[i])
+		}
+	case types.DateFamily:
+		// pgDate.orig property doesn't matter and can cause the test to fail
+		require.Equal(t, expected.(*tree.DDate).Date.UnixEpochDays(),
+			actual.(*tree.DDate).Date.UnixEpochDays())
+	case types.JsonFamily:
+		// Only the value of the json object matters, not that additional properties
+		require.Equal(t, expected.(*tree.DJSON).JSON.String(),
+			actual.(*tree.DJSON).JSON.String())
+	case types.FloatFamily:
+		if expected.(*tree.DFloat).String() == "NaN" {
+			// NaN != NaN, therefore stringify the comparison.
+			require.Equal(t, "NaN", actual.(*tree.DFloat).String())
+		}else{
+			require.Equal(t, expected, actual)
+		}
+	default:
+		require.Equal(t, expected, actual)
+	}
 }
 
 func TestRandomParquetExports(t *testing.T) {
@@ -175,7 +184,7 @@ func TestRandomParquetExports(t *testing.T) {
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
 	dbName := "rand"
-
+	rng, _ := randutil.NewTestRand()
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			UseDatabase:   dbName,
@@ -186,38 +195,68 @@ func TestRandomParquetExports(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, params)
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
-	tableName := "table_1"
-	// TODO (butler): Randomly generate additional table(s) using tools from PR
-	// #75677. The function below only creates a deterministic table with a bunch
-	// of interesting corner case values.
-	err := randgen.GenerateRandInterestingTable(tc.Conns[0], dbName, tableName)
-	require.NoError(t, err)
-
+	var tableName string
 	s0 := tc.Server(0)
 	ie := s0.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
-		// Ensure table only contains columns supported by EXPORT Parquet
-		_, cols, err := ie.QueryRowExWithCols(
-			ctx,
-			"",
-			nil,
-			sessiondata.InternalExecutorOverride{
-				User:     security.RootUserName(),
-				Database: dbName,
-			},
-			fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
-		require.NoError(t, err)
+		var (
+			i           int
+			success     bool
+			tablePrefix = "table"
+			numTables   = 10
+		)
 
-		for _, col := range cols {
-			_, err := importer.NewParquetColumn(col.Typ, "", false)
-			if err != nil {
-				t.Logf("Column type %s not supported in parquet, dropping", col.Typ.String())
-				sqlDB.Exec(t, fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+		stmts := randgen.RandCreateTables(rng, tablePrefix, numTables,
+			randgen.PartialIndexMutator,
+			randgen.ForeignKeyMutator,
+		)
+
+		var sb strings.Builder
+		for _, stmt := range stmts {
+			sb.WriteString(tree.SerializeForDisplay(stmt))
+			sb.WriteString(";\n")
+		}
+		sqlDB.Exec(t, sb.String())
+
+		for i = 1; i < numTables; i++ {
+			tableName = tablePrefix + fmt.Sprint(i)
+			numRows, err := randgen.PopulateTableWithRandData(rng, tc.Conns[0], tableName, 20)
+			require.NoError(t, err)
+			if numRows > 10 {
+				// Ensure the table only contains columns supported by EXPORT Parquet. If an
+				// unsupported column cannot be dropped, try populating another table
+				if err := func () error {
+					_, cols, err := ie.QueryRowExWithCols(
+						ctx,
+						"",
+						nil,
+						sessiondata.InternalExecutorOverride{
+							User:     security.RootUserName(),
+							Database: dbName},
+						fmt.Sprintf("SELECT * FROM %s LIMIT 1", tableName))
+					require.NoError(t, err)
+
+					for _, col := range cols {
+						_, err := importer.NewParquetColumn(col.Typ, "", false)
+						if err != nil {
+							_, err = sqlDB.DB.ExecContext(ctx,fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName, col.Name))
+							if err != nil{
+								return err
+							}
+						}
+					}
+					return nil
+				}(); err != nil{
+					continue
+				}
+				success = true
+				break
 			}
 		}
+		require.Equal(t, true, success)
 	}
 
 	// TODO (butler): iterate over random select statements
@@ -229,7 +268,7 @@ func TestRandomParquetExports(t *testing.T) {
 			tableName, tableName),
 	}
 	sqlDB.Exec(t, test.stmt)
-	err = validateParquetFile(t, ctx, ie, test)
+	err := validateParquetFile(t, ctx, ie, test)
 	require.NoError(t, err)
 }
 
