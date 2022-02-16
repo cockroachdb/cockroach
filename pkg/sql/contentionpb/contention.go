@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -73,4 +75,29 @@ func (r *ResolvedTxnID) Valid() bool {
 // Valid returns if the ExtendedContentionEvent is valid.
 func (e *ExtendedContentionEvent) Valid() bool {
 	return e.BlockingEvent.TxnMeta.ID != uuid.UUID{}
+}
+
+// Hash returns a hash that's unique to ExtendedContentionEvent using
+// blocking txn's txnID, waiting txn's txnID and the event collection timestamp.
+func (e *ExtendedContentionEvent) Hash() uint64 {
+	hash := util.MakeFNV64()
+	hashUUID(e.BlockingEvent.TxnMeta.ID, &hash)
+	hashUUID(e.WaitingTxnID, &hash)
+	hash.Add(uint64(e.CollectionTs.UnixMilli()))
+	return hash.Sum()
+}
+
+func hashUUID(u uuid.UUID, fnv *util.FNV64) {
+	b := u.GetBytes()
+	// Hash the blocking txn id.
+	b, val, err := encoding.DecodeUint64Descending(b)
+	if err != nil {
+		panic(err)
+	}
+	fnv.Add(val)
+	_, val, err = encoding.DecodeUint64Descending(b)
+	if err != nil {
+		panic(err)
+	}
+	fnv.Add(val)
 }

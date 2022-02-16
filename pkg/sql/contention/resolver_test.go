@@ -213,6 +213,7 @@ func TestResolver(t *testing.T) {
 		// evicted txnID from txnIDCache.
 		populateFakeStatusServerCluster(statusServer, tcs[:2])
 		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		missingTxnMissingRetryKey := input[2].Hash()
 
 		resolver.enqueue(input)
 		actual, err := resolver.dequeue(ctx)
@@ -223,7 +224,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t,
 			sortResolvedContentionEvents(expected[:2]), sortResolvedContentionEvents(actual))
 		require.Equal(t, 1, len(resolver.mu.remainingRetries))
-		remainingRetryBudget, foundRetryRecord := resolver.mu.remainingRetries[missingTxnID]
+		remainingRetryBudget, foundRetryRecord := resolver.mu.remainingRetries[missingTxnMissingRetryKey]
 		require.True(t, foundRetryRecord)
 		require.Equal(t, retryBudgetForMissingResult, remainingRetryBudget)
 
@@ -286,6 +287,8 @@ func TestResolver(t *testing.T) {
 			"3" /* coordinatorNode */, injectedErr)
 
 		input, expected := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		missingTxnRemainingRetryKey1 := input[1].Hash()
+
 		expected = sortResolvedContentionEvents(expected)
 		expectedWithOnlyResultsFromAvailableNodes := make([]contentionpb.ExtendedContentionEvent, 0, len(expected))
 		for _, event := range expected {
@@ -310,7 +313,7 @@ func TestResolver(t *testing.T) {
 		require.Equal(t, 1, len(resolver.mu.remainingRetries),
 			"expected to have a retry record after RPC failure, but the "+
 				"retry record is missing")
-		remainingRetryBudget, found := resolver.mu.remainingRetries[missingTxnID1]
+		remainingRetryBudget, found := resolver.mu.remainingRetries[missingTxnRemainingRetryKey1]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure, remainingRetryBudget)
 
@@ -331,6 +334,7 @@ func TestResolver(t *testing.T) {
 		statusServer.setStatusServerError(
 			"2" /* coordinatorNodeID */, injectedErr)
 		input2, expected2 := generateUnresolvedContentionEventsFromTestData(t, tcs)
+		missingTxnRemainingRetryKey2 := input2[0].Hash()
 
 		resolver.enqueue(input2)
 		require.Equal(t, 2, len(resolver.mu.unresolvedEvents))
@@ -338,13 +342,13 @@ func TestResolver(t *testing.T) {
 		require.ErrorIs(t, resolver.resolveLocked(ctx), injectedErr)
 		require.Equal(t, 2, len(resolver.mu.remainingRetries))
 
-		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnID1]
+		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnRemainingRetryKey1]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure-1, remainingRetryBudget,
 			"expect retry budget be decremented after consecutive failures, "+
 				"but it was not")
 
-		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnID2]
+		remainingRetryBudget, found = resolver.mu.remainingRetries[missingTxnRemainingRetryKey2]
 		require.True(t, found)
 		require.Equal(t, retryBudgetForRPCFailure, remainingRetryBudget)
 
@@ -389,12 +393,15 @@ func generateUnresolvedContentionEventsFromTestData(
 		coordinatorID, err := strconv.Atoi(tc.coordinatorNodeID)
 		require.NoError(t, err)
 		event.BlockingEvent.TxnMeta.CoordinatorNodeID = int32(coordinatorID)
+		event.WaitingTxnID = tc.TxnID
 		input = append(input, event)
 
 		if tc.TxnFingerprintID != roachpb.InvalidTransactionFingerprintID {
 			resolvedEvent := contentionpb.ExtendedContentionEvent{}
 			resolvedEvent.BlockingEvent = event.BlockingEvent
 			resolvedEvent.BlockingTxnFingerprintID = tc.TxnFingerprintID
+			resolvedEvent.WaitingTxnID = event.WaitingTxnID
+			resolvedEvent.WaitingTxnFingerprintID = tc.TxnFingerprintID
 			expected = append(expected, resolvedEvent)
 		}
 	}
@@ -404,5 +411,7 @@ func generateUnresolvedContentionEventsFromTestData(
 func populateFakeStatusServerCluster(f fakeStatusServerCluster, tcs []testData) {
 	for _, tc := range tcs {
 		f.setTxnIDEntry(tc.coordinatorNodeID, tc.TxnID, tc.TxnFingerprintID)
+		// TODO(azhng): wip: this is kind of a hack heh?
+		f.setTxnIDEntry("local", tc.TxnID, tc.TxnFingerprintID)
 	}
 }

@@ -994,6 +994,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 				contentionEvent := contentionpb.ExtendedContentionEvent{
 					BlockingEvent: ev,
 				}
+				// TODO(azhng): wip: this can be nil, why?
 				if r.txn != nil {
 					contentionEvent.WaitingTxnID = r.txn.ID()
 				}
