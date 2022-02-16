@@ -29,6 +29,7 @@ go_library(
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
+        "//pkg/util",
         "//pkg/util/cloudinfo",
         "//pkg/util/protoutil",
         "//pkg/util/treeprinter",
