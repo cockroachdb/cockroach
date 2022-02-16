@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -53,6 +55,19 @@ func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) 
 		_, err := db.Exec(`SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = DEFAULT`)
 		require.NoError(t, err)
 	}
+}
+
+// SetShortRangeFeedIntervals is a helper to set the cluster settings
+// pertaining to rangefeeds to short durations. This is helps tests which
+// rely on zone/span configuration changes to propagate.
+func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
+	tdb := sqlutils.MakeSQLRunner(db)
+	short := "'20ms'"
+	if util.RaceEnabled {
+		short = "'200ms'"
+	}
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
+	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
