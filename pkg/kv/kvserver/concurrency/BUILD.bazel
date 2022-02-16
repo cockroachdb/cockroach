@@ -54,6 +54,7 @@ go_test(
     embed = [":concurrency"],
     shard_count = 16,
     deps = [
+        "//pkg/keys",
         "//pkg/kv/kvserver/batcheval",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/concurrency/poison",
