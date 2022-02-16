@@ -19,14 +19,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -986,44 +982,7 @@ func (s *statusServer) GetFiles(
 		return status.GetFiles(ctx, req)
 	}
 
-	var dir string
-	switch req.Type {
-	// TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
-	// instead of reading individual entries.
-	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
-		dir = s.admin.server.cfg.HeapProfileDirName
-	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
-		dir = s.admin.server.cfg.GoroutineDumpDirName
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
-	}
-	if dir == "" {
-		return nil, status.Errorf(codes.Unimplemented, "dump directory not configured: %s", req.Type)
-	}
-	var resp serverpb.GetFilesResponse
-	for _, pattern := range req.Patterns {
-		if err := checkFilePattern(pattern); err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
-		}
-		filepaths, err := filepath.Glob(filepath.Join(dir, pattern))
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "bad pattern: %s", pattern)
-		}
-
-		for _, path := range filepaths {
-			fileinfo, _ := os.Stat(path)
-			var contents []byte
-			if !req.ListOnly {
-				contents, err = ioutil.ReadFile(path)
-				if err != nil {
-					return nil, serverError(ctx, err)
-				}
-			}
-			resp.Files = append(resp.Files,
-				&serverpb.File{Name: fileinfo.Name(), FileSize: fileinfo.Size(), Contents: contents})
-		}
-	}
-	return &resp, nil
+	return getLocalFiles(req, s.sqlServer.cfg.HeapProfileDirName, s.sqlServer.cfg.GoroutineDumpDirName)
 }
 
 // checkFilePattern checks if a pattern is acceptable for the GetFiles call.
@@ -1274,21 +1233,7 @@ func (s *statusServer) Stacks(
 		return status.Stacks(ctx, req)
 	}
 
-	var debug int
-	switch req.Type {
-	case serverpb.StacksType_GOROUTINE_STACKS:
-		debug = 2
-	case serverpb.StacksType_GOROUTINE_STACKS_DEBUG_1:
-		debug = 1
-	default:
-		return nil, status.Errorf(codes.InvalidArgument, "unknown stacks type: %s", req.Type)
-	}
-
-	var buf bytes.Buffer
-	if err := pprof.Lookup("goroutine").WriteTo(&buf, debug); err != nil {
-		return nil, serverError(ctx, err)
-	}
-	return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
+	return stacksLocal(req)
 }
 
 // TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
@@ -1322,53 +1267,6 @@ func (s *statusServer) Profile(
 	}
 
 	return profileLocal(ctx, req, s.st)
-}
-
-func profileLocal(
-	ctx context.Context, req *serverpb.ProfileRequest, st *cluster.Settings,
-) (*serverpb.JSONResponse, error) {
-	switch req.Type {
-	case serverpb.ProfileRequest_CPU:
-		var buf bytes.Buffer
-		profileType := cluster.CPUProfileDefault
-		if req.Labels {
-			profileType = cluster.CPUProfileWithLabels
-		}
-		if err := debug.CPUProfileDo(st, profileType, func() error {
-			duration := 30 * time.Second
-			if req.Seconds != 0 {
-				duration = time.Duration(req.Seconds) * time.Second
-			}
-			if err := pprof.StartCPUProfile(&buf); err != nil {
-				return err
-			}
-			defer pprof.StopCPUProfile()
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(duration):
-				return nil
-			}
-		}); err != nil {
-			return nil, serverError(ctx, err)
-		}
-		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
-	default:
-		name, ok := serverpb.ProfileRequest_Type_name[int32(req.Type)]
-		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "unknown profile: %d", req.Type)
-		}
-		name = strings.ToLower(name)
-		p := pprof.Lookup(name)
-		if p == nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unable to find profile: %s", name)
-		}
-		var buf bytes.Buffer
-		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
-		}
-		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
-	}
 }
 
 // Regions implements the serverpb.Status interface.
