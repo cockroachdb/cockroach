@@ -434,6 +434,10 @@ func TestSchemaChanger(t *testing.T) {
 
 type noopJobRegistry struct{}
 
+func (n noopJobRegistry) CheckPausepoint(name string) error {
+	return nil
+}
+
 func (n noopJobRegistry) UpdateJobWithTxn(
 	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
 ) error {
