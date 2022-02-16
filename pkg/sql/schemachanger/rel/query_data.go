@@ -47,7 +47,7 @@ type typedValue struct {
 	value interface{}
 }
 
-func (tv typedValue) toInterface() interface{} {
+func (tv typedValue) toInterface(pointerValue bool) interface{} {
 	if tv.typ == reflectTypeType {
 		return tv.value.(reflect.Type)
 	}
@@ -57,7 +57,11 @@ func (tv typedValue) toInterface() interface{} {
 		}
 		return reflect.ValueOf(tv.value).Convert(tv.typ).Interface()
 	}
-	return reflect.ValueOf(tv.value).Convert(reflect.PtrTo(tv.typ)).Elem().Interface()
+	pv := reflect.ValueOf(tv.value).Convert(reflect.PtrTo(tv.typ))
+	if pointerValue {
+		return pv.Interface()
+	}
+	return pv.Elem().Interface()
 }
 
 func (s *slot) eq(other slot) bool {
