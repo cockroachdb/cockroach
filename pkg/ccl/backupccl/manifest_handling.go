@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -86,6 +87,10 @@ const (
 	// latestFileName is the name of a file in the collection which contains the
 	// path of the most recently taken full backup in the backup collection.
 	latestFileName = "LATEST"
+
+	// latestHistoryDirectory is the directory where all 22.1 and beyond
+	// LATEST files will be stored as we no longer want to overwrite it.
+	latestHistoryDirectory = "latest-history/LATEST"
 )
 
 // isGZipped detects whether the given bytes represent GZipped data. This check
@@ -213,7 +218,7 @@ func readBackupManifest(
 	filename string,
 	encryption *jobspb.BackupEncryptionOptions,
 ) (BackupManifest, int64, error) {
-	r, err := exportStore.ReadFile(ctx, filename)
+	r, err := readLatestCheckpointFile(ctx, exportStore, filename)
 	if err != nil {
 		return BackupManifest{}, 0, err
 	}
@@ -226,7 +231,7 @@ func readBackupManifest(
 		mem.Shrink(ctx, int64(cap(descBytes)))
 	}()
 
-	checksumFile, err := exportStore.ReadFile(ctx, filename+backupManifestChecksumSuffix)
+	checksumFile, err := readLatestCheckpointFile(ctx, exportStore, filename+backupManifestChecksumSuffix)
 	if err == nil {
 		// If there is a checksum file present, check that it matches.
 		defer checksumFile.Close(ctx)
@@ -436,8 +441,17 @@ func writeBackupManifest(
 		}
 	}
 
-	if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
-		return err
+	// The backup manifest should only be written to the base directory,
+	// unlike the checkpoints which can be written to both the base and
+	// progress directory depending on the version.
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename, descBuf); err != nil {
+			return err
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf)); err != nil {
+			return err
+		}
 	}
 
 	// Write the checksum file after we've successfully wrote the manifest.
@@ -445,8 +459,15 @@ func writeBackupManifest(
 	if err != nil {
 		return errors.Wrap(err, "calculating checksum")
 	}
-	if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
-		return errors.Wrap(err, "writing manifest checksum")
+
+	if filename != backupManifestName {
+		if err := writeNewCheckpointFile(ctx, settings, exportStore, filename+backupManifestChecksumSuffix, checksum); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
+	} else {
+		if err := cloud.WriteFile(ctx, exportStore, filename+backupManifestChecksumSuffix, bytes.NewReader(checksum)); err != nil {
+			return errors.Wrap(err, "writing manifest checksum")
+		}
 	}
 
 	return nil
@@ -699,7 +720,14 @@ func FindPriorBackups(
 func checkForLatestFileInCollection(
 	ctx context.Context, store cloud.ExternalStorage,
 ) (bool, error) {
-	_, err := store.ReadFile(ctx, latestFileName)
+	_, err := store.ReadFile(ctx, latestHistoryDirectory)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return false, pgerror.WithCandidateCode(err, pgcode.Io)
+		}
+
+		_, err = store.ReadFile(ctx, latestFileName)
+	}
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return false, nil
@@ -1153,7 +1181,7 @@ func checkForPreviousBackup(
 			redactedURI, backupManifestName)
 	}
 
-	r, err = exportStore.ReadFile(ctx, backupManifestCheckpointName)
+	r, err = readLatestCheckpointFile(ctx, exportStore, backupManifestCheckpointName)
 	if err == nil {
 		r.Close(ctx)
 		return pgerror.Newf(pgcode.FileAlreadyExists,
@@ -1195,4 +1223,45 @@ func ListFullBackupsInCollection(
 		backupPaths[i] = strings.TrimSuffix(backupPath, "/"+backupManifestName)
 	}
 	return backupPaths, nil
+}
+
+// readLatestCheckpointFile returns an io.reader of the latest checkpoint
+// file.
+func readLatestCheckpointFile(
+	ctx context.Context, exportStore cloud.ExternalStorage, filename string,
+) (ioctx.ReadCloserCtx, error) {
+	// First try reading from the progress directory. If the backup is from
+	// an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	r, err := exportStore.ReadFile(ctx, backupProgressDirectory+"/"+filename)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return nil, err
+		}
+
+		return exportStore.ReadFile(ctx, filename)
+	}
+	return r, nil
+}
+
+// writeNewCheckpointFile writes a new BACKUP-CHECKPOINT file to both the base
+// directory and latest-history directory, depending on cluster version.
+func writeNewCheckpointFile(
+	ctx context.Context,
+	settings *cluster.Settings,
+	exportStore cloud.ExternalStorage,
+	filename string,
+	descBuf []byte,
+) error {
+	// If the cluster is still running on a mixed node, we want to write
+	// to the base directory as well the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		err := cloud.WriteFile(ctx, exportStore, filename, bytes.NewReader(descBuf))
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, backupProgressDirectory+"/"+filename, bytes.NewReader(descBuf))
 }

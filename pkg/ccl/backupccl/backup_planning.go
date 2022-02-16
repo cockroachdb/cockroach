@@ -65,6 +65,7 @@ const (
 	backupOptAsJSON          = "as_json"
 	backupOptWithDebugIDs    = "debug_ids"
 	backupOptIncStorage      = "incremental_location"
+	backupProgressDirectory  = "progress"
 	localityURLParam         = "COCKROACH_LOCALITY"
 	defaultLocalityValue     = "default"
 )

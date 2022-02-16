@@ -226,6 +226,12 @@ func backup(
 					TotalEntryCounts:  backupManifest.EntryCounts,
 					RevisionStartTime: backupManifest.RevisionStartTime,
 				})
+
+				// Always write checkpoints to the progress folder, but only write
+				// to base directory if we detect that the cluster isn't running
+				// on pure 22.1. This is because older nodes expect checkpoints
+				// in the base directory and will throw an error if it isn't.
+				// TODO (Darryl): Figure out if this is the right way to check for pure 22.1
 				err := writeBackupManifest(
 					ctx, settings, defaultStore, backupManifestCheckpointName, encryption, backupManifest,
 				)
@@ -614,7 +620,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return err
 		}
 		defer c.Close()
-		if err := cloud.WriteFile(ctx, c, latestFileName, strings.NewReader(suffix)); err != nil {
+
+		if err := writeNewLatestFile(ctx, p.ExecCfg().Settings, c, suffix); err != nil {
 			return err
 		}
 	}
@@ -684,12 +691,16 @@ func (b *backupResumer) readManifestOnResume(
 	// they could be using either the new or the old foreign key
 	// representations. We should just preserve whatever representation the
 	// table descriptors were using and leave them alone.
+	// Read in checkpoint from the /progress folder, if it isn't there
+	// because it is an older backup, that is okay because we will
+	// throw an error and restart the backup from scratch.
 	desc, memSize, err := readBackupManifest(ctx, mem, defaultStore, backupManifestCheckpointName,
 		details.EncryptionOptions)
 	if err != nil {
 		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return nil, 0, errors.Wrapf(err, "reading backup checkpoint")
 		}
+
 		// Try reading temp checkpoint.
 		tmpCheckpoint := tempCheckpointFileNameForJob(b.job.ID())
 		desc, memSize, err = readBackupManifest(ctx, mem, defaultStore, tmpCheckpoint, details.EncryptionOptions)
@@ -707,6 +718,9 @@ func (b *backupResumer) readManifestOnResume(
 		}
 		// Best effort remove temp checkpoint.
 		if err := defaultStore.Delete(ctx, tmpCheckpoint); err != nil {
+			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
+		}
+		if err := defaultStore.Delete(ctx, backupProgressDirectory+"/"+tmpCheckpoint); err != nil {
 			log.Errorf(ctx, "error removing temporary checkpoint %s", tmpCheckpoint)
 		}
 	}
@@ -801,7 +815,13 @@ func (b *backupResumer) deleteCheckpoint(
 			return err
 		}
 		defer exportStore.Close()
-		return exportStore.Delete(ctx, backupManifestCheckpointName)
+		// The checkpoint in the progress folder should always exist for new
+		// directories so try deleting that first.
+		err = exportStore.Delete(ctx, backupProgressDirectory+"/"+backupManifestCheckpointName)
+		if err != nil {
+			return err
+		}
+		return exportStore.Delete(ctx, backupProgressDirectory)
 	}(); err != nil {
 		log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 	}

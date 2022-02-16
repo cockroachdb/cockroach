@@ -301,6 +301,10 @@ const (
 	// ChangefeedIdleness is the version where changefeed aggregators forward
 	// idleness-related information alnog with resolved spans to the frontier
 	ChangefeedIdleness
+	// BackupDoesNotOverwriteLatestAndCheckpoint stops latest and checkpoint
+	// files from being overwritten ever. Instead, it writes new files alongside
+	// the old.
+	BackupDoesNotOverwriteLatestAndCheckpoint
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -491,6 +495,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     ChangefeedIdleness,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 82},
+	},
+	{
+		Key:     BackupDoesNotOverwriteLatestAndCheckpoint,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 84},
 	},
 
 	// *************************************************

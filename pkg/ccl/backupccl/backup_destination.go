@@ -12,11 +12,14 @@ import (
 	"context"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -75,11 +78,11 @@ func resolveDest(
 	endTime hlc.Timestamp,
 	incrementalFrom []string,
 ) (
-	string, /* collectionURI */
-	string, /* defaultURI - the full path for the planned backup */
-	string, /* chosenSuffix - the resolved subdir for the planned backup */
+	string,            /* collectionURI */
+	string,            /* defaultURI - the full path for the planned backup */
+	string,            /* chosenSuffix - the resolved subdir for the planned backup */
 	map[string]string, /* urisByLocalityKV */
-	[]string, /* prevBackupURIs - list of full paths for previous backups in the chain */
+	[]string,          /* prevBackupURIs - list of full paths for previous backups in the chain */
 	error,
 ) {
 	// chosenSuffix is the automatically chosen suffix within the collection path
@@ -315,7 +318,19 @@ func readLatestFile(
 		return "", err
 	}
 	defer collection.Close()
-	latestFile, err := collection.ReadFile(ctx, latestFileName)
+
+	// First try reading from the latest-history directory. If the backup
+	// is from an older version, it may not exist there yet so try reading
+	// in the base directory if the first attempt fails.
+	latestFile, err := collection.ReadFile(ctx, latestHistoryDirectory)
+	if err != nil {
+		if !errors.Is(err, cloud.ErrFileDoesNotExist) {
+			return "", err
+		}
+
+		latestFile, err = collection.ReadFile(ctx, latestFileName)
+	}
+
 	if err != nil {
 		if errors.Is(err, cloud.ErrFileDoesNotExist) {
 			return "", pgerror.Wrapf(err, pgcode.UndefinedFile, "path does not contain a completed latest backup")
@@ -330,4 +345,22 @@ func readLatestFile(
 		return "", errors.Errorf("malformed LATEST file")
 	}
 	return string(latest), nil
+}
+
+// writeNewLatestFile writes a new LATEST file to both the base directory
+// and latest-history directory, depending on cluster version.
+func writeNewLatestFile(
+	ctx context.Context, settings *cluster.Settings, exportStore cloud.ExternalStorage, suffix string,
+) error {
+	// If the cluster is still running on a mixed node, we want to write
+	// to the base directory as well the progress directory. That way if
+	// an old node resumes a backup, it doesn't have to start over.
+	if !settings.Version.IsActive(ctx, clusterversion.BackupDoesNotOverwriteLatestAndCheckpoint) {
+		err := cloud.WriteFile(ctx, exportStore, latestFileName, strings.NewReader(suffix))
+		if err != nil {
+			return err
+		}
+	}
+
+	return cloud.WriteFile(ctx, exportStore, latestHistoryDirectory, strings.NewReader(suffix))
 }
