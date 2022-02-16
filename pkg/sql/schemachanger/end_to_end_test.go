@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,10 +37,18 @@ func TestRollback(t *testing.T) {
 	sctest.Rollback(t, newCluster)
 }
 
+func TestPause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sctest.Pause(t, newCluster)
+}
+
 func newCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLDeclarativeSchemaChanger: knobs,
+			JobsTestingKnobs:            jobs.NewTestingKnobsWithShortIntervals(),
 		},
 	})
 	return db, func() {
