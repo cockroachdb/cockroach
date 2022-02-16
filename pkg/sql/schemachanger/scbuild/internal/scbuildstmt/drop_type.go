@@ -75,7 +75,7 @@ func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior
 			}
 			panic(pgerror.Newf(
 				pgcode.DependentObjectsStillExist,
-				"cannot drop type %q because other objects (%v) still depend on it.",
+				"cannot drop type %q because other objects (%v) still depend on it",
 				desc.GetName(),
 				dependentNames,
 			))
