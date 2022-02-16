@@ -48,7 +48,6 @@ func alterZoneConfigAndClusterSettings(
 		`SET CLUSTER SETTING jobs.retention_time = '15s';`,
 		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;`,
 		`SET CLUSTER SETTING kv.range_split.by_load_merge_delay = '5s';`,
-		`SET CLUSTER SETTING sql.catalog.unsafe_skip_system_config_trigger.enabled = true;`,
 
 		// Enable experimental features.
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled = 'true';`,
