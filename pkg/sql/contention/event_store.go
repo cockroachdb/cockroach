@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 const (
@@ -248,14 +247,14 @@ func (s *eventStore) forEachEvent(
 	// is important since the op() callback can take arbitrary long to execute,
 	// we should not be holding the lock while op() is executing.
 	s.mu.RLock()
-	keys := make([]uuid.UUID, 0, s.mu.store.Len())
+	keys := make([]uint64, 0, s.mu.store.Len())
 	s.mu.store.Do(func(entry *cache.Entry) {
-		keys = append(keys, entry.Key.(uuid.UUID))
+		keys = append(keys, entry.Key.(uint64))
 	})
 	s.mu.RUnlock()
 
 	for i := range keys {
-		event, ok := s.getEventByBlockingTxnID(keys[i])
+		event, ok := s.getEventByEventHash(keys[i])
 		if !ok {
 			// The event might have been evicted between reading the keys and
 			// getting the event. In this case we simply ignore it.
@@ -269,13 +268,13 @@ func (s *eventStore) forEachEvent(
 	return nil
 }
 
-func (s *eventStore) getEventByBlockingTxnID(
-	txnID uuid.UUID,
+func (s *eventStore) getEventByEventHash(
+	hash uint64,
 ) (_ contentionpb.ExtendedContentionEvent, ok bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	event, ok := s.mu.store.Get(txnID)
+	event, ok := s.mu.store.Get(hash)
 	return event.(contentionpb.ExtendedContentionEvent), ok
 }
 
@@ -319,7 +318,7 @@ func (s *eventStore) upsertBatch(events []contentionpb.ExtendedContentionEvent) 
 		if !ok {
 			atomic.AddInt64(&s.atomic.storageSize, int64(entryBytes(&events[i])))
 		}
-		s.mu.store.Add(blockingTxnID, events[i])
+		s.mu.store.Add(events[i].Hash(), events[i])
 	}
 }
 
@@ -333,7 +332,7 @@ func (s *eventStore) resolutionIntervalWithJitter() time.Duration {
 }
 
 func entryBytes(event *contentionpb.ExtendedContentionEvent) int {
-	// Since we store the blocking txn's txnID as the key to the unordered cache,
-	// this is means we are storing another copy of uuid.
-	return event.Size() + uuid.UUID{}.Size()
+	// Since we store the event's hash as the key to the unordered cache,
+	// this is means we are storing another copy of uint64 (8 bytes).
+	return event.Size() + 8
 }

@@ -254,6 +254,7 @@ ALL_TESTS = [
     "//pkg/sql/contention/contentionutils:contentionutils_test",
     "//pkg/sql/contention/txnidcache:txnidcache_test",
     "//pkg/sql/contention:contention_test",
+    "//pkg/sql/contentionpb:contentionpb_test",
     "//pkg/sql/covering:covering_test",
     "//pkg/sql/distsql:distsql_test",
     "//pkg/sql/doctor:doctor_test",
