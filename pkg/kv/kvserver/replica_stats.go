@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -30,6 +31,24 @@ const (
 	// return outlier/anomalous data.
 	MinStatsDuration = 5 * time.Second
 )
+
+// AddSSTableRequestSizeFactor wraps
+// "kv.replica_stats.addsst_request_size_factor". When this setting is set to
+// 0, all batch requests are treated uniformly as 1 QPS. When this setting is
+// greater than or equal to 1, AddSSTable requests will add additional QPS,
+// when present within a batch request. The additional QPS is size of the
+// SSTable data, divided by this factor. Thereby, the magnitude of this factor
+// is inversely related to QPS sensitivity to AddSSTableRequests.
+var AddSSTableRequestSizeFactor = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"kv.replica_stats.addsst_request_size_factor",
+	"the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1",
+	// The default value of 50,000 was chosen as the default divisor, following manual testing that
+	// is discussed in this pull request: #76252. Every additional 50,000 AddSSTable bytes will
+	// increase accounted QPS by 1. Typically AddSSTableRequests are ~1mb in size, accounted as 20
+	// QPS.
+	50000,
+).WithPublic()
 
 type localityOracle func(roachpb.NodeID) string
 
@@ -105,10 +124,6 @@ func (rs *replicaStats) splitRequestCounts(other *replicaStats) {
 	}
 }
 
-func (rs *replicaStats) record(nodeID roachpb.NodeID) {
-	rs.recordCount(1, nodeID)
-}
-
 func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
 	var locality string
 	if rs.getNodeLocality != nil {
@@ -179,6 +194,25 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 	return counts, now.Sub(rs.mu.lastReset)
 }
 
+// sumQueriesLocked returns the sum of all queries currently recorded.
+// Calling this method requires holding a lock on mu.
+func (rs *replicaStats) sumQueriesLocked() (float64, int) {
+	var sum float64
+	var windowsUsed int
+	for i := range rs.mu.requests {
+		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
+		// negative result from the modulus operation when rs.mu.idx is small.
+		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
+		if cur := rs.mu.requests[requestsIdx]; cur != nil {
+			windowsUsed++
+			for _, v := range cur {
+				sum += v
+			}
+		}
+	}
+	return sum, windowsUsed
+}
+
 // avgQPS returns the average requests-per-second and the amount of time
 // over which the stat was accumulated. Note that these averages are exact,
 // not exponentially decayed (there isn't a ton of justification for going
@@ -196,19 +230,7 @@ func (rs *replicaStats) avgQPS() (float64, time.Duration) {
 	rs.maybeRotateLocked(now)
 
 	// First accumulate the counts, then divide by the total number of seconds.
-	var sum float64
-	var windowsUsed int
-	for i := range rs.mu.requests {
-		// We have to add len(rs.mu.requests) to the numerator to avoid getting a
-		// negative result from the modulus operation when rs.mu.idx is small.
-		requestsIdx := (rs.mu.idx + len(rs.mu.requests) - i) % len(rs.mu.requests)
-		if cur := rs.mu.requests[requestsIdx]; cur != nil {
-			windowsUsed++
-			for _, v := range cur {
-				sum += v
-			}
-		}
-	}
+	sum, windowsUsed := rs.sumQueriesLocked()
 	if windowsUsed <= 0 {
 		return 0, 0
 	}

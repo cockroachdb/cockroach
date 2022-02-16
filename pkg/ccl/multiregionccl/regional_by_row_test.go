@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -568,6 +569,10 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 		{locality: "REGIONAL BY ROW AS region_col"},
 	} {
 		t.Run(tc.locality, func(t *testing.T) {
+			// Don't allow gc jobs to complete so that we
+			// can validate that they were created.
+			blockGC := make(chan struct{})
+
 			knobs := base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the merge queue because it makes this test flakey
@@ -583,6 +588,7 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 				},
 				// Decrease the adopt loop interval so that retries happen quickly.
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				GCJob:            &sql.GCJobTestingKnobs{RunBeforeResume: func(_ jobspb.JobID) error { <-blockGC; return nil }},
 			}
 
 			_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
@@ -680,10 +686,24 @@ CREATE TABLE regional_by_row (
 				return nil
 			}
 
+			expectedGCJobsForDrops := 4
+			expectedGCJobsForTempIndexes := 4
 			// Now check that we have the right number of index GC jobs pending.
-			err = queryIndexGCJobsAndValidateCount(`running`, 4)
+			err = queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops+expectedGCJobsForTempIndexes)
 			require.NoError(t, err)
 			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
+			require.NoError(t, err)
+
+			queryAndEnsureThatIndexGCJobsSucceeded := func(count int) func() error {
+				return func() error { return queryIndexGCJobsAndValidateCount(`succeeded`, count) }
+			}
+
+			// Unblock GC jobs.
+			close(blockGC)
+			// The GC jobs for the temporary indexes should be cleaned up immediately.
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForTempIndexes))
+			// The GC jobs for the drops should still be waiting out the GC TTL.
+			err = queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops)
 			require.NoError(t, err)
 
 			// Change gc.ttlseconds to speed up the cleanup.
@@ -691,10 +711,7 @@ CREATE TABLE regional_by_row (
 			require.NoError(t, err)
 
 			// Validate that indexes are cleaned up.
-			queryAndEnsureThatFourIndexGCJobsSucceeded := func() error {
-				return queryIndexGCJobsAndValidateCount(`succeeded`, 4)
-			}
-			testutils.SucceedsSoon(t, queryAndEnsureThatFourIndexGCJobsSucceeded)
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))
 			err = queryIndexGCJobsAndValidateCount(`running`, 0)
 			require.NoError(t, err)
 		})
@@ -918,7 +935,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	t.Run("primary index", func(t *testing.T) {
 		tdb.Exec(t, `CREATE TABLE test.t1 (
-			a INT PRIMARY KEY, 
+			a INT PRIMARY KEY,
 			b test.public.crdb_internal_region NOT NULL
 		) LOCALITY GLOBAL`)
 		indexes := fetchIndexes("t1")
@@ -944,7 +961,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 
 	t.Run("secondary index", func(t *testing.T) {
 		tdb.Exec(t, `CREATE TABLE test.t2 (
-			a INT PRIMARY KEY, 
+			a INT PRIMARY KEY,
 			b test.public.crdb_internal_region NOT NULL,
 			c INT NOT NULL,
 			d INT NOT NULL,

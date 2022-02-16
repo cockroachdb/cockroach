@@ -1353,9 +1353,10 @@ type RegistrySpan interface {
 	// span registry, we want as much information as possible to be included.
 	GetFullRecording(recType RecordingType) Recording
 
-	// SetVerbose sets the verbosity of the span appropriately and
-	// recurses on its children.
-	SetVerbose(to bool)
+	// SetRecordingType sets the recording mode of the span and its children,
+	// recursively. Setting it to RecordingOff disables further recording.
+	// Everything recorded so far remains in memory.
+	SetRecordingType(to RecordingType)
 }
 
 var _ RegistrySpan = &crdbSpan{}

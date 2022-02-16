@@ -74,6 +74,15 @@ message BackfillerSpec {
   reserved 6;
 
   optional int32 initial_splits = 11 [(gogoproto.nullable) = false];
+
+  // WriteAtRequestTimestamp controls the corresponding AddSSTable request
+  // option which updates all MVCC timestamps in the SST to the request
+  // timestamp, even if the request gets pushed. This ensures the writes
+  // comply with the timestamp cache and closed timestamp.
+  //
+  // Note that older nodes do not respect this flag so callers should
+  // check MVCCAddSSTable before setting this option.
+  optional bool write_at_request_timestamp = 12 [(gogoproto.nullable) = false];
 }
 
 // JobProgress identifies the job to report progress on. This reporting
@@ -161,10 +170,10 @@ message ReadImportDataSpec {
 
 message StreamIngestionDataSpec {
   reserved 1;
-  
+
   // StreamID is the ID of the stream (which is shared across the producer and consumer).
   optional uint64 stream_id = 5 [(gogoproto.nullable) = false, (gogoproto.customname) = "StreamID"];
-  
+
   // PartitionSpecs specify how to subscribe to the i'th partition.
   repeated string partition_ids = 6;
   // PartitionSpecs specify how to subscribe to the i'th partition.
@@ -172,14 +181,14 @@ message StreamIngestionDataSpec {
   // PartitionAddresses locate the partitions that produce events to be
   // ingested. We don't set the casttype to avoid depending on ccl packages.
   repeated string partition_addresses = 8;
-  
+
   // The processor will ingest events from StartTime onwards.
   optional util.hlc.Timestamp start_time = 2 [(gogoproto.nullable) = false];
   // StreamAddress locate the stream so that a stream client can be initialized.
   optional string stream_address = 3 [(gogoproto.nullable) = false];
   // JobID is the job ID of the stream ingestion job.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-  
+
 }
 
 message StreamIngestionFrontierSpec {
@@ -296,4 +305,16 @@ message ExportSpec {
 // writes them to a target table using AddSSTable. It outputs a BulkOpSummary.
 message BulkRowWriterSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+}
+
+message IndexBackfillMergerSpec {
+  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+
+  repeated uint32 temporary_indexes = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+  repeated uint32 added_indexes = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"];
+
+  repeated roachpb.Span spans = 4 [(gogoproto.nullable) = false];
+  repeated int32 span_idx = 5;
+
+  optional int64 chunk_size = 6 [(gogoproto.nullable) = false];
 }

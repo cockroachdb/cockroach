@@ -559,8 +559,8 @@ oid         relname            relnamespace  reltype  reloftype  relowner    rel
 2129466852  t6_pkey            3082627813    0        0          1546506610  2631952481  0            0
 2129466855  t6_expr_idx        3082627813    0        0          1546506610  2631952481  0            0
 2129466854  t6_expr_expr1_idx  3082627813    0        0          1546506610  2631952481  0            0
-2129466849  t6_expr_key        3082627813    0        0          1546506610  2631952481  0            0
-2129466848  t6_expr_idx1       3082627813    0        0          1546506610  2631952481  0            0
+2129466848  t6_expr_key        3082627813    0        0          1546506610  2631952481  0            0
+2129466850  t6_expr_idx1       3082627813    0        0          1546506610  2631952481  0            0
 121         mv1                3082627813    100121   0          1546506610  0           0            0
 784389845   mv1_pkey           3082627813    0        0          1546506610  2631952481  0            0
 
@@ -728,8 +728,8 @@ attrelid    relname            attname                   atttypid  attstattarget
 2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
 2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
 2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_2  20        0              8       8       0         -1
-2129466849  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
-2129466848  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
+2129466848  t6_expr_key        crdb_internal_idx_expr_3  25        0              -1      9       0         -1
+2129466850  t6_expr_idx1       crdb_internal_idx_expr_4  16        0              1       10      0         -1
 121         mv1                ?column?                  20        0              8       1       0         -1
 121         mv1                rowid                     20        0              8       2       0         -1
 784389845   mv1_pkey           rowid                     20        0              8       2       0         -1
@@ -992,8 +992,8 @@ crdb_oid    schemaname  tablename  indexname          tablespace
 2129466852  public      t6         t6_pkey            NULL
 2129466855  public      t6         t6_expr_idx        NULL
 2129466854  public      t6         t6_expr_expr1_idx  NULL
-2129466849  public      t6         t6_expr_key        NULL
-2129466848  public      t6         t6_expr_idx1       NULL
+2129466848  public      t6         t6_expr_key        NULL
+2129466850  public      t6         t6_expr_idx1       NULL
 784389845   public      mv1        mv1_pkey           NULL
 
 query OTTT colnames
@@ -1016,8 +1016,8 @@ crdb_oid    tablename  indexname          indexdef
 2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
 2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
 2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2129466849  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-2129466848  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
+2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
 784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
@@ -1271,7 +1271,7 @@ oid         conname        connamespace  contype  condef
 108480825   uwi_b_c        3082627813    u        UNIQUE WITHOUT INDEX (b, c)
 192087236   fk_b_c         3082627813    f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
 296187876   check_c        3082627813    c        CHECK ((c != ''::STRING))
-1002858067  t6_expr_key    3082627813    u        UNIQUE (lower(c) ASC)
+1002858066  t6_expr_key    3082627813    u        UNIQUE (lower(c) ASC)
 1034567609  uwi_b_partial  3082627813    u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 1568726274  index_key      3082627813    u        UNIQUE (b ASC, c ASC)
 1568726275  t1_a_key       3082627813    u        UNIQUE (a ASC)
@@ -1295,7 +1295,7 @@ check_b        c        false          false        true          114       0   
 uwi_b_c        u        false          false        true          116       0         0
 fk_b_c         f        false          false        true          117       0         0
 check_c        c        false          false        true          114       0         0
-t6_expr_key    u        false          false        true          120       0         2129466849
+t6_expr_key    u        false          false        true          120       0         2129466848
 uwi_b_partial  u        false          false        true          116       0         0
 index_key      u        false          false        true          110       0         3687884464
 t1_a_key       u        false          false        true          110       0         3687884465

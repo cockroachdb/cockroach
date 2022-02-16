@@ -42,6 +42,7 @@ go_test(
         "//pkg/ccl/testutilsccl",
         "//pkg/ccl/utilccl",
         "//pkg/jobs",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",

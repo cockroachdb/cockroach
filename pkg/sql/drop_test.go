@@ -489,7 +489,17 @@ func TestDropIndex(t *testing.T) {
 	})
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			Username:    security.RootUserName(),
+			Description: `GC for temporary index used during index backfill`,
+			DescriptorIDs: descpb.IDs{
+				tableDesc.GetID(),
+			},
+		}); err != nil {
+			return err
+		}
+
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -765,7 +775,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		// Ensure that the job is marked as succeeded.
 		testutils.SucceedsSoon(t, func() error {
-			return jobutils.VerifySystemJob(t, sqlRun, i, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			return jobutils.VerifySystemJob(t, sqlRun, (i*2)+1, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUserName(),
 				Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 				DescriptorIDs: descpb.IDs{

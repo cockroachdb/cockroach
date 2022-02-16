@@ -283,6 +283,12 @@ const (
 	// to disable the data propagation mechanism it and the entire spanconfig
 	// infrastructure obviates.
 	DisableSystemConfigGossipTrigger
+	// MVCCIndexBackfiller supports MVCC-compliant index
+	// backfillers via a new BACKFILLING index state, delete
+	// preserving temporary indexes, and a post-backfill merging
+	// processing.
+	MVCCIndexBackfiller
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -450,7 +456,10 @@ var versionsSingleton = keyedVersions{
 		Key:     DisableSystemConfigGossipTrigger,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 66},
 	},
-
+	{
+		Key:     MVCCIndexBackfiller,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

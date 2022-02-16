@@ -372,26 +372,14 @@ func (sp *Span) Meta() SpanMeta {
 	return sp.i.Meta()
 }
 
-// SetVerbose toggles verbose recording on the Span, which must not be a noop
-// span (see the WithForceRealSpan option).
-//
-// With 'true', future calls to Record are actually recorded, and any future
-// descendants of this Span will do so automatically as well. This does not
-// apply to past derived Spans, which may in fact be noop spans.
-//
-// When set to 'false', Record will cede to add data to the recording (though
-// they may still be collected, should the Span have been set up with an
-// auxiliary trace sink). This does not apply to Spans derived from this one
-// when it was verbose.
-func (sp *Span) SetVerbose(to bool) {
+// SetRecordingType sets the recording mode of the span and its children,
+// recursively. Setting it to RecordingOff disables further recording.
+// Everything recorded so far remains in memory.
+func (sp *Span) SetRecordingType(to RecordingType) {
 	if sp.detectUseAfterFinish() {
 		return
 	}
-	// We allow toggling verbosity on and off for a finished span. This shouldn't
-	// matter either way as a finished span drops all new data, but if we
-	// prevented the toggling we could end up in weird states since IsVerbose()
-	// won't reflect what the caller asked for.
-	sp.i.SetVerbose(to)
+	sp.i.SetRecordingType(to)
 }
 
 // RecordingType returns the range's current recording mode.

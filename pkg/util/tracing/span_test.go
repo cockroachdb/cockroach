@@ -292,7 +292,7 @@ func TestSpanRecordStructuredLimit(t *testing.T) {
 		sp.RecordStructured(payload(i))
 	}
 
-	sp.SetVerbose(true)
+	sp.SetRecordingType(RecordingVerbose)
 	rec := sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].StructuredRecords, numStructuredRecordings)
@@ -528,7 +528,7 @@ func TestSpanTagsInRecordings(t *testing.T) {
 	// We didn't stringify the log tag.
 	require.Zero(t, int(counter))
 
-	sp.SetVerbose(true)
+	sp.SetRecordingType(RecordingVerbose)
 	rec = sp.GetRecording(RecordingVerbose)
 	require.Len(t, rec, 1)
 	require.Len(t, rec[0].Tags, 5) // _unfinished:1 _verbose:1 foo:tagbar foo1:1 foor2:bar2
