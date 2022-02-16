@@ -182,6 +182,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 	// check the ParentID for tables, and all the valid parents must be
 	// known before we start to check that.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if _, isDB := desc.(catalog.DatabaseDescriptor); isDB {
 			if _, ok := r.DbsByName[desc.GetName()]; ok {
 				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
@@ -207,6 +210,9 @@ func NewDescriptorResolver(descs []catalog.Descriptor) (*DescriptorResolver, err
 
 	// Add all schemas to the resolver.
 	for _, desc := range descs {
+		if desc.Dropped() {
+			continue
+		}
 		if sc, ok := desc.(catalog.SchemaDescriptor); ok {
 			schemaMap := r.ObjsByName[sc.GetParentID()]
 			if schemaMap == nil {
