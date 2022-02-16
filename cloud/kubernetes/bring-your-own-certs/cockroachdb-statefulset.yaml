@@ -1,3 +1,4 @@
+# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/bring-your-own-certs/cockroachdb-statefulset.yaml
 # This config file defines a CockroachDB StatefulSet that uses certificates
 # created outside of Kubernetes. You may want to use it if you want to use a
 # different certificate authority from the one being used by Kubernetes or if

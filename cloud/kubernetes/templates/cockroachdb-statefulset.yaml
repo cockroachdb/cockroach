@@ -1,72 +1,3 @@
-# Generated file, DO NOT EDIT. Source: cloud/kubernetes/templates/multiregion/eks/cockroachdb-statefulset-secure-eks.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cockroachdb
-  labels:
-    app: cockroachdb
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: cockroachdb
-  labels:
-    app: cockroachdb
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - create
-  - get
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: cockroachdb
-  labels:
-    app: cockroachdb
-rules:
-- apiGroups:
-  - certificates.k8s.io
-  resources:
-  - certificatesigningrequests
-  verbs:
-  - create
-  - get
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: cockroachdb
-  labels:
-    app: cockroachdb
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: cockroachdb
-subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cockroachdb
-  labels:
-    app: cockroachdb
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cockroachdb
-subjects:
-- kind: ServiceAccount
-  name: cockroachdb
-  namespace: default
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -141,8 +72,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: cockroachdb
-  # TODO: Use this field to specify a namespace other than "default" in which to deploy CockroachDB (e.g., us-east-1).
-  # namespace: <cluster-namespace>
 spec:
   serviceName: "cockroachdb"
   replicas: 3
@@ -154,7 +83,6 @@ spec:
       labels:
         app: cockroachdb
     spec:
-      serviceAccountName: cockroachdb
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -167,25 +95,9 @@ spec:
                   values:
                   - cockroachdb
               topologyKey: kubernetes.io/hostname
-      # This init container is used to determine the availability zones of the Cockroach pods. The AZs are used to define --locality when starting Cockroach nodes.
-      initContainers:
-      - command:
-        - sh
-        - -ecx
-        - echo "aws-$(curl http://169.254.169.254/latest/meta-data/placement/availability-zone/)"
-          > /etc/cockroach-env/zone
-        image: byrnedo/alpine-curl:0.1
-        imagePullPolicy: IfNotPresent
-        name: locality-container
-        resources: {}
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-        volumeMounts:
-        - mountPath: /etc/cockroach-env
-          name: cockroach-env
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v21.2.6
+        image: cockroachdb/cockroach:@VERSION@
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the resources that can be allocated on each of your Kubernetes nodes by running:
@@ -208,27 +120,21 @@ spec:
 #         httpGet:
 #           path: "/health"
 #           port: http
-#           scheme: HTTPS
 #         initialDelaySeconds: 30
 #         periodSeconds: 5
         readinessProbe:
           httpGet:
             path: "/health?ready=1"
             port: http
-            scheme: HTTPS
           initialDelaySeconds: 10
           periodSeconds: 5
           failureThreshold: 2
         volumeMounts:
         - name: datadir
           mountPath: /cockroach/cockroach-data
-        - name: certs
-          mountPath: /cockroach/cockroach-certs
-        - name: cockroach-env
-          mountPath: /etc/cockroach-env
         env:
         - name: COCKROACH_CHANNEL
-          value: kubernetes-multiregion
+          value: kubernetes-insecure
         - name: GOMAXPROCS
           valueFrom:
             resourceFieldRef:
@@ -248,12 +154,10 @@ spec:
             /cockroach/cockroach
             start
             --logtostderr
-            --certs-dir /cockroach/cockroach-certs
+            --insecure
             --advertise-host $(hostname -f)
             --http-addr 0.0.0.0
-            # TODO: Replace the placeholder values in --join and --locality with the namespace of the CockroachDB cluster in each region (e.g., us-east-1).
-            # --join cockroachdb-0.cockroachdb.<cluster-namespace-1>,cockroachdb-1.cockroachdb.<cluster-namespace-1>,cockroachdb-2.cockroachdb.<cluster-namespace-1>,cockroachdb-0.cockroachdb.<cluster-namespace-2>,cockroachdb-1.cockroachdb.<cluster-namespace-2>,cockroachdb-2.cockroachdb.<cluster-namespace-2>,cockroachdb-0.cockroachdb.<cluster-namespace-3>,cockroachdb-1.cockroachdb.<cluster-namespace-3>,cockroachdb-2.cockroachdb.<cluster-namespace-3>
-            # --locality=region=<cluster-namespace-1>,az=$(cat /etc/cockroach-env/zone),dns=$(hostname -f)
+            --join cockroachdb-0.cockroachdb,cockroachdb-1.cockroachdb,cockroachdb-2.cockroachdb
             --cache $(expr $MEMORY_LIMIT_MIB / 4)MiB
             --max-sql-memory $(expr $MEMORY_LIMIT_MIB / 4)MiB
       # No pre-stop hook is required, a SIGTERM plus some time is all that's
@@ -263,12 +167,6 @@ spec:
       - name: datadir
         persistentVolumeClaim:
           claimName: datadir
-      - name: certs
-        secret:
-          secretName: cockroachdb.node
-          defaultMode: 256
-      - name: cockroach-env
-        emptyDir: {}
   podManagementPolicy: Parallel
   updateStrategy:
     type: RollingUpdate

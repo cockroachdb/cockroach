@@ -9,6 +9,7 @@ go_library(
         "mail.go",
         "main.go",
         "metadata.go",
+        "orchestration.go",
         "pick_sha.go",
         "templates.go",
     ],

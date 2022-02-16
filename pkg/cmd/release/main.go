@@ -23,4 +23,5 @@ func main() {
 func init() {
 	rootCmd.AddCommand(pickSHACmd)
 	rootCmd.AddCommand(postReleaseSeriesBlockersCmd)
+	rootCmd.AddCommand(setOrchestrationVersionCmd)
 }
