@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -471,14 +472,53 @@ func (c *Constraint) Combine(evalCtx *tree.EvalContext, other *Constraint) {
 
 // ConsolidateSpans merges spans that have consecutive boundaries. For example:
 //   [/1 - /2] [/3 - /4] becomes [/1 - /4].
-func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
+// An optional PrefixSorter parameter describes the localities of partitions in
+// the index for which the Constraint is being built. Spans belonging to 100%
+// local partitions will not be consolidated with spans that overlap any remote
+// row ranges. A local row range is one whose leaseholder region preference is
+// the same region as the gateway region.
+func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext, ps *partition.PrefixSorter) {
 	keyCtx := KeyContext{Columns: c.Columns, EvalCtx: evalCtx}
 	var result Spans
+
+	if c.Spans.Count() < 1 {
+		return
+	}
+	indexHasLocalAndRemoteParts := ps != nil
+	spanIsLocal, lastSpanIsLocal, localRemoteCrossover := false, false, false
+
+	// Initializations for the first span so we avoid putting a conditional in the
+	// below 'for' loop
+	if indexHasLocalAndRemoteParts {
+		last := c.Spans.Get(0)
+		if match, ok := FindMatch(last, ps); ok {
+			if match.IsLocal {
+				lastSpanIsLocal = true
+			}
+		}
+	}
+
 	for i := 1; i < c.Spans.Count(); i++ {
 		last := c.Spans.Get(i - 1)
 		sp := c.Spans.Get(i)
+		if indexHasLocalAndRemoteParts {
+			spanIsLocal = false
+			if match, ok := FindMatch(sp, ps); ok {
+				if match.IsLocal {
+					spanIsLocal = true
+				}
+			}
+			// If last span is in the local gateway region and the current span is
+			// not, or vice versa, save this info so we don't combine these spans.
+			localRemoteCrossover = spanIsLocal != lastSpanIsLocal
+		}
+		// Do not merge local spans with remote spans because a span must be 100%
+		// local in order to utilize locality optimized search.
+		// An example query on a LOCALITY REGIONAL BY ROW table which this
+		// benefits is:
+		// SELECT * FROM regional_by_row_table WHERE pk <> 4 LIMIT 3;
 		if last.endBoundary == IncludeBoundary && sp.startBoundary == IncludeBoundary &&
-			sp.start.IsNextKey(&keyCtx, last.end) {
+			sp.start.IsNextKey(&keyCtx, last.end) && !localRemoteCrossover {
 			// We only initialize `result` if we need to change something.
 			if result.Count() == 0 {
 				result.Alloc(c.Spans.Count() - 1)
@@ -494,6 +534,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 				result.Append(sp)
 			}
 		}
+		lastSpanIsLocal = spanIsLocal
 	}
 	if result.Count() != 0 {
 		c.Spans = result

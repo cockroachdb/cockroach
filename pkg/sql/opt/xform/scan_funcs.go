@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -91,8 +92,6 @@ func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.Sca
 	})
 }
 
-const regionKey = "region"
-
 // CanMaybeGenerateLocalityOptimizedScan returns true if it may be possible to
 // generate a locality optimized scan from the given scan private.
 // CanMaybeGenerateLocalityOptimizedScan performs simple checks that are
@@ -110,35 +109,41 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 		return false
 	}
 
-	if scanPrivate.HardLimit != 0 {
-		// This optimization doesn't apply to limited scans.
-		return false
-	}
+	if scanPrivate.Constraint == nil {
+		// Since we have no constraint, we must have a limit to use this
+		// optimization. We also require the limit to be less than the kv batch
+		// size, since it's probably better to use DistSQL once we're scanning
+		// multiple batches.
+		// TODO(rytaft): Revisit this when we have a more accurate cost model for
+		//               data distribution.
+		if scanPrivate.HardLimit == 0 || rowinfra.KeyLimit(scanPrivate.HardLimit) > rowinfra.ProductionKVBatchSize {
+			return false
+		}
+	} else {
+		// This scan should have at least two spans, or we won't be able to move one
+		// of the spans to a separate remote scan.
+		if scanPrivate.Constraint.Spans.Count() < 2 {
+			return false
+		}
 
-	// This scan should have at least two spans, or we won't be able to move one
-	// of the spans to a separate remote scan.
-	if scanPrivate.Constraint == nil || scanPrivate.Constraint.Spans.Count() < 2 {
-		return false
-	}
-
-	// Don't apply the rule if there are too many spans, since the rule code is
-	// O(# spans * # prefixes * # datums per prefix).
-	if scanPrivate.Constraint.Spans.Count() > 10000 {
-		return false
+		// Don't apply the rule if there are too many spans, since the rule code is
+		// O(# spans * # prefixes * # datums per prefix).
+		if scanPrivate.Constraint.Spans.Count() > 10000 {
+			return false
+		}
 	}
 
 	// There should be at least two partitions, or we won't be able to
 	// differentiate between local and remote partitions.
+	// This information is encapsulated in the PrefixSorter. If a PrefixSorter was
+	// not created for this index, then either all partitions are local, all
+	// are remote, or the index is not partitioned.
 	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	index := tabMeta.Table.Index(scanPrivate.Index)
-	if index.PartitionCount() < 2 {
+	if _, ok := tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
 		return false
 	}
-
-	// The local region must be set, or we won't be able to determine which
-	// partitions are local.
-	_, found := c.e.evalCtx.Locality.Find(regionKey)
-	return found
+	return true
 }
 
 // GenerateLocalityOptimizedScan generates a locality optimized scan if possible
@@ -154,45 +159,54 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	// we're scanning multiple batches.
 	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
 	// distribution.
-	if rowinfra.KeyLimit(grp.Relational().Cardinality.Max) > rowinfra.ProductionKVBatchSize {
+	maxRows := rowinfra.KeyLimit(grp.Relational().Cardinality.Max)
+	if maxRows > rowinfra.ProductionKVBatchSize {
 		return
 	}
 
 	tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate.Table)
 	index := tabMeta.Table.Index(scanPrivate.Index)
 
-	// We already know that a local region exists from calling
-	// CanMaybeGenerateLocalityOptimizedScan.
-	localRegion, _ := c.e.evalCtx.Locality.Find(regionKey)
-
-	// Determine whether the index has both local and remote partitions, and
-	// if so, which spans target local partitions.
-	var localPartitions util.FastIntSet
-	for i, n := 0, index.PartitionCount(); i < n; i++ {
-		part := index.Partition(i)
-		if isZoneLocal(part.Zone(), localRegion) {
-			localPartitions.Add(i)
-		}
-	}
-	if localPartitions.Len() == 0 || localPartitions.Len() == index.PartitionCount() {
-		// The partitions are either all local or all remote.
+	// The PrefixSorter has collected all the prefixes from all the different
+	// partitions (remembering which ones came from local partitions), and has
+	// sorted them so that longer prefixes come before shorter prefixes. For each
+	// span in the scanConstraint, we will iterate through the list of prefixes
+	// until we find a match, so ordering them with longer prefixes first ensures
+	// that the correct match is found. The PrefixSorter is only non-nil when this
+	// index has at least one local and one remote partition.
+	var ps *partition.PrefixSorter
+	var ok bool
+	if ps, ok = tabMeta.IndexPartitionLocality(scanPrivate.Index, index, c.e.evalCtx); !ok {
 		return
 	}
 
-	localSpans := c.getLocalSpans(index, localPartitions, scanPrivate.Constraint)
-	if localSpans.Len() == 0 || localSpans.Len() == scanPrivate.Constraint.Spans.Count() {
+	// If the Scan has no Constraint, retrieve the constraint of the form
+	// 'part_col IN (<part_1>, <part_2> ... <part_n>)' plus an expression
+	// representing any gaps between defined partitions (if any), all combined
+	// in a single constraint.
+	// It is expected that this constraint covers all rows in the table, so it is
+	// equivalent to a nil Constraint.
+	idxConstraint := scanPrivate.Constraint
+	if idxConstraint == nil {
+		if idxConstraint, ok = c.buildAllPartitionsConstraint(tabMeta, index, ps, scanPrivate); !ok {
+			return
+		}
+	}
+	localSpans := c.getLocalSpans(idxConstraint, ps)
+	if localSpans.Len() == 0 || localSpans.Len() == idxConstraint.Spans.Count() {
 		// The spans target all local or all remote partitions.
 		return
 	}
 
 	// Split the spans into local and remote sets.
-	localConstraint, remoteConstraint := c.splitSpans(scanPrivate.Constraint, localSpans)
+	localConstraint, remoteConstraint := c.splitSpans(idxConstraint, localSpans)
 
 	// Create the local scan.
 	localScanPrivate := c.DuplicateScanPrivate(scanPrivate)
 	localScanPrivate.LocalityOptimized = true
 	localConstraint.Columns = localConstraint.Columns.RemapColumns(scanPrivate.Table, localScanPrivate.Table)
 	localScanPrivate.SetConstraint(c.e.evalCtx, &localConstraint)
+	localScanPrivate.HardLimit = scanPrivate.HardLimit
 	localScan := c.e.f.ConstructScan(localScanPrivate)
 
 	// Create the remote scan.
@@ -200,6 +214,7 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	remoteScanPrivate.LocalityOptimized = true
 	remoteConstraint.Columns = remoteConstraint.Columns.RemapColumns(scanPrivate.Table, remoteScanPrivate.Table)
 	remoteScanPrivate.SetConstraint(c.e.evalCtx, &remoteConstraint)
+	remoteScanPrivate.HardLimit = scanPrivate.HardLimit
 	remoteScan := c.e.f.ConstructScan(remoteScanPrivate)
 
 	// Add the LocalityOptimizedSearchExpr to the same group as the original scan.
@@ -215,45 +230,110 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
 }
 
+// buildAllPartitionsConstraint retrieves the partition filters and in between
+// filters for the "index" belonging to the table described by "tabMeta", and
+// builds the full set of spans covering both defined partitions and rows
+// belonging to no defined partition (or partitions defined as DEFAULT). If a
+// Constraint fails to be built or if the Constraint is unconstrained, this
+// function returns (nil, false).
+// Partition spans that are 100% local will not be merged with other spans. Note
+// that if the partitioning columns have no CHECK constraint defined, suboptimal
+// spans may be produced which don't maximize the number of rows accessed as a
+// 100% local operation.
+// For example:
+//    CREATE TABLE abc_part (
+//       r STRING NOT NULL ,
+//       t INT NOT NULL,
+//       a INT PRIMARY KEY,
+//       b INT,
+//       c INT,
+//       d INT,
+//       UNIQUE INDEX c_idx (r, t, c) PARTITION BY LIST (r, t) (
+//         PARTITION west VALUES IN (('west', 1), ('east', 4)),
+//         PARTITION east VALUES IN (('east', DEFAULT), ('east', 2)),
+//         PARTITION default VALUES IN (DEFAULT)
+//       )
+//    );
+//    ALTER PARTITION "east" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//     num_voters = 5,
+//     voter_constraints = '{+region=east: 2}',
+//     lease_preferences = '[[+region=east]]'
+//
+//    ALTER PARTITION "west" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//     num_voters = 5,
+//     voter_constraints = '{+region=west: 2}',
+//     lease_preferences = '[[+region=west]]'
+//
+//    ALTER PARTITION "default" OF INDEX abc_part@c_idx CONFIGURE ZONE USING
+//     num_voters = 5,
+//     lease_preferences = '[[+region=central]]';
+//
+//    EXPLAIN SELECT c FROM abc_part@c_idx LIMIT 3;
+//                         info
+//    ----------------------------------------------
+//      distribution: local
+//      vectorized: true
+//
+//      • union all
+//      │ limit: 3
+//      │
+//      ├── • scan
+//      │     missing stats
+//      │     table: abc_part@c_idx
+//      │     spans: [/'east'/2 - /'east'/3]
+//      │     limit: 3
+//      │
+//      └── • scan
+//            missing stats
+//            table: abc_part@c_idx
+//            spans: [ - /'east'/1] [/'east'/4 - ]
+//            limit: 3
+//
+// Because of the partial-default east partition, ('east', DEFAULT), the spans
+// in the local (left) branch of the union all should be
+// [/'east' - /'east'/3] [/'east'/5 - /'east']. Adding in the following check
+// constraint achieves this: CHECK (r IN ('east', 'west', 'central'))
+func (c *CustomFuncs) buildAllPartitionsConstraint(
+	tabMeta *opt.TableMeta, index cat.Index, ps *partition.PrefixSorter, sp *memo.ScanPrivate,
+) (*constraint.Constraint, bool) {
+	var ok bool
+	var remainingFilters memo.FiltersExpr
+	var combinedConstraint *constraint.Constraint
+
+	// CHECK constraint and computed column filters
+	optionalFilters, filterColumns :=
+		c.GetOptionalFiltersAndFilterColumns(nil /* explicitFilters */, sp)
+
+	if _, remainingFilters, combinedConstraint, ok = c.MakeCombinedFiltersConstraint(
+		tabMeta, index, sp, ps,
+		nil /* explicitFilters */, optionalFilters, filterColumns,
+	); !ok {
+		return nil, false
+	}
+
+	// All partitionFilters are expected to build constraints. If they don't,
+	// let's not hide the problem by still generating a locality-optimized search
+	// that doesn't fully cover local spans.
+	if remainingFilters != nil && len(remainingFilters) > 0 {
+		return nil, false
+	}
+
+	return combinedConstraint, true
+}
+
 // getLocalSpans returns the indexes of the spans from the given constraint that
 // target local partitions.
 func (c *CustomFuncs) getLocalSpans(
-	index cat.Index, localPartitions util.FastIntSet, constraint *constraint.Constraint,
+	scanConstraint *constraint.Constraint, ps *partition.PrefixSorter,
 ) util.FastIntSet {
-	// Collect all the prefixes from all the different partitions (remembering
-	// which ones came from local partitions), and sort them so that longer
-	// prefixes come before shorter prefixes. For each span in the constraint, we
-	// will iterate through the list of prefixes until we find a match, so
-	// ordering them with longer prefixes first ensures that the correct match is
-	// found.
-	allPrefixes := getSortedPrefixes(index, localPartitions)
-
-	// Now iterate through the spans and determine whether each one matches
+	// Iterate through the spans and determine whether each one matches
 	// with a prefix from a local partition.
-	// TODO(rytaft): Sort the prefixes by key in addition to length, and use
-	// binary search here.
 	var localSpans util.FastIntSet
-	for i, n := 0, constraint.Spans.Count(); i < n; i++ {
-		span := constraint.Spans.Get(i)
-		spanPrefix := span.Prefix(c.e.evalCtx)
-		for j := range allPrefixes {
-			prefix := allPrefixes[j].prefix
-			isLocal := allPrefixes[j].isLocal
-			if len(prefix) > spanPrefix {
-				continue
-			}
-			matches := true
-			for k, datum := range prefix {
-				if span.StartKey().Value(k).Compare(c.e.evalCtx, datum) != 0 {
-					matches = false
-					break
-				}
-			}
-			if matches {
-				if isLocal {
-					localSpans.Add(i)
-				}
-				break
+	for i, n := 0, scanConstraint.Spans.Count(); i < n; i++ {
+		span := scanConstraint.Spans.Get(i)
+		if match, ok := constraint.FindMatch(span, ps); ok {
+			if match.IsLocal {
+				localSpans.Add(i)
 			}
 		}
 	}

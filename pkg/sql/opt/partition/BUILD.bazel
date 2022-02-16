@@ -1,0 +1,28 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "partition",
+    srcs = ["locality.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/partition",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/opt/cat",
+        "//pkg/sql/sem/tree",
+        "//pkg/util",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "partition_test",
+    srcs = ["locality_test.go"],
+    embed = [":partition"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/opt/testutils/testcat",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/util",
+        "//pkg/util/leaktest",
+    ],
+)
