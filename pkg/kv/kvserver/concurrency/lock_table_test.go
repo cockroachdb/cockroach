@@ -154,6 +154,15 @@ print
 ----
 <state of lock table>
 
+query [span=<start>[,<end>]] [max-locks=<int>] [max-bytes=<int>] [uncontended]
+----
+
+ Queries the lockTable over a given span (or over the entire LT if no span
+ provided), returning lock state info up to a maximum number of locks or bytes
+ if provided.  By default only returns contended locks (those with waiters),
+ unless the uncontended option is given.
+
+
 metrics
 ----
 <metrics for lock table>
@@ -177,7 +186,7 @@ func TestLockTableBasic(t *testing.T) {
 			case "new-lock-table":
 				var maxLocks int
 				d.ScanArgs(t, "maxlocks", &maxLocks)
-				ltImpl := newLockTable(int64(maxLocks), testTimeProvider)
+				ltImpl := newLockTable(int64(maxLocks), roachpb.RangeID(3), testTimeProvider)
 				ltImpl.enabled = true
 				ltImpl.enabledSeq = 1
 				ltImpl.minLocks = 0
@@ -562,6 +571,47 @@ func TestLockTableBasic(t *testing.T) {
 			case "print":
 				return lt.String()
 
+			case "query":
+				var span *roachpb.Span
+				var maxLocks int
+				var targetBytes int
+				if d.HasArg("span") {
+					var spanStr string
+					d.ScanArgs(t, "span", &spanStr)
+					validSpan := getSpan(t, d, spanStr)
+					span = &validSpan
+				}
+				if d.HasArg("max-locks") {
+					d.ScanArgs(t, "max-locks", &maxLocks)
+				}
+				if d.HasArg("max-bytes") {
+					d.ScanArgs(t, "max-bytes", &targetBytes)
+				}
+				scanOpts := QueryLockTableOptions{
+					MaxLocks:           int64(maxLocks),
+					TargetBytes:        int64(targetBytes),
+					IncludeUncontended: d.HasArg("uncontended"),
+				}
+				lockInfos, resumeState := lt.QueryLockTableState(span, scanOpts)
+				var lockInfoBytes int64
+				for _, lockInfo := range lockInfos {
+					lockInfoBytes += int64(lockInfo.Size())
+				}
+
+				var buf strings.Builder
+				fmt.Fprintf(&buf, "num locks: %d, bytes returned: %d, resume reason: %s, resume span: %s",
+					len(lockInfos), lockInfoBytes, resumeState.ResumeReason, resumeState.ResumeSpan)
+				if len(lockInfos) > 0 {
+					fmt.Fprintf(&buf, "\n locks:")
+				}
+				for _, lockInfo := range lockInfos {
+					lockInfoStrLines := strings.Split(redact.Sprintf("%+v", lockInfo).StripMarkers(), "\n")
+					for _, line := range lockInfoStrLines {
+						fmt.Fprintf(&buf, "\n  %s", line)
+					}
+				}
+				return buf.String()
+
 			case "metrics":
 				metrics := lt.Metrics()
 				b, err := yaml.Marshal(&metrics)
@@ -645,7 +695,7 @@ func intentsToResolveToStr(toResolve []roachpb.LockUpdate, startOnNewLine bool) 
 }
 
 func TestLockTableMaxLocks(t *testing.T) {
-	lt := newLockTable(5, timeutil.DefaultTimeSource{})
+	lt := newLockTable(5, roachpb.RangeID(3), timeutil.DefaultTimeSource{})
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -772,7 +822,7 @@ func TestLockTableMaxLocks(t *testing.T) {
 // TestLockTableMaxLocksWithMultipleNotRemovableRefs tests the notRemovable
 // ref counting.
 func TestLockTableMaxLocksWithMultipleNotRemovableRefs(t *testing.T) {
-	lt := newLockTable(2, timeutil.DefaultTimeSource{})
+	lt := newLockTable(2, roachpb.RangeID(3), timeutil.DefaultTimeSource{})
 	lt.minLocks = 0
 	lt.enabled = true
 	var keys []roachpb.Key
@@ -1008,7 +1058,7 @@ type workloadExecutor struct {
 
 func newWorkLoadExecutor(items []workloadItem, concurrency int) *workloadExecutor {
 	const maxLocks = 100000
-	lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
+	lt := newLockTable(maxLocks, roachpb.RangeID(3), timeutil.DefaultTimeSource{})
 	lt.enabled = true
 	return &workloadExecutor{
 		lm:           spanlatch.Manager{},
@@ -1571,7 +1621,7 @@ func BenchmarkLockTable(b *testing.B) {
 						var numRequestsWaited uint64
 						var numScanCalls uint64
 						const maxLocks = 100000
-						lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
+						lt := newLockTable(maxLocks, roachpb.RangeID(3), timeutil.DefaultTimeSource{})
 						lt.enabled = true
 						env := benchEnv{
 							lm:                &spanlatch.Manager{},
@@ -1611,7 +1661,7 @@ func BenchmarkLockTableMetrics(b *testing.B) {
 	for _, locks := range []int{0, 1 << 0, 1 << 4, 1 << 8, 1 << 12} {
 		b.Run(fmt.Sprintf("locks=%d", locks), func(b *testing.B) {
 			const maxLocks = 100000
-			lt := newLockTable(maxLocks, timeutil.DefaultTimeSource{})
+			lt := newLockTable(maxLocks, roachpb.RangeID(3), timeutil.DefaultTimeSource{})
 			lt.enabled = true
 
 			txn := &enginepb.TxnMeta{ID: uuid.MakeV4()}

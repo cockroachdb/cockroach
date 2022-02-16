@@ -143,7 +143,7 @@ func (c *Config) initDefaults() {
 func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
-	lt := newLockTable(cfg.MaxLockTableSize, timeutil.DefaultTimeSource{})
+	lt := newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.GetRangeID(), timeutil.DefaultTimeSource{})
 	*m = managerImpl{
 		st: cfg.Settings,
 		// TODO(nvanbenschoten): move pkg/storage/spanlatch to a new
@@ -498,6 +498,13 @@ func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate)
 	if err := m.lt.UpdateLocks(up); err != nil {
 		log.Fatalf(ctx, "%v", err)
 	}
+}
+
+// QueryLockTableState implements the LockManager interface
+func (m *managerImpl) QueryLockTableState(
+	ctx context.Context, span *roachpb.Span, opts QueryLockTableOptions,
+) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
+	return m.lt.QueryLockTableState(span, opts)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.

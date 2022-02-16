@@ -251,6 +251,10 @@ type LockManager interface {
 	// updated or released a lock or range of locks that it previously held.
 	// The Durability field of the lock update struct is ignored.
 	OnLockUpdated(context.Context, *roachpb.LockUpdate)
+
+	// QueryLockTableState gathers detailed metadata on locks tracked in the lock
+	// table that are part of the provided span (if non-nil) and key scope.
+	QueryLockTableState(ctx context.Context, span *roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
 }
 
 // TransactionManager is concerned with tracking transactions that have their
@@ -432,6 +436,22 @@ type Response = []roachpb.ResponseUnion
 
 // Error is an alias for a roachpb.Error.
 type Error = roachpb.Error
+
+// QueryLockTableOptions bundles the options for the QueryLockTableState function.
+type QueryLockTableOptions struct {
+	KeyScope           spanset.SpanScope
+	MaxLocks           int64
+	TargetBytes        int64
+	IncludeUncontended bool
+}
+
+// QueryLockTableResumeState bundles the return metadata on the pagination of
+// results from the QueryLockTableState function.
+type QueryLockTableResumeState struct {
+	ResumeSpan      *roachpb.Span
+	ResumeReason    roachpb.ResumeReason
+	ResumeNextBytes int64
+}
 
 ///////////////////////////////////
 // Internal Structure Interfaces //
@@ -672,6 +692,9 @@ type lockTable interface {
 	// waiting on locks of finalized transactions and telling the caller via
 	// lockTableGuard.ResolveBeforeEvaluation to resolve a batch of intents.
 	TransactionIsFinalized(*roachpb.Transaction)
+
+	// QueryLockTableState returns detailed metadata on locks managed by the lockTable.
+	QueryLockTableState(span *roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
 
 	// Metrics returns information about the state of the lockTable.
 	Metrics() LockTableMetrics
