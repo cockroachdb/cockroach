@@ -2368,6 +2368,7 @@ alter_default_privileges_target_object ::=
 alter_changefeed_cmd ::=
 	'ADD' changefeed_targets
 	| 'DROP' changefeed_targets
+	| 'SET' kv_option_list
 
 role_option ::=
 	'CREATEROLE'

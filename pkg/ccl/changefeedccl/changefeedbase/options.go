@@ -31,6 +31,10 @@ type SchemaChangePolicy string
 // include virtual columns in an event
 type VirtualColumnVisibility string
 
+// AlterNoValueOptionType defines the types of alterations that a user can
+// perform on an option with no value
+type AlterNoValueOptionType string
+
 // Constants for the options.
 const (
 	OptAvroSchemaPrefix         = `avro_schema_prefix`
@@ -105,6 +109,9 @@ const (
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
+
+	OptUnsetValue AlterNoValueOptionType = `false`
+	OptSetValue   AlterNoValueOptionType = `true`
 
 	DeprecatedOptFormatAvro                   = `experimental_avro`
 	DeprecatedSinkSchemeCloudStorageAzure     = `experimental-azure`
@@ -233,3 +240,37 @@ var NoLongerExperimental = map[string]string{
 	DeprecatedSinkSchemeCloudStorageNodelocal: SinkSchemeCloudStorageNodelocal,
 	DeprecatedSinkSchemeCloudStorageS3:        SinkSchemeCloudStorageS3,
 }
+
+// AlterChangefeedOptionExpectValues is used to parse alter changefeed options
+// using PlanHookState.TypeAsStringOpts()
+var AlterChangefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
+	OptAvroSchemaPrefix:         sql.KVStringOptRequireValue,
+	OptConfluentSchemaRegistry:  sql.KVStringOptRequireValue,
+	OptCursor:                   sql.KVStringOptRequireValue,
+	OptEnvelope:                 sql.KVStringOptRequireValue,
+	OptFormat:                   sql.KVStringOptRequireValue,
+	OptFullTableName:            sql.KVStringOptRequireValue,
+	OptKeyInValue:               sql.KVStringOptRequireValue,
+	OptTopicInValue:             sql.KVStringOptRequireValue,
+	OptResolvedTimestamps:       sql.KVStringOptAny,
+	OptMinCheckpointFrequency:   sql.KVStringOptRequireValue,
+	OptUpdatedTimestamps:        sql.KVStringOptRequireValue,
+	OptMVCCTimestamps:           sql.KVStringOptRequireValue,
+	OptDiff:                     sql.KVStringOptRequireValue,
+	OptCompression:              sql.KVStringOptRequireValue,
+	OptSchemaChangeEvents:       sql.KVStringOptRequireValue,
+	OptSchemaChangePolicy:       sql.KVStringOptRequireValue,
+	OptProtectDataFromGCOnPause: sql.KVStringOptRequireValue,
+	OptKafkaSinkConfig:          sql.KVStringOptRequireValue,
+	OptWebhookSinkConfig:        sql.KVStringOptRequireValue,
+	OptWebhookAuthHeader:        sql.KVStringOptRequireValue,
+	OptWebhookClientTimeout:     sql.KVStringOptRequireValue,
+	OptOnError:                  sql.KVStringOptRequireValue,
+	OptMetricsScope:             sql.KVStringOptRequireValue,
+	OptVirtualColumns:           sql.KVStringOptRequireValue,
+}
+
+// OptionsWithNoValue are options that do not require a value
+var OptionsWithNoValue = makeStringSet(OptFullTableName, OptKeyInValue,
+	OptTopicInValue, OptUpdatedTimestamps,
+	OptMVCCTimestamps, OptDiff, OptProtectDataFromGCOnPause)

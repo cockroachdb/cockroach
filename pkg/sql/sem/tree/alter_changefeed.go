@@ -48,9 +48,11 @@ type AlterChangefeedCmd interface {
 
 func (*AlterChangefeedAddTarget) alterChangefeedCmd()  {}
 func (*AlterChangefeedDropTarget) alterChangefeedCmd() {}
+func (*AlterChangefeedSetOptions) alterChangefeedCmd() {}
 
 var _ AlterChangefeedCmd = &AlterChangefeedAddTarget{}
 var _ AlterChangefeedCmd = &AlterChangefeedDropTarget{}
+var _ AlterChangefeedCmd = &AlterChangefeedSetOptions{}
 
 // AlterChangefeedAddTarget represents an ADD <targets> command
 type AlterChangefeedAddTarget struct {
@@ -72,4 +74,15 @@ type AlterChangefeedDropTarget struct {
 func (node *AlterChangefeedDropTarget) Format(ctx *FmtCtx) {
 	ctx.WriteString(" DROP ")
 	ctx.FormatNode(&node.Targets.Tables)
+}
+
+// AlterChangefeedSetOptions represents an SET <options> command
+type AlterChangefeedSetOptions struct {
+	Options KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterChangefeedSetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString(" SET ")
+	ctx.FormatNode(&node.Options)
 }
