@@ -8,29 +8,46 @@ Original authors: Michael Butler & Shiranka Miskin (November 2021)
 
 Jobs are CockroachDB's way of representing long running background tasks.  They
 are used internally as a core part of various features of CockroachDB such as
-Changefeeds, Backups, and Schema Changes .  Progress is regularly persisted such
-that it can be resumed on node failure, the tasks can be
-paused/resumed/cancelled through SQL commands such as [`PAUSE
-JOB`](https://www.cockroachlabs.com/docs/stable/pause-job.html), and
-running/recent jobs can be inspected such as through the [`SHOW
-JOBS`](https://www.cockroachlabs.com/docs/stable/show-jobs.html) command.  They
-can even be scheduled to run periodically through commands such as [`CREATE
-SCHEDULE FOR BACKUP`
-](https://www.cockroachlabs.com/docs/stable/create-schedule-for-backup.html#synopsis).
+Changefeeds, Backups, and Schema Changes.  Progress is regularly persisted such
+that a node may fail / the job can be paused and a node will still be able to
+resume the work later on.
 
+
+## User Control
+
+Users can send `PAUSE`/`RESUME`/`CANCEL` commands to specific jobs via SQL
+commands such as `PAUSE JOB {job_id}` for a single job, to an arbitrary set of
+jobs with commands such as `CANCEL JOBS {select_clause}`, to specific job types
+through commands such as `RESUME ALL CHANGEFEED JOBS`, or to jobs triggered by a
+given [schedule](##scheduled-jobs) through commands such as `PAUSE JOBS FOR
+SCHEDULE {schedule_id}`.
+
+Commands to specific job ids are handled through
+[`controlJobsNode.startExec`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/control_jobs.go#L113).
+`PAUSE` and `CANCEL` commands move the job to a `pause-requested` and
+`cancel-requested` state respectively, which allows the node currently running
+the job to proceed with actually pausing or cancelling it (see `jobs/cancel` in
+[Job Management](#job-management)).  `RESUME` moves the job to a `running` state
+to be picked up by any node (see `jobs/adopt` in [Job
+Management](#job-management)).
+
+The batch commands based on a schedule / type are simply delegated to the
+respective `{cmd} JOBS` command via
+[`delegateJobControl`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/delegate/job_control.go#L40).
 
 
 ## Internal Representation
 
 A Job is represented as a row in the
 [`system.jobs`](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/sql/catalog/systemschema/system.go#L185)
-table.  This table is the single source of truth for the information about
-currently relevant jobs.  Nodes read this table to determine the jobs they can
-execute, using the
+table which is the single source of truth for individual job information. Nodes
+read this table to determine the jobs they can execute, using the
 [`payload`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.proto#L755)
 to determine how to execute them and the
 [`progress`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.proto#L815)
-to pick up from where other nodes may have left it.
+to pick up from where other nodes may have left it. Completed/cancelled jobs are
+[eventually](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/config.go#L107)
+garbage collected from `system.jobs`.
 
 ```sql
 CREATE TABLE system.jobs (
@@ -132,14 +149,16 @@ in the job record.  Job execution ends when the status changes from `running` to
 [deleted](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L1000)
 from the system table -- by default, 14 hours after execution ends.
 
-If that node fails to execute the job, once the job record is in the table it
-should also be able to be resumed by any node in the cluster. The mechanism by
-which this is done is the [`JobRegistry`](#Job-Management).
+If that node fails to completely execute the job (either the node failing or the
+job being paused), once the job record is in the table it is also able to be
+resumed by any node in the cluster. The mechanism by which this is done is the
+[`JobRegistry`](#Job-Management).
 
 
 ## The Job Registry
 A node interacts with the jobs table through the [`JobRegistry`](https://github.com/cockroachdb/cockroach/blob/7097a9015f1a09c7dee4fbdbcc6bde82121f657b/pkg/jobs/registry.go#L92)
 struct.
+
 
 ### Job Creation
 A node creates a job by calling the Registry's
@@ -160,30 +179,11 @@ the job. By contrast, `CreateAdoptableJobWithTxn` allows another node to adopt a
 [resume](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L246)
 the job (`startableJob.Start()` is never called on these jobs).
 
-### User Control
-Users can send `PAUSE`/`RESUME`/`CANCEL` commands to specific jobs via SQL
-commands such as `PAUSE JOB {job_id}` for a single job, `CANCEL JOBS
-{select_clause}` for an arbitrary set of jobs, or batch commands like `RESUME
-ALL CHANGEFEED JOBS` for all jobs of a specific type and `PAUSE JOBS FOR
-SCHEDULE {schedule_id}` for jobs triggered by a given [schedule](## Scheduled Jobs).  
-Commands to specific job ids are handled through
-[`controlJobsNode.startExec`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/control_jobs.go#L113).
-`PAUSE` and `CANCEL` commands move the job to a `pause-requested` and
-`cancel-requested` state respectively, which allows the node currently running
-the job to proceed with actually pausing or cancelling it (see `jobs/cancel` in
-[Job Management](#job-management)).  `RESUME` moves the job to a `running`
-state to be picked up by any node (see `jobs/adopt` in [Job Management](#job-management)).
-
-
-The batch commands based on a schedule / type are simply delegated to the
-respective `{cmd} JOBS` command via
-[`delegateJobControl`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/delegate/job_control.go#L40).
-
 
 ### Job Management
-While job creation is triggered in response to client queries such as `BACKUP`
-(see **<TODO: LINK TO USAGE SECTION>**), job adoption, cancellation, and deletion is
-managed through daemon goroutines. These daemon goroutines will continually run
+While job creation is triggered in response to client queries such as
+[`BACKUP`](###backup), job adoption, cancellation, and deletion is managed
+through daemon goroutines. These daemon goroutines will continually run
 on each node, allowing any node to participate in picking up work, unassigning
 jobs that were on nodes that failed, and cleaning up old job records from the
 table.
@@ -243,6 +243,53 @@ Specifically, `jobRegistry.Start()` kicks off the following goroutines:
     to filter on the finished time.
 
 
+### Job Execution
+
+Each job type registers its respective execution logic through
+[jobs.RegisterConstructor](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L1153)
+which globally registers a
+[`Constructor`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L1148)
+function for a given
+[`jobspb.Type`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/jobspb/jobs.pb.go#L103).
+This `Constructor` returns an implementation of
+[`jobs.Resumer`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L1111)
+with the `Resume` and `OnFailOrCancel` functions for the registry to execute.
+
+When a job is adopted and
+[resumed](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L246)
+by a node's registry, unless the job is not already running or completed,
+[runJob](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L367)
+is ran in its own goroutine as an [async
+task](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L333).
+During adoption a [new context is
+created](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L662)
+for the `runJob` execution with its own
+[`cancel`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L259)
+function that is stored in the
+registry's internal
+[map](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L143)
+of [adopted
+jobs](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L52).
+This cancel callback stored in the registry allows it to remotely terminate the
+job when it must
+[`servePauseAndCancelRequests`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/adopt.go#L443).
+
+This thread handles executing the job by modeling it as a state machine through
+the registry's
+[`stepThroughStateMachine`](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L1174),
+starting from the `StatusRunning` state.  It [calls
+resumer.Resume](https://github.com/cockroachdb/cockroach/blob/8a501a247f177bf287bcf34beb4f05155818998c/pkg/jobs/registry.go#L1209)
+to execute the job-specific logic, and once the function completes it
+recursively calls `stepThroughStateMachine` to transition to the appropriate
+next state depending on if the resumption completed successfully or due to some
+form of error (either through the job's own execution or through a context error
+triggered by `servePauseAndCancelRequests`).  As it transitions through the
+state machine it updates job state accordingly and potentially calls
+`resumer.OnFailOrCancel` for job-specific handling.  Eventually the original
+`stepThroughStateMachine` exits and the `runJob` thread can complete.
+
+
+
 
 ## Scheduled Jobs
 
@@ -250,6 +297,13 @@ Jobs on their own are triggered by specific user commands such as `BACKUP` or
 `CREATE CHANGEFEED`, however cockroachdb also supports scheduling jobs to run in
 the future and be able to recur based on a crontab schedule.  As of writing this
 is only used for backups with `CREATE SCHEDULE FOR BACKUP`.
+
+Similar to Jobs, Schedules can be `PAUSE`d, `RESUME`d, or `DROP`ped via `{cmd}
+SCHEDULES {select_clause}` and are handled by
+[`controlSchedulesNode.startExec`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/control_schedules.go#L136).
+`PAUSE` and `RESUME` simply set the `next_run` of the schedule to either
+an empty value or the next iteration according to the `schedule_expr`, while
+`CANCEL` deletes the record from the table.
 
 Job Schedules are stored in the
 [`system.scheduled_jobs`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/catalog/systemschema/system.go#L432)
@@ -320,16 +374,6 @@ initializing the struct which can then have its properties be set using the
 setter functions.  Finally, the data in the struct is persisted into the
 `scheduled_jobs` table via
 [`ScheduledJob.Create`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/jobs/scheduled_job.go#L365).
-
-
-### User Control
-
-Similar to Jobs, Schedules can be `PAUSE`d, `RESUME`d, or `DROP`ped via `{cmd}
-SCHEDULES {select_clause}` and are handled by
-[`controlSchedulesNode.startExec`](https://github.com/cockroachdb/cockroach/blob/ae17f3df3448dcf13d4b187f1c45256cfa17d2f7/pkg/sql/control_schedules.go#L136).
-`PAUSE` and `RESUME` simply set the `next_run` of the schedule to either
-an empty value or the next iteration according to the `schedule_expr`, while
-`CANCEL` deletes the record from the table.
 
 
 ### Schedule Management
