@@ -2523,7 +2523,7 @@ func (desc *wrapper) GetExcludeDataFromBackup() bool {
 	return desc.ExcludeDataFromBackup
 }
 
-// GetMultiRegionEnumDependency returns true if the given table has an "implicit"
+// GetMultiRegionEnumDependencyIfExists returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region
 // (i.e non-primary region). Even though these tables don't have a column

@@ -269,6 +269,12 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 
+object MultiRegionEnumTypeReference
+
+MultiRegionEnumTypeReference :  TableID
+MultiRegionEnumTypeReference :  DatabaseID
+MultiRegionEnumTypeReference :  TypeID
+
 Table <|-- Column
 Table <|-- PrimaryIndex
 Table <|-- SecondaryIndex
@@ -336,4 +342,7 @@ UniqueConstraint <|-- ConstraintComment
 CheckConstraint <|-- ConstraintComment
 Database <|-- DatabaseRoleSetting
 Table <|-- RowLevelTTL
+Table <|-- MultiRegionEnumTypeReference
+Database <|-- MultiRegionEnumTypeReference
+Type <|-- MultiRegionEnumTypeReference
 @enduml
