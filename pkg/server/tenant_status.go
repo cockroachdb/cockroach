@@ -791,11 +791,42 @@ func (t *tenantStatusServer) ListLocalDistSQLFlows(
 }
 
 // Profile implements the profiling endpoint by delegating the request
-// to the local handler. No facility for requesting profiles from
-// remote nodes is facilitated at this time. Requests for nodes other
-// than "local" will return an error.
+// to the local handler. If the requested node_id is not the same as
+// the current instance ID, it performs an RPC call to fetch the profile
+// data for the requested SQL instance.
 func (t *tenantStatusServer) Profile(
 	ctx context.Context, request *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	instanceID, local, err := t.parseInstanceID(request.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Profile(ctx, request)
+	}
+	return profileLocal(ctx, request, t.st)
+}
+
+func (t *tenantStatusServer) Stacks(
+	ctx context.Context, request *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
@@ -804,10 +835,22 @@ func (t *tenantStatusServer) Profile(
 		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
 	}
 
-	if request.NodeId != "local" {
-		return nil, status.Errorf(codes.Unimplemented, "profiling arbitrary tenants is unsupported")
+	instanceID, local, err := t.parseInstanceID(request.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
-	return profileLocal(ctx, request, t.st)
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.Stacks(ctx, request)
+	}
+	return stacksLocal(request)
 }
 
 func (t *tenantStatusServer) IndexUsageStatistics(
@@ -1041,4 +1084,34 @@ func (t *tenantStatusServer) NodesList(
 		resp.Nodes = append(resp.Nodes, nodeDetails)
 	}
 	return &resp, err
+}
+
+// GetFiles returns a list of files of type defined in the request.
+func (t *tenantStatusServer) GetFiles(
+	ctx context.Context, req *serverpb.GetFilesRequest,
+) (*serverpb.GetFilesResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = t.AnnotateCtx(ctx)
+
+	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
+		return nil, err
+	}
+
+	instanceID, local, err := t.parseInstanceID(req.NodeId)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, err.Error())
+	}
+	if !local {
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		status, err := t.dialPod(ctx, instanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+		return status.GetFiles(ctx, req)
+	}
+
+	return getLocalFiles(req, t.sqlServer.cfg.HeapProfileDirName, t.sqlServer.cfg.GoroutineDumpDirName)
 }
