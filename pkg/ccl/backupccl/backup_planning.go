@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,6 +87,13 @@ var featureBackupEnabled = settings.RegisterBoolSetting(
 	"feature.backup.enabled",
 	"set to true to enable backups, false to disable; default is true",
 	featureflag.FeatureFlagEnabledDefault,
+).WithPublic()
+
+var resolveDuringExec = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"bulkio.backup.resolve_destination_in_job.enabled",
+	"defer the interaction with the external storage used to resolve backup destination until the job starts",
+	util.ConstantWithMetamorphicTestBool("backup-resolve-exec", false),
 ).WithPublic()
 
 func (p *backupKMSEnv) ClusterSettings() *cluster.Settings {
@@ -785,6 +793,75 @@ func backupPlanHook(
 			initialDetails.SpecificTenantIds = []roachpb.TenantID{backupStmt.Targets.Tenant}
 		}
 
+		jobID := p.ExecCfg().JobRegistry.MakeJobID()
+
+		// TODO(dt): replace setting with cluster version gate.
+		if resolveDuringExec.Get(p.ExecCfg().SV()) {
+			description, err := backupJobDescription(p,
+				backupStmt.Backup, to, incrementalFrom,
+				encryptionParams.RawKmsUris,
+				initialDetails.Destination.Subdir,
+				initialDetails.Destination.IncrementalStorage,
+			)
+			if err != nil {
+				return err
+			}
+			jr := jobs.Record{
+				Description: description,
+				Details:     initialDetails,
+				Progress:    jobspb.BackupProgress{},
+				CreatedBy:   backupStmt.CreatedByInfo,
+				Username:    p.User(),
+				DescriptorIDs: func() (sqlDescIDs []descpb.ID) {
+					for i := range targetDescs {
+						sqlDescIDs = append(sqlDescIDs, targetDescs[i].GetID())
+					}
+					return sqlDescIDs
+				}(),
+			}
+			plannerTxn := p.ExtendedEvalContext().Txn
+
+			if backupStmt.Options.Detached {
+				// When running inside an explicit transaction, we simply create the job
+				// record. We do not wait for the job to finish.
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+					ctx, jr, jobID, plannerTxn)
+				if err != nil {
+					return err
+				}
+				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+				return nil
+			}
+			var sj *jobs.StartableJob
+			if err := func() (err error) {
+				defer func() {
+					if err == nil || sj == nil {
+						return
+					}
+					if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+						log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
+					}
+				}()
+				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+					return err
+				}
+				// We commit the transaction here so that the job can be started. This
+				// is safe because we're in an implicit transaction. If we were in an
+				// explicit transaction the job would have to be run with the detached
+				// option and would have been handled above.
+				return plannerTxn.Commit(ctx)
+			}(); err != nil {
+				return err
+			}
+			if err := sj.Start(ctx); err != nil {
+				return err
+			}
+			if err := sj.AwaitCompletion(ctx); err != nil {
+				return err
+			}
+			return sj.ReportExecutionResults(ctx, resultsCh)
+		}
+
 		// TODO(dt): move this to job execution phase.
 		backupDetails, backupManifest, err := getBackupDetailAndManifest(
 			ctx, p.ExecCfg(), p.ExtendedEvalContext().Txn, initialDetails, p.User(),
@@ -798,6 +875,10 @@ func backupPlanHook(
 			return err
 		}
 
+		// We create the job record in the planner's transaction to ensure that
+		// the job record creation happens transactionally.
+		plannerTxn := p.ExtendedEvalContext().Txn
+
 		// Write backup manifest into a temporary checkpoint file.
 		// This accomplishes 2 purposes:
 		//  1. Persists large state needed for backup job completion.
@@ -807,23 +888,7 @@ func backupPlanHook(
 		//
 		// TODO (pbardea): For partitioned backups, also add verification for other
 		// stores we are writing to in addition to the default.
-		doWriteBackupManifestCheckpoint := func(ctx context.Context, jobID jobspb.JobID) error {
-			defaultStore, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, p.User())
-			if err != nil {
-				return err
-			}
-			defer defaultStore.Close()
-
-			if err := writeBackupManifest(
-				ctx, p.ExecCfg().Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
-				backupDetails.EncryptionOptions, &backupManifest,
-			); err != nil {
-				return errors.Wrapf(err, "writing checkpoint file")
-			}
-			return nil
-		}
-
-		if err := planSchedulePTSChaining(ctx, p, &backupDetails, backupStmt); err != nil {
+		if err := planSchedulePTSChaining(ctx, p.ExecCfg(), plannerTxn, &backupDetails, backupStmt.CreatedByInfo); err != nil {
 			return err
 		}
 
@@ -852,14 +917,8 @@ func backupPlanHook(
 			p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "",
 		) != nil
 
-		// We create the job record in the planner's transaction to ensure that
-		// the job record creation happens transactionally.
-		plannerTxn := p.ExtendedEvalContext().Txn
-
-		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-
 		if err := protectTimestampForBackup(
-			ctx, p, plannerTxn, jobID, backupManifest, backupDetails,
+			ctx, p.ExecCfg(), plannerTxn, jobID, backupManifest, backupDetails,
 		); err != nil {
 			return err
 		}
@@ -873,7 +932,9 @@ func backupPlanHook(
 				return err
 			}
 
-			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
+			if err := writeBackupManifestCheckpoint(
+				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+			); err != nil {
 				return err
 			}
 
@@ -897,7 +958,9 @@ func backupPlanHook(
 			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
 				return err
 			}
-			if err := doWriteBackupManifestCheckpoint(ctx, jobID); err != nil {
+			if err := writeBackupManifestCheckpoint(
+				ctx, jobID, backupDetails, &backupManifest, p.ExecCfg(), p.User(),
+			); err != nil {
 				return err
 			}
 
@@ -1007,6 +1070,29 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	return sj, args, nil
 }
 
+func writeBackupManifestCheckpoint(
+	ctx context.Context,
+	jobID jobspb.JobID,
+	backupDetails jobspb.BackupDetails,
+	backupManifest *BackupManifest,
+	execCfg *sql.ExecutorConfig,
+	user security.SQLUsername,
+) error {
+	defaultStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, backupDetails.URI, user)
+	if err != nil {
+		return err
+	}
+	defer defaultStore.Close()
+
+	if err := writeBackupManifest(
+		ctx, execCfg.Settings, defaultStore, tempCheckpointFileNameForJob(jobID),
+		backupDetails.EncryptionOptions, backupManifest,
+	); err != nil {
+		return errors.Wrapf(err, "writing checkpoint file")
+	}
+	return nil
+}
+
 // planSchedulePTSChaining populates backupDetails with information relevant to
 // the chaining of protected timestamp records between scheduled backups.
 // Depending on whether backupStmt is a full or incremental backup, we populate
@@ -1014,23 +1100,24 @@ func getScheduledBackupExecutionArgsFromSchedule(
 // completion of the backup job.
 func planSchedulePTSChaining(
 	ctx context.Context,
-	p sql.PlanHookState,
+	execCfg *sql.ExecutorConfig,
+	txn *kv.Txn,
 	backupDetails *jobspb.BackupDetails,
-	backupStmt *annotatedBackupStatement,
+	createdBy *jobs.CreatedByInfo,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
-	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
+	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
 			env = knobs.JobSchedulerEnv
 		}
 	}
 	// If this is not a scheduled backup, we do not chain pts records.
-	if backupStmt.CreatedByInfo == nil || backupStmt.CreatedByInfo.Name != jobs.CreatedByScheduledJobs {
+	if createdBy == nil || createdBy.Name != jobs.CreatedByScheduledJobs {
 		return nil
 	}
 
-	_, args, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
-		p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, backupStmt.CreatedByInfo.ID)
+	_, args, err := getScheduledBackupExecutionArgsFromSchedule(
+		ctx, env, txn, execCfg.InternalExecutor, createdBy.ID)
 	if err != nil {
 		return err
 	}
@@ -1048,8 +1135,8 @@ func planSchedulePTSChaining(
 			return nil
 		}
 
-		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env,
-			p.ExtendedEvalContext().Txn, p.ExecCfg().InternalExecutor, args.DependentScheduleID)
+		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
+			ctx, env, txn, execCfg.InternalExecutor, args.DependentScheduleID)
 		if err != nil {
 			// If we are unable to resolve the dependent incremental schedule (it
 			// could have been dropped) we do not need to perform any chaining.
@@ -1240,7 +1327,7 @@ func getProtectedTimestampTargetForBackup(backupManifest BackupManifest) *ptpb.T
 
 func protectTimestampForBackup(
 	ctx context.Context,
-	p sql.PlanHookState,
+	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
 	jobID jobspb.JobID,
 	backupManifest BackupManifest,
@@ -1260,7 +1347,7 @@ func protectTimestampForBackup(
 		target := getProtectedTimestampTargetForBackup(backupManifest)
 		rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
 			tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
-		err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, rec)
+		err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
 		if err != nil {
 			return err
 		}
