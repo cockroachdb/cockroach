@@ -147,7 +147,7 @@ func TestRegistry(t *testing.T) {
 				return fmt.Sprintf("could not parse duration %s as int: %v", duration, err)
 			}
 			keyBytes = encoding.EncodeStringAscending(keyBytes, key)
-			registry.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(registry, roachpb.ContentionEvent{
 				Key: keyBytes,
 				TxnMeta: enginepb.TxnMeta{
 					ID:                contendingTxnID,
@@ -180,7 +180,7 @@ func TestRegistryConcurrentAdds(t *testing.T) {
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
 			defer wg.Done()
-			registry.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(registry, roachpb.ContentionEvent{
 				Key: keys.MakeTableIDIndexID(nil /* key */, 1 /* tableID */, 1 /* indexID */),
 			})
 		}()
@@ -238,7 +238,7 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 				key = keys.MakeTableIDIndexID(key, tableID, indexID)
 			}
 			key = append(key, getKey()...)
-			r.AddContentionEvent(roachpb.ContentionEvent{
+			addContentionEvent(r, roachpb.ContentionEvent{
 				Key: key,
 				TxnMeta: enginepb.TxnMeta{
 					ID:                uuid.MakeV4(),
@@ -326,4 +326,10 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 		m = contention.MergeSerializedRegistries(m, s)
 		checkSerializedRegistryInvariants(m)
 	}
+}
+
+func addContentionEvent(r *contention.Registry, ev roachpb.ContentionEvent) {
+	r.AddContentionEvent(contentionpb.ExtendedContentionEvent{
+		BlockingEvent: ev,
+	})
 }

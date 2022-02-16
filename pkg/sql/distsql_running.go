@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -990,7 +991,13 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 					r.contendedQueryMetric.Inc(1)
 					r.contendedQueryMetric = nil
 				}
-				r.contentionRegistry.AddContentionEvent(ev)
+				contentionEvent := contentionpb.ExtendedContentionEvent{
+					BlockingEvent: ev,
+				}
+				if r.txn != nil {
+					contentionEvent.WaitingTxnID = r.txn.ID()
+				}
+				r.contentionRegistry.AddContentionEvent(contentionEvent)
 			})
 		}
 	}
