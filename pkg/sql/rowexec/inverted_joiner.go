@@ -338,7 +338,6 @@ func newInvertedJoiner(
 	}
 
 	ij.spanBuilder = span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), ij.desc, ij.index)
-	ij.spanBuilder.SetNeededColumns(allIndexCols)
 
 	// Initialize memory monitors and row container for index rows.
 	ctx := flowCtx.EvalCtx.Ctx()

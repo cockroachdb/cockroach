@@ -507,7 +507,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 	readerType joinReaderType,
 ) error {
 	spanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-	spanBuilder.SetNeededColumns(neededRightCols)
+	spanSplitter := span.MakeSplitter(jr.desc, jr.index, neededRightCols)
 
 	strategyMemAcc := jr.MemMonitor.MakeBoundAccount()
 	spanGeneratorMemAcc := jr.MemMonitor.MakeBoundAccount()
@@ -521,6 +521,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 		}
 		generator = &defaultSpanGenerator{
 			spanBuilder:          spanBuilder,
+			spanSplitter:         spanSplitter,
 			keyToInputRowIndices: keyToInputRowIndices,
 			numKeyCols:           numKeyCols,
 			lookupCols:           jr.lookupCols,
@@ -546,6 +547,7 @@ func (jr *joinReader) initJoinReaderStrategy(
 			multiSpanGen := &multiSpanGenerator{}
 			if err := multiSpanGen.init(
 				spanBuilder,
+				spanSplitter,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
@@ -558,11 +560,13 @@ func (jr *joinReader) initJoinReaderStrategy(
 		} else {
 			localityOptSpanGen := &localityOptimizedSpanGenerator{}
 			remoteSpanBuilder := span.MakeBuilder(flowCtx.EvalCtx, flowCtx.Codec(), jr.desc, jr.index)
-			remoteSpanBuilder.SetNeededColumns(neededRightCols)
+			remoteSpanSplitter := span.MakeSplitter(jr.desc, jr.index, neededRightCols)
 			remoteSpanGenMemAcc := jr.MemMonitor.MakeBoundAccount()
 			if err := localityOptSpanGen.init(
 				spanBuilder,
+				spanSplitter,
 				remoteSpanBuilder,
+				remoteSpanSplitter,
 				numKeyCols,
 				len(jr.input.OutputTypes()),
 				&jr.lookupExpr,
