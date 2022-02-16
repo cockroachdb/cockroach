@@ -143,6 +143,23 @@ func TestPersistedSQLStatsRead(t *testing.T) {
 	})
 }
 
+// https://github.com/cockroachdb/cockroach/issues/76710
+func TestInternalExecutorReadVirtualTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	sqlConn := sqlutils.MakeSQLRunner(conn)
+
+	sqlConn.Exec(t, `
+	CREATE MATERIALIZED VIEW temp
+	AS SELECT fingerprint_id FROM crdb_internal.cluster_statement_statistics
+`)
+}
+
 func verifyStoredStmtFingerprints(
 	t *testing.T,
 	expectedStmtFingerprints map[string]int64,

@@ -458,18 +458,6 @@ CREATE TABLE error (a INT, b INT, INDEX idx (a), UNIQUE INDEX idx (b))
 statement error pgcode 42P07 duplicate index name: \"idx\"
 CREATE TABLE error (a INT, b INT, UNIQUE INDEX idx (a), UNIQUE INDEX idx (b))
 
-# Regression test for using some virtual tables in CREATE TABLE AS which is not
-# supported at the moment (#65512).
-
-query error crdb_internal.node_statement_statistics cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_statement_statistics);
-
-query error crdb_internal.node_transaction_statistics cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_transaction_statistics);
-
-query error crdb_internal.node_txn_stats cannot be used in this context
-CREATE TABLE ctas AS (SELECT * FROM crdb_internal.node_txn_stats);
-
 subtest generated_as_identity
 statement ok
 CREATE TABLE generated_always_t (

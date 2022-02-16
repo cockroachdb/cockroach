@@ -435,11 +435,13 @@ func internalExtendedEvalCtx(
 	var indexUsageStats *idxusage.LocalIndexUsageStats
 	var sqlStatsController tree.SQLStatsController
 	var indexUsageStatsController tree.IndexUsageStatsController
+	var sqlStatsProvider *persistedsqlstats.PersistedSQLStats
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
 			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
 			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
+			sqlStatsProvider = execCfg.InternalExecutor.s.sqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -467,6 +469,7 @@ func internalExtendedEvalCtx(
 		},
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
+		statsProvider:   sqlStatsProvider,
 		indexUsageStats: indexUsageStats,
 	}
 	ret.copyFromExecCfg(execCfg)
