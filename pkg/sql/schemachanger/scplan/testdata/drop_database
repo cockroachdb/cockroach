@@ -49,7 +49,7 @@ CREATE VIEW db1.sc1.v5 AS (SELECT 'a'::db1.sc1.typ::string AS k, n2, n1 from db1
 ops
 DROP DATABASE db1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 37 MutationType ops
+StatementPhase stage 1 of 1 with 40 MutationType ops
   transitions:
     [[Sequence:{DescID: 107}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[TableComment:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
@@ -122,6 +122,8 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 105
+    *scop.DrainDescriptorName
+      TableID: 105
     *scop.RemoveSchemaComment
       SchemaID: 105
     *scop.MarkDescriptorAsDroppedSynthetically
@@ -173,10 +175,14 @@ StatementPhase stage 1 of 1 with 37 MutationType ops
       DescID: 116
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 106
+    *scop.DrainDescriptorName
+      TableID: 106
     *scop.RemoveSchemaComment
       SchemaID: 106
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 104
+    *scop.DrainDescriptorName
+      TableID: 104
     *scop.RemoveDatabaseComment
       DatabaseID: 104
     *scop.RemoveDatabaseRoleSettings
@@ -443,7 +449,7 @@ PreCommitPhase stage 1 of 1 with 56 MutationType ops
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 43 MutationType ops
   transitions:
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
@@ -496,8 +502,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForTable
       TableID: 110
-    *scop.DrainDescriptorName
-      TableID: 105
     *scop.LogEvent
       Authorization:
         UserName: root
@@ -641,8 +645,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 116
-    *scop.DrainDescriptorName
-      TableID: 106
     *scop.LogEvent
       Authorization:
         UserName: root
@@ -667,8 +669,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 46 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 106
-    *scop.DrainDescriptorName
-      TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
