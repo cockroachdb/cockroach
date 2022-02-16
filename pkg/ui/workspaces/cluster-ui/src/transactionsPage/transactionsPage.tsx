@@ -324,10 +324,6 @@ export class TransactionsPage extends React.Component<
     }
   };
 
-  resetTime = (): void => {
-    this.changeTimeScale(defaultTimeScaleSelected);
-  };
-
   render(): React.ReactElement {
     const {
       data,
@@ -403,11 +399,6 @@ export class TransactionsPage extends React.Component<
               currentScale={this.props.timeScale}
               setTimeScale={this.changeTimeScale}
             />
-          </PageConfigItem>
-          <PageConfigItem>
-            <button className={cx("reset-btn")} onClick={this.resetTime}>
-              reset time
-            </button>
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
             <ClearStats
