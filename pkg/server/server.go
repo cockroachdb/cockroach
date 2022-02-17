@@ -353,17 +353,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	tcsFactory := kvcoord.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, distSender)
 
-	gcoords, metrics := admission.NewGrantCoordinators(
-		cfg.AmbientCtx,
-		admission.Options{
-			MinCPUSlots:                    1,
-			MaxCPUSlots:                    100000, /* TODO(sumeer): add cluster setting */
-			SQLKVResponseBurstTokens:       100000, /* TODO(sumeer): add cluster setting */
-			SQLSQLResponseBurstTokens:      100000, /* arbitrary, and unused */
-			SQLStatementLeafStartWorkSlots: 100,    /* arbitrary, and unused */
-			SQLStatementRootStartWorkSlots: 100,    /* arbitrary, and unused */
-			Settings:                       st,
-		})
+	admissionOptions := admission.Merge(admission.DefaultOptions, cfg.TestingKnobs.AdmissionControl.(*admission.Options))
+	admissionOptions.Settings = st
+	gcoords, metrics := admission.NewGrantCoordinators(cfg.AmbientCtx, admissionOptions)
 	for i := range metrics {
 		registry.AddMetricStruct(metrics[i])
 	}
