@@ -61,7 +61,10 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	// are being dropped. This entry will be used to generate the GC jobs below.
 	for _, dbID := range mvs.dbGCJobs.Ordered() {
 		if _, ok := mvs.descriptorGCJobs[dbID]; !ok {
-			mvs.descriptorGCJobs[dbID] = nil
+			// Zone config should now be safe to remove versus waiting for the GC job.
+			if err := b.DeleteZoneConfig(ctx, dbID); err != nil {
+				return err
+			}
 		}
 	}
 	var dbIDs catalog.DescriptorIDSet

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -252,6 +253,16 @@ func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.I
 	}
 	b.deletedDescriptors.Add(id)
 	b.descsCollection.AddDeletedDescriptor(id)
+	return nil
+}
+
+// DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	zoneKeyPrefix := config.MakeZoneKeyPrefix(b.codec, id)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+	}
+	b.batch.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 	return nil
 }
 

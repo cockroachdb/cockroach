@@ -457,126 +457,14 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 13 MutationType ops
-create job #2: "GC for dropping descriptors and parent database 104"
-  descriptor IDs: []
+## PostCommitNonRevertiblePhase stage 1 of 1 with 14 MutationType ops
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹multi_region_test_db› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-upsert descriptor #104
-   database:
-  -  declarativeSchemaChangerState:
-  -    authorization: {}
-  -    currentStatuses:
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    - DROPPED
-  -    - ABSENT
-  -    - ABSENT
-  -    - ABSENT
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
-  -        statement: DROP DATABASE multi_region_test_db CASCADE
-  -        statementTag: DROP DATABASE
-  -    targetRanks:
-  -    - 0
-  -    - 1
-  -    - 2
-  -    - 3
-  -    - 4
-  -    - 5
-  -    - 6
-  -    - 7
-  -    - 8
-  -    targets:
-  -    - elementProto:
-  -        namespace:
-  -          descriptorId: 104
-  -          name: multi_region_test_db
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        owner:
-  -          descriptorId: 104
-  -          owner: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2
-  -          userName: admin
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2048
-  -          userName: public
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        userPrivileges:
-  -          descriptorId: 104
-  -          privileges: 2
-  -          userName: root
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        database:
-  -          databaseId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRoleSetting:
-  -          databaseId: 104
-  -          roleName: __placeholder_role_name__
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseComment:
-  -          comment: __placeholder_comment__
-  -          databaseId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRegionConfig:
-  -          databaseId: 104
-  -          regionEnumTypeId: 105
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     id: 104
-     modificationTime: {}
-  ...
-         id: 106
-     state: DROP
-  -  version: "2"
-  +  version: "3"
+delete descriptor #104
 delete descriptor #105
 delete descriptor #106
 delete descriptor #107
+deleting zone config for #104
 commit transaction #3
 # end PostCommitPhase

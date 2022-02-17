@@ -55,6 +55,11 @@ func init() {
 						DatabaseID: this.DatabaseID,
 					}
 				}),
+				emit(func(this *scpb.Database) scop.Op {
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.DatabaseID,
+					}
+				}),
 			),
 		),
 	)
