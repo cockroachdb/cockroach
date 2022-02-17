@@ -78,11 +78,7 @@ func randTablesN(r *rand.Rand, n int) []string {
 	stmts = append(stmts, `SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false;`)
 
 	// Create the random tables.
-	createTableStatements := randgen.RandCreateTables(r, "table", n,
-		randgen.StatisticsMutator,
-		randgen.PartialIndexMutator,
-		randgen.ForeignKeyMutator,
-	)
+	createTableStatements := randgen.RandCreateTables(r, "table", n, false, randgen.StatisticsMutator, randgen.PartialIndexMutator, randgen.ForeignKeyMutator)
 
 	for _, stmt := range createTableStatements {
 		stmts = append(stmts, tree.SerializeForDisplay(stmt))

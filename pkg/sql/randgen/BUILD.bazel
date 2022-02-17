@@ -44,6 +44,7 @@ go_library(
         "//pkg/util/timeutil/pgdate",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
     ],
@@ -59,6 +60,8 @@ go_test(
     embed = [":randgen"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
+        "//pkg/ccl/utilccl",
         "//pkg/security",
         "//pkg/security/securitytest",
         "//pkg/server",
