@@ -226,8 +226,6 @@ func (handler *proxyHandler) handle(ctx context.Context, incomingConn *proxyConn
 		updateMetricsAndSendErrToClient(clientErr, conn, handler.metrics)
 		return clientErr
 	}
-	// This forwards the remote addr to the backend.
-	backendStartupMsg.Parameters["crdb:remote_addr"] = conn.RemoteAddr().String()
 
 	ctx = logtags.AddTag(ctx, "cluster", clusterName)
 	ctx = logtags.AddTag(ctx, "tenant", tenID)
