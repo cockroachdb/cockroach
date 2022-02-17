@@ -365,18 +365,16 @@ func NeededColumnFamilyIDs(
 			if nc.Contains(columnOrdinal) {
 				needed = true
 			}
-			if !columns[columnOrdinal].IsNullable() && (!indexedCols.Contains(columnOrdinal) ||
-				compositeCols.Contains(columnOrdinal) && !hasSecondaryEncoding) {
-				// The column is non-nullable and cannot be decoded from a different
-				// family, so this column family must have a KV entry for every row.
+			if !columns[columnOrdinal].IsNullable() && !indexedCols.Contains(columnOrdinal) {
+				// This column is non-nullable and is not indexed, thus, it must
+				// be stored in the value part of the KV entry. As a result,
+				// this column family is non-nullable too.
 				nullable = false
 			}
 		}
 		if needed {
 			neededFamilyIDs = append(neededFamilyIDs, family.ID)
-			if !nullable {
-				allFamiliesNullable = false
-			}
+			allFamiliesNullable = allFamiliesNullable && nullable
 		}
 		return nil
 	})
