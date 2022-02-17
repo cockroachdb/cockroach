@@ -34,13 +34,16 @@ func TestAuthenticateWithSessionRevivalToken(t *testing.T) {
 	ctx := context.Background()
 
 	params, _ := tests.CreateTestServerParams()
-	s, _, _ := serverutils.StartServer(t, params)
+	s, mainDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-	tenant, mainDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
-	defer tenant.Stopper().Stop(ctx)
 	defer mainDB.Close()
+	tenant, tenantDB := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(serverutils.TestTenantID()))
+	defer tenant.Stopper().Stop(ctx)
+	defer tenantDB.Close()
 
-	_, err := mainDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	_, err := tenantDB.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	require.NoError(t, err)
+	_, err = tenantDB.Exec("SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
 	require.NoError(t, err)
 
 	var token string
