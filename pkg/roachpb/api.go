@@ -664,6 +664,9 @@ func (*QueryTxnRequest) Method() Method { return QueryTxn }
 func (*QueryIntentRequest) Method() Method { return QueryIntent }
 
 // Method implements the Request interface.
+func (*QueryLocksRequest) Method() Method { return QueryLocks }
+
+// Method implements the Request interface.
 func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
 
 // Method implements the Request interface.
@@ -875,6 +878,12 @@ func (qtr *QueryTxnRequest) ShallowCopy() Request {
 
 // ShallowCopy implements the Request interface.
 func (pir *QueryIntentRequest) ShallowCopy() Request {
+	shallowCopy := *pir
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (pir *QueryLocksRequest) ShallowCopy() Request {
 	shallowCopy := *pir
 	return &shallowCopy
 }
@@ -1317,6 +1326,7 @@ func (*QueryTxnRequest) flags() flag   { return isRead | isAlone }
 func (*QueryIntentRequest) flags() flag {
 	return isRead | isPrefix | updatesTSCache | updatesTSCacheOnErr
 }
+func (*QueryLocksRequest) flags() flag         { return isRead | isRange }
 func (*ResolveIntentRequest) flags() flag      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() flag { return isWrite | isRange }
 func (*TruncateLogRequest) flags() flag        { return isWrite }

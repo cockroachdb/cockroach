@@ -1036,7 +1036,7 @@ message RecoverTxnResponse {
   Transaction recovered_txn = 2 [(gogoproto.nullable) = false];
 }
 
-// A QueryTxnResponse is arguments to the QueryTxn() method. It's sent
+// A QueryTxnRequest is arguments to the QueryTxn() method. It's sent
 // by transactions which are waiting to push another transaction because
 // of conflicting write intents to fetch updates to either the pusher's
 // or the pushee's transaction records.
@@ -1112,6 +1112,24 @@ message QueryIntentResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Whether an intent matching the expected transaction was found at the key.
   bool found_intent = 2;
+}
+
+// A QueryLocksRequest is arguments to the QueryLocks() method.  It requests
+// the state of the locks held in the lock table over the given key span,
+// up to a maximum number of results or byte limit, and is used for the
+// the purposes of observability.
+message QueryLocksRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Whether to include locks that do not have waiting readers or writers, for
+  // example in the case of an unreplicated lock.
+  bool include_uncontended = 2;
+}
+
+// A QueryLocksResponse is the return value from the QueryLocks() method.
+message QueryLocksResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated LockStateInfo locks = 2 [(gogoproto.nullable) = false];
 }
 
 // A ResolveIntentRequest is arguments to the ResolveIntent()
@@ -2057,6 +2075,7 @@ message RequestUnion {
     ExportRequest export = 32;
     QueryTxnRequest query_txn = 33;
     QueryIntentRequest query_intent = 42;
+    QueryLocksRequest query_locks = 55;
     AdminScatterRequest admin_scatter = 36;
     AddSSTableRequest add_sstable = 37;
     RecomputeStatsRequest recompute_stats = 39;
@@ -2111,6 +2130,7 @@ message ResponseUnion {
     ExportResponse export = 32;
     QueryTxnResponse query_txn = 33;
     QueryIntentResponse query_intent = 42;
+    QueryLocksResponse query_locks = 55;
     AdminScatterResponse admin_scatter = 36;
     AddSSTableResponse add_sstable = 37;
     RecomputeStatsResponse recompute_stats = 39;
@@ -2279,6 +2299,7 @@ message Header {
   // - GetRequest
   // - RevertRangeRequest
   // - ResolveIntentRangeRequest
+  // - QueryLocksRequest
   //
   // The following two requests types are also allowed in the batch, although
   // the limit has no effect on them:

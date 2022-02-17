@@ -370,6 +370,15 @@ func (r *Replica) collectSpansRead(
 			// towards the current header.Key. So ResumeSpan.EndKey has been read
 			// and becomes the inclusive start key of what was read.
 			header.Key = t.ResumeSpan.EndKey
+		case *roachpb.QueryLocksResponse:
+			if header.Key.Equal(t.ResumeSpan.Key) {
+				// The request did not evaluate. Ignore it.
+				continue
+			}
+			// The scan will resume at the inclusive ResumeSpan.Key. So
+			// ResumeSpan.Key has not been read and becomes the exclusive end key of
+			// what was read.
+			header.EndKey = t.ResumeSpan.Key
 		default:
 			// Consider it fully evaluated, which is safe.
 			baCopy.Requests[j] = baReq
