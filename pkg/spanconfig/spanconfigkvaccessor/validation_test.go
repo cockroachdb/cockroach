@@ -25,13 +25,12 @@ import (
 func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clusterTarget := spanconfig.MakeTargetFromSystemTarget(spanconfig.SystemTarget{
-		SourceTenantID: roachpb.SystemTenantID,
-		TargetTenantID: nil,
-	})
+	entireKeyspaceTarget := spanconfig.MakeTargetFromSystemTarget(
+		spanconfig.MakeEntireKeyspaceTarget(),
+	)
 
 	makeTenantTarget := func(id uint64) spanconfig.Target {
-		target, err := spanconfig.MakeTenantTarget(roachpb.MakeTenantID(id), roachpb.MakeTenantID(id))
+		target, err := spanconfig.MakeTenantKeyspaceTarget(roachpb.MakeTenantID(id), roachpb.MakeTenantID(id))
 		require.NoError(t, err)
 		return spanconfig.MakeTargetFromSystemTarget(target)
 	}
@@ -145,9 +144,9 @@ func TestValidateUpdateArgs(t *testing.T) {
 			// Duplicate in toDelete with some span targets.
 			toDelete: []spanconfig.Target{
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
-				clusterTarget,
+				entireKeyspaceTarget,
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
-				clusterTarget,
+				entireKeyspaceTarget,
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
 			},
 			expErr: "duplicate system targets .* in the same list",
@@ -156,9 +155,9 @@ func TestValidateUpdateArgs(t *testing.T) {
 			// Duplicate in toDelete with some span targets.
 			toDelete: []spanconfig.Target{
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
-				clusterTarget,
+				entireKeyspaceTarget,
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
-				clusterTarget,
+				entireKeyspaceTarget,
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
 			},
 			expErr: "duplicate system targets .* in the same list",
@@ -170,7 +169,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")}),
 				makeTenantTarget(20),
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")}),
-				clusterTarget,
+				entireKeyspaceTarget,
 				spanconfig.MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")}),
 			},
 			toUpsert: []spanconfig.Record{
@@ -183,7 +182,38 @@ func TestValidateUpdateArgs(t *testing.T) {
 			},
 			expErr: "",
 		},
+		{
+			// Read only targets are not valid delete args.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSystemTarget(
+					spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
+				),
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
+		{
+			// Read only targets are not valid upsert args.
+			toUpsert: []spanconfig.Record{
+				{
+					Target: spanconfig.MakeTargetFromSystemTarget(
+						spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
+					),
+				},
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
+		{
+			// Read only target validation also applies when the source is a secondary
+			// tenant.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSystemTarget(
+					spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10)),
+				),
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
 	} {
-		require.True(t, testutils.IsError(validateUpdateArgs(tc.toDelete, tc.toUpsert), tc.expErr))
+		err := validateUpdateArgs(tc.toDelete, tc.toUpsert)
+		require.True(t, testutils.IsError(err, tc.expErr), "exp %s; got %s", tc.expErr, err)
 	}
 }
