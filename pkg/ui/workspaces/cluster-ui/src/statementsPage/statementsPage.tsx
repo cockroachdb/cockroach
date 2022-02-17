@@ -59,6 +59,7 @@ import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { InlineAlert } from "@cockroachlabs/ui-components";
 
 type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -589,6 +590,12 @@ export class StatementsPage extends React.Component<
       ? []
       : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
     const { filters, activeFilters } = this.state;
+    const longLoadingMessage = isNil(this.props.statements) && (
+      <InlineAlert
+        intent="info"
+        title="If the selected time period contains a large amount of data, this page might take a few minutes to load."
+      />
+    );
 
     return (
       <div className={cx("root", "table-area")}>
@@ -643,6 +650,7 @@ export class StatementsPage extends React.Component<
             })
           }
         />
+        {longLoadingMessage}
         <ActivateStatementDiagnosticsModal
           ref={this.activateDiagnosticsRef}
           activate={onActivateStatementDiagnostics}

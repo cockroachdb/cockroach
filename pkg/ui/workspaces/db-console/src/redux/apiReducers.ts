@@ -282,7 +282,7 @@ const queriesReducerObj = new CachedDataReducer(
   api.getStatements,
   "statements",
   moment.duration(5, "m"),
-  moment.duration(1, "m"),
+  moment.duration(30, "m"),
 );
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
