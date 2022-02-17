@@ -12,12 +12,14 @@ package jobs
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
@@ -25,6 +27,7 @@ import (
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
 
+	RowLevelTTL  *RowLevelTTLMetrics
 	Changefeed   metric.Struct
 	StreamIngest metric.Struct
 
@@ -39,6 +42,15 @@ type Metrics struct {
 	// without an adopt loop, e.g., through a StartableJob.
 	ResumedJobs *metric.Counter
 }
+
+// RowLevelTTLMetrics are the metrics for row level TTL.
+type RowLevelTTLMetrics struct {
+	syncutil.Mutex
+	Metrics    map[string]metric.Struct
+	CreateFunc func(name string) metric.Struct
+}
+
+var invalidPrometheusRe = regexp.MustCompile(`[^a-zA-Z0-9_]`)
 
 // JobTypeMetrics is a metric.Struct containing metrics for each type of job.
 type JobTypeMetrics struct {
@@ -178,7 +190,15 @@ var (
 func (Metrics) MetricStruct() {}
 
 // init initializes the metrics for job monitoring.
-func (m *Metrics) init(histogramWindowInterval time.Duration) {
+func (m *Metrics) init(histogramWindowInterval time.Duration, addMetricStruct func(interface{})) {
+	if MakeRowLevelTTLMetricsHook != nil {
+		m.RowLevelTTL = &RowLevelTTLMetrics{
+			Metrics: make(map[string]metric.Struct),
+			CreateFunc: func(name string) metric.Struct {
+				return MakeRowLevelTTLMetricsHook(histogramWindowInterval, name, addMetricStruct)
+			},
+		}
+	}
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
@@ -207,6 +227,20 @@ func (m *Metrics) init(histogramWindowInterval time.Duration) {
 	}
 }
 
+// GetRowLevelTTLMetrics gets the row level TTL metrics for the given name.
+func (m *Metrics) GetRowLevelTTLMetrics(name string) metric.Struct {
+	m.RowLevelTTL.Lock()
+	defer m.RowLevelTTL.Unlock()
+
+	name = invalidPrometheusRe.ReplaceAllString(name, "_")
+	if ret, ok := m.RowLevelTTL.Metrics[name]; ok {
+		return ret
+	}
+	ret := m.RowLevelTTL.CreateFunc(name)
+	m.RowLevelTTL.Metrics[name] = ret
+	return ret
+}
+
 // MakeChangefeedMetricsHook allows for registration of changefeed metrics from
 // ccl code.
 var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
@@ -214,6 +248,9 @@ var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
 // MakeStreamIngestMetricsHook allows for registration of streaming metrics from
 // ccl code.
 var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
+
+// MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
+var MakeRowLevelTTLMetricsHook func(time.Duration, string, func(interface{})) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {
