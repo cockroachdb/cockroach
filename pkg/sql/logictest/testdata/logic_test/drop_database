@@ -28,7 +28,7 @@ DROP DATABASE "foo-bar" CASCADE
 query TTT
 SELECT name, database_name, state FROM crdb_internal.tables WHERE name = 't'
 ----
-t  foo-bar  DROP
+t  [106]  DROP
 
 query TTTTT
 SHOW DATABASES
