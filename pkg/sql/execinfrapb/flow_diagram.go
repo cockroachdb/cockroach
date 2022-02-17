@@ -513,6 +513,16 @@ func (post *PostProcessSpec) summary() []string {
 	return res
 }
 
+func (c *RestoreDataSpec) summary() (string, []string) {
+	return "RestoreDataSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (c *SplitAndScatterSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("%d chunks", len(c.Chunks))
+	return "SplitAndScatterSpec", []string{detail}
+}
+
 // summary implements the diagramCellType interface.
 func (c *ReadImportDataSpec) summary() (string, []string) {
 	ss := make([]string, 0, len(c.Uri))
@@ -520,6 +530,21 @@ func (c *ReadImportDataSpec) summary() (string, []string) {
 		ss = append(ss, s)
 	}
 	return "ReadImportData", ss
+}
+
+// summary implements the diagramCellType interface.
+func (s *StreamIngestionDataSpec) summary() (string, []string) {
+	return "StreamIngestionData", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *StreamIngestionFrontierSpec) summary() (string, []string) {
+	return "StreamIngestionFrontier", []string{}
+}
+
+// summary implements the diagramCellType interface.
+func (s *IndexBackfillMergerSpec) summary() (string, []string) {
+	return "IndexBackfillMerger", []string{}
 }
 
 // summary implements the diagramCellType interface.
