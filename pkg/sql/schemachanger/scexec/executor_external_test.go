@@ -74,6 +74,7 @@ func (ti testInfra) newExecDeps(
 		noopMetadataUpdaterFactory{}, /* commentUpdaterFactory*/
 		noopEventLogger{},            /* eventLogger */
 		1,                            /* schemaChangerJobID */
+		true,                         /* kv trace */
 		nil,                          /* statements */
 	)
 }
