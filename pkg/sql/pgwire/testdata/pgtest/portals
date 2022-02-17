@@ -1143,3 +1143,30 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"3"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 2"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify that Sync deletes all named portals, even if they haven't been
+# executed. (Regression test of #71665.)
+send
+Parse {"Name": "s16", "Query": "SELECT 1"}
+Bind {"DestinationPortal": "p16", "PreparedStatement": "s16"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Execute {"Portal": "p16"}
+Sync
+----
+
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

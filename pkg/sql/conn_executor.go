@@ -1951,13 +1951,11 @@ func (ex *connExecutor) execCmd() error {
 		// inside a BEGIN/COMMIT transaction block (“close” meaning to commit if no
 		// error, or roll back if error)."
 		// In other words, Sync is treated as commit for implicit transactions.
-		if op, ok := ex.machine.CurState().(stateOpen); ok {
-			if op.ImplicitTxn.Get() {
-				// Note that the handling of ev in the case of Sync is massaged a bit
-				// later - Sync is special in that, if it encounters an error, that does
-				// *not *cause the session to ignore all commands until the next Sync.
-				ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
-			}
+		if ex.implicitTxn() {
+			// Note that the handling of ev in the case of Sync is massaged a bit
+			// later - Sync is special in that, if it encounters an error, that does
+			// *not *cause the session to ignore all commands until the next Sync.
+			ev, payload = ex.handleAutoCommit(ctx, &tree.CommitTransaction{})
 		}
 		// Note that the Sync result will flush results to the network connection.
 		res = ex.clientComm.CreateSyncResult(pos)
@@ -2525,7 +2523,6 @@ func (ex *connExecutor) setTransactionModes(
 		if err := ex.state.setHistoricalTimestamp(ctx, asOfTs); err != nil {
 			return err
 		}
-		ex.state.sqlTimestamp = asOfTs.GoTime()
 		if rwMode == tree.UnspecifiedReadWriteMode {
 			rwMode = tree.ReadOnly
 		}
@@ -2629,10 +2626,16 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
 func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, stmtTS time.Time) {
+	newTxn := txn == nil || evalCtx.Txn != txn
 	evalCtx.TxnState = ex.getTransactionState()
 	evalCtx.TxnReadOnly = ex.state.readOnly
 	evalCtx.TxnImplicit = ex.implicitTxn()
-	evalCtx.StmtTimestamp = stmtTS
+	if newTxn || !ex.implicitTxn() {
+		// Only update the stmt timestamp if in a new txn or an explicit txn. This is because this gets
+		// called multiple times during an extended protocol implicit txn, but we
+		// want all those stages to share the same stmtTS.
+		evalCtx.StmtTimestamp = stmtTS
+	}
 	evalCtx.TxnTimestamp = ex.state.sqlTimestamp
 	evalCtx.Placeholders = nil
 	evalCtx.Annotations = nil
@@ -2655,7 +2658,10 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 		nextMax := minTSErr.MinTimestampBound
 		ex.extraTxnState.descCollection.SetMaxTimestampBound(nextMax)
 		evalCtx.AsOfSystemTime.MaxTimestampBound = nextMax
-	} else {
+	} else if newTxn {
+		// Otherwise, only change the historical timestamps if this is a new txn.
+		// This is because resetPlanner can be called multiple times for the same
+		// txn during the extended protocol.
 		ex.extraTxnState.descCollection.ResetMaxTimestampBound()
 		evalCtx.AsOfSystemTime = nil
 	}
