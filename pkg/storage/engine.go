@@ -544,18 +544,12 @@ type Writer interface {
 	// the Key field of an EngineKey. Similar to the other Clear* methods,
 	// this method actually removes entries from the storage engine.
 	//
-	// Note that when used on batches, subsequent reads may not reflect the result
-	// of the ClearRawRange.
-	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearRawRange(start, end roachpb.Key) error
 	// ClearMVCCRangeAndIntents removes MVCC keys and intents from start (inclusive)
 	// to end (exclusive). This is a higher-level method that handles both
 	// interleaved and separated intents. Similar to the other Clear* methods,
 	// this method actually removes entries from the storage engine.
-	//
-	// Note that when used on batches, subsequent reads may not reflect the result
-	// of the ClearMVCCRangeAndIntents.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCCRangeAndIntents(start, end roachpb.Key) error
@@ -565,9 +559,6 @@ type Writer interface {
 	// clearing a subset of versions of a key, since the parameters are MVCCKeys
 	// and not roachpb.Keys. Similar to the other Clear* methods, this method
 	// actually removes entries from the storage engine.
-	//
-	// Note that when used on batches, subsequent reads may not reflect the result
-	// of the ClearMVCCRange.
 	//
 	// It is safe to modify the contents of the arguments after it returns.
 	ClearMVCCRange(start, end MVCCKey) error
