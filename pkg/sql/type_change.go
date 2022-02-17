@@ -1232,6 +1232,9 @@ func (t *typeSchemaChanger) execWithRetry(ctx context.Context) error {
 		Multiplier:     1.5,
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		if err := t.execCfg.JobRegistry.CheckPausepoint("typeschemachanger.before.exec"); err != nil {
+			return err
+		}
 		tcErr := t.exec(ctx)
 		switch {
 		case tcErr == nil:

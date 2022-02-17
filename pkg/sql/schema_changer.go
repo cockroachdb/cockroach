@@ -2248,6 +2248,9 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 			// Note that r.Next always returns true on first run so exec will be
 			// called at least once before there is a chance for this loop to exit.
+			if err := p.ExecCfg().JobRegistry.CheckPausepoint("schemachanger.before.exec"); err != nil {
+				return err
+			}
 			scErr = sc.exec(ctx)
 			switch {
 			case scErr == nil:
