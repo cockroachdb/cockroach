@@ -1741,6 +1741,16 @@ func queryIntentArgs(
 	}
 }
 
+func queryLocksArgs(key, endKey []byte, includeUncontended bool) roachpb.QueryLocksRequest {
+	return roachpb.QueryLocksRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    key,
+			EndKey: endKey,
+		},
+		IncludeUncontended: includeUncontended,
+	}
+}
+
 func resolveIntentRangeArgsString(
 	s, e string, txn enginepb.TxnMeta, status roachpb.TransactionStatus,
 ) *roachpb.ResolveIntentRangeRequest {
@@ -11146,6 +11156,155 @@ func TestReplicaNotifyLockTableOn1PC(t *testing.T) {
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
+}
+
+// TestReplicaQueryLocks tests QueryLocks in a number of scenarios while locks are
+// held, such as filtering out uncontended locks and limiting results.
+func TestReplicaQueryLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "includeUncontended", func(t *testing.T, includeUncontended bool) {
+		testutils.RunTrueAndFalse(t, "limitResults", func(t *testing.T, limitResults bool) {
+
+			ctx := context.Background()
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			tc.Start(ctx, t, stopper)
+
+			// Write a values to keys "a", "b".
+			keyA := roachpb.Key("a")
+			keyB := roachpb.Key("b")
+			initVal := incrementArgs(keyA, 1)
+			if _, pErr := tc.SendWrapped(initVal); pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+			initVal = incrementArgs(keyB, 1)
+			if _, pErr := tc.SendWrapped(initVal); pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+
+			// Create a new transaction and perform a "for update" scan. This should
+			// acquire unreplicated, exclusive locks on keys "a" and "b".
+			txn := newTransaction("test", keyA, 1, tc.Clock())
+			var ba roachpb.BatchRequest
+			ba.Header = roachpb.Header{Txn: txn}
+			ba.Add(roachpb.NewScan(keyA, keyB.Next(), true /* forUpdate */))
+			if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+
+			// Try to write to key "a" outside this transaction. Should wait on the
+			// "for update" lock in a lock wait-queue in the concurrency manager until
+			// the lock is released.
+			pErrC := make(chan *roachpb.Error, 1)
+			go func() {
+				otherWrite := incrementArgs(keyA, 1)
+				_, pErr := tc.SendWrapped(otherWrite)
+				pErrC <- pErr
+			}()
+
+			// The non-transactional write should not complete.
+			select {
+			case pErr := <-pErrC:
+				t.Fatalf("write unexpectedly finished with error: %v", pErr)
+			case <-time.After(50 * time.Millisecond):
+			}
+
+			var h roachpb.Header
+			var queryResp *roachpb.QueryLocksResponse
+			var ok bool
+			if limitResults {
+				h.MaxSpanRequestKeys = 1
+			}
+			queryArgs := queryLocksArgs(keys.MinKey, keys.MaxKey, includeUncontended)
+			resp, err := tc.SendWrappedWith(h, &queryArgs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if queryResp, ok = resp.(*roachpb.QueryLocksResponse); !ok {
+				t.Fatalf("expected QueryLocksResponse, found %v", resp)
+			}
+
+			expectedLen := 1
+			if includeUncontended && !limitResults {
+				expectedLen = 2
+			}
+
+			// First, validate length of results and the expected resume span/resume reason, if any.
+			require.Len(t, queryResp.Locks, expectedLen, "expected %d locks in response, got only %d", expectedLen, len(queryResp.Locks))
+			if includeUncontended && limitResults {
+				require.NotNil(t, resp.Header().ResumeSpan, "expected resume span")
+				require.Equal(t, roachpb.RESUME_KEY_LIMIT, resp.Header().ResumeReason)
+				require.Equal(t, roachpb.Key("b"), resp.Header().ResumeSpan.Key)
+			} else {
+				require.Nil(t, resp.Header().ResumeSpan)
+				require.Equal(t, roachpb.RESUME_UNKNOWN, resp.Header().ResumeReason)
+			}
+
+			// Validate first lock as held by txn, on key "a", at the correct ts, with a single waiter.
+			lockInfo := queryResp.Locks[0]
+			require.Equal(t, roachpb.Key("a"), lockInfo.Key)
+			require.NotNil(t, lockInfo.LockHolder, "expected lock to be held")
+			require.Equalf(t, txn.ID, lockInfo.LockHolder.ID,
+				"expected lock to be held by txn %s @ %s, observed lock held by txn %s @ %s",
+				txn.Short(), txn.WriteTimestamp, lockInfo.LockHolder.Short(), lockInfo.LockHolder.WriteTimestamp,
+			)
+			require.Equalf(t, txn.WriteTimestamp, lockInfo.LockHolder.WriteTimestamp,
+				"expected lock to be held by txn %s @ %s, observed lock held by txn %s @ %s",
+				txn.Short(), txn.WriteTimestamp, lockInfo.LockHolder.Short(), lockInfo.LockHolder.WriteTimestamp,
+			)
+			require.Equal(t, lock.Unreplicated, lockInfo.Durability)
+			require.Len(t, lockInfo.Waiters, 1)
+
+			// Validate the second, uncontended lock on key "b", if we expect it in our response.
+			if expectedLen == 2 {
+				lockInfo = queryResp.Locks[1]
+
+				require.Equal(t, roachpb.Key("b"), lockInfo.Key)
+				require.NotNil(t, lockInfo.LockHolder, "expected lock to be held")
+				if !lockInfo.LockHolder.ID.Equal(txn.ID) || !lockInfo.LockHolder.WriteTimestamp.Equal(txn.WriteTimestamp) {
+					t.Fatalf("expected lock to be held by txn %s @ %s, observed lock held by txn %s @ %s",
+						txn.Short(), txn.WriteTimestamp, lockInfo.LockHolder.Short(), lockInfo.LockHolder.WriteTimestamp)
+				}
+				require.Equal(t, lock.Unreplicated, lockInfo.Durability)
+				require.Len(t, lockInfo.Waiters, 0)
+			}
+
+			// Update the locked value and commit in a single batch. This should release
+			// the "for update" lock.
+			ba = roachpb.BatchRequest{}
+			incArgs := incrementArgs(keyA, 1)
+			et, etH := endTxnArgs(txn, true /* commit */)
+			et.Require1PC = true
+			et.LockSpans = []roachpb.Span{{Key: keyA, EndKey: keyB.Next()}}
+			ba.Header = etH
+			ba.Add(incArgs, &et)
+			assignSeqNumsForReqs(txn, incArgs, &et)
+			if _, pErr := tc.Sender().Send(ctx, ba); pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+
+			// The second write should complete.
+			pErr := <-pErrC
+			if pErr != nil {
+				t.Fatalf("unexpected error: %s", pErr)
+			}
+
+			// Validate that a second QueryLocks request returns no locks.
+			resp, err = tc.SendWrappedWith(h, &queryArgs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if queryResp, ok = resp.(*roachpb.QueryLocksResponse); !ok {
+				t.Fatalf("expected QueryLocksResponse, found %v", resp)
+			}
+			require.Empty(t, queryResp.Locks)
+			require.Nil(t, resp.Header().ResumeSpan)
+			require.Equal(t, roachpb.RESUME_UNKNOWN, resp.Header().ResumeReason)
+		})
+	})
 }
 
 func TestReplicaShouldCampaignOnWake(t *testing.T) {

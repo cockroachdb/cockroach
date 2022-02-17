@@ -27,6 +27,7 @@ go_library(
         "cmd_push_txn.go",
         "cmd_put.go",
         "cmd_query_intent.go",
+        "cmd_query_locks.go",
         "cmd_query_resolved_timestamp.go",
         "cmd_query_txn.go",
         "cmd_range_stats.go",

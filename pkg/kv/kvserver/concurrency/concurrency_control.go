@@ -461,9 +461,20 @@ type QueryLockTableOptions struct {
 // QueryLockTableResumeState bundles the return metadata on the pagination of
 // results from the QueryLockTableState function.
 type QueryLockTableResumeState struct {
-	ResumeSpan      *roachpb.Span
-	ResumeReason    roachpb.ResumeReason
+	ResumeSpan   *roachpb.Span
+	ResumeReason roachpb.ResumeReason
+
+	// ResumeNextBytes represents the size (in bytes) of the next
+	// roachpb.LockStateInfo object that would have been returned by
+	// QueryLockTableState if it were not limited by MaxLocks or TargetBytes.
+	// As such, this value is only set if ResumeSpan, ResumeReason have been set.
 	ResumeNextBytes int64
+
+	// TotalBytes is the byte size of the roachpb.LockStateInfo objects returned
+	// by QueryLockTableState, and is always set. This value is used to calculate
+	// the remaining quota of bytes (from TargetBytes) that can be used in
+	// querying other ranges served by the same request.
+	TotalBytes int64
 }
 
 ///////////////////////////////////
