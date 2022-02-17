@@ -160,14 +160,20 @@ func (m *HybridManualClock) Increment(nanos int64) {
 	m.mu.Unlock()
 }
 
-// Forward sets the wall time to the supplied timestamp this moves the clock
-// forward in time.
-func (m *HybridManualClock) Forward(nanos int64) {
+// Forward sets the wall time to the supplied timestamp if this moves the clock
+// forward in time. Note that this takes an absolute timestamp (i.e. a wall
+// clock timestamp), not a delta.
+func (m *HybridManualClock) Forward(tsNanos int64) {
 	m.mu.Lock()
-	if nanos > m.mu.nanos {
-		m.mu.nanos = nanos
+	defer m.mu.Unlock()
+	now := UnixNano()
+	if tsNanos < now {
+		return
 	}
-	m.mu.Unlock()
+	aheadNanos := tsNanos - now
+	if aheadNanos > m.mu.nanos {
+		m.mu.nanos = aheadNanos
+	}
 }
 
 // Pause pauses the hybrid manual clock; the passage of time no longer causes
