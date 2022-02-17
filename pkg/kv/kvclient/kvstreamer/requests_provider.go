@@ -11,6 +11,7 @@
 package kvstreamer
 
 import (
+	"container/heap"
 	"fmt"
 	"sort"
 	"sync"
@@ -40,6 +41,14 @@ type singleRangeBatch struct {
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
 	// necessary but might not be sufficient for the response to be non-empty.
 	minTargetBytes int64
+	// priority is the smallest number in positions. It is the priority of this
+	// singleRangeBatch where the smaller the value is, the sooner the Result
+	// will be needed, so batches with the smallest priority value has the
+	// highest "urgency".
+	// TODO(yuzefovich): once lookup joins are supported, we'll need a way to
+	// order singleRangeBatches that contain parts of a single ScanRequest
+	// spanning multiple ranges.
+	priority int
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -142,6 +151,10 @@ type requestsProviderBase struct {
 	done bool
 }
 
+func (b *requestsProviderBase) init() {
+	b.hasWork = sync.NewCond(&b.Mutex)
+}
+
 func (b *requestsProviderBase) waitLocked() {
 	b.Mutex.AssertHeld()
 	if b.done {
@@ -171,6 +184,12 @@ type outOfOrderRequestsProvider struct {
 }
 
 var _ requestsProvider = &outOfOrderRequestsProvider{}
+
+func newOutOfOrderRequestsProvider() requestsProvider {
+	p := outOfOrderRequestsProvider{requestsProviderBase: &requestsProviderBase{}}
+	p.init()
+	return &p
+}
 
 func (p *outOfOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
 	p.Lock()
@@ -203,4 +222,79 @@ func (p *outOfOrderRequestsProvider) removeFirstLocked() {
 		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
 	}
 	p.requests = p.requests[1:]
+}
+
+// inOrderRequestsProvider is a requestProvider that maintains a min heap of all
+// requests according to the priority values (the smaller the priority value is,
+// the higher actual priority of fulfilling the corresponding request).
+type inOrderRequestsProvider struct {
+	*requestsProviderBase
+}
+
+var _ requestsProvider = &inOrderRequestsProvider{}
+var _ heap.Interface = &inOrderRequestsProvider{}
+
+func newInOrderRequestsProvider() requestsProvider {
+	p := inOrderRequestsProvider{requestsProviderBase: &requestsProviderBase{}}
+	p.init()
+	return &p
+}
+
+func (p *inOrderRequestsProvider) Len() int {
+	return len(p.requests)
+}
+
+func (p *inOrderRequestsProvider) Less(i, j int) bool {
+	return p.requests[i].priority < p.requests[j].priority
+}
+
+func (p *inOrderRequestsProvider) Swap(i, j int) {
+	p.requests[i], p.requests[j] = p.requests[j], p.requests[i]
+}
+
+func (p *inOrderRequestsProvider) Push(x interface{}) {
+	p.requests = append(p.requests, x.(singleRangeBatch))
+}
+
+func (p *inOrderRequestsProvider) Pop() interface{} {
+	x := p.requests[len(p.requests)-1]
+	p.requests = p.requests[:len(p.requests)-1]
+	return x
+}
+
+func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	if len(p.requests) > 0 {
+		panic(errors.AssertionFailedf("inOrderRequestsProvider has old requests in enqueue"))
+	}
+	p.requests = requests
+	heap.Init(p)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	if debug {
+		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", request.positions, request.minTargetBytes)
+	}
+	heap.Push(p, request)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) firstLocked() singleRangeBatch {
+	p.Mutex.AssertHeld()
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+	}
+	return p.requests[0]
+}
+
+func (p *inOrderRequestsProvider) removeFirstLocked() {
+	p.Mutex.AssertHeld()
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+	}
+	heap.Remove(p, 0)
 }

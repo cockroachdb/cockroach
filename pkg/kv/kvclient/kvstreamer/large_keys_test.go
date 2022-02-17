@@ -43,6 +43,10 @@ func TestLargeKeys(t *testing.T) {
 			name:  "no ordering",
 			query: "SELECT * FROM foo@foo_attribute_idx WHERE attribute=1",
 		},
+		{
+			name:  "with ordering",
+			query: "SELECT max(extra), max(length(blob)) FROM foo@foo_attribute_idx GROUP BY attribute",
+		},
 	}
 
 	rng, _ := randutil.NewTestRand()
@@ -131,7 +135,7 @@ func TestLargeKeys(t *testing.T) {
 					}
 					// We randomize the value size for 'blob' column to improve
 					// the test coverage.
-					blobSize := int(float64(valueSize)*2.0*rng.Float64()) + 1
+					blobSize := int(float64(valueSize)*5.0*rng.Float64()) + 1
 					_, err = db.Exec("INSERT INTO foo SELECT repeat($1, $2), 1, 1, repeat($1, $3);", letter, valueSize, blobSize)
 					require.NoError(t, err)
 				}
@@ -167,7 +171,9 @@ func TestLargeKeys(t *testing.T) {
 							),
 								func(t *testing.T) {
 									_, err = db.Exec(tc.query)
-									require.NoError(t, err)
+									if err != nil {
+										t.Fatal(err)
+									}
 									// Now examine the trace and count the async
 									// requests issued by the Streamer.
 									tr := <-recCh

@@ -120,6 +120,7 @@ type ColIndexJoin struct {
 		*kvstreamer.Streamer
 		budgetAcc   *mon.BoundAccount
 		budgetLimit int64
+		diskMonitor *mon.BytesMonitor
 	}
 }
 
@@ -148,10 +149,16 @@ func (s *ColIndexJoin) Init(ctx context.Context) {
 			s.streamerInfo.budgetLimit,
 			s.streamerInfo.budgetAcc,
 		)
+		mode := kvstreamer.OutOfOrder
+		if s.maintainOrdering {
+			mode = kvstreamer.InOrder
+		}
 		s.streamerInfo.Streamer.Init(
-			kvstreamer.OutOfOrder,
+			mode,
 			kvstreamer.Hints{UniqueRequests: true},
 			int(s.cf.table.spec.MaxKeysPerRow),
+			s.flowCtx.Cfg.TempStorage,
+			s.streamerInfo.diskMonitor,
 		)
 	}
 }
@@ -422,6 +429,9 @@ var inputBatchSizeLimit = int64(util.ConstantWithMetamorphicTestRange(
 ))
 
 // NewColIndexJoin creates a new ColIndexJoin operator.
+//
+// If spec.MaintainOrdering is true, then the diskMonitor argument must be
+// non-nil.
 func NewColIndexJoin(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -432,6 +442,7 @@ func NewColIndexJoin(
 	input colexecop.Operator,
 	spec *execinfrapb.JoinReaderSpec,
 	inputTypes []*types.T,
+	diskMonitor *mon.BytesMonitor,
 ) (*ColIndexJoin, error) {
 	// NB: we hit this with a zero NodeID (but !ok) with multi-tenancy.
 	if nodeID, ok := flowCtx.NodeID.OptionalNodeID(); nodeID == 0 && ok {
@@ -455,8 +466,7 @@ func NewColIndexJoin(
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 
 	useStreamer := flowCtx.Txn != nil && flowCtx.Txn.Type() == kv.LeafTxn &&
-		row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings) &&
-		!spec.MaintainOrdering
+		row.CanUseStreamer(ctx, flowCtx.EvalCtx.Settings)
 	if useStreamer {
 		if streamerBudgetAcc == nil {
 			return nil, errors.AssertionFailedf("streamer budget account is nil when the Streamer API is desired")
@@ -504,6 +514,10 @@ func NewColIndexJoin(
 	if useStreamer {
 		op.streamerInfo.budgetLimit = 3 * memoryLimit
 		op.streamerInfo.budgetAcc = streamerBudgetAcc
+		if spec.MaintainOrdering && diskMonitor == nil {
+			return nil, errors.AssertionFailedf("diskMonitor is nil when ordering needs to be maintained")
+		}
+		op.streamerInfo.diskMonitor = diskMonitor
 		if memoryLimit < inputBatchSizeLimit {
 			// If we have a low workmem limit, then we want to reduce the input
 			// batch size limit.
