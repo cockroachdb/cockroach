@@ -1272,7 +1272,9 @@ func (*ClearRangeRequest) flags() flag {
 
 // Note that RevertRange commands cannot be part of a transaction as
 // they clear all MVCC versions above their target time.
-func (*RevertRangeRequest) flags() flag { return isWrite | isRange | bypassesReplicaCircuitBreaker }
+func (*RevertRangeRequest) flags() flag {
+	return isWrite | isRange | isAlone | bypassesReplicaCircuitBreaker
+}
 
 func (sr *ScanRequest) flags() flag {
 	maybeLocking := flagForLockStrength(sr.KeyLocking)
