@@ -102,7 +102,7 @@ type Factory struct {
 // normalization rules are applied when this limit is reached, and the
 // onMaxConstructorStackDepthExceeded method is called. This can result in an
 // expression that is not fully optimized.
-const maxConstructorStackDepth = 10000
+const maxConstructorStackDepth = 10_000
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).

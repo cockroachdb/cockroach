@@ -2569,6 +2569,15 @@ func (b *logicalPropsBuilder) buildNormCycleTestRelProps(
 ) {
 }
 
+func (b *logicalPropsBuilder) buildMemoCycleTestRelProps(
+	mc *MemoCycleTestRelExpr, rel *props.Relational,
+) {
+	// Make the cardinality non-zero to prevent SimplifyZeroCardinalityGroup
+	// from transforming mc into an empty Values expression.
+	inputProps := mc.Input.Relational()
+	rel.Cardinality = inputProps.Cardinality
+}
+
 // WithUses returns the WithUsesMap for the given expression.
 func WithUses(r opt.Expr) props.WithUsesMap {
 	switch e := r.(type) {

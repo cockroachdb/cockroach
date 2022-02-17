@@ -96,9 +96,15 @@ func (p *planner) SetClusterSetting(
 		return nil, errors.AssertionFailedf("expected writable setting, got %T", v)
 	}
 
-	if setting.Class() == settings.SystemOnly && !p.execCfg.Codec.ForSystemTenant() {
-		return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-			"setting %s is only settable in the system tenant", name)
+	if !p.execCfg.Codec.ForSystemTenant() {
+		switch setting.Class() {
+		case settings.SystemOnly:
+			// The Lookup call above should never return SystemOnly settings if this
+			// is a tenant.
+			return nil, errors.AssertionFailedf("looked up system-only setting")
+		case settings.TenantReadOnly:
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "setting %s is only settable by the operator", name)
+		}
 	}
 
 	var value tree.TypedExpr

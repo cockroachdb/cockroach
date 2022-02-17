@@ -73,6 +73,18 @@ import (
 // For more examples, see the various testdata/ files.
 //
 func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr, err error) {
+	return buildAndOptimize(catalog, nil /* optimizer */, factory, input)
+}
+
+// Optimize generates an expression from an optgen string and runs normalization
+// and exploration rules. The string must represent a relational expression.
+func Optimize(catalog cat.Catalog, o *xform.Optimizer, input string) (_ opt.Expr, err error) {
+	return buildAndOptimize(catalog, o, o.Factory(), input)
+}
+
+func buildAndOptimize(
+	catalog cat.Catalog, optimizer *xform.Optimizer, factory *norm.Factory, input string,
+) (_ opt.Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if e, ok := r.(exprGenErr); ok {
@@ -105,6 +117,16 @@ func Build(catalog cat.Catalog, factory *norm.Factory, input string) (_ opt.Expr
 	} else {
 		expr = result.(opt.Expr)
 	}
+
+	// A non-nil optimizer indicates that exploration should be performed.
+	if optimizer != nil {
+		if rel, ok := expr.(memo.RelExpr); ok {
+			optimizer.Memo().SetRoot(rel, &physical.Required{})
+			return optimizer.Optimize()
+		}
+		return nil, errors.AssertionFailedf("expropt requires a relational expression")
+	}
+
 	eg.populateBestProps(expr, required)
 	if rel, ok := expr.(memo.RelExpr); ok {
 		eg.mem.SetRoot(rel, required)
