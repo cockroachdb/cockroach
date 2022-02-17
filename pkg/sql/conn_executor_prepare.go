@@ -31,12 +31,16 @@ import (
 func (ex *connExecutor) execPrepare(
 	ctx context.Context, parseCmd PrepareStmt,
 ) (fsm.Event, fsm.EventPayload) {
-	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
-	defer sp.Finish()
-
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return ex.makeErrEvent(err, parseCmd.AST)
 	}
+
+	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
+		return ex.beginImplicitTxn(ctx, parseCmd.AST)
+	}
+
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "prepare stmt")
+	defer sp.Finish()
 
 	// The anonymous statement can be overwritten.
 	if parseCmd.Name != "" {
@@ -173,7 +177,7 @@ func (ex *connExecutor) prepare(
 			// instrumented the planner to collect execution statistics, and
 			// resetting the planner here would break the assumptions of the
 			// instrumentation.
-			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+			ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime())
 		}
 
 		if placeholderHints == nil {
@@ -265,18 +269,8 @@ func (ex *connExecutor) populatePrepared(
 		return 0, err
 	}
 	p.extendedEvalCtx.PrepareOnly = true
-
-	asOf, err := p.isAsOf(ctx, stmt.AST)
-	if err != nil {
+	if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
 		return 0, err
-	}
-	if asOf != nil {
-		p.extendedEvalCtx.AsOfSystemTime = asOf
-		if !asOf.BoundedStaleness {
-			if err := txn.SetFixedTimestamp(ctx, asOf.Timestamp); err != nil {
-				return 0, err
-			}
-		}
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres
@@ -300,9 +294,19 @@ func (ex *connExecutor) populatePrepared(
 func (ex *connExecutor) execBind(
 	ctx context.Context, bindCmd BindStmt,
 ) (fsm.Event, fsm.EventPayload) {
-
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
 		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+	}
+
+	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
+	if !ok {
+		return retErr(pgerror.Newf(
+			pgcode.InvalidSQLStatementName,
+			"unknown prepared statement %q", bindCmd.PreparedStatementName))
+	}
+
+	if _, isNoTxn := ex.machine.CurState().(stateNoTxn); isNoTxn {
+		return ex.beginImplicitTxn(ctx, ps.AST)
 	}
 
 	portalName := bindCmd.PortalName
@@ -315,13 +319,6 @@ func (ex *connExecutor) execBind(
 	} else {
 		// Deallocate the unnamed portal, if it exists.
 		ex.deletePortal(ctx, "")
-	}
-
-	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
-	if !ok {
-		return retErr(pgerror.Newf(
-			pgcode.InvalidSQLStatementName,
-			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
 
 	numQArgs := uint16(len(ps.InferredTypes))
@@ -388,6 +385,9 @@ func (ex *connExecutor) execBind(
 				ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 				p := &ex.planner
 				ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTS */)
+				if err := ex.handleAOST(ctx, ps.AST); err != nil {
+					return err
+				}
 			}
 
 			for i, arg := range bindCmd.Args {

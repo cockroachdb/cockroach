@@ -128,6 +128,8 @@ func makeEventTxnStartPayload(
 	}
 }
 
+type eventTxnUpgradeToExplicit struct{}
+
 type eventTxnFinishCommitted struct{}
 type eventTxnFinishAborted struct{}
 
@@ -191,14 +193,15 @@ type payloadWithError interface {
 	errorCause() error
 }
 
-func (eventTxnStart) Event()           {}
-func (eventTxnFinishCommitted) Event() {}
-func (eventTxnFinishAborted) Event()   {}
-func (eventSavepointRollback) Event()  {}
-func (eventNonRetriableErr) Event()    {}
-func (eventRetriableErr) Event()       {}
-func (eventTxnRestart) Event()         {}
-func (eventTxnReleased) Event()        {}
+func (eventTxnStart) Event()             {}
+func (eventTxnFinishCommitted) Event()   {}
+func (eventTxnFinishAborted) Event()     {}
+func (eventSavepointRollback) Event()    {}
+func (eventNonRetriableErr) Event()      {}
+func (eventRetriableErr) Event()         {}
+func (eventTxnRestart) Event()           {}
+func (eventTxnReleased) Event()          {}
+func (eventTxnUpgradeToExplicit) Event() {}
 
 // Other constants.
 
@@ -292,6 +295,17 @@ var TxnStateTransitions = fsm.Compile(fsm.Pattern{
 		eventNonRetriableErr{IsCommit: fsm.False}: {
 			Next:   stateNoTxn{},
 			Action: cleanupAndFinishOnError,
+		},
+		eventTxnUpgradeToExplicit{}: {
+			Next: stateOpen{ImplicitTxn: fsm.False},
+			Action: func(args fsm.Args) error {
+				args.Extended.(*txnState).setAdvanceInfo(
+					advanceOne,
+					noRewind,
+					txnEvent{eventType: noEvent},
+				)
+				return nil
+			},
 		},
 	},
 	// Handle the errors in explicit txns. They move us to Aborted.
