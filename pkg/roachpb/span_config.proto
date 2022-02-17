@@ -183,16 +183,38 @@ message SystemSpanConfigTarget {
   TenantID source_tenant_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "SourceTenantID"];
 
   // TargetTenantID is the ID of the tenant that the associated system span
-  // configuration applies to.
-  //
-  // If the host tenant is the source and the target is unspecified then the
-  // associated system span configuration applies over all ranges in the system
-  // (including those belonging to secondary tenants).
+  // configuration applies to. This field can only be set in conjunction with
+  // the type targeting a SpecificTenant; it must be left unset for all other
+  // system target types.
   //
   // Secondary tenants are only allowed to target themselves and must fill in
   // this field. The host tenant may use this field to target a specific
   // secondary tenant.
   TenantID target_tenant_id = 2 [(gogoproto.customname) = "TargetTenantID"];
+
+
+  // SystemTargetType indicates the type of the SystemTarget.
+  enum SystemTargetType {
+	  // Unset indicates that the type hasn't been set; should never be the case
+	  // for well formed SystemTargets.
+    Unset = 0;
+    // SpecificTenant indicates that the system target is targeting a specific
+    // tenant.
+    SpecificTenant = 1;
+    // EntireCluster indicates that the system target is targeting the entire
+    // cluster, i.e, all ranges in the system. Only the system tenant is allowed
+    // to target the entire cluster.
+    EntireCluster = 2;
+    // EverythingTargetingTenants indicates that the system target is
+    // specifying all system span configurations installed by the source tenant
+    // that target specific tenants. This field is only meaningful in the
+    // context of fetching system span configurations, not installing them; it
+    // should not be used as a target in UpdateSystemSpanConfigsRequest.
+    EverythingTargetingTenants = 3;
+  }
+
+  // SystemTargetType represents the type of the system target.
+  SystemTargetType system_target_type = 3;
 }
 
 // SpanConfigTarget specifies the target of an associated span configuration.

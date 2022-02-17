@@ -33,8 +33,10 @@ import (
 var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
 
 // systemTargetRe matches strings of the form
-// "{source=(<id>|system),target=(<id>|system)}".
-var systemTargetRe = regexp.MustCompile(`^{(cluster)|(source=(\d*),\s??target=(\d*))}$`)
+// "{cluster|source=<id>,(target=<id>|everything-installed-on-tenants)}".
+var systemTargetRe = regexp.MustCompile(
+	`^{(cluster)|(source=(\d*),\s??((target=(\d*))|everything-installed-on-tenants))}$`,
+)
 
 // configRe matches a single word. It's a shorthand for declaring a unique
 // config.
@@ -69,7 +71,10 @@ func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarge
 
 	sourceID, err := strconv.Atoi(matches[3])
 	require.NoError(t, err)
-	targetID, err := strconv.Atoi(matches[4])
+	if matches[4] == "everything-installed-on-tenants" {
+		return spanconfig.MakeEverythingTargetingTenantsTarget(roachpb.MakeTenantID(uint64(sourceID)))
+	}
+	targetID, err := strconv.Atoi(matches[6])
 	require.NoError(t, err)
 	target, err := spanconfig.MakeTenantTarget(
 		roachpb.MakeTenantID(uint64(sourceID)), roachpb.MakeTenantID(uint64(targetID)),

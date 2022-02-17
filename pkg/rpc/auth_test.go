@@ -191,8 +191,9 @@ func TestTenantAuthRequest(t *testing.T) {
 		return roachpb.SpanConfigTarget{
 			Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 				SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-					SourceTenantID: roachpb.MakeTenantID(source),
-					TargetTenantID: &targetID,
+					SourceTenantID:   roachpb.MakeTenantID(source),
+					TargetTenantID:   &targetID,
+					SystemTargetType: roachpb.SystemSpanConfigTarget_SpecificTenant,
 				},
 			},
 		}
@@ -535,12 +536,25 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SourceTenantID:   roachpb.MakeTenantID(10),
+							TargetTenantID:   nil,
+							SystemTargetType: roachpb.SystemSpanConfigTarget_EntireCluster,
 						},
 					},
 				}),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire cluster`,
+			},
+			{
+				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID:   roachpb.MakeTenantID(20),
+							TargetTenantID:   nil,
+							SystemTargetType: roachpb.SystemSpanConfigTarget_EverythingTargetingTenants,
+						},
+					},
+				}),
+				expErr: `malformed source tenant field`,
 			},
 		},
 		"/cockroach.roachpb.Internal/UpdateSpanConfigs": {
@@ -650,12 +664,13 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SourceTenantID:   roachpb.MakeTenantID(10),
+							TargetTenantID:   nil,
+							SystemTargetType: roachpb.SystemSpanConfigTarget_EntireCluster,
 						},
 					},
 				}, false),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire cluster`,
 			},
 			{
 				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 10), true),
@@ -675,12 +690,13 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SourceTenantID:   roachpb.MakeTenantID(10),
+							TargetTenantID:   nil,
+							SystemTargetType: roachpb.SystemSpanConfigTarget_EntireCluster,
 						},
 					},
 				}, true),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire cluster`,
 			},
 		},
 

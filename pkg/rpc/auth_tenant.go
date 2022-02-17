@@ -315,11 +315,12 @@ func validateSpanConfigTarget(
 			return nil
 		}
 
-		if target.TargetTenantID == nil {
-			return authErrorf("secondary tenants must explicitly target themselves")
+		if target.SystemTargetType == roachpb.SystemSpanConfigTarget_EntireCluster {
+			return authErrorf("secondary tenants cannot target the entire cluster")
 		}
 
-		if target.SourceTenantID != *target.TargetTenantID {
+		if target.SystemTargetType == roachpb.SystemSpanConfigTarget_SpecificTenant &&
+			target.SourceTenantID != *target.TargetTenantID {
 			return authErrorf(
 				"secondary tenants cannot interact with system span configurations of other tenants",
 			)

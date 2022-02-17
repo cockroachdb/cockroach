@@ -87,45 +87,127 @@ func TestDecodeInvalidSpanAsSystemTarget(t *testing.T) {
 
 // TestSystemTargetValidation ensures target.validate() works as expected.
 func TestSystemTargetValidation(t *testing.T) {
+	tenant10 := roachpb.MakeTenantID(10)
+	tenant20 := roachpb.MakeTenantID(20)
 	for _, tc := range []struct {
 		sourceTenantID roachpb.TenantID
-		targetTenantID roachpb.TenantID
+		targetTenantID *roachpb.TenantID
+		targetType     systemTargetType
 		expErr         string
 	}{
 		{
 			// Secondary tenants cannot target the system tenant.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.SystemTenantID,
-			expErr:         "secondary tenant 10 cannot target another tenant with ID",
+			sourceTenantID: tenant10,
+			targetTenantID: &roachpb.SystemTenantID,
+			targetType:     SystemTargetTypeSpecificTenant,
+			expErr:         "secondary tenant 10 cannot target another tenant with ID system",
 		},
 		{
 			// Secondary tenants cannot target other secondary tenants.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.MakeTenantID(20),
-			expErr:         "secondary tenant 10 cannot target another tenant with ID",
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant20,
+			targetType:     SystemTargetTypeSpecificTenant,
+			expErr:         "secondary tenant 10 cannot target another tenant with ID 20",
+		},
+		{
+			// Secondary tenants cannot target the entire cluster.
+			sourceTenantID: tenant10,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEntireCluster,
+			expErr:         "only the host tenant is allowed to target the entire cluster",
+		},
+		{
+			// Ensure secondary tenants can't target the entire cluster even if they
+			// set targetTenantID to themselves.
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEntireCluster,
+			expErr:         "only the host tenant is allowed to target the entire cluster",
+		},
+		{
+			// System tenant can't set both targetTenantID and target everything
+			// installed on tenants.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEverythingTargetingTenants,
+			expErr:         "targetTenantID must be unset when targeting everything installed",
+		},
+		{
+			// System tenant must fill in a targetTenantID when targeting a specific
+			// tenant.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeSpecificTenant,
+			expErr:         "malformed system target for specific tenant; targetTenantID unset",
+		},
+		{
+			// System tenant can't set both targetTenantID and target the entire
+			// cluster.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEntireCluster,
+			expErr:         "malformed system target for entire cluster; targetTenantID set",
+		},
+		{
+			// secondary tenant can't set both targetTenantID and target everything
+			// installed on tenants.
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEverythingTargetingTenants,
+			expErr:         "targetTenantID must be unset when targeting everything installed",
 		},
 		// Test some valid targets.
 		{
 			// System tenant targeting secondary tenant is allowed.
 			sourceTenantID: roachpb.SystemTenantID,
-			targetTenantID: roachpb.MakeTenantID(20),
+			targetTenantID: &tenant20,
+			targetType:     SystemTargetTypeSpecificTenant,
+		},
+		{
+			// System tenant targeting the entire cluster is allowed.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEntireCluster,
 		},
 		{
 			// System tenant targeting itself is allowed.
 			sourceTenantID: roachpb.SystemTenantID,
-			targetTenantID: roachpb.SystemTenantID,
+			targetTenantID: &roachpb.SystemTenantID,
+			targetType:     SystemTargetTypeSpecificTenant,
 		},
 		{
 			// Secondary tenant targeting itself is allowed.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.MakeTenantID(10),
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeSpecificTenant,
+		},
+		{
+			// Secondary tenant targeting everything installed on tenants by it is
+			// allowed.
+			sourceTenantID: tenant10,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEverythingTargetingTenants,
+		},
+		{
+			// System tenant targeting everything installed on tenants by it is
+			// allowed.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEverythingTargetingTenants,
 		},
 	} {
 		target := SystemTarget{
-			SourceTenantID: tc.sourceTenantID,
-			TargetTenantID: &tc.targetTenantID,
+			sourceTenantID:   tc.sourceTenantID,
+			targetTenantID:   tc.targetTenantID,
+			systemTargetType: tc.targetType,
 		}
-		require.True(t, testutils.IsError(target.validate(), tc.expErr))
+		require.True(
+			t,
+			testutils.IsError(target.validate(), tc.expErr),
+			"expected: %s got: %s ",
+			tc.expErr,
+			target.validate(),
+		)
 	}
 }
 
@@ -133,6 +215,8 @@ func TestSystemTargetValidation(t *testing.T) {
 func TestTargetSortingRandomized(t *testing.T) {
 	// Construct a set of sorted targets.
 	sortedTargets := Targets{
+		MakeTargetFromSystemTarget(MakeEverythingTargetingTenantsTarget(roachpb.SystemTenantID)),
+		MakeTargetFromSystemTarget(MakeEverythingTargetingTenantsTarget(roachpb.MakeTenantID(10))),
 		MakeTargetFromSystemTarget(MakeClusterTarget()),
 		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID)),
 		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10))),
@@ -155,6 +239,34 @@ func TestTargetSortingRandomized(t *testing.T) {
 
 		sort.Sort(tc)
 		require.Equal(t, sortedTargets, tc)
+	}
+}
+
+// TestSpanTargetsConstructedInSystemSpanConfigKeyspace ensures that
+// constructing span targets
+func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
+	for _, tc := range []roachpb.Span{
+		MakeClusterTarget().encode(),
+		makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)).encode(),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID).encode(),
+		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)).encode(),
+		{
+			// Extends into from the left
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.SystemSpanConfigPrefix.Next(), // End Key isn't inclusive.
+		},
+		{
+			// Entirely contained.
+			Key:    keys.SystemSpanConfigPrefix.Next(),
+			EndKey: keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+		},
+		{
+			// Extends beyond on the right.
+			Key:    keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+			EndKey: keys.SystemSpanConfigKeyMax.Next().Next(),
+		},
+	} {
+		require.Panics(t, func() { MakeTargetFromSpan(tc) })
 	}
 }
 

@@ -22,24 +22,41 @@ import (
 
 // SystemTarget specifies the target of a system span configuration.
 type SystemTarget struct {
-	// SourceTenantID is the ID of the tenant that specified the system span
+	// sourceTenantID is the ID of the tenant that specified the system span
 	// configuration.
-	// SourceTenantID is the ID of the tenant that specified the system span
-	// configuration.
-	SourceTenantID roachpb.TenantID
+	sourceTenantID roachpb.TenantID
 
-	// TargetTenantID is the ID of the tenant that the associated system span
-	// configuration applies to.
-	//
-	// If the host tenant is the source and the TargetTenantID is unspecified then
-	// the associated system span configuration applies over all ranges in the
-	// system (including those belonging to secondary tenants).
+	// targetTenantID is the ID of the tenant that the associated system span
+	// configuration applies. This field can only be set in conjunction with the
+	// type being SystemTargetTypeSpecificTenant; it must be left unset for all
+	// other system target types.
 	//
 	// Secondary tenants are only allowed to target themselves. The host tenant
-	// may use this field to target a specific secondary tenant. We validate this
-	// when constructing new system targets.
-	TargetTenantID *roachpb.TenantID
+	// may use this field to target a specific secondary tenant.
+	targetTenantID *roachpb.TenantID
+
+	// systemTargetType indicates the type of the system target. targetTenantID
+	// can only be set if the system target is specific.
+	systemTargetType systemTargetType
 }
+
+// systemTargetType indicates the type of SystemTarget.
+type systemTargetType int
+
+const (
+	_ systemTargetType = iota
+	// SystemTargetTypeSpecificTenant indicates that the system target is
+	// targeting a specific tenant.
+	SystemTargetTypeSpecificTenant
+	// SystemTargetTypeEntireCluster indicates that the system target is targeting
+	// the entire cluster, i.e, all ranges in the system. Only the host tenant is
+	// allowed to do so.
+	SystemTargetTypeEntireCluster
+	// SystemTargetTypeEverythingTargetingTenants represents all system span
+	// configurations installed by a source tenant that target specific tenants.
+	// This is a read-only system target.
+	SystemTargetTypeEverythingTargetingTenants
+)
 
 // MakeTenantTarget constructs, validates, and returns a new SystemTarget that
 // targets the physical keyspace of the targetTenantID.
@@ -47,8 +64,9 @@ func MakeTenantTarget(
 	sourceTenantID roachpb.TenantID, targetTenantID roachpb.TenantID,
 ) (SystemTarget, error) {
 	t := SystemTarget{
-		SourceTenantID: sourceTenantID,
-		TargetTenantID: &targetTenantID,
+		sourceTenantID:   sourceTenantID,
+		targetTenantID:   &targetTenantID,
+		systemTargetType: SystemTargetTypeSpecificTenant,
 	}
 	return t, t.validate()
 }
@@ -56,125 +74,186 @@ func MakeTenantTarget(
 // MakeSystemTargetFromProto constructs a SystemTarget from a
 // roachpb.SystemSpanConfigTarget and validates it.
 func MakeSystemTargetFromProto(proto *roachpb.SystemSpanConfigTarget) (SystemTarget, error) {
-	if proto.SourceTenantID == roachpb.SystemTenantID && proto.TargetTenantID == nil {
-		return MakeClusterTarget(), nil
-	} else if proto.TargetTenantID == nil {
-		return SystemTarget{},
-			errors.Newf("secondary tenant %s cannot target the entire cluster", proto.SourceTenantID)
+	var t SystemTarget
+	switch proto.SystemTargetType {
+	case roachpb.SystemSpanConfigTarget_SpecificTenant:
+		t = SystemTarget{
+			sourceTenantID:   proto.SourceTenantID,
+			targetTenantID:   proto.TargetTenantID,
+			systemTargetType: SystemTargetTypeSpecificTenant,
+		}
+	case roachpb.SystemSpanConfigTarget_EntireCluster:
+		t = SystemTarget{
+			sourceTenantID:   proto.SourceTenantID,
+			targetTenantID:   proto.TargetTenantID,
+			systemTargetType: SystemTargetTypeEntireCluster,
+		}
+	case roachpb.SystemSpanConfigTarget_EverythingTargetingTenants:
+		t = SystemTarget{
+			sourceTenantID:   proto.SourceTenantID,
+			targetTenantID:   proto.TargetTenantID,
+			systemTargetType: SystemTargetTypeEverythingTargetingTenants,
+		}
+	case roachpb.SystemSpanConfigTarget_Unset:
+		return SystemTarget{}, errors.AssertionFailedf("system target type unset on proto")
 	}
-
-	return MakeTenantTarget(proto.SourceTenantID, *proto.TargetTenantID)
+	return t, t.validate()
 }
 
 // MakeClusterTarget returns a new system target that targets the entire cluster.
 // Only the host tenant is allowed to target the entire cluster.
 func MakeClusterTarget() SystemTarget {
 	return SystemTarget{
-		SourceTenantID: roachpb.SystemTenantID,
+		sourceTenantID:   roachpb.SystemTenantID,
+		systemTargetType: SystemTargetTypeEntireCluster,
+	}
+}
+
+// MakeEverythingTargetingTenantsTarget returns a new SystemTarget that
+// represents all system span configurations installed by the given tenant ID
+// on specific tenants (including both itself and other tenants).
+func MakeEverythingTargetingTenantsTarget(sourceID roachpb.TenantID) SystemTarget {
+	return SystemTarget{
+		sourceTenantID:   sourceID,
+		systemTargetType: SystemTargetTypeEverythingTargetingTenants,
 	}
 }
 
 // targetsEntireCluster returns true if the target applies to all ranges in the
 // system (including those belonging to secondary tenants).
 func (st SystemTarget) targetsEntireCluster() bool {
-	return st.SourceTenantID == roachpb.SystemTenantID && st.TargetTenantID == nil
+	return st.systemTargetType == SystemTargetTypeEntireCluster
+}
+
+// IsReadOnly returns true if the system target is read-only. Read only targets
+// should not be persisted.
+func (st SystemTarget) IsReadOnly() bool {
+	return st.systemTargetType == SystemTargetTypeEverythingTargetingTenants
 }
 
 // encode returns an encoded span associated with the receiver which is suitable
-// for persistence in system.span_configurations.
+// for interaction with system.span_configurations table.
 func (st SystemTarget) encode() roachpb.Span {
 	var k roachpb.Key
 
-	if st.SourceTenantID == roachpb.SystemTenantID &&
-		st.TargetTenantID == nil {
+	switch st.systemTargetType {
+	case SystemTargetTypeEntireCluster:
 		k = keys.SystemSpanConfigEntireKeyspace
-	} else if st.SourceTenantID == roachpb.SystemTenantID {
-		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigHostOnTenantKeyspace, st.TargetTenantID.ToUint64(),
-		)
-	} else {
-		k = encoding.EncodeUvarintAscending(
-			keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.SourceTenantID.ToUint64(),
-		)
+	case SystemTargetTypeSpecificTenant:
+		if st.sourceTenantID == roachpb.SystemTenantID {
+			k = encoding.EncodeUvarintAscending(
+				keys.SystemSpanConfigHostOnTenantKeyspace, st.targetTenantID.ToUint64(),
+			)
+		} else {
+			k = encoding.EncodeUvarintAscending(
+				keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.sourceTenantID.ToUint64(),
+			)
+		}
+	case SystemTargetTypeEverythingTargetingTenants:
+		if st.sourceTenantID == roachpb.SystemTenantID {
+			k = keys.SystemSpanConfigHostOnTenantKeyspace
+		} else {
+			k = encoding.EncodeUvarintAscending(
+				keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace, st.sourceTenantID.ToUint64(),
+			)
+		}
 	}
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
 }
 
 // validate ensures that the receiver is well-formed.
 func (st SystemTarget) validate() error {
-	if st.SourceTenantID == roachpb.SystemTenantID {
-		// The system tenant can target itself, other secondary tenants, and the
-		// entire cluster (including secondary tenant ranges).
-		return nil
-	}
-	if st.TargetTenantID == nil {
-		return errors.AssertionFailedf(
-			"secondary tenant %s cannot have unspecified target tenant ID", st.SourceTenantID,
-		)
-	}
-	if st.SourceTenantID != *st.TargetTenantID {
-		return errors.AssertionFailedf(
-			"secondary tenant %s cannot target another tenant with ID %s",
-			st.SourceTenantID,
-			st.TargetTenantID,
-		)
+	switch st.systemTargetType {
+	case SystemTargetTypeEverythingTargetingTenants:
+		if st.targetTenantID != nil {
+			return errors.AssertionFailedf(
+				"targetTenantID must be unset when targeting everything installed on tenants",
+			)
+		}
+	case SystemTargetTypeEntireCluster:
+		if st.sourceTenantID != roachpb.SystemTenantID {
+			return errors.AssertionFailedf("only the host tenant is allowed to target the entire cluster")
+		}
+		if st.targetTenantID != nil {
+			return errors.AssertionFailedf("malformed system target for entire cluster; targetTenantID set")
+		}
+	case SystemTargetTypeSpecificTenant:
+		if st.targetTenantID == nil {
+			return errors.AssertionFailedf("malformed system target for specific tenant; targetTenantID unset")
+		}
+		if st.sourceTenantID != roachpb.SystemTenantID && st.sourceTenantID != *st.targetTenantID {
+			return errors.AssertionFailedf(
+				"secondary tenant %s cannot target another tenant with ID %s",
+				st.sourceTenantID,
+				st.targetTenantID,
+			)
+		}
+	default:
+		return errors.AssertionFailedf("invalid system target type")
 	}
 	return nil
 }
 
 // isEmpty returns true if the receiver is empty.
 func (st SystemTarget) isEmpty() bool {
-	return st.SourceTenantID.Equal(roachpb.TenantID{}) && st.TargetTenantID.Equal(nil)
+	return st.sourceTenantID.Equal(roachpb.TenantID{}) && st.targetTenantID.Equal(nil)
 }
 
 // less returns true if the receiver is considered less than the supplied
 // target. The semantics are defined as follows:
-// - host installed targets that target the entire cluster come first.
-// - host installed targets that target a tenant come next (ordered by target
-// tenant ID).
-// - secondary tenant installed targets come next, ordered by secondary tenant
-// ID.
+// - read only targets come first, ordered by tenant ID.
+// - targets that target the entire cluster come next.
+// - targets that target specific tenant come last, sorted by source tenant ID;
+// target tenant ID is used as a tiebreaker if the source's are the same.
 func (st SystemTarget) less(ot SystemTarget) bool {
-	if st.SourceTenantID == roachpb.SystemTenantID &&
-		ot.SourceTenantID == roachpb.SystemTenantID {
-		if st.targetsEntireCluster() {
-			return true
-		} else if ot.targetsEntireCluster() {
-			return false
-		}
-
-		return st.TargetTenantID.ToUint64() < ot.TargetTenantID.ToUint64()
+	if st.IsReadOnly() && ot.IsReadOnly() {
+		return st.sourceTenantID.ToUint64() < ot.sourceTenantID.ToUint64()
 	}
 
-	if st.SourceTenantID == roachpb.SystemTenantID {
+	if st.IsReadOnly() {
 		return true
-	} else if ot.SourceTenantID == roachpb.SystemTenantID {
+	} else if ot.IsReadOnly() {
 		return false
 	}
 
-	return st.SourceTenantID.ToUint64() < ot.SourceTenantID.ToUint64()
+	if st.targetsEntireCluster() {
+		return true
+	} else if ot.targetsEntireCluster() {
+		return false
+	}
+
+	if st.sourceTenantID.ToUint64() == ot.sourceTenantID.ToUint64() {
+		return st.targetTenantID.ToUint64() < ot.targetTenantID.ToUint64()
+	}
+
+	return st.sourceTenantID.ToUint64() < ot.sourceTenantID.ToUint64()
 }
 
 // equal returns true iff the receiver is equal to the supplied system target.
 func (st SystemTarget) equal(ot SystemTarget) bool {
-	return st.SourceTenantID.Equal(ot.SourceTenantID) && st.TargetTenantID.Equal(ot.TargetTenantID)
+	return st.sourceTenantID.Equal(ot.sourceTenantID) && st.targetTenantID.Equal(ot.targetTenantID)
 }
 
 // String returns a pretty printed version of a system target.
 func (st SystemTarget) String() string {
-	if st.targetsEntireCluster() {
+	switch st.systemTargetType {
+	case SystemTargetTypeEntireCluster:
 		return "{cluster}"
+	case SystemTargetTypeEverythingTargetingTenants:
+		return fmt.Sprintf("{source=%d, everything-installed-on-tenants}", st.sourceTenantID)
+	case SystemTargetTypeSpecificTenant:
+		return fmt.Sprintf(
+			"{source=%d,target=%d}",
+			st.sourceTenantID.ToUint64(),
+			st.targetTenantID.ToUint64(),
+		)
+	default:
+		panic("unreachable")
 	}
-	return fmt.Sprintf(
-		"{source=%d,target=%d}",
-		st.SourceTenantID.ToUint64(),
-		st.TargetTenantID.ToUint64(),
-	)
 }
 
 // decodeSystemTarget converts the given span into a SystemTarget. An error is
-// returned if the supplied span does not conform to a  system target's
-// encoding.
+// returned if the supplied span does not conform to a system target's encoding.
 func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 	// Validate the end key is well-formed.
 	if !span.EndKey.Equal(span.Key.PrefixEnd()) {

@@ -34,9 +34,11 @@ import (
 // 		span [a,e)
 // 		span [a,b)
 // 		span [b,c)
+//		system-target {cluster}
 //		system-target {source=1,target=20}
 //		system-target {source=1,target=1}
 //		system-target {source=20,target=20}
+// 		system-target {source=1,everything-installed-on-tenants}
 //      ----
 //
 // 		kvaccessor-update
@@ -45,13 +47,14 @@ import (
 // 		upsert [d,e):D
 // 		delete {source=1,target=1}
 // 		upsert {source=1,target=1}:A
+// 		upsert {cluster}:F
 //      ----
 //
 // They tie into GetSpanConfigRecords and UpdateSpanConfigRecords
 // respectively. For kvaccessor-get, each listed target is added to the set of
 // targets being read. For kvaccessor-update, the lines prefixed with "delete"
 // count towards the targets being deleted, and for "upsert" they correspond to
-// the span config entries being upserted. See
+// the span config records being upserted. See
 // spanconfigtestutils.Parse{Span,Config,SpanConfigRecord} for more details.
 func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()

@@ -25,10 +25,7 @@ import (
 func TestValidateUpdateArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clusterTarget := spanconfig.MakeTargetFromSystemTarget(spanconfig.SystemTarget{
-		SourceTenantID: roachpb.SystemTenantID,
-		TargetTenantID: nil,
-	})
+	clusterTarget := spanconfig.MakeTargetFromSystemTarget(spanconfig.MakeClusterTarget())
 
 	makeTenantTarget := func(id uint64) spanconfig.Target {
 		target, err := spanconfig.MakeTenantTarget(roachpb.MakeTenantID(id), roachpb.MakeTenantID(id))
@@ -183,7 +180,38 @@ func TestValidateUpdateArgs(t *testing.T) {
 			},
 			expErr: "",
 		},
+		{
+			// Read only targets are not valid delete args.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSystemTarget(
+					spanconfig.MakeEverythingTargetingTenantsTarget(roachpb.SystemTenantID),
+				),
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
+		{
+			// Read only targets are not valid upsert args.
+			toUpsert: []spanconfig.Record{
+				{
+					Target: spanconfig.MakeTargetFromSystemTarget(
+						spanconfig.MakeEverythingTargetingTenantsTarget(roachpb.SystemTenantID),
+					),
+				},
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
+		{
+			// Read only target validation also applies when the source is a secondary
+			// tenant.
+			toDelete: []spanconfig.Target{
+				spanconfig.MakeTargetFromSystemTarget(
+					spanconfig.MakeEverythingTargetingTenantsTarget(roachpb.MakeTenantID(10)),
+				),
+			},
+			expErr: "cannot use read only system target .* as an update argument",
+		},
 	} {
-		require.True(t, testutils.IsError(validateUpdateArgs(tc.toDelete, tc.toUpsert), tc.expErr))
+		err := validateUpdateArgs(tc.toDelete, tc.toUpsert)
+		require.True(t, testutils.IsError(err, tc.expErr), "exp %s; got %s", tc.expErr, err)
 	}
 }
