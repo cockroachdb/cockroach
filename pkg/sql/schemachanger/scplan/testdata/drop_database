@@ -632,7 +632,7 @@ PreCommitPhase stage 1 of 1 with 102 MutationType ops
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 59 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 60 MutationType ops
   transitions:
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
@@ -681,6 +681,8 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 59 MutationType ops
       TargetStatus: 1
     *scop.CreateGcJobForDatabase
       DatabaseID: 104
+    *scop.DeleteDescriptor
+      DescriptorID: 104
     *scop.LogEvent
       Authorization:
         UserName: root
