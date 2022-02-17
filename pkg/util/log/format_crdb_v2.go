@@ -536,6 +536,7 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 		d.addContinuationFragmentToEntry(entry, &entryMsg, frag)
 	}
 
+	preRedactMessage := entry.Message
 	r := redactablePackage{
 		msg:        entryMsg.Bytes(),
 		redactable: entry.Redactable,
@@ -543,6 +544,15 @@ func (d *entryDecoderV2) Decode(entry *logpb.Entry) (err error) {
 	r = d.sensitiveEditor(r)
 	entry.Message = string(r.msg)
 	entry.Redactable = r.redactable
+
+	if entry.StructuredEnd != 0 && preRedactMessage != entry.Message {
+		if nl := strings.IndexByte(entry.Message, '\n'); nl != -1 {
+			entry.StructuredEnd = uint32(nl)
+			entry.StackTraceStart = uint32(nl + 1)
+		} else {
+			entry.StructuredEnd = uint32(len(entry.Message))
+		}
+	}
 
 	return nil
 }
