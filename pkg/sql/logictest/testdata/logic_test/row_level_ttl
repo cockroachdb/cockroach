@@ -321,18 +321,18 @@ CREATE TABLE tbl (
   id INT PRIMARY KEY,
   text TEXT,
   FAMILY (id, text)
-) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50)
+) WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 50, ttl_range_concurrency = 2)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
 ----
 CREATE TABLE public.tbl (
-                                                                                                                        id INT8 NOT NULL,
-                                                                                                                        text STRING NULL,
-                                                                                                                        crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-                                                                                                                        CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                        FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 50)
+                                                                                                                                                   id INT8 NOT NULL,
+                                                                                                                                                   text STRING NULL,
+                                                                                                                                                   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                                                   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                                                   FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 50, ttl_range_concurrency = 2)
 
 statement ok
 ALTER TABLE tbl SET (ttl_delete_batch_size = 100)
@@ -341,12 +341,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
 ----
 CREATE TABLE public.tbl (
-                                                                                                                                                     id INT8 NOT NULL,
-                                                                                                                                                     text STRING NULL,
-                                                                                                                                                     crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-                                                                                                                                                     CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-                                                                                                                                                     FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 50, ttl_delete_batch_size = 100)
+                                                                                                                                                                                id INT8 NOT NULL,
+                                                                                                                                                                                text STRING NULL,
+                                                                                                                                                                                crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+                                                                                                                                                                                CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
+                                                                                                                                                                                FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_automatic_column = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_select_batch_size = 50, ttl_delete_batch_size = 100, ttl_range_concurrency = 2)
 
 statement error "ttl_select_batch_size" must be at least 1
 ALTER TABLE tbl SET (ttl_select_batch_size = -1)
@@ -354,8 +354,11 @@ ALTER TABLE tbl SET (ttl_select_batch_size = -1)
 statement error "ttl_delete_batch_size" must be at least 1
 ALTER TABLE tbl SET (ttl_delete_batch_size = -1)
 
+statement error "ttl_range_concurrency" must be at least 1
+ALTER TABLE tbl SET (ttl_range_concurrency = -1)
+
 statement ok
-ALTER TABLE tbl RESET (ttl_delete_batch_size, ttl_select_batch_size)
+ALTER TABLE tbl RESET (ttl_delete_batch_size, ttl_select_batch_size, ttl_range_concurrency)
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tbl]
