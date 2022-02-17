@@ -19,7 +19,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -192,7 +191,7 @@ func TestDataDriven(t *testing.T) {
 					return nil
 				})
 				records, err := kvAccessor.GetSpanConfigRecords(
-					ctx, []spanconfig.Target{spanconfig.MakeTargetFromSpan(keys.EverythingSpan)},
+					ctx, spanconfig.TestingEntireSpanConfigurationStateTargets(),
 				)
 				require.NoError(t, err)
 				sort.Slice(records, func(i, j int) bool {

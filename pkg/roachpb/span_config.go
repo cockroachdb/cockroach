@@ -127,3 +127,55 @@ func TestingDatabaseSystemSpanConfig(host bool) SpanConfig {
 	config.GCPolicy.IgnoreStrictEnforcement = true
 	return config
 }
+
+// IsEntireKeyspaceTarget returns true if the receiver targets the entire
+// keyspace.
+func (st SystemSpanConfigTarget) IsEntireKeyspaceTarget() bool {
+	return st.Type.GetEntireKeyspace() != nil
+}
+
+// IsSpecificTenantKeyspaceTarget returns true if the receiver targets a
+// specific tenant's keyspace.
+func (st SystemSpanConfigTarget) IsSpecificTenantKeyspaceTarget() bool {
+	return st.Type.GetSpecificTenantKeyspace() != nil
+}
+
+// IsAllTenantKeyspaceTargetsSetTarget returns true if the receiver target
+// encompasses all targets that have been set on specific tenant keyspaces
+// by the system target source.
+func (st SystemSpanConfigTarget) IsAllTenantKeyspaceTargetsSetTarget() bool {
+	return st.Type.GetAllTenantKeyspaceTargetsSet() != nil
+}
+
+// NewEntireKeyspaceTargetType returns a system span config target type that
+// targets the entire keyspace.
+func NewEntireKeyspaceTargetType() *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_EntireKeyspace{
+			EntireKeyspace: &SystemSpanConfigTarget_EntireKeyspace{},
+		},
+	}
+}
+
+// NewSpecificTenantKeyspaceTargetType returns a system span config target type
+// that the given tenant ID's keyspace.
+func NewSpecificTenantKeyspaceTargetType(tenantID TenantID) *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_SpecificTenantKeyspace{
+			SpecificTenantKeyspace: &SystemSpanConfigTarget_TenantKeyspace{
+				TenantID: tenantID,
+			},
+		},
+	}
+}
+
+// NewAllTenantKeyspaceTargetsSetTargetType returns a read-only system span
+// config target  type that encompasses all targets that have been set on
+// specific tenant keyspaces.
+func NewAllTenantKeyspaceTargetsSetTargetType() *SystemSpanConfigTarget_Type {
+	return &SystemSpanConfigTarget_Type{
+		Type: &SystemSpanConfigTarget_Type_AllTenantKeyspaceTargetsSet{
+			AllTenantKeyspaceTargetsSet: &SystemSpanConfigTarget_AllTenantKeyspaceTargetsSet{},
+		},
+	}
+}

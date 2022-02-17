@@ -26,13 +26,13 @@ import (
 func TestEncodeDecodeSystemTarget(t *testing.T) {
 	for _, testTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
-		makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
 		// System tenant targeting its logical cluster.
-		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		// System tenant targeting a secondary tenant.
-		makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
-		// System tenant targeting the entire cluster.
-		MakeClusterTarget(),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+		// System tenant targeting the entire keyspace.
+		MakeEntireKeyspaceTarget(),
 	} {
 		systemTarget, err := decodeSystemTarget(testTarget.encode())
 		require.NoError(t, err)
@@ -42,6 +42,37 @@ func TestEncodeDecodeSystemTarget(t *testing.T) {
 		target := MakeTargetFromSystemTarget(systemTarget)
 		decodedTarget := DecodeTarget(target.Encode())
 		require.Equal(t, target, decodedTarget)
+	}
+}
+
+// TestTargetToFromProto ensures that converting system targets to protos and
+// from protos is roundtripable.
+func TestTargetToFromProto(t *testing.T) {
+	for _, testSystemTarget := range []SystemTarget{
+		// Tenant targeting its logical cluster.
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+		// System tenant targeting its logical cluster.
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
+		// System tenant targeting a secondary tenant.
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+		// System tenant targeting the entire keyspace.
+		MakeEntireKeyspaceTarget(),
+		// System tenant's read-only target to fetch all system span configurations
+		// it has set over secondary tenant keyspaces.
+		MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
+		// A secondary tenant's read-only target to fetch all system span
+		// configurations it has set over secondary tenant keyspaces.
+		MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10)),
+	} {
+		systemTarget, err := makeSystemTargetFromProto(testSystemTarget.toProto())
+		require.NoError(t, err)
+		require.Equal(t, testSystemTarget, systemTarget)
+
+		// For good measure, let's also test at the level of a spanconfig.Target.
+		testTarget := MakeTargetFromSystemTarget(testSystemTarget)
+		target, err := MakeTarget(testTarget.ToProto())
+		require.NoError(t, err)
+		require.Equal(t, target, testTarget)
 	}
 }
 
@@ -87,45 +118,128 @@ func TestDecodeInvalidSpanAsSystemTarget(t *testing.T) {
 
 // TestSystemTargetValidation ensures target.validate() works as expected.
 func TestSystemTargetValidation(t *testing.T) {
+	tenant10 := roachpb.MakeTenantID(10)
+	tenant20 := roachpb.MakeTenantID(20)
 	for _, tc := range []struct {
 		sourceTenantID roachpb.TenantID
-		targetTenantID roachpb.TenantID
+		targetTenantID *roachpb.TenantID
+		targetType     systemTargetType
 		expErr         string
 	}{
 		{
 			// Secondary tenants cannot target the system tenant.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.SystemTenantID,
-			expErr:         "secondary tenant 10 cannot target another tenant with ID",
+			sourceTenantID: tenant10,
+			targetTenantID: &roachpb.SystemTenantID,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
+			expErr:         "secondary tenant 10 cannot target another tenant with ID system",
 		},
 		{
 			// Secondary tenants cannot target other secondary tenants.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.MakeTenantID(20),
-			expErr:         "secondary tenant 10 cannot target another tenant with ID",
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant20,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
+			expErr:         "secondary tenant 10 cannot target another tenant with ID 20",
+		},
+		{
+			// Secondary tenants cannot target the entire keyspace.
+			sourceTenantID: tenant10,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEntireKeyspace,
+			expErr:         "only the host tenant is allowed to target the entire keyspace",
+		},
+		{
+			// Ensure secondary tenants can't target the entire keyspace even if they
+			// set targetTenantID to themselves.
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEntireKeyspace,
+			expErr:         "only the host tenant is allowed to target the entire keyspace",
+		},
+		{
+			// System tenant can't set both targetTenantID and target everything
+			// installed on tenants.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeAllTenantKeyspaceTargetsSet,
+			expErr:         "targetTenantID must be unset when targeting everything installed",
+		},
+		{
+			// System tenant must fill in a targetTenantID when targeting a specific
+			// tenant.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
+			expErr:         "malformed system target for specific tenant keyspace; targetTenantID unset",
+		},
+		{
+			// System tenant can't set both targetTenantID and target the entire
+			// keyspace.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeEntireKeyspace,
+			expErr:         "malformed system target for entire keyspace; targetTenantID set",
+		},
+		{
+			// secondary tenant can't set both targetTenantID and target everything
+			// installed on tenants.
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeAllTenantKeyspaceTargetsSet,
+			expErr:         "targetTenantID must be unset when targeting everything installed",
 		},
 		// Test some valid targets.
 		{
 			// System tenant targeting secondary tenant is allowed.
 			sourceTenantID: roachpb.SystemTenantID,
-			targetTenantID: roachpb.MakeTenantID(20),
+			targetTenantID: &tenant20,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
+		},
+		{
+			// System tenant targeting the entire keyspace is allowed.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeEntireKeyspace,
 		},
 		{
 			// System tenant targeting itself is allowed.
 			sourceTenantID: roachpb.SystemTenantID,
-			targetTenantID: roachpb.SystemTenantID,
+			targetTenantID: &roachpb.SystemTenantID,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
 		},
 		{
 			// Secondary tenant targeting itself is allowed.
-			sourceTenantID: roachpb.MakeTenantID(10),
-			targetTenantID: roachpb.MakeTenantID(10),
+			sourceTenantID: tenant10,
+			targetTenantID: &tenant10,
+			targetType:     SystemTargetTypeSpecificTenantKeyspace,
+		},
+		{
+			// Secondary tenant targeting everything installed on tenants by it is
+			// allowed.
+			sourceTenantID: tenant10,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeAllTenantKeyspaceTargetsSet,
+		},
+		{
+			// System tenant targeting everything installed on tenants by it is
+			// allowed.
+			sourceTenantID: roachpb.SystemTenantID,
+			targetTenantID: nil,
+			targetType:     SystemTargetTypeAllTenantKeyspaceTargetsSet,
 		},
 	} {
 		target := SystemTarget{
-			SourceTenantID: tc.sourceTenantID,
-			TargetTenantID: &tc.targetTenantID,
+			sourceTenantID:   tc.sourceTenantID,
+			targetTenantID:   tc.targetTenantID,
+			systemTargetType: tc.targetType,
 		}
-		require.True(t, testutils.IsError(target.validate(), tc.expErr))
+		err := target.validate()
+		require.True(
+			t,
+			testutils.IsError(err, tc.expErr),
+			"expected: %s got: %s ",
+			tc.expErr,
+			err,
+		)
 	}
 }
 
@@ -133,12 +247,24 @@ func TestSystemTargetValidation(t *testing.T) {
 func TestTargetSortingRandomized(t *testing.T) {
 	// Construct a set of sorted targets.
 	sortedTargets := Targets{
-		MakeTargetFromSystemTarget(MakeClusterTarget()),
-		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID)),
-		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10))),
-		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(20))),
-		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.MakeTenantID(5), roachpb.MakeTenantID(5))),
-		MakeTargetFromSystemTarget(makeTenantTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10))),
+		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID)),
+		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10))),
+		MakeTargetFromSystemTarget(MakeEntireKeyspaceTarget()),
+		MakeTargetFromSystemTarget(
+			makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
+		),
+		MakeTargetFromSystemTarget(
+			makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+		),
+		MakeTargetFromSystemTarget(
+			makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(20)),
+		),
+		MakeTargetFromSystemTarget(
+			makeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(5), roachpb.MakeTenantID(5)),
+		),
+		MakeTargetFromSystemTarget(
+			makeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+		),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("y"), EndKey: roachpb.Key("z")}),
@@ -158,10 +284,38 @@ func TestTargetSortingRandomized(t *testing.T) {
 	}
 }
 
-func makeTenantTargetOrFatal(
+// TestSpanTargetsConstructedInSystemSpanConfigKeyspace ensures that
+// constructing span targets
+func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
+	for _, tc := range []roachpb.Span{
+		MakeEntireKeyspaceTarget().encode(),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)).encode(),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID).encode(),
+		makeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)).encode(),
+		{
+			// Extends into from the left
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.SystemSpanConfigPrefix.Next(), // End Key isn't inclusive.
+		},
+		{
+			// Entirely contained.
+			Key:    keys.SystemSpanConfigPrefix.Next(),
+			EndKey: keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+		},
+		{
+			// Extends beyond on the right.
+			Key:    keys.SystemSpanConfigPrefix.Next().PrefixEnd(),
+			EndKey: keys.SystemSpanConfigKeyMax.Next().Next(),
+		},
+	} {
+		require.Panics(t, func() { MakeTargetFromSpan(tc) })
+	}
+}
+
+func makeTenantKeyspaceTargetOrFatal(
 	t *testing.T, sourceID roachpb.TenantID, targetID roachpb.TenantID,
 ) SystemTarget {
-	target, err := MakeTenantTarget(sourceID, targetID)
+	target, err := MakeTenantKeyspaceTarget(sourceID, targetID)
 	require.NoError(t, err)
 	return target
 }
