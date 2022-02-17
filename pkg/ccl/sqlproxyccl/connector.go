@@ -31,6 +31,9 @@ import (
 // will activate token-based authentication if present in the startup message.
 const sessionRevivalTokenStartupParam = "crdb:session_revival_token_base64"
 
+// remoteAddrStartupParam contains the remote address of the original client.
+const remoteAddrStartupParam = "crdb:remote_addr"
+
 // TenantResolver is an interface for the tenant directory. Currently only
 // tenant.Directory implements it.
 //
