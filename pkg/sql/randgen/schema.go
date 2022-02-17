@@ -99,6 +99,7 @@ func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTa
 func RandCreateTableWithColumnIndexNumberGenerator(
 	rng *rand.Rand, prefix string, tableIdx int, generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
+	tableName := fmt.Sprintf("%s%d", prefix, tableIdx)
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -133,7 +134,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 
 	// Make a random primary key with high likelihood.
 	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */)
 		if ok && !indexDef.Inverted {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				PrimaryKey:    true,
@@ -156,7 +157,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, true /* allowExpressions */)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */)
 		if !ok {
 			continue
 		}
@@ -173,7 +174,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	}
 
 	ret := &tree.CreateTable{
-		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
+		Table: tree.MakeUnqualifiedTableName(tree.Name(tableName)),
 		Defs:  defs,
 	}
 
@@ -243,6 +244,7 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 //
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
+// TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
 	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
 ) (numRowsInserted int, err error) {
@@ -400,7 +402,7 @@ func randComputedColumnTableDef(
 ) *tree.ColumnTableDef {
 	newDef := randColumnTableDef(rng, tableIdx, colIdx)
 	newDef.Computed.Computed = true
-	newDef.Computed.Virtual = (rng.Intn(2) == 0)
+	newDef.Computed.Virtual = rng.Intn(2) == 0
 
 	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
@@ -414,7 +416,7 @@ func randComputedColumnTableDef(
 // subset of the given columns and a random direction. If unsuccessful, ok=false
 // is returned.
 func randIndexTableDefFromCols(
-	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, allowExpressions bool,
+	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, tableName string, isPrimaryIndex bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -441,6 +443,11 @@ func randIndexTableDefFromCols(
 		}
 		eligibleExprIndexRefs = eligibleExprIndexRefs[:i]
 	}
+	// prefix is the list of columns in the index up until an inverted column, if
+	// one exists. stopPrefix is set to true if we find an inverted columnn in the
+	// index, after which we stop adding columns to the prefix.
+	var prefix tree.NameList
+	var stopPrefix bool
 
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
@@ -451,7 +458,7 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if allowExpressions && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
+		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
 			var expr tree.Expr
 			// Do not allow NULL in expressions to avoid expressions that have
 			// an ambiguous type.
@@ -460,6 +467,7 @@ func randIndexTableDefFromCols(
 			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""
+			stopPrefix = true
 		}
 
 		// The non-terminal index columns must be indexable.
@@ -471,12 +479,97 @@ func randIndexTableDefFromCols(
 		// index an inverted index.
 		if colinfo.ColumnTypeIsInvertedIndexable(semType) {
 			def.Inverted = true
+			stopPrefix = true
+		}
+
+		if !stopPrefix {
+			prefix = append(prefix, cols[i].Name)
 		}
 
 		def.Columns = append(def.Columns, elem)
 	}
 
+	// Partition the secondary index in ~10% of cases.
+	// TODO(harding): Allow partitioning the primary index. This will require
+	// massaging the syntax.
+	if !isPrimaryIndex && len(prefix) > 0 && rng.Intn(10) == 0 {
+		def.PartitionByIndex = &tree.PartitionByIndex{PartitionBy: &tree.PartitionBy{}}
+		prefixLen := 1 + rng.Intn(len(prefix))
+		def.PartitionByIndex.Fields = prefix[:prefixLen]
+
+		// Add up to 10 partitions.
+		for i := 0; i < rng.Intn(10)+1; i++ {
+			var partition tree.ListPartition
+			partition.Name = tree.UnrestrictedName(fmt.Sprintf("%s_part_%d", tableName, i))
+			// Add up to 10 expressions in each partition.
+			for j := 0; j < rng.Intn(10)+1; j++ {
+				// Use a tuple to contain the expressions in case there are multiple
+				// partitioning columns.
+				var t tree.Tuple
+				t.Exprs = make([]tree.Expr, prefixLen)
+				for k := 0; k < prefixLen; k++ {
+					t.Exprs[k] = RandDatum(rng, tree.MustBeStaticallyKnownType(cols[k].Type), cols[k].Nullable.Nullability != tree.NotNull)
+				}
+				// Don't include the partition if it matches previous partition values.
+				// Include the expressions from this partition, so we also check for
+				// duplicates there.
+				isDup, err := isDuplicateExpr(t.Exprs, append(def.PartitionByIndex.List, partition))
+				if err != nil {
+					return def, false
+				}
+				if isDup {
+					continue
+				}
+				partition.Exprs = append(partition.Exprs, &t)
+			}
+
+			if len(partition.Exprs) > 0 {
+				def.PartitionByIndex.List = append(def.PartitionByIndex.List, partition)
+			}
+		}
+		// Add a default partition 50% of the time.
+		if rng.Intn(2) == 0 {
+			var partition tree.ListPartition
+			partition.Name = "DEFAULT"
+			var t tree.Tuple
+			t.Exprs = make([]tree.Expr, prefixLen)
+			for i := 0; i < prefixLen; i++ {
+				t.Exprs[i] = tree.DefaultVal{}
+			}
+			partition.Exprs = append(partition.Exprs, &t)
+			def.PartitionByIndex.List = append(def.PartitionByIndex.List, partition)
+		}
+	}
+
 	return def, true
+}
+
+func isDuplicateExpr(e tree.Exprs, list []tree.ListPartition) (bool, error) {
+	// Iterate over the partitions.
+	for _, p := range list {
+		// Iterate over the tuples of expressions in the partition.
+		for _, tpe := range p.Exprs {
+			tp, ok := tpe.(*tree.Tuple)
+			if !ok || len(tp.Exprs) != len(e) {
+				continue
+			}
+			n := 0
+			// Check each expression in the tuple.
+			for ; n < len(tp.Exprs); n++ {
+				cmp, err := tp.Exprs[n].(tree.Datum).CompareError(&tree.EvalContext{}, e[n].(tree.Datum))
+				if err != nil {
+					return false, err
+				}
+				if cmp != 0 {
+					break
+				}
+			}
+			if n == len(tp.Exprs) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // nonComputedColumnTableDefs returns a slice containing all the columns in cols
