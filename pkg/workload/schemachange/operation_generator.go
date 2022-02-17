@@ -1105,8 +1105,12 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (strin
 	if err != nil {
 		return "", err
 	}
+	databaseHasMultiRegion, err := og.databaseIsMultiRegion(ctx, tx)
+	if err != nil {
+		return "", err
+	}
 
-	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, og.newUniqueSeqNum)
+	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(og.params.rng, "table", tableIdx, databaseHasMultiRegion, og.newUniqueSeqNum)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
 
