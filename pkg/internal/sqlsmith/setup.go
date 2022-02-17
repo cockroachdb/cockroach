@@ -79,10 +79,8 @@ func randTablesN(r *rand.Rand, n int) []string {
 
 	// Create the random tables.
 	createTableStatements := randgen.RandCreateTables(r, "table", n,
-		randgen.StatisticsMutator,
-		randgen.PartialIndexMutator,
-		randgen.ForeignKeyMutator,
-	)
+		false /* isMultiRegion */, randgen.StatisticsMutator,
+		randgen.PartialIndexMutator, randgen.ForeignKeyMutator)
 
 	for _, stmt := range createTableStatements {
 		stmts = append(stmts, tree.SerializeForDisplay(stmt))

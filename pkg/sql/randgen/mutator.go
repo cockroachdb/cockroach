@@ -420,6 +420,27 @@ func foreignKeyMutator(
 		if !ok {
 			continue
 		}
+		// Skip partitioned tables, since using foreign keys results in in-between
+		// filters not yielding a constraint.
+		// TODO(harding): Allow foreign keys on partitioned tables.
+		var skip bool
+		for _, def := range table.Defs {
+			switch def := def.(type) {
+			case *tree.IndexTableDef:
+				if def.PartitionByIndex != nil {
+					skip = true
+					break
+				}
+			case *tree.UniqueConstraintTableDef:
+				if def.IndexTableDef.PartitionByIndex != nil {
+					skip = true
+					break
+				}
+			}
+		}
+		if skip {
+			continue
+		}
 		tables = append(tables, table)
 		byName[table.Table] = table
 		usedCols[table.Table] = map[tree.Name]bool{}
