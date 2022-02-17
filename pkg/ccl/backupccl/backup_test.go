@@ -335,14 +335,21 @@ func TestBackupRestoreDataDriven(t *testing.T) {
 				_, err := ds.getSQLDB(t, server, user).Exec(d.Input)
 				ret := ds.noticeBuffer
 				if err != nil {
-					ret = append(ds.noticeBuffer, err.Error())
-					if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+					// pausepoint errors have the job ID in them, and datadriven tests
+					// don't seem to support regex matching. Clean the error up to not
+					// include the job ID.
+					if i := strings.Index(err.Error(), "paused before it completed with reason"); i != -1 {
+						ret = append(ds.noticeBuffer, err.Error()[i:])
+					} else if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+						ret = append(ds.noticeBuffer, err.Error())
 						if pqErr.Detail != "" {
 							ret = append(ret, "DETAIL: "+pqErr.Detail)
 						}
 						if pqErr.Hint != "" {
 							ret = append(ret, "HINT: "+pqErr.Hint)
 						}
+					} else {
+						t.Errorf("failed to execute stmt %s due to %s", d.Input, err.Error())
 					}
 				}
 				return strings.Join(ret, "\n")

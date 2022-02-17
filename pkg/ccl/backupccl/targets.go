@@ -229,8 +229,9 @@ func getAllDescChanges(
 	return res, nil
 }
 
-// fullClusterTargets returns all of the tableDescriptors to be included in a
-// full cluster backup, and all the user databases.
+// fullClusterTargets returns all of the descriptors to be included in a full
+// cluster backup, along with all the "complete databases" that we are backing
+// up.
 func fullClusterTargets(
 	allDescs []catalog.Descriptor,
 ) ([]catalog.Descriptor, []catalog.DatabaseDescriptor, error) {
@@ -240,6 +241,11 @@ func fullClusterTargets(
 	systemTablesToBackup := GetSystemTablesToIncludeInClusterBackup()
 
 	for _, desc := range allDescs {
+		// If a descriptor is in the DROP state at `EndTime` we do not want to
+		// include it in the backup.
+		if desc.Dropped() {
+			continue
+		}
 		switch desc := desc.(type) {
 		case catalog.DatabaseDescriptor:
 			dbDesc := dbdesc.NewBuilder(desc.DatabaseDesc()).BuildImmutableDatabase()
@@ -256,10 +262,7 @@ func fullClusterTargets(
 					fullClusterDescs = append(fullClusterDescs, desc)
 				}
 			} else {
-				// Add all user tables that are not in a DROP state.
-				if !desc.Dropped() {
-					fullClusterDescs = append(fullClusterDescs, desc)
-				}
+				fullClusterDescs = append(fullClusterDescs, desc)
 			}
 		case catalog.SchemaDescriptor:
 			fullClusterDescs = append(fullClusterDescs, desc)
