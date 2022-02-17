@@ -10,7 +10,11 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
@@ -162,15 +166,57 @@ WHERE
 		},
 
 		{
-			Name:  "has_table_privilege real table",
+			Name:  "has_schema_privilege 1",
+			Setup: `CREATE SCHEMA s`,
+			Stmt:  `SELECT has_schema_privilege('s', 'CREATE')`,
+		},
+
+		{
+			Name:  "has_schema_privilege 3",
+			Setup: repeat("CREATE SCHEMA s%d_3", 3, "; "),
+			Stmt:  "SELECT " + repeat("has_schema_privilege('s%d_3', 'CREATE')", 3, ", "),
+		},
+
+		{
+			Name:  "has_schema_privilege 5",
+			Setup: repeat("CREATE SCHEMA s%d_5", 5, "; "),
+			Stmt:  "SELECT " + repeat("has_schema_privilege('s%d_5', 'CREATE')", 5, ", "),
+		},
+
+		{
+			Name:  "has_sequence_privilege 1",
+			Setup: `CREATE SEQUENCE seq`,
+			Stmt:  `SELECT has_sequence_privilege('seq', 'SELECT')`,
+		},
+
+		{
+			Name:  "has_sequence_privilege 3",
+			Setup: repeat("CREATE SEQUENCE seq%d_3", 3, "; "),
+			Stmt:  "SELECT " + repeat("has_sequence_privilege('seq%d_3', 'SELECT')", 3, ", "),
+		},
+
+		{
+			Name:  "has_sequence_privilege 5",
+			Setup: repeat("CREATE SEQUENCE seq%d_5", 5, ";"),
+			Stmt:  "SELECT " + repeat("has_sequence_privilege('seq%d_5', 'SELECT')", 5, ", "),
+		},
+
+		{
+			Name:  "has_table_privilege 1",
 			Setup: `CREATE TABLE t(a int primary key, b int)`,
 			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
 		},
 
 		{
-			Name:  "has_table_privilege virtual table",
-			Setup: `CREATE TABLE t(a int primary key, b int)`,
-			Stmt:  `SELECT has_table_privilege('t', 'SELECT')`,
+			Name:  "has_table_privilege 3",
+			Setup: repeat("CREATE TABLE t%d_3(a int primary key, b int)", 3, "; "),
+			Stmt:  "SELECT " + repeat("has_table_privilege('t%d_3', 'SELECT')", 3, ", "),
+		},
+
+		{
+			Name:  "has_table_privilege 5",
+			Setup: repeat("CREATE TABLE t%d_5(a int primary key, b int)", 5, "; "),
+			Stmt:  "SELECT " + repeat("has_table_privilege('t%d_5', 'SELECT')", 5, ", "),
 		},
 
 		{
@@ -240,4 +286,12 @@ FROM indexes
 ORDER BY relname DESC, input`,
 		},
 	})
+}
+
+func repeat(format string, times int, sep string) string {
+	formattedStrings := make([]string, times)
+	for i := 0; i < times; i++ {
+		formattedStrings[i] = fmt.Sprintf(format, i)
+	}
+	return strings.Join(formattedStrings, sep)
 }
