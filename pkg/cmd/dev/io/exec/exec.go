@@ -280,3 +280,9 @@ func (e *Exec) Next(
 		return f(&outTrace, &errTrace)
 	})
 }
+
+// IsDryrun returns whether or not this exec is running in "dryrun" mode, which is useful to avoid
+// behavior that would otherwise permanently block execution during testing.
+func (e *Exec) IsDryrun() bool {
+	return e.knobs.dryrun
+}
