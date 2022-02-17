@@ -1,5 +1,5 @@
 Source code in this repository is variously licensed under the Business Source
-License 1.1 (BSL), the CockroachDB Community License (CCL), the MIT license, and
+License 1.1 (BSL), the CockroachDB Community License (CCL), the MIT license, the GPL license and
 BSD-style licenses. A copy of each license can be found in the licenses
 directory. Source code in a given file is licensed under the BSL and the
 copyright belongs to The Cockroach Authors unless otherwise noted at the
