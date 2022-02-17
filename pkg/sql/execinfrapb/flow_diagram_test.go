@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 // compareDiagrams verifies that two JSON strings decode to equal diagramData
@@ -403,4 +404,11 @@ func TestPlanDiagramJoin(t *testing.T) {
 	`
 
 	compareDiagrams(t, s, expected)
+}
+
+func TestProcessorsImplementDiagramCellType(t *testing.T) {
+	pcu := reflect.ValueOf(ProcessorCoreUnion{})
+	for i := 0; i < pcu.NumField(); i++ {
+		require.Implements(t, (*diagramCellType)(nil), pcu.Field(i).Interface())
+	}
 }
