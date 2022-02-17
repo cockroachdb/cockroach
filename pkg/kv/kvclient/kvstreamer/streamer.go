@@ -12,6 +12,7 @@ package kvstreamer
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sort"
 	"sync"
@@ -32,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// TODO(yuzefovich): remove this once the Streamer is stabilized.
+const debug = false
 
 // OperationMode describes the mode of operation of the Streamer.
 type OperationMode int
@@ -550,6 +554,9 @@ func (s *Streamer) Enqueue(
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
+	if debug {
+		fmt.Printf("enqueuing %d requests to serve\n", len(requestsToServe))
+	}
 	s.mu.requestsToServe = requestsToServe
 	s.mu.hasWork.Signal()
 	return nil
@@ -590,7 +597,13 @@ func (s *Streamer) GetResults(ctx context.Context) ([]Result, error) {
 		s.mu.results = nil
 		allComplete := s.mu.numCompleteRequests == s.mu.numEnqueuedRequests
 		if len(results) > 0 || allComplete || s.mu.err != nil {
+			if debug {
+				fmt.Printf("returning %s to the client\n", resultsToString(results))
+			}
 			return results, s.mu.err
+		}
+		if debug {
+			fmt.Println("blocking to wait for results")
 		}
 		s.mu.hasResults.Wait()
 		// Check whether the Streamer has been canceled or closed while we were
@@ -696,6 +709,11 @@ type singleRangeBatch struct {
 	// reqsReservedBytes tracks the memory reservation against the budget for
 	// the memory usage of reqs.
 	reqsReservedBytes int64
+	// minTargetBytes, if positive, indicates the minimum TargetBytes limit that
+	// this singleRangeBatch should be sent with in order for the response to
+	// not be empty. Note that TargetBytes of at least minTargetBytes is
+	// necessary but might not be sufficient for the response to be non-empty.
+	minTargetBytes int64
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -714,6 +732,28 @@ func (r *singleRangeBatch) Less(i, j int) bool {
 	// TODO(yuzefovich): figure out whether it's worth extracting the keys when
 	// constructing singleRangeBatch object.
 	return r.reqs[i].GetInner().Header().Key.Compare(r.reqs[j].GetInner().Header().Key) < 0
+}
+
+func reqsToString(reqs []singleRangeBatch) string {
+	result := "requests for positions "
+	for i, r := range reqs {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%v", r.positions)
+	}
+	return result
+}
+
+func resultsToString(results []Result) string {
+	result := "results for positions "
+	for i, r := range results {
+		if i > 0 {
+			result += ", "
+		}
+		result += fmt.Sprintf("%d", r.position)
+	}
+	return result
 }
 
 type workerCoordinator struct {
@@ -751,19 +791,15 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			}
 		}
 
-		// At the moment, we're using a simple average which is suboptimal
-		// because it is not reactive enough to larger responses coming back
-		// later. As a result, we can have a degenerate behavior where many
-		// requests end up coming back empty. Furthermore, at the moment we're
-		// not incorporating the response size information from those empty
-		// requests.
-		//
-		// In order to work around this we'll just use a larger estimate for
-		// each response for now.
-		// TODO(yuzefovich): improve this.
-		avgResponseSize = 2 * avgResponseSize
-
-		shouldExit = w.waitUntilEnoughBudget(ctx, avgResponseSize)
+		// If we already have minTargetBytes set on the first request to be
+		// issued, then use that; otherwise, use the estimate.
+		atLeastBytes := requestsToServe[0].minTargetBytes
+		if atLeastBytes == 0 {
+			// TODO(yuzefovich): consider using a multiple of avgResponseSize
+			// here.
+			atLeastBytes = avgResponseSize
+		}
+		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes)
 		if shouldExit {
 			return
 		}
@@ -825,23 +861,28 @@ func (w *workerCoordinator) getRequestsLocked() (
 	return requestsToServe, avgResponseSize, shouldExit
 }
 
-// waitUntilEnoughBudget waits until there is enough budget to at least receive
-// one full response.
+// waitUntilEnoughBudget waits until atLeastBytes bytes is available in the
+// budget.
 //
 // A boolean that indicates whether the coordinator should exit is returned.
 func (w *workerCoordinator) waitUntilEnoughBudget(
-	ctx context.Context, avgResponseSize int64,
+	ctx context.Context, atLeastBytes int64,
 ) (shouldExit bool) {
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
-	// TODO(yuzefovich): consider using a multiple of avgResponseSize here.
-	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < avgResponseSize {
+	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < atLeastBytes {
 		// There isn't enough budget at the moment. Check whether there are any
 		// requests in progress.
 		if w.s.getNumRequestsInProgress() == 0 {
 			// We have a degenerate case when a single row is expected to exceed
 			// the budget.
 			return false
+		}
+		if debug {
+			fmt.Printf(
+				"waiting for budget to free up: atLeastBytes %d, available %d\n",
+				atLeastBytes, w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
+			)
 		}
 		// We have to wait for some budget.release() calls.
 		w.s.budget.mu.waitForBudget.Wait()
@@ -880,11 +921,29 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 
+	if debug {
+		fmt.Printf(
+			"picked up %s to serve, available budget %d, "+
+				"num requests in progress %d, average response size %d\n",
+			reqsToString(requestsToServe), w.s.budget.limitBytes-w.s.budget.mu.acc.Used(),
+			w.s.getNumRequestsInProgress(), avgResponseSize,
+		)
+	}
+
 	headOfLine := w.s.getNumRequestsInProgress() == 0
 	var budgetIsExhausted bool
 	for numRequestsIssued < len(requestsToServe) && !budgetIsExhausted {
+		singleRangeReqs := requestsToServe[numRequestsIssued]
 		availableBudget := w.s.budget.limitBytes - w.s.budget.mu.acc.Used()
-		if availableBudget < avgResponseSize {
+		// minAcceptableBudget is the minimum TargetBytes limit with which it
+		// makes sense to issue this request (if we issue the request with
+		// smaller limit, then it's very likely to come back with an empty
+		// response).
+		minAcceptableBudget := singleRangeReqs.minTargetBytes
+		if minAcceptableBudget == 0 {
+			minAcceptableBudget = avgResponseSize
+		}
+		if availableBudget < minAcceptableBudget {
 			if !headOfLine {
 				// We don't have enough budget available to serve this request,
 				// and there are other requests in progress, so we'll wait for
@@ -901,7 +960,6 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 				availableBudget = 1
 			}
 		}
-		singleRangeReqs := requestsToServe[numRequestsIssued]
 		// Calculate what TargetBytes limit to use for the BatchRequest that
 		// will be issued based on singleRangeReqs. We use the estimate to guess
 		// how much memory the response will need, and we reserve this
@@ -912,6 +970,12 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// get a very large single row in response which will exceed this
 		// limit).
 		targetBytes := int64(len(singleRangeReqs.reqs)) * avgResponseSize
+		// Make sure that targetBytes is sufficient to receive non-empty
+		// response. Our estimate might be an under-estimate when responses vary
+		// significantly in size.
+		if targetBytes < singleRangeReqs.minTargetBytes {
+			targetBytes = singleRangeReqs.minTargetBytes
+		}
 		if targetBytes > availableBudget {
 			// The estimate tells us that we don't have enough budget to receive
 			// the full response; however, in order to utilize the available
@@ -954,6 +1018,12 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 			// any more responses at the moment.
 			return err
 		}
+		if debug {
+			fmt.Printf(
+				"issuing an async request for positions %v, targetBytes=%d, headOfLine=%t\n",
+				singleRangeReqs.positions, targetBytes, headOfLine,
+			)
+		}
 		w.performRequestAsync(ctx, singleRangeReqs, targetBytes, headOfLine)
 		numRequestsIssued++
 		headOfLine = false
@@ -965,6 +1035,9 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 func (w *workerCoordinator) addRequest(req singleRangeBatch) {
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()
+	if debug {
+		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", req.positions, req.minTargetBytes)
+	}
 	w.s.mu.requestsToServe = append(w.s.mu.requestsToServe, req)
 	w.s.mu.hasWork.Signal()
 }
@@ -973,6 +1046,10 @@ func (w *workerCoordinator) asyncRequestCleanup() {
 	w.s.adjustNumRequestsInFlight(-1 /* delta */)
 	w.s.waitGroup.Done()
 }
+
+// AsyncRequestOp is the operation name (in tracing) of all requests issued by
+// the Streamer asynchronously.
+const AsyncRequestOp = "streamer-lookup-async"
 
 // performRequestAsync dispatches the given single-range batch for evaluation
 // asynchronously. If the batch cannot be evaluated fully (due to exhausting its
@@ -1001,7 +1078,7 @@ func (w *workerCoordinator) performRequestAsync(
 	if err := w.s.stopper.RunAsyncTaskEx(
 		ctx,
 		stop.TaskOpts{
-			TaskName:   "streamer-lookup-async",
+			TaskName:   AsyncRequestOp,
 			SpanOpt:    stop.ChildSpan,
 			Sem:        w.asyncSem,
 			WaitForSem: true,
@@ -1246,6 +1323,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newGet.union.Get = &newGet.req
 				resumeReq.reqs[resumeReqIdx].Value = &newGet.union
 				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				if resumeReq.minTargetBytes == 0 {
+					resumeReq.minTargetBytes = get.ResumeNextBytes
+				}
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
@@ -1299,6 +1379,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 				newScan.union.Scan = &newScan.req
 				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
 				resumeReq.positions[resumeReqIdx] = req.positions[i]
+				if resumeReq.minTargetBytes == 0 {
+					resumeReq.minTargetBytes = scan.ResumeNextBytes
+				}
 				resumeReqIdx++
 			}
 		}
@@ -1317,6 +1400,26 @@ func (w *workerCoordinator) processSingleRangeResults(
 		w.finalizeSingleRangeResults(
 			results, memoryFootprintBytes, hasNonEmptyScanResponse, numCompleteGetResponses,
 		)
+	} else {
+		// We received an empty response.
+		if req.minTargetBytes != 0 {
+			// We previously have already received an empty response for this
+			// request, and minTargetBytes wasn't sufficient. Make sure that
+			// minTargetBytes on the resume request has increased.
+			if resumeReq.minTargetBytes <= req.minTargetBytes {
+				// Since ResumeNextBytes is populated on a best-effort basis, we
+				// cannot rely on it to make progress, so we make sure that if
+				// minTargetBytes hasn't increased for the resume request, we
+				// use the double of the original target.
+				resumeReq.minTargetBytes = 2 * req.minTargetBytes
+			}
+		}
+		if debug {
+			fmt.Printf(
+				"request for positions %v came back empty, original minTargetBytes=%d, "+
+					"resumeReq.minTargetBytes=%d\n", req.positions, req.minTargetBytes, resumeReq.minTargetBytes,
+			)
+		}
 	}
 
 	// If we have any incomplete requests, add them back into the work
@@ -1379,6 +1482,9 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	w.s.mu.avgResponseEstimator.update(actualMemoryReservation, int64(len(results)))
 	w.s.mu.numCompleteRequests += numCompleteResponses
 	w.s.mu.numUnreleasedResults += len(results)
+	if debug {
+		fmt.Printf("created %s with total size %d\n", resultsToString(results), actualMemoryReservation)
+	}
 	w.s.mu.results = append(w.s.mu.results, results...)
 	w.s.mu.hasResults.Signal()
 }
