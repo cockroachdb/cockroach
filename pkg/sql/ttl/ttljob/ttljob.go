@@ -262,13 +262,8 @@ func runTTLOnRange(
 	for {
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
-		var expiredRowsPKs []tree.Datums
-
-		if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			expiredRowsPKs, err = selectBuilder.run(ctx, ie, txn)
-			return err
-		}); err != nil {
+		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
+		if err != nil {
 			return errors.Wrapf(err, "error selecting rows to delete")
 		}
 
