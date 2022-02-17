@@ -317,7 +317,11 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			})
 			defer cleanupFunc()
 
+			rangeBatchSize := 1 + rng.Intn(3)
+			t.Logf("range batch size: %d", rangeBatchSize)
+
 			th.sqlDB.Exec(t, tc.createTable)
+			th.sqlDB.Exec(t, `SET CLUSTER SETTING sql.ttl.range_batch_size = $1`, rangeBatchSize)
 
 			// Extract the columns from CREATE TABLE.
 			stmt, err := parser.ParseOne(tc.createTable)

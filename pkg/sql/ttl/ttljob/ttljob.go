@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -54,6 +53,13 @@ var (
 		"sql.ttl.default_range_concurrency",
 		"default amount of ranges to process at once during a TTL delete",
 		1,
+		settings.PositiveInt,
+	).WithPublic()
+	rangeBatchSize = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"sql.ttl.range_batch_size",
+		"amount of ranges to fetch at a time for a table",
+		100,
 		settings.PositiveInt,
 	).WithPublic()
 )
@@ -93,7 +99,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var pkColumns []string
 	var pkTypes []*types.T
 	var pkDirs []descpb.IndexDescriptor_Direction
-	var ranges []kv.KeyValue
+	var rangeSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := p.ExtendedEvalContext().Descs.GetImmutableTableByID(
 			ctx,
@@ -127,11 +133,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		if ttl == nil {
 			return errors.Newf("unable to find TTL on table %s", desc.GetName())
 		}
-
-		ranges, err = kvclient.ScanMetaKVs(ctx, txn, desc.TableSpan(p.ExecCfg().Codec))
-		if err != nil {
-			return err
-		}
+		rangeSpan = desc.TableSpan(p.ExecCfg().Codec)
 		ttlSettings = *ttl
 		return nil
 	}); err != nil {
@@ -183,20 +185,56 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			close(ch)
 			retErr = errors.CombineErrors(retErr, g.Wait())
 		}()
-		for _, r := range ranges {
-			if err := r.ValueProto(&rangeDesc); err != nil {
+		done := false
+
+		batchSize := rangeBatchSize.Get(p.ExecCfg().SV())
+		for !done {
+			var ranges []kv.KeyValue
+
+			// Scan ranges up to rangeBatchSize.
+			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				metaStart := keys.RangeMetaKey(keys.MustAddr(rangeSpan.Key).Next())
+				metaEnd := keys.RangeMetaKey(keys.MustAddr(rangeSpan.EndKey))
+
+				kvs, err := txn.Scan(ctx, metaStart, metaEnd, batchSize)
+				if err != nil {
+					return err
+				}
+				if len(kvs) < int(batchSize) {
+					done = true
+					if len(kvs) == 0 || !kvs[len(kvs)-1].Key.Equal(metaEnd.AsRawKey()) {
+						// Normally we need to scan one more KV because the ranges are addressed by
+						// the end key.
+						extraKV, err := txn.Scan(ctx, metaEnd, keys.Meta2Prefix.PrefixEnd(), 1 /* one result */)
+						if err != nil {
+							return err
+						}
+						kvs = append(kvs, extraKV[0])
+					}
+				}
+				ranges = kvs
+				return nil
+			}); err != nil {
 				return err
 			}
-			var nextRange rangeToProcess
-			nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
-			if err != nil {
-				return err
+
+			// Send these to each goroutine worker.
+			for _, r := range ranges {
+				if err := r.ValueProto(&rangeDesc); err != nil {
+					return err
+				}
+				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
+				var nextRange rangeToProcess
+				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
+				if err != nil {
+					return err
+				}
+				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
+				if err != nil {
+					return err
+				}
+				ch <- nextRange
 			}
-			nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, pkDirs, &alloc)
-			if err != nil {
-				return err
-			}
-			ch <- nextRange
 		}
 		return nil
 	}(); err != nil {
