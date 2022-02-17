@@ -591,9 +591,10 @@ func registerTPCHVec(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:    "tpchvec/smithcmp",
-		Owner:   registry.OwnerSQLQueries,
-		Cluster: r.MakeClusterSpec(tpchVecNodeCount),
+		Name:            "tpchvec/smithcmp",
+		Owner:           registry.OwnerSQLQueries,
+		Cluster:         r.MakeClusterSpec(tpchVecNodeCount),
+		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHVec(ctx, t, c, tpchVecSmithcmpTest{}, smithcmpTestRun)
 		},
