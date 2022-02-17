@@ -76,6 +76,11 @@ var FrontendAdmit = func(
 		if sniServerName != "" {
 			startup.Parameters["sni-server"] = sniServerName
 		}
+		// This forwards the remote addr to the backend.
+		startup.Parameters[remoteAddrStartupParam] = conn.RemoteAddr().String()
+		// The client is blocked from using session revival tokens; only the proxy
+		// itself can.
+		delete(startup.Parameters, sessionRevivalTokenStartupParam)
 		return conn, startup, nil
 	}
 
