@@ -134,9 +134,13 @@ func EndToEndSideEffects(t *testing.T, dir string, newCluster NewClusterFunc) {
 // scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
 var scheduleIDRegexp = regexp.MustCompile(`scheduleId: "?[0-9]+"?`)
 
+// dropTimeRegexp captures either `dropTime: \"time\"`.
+var dropTimeRegexp = regexp.MustCompile("dropTime: \"[0-9]+")
+
 func replaceNonDeterministicOutput(text string) string {
 	// scheduleIDs change based on execution time, so redact the output.
-	return scheduleIDRegexp.ReplaceAllString(text, "scheduleId: <redacted>")
+	nextString := scheduleIDRegexp.ReplaceAllString(text, "scheduleId: <redacted>")
+	return dropTimeRegexp.ReplaceAllString(nextString, "dropTime: <redacted>")
 }
 
 // execStatementWithTestDeps executes the DDL statement using the declarative

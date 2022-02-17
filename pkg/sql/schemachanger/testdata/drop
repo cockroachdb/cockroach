@@ -399,6 +399,7 @@ upsert descriptor #108
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -652,8 +653,8 @@ upsert descriptor #108
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 107
@@ -1852,6 +1853,7 @@ upsert descriptor #116
   +        sourceElementId: 8
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -2162,6 +2164,7 @@ upsert descriptor #117
   +        sourceElementId: 3
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -2374,6 +2377,7 @@ upsert descriptor #118
   +        sourceElementId: 6
   +        subWorkId: 1
   +      targetStatus: ABSENT
+  +  dropTime: <redacted>"
      families:
      - columnIds:
   ...
@@ -3669,8 +3673,8 @@ upsert descriptor #116
   -        sourceElementId: 8
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 113
@@ -3965,8 +3969,8 @@ upsert descriptor #117
   -        sourceElementId: 3
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 112
@@ -4175,8 +4179,8 @@ upsert descriptor #118
   -        sourceElementId: 6
   -        subWorkId: 1
   -      targetStatus: ABSENT
+     dropTime: <redacted>"
      families:
-     - columnIds:
   ...
      state: DROP
      unexposedParentSchemaId: 112
