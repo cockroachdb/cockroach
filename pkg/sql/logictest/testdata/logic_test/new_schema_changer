@@ -834,17 +834,17 @@ SHOW INDEXES FROM tIndex
 ----
 table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
 tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
-tindex      bar          true        2             a                ASC        false    true
+tindex      bar          true        2             a                         ASC        false    true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
-tindex      bar2         true        2             a                ASC        false    true
+tindex      bar2         true        2             a                         ASC        false    true
 tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
-tindex      bar3         false       2             a                ASC        false    true
+tindex      bar3         false       2             a                         ASC        true     true
 tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
-tindex      bar4         true        2             a                ASC        false    true
-tindex      foo          true        1             b                ASC        false    false
-tindex      foo          true        2             a                ASC        false    true
-tindex      tindex_pkey  false       1             a                ASC        false    false
-tindex      tindex_pkey  false       2             b                N/A        true     false
+tindex      bar4         true        2             a                         ASC        false    true
+tindex      foo          true        1             b                         ASC        false    false
+tindex      foo          true        2             a                         ASC        false    true
+tindex      tindex_pkey  false       1             a                         ASC        false    false
+tindex      tindex_pkey  false       2             b                         N/A        true     false
 
 statement error  duplicate key value violates unique constraint "bar3"
 INSERT INTO tIndex VALUES (2,1)
@@ -859,19 +859,19 @@ INSERT INTO tIndex VALUES (20000,10000)
 query TTBITTBB colnames
 SHOW INDEXES FROM tIndex
 ----
-table_name  index_name   non_unique  seq_in_index  column_name      direction  storing  implicit
+table_name  index_name   non_unique  seq_in_index  column_name               direction  storing  implicit
 tindex      bar          true        1             crdb_internal_idx_expr    ASC        false    false
-tindex      bar          true        2             a                ASC        false    true
+tindex      bar          true        2             a                         ASC        false    true
 tindex      bar2         true        1             crdb_internal_idx_expr_1  ASC        false    false
-tindex      bar2         true        2             a                ASC        false    true
+tindex      bar2         true        2             a                         ASC        false    true
 tindex      bar3         false       1             crdb_internal_idx_expr_2  ASC        false    false
-tindex      bar3         false       2             a                ASC        false    true
+tindex      bar3         false       2             a                         ASC        true     true
 tindex      bar4         true        1             crdb_internal_idx_expr_3  ASC        false    false
-tindex      bar4         true        2             a                ASC        false    true
-tindex      foo          true        1             b                ASC        false    false
-tindex      foo          true        2             a                ASC        false    true
-tindex      tindex_pkey  false       1             a                ASC        false    false
-tindex      tindex_pkey  false       2             b                N/A        true     false
+tindex      bar4         true        2             a                         ASC        false    true
+tindex      foo          true        1             b                         ASC        false    false
+tindex      foo          true        2             a                         ASC        false    true
+tindex      tindex_pkey  false       1             a                         ASC        false    false
+tindex      tindex_pkey  false       2             b                         N/A        true     false
 
 # test for DESC index
 

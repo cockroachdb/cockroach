@@ -4008,7 +4008,7 @@ other_db       public        teststatics  YES         public        idx_c       
 other_db       public        teststatics  YES         public        idx_c             2             id           NULL       NULL         ASC        NO       YES
 other_db       public        teststatics  NO          public        idx_cd            1             c            NULL       NULL         ASC        NO       NO
 other_db       public        teststatics  NO          public        idx_cd            2             d            NULL       NULL         ASC        NO       NO
-other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        NO       YES
+other_db       public        teststatics  NO          public        idx_cd            3             id           NULL       NULL         ASC        YES      YES
 other_db       public        teststatics  NO          public        teststatics_pkey  1             id           NULL       NULL         ASC        NO       NO
 other_db       public        teststatics  NO          public        teststatics_pkey  2             c            NULL       NULL         N/A        YES      NO
 other_db       public        teststatics  NO          public        teststatics_pkey  3             d            NULL       NULL         N/A        YES      NO
