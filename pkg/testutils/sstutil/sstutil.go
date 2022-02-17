@@ -25,13 +25,13 @@ import (
 
 // MakeSST builds a binary in-memory SST from the given tests data. It returns
 // the binary SST data as well as the start and end (exclusive) keys of the SST.
-func MakeSST(t *testing.T, kvs []KV) ([]byte, roachpb.Key, roachpb.Key) {
+func MakeSST(
+	ctx context.Context, cs *cluster.Settings, t *testing.T, kvs []KV,
+) ([]byte, roachpb.Key, roachpb.Key) {
 	t.Helper()
 
 	sstFile := &storage.MemFile{}
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	writer := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+	writer := storage.MakeIngestionSSTWriter(ctx, cs, sstFile)
 	defer writer.Close()
 
 	start, end := keys.MaxKey, keys.MinKey
