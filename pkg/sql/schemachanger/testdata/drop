@@ -708,8 +708,8 @@ upsert descriptor #104
          id: 105
   -    sc:
   -      id: 107
-  -  version: "4"
-  +  version: "5"
+  -  version: "5"
+  +  version: "6"
 upsert descriptor #107
    schema:
   +  declarativeSchemaChangerState:
@@ -880,8 +880,8 @@ upsert descriptor #104
   ...
        public:
          id: 105
-  -  version: "5"
-  +  version: "6"
+  -  version: "6"
+  +  version: "7"
 delete descriptor #107
 delete descriptor #109
 delete descriptor #110
@@ -968,10 +968,10 @@ upsert descriptor #104
   -  schemas:
   -    public:
   -      id: 105
-  -  version: "5"
+  -  version: "7"
   +  schemas: {}
   +  state: DROP
-  +  version: "6"
+  +  version: "8"
 upsert descriptor #105
    schema:
   +  declarativeSchemaChangerState:
@@ -1019,75 +1019,13 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
-create job #2: "GC for dropping descriptors and parent database 104"
-  descriptor IDs: []
+## PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
 write *eventpb.DropDatabase to event log for descriptor #104: DROP DATABASE ‹db› CASCADE
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
-upsert descriptor #104
-   database:
-  -  declarativeSchemaChangerState:
-  -    authorization: {}
-  -    currentStatuses:
-  -    - ABSENT
-  -    - DROPPED
-  -    - ABSENT
-  -    - ABSENT
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: DROP DATABASE ‹db› CASCADE
-  -        statement: DROP DATABASE db CASCADE
-  -        statementTag: DROP DATABASE
-  -    targetRanks:
-  -    - 1
-  -    - 3
-  -    - 4
-  -    - 5
-  -    targets:
-  -    - elementProto:
-  -        schemaEntry:
-  -          databaseId: 104
-  -          schemaId: 105
-  -      metadata:
-  -        sourceElementId: 2
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        database:
-  -          databaseId: 104
-  -          dependentObjects:
-  -          - 105
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseComment:
-  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
-  -            when doing decomposition
-  -          databaseId: 104
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRoleSetting:
-  -          databaseId: 104
-  -          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     id: 104
-     modificationTime: {}
-  ...
-       version: 2
-     state: DROP
-  -  version: "6"
-  +  version: "7"
+delete descriptor #104
 delete descriptor #105
+deleting zone config for #104
 commit transaction #3
 # end PostCommitPhase
 
@@ -3191,7 +3129,7 @@ commit transaction #1
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 47 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 48 MutationType ops
 create job #2: "GC for dropping descriptors 114 117 118 115 116 119 120 121 122 125 and parent database 111"
   descriptor IDs: [114 117 118 115 116 119 120 121 122 125]
 write *eventpb.DropDatabase to event log for descriptor #111: DROP DATABASE ‹db1› CASCADE
@@ -3199,79 +3137,6 @@ write *eventpb.DropType to event log for descriptor #124: DROP DATABASE ‹db1�
 update progress of schema change job #1
 set schema change job #1 to non-cancellable
 delete scheduleId: <redacted>
-upsert descriptor #111
-   database:
-  -  declarativeSchemaChangerState:
-  -    authorization: {}
-  -    currentStatuses:
-  -    - ABSENT
-  -    - ABSENT
-  -    - DROPPED
-  -    - ABSENT
-  -    - ABSENT
-  -    jobId: "1"
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: DROP DATABASE ‹db1› CASCADE
-  -        statement: DROP DATABASE db1 CASCADE
-  -        statementTag: DROP DATABASE
-  -    targetRanks:
-  -    - 48
-  -    - 134
-  -    - 136
-  -    - 137
-  -    - 138
-  -    targets:
-  -    - elementProto:
-  -        schemaEntry:
-  -          databaseId: 111
-  -          schemaId: 112
-  -      metadata:
-  -        sourceElementId: 2
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        schemaEntry:
-  -          databaseId: 111
-  -          schemaId: 113
-  -      metadata:
-  -        sourceElementId: 2
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        database:
-  -          databaseId: 111
-  -          dependentObjects:
-  -          - 112
-  -          - 113
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseComment:
-  -          comment: TODO(fqazi) Comments are not currently fetched from system.comments
-  -            when doing decomposition
-  -          databaseId: 111
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        databaseRoleSetting:
-  -          databaseId: 111
-  -          roleName: TODO(fqazi) Roles are not currently fetched from database_role_settings
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-     id: 111
-     modificationTime: {}
-  ...
-       version: 2
-     state: DROP
-  -  version: "3"
-  +  version: "4"
 upsert descriptor #114
   ...
      createAsOfTime:
@@ -4922,6 +4787,7 @@ upsert descriptor #125
   -  version: "2"
   +  version: "3"
      viewQuery: (SELECT 'a':::sc1.typ::STRING AS k, n2, n1 FROM db1.sc1.v4)
+delete descriptor #111
 delete descriptor #112
 delete descriptor #113
 delete descriptor #123

@@ -87,6 +87,9 @@ type CatalogChangeBatcher interface {
 
 	// ValidateAndRun executes the updates after validating the catalog changes.
 	ValidateAndRun(ctx context.Context) error
+
+	// DeleteZoneConfig deletes the zone config for a database entry.
+	DeleteZoneConfig(ctx context.Context, dbID descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
