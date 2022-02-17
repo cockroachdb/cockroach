@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -195,6 +197,7 @@ func TestRandomParquetExports(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
+	defer utilccl.TestingEnableEnterprise()()
 	dbName := "rand"
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase:   dbName,
@@ -218,6 +221,7 @@ func TestRandomParquetExports(t *testing.T) {
 		)
 
 		stmts := randgen.RandCreateTables(rng, tablePrefix, numTables,
+			false, /* isMultiRegion */
 			randgen.PartialIndexMutator,
 			randgen.ForeignKeyMutator,
 		)
