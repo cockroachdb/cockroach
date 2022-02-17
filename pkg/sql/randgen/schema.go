@@ -13,9 +13,11 @@ package randgen
 import (
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"math/rand"
 	"strings"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -69,7 +71,7 @@ func RandCreateType(rng *rand.Rand, name, alphabet string) tree.Statement {
 
 // RandCreateTables creates random table definitions.
 func RandCreateTables(
-	rng *rand.Rand, prefix string, num int, mutators ...Mutator,
+	rng *rand.Rand, prefix string, num int, isMultiRegion bool, mutators ...Mutator,
 ) []tree.Statement {
 	if num < 1 {
 		panic("at least one table required")
@@ -78,7 +80,7 @@ func RandCreateTables(
 	// Make some random tables.
 	tables := make([]tree.Statement, num)
 	for i := 0; i < num; i++ {
-		t := RandCreateTable(rng, prefix, i+1)
+		t := RandCreateTable(rng, prefix, i+1, isMultiRegion)
 		tables[i] = t
 	}
 
@@ -90,15 +92,23 @@ func RandCreateTables(
 }
 
 // RandCreateTable creates a random CreateTable definition.
-func RandCreateTable(rng *rand.Rand, prefix string, tableIdx int) *tree.CreateTable {
-	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx, nil /* generateColumnIndexNumber */)
+func RandCreateTable(
+	rng *rand.Rand, prefix string, tableIdx int, isMultiRegion bool,
+) *tree.CreateTable {
+	return RandCreateTableWithColumnIndexNumberGenerator(rng, prefix, tableIdx,
+		isMultiRegion, nil /* generateColumnIndexNumber */)
 }
 
 // RandCreateTableWithColumnIndexNumberGenerator creates a random CreateTable definition
 // using the passed function to generate column index numbers for column names.
 func RandCreateTableWithColumnIndexNumberGenerator(
-	rng *rand.Rand, prefix string, tableIdx int, generateColumnIndexNumber func() int64,
+	rng *rand.Rand,
+	prefix string,
+	tableIdx int,
+	isMultiRegion bool,
+	generateColumnIndexNumber func() int64,
 ) *tree.CreateTable {
+	tableName := fmt.Sprintf("%s%d", prefix, tableIdx)
 	// columnDefs contains the list of Columns we'll add to our table.
 	nColumns := randutil.RandIntInRange(rng, 1, 20)
 	columnDefs := make([]*tree.ColumnTableDef, 0, nColumns)
@@ -133,7 +143,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 
 	// Make a random primary key with high likelihood.
 	if rng.Intn(8) != 0 {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, false /* allowExpressions */)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, true /* isPrimaryIndex */, isMultiRegion)
 		if ok && !indexDef.Inverted {
 			defs = append(defs, &tree.UniqueConstraintTableDef{
 				PrimaryKey:    true,
@@ -156,7 +166,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	// Make indexes.
 	nIdxs := rng.Intn(10)
 	for i := 0; i < nIdxs; i++ {
-		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, true /* allowExpressions */)
+		indexDef, ok := randIndexTableDefFromCols(rng, columnDefs, tableName, false /* isPrimaryIndex */, isMultiRegion)
 		if !ok {
 			continue
 		}
@@ -173,7 +183,7 @@ func RandCreateTableWithColumnIndexNumberGenerator(
 	}
 
 	ret := &tree.CreateTable{
-		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("%s%d", prefix, tableIdx))),
+		Table: tree.MakeUnqualifiedTableName(tree.Name(tableName)),
 		Defs:  defs,
 	}
 
@@ -243,6 +253,7 @@ func generateInsertStmtVals(rng *rand.Rand, colTypes []*types.T, nullable []bool
 //
 // If numRowsInserted == 0, PopulateTableWithRandomData or RandDatum couldn't
 // handle this table's schema. Consider increasing numInserts or filing a bug.
+// TODO(harding): Populate data in partitions.
 func PopulateTableWithRandData(
 	rng *rand.Rand, db *gosql.DB, tableName string, numInserts int,
 ) (numRowsInserted int, err error) {
@@ -400,7 +411,7 @@ func randComputedColumnTableDef(
 ) *tree.ColumnTableDef {
 	newDef := randColumnTableDef(rng, tableIdx, colIdx)
 	newDef.Computed.Computed = true
-	newDef.Computed.Virtual = (rng.Intn(2) == 0)
+	newDef.Computed.Virtual = rng.Intn(2) == 0
 
 	expr, typ, nullability, _ := randExpr(rng, normalColDefs, true /* nullOk */)
 	newDef.Computed.Expr = expr
@@ -414,7 +425,11 @@ func randComputedColumnTableDef(
 // subset of the given columns and a random direction. If unsuccessful, ok=false
 // is returned.
 func randIndexTableDefFromCols(
-	rng *rand.Rand, columnTableDefs []*tree.ColumnTableDef, allowExpressions bool,
+	rng *rand.Rand,
+	columnTableDefs []*tree.ColumnTableDef,
+	tableName string,
+	isPrimaryIndex bool,
+	isMultiRegion bool,
 ) (def tree.IndexTableDef, ok bool) {
 	cpy := make([]*tree.ColumnTableDef, len(columnTableDefs))
 	copy(cpy, columnTableDefs)
@@ -441,6 +456,11 @@ func randIndexTableDefFromCols(
 		}
 		eligibleExprIndexRefs = eligibleExprIndexRefs[:i]
 	}
+	// prefix is the list of columns in the index up until an inverted column, if
+	// one exists. stopPrefix is set to true if we find an inverted columnn in the
+	// index, after which we stop adding columns to the prefix.
+	var prefix tree.NameList
+	var stopPrefix bool
 
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
@@ -451,7 +471,7 @@ func randIndexTableDefFromCols(
 		}
 
 		// Replace the column with an expression 10% of the time.
-		if allowExpressions && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
+		if !isPrimaryIndex && len(eligibleExprIndexRefs) > 0 && rng.Intn(10) == 0 {
 			var expr tree.Expr
 			// Do not allow NULL in expressions to avoid expressions that have
 			// an ambiguous type.
@@ -460,6 +480,7 @@ func randIndexTableDefFromCols(
 			removeColsFromExprIndexRefCols(referencedCols)
 			elem.Expr = expr
 			elem.Column = ""
+			stopPrefix = true
 		}
 
 		// The non-terminal index columns must be indexable.
@@ -471,12 +492,119 @@ func randIndexTableDefFromCols(
 		// index an inverted index.
 		if colinfo.ColumnTypeIsInvertedIndexable(semType) {
 			def.Inverted = true
+			stopPrefix = true
+		}
+
+		if !stopPrefix {
+			prefix = append(prefix, cols[i].Name)
 		}
 
 		def.Columns = append(def.Columns, elem)
 	}
 
+	// Partition the secondary index in ~10% of cases. Multi-region databases do
+	// not support partitioning.
+	// TODO(harding): Allow partitioning the primary index. This will require
+	// massaging the syntax.
+	if !isMultiRegion && !isPrimaryIndex && len(prefix) > 0 && rng.Intn(10) == 0 {
+		def.PartitionByIndex = &tree.PartitionByIndex{PartitionBy: &tree.PartitionBy{}}
+		prefixLen := 1 + rng.Intn(len(prefix))
+		def.PartitionByIndex.Fields = prefix[:prefixLen]
+
+		// Add up to 10 partitions.
+		numPartitions := rng.Intn(10) + 1
+		numExpressions := rng.Intn(10) + 1
+		for i := 0; i < numPartitions; i++ {
+			var partition tree.ListPartition
+			partition.Name = tree.UnrestrictedName(fmt.Sprintf("%s_part_%d", tableName, i))
+			// Add up to 10 expressions in each partition.
+			for j := 0; j < numExpressions; j++ {
+				// Use a tuple to contain the expressions in case there are multiple
+				// partitioning columns.
+				var t tree.Tuple
+				t.Exprs = make([]tree.Expr, prefixLen)
+				for k := 0; k < prefixLen; k++ {
+					colType := tree.MustBeStaticallyKnownType(cols[k].Type)
+					t.Exprs[k] = RandDatum(rng, colType, cols[k].Nullable.Nullability != tree.NotNull)
+					// Variable expressions are not supported in partitions, and NaN and
+					// infinity are considered variable expressions, so if one is
+					// generated then regenerate the value.
+					if t.Exprs[k].(tree.Datum) == tree.DNull {
+						continue
+					}
+					switch colType.Family() {
+					case types.FloatFamily:
+						d := float64(*t.Exprs[k].(tree.Datum).(*tree.DFloat))
+						if math.IsNaN(d) || math.IsInf(d, 1) || math.IsInf(d, -1) {
+							k--
+						}
+					case types.DecimalFamily:
+						d := t.Exprs[k].(tree.Datum).(*tree.DDecimal).Decimal
+						if d.Form == apd.NaN || d.Form == apd.Infinite {
+							k--
+						}
+					}
+				}
+				// Don't include the partition if it matches previous partition values.
+				// Include the expressions from this partition, so we also check for
+				// duplicates there.
+				isDup, err := isDuplicateExpr(t.Exprs, append(def.PartitionByIndex.List, partition))
+				if err != nil {
+					return def, false
+				}
+				if isDup {
+					continue
+				}
+				partition.Exprs = append(partition.Exprs, &t)
+			}
+
+			if len(partition.Exprs) > 0 {
+				def.PartitionByIndex.List = append(def.PartitionByIndex.List, partition)
+			}
+		}
+		// Add a default partition 50% of the time.
+		if rng.Intn(2) == 0 {
+			var partition tree.ListPartition
+			partition.Name = "DEFAULT"
+			var t tree.Tuple
+			t.Exprs = make([]tree.Expr, prefixLen)
+			for i := 0; i < prefixLen; i++ {
+				t.Exprs[i] = tree.DefaultVal{}
+			}
+			partition.Exprs = append(partition.Exprs, &t)
+			def.PartitionByIndex.List = append(def.PartitionByIndex.List, partition)
+		}
+	}
+
 	return def, true
+}
+
+func isDuplicateExpr(e tree.Exprs, list []tree.ListPartition) (bool, error) {
+	// Iterate over the partitions.
+	for _, p := range list {
+		// Iterate over the tuples of expressions in the partition.
+		for _, tpe := range p.Exprs {
+			tp, ok := tpe.(*tree.Tuple)
+			if !ok || len(tp.Exprs) != len(e) {
+				continue
+			}
+			n := 0
+			// Check each expression in the tuple.
+			for ; n < len(tp.Exprs); n++ {
+				cmp, err := tp.Exprs[n].(tree.Datum).CompareError(&tree.EvalContext{}, e[n].(tree.Datum))
+				if err != nil {
+					return false, err
+				}
+				if cmp != 0 {
+					break
+				}
+			}
+			if n == len(tp.Exprs) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // nonComputedColumnTableDefs returns a slice containing all the columns in cols
