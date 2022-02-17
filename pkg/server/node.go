@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -232,6 +233,8 @@ type Node struct {
 	// Turns `Node.writeNodeStatus` into a no-op. This is a hack to enable the
 	// COCKROACH_DEBUG_TS_IMPORT_FILE env var.
 	suppressNodeStatus syncutil.AtomicBool
+
+	testingErrorEvent func(context.Context, *roachpb.BatchRequest, error)
 }
 
 var _ roachpb.InternalServer = &Node{}
@@ -374,6 +377,7 @@ func NewNode(
 		tenantUsage:           tenantUsage,
 		tenantSettingsWatcher: tenantSettingsWatcher,
 		spanConfigAccessor:    spanConfigAccessor,
+		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = n.admissionController
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
@@ -1021,11 +1025,11 @@ func (n *Node) Batch(
 	}
 
 	handle, err := n.admissionController.AdmitKVWork(ctx, tenantID, args)
-	if err != nil {
-		return nil, err
+	var br *roachpb.BatchResponse
+	if err == nil {
+		br, err = n.batchInternal(ctx, tenantID, args)
+		n.admissionController.AdmittedKVWorkDone(handle)
 	}
-	br, err := n.batchInternal(ctx, tenantID, args)
-	n.admissionController.AdmittedKVWorkDone(handle)
 
 	// We always return errors via BatchResponse.Error so structure is
 	// preserved; plain errors are presumed to be from the RPC
@@ -1040,6 +1044,9 @@ func (n *Node) Batch(
 			)
 		}
 		br.Error = roachpb.NewError(err)
+	}
+	if buildutil.CrdbTestBuild && br.Error != nil && n.testingErrorEvent != nil {
+		n.testingErrorEvent(ctx, args, errors.DecodeError(ctx, br.Error.EncodedError))
 	}
 	return br, nil
 }

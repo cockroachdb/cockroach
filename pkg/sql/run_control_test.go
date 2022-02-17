@@ -22,11 +22,17 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -724,4 +730,122 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 		t.Fatal(err)
 	}
 	return db
+}
+
+// TestTenantStatementTimeoutAdmissionQueueCancelation tests that a KV request
+// that is canceled via a statement timeout is properly removed from the
+// admission control queue. A testing filter is used to "park" a small number of
+// requests thereby consuming those CPU "slots" and testing knobs are used to
+// tightly control the number of entries in the queue so that we guarantee our
+// main statement with a timeout is blocked.
+func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "times out under stress")
+
+	require.True(t, buildutil.CrdbTestBuild)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tenantID := serverutils.TestTenantID()
+
+	numBlockers := 4
+
+	// We can't get the tableID programmatically here, checked below with assert.
+	const tableID = 104
+	sqlEnc := keys.MakeSQLCodec(tenantID)
+	tableKey := sqlEnc.TablePrefix(tableID)
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	unblockClientCh := make(chan struct{})
+	qBlockersCh := make(chan struct{})
+
+	var wg sync.WaitGroup
+	// +1 because we want to wait until all the queue blockers and the main
+	// client goroutine finish.
+	wg.Add(numBlockers + 1)
+
+	matchBatch := func(ctx context.Context, req *roachpb.BatchRequest) bool {
+		tid, ok := roachpb.TenantFromContext(ctx)
+		if ok && tid == tenantID && len(req.Requests) > 0 {
+			scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+			if ok && tableSpan.ContainsKey(scan.Key) {
+				return true
+			}
+		}
+		return false
+	}
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			AdmissionControl: &admission.Options{
+				MaxCPUSlots: numBlockers,
+				// During testing if CPU isn't responsive and skipEnforcement
+				// turns off admission control queuing behavior, for this test
+				// to be reliable we need that to not happen.
+				TestingDisableSkipEnforcement: true,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
+					if matchBatch(ctx, &req) {
+						// Notify we're blocking.
+						unblockClientCh <- struct{}{}
+						<-qBlockersCh
+					}
+					return nil
+				},
+				TestingResponseErrorEvent: func(ctx context.Context, req *roachpb.BatchRequest, err error) {
+					if matchBatch(ctx, req) {
+						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+						if ok && tableSpan.ContainsKey(scan.Key) {
+							cancel()
+							wg.Done()
+						}
+					}
+				},
+			},
+		},
+	}
+
+	kvserver, _, _ := serverutils.StartServer(t, params)
+	defer kvserver.Stopper().Stop(context.Background())
+
+	tenant, db := serverutils.StartTenant(t, kvserver, base.TestTenantArgs{TenantID: tenantID})
+	defer db.Close()
+
+	r1 := sqlutils.MakeSQLRunner(db)
+	r1.Exec(t, `CREATE TABLE foo (t int)`)
+
+	row := r1.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'foo'`)
+	var id int64
+	row.Scan(&id)
+	require.Equal(t, tableID, int(id))
+
+	makeTenantConn := func() *sqlutils.SQLRunner {
+		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper()))
+	}
+
+	blockers := make([]*sqlutils.SQLRunner, numBlockers)
+	for i := 0; i < numBlockers; i++ {
+		blockers[i] = makeTenantConn()
+	}
+	client := makeTenantConn()
+	client.Exec(t, "SET statement_timeout = 500")
+	for _, r := range blockers {
+		go func(r *sqlutils.SQLRunner) {
+			defer wg.Done()
+			r.Exec(t, `SELECT * FROM foo`)
+		}(r)
+	}
+	// Wait till all blockers are parked.
+	for i := 0; i < numBlockers; i++ {
+		<-unblockClientCh
+	}
+	client.ExpectErr(t, "timeout", `SELECT * FROM foo`)
+	// Unblock the blockers.
+	for i := 0; i < numBlockers; i++ {
+		qBlockersCh <- struct{}{}
+	}
+	wg.Wait()
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
 }
