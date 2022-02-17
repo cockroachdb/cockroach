@@ -195,5 +195,18 @@ func Open(ctx context.Context, loc Location, opts ...ConfigOption) (*Pebble, err
 	if cfg.Settings == nil {
 		cfg.Settings = cluster.MakeClusterSettings()
 	}
-	return NewPebble(ctx, cfg.PebbleConfig)
+	p, err := NewPebble(ctx, cfg.PebbleConfig)
+	if err != nil {
+		return nil, err
+	}
+	// Set the active cluster version, ensuring the engine's format
+	// major version is ratcheted sufficiently high to match the
+	// settings cluster version.
+	if v := p.settings.Version.ActiveVersionOrEmpty(ctx).Version; v != (roachpb.Version{}) {
+		if err := p.SetMinVersion(v); err != nil {
+			p.Close()
+			return nil, err
+		}
+	}
+	return p, nil
 }
