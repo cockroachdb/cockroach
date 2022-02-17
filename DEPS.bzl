@@ -1327,10 +1327,10 @@ def go_deps():
         name = "com_github_cockroachdb_stress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/stress",
-        sha256 = "bd0dea0ebea9ea71aa12e5918fa8b61a78a548d54e8e9c126aa285c1ae84d3e4",
-        strip_prefix = "github.com/cockroachdb/stress@v0.0.0-20220119200057-43d99a9e6d7f",
+        sha256 = "a516f84f8e1ad554357b7e60083dddf092d5ac1e80e311de47c46eeac28a4453",
+        strip_prefix = "github.com/cockroachdb/stress@v0.0.0-20220217190341-94cf65c2a29f",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/stress/com_github_cockroachdb_stress-v0.0.0-20220119200057-43d99a9e6d7f.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/stress/com_github_cockroachdb_stress-v0.0.0-20220217190341-94cf65c2a29f.zip",
         ],
     )
     go_repository(
