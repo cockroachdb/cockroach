@@ -11,6 +11,10 @@ package sqlproxyccl
 import (
 	"context"
 	"net"
+
+	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/interceptor"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/errors"
 )
 
 // forwarder is used to forward pgwire messages from the client to the server,
@@ -31,8 +35,27 @@ type forwarder struct {
 	// connection. In the context of a connection migration, serverConn is only
 	// replaced once the session has successfully been deserialized, and the
 	// old connection will be closed.
+	//
+	// All reads from these connections must go through the interceptors. It is
+	// not safe to read from these directly as the interceptors may have
+	// buffered data.
 	clientConn net.Conn // client <-> proxy
 	serverConn net.Conn // proxy <-> server
+
+	// clientInterceptor and serverInterceptor provides a convenient way to
+	// read and forward Postgres messages, while minimizing IO reads and memory
+	// allocations.
+	//
+	// These interceptors have to match clientConn and serverConn. See comment
+	// above on when those fields will be updated.
+	//
+	// TODO(jaylim-crl): Add updater functions that sets both conn and
+	// interceptor fields at the same time. At the moment, there's no use case
+	// besides the forward function. When connection migration happens, we
+	// will need to create a new serverInterceptor. We should remember to close
+	// old serverConn as well.
+	clientInterceptor *interceptor.BackendInterceptor  // clientConn -> serverConn
+	serverInterceptor *interceptor.FrontendInterceptor // serverConn -> clientConn
 
 	// errChan is a buffered channel that contains the first forwarder error.
 	// This channel may receive nil errors.
@@ -42,51 +65,52 @@ type forwarder struct {
 // forward returns a new instance of forwarder, and starts forwarding messages
 // from clientConn to serverConn. When this is called, it is expected that the
 // caller passes ownership of serverConn to the forwarder, which implies that
-// the forwarder will clean up serverConn.
+// the forwarder will clean up serverConn. clientConn and serverConn must not
+// be nil in all cases except for testing.
 //
-// All goroutines spun up must check on f.ctx to prevent leaks, if possible. If
-// there was an error within the goroutines, the forwarder will be closed, and
-// the first error can be found in f.errChan.
-//
-// clientConn and serverConn must not be nil in all cases except testing.
-//
-// Note that callers MUST call Close in all cases, and should not rely on the
-// fact that ctx was passed into forward(). There could be a possibility where
-// the top-level context was cancelled, but the forwarder has not cleaned up.
+// Note that callers MUST call Close in all cases, even if ctx was cancelled.
 func forward(ctx context.Context, clientConn, serverConn net.Conn) *forwarder {
 	ctx, cancelFn := context.WithCancel(ctx)
 
 	f := &forwarder{
-		ctx:        ctx,
-		ctxCancel:  cancelFn,
-		clientConn: clientConn,
-		serverConn: serverConn,
-		errChan:    make(chan error, 1),
+		ctx:       ctx,
+		ctxCancel: cancelFn,
+		errChan:   make(chan error, 1),
 	}
 
-	go func() {
-		// Block until context is done.
-		<-f.ctx.Done()
+	// The net.Conn object for the client is switched to a net.Conn that
+	// unblocks Read every second on idle to check for exit conditions.
+	// This is mainly used to unblock the request processor whenever the
+	// forwarder has stopped, or a transfer has been requested.
+	clientConn = pgwire.NewReadTimeoutConn(clientConn, func() error {
+		// Context was cancelled.
+		if f.ctx.Err() != nil {
+			return f.ctx.Err()
+		}
+		// TODO(jaylim-crl): Check for transfer state here.
+		return nil
+	})
 
-		// Close the forwarder to clean up. This goroutine is temporarily here
-		// because the only way to unblock io.Copy is to close one of the ends,
-		// which will be done through closing the forwarder. Once we replace
-		// io.Copy with the interceptors, we could use f.ctx directly, and no
-		// longer need this goroutine.
-		//
-		// Note that if f.Close was called externally, this will result
-		// in two f.Close calls in total, i.e. one externally, and one here
-		// once the context gets cancelled. This is fine for now since we'll
-		// be removing this soon anyway.
-		f.Close()
-	}()
+	f.setClientConn(clientConn)
+	f.setServerConn(serverConn)
 
-	// Copy all pgwire messages from frontend to backend connection until we
-	// encounter an error or shutdown signal.
+	// Start request (client to server) and response (server to client)
+	// processors. We will copy all pgwire messages/ from client to server
+	// (and vice-versa) until we encounter an error or a shutdown signal
+	// (i.e. context cancellation).
 	go func() {
 		defer f.Close()
 
-		err := ConnectionCopy(f.serverConn, f.clientConn)
+		err := wrapClientToServerError(f.handleClientToServer())
+		select {
+		case f.errChan <- err: /* error reported */
+		default: /* the channel already contains an error */
+		}
+	}()
+	go func() {
+		defer f.Close()
+
+		err := wrapServerToClientError(f.handleServerToClient())
 		select {
 		case f.errChan <- err: /* error reported */
 		default: /* the channel already contains an error */
@@ -104,4 +128,79 @@ func (f *forwarder) Close() {
 	// Since Close is idempotent, we'll ignore the error from Close in case it
 	// has already been closed.
 	f.serverConn.Close()
+}
+
+// handleClientToServer handles the communication from the client to the server.
+// This returns a context cancellation error whenever the forwarder's context
+// is cancelled, or whenever forwarding fails. When ForwardMsg gets blocked on
+// Read, we will unblock that through our custom readTimeoutConn wrapper, which
+// gets triggered when context is cancelled.
+func (f *forwarder) handleClientToServer() error {
+	for f.ctx.Err() == nil {
+		if _, err := f.clientInterceptor.ForwardMsg(f.serverConn); err != nil {
+			return err
+		}
+	}
+	return f.ctx.Err()
+}
+
+// handleServerToClient handles the communication from the server to the client.
+// This returns a context cancellation error whenever the forwarder's context
+// is cancelled, or whenever forwarding fails. When ForwardMsg gets blocked on
+// Read, we will unblock that by closing serverConn through f.Close().
+func (f *forwarder) handleServerToClient() error {
+	for f.ctx.Err() == nil {
+		if _, err := f.serverInterceptor.ForwardMsg(f.clientConn); err != nil {
+			return err
+		}
+	}
+	return f.ctx.Err()
+}
+
+// setClientConn is a convenient helper to update clientConn, and will also
+// create a matching interceptor for the given connection. It is the caller's
+// responsibility to close the old connection before calling this, or there
+// may be a leak.
+func (f *forwarder) setClientConn(clientConn net.Conn) {
+	f.clientConn = clientConn
+	f.clientInterceptor = interceptor.NewBackendInterceptor(f.clientConn)
+}
+
+// setServerConn is a convenient helper to update serverConn, and will also
+// create a matching interceptor for the given connection. It is the caller's
+// responsibility to close the old connection before calling this, or there
+// may be a leak.
+func (f *forwarder) setServerConn(serverConn net.Conn) {
+	f.serverConn = serverConn
+	f.serverInterceptor = interceptor.NewFrontendInterceptor(f.serverConn)
+}
+
+// wrapClientToServerError overrides client to server errors for external
+// consumption.
+//
+// TODO(jaylim-crl): We don't send any of these to the client today,
+// unfortunately. At the moment, this is only used for metrics. See TODO in
+// proxy_handler about sending safely to avoid corrupted packets. Handle these
+// errors in a friendly manner.
+func wrapClientToServerError(err error) error {
+	if err == nil ||
+		errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
+		return nil
+	}
+	return newErrorf(codeClientDisconnected, "copying from client to target server: %v", err)
+}
+
+// wrapServerToClientError overrides server to client errors for external
+// consumption.
+//
+// TODO(jaylim-crl): We don't send any of these to the client today,
+// unfortunately. At the moment, this is only used for metrics. See TODO in
+// proxy_handler about sending safely to avoid corrupted packets. Handle these
+// errors in a friendly manner.
+func wrapServerToClientError(err error) error {
+	if err == nil ||
+		errors.IsAny(err, context.Canceled, context.DeadlineExceeded) {
+		return nil
+	}
+	return newErrorf(codeBackendDisconnected, "copying from target server to client: %s", err)
 }
