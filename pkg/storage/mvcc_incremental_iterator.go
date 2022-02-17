@@ -533,6 +533,34 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 	}
 }
 
+// NextKeyIgnoringTime returns the next distinct key that would be encountered
+// in a non-incremental iteration by moving the underlying non-TBI iterator
+// forward. This method throws an error if it encounters an intent in the time
+// range (startTime, endTime] or sees an inline value.
+func (i *MVCCIncrementalIterator) NextKeyIgnoringTime() {
+	i.iter.NextKey()
+	for {
+		if !i.checkValidAndSaveErr() {
+			return
+		}
+
+		if err := i.initMetaAndCheckForIntentOrInlineError(); err != nil {
+			return
+		}
+
+		// We have encountered an intent but it does not lie in the timestamp span
+		// (startTime, endTime] so we do not throw an error, and attempt to move to
+		// the next valid KV.
+		if i.meta.Txn != nil && i.intentPolicy != MVCCIncrementalIterIntentPolicyEmit {
+			i.Next()
+			continue
+		}
+
+		// We have a valid KV or an intent to emit.
+		return
+	}
+}
+
 // NumCollectedIntents returns number of intents encountered during iteration.
 // This is only the case when intent aggregation is enabled, otherwise it is
 // always 0.
