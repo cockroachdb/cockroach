@@ -18,15 +18,21 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -724,4 +730,112 @@ func getUserConn(t *testing.T, username string, server serverutils.TestServerInt
 		t.Fatal(err)
 	}
 	return db
+}
+func TestTenantStatementTimeoutAdmissionQueueCancelation(t *testing.T) {
+	require.True(t, buildutil.CrdbTestBuild)
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tenantID := serverutils.TestTenantID()
+
+	numBlockers := 4
+
+	// We can't get the tableID programmatically here.
+	const tableID = 104
+	var counter int64
+	sqlEnc := keys.MakeSQLCodec(tenantID)
+	tableKey := sqlEnc.TablePrefix(tableID)
+	tableSpan := roachpb.Span{Key: tableKey, EndKey: tableKey.PrefixEnd()}
+
+	unblockClientCh := make(chan struct{})
+	qBlockersCh := make(chan struct{})
+
+	var wg sync.WaitGroup
+	// we want to wait for all the queue blockers to come back and the
+	wg.Add(numBlockers + 1)
+
+	matchBatch := func(ctx context.Context, req *roachpb.BatchRequest) bool {
+		tid, ok := roachpb.TenantFromContext(ctx)
+		if ok && tid == tenantID && len(req.Requests) > 0 {
+			scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+			if ok && tableSpan.ContainsKey(scan.Key) {
+				return true
+			}
+		}
+		return false
+	}
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			AdmissionControl: &admission.Options{
+				MaxCPUSlots: numBlockers,
+				// During testing if CPU isn't responsive and skipEnforcement turns off admission control queuing behavior,
+				// for this test to be reliable we need that to not happen.
+				DisableSkipEnforcement: true,
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, req roachpb.BatchRequest) *roachpb.Error {
+					if matchBatch(ctx, &req) {
+						c := atomic.AddInt64(&counter, 1)
+						// only unblock 2nd time through
+						if c == int64(numBlockers) {
+							unblockClientCh <- struct{}{}
+						}
+						<-qBlockersCh
+					}
+					return nil
+				},
+				TestingResponseErrorEvent: func(ctx context.Context, req *roachpb.BatchRequest, err error) {
+					if matchBatch(ctx, req) {
+						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
+						if ok && tableSpan.ContainsKey(scan.Key) {
+							cancel()
+							wg.Done()
+						}
+					}
+				},
+			},
+		},
+	}
+
+	kvserver, _, _ := serverutils.StartServer(t, params)
+	defer kvserver.Stopper().Stop(context.Background())
+
+	tenant, db := serverutils.StartTenant(t, kvserver, base.TestTenantArgs{TenantID: tenantID})
+	defer db.Close()
+
+	r1 := sqlutils.MakeSQLRunner(db)
+	r1.Exec(t, `CREATE TABLE foo (t int)`)
+
+	row := r1.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'foo'`)
+	var id int64
+	row.Scan(&id)
+	require.Equal(t, tableID, int(id))
+
+	makeTenantConn := func() *sqlutils.SQLRunner {
+		return sqlutils.MakeSQLRunner(serverutils.OpenDBConn(t, tenant.SQLAddr(), "" /* useDatabase */, false /* insecure */, kvserver.Stopper()))
+	}
+
+	blockers := make([]*sqlutils.SQLRunner, numBlockers)
+	for i := 0; i < numBlockers; i++ {
+		blockers[i] = makeTenantConn()
+	}
+	client := makeTenantConn()
+	client.Exec(t, "SET statement_timeout = 500")
+	for _, r := range blockers {
+		go func(r *sqlutils.SQLRunner) {
+			defer wg.Done()
+			r.Exec(t, `SELECT * FROM foo`)
+		}(r)
+	}
+	// wait till queue is full
+	<-unblockClientCh
+	client.ExpectErr(t, "timeout", `SELECT * FROM foo`)
+	// unblock waiters
+	for i := 0; i < numBlockers; i++ {
+		qBlockersCh <- struct{}{}
+	}
+	wg.Wait()
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
 }
