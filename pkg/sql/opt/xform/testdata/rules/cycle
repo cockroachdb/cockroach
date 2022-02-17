@@ -1,0 +1,18 @@
+exec-ddl
+CREATE TABLE ab (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX (b)
+)
+----
+
+# This test ensures that a memo cycle does not cause a stack overflow. Instead,
+# the cycle is detected and the optimizer throws an internal error. The cycle is
+# created by the test-only exploration rule MemoCycleTestRelRule.
+expropt
+(MemoCycleTestRel
+    (Scan [ (Table "ab") (Cols "a,b") ])
+    [ (Eq (Var "b") (Const 1 "int")) ]
+)
+----
+error: memo group optimization passes surpassed limit of 100000; there may be a cycle in the memo

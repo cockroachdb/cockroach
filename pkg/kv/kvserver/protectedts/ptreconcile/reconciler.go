@@ -30,11 +30,8 @@ import (
 
 // ReconcileInterval is the interval between two reconciliations of protected
 // timestamp records.
-//
-// TODO(adityamaru): Set to TenantReadOnly once the work for #73349 is
-// completed.
 var ReconcileInterval = settings.RegisterDurationSetting(
-	settings.TenantWritable,
+	settings.TenantReadOnly,
 	"kv.protectedts.reconciliation.interval",
 	"the frequency for reconciling jobs with protected timestamp records",
 	5*time.Minute,

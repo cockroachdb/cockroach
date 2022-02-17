@@ -1303,13 +1303,3 @@ define FakeRel {
 define FakeRelPrivate {
     Props RelPropsPtr
 }
-
-# NormCycleTestRel is a relational operator for testing that normalization rule
-# cycles are detected by the Factory and a stack overflow is prevented. Two
-# rules for this expression, NormCycleTestRelTrueToFalse and
-# NormCycleTestRelFalseToTrue, create a normalization rule cycle. See the cycle
-# test file for tests that use this expression.
-[Relational]
-define NormCycleTestRel {
-    Scalar ScalarExpr
-}

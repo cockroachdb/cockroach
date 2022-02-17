@@ -1421,11 +1421,10 @@ func (txn *Txn) replaceRootSenderIfTxnAbortedLocked(
 	// transaction, even once the proto is reset.
 	txn.recordPreviousTxnIDLocked(txn.mu.ID)
 	txn.mu.ID = newTxn.ID
-	// Create a new txn sender. We need to preserve the stepping mode,
-	// if any.
-	// prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
+	// Create a new txn sender. We need to preserve the stepping mode, if any.
+	prevSteppingMode := txn.mu.sender.GetSteppingMode(ctx)
 	txn.mu.sender = txn.db.factory.RootTransactionalSender(newTxn, txn.mu.userPriority)
-	// txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
+	txn.mu.sender.ConfigureStepping(ctx, prevSteppingMode)
 }
 
 func (txn *Txn) recordPreviousTxnIDLocked(prevTxnID uuid.UUID) {
