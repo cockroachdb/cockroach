@@ -279,7 +279,7 @@ func (c *conn) serveImpl(
 
 	var sentDrainSignal bool
 	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = newReadTimeoutConn(c.conn, func() error {
+	c.conn = NewReadTimeoutConn(c.conn, func() error {
 		// If the context was canceled, it's time to stop reading. Either a
 		// higher-level server or the command processor have canceled us.
 		if ctx.Err() != nil {
@@ -1745,7 +1745,8 @@ type readTimeoutConn struct {
 	checkExitConds func() error
 }
 
-func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
+// NewReadTimeoutConn wraps the given connection with a readTimeoutConn.
+func NewReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	return &readTimeoutConn{
 		Conn:           c,
 		checkExitConds: checkExitConds,

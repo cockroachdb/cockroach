@@ -1120,7 +1120,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := newReadTimeoutConn(c, func() error { return ctx.Err() })
+			readTimeoutConn := NewReadTimeoutConn(c, func() error { return ctx.Err() })
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
