@@ -54,6 +54,7 @@ regions: <hidden>
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ estimated max memory allocated: 0 B
+        │ estimated max sql temp disk usage: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
@@ -78,7 +79,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVVFu4zYQ_e8pBvOTGFVhUlJcL4sCbrza1m2zXsjGFovKMBRp6hUskVqSahUEPlYv0JMVkpJFvK6VOP2JP2TPDB898x4fdYvmU44CF8GvwXQJW3gTzq9gQ2pt4-uc4LefgjAAY9eZtKQNJdacny3C2evv3dErPv7u3Xz2dnnuM8aYB-0X8wZnQvwYzK-CZfjBafYqBjAPXwchXH6ALTooVUpv44IMit-R48rBUquEjFG6Sd22C2ZpjYI5mMmysk165WCiNKG4RZvZnFDgsukxpDglPWToYEo2zvJ2288jTJoG1plMqUYHpyqvCmkEbLvO0MFFGTeJYYSXUVT_kUZRzVkU1eyxB35zKoZHCLFMwWOg7EfSBh385T3YrCAB7J-_7-JESUvSZkoelLT6y4CmOBXgd5nrG0v3Kc-FS3Tw6v10CsZSCYmqpIVzqu0wk3YggLU8dQuItscWFHENBRVK30Cc5yqJLaUCWLv7dWyTj2RAVbasrIBmfdvWfcLH1c7BLroTzth4Qyj4znm6uDP5J2lL6Zsst6RJD_m-wvf1oC41KAkTLsA0WoKxsbai1cb79iKKmMuiiLHHHggk01NhjaQHms4bGiZNv-2ArWqdYF1sbJzn-9pSTUl1KHmfEE3NfMrBUlFCmpktVCbe0JN1co_q5J6i088qk3cedHs82P1al1u6-W8fPtsI7qER-OglGOE4wd4pBH82gLdPb5cXX97OjDPe3MMuc0ejV-zhZzr6gY993gVjNuZj3w98fiYeXtgTd3D0CLvPOML_gyb_FJoWSlvSQ3-fpAn_-qW56-KUqUIypZKG9qY6tjPbrRykdEPda9SoSif0Tquk_ZsunLe4NpGSsV2Vd8FMdqWmwYdg3gt2-8FuL9jrB3u9YL8f7PeCL74Ar3Zf_RsAAP__XBHl5A==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMVeFu40QQ_s9TjOZPG2GUXdsNuUVIoTkfBOjl5ESHTjiKXHvIWbF3fbtrcFXlsXgBngzZbk_NhbhNEejyw8nM7LeZ-b791rdoPuQocBH8HEyXsIVX4fwKNqTWNr7OCX75IQgDMHadSUvaUGLN-dkinL381h294ONv3sxnr5fnPmOMedB-MW9wJsT3wfwqWIbvnGavYgDz8GUQwuU72KKDUqX0Oi7IoPgVOa4cLLVKyBilm9Rtu2CW1iiYg5ksK9ukVw4mShOKW7SZzQkFLpseQ4pT0kOGDqZk4yxvt_04wqRpYJ3JlGp0cKryqpBGwLbrDB1clHGTGEZ4GUX1b2kU1ZxFUc0ee-BXp2J4hBDLFDwGyr4nbdDBn96CzQoSwP768y5OlLQkbabkQUmrPwxoilMBfpe5vrF0n_JcuEQHr95Op2AslZCoSlo4p9oOM2kHAljLU7eAaHtsQRHXUFCh9A3Eea6S2FIqgLW7X8c2eU8GVGXLygpo1rdt3Sd8XO0c7KI74YyNN4SC75ynizuTv5O2lL7Kckua9JDvK3xfD-pSg5Iw4QJMoyUYG2srWm28ry-iiLksihh77IFAMj0V1kh6oOm8oWHS9NsO2KrWCdbFxsZ5vq8t1ZRUh5L3CdHUzIccLBUlpJnZQmXiDT1ZJ_eoTu4pOv2oMnnnQbfHg92vdbmlm3_24bON4B4agY_-ByP8d_x7p_D_0R_ePvtdXnx6eTPOeHNNu8wdjV6wh5_p6Ds-9nkXjNmYj30_8PmZeHifT9zB0RPuPuOE_wua_FNoWihtSQ_9fZIm_MvPzXwXp0wVkimVNLQ31bGd2W7lIKUb6t6yRlU6oTdaJe3fdOG8xbWJlIztqrwLZrIrNQ0-BPNesNsPdnvBXj_Y6wX7_WC_F3zxCXi1--LvAAAA__8fwO_M
 
 statement ok
 DROP TABLE geo_table
@@ -138,6 +139,7 @@ regions: <hidden>
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ estimated max memory allocated: 0 B
+        │ estimated max sql temp disk usage: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
@@ -162,7 +164,7 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkleFu40QQx7_zFKP50kYYZdd2Q24RUmjOBwF6OTnRoROOItceclbsXd_uGlxVeSxegCdDa7en5koNEf2ARD5sMjP738zMz7O-RfOhRIGr6MdovoY9vIqXV7AjtbXpdUnw03dRHIGx20Ja0oYya87PVvHi5df-5AWffvVmuXi9Pg8ZYyyA7osFozMhvo2WV9E6fue5s6oRLOOXUQyX72CPHkqV0-u0IoPiZ-S48bDWKiNjlHau227DIm9RMA8LWTfWuTceZkoTilu0hS0JBa5djjGlOekxQw9zsmlRdsd-LGHmEtgWMqcWPZyrsqmkEbDvM0MPV3XqHOMEL5Ok_SVPkpYFbmF_s-AXp2p4gpDKHAIGyr4nbdDDH96CLSoSwP74_c7OlLQkbaHko5BWvxnQlOYC_N5zfWPp3sUncIkeXr2dz8FYqiFTjbRwTq0dF9KOBLCuT_0Gov1TG6q0hYoqpW8gLUuVpZZyAaw7_Tq12XsyoBpbN1aA29-lde_wcXPwsLfuwBmb7ggFP3j_HO5C_kraUv6qKC1p0mN-TPg-HrW1BiVhxgUYxxKMTbUVHZvgy4skYY4NcwgGFwSS-akyh_QR06Vrw8zl2xXYUeuB9baxaVkes6WWsuYx8iEQLmY-lGCpqiEvzB4ak-7oGTj5p3D6XhXybgb9gRnsf23rPd389Rz-nwYhOKXBHwcgOG5v7xef3s6MM-7uYZ_5k8kL9vAzn3zDpyHvjSmb8mkYRiE_Ew8v7Jk_etZH-F-0KTylTSulLelxeNykGf_8vzZdF6dUFZOplTR0VNVTJ7PDxkPKd9S_Ro1qdEZvtMq6v-nNZafrHDkZ20d5byxkH3IJPhTzQbE_LPYHxcGwOBgUh8PicFB88Yl4c_jszwAAAP__brTl5g==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUleGO20QQx7_zFKP5chdhlF3bF9JFSOFSFwJcUzlRUYWjyGcPqRV7191dg0-nPBYvwJOhte-qS48aIg6J5sMmM7P_zcz8POtbNO9KFLiKfozma9jDi3h5BTtSW5telwQ_fRfFERi7LaQlbSiz5vxsFS-ef-1PnvHpV6-Wi5fr85AxxgLovlgwOhPi22h5Fa3jN547qxrBMn4exXD5BvbooVQ5vUwrMih-Ro4bD2utMjJGaee67TYs8hYF87CQdWOde-NhpjShuEVb2JJQ4NrlGFOakx4z9DAnmxZld-z7EmYugW0hc2rRw7kqm0oaAfs-M_RwVafOMU7wMknaX_IkaVngFvY3C35xqoYnCKnMIWCg7FvSBj384TXYoiIB7I_f7-xMSUvSFko-Cmn1mwFNaS7A7z3XN5buXXwCl-jh1ev5HIylGjLVSAvn1NpxIe1IAOv61G8g2n9sQ5W2UFGl9A2kZamy1FIugHWnX6c2e0sGVGPrxgpw-7u07h0-bg4e9tYdOGPTHaHgB--fw13IX0lbyl8UpSVNesyPCd_Ho7bWoCTMuADjWIKxqbaiYxN8eZEkzLFhDsHggkAyP1XmkD5iunRtmLl8uwI7aj2w3jY2LctjttRS1jxGPgTCxcy7EixVNeSF2UNj0h09ASf_FE7fq0LezaA_MIP9r229p5u_nsNPbhD-u_4Hp_T__XwEx93v_eLDy5txxt017TN_MnnGHn7mk2_4NOS9MWVTPg3DKORn4uF9PvNHT_qE_4s2hae0aaW0JT0Oj5s045__34bv4pSqYjK1koaOqvrYyeyw8ZDyHfVvWaMandErrbLub3pz2ek6R07G9lHeGwvZh1yCD8V8UOwPi_1BcTAsDgbF4bA4HBRffCDeHD77MwAA__8yoe_O
 
 # Also works when creating an index.
 statement ok
@@ -206,6 +208,7 @@ regions: <hidden>
         │ KV rows read: 2
         │ KV bytes read: 16 B
         │ estimated max memory allocated: 0 B
+        │ estimated max sql temp disk usage: 0 B
         │ table: geo_table@geo_table_pkey
         │
         └── • inverted filter
@@ -230,4 +233,4 @@ regions: <hidden>
                   table: geo_table@geom_index
                   spans: 31 spans
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzkleFu40QQx7_zFKP50kYYZdd2Q24RUmjOBwF6OTnRoROOItceclbsXd_uGlxVeSxegCdDa7en5koNEf2ARD5sMjP738zMz7O-RfOhRIGr6MdovoY9vIqXV7AjtbXpdUnw03dRHIGx20Ja0oYya87PVvHi5df-5AWffvVmuXi9Pg8ZYyyA7osFozMhvo2WV9E6fue5s6oRLOOXUQyX72CPHkqV0-u0IoPiZ-S48bDWKiNjlHau227DIm9RMA8LWTfWuTceZkoTilu0hS0JBa5djjGlOekxQw9zsmlRdsd-LGHmEtgWMqcWPZyrsqmkEbDvM0MPV3XqHOMEL5Ok_SVPkpYFbmF_s-AXp2p4gpDKHAIGyr4nbdDDH96CLSoSwP74_c7OlLQkbaHko5BWvxnQlOYC_N5zfWPp3sUncIkeXr2dz8FYqiFTjbRwTq0dF9KOBLCuT_0Gov1TG6q0hYoqpW8gLUuVpZZyAaw7_Tq12XsyoBpbN1aA29-lde_wcXPwsLfuwBmb7ggFP3j_HO5C_kraUv6qKC1p0mN-TPg-HrW1BiVhxgUYxxKMTbUVHZvgy4skYY4NcwgGFwSS-akyh_QR06Vrw8zl2xXYUeuB9baxaVkes6WWsuYx8iEQLmY-lGCpqiEvzB4ak-7oGTj5p3D6XhXybgb9gRnsf23rPd389Rz-nwYhOKXBHwcgOG5v7xef3s6MM-7uYZ_5k8kL9vAzn3zDpyHvjSmb8mkYRiE_Ew8v7Jk_etZH-F-0KTylTSulLelxeNykGf_8vzZdF6dUFZOplTR0VNVTJ7PDxkPKd9S_Ro1qdEZvtMq6v-nNZafrHDkZ20d5byxkH3IJPhTzQbE_LPYHxcGwOBgUh8PicFB88Yl4c_jszwAAAP__brTl5g==
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzUleGO20QQx7_zFKP5chdhlF3bF9JFSOFSFwJcUzlRUYWjyGcPqRV7191dg0-nPBYvwJOhte-qS48aIg6J5sMmM7P_zcz8POtbNO9KFLiKfozma9jDi3h5BTtSW5telwQ_fRfFERi7LaQlbSiz5vxsFS-ef-1PnvHpV6-Wi5fr85AxxgLovlgwOhPi22h5Fa3jN547qxrBMn4exXD5BvbooVQ5vUwrMih-Ro4bD2utMjJGaee67TYs8hYF87CQdWOde-NhpjShuEVb2JJQ4NrlGFOakx4z9DAnmxZld-z7EmYugW0hc2rRw7kqm0oaAfs-M_RwVafOMU7wMknaX_IkaVngFvY3C35xqoYnCKnMIWCg7FvSBj384TXYoiIB7I_f7-xMSUvSFko-Cmn1mwFNaS7A7z3XN5buXXwCl-jh1ev5HIylGjLVSAvn1NpxIe1IAOv61G8g2n9sQ5W2UFGl9A2kZamy1FIugHWnX6c2e0sGVGPrxgpw-7u07h0-bg4e9tYdOGPTHaHgB--fw13IX0lbyl8UpSVNesyPCd_Ho7bWoCTMuADjWIKxqbaiYxN8eZEkzLFhDsHggkAyP1XmkD5iunRtmLl8uwI7aj2w3jY2LctjttRS1jxGPgTCxcy7EixVNeSF2UNj0h09ASf_FE7fq0LezaA_MIP9r229p5u_nsNPbhD-u_4Hp_T__XwEx93v_eLDy5txxt017TN_MnnGHn7mk2_4NOS9MWVTPg3DKORn4uF9PvNHT_qE_4s2hae0aaW0JT0Oj5s045__34bv4pSqYjK1koaOqvrYyeyw8ZDyHfVvWaMandErrbLub3pz2ek6R07G9lHeGwvZh1yCD8V8UOwPi_1BcTAsDgbF4bA4HBRffCDeHD77MwAA__8yoe_O

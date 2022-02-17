@@ -13,6 +13,7 @@ package kvstreamer
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime"
 	"sort"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -59,10 +61,6 @@ const (
 	// possible.
 	OutOfOrder
 )
-
-// Remove an unused warning for now.
-// TODO(yuzefovich): remove this when supported.
-var _ = InOrder
 
 // Result describes the result of performing a single KV request.
 //
@@ -333,10 +331,17 @@ func NewStreamer(
 //
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
-func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
-	if mode != OutOfOrder {
-		panic(errors.AssertionFailedf("only OutOfOrder mode is supported"))
-	}
+//
+// In InOrder mode, engine and diskMonitor arguments must be non-nil and will be
+// used to instantiate a temporary disk-backed container for some of buffered
+// results.
+func (s *Streamer) Init(
+	mode OperationMode,
+	hints Hints,
+	maxKeysPerRow int,
+	engine diskmap.Factory,
+	diskMonitor *mon.BytesMonitor,
+) {
 	s.mode = mode
 	var requestsBase requestsProviderBase
 	requestsBase.hasWork = sync.NewCond(&requestsBase.Mutex)
@@ -344,8 +349,19 @@ func (s *Streamer) Init(mode OperationMode, hints Hints, maxKeysPerRow int) {
 		budget:     s.budget,
 		hasResults: make(chan struct{}, 1),
 	}
-	s.requestsToServe = &outOfOrderRequestsProvider{requestsProviderBase: &requestsBase}
-	s.results = &outOfOrderResultsBuffer{resultsBufferBase: &resultsBase}
+	if mode == OutOfOrder {
+		s.requestsToServe = &outOfOrderRequestsProvider{requestsProviderBase: &requestsBase}
+		s.results = &outOfOrderResultsBuffer{resultsBufferBase: &resultsBase}
+	} else {
+		if engine == nil || diskMonitor == nil {
+			panic(errors.AssertionFailedf("either engine or diskMonitor is nil"))
+		}
+		s.requestsToServe = &inOrderRequestsProvider{requestsProviderBase: &requestsBase}
+		results := &inOrderResultsBuffer{resultsBufferBase: &resultsBase}
+		results.disk.engine = engine
+		results.disk.monitor = diskMonitor
+		s.results = results
+	}
 	if !hints.UniqueRequests {
 		panic(errors.AssertionFailedf("only unique requests are currently supported"))
 	}
@@ -493,11 +509,19 @@ func (s *Streamer) Enqueue(
 			reqs:              singleRangeReqs,
 			positions:         positions,
 			reqsReservedBytes: requestsMemUsage(singleRangeReqs),
+			priority:          positions[0],
 		}
 		totalReqsMemUsage += r.reqsReservedBytes
 
 		if s.mode == OutOfOrder {
 			// Sort all single-range requests to be in the key order.
+			// TODO(yuzefovich): we should be able to sort not head-of-the-line
+			// request in the InOrder mode too; however, there would be
+			// complications whenever a request (either original or with
+			// ResumeSpans) is put back because in such a scenario any request
+			// can become head-of-the-line in the future. We probably will need
+			// to introduce a way to "restore" the original order within
+			// singleRangeBatch if it is sorted and issued with headOfLine=true.
 			sort.Sort(&r)
 		}
 
@@ -658,11 +682,18 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		}
 
 		var atLeastBytes int64
+		// The higher the value of priority is, the lower the actual priority of
+		// spilling. Use the maximum value by default.
+		spillingPriority := math.MaxInt64
 		w.s.requestsToServe.Lock()
 		if !w.s.requestsToServe.emptyLocked() {
 			// If we already have minTargetBytes set on the first request to be
 			// issued, then use that.
 			atLeastBytes = w.s.requestsToServe.firstLocked().minTargetBytes
+			// The first request has the highest urgency among all current
+			// requests to serve, so we use its priority to spill everything
+			// with less urgency when necessary to free up the budget.
+			spillingPriority = w.s.requestsToServe.firstLocked().priority
 		}
 		w.s.requestsToServe.Unlock()
 
@@ -675,7 +706,7 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			atLeastBytes = avgResponseSize
 		}
 
-		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes)
+		shouldExit = w.waitUntilEnoughBudget(ctx, atLeastBytes, spillingPriority)
 		if shouldExit {
 			return
 		}
@@ -733,13 +764,26 @@ func (w *workerCoordinator) getAvgResponseSize() (avgResponseSize int64, shouldE
 //
 // A boolean that indicates whether the coordinator should exit is returned.
 func (w *workerCoordinator) waitUntilEnoughBudget(
-	ctx context.Context, atLeastBytes int64,
+	ctx context.Context, atLeastBytes int64, spillingPriority int,
 ) (shouldExit bool) {
 	w.s.budget.mu.Lock()
 	defer w.s.budget.mu.Unlock()
 	for w.s.budget.limitBytes-w.s.budget.mu.acc.Used() < atLeastBytes {
-		// There isn't enough budget at the moment. Check whether there are any
-		// requests in progress.
+		// There isn't enough budget at the moment.
+		//
+		// First, ask the results buffer to spill some results to disk in order
+		// to free up budget.
+		if ok, err := w.s.results.spill(
+			ctx, atLeastBytes-(w.s.budget.limitBytes-w.s.budget.mu.acc.Used()), spillingPriority,
+		); err != nil {
+			w.s.results.setError(err)
+			shouldExit = true
+			return shouldExit
+		} else if ok {
+			// The spilling was successful.
+			return false
+		}
+		// Check whether there are any requests in progress.
 		if w.s.getNumRequestsInProgress() == 0 {
 			// We have a degenerate case when a single row is expected to exceed
 			// the budget.
@@ -1195,6 +1239,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// We've already reconciled the budget with the actual reservation for the
 	// requests with the ResumeSpans.
 	resumeReq.reqsReservedBytes = resumeReqsMemUsage
+	resumeReq.priority = math.MaxInt
 	gets := make([]struct {
 		req   roachpb.GetRequest
 		union roachpb.RequestUnion_Get
@@ -1213,9 +1258,10 @@ func (w *workerCoordinator) processSingleRangeResults(
 	// memoryFootprintBytes, so we use it only as an additional check.
 	var memoryTokensBytes int64
 	for i, resp := range br.Responses {
-		enqueueKey := req.positions[i]
+		position := req.positions[i]
+		enqueueKey := position
 		if w.s.enqueueKeys != nil {
-			enqueueKey = w.s.enqueueKeys[req.positions[i]]
+			enqueueKey = w.s.enqueueKeys[position]
 		}
 		reply := resp.GetInner()
 		switch origRequest := req.reqs[i].GetInner().(type) {
@@ -1235,6 +1281,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 				if resumeReq.minTargetBytes == 0 {
 					resumeReq.minTargetBytes = get.ResumeNextBytes
 				}
+				if position < resumeReq.priority {
+					resumeReq.priority = position
+				}
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
@@ -1248,7 +1297,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests are
 					// unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             req.positions[i],
+					position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = getResponseSize(get)
@@ -1282,7 +1331,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 					// This currently only works because all requests
 					// are unique.
 					EnqueueKeysSatisfied: []int{enqueueKey},
-					position:             req.positions[i],
+					position:             position,
 				}
 				result.memoryTok.streamer = w.s
 				result.memoryTok.toRelease = scanResponseSize(scan)
@@ -1306,6 +1355,9 @@ func (w *workerCoordinator) processSingleRangeResults(
 				resumeReq.positions[resumeReqIdx] = req.positions[i]
 				if resumeReq.minTargetBytes == 0 {
 					resumeReq.minTargetBytes = scan.ResumeNextBytes
+				}
+				if position < resumeReq.priority {
+					resumeReq.priority = position
 				}
 				resumeReqIdx++
 			}

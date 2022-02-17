@@ -132,6 +132,16 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
 	return bufferingOpUnlimitedMemMonitor, r.accounts[oldLen:len(r.accounts)]
 }
 
+// CreateDiskMonitor instantiates an unlimited disk monitor.
+func (r *MonitorRegistry) CreateDiskMonitor(
+	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
+) *mon.BytesMonitor {
+	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
+	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
+	r.monitors = append(r.monitors, opDiskMonitor)
+	return opDiskMonitor
+}
+
 // CreateDiskAccount instantiates an unlimited disk monitor and a disk account
 // to be used for disk spilling infrastructure in vectorized engine.
 //
@@ -140,9 +150,7 @@ func (r *MonitorRegistry) CreateUnlimitedMemAccounts(
 func (r *MonitorRegistry) CreateDiskAccount(
 	ctx context.Context, flowCtx *execinfra.FlowCtx, opName string, processorID int32,
 ) *mon.BoundAccount {
-	monitorName := r.getMemMonitorName(opName, processorID, "disk" /* suffix */)
-	opDiskMonitor := execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, monitorName)
-	r.monitors = append(r.monitors, opDiskMonitor)
+	opDiskMonitor := r.CreateDiskMonitor(ctx, flowCtx, opName, processorID)
 	opDiskAccount := opDiskMonitor.MakeBoundAccount()
 	r.accounts = append(r.accounts, &opDiskAccount)
 	return &opDiskAccount

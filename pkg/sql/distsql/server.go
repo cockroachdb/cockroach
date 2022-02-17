@@ -414,9 +414,9 @@ func (ds *ServerImpl) setupFlow(
 	if req.LeafTxnInputState != nil && row.CanUseStreamer(ctx, ds.Settings) {
 		for _, proc := range req.Flow.Processors {
 			if jr := proc.Core.JoinReader; jr != nil {
-				if !jr.MaintainOrdering && jr.IsIndexJoin() {
-					// Index joins when ordering doesn't have to be maintained
-					// are executed via the Streamer API that has concurrency.
+				if jr.IsIndexJoin() {
+					// Index joins are executed via the Streamer API that has
+					// concurrency.
 					useLeaf = true
 					break
 				}
