@@ -19,7 +19,7 @@ t           b_idx       true        4             a            ASC        false 
 t           c_idx       false       1             c            ASC        false    false
 t           c_idx       false       2             b            N/A        true     false
 t           c_idx       false       3             d            N/A        true     false
-t           c_idx       false       4             a            ASC        false    true
+t           c_idx       false       4             a            ASC        true     true
 t           t_pkey      false       1             a            ASC        false    false
 t           t_pkey      false       2             b            N/A        true     false
 t           t_pkey      false       3             c            N/A        true     false

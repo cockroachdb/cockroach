@@ -18,7 +18,7 @@ t1          c_idx       true        2             a            ASC        false 
 t1          c_idx       true        3             b            ASC        false    true
 t1          d_b_idx     false       1             d            ASC        false    false
 t1          d_b_idx     false       2             b            ASC        false    false
-t1          d_b_idx     false       3             a            ASC        false    true
+t1          d_b_idx     false       3             a            ASC        true     true
 t1          t1_pkey     false       1             a            ASC        false    false
 t1          t1_pkey     false       2             b            ASC        false    false
 t1          t1_pkey     false       3             c            N/A        true     false
@@ -48,13 +48,13 @@ t2          a_e_c_idx    true        3             c            ASC        false
 t2          a_e_c_idx    true        4             b            ASC        false    true
 t2          b_d_idx      false       1             b            ASC        false    false
 t2          b_d_idx      false       2             d            ASC        false    false
-t2          b_d_idx      false       3             c            ASC        false    true
-t2          b_d_idx      false       4             a            ASC        false    true
+t2          b_d_idx      false       3             c            ASC        true     true
+t2          b_d_idx      false       4             a            ASC        true     true
 t2          c_e_d_a_idx  false       1             c            ASC        false    false
 t2          c_e_d_a_idx  false       2             e            ASC        false    false
 t2          c_e_d_a_idx  false       3             d            ASC        false    false
 t2          c_e_d_a_idx  false       4             a            ASC        false    false
-t2          c_e_d_a_idx  false       5             b            ASC        false    true
+t2          c_e_d_a_idx  false       5             b            ASC        true     true
 t2          d_idx        true        1             d            ASC        false    false
 t2          d_idx        true        2             c            ASC        false    true
 t2          d_idx        true        3             b            ASC        false    true

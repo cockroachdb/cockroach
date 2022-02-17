@@ -771,7 +771,7 @@ CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC
 ----
 abz  abz_c_b_key  false  1  c  DESC  false  false
 abz  abz_c_b_key  false  2  b  ASC   false  false
-abz  abz_c_b_key  false  3  a  ASC   false  true
+abz  abz_c_b_key  false  3  a  ASC   true   true
 abz  abz_pkey     false  1  a  DESC  false  false
 abz  abz_pkey     false  2  b  ASC   false  false
 abz  abz_pkey     false  3  c  N/A   true   false
