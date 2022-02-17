@@ -11,6 +11,7 @@
 package kvserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -94,6 +95,9 @@ type StoreTestingKnobs struct {
 	// in order for unit tests to modify the request, error returned to the client
 	// or data.
 	TestingRangefeedFilter kvserverbase.ReplicaRangefeedFilter
+
+	// When an err is returned in a batch response call this hook
+	TestingServerResponseError func(context.Context, *roachpb.BatchRequest, error)
 
 	// MaxOffset, if set, overrides the server clock's MaxOffset at server
 	// creation time.

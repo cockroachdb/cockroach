@@ -657,6 +657,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/admission",
         "//pkg/util/bitarray",
         "//pkg/util/caller",
         "//pkg/util/cancelchecker",
