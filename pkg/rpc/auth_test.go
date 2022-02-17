@@ -187,12 +187,17 @@ func TestTenantAuthRequest(t *testing.T) {
 		return ru
 	}
 	makeSystemSpanConfigTarget := func(source, target uint64) roachpb.SpanConfigTarget {
-		targetID := roachpb.MakeTenantID(target)
 		return roachpb.SpanConfigTarget{
 			Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 				SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
 					SourceTenantID: roachpb.MakeTenantID(source),
-					TargetTenantID: &targetID,
+					SystemTargetType: &roachpb.SystemSpanConfigTarget_SystemTargetType{
+						Type: &roachpb.SystemSpanConfigTarget_SystemTargetType_SpecificTenantKeyspaceTarget{
+							SpecificTenantKeyspaceTarget: &roachpb.SystemSpanConfigTarget_TenantKeyspaceTarget{
+								TenantID: roachpb.MakeTenantID(target),
+							},
+						},
+					},
 				},
 			},
 		}
@@ -536,11 +541,30 @@ func TestTenantAuthRequest(t *testing.T) {
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
 							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SystemTargetType: &roachpb.SystemSpanConfigTarget_SystemTargetType{
+								Type: &roachpb.SystemSpanConfigTarget_SystemTargetType_EntireKeyspaceTarget{
+									EntireKeyspaceTarget: true,
+								},
+							},
 						},
 					},
 				}),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire keyspace`,
+			},
+			{
+				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
+					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
+						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
+							SourceTenantID: roachpb.MakeTenantID(20),
+							SystemTargetType: &roachpb.SystemSpanConfigTarget_SystemTargetType{
+								Type: &roachpb.SystemSpanConfigTarget_SystemTargetType_EntireKeyspaceTarget{
+									EntireKeyspaceTarget: true,
+								},
+							},
+						},
+					},
+				}),
+				expErr: `malformed source tenant field`,
 			},
 		},
 		"/cockroach.roachpb.Internal/UpdateSpanConfigs": {
@@ -651,11 +675,15 @@ func TestTenantAuthRequest(t *testing.T) {
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
 							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SystemTargetType: &roachpb.SystemSpanConfigTarget_SystemTargetType{
+								Type: &roachpb.SystemSpanConfigTarget_SystemTargetType_EntireKeyspaceTarget{
+									EntireKeyspaceTarget: true,
+								},
+							},
 						},
 					},
 				}, false),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire keyspace`,
 			},
 			{
 				req:    makeUpdateSpanConfigsReq(makeSystemSpanConfigTarget(10, 10), true),
@@ -676,11 +704,15 @@ func TestTenantAuthRequest(t *testing.T) {
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
 							SourceTenantID: roachpb.MakeTenantID(10),
-							TargetTenantID: nil,
+							SystemTargetType: &roachpb.SystemSpanConfigTarget_SystemTargetType{
+								Type: &roachpb.SystemSpanConfigTarget_SystemTargetType_EntireKeyspaceTarget{
+									EntireKeyspaceTarget: true,
+								},
+							},
 						},
 					},
 				}, true),
-				expErr: `secondary tenants must explicitly target themselves`,
+				expErr: `secondary tenants cannot target the entire keyspace`,
 			},
 		},
 

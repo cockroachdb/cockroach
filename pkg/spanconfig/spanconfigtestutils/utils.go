@@ -33,8 +33,10 @@ import (
 var spanRe = regexp.MustCompile(`^\[(\w+),\s??(\w+)\)$`)
 
 // systemTargetRe matches strings of the form
-// "{source=(<id>|system),target=(<id>|system)}".
-var systemTargetRe = regexp.MustCompile(`^{(cluster)|(source=(\d*),\s??target=(\d*))}$`)
+// "{entire-keyspace|source=<id>,(target=<id>|all-tenant-keyspace-targets-set)}".
+var systemTargetRe = regexp.MustCompile(
+	`^{(entire-keyspace)|(source=(\d*),\s??((target=(\d*))|all-tenant-keyspace-targets-set))}$`,
+)
 
 // configRe matches a single word. It's a shorthand for declaring a unique
 // config.
@@ -63,15 +65,18 @@ func parseSystemTarget(t *testing.T, systemTarget string) spanconfig.SystemTarge
 	}
 	matches := systemTargetRe.FindStringSubmatch(systemTarget)
 
-	if matches[1] == "cluster" {
-		return spanconfig.MakeClusterTarget()
+	if matches[1] == "entire-keyspace" {
+		return spanconfig.MakeEntireKeyspaceTarget()
 	}
 
 	sourceID, err := strconv.Atoi(matches[3])
 	require.NoError(t, err)
-	targetID, err := strconv.Atoi(matches[4])
+	if matches[4] == "all-tenant-keyspace-targets-set" {
+		return spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(uint64(sourceID)))
+	}
+	targetID, err := strconv.Atoi(matches[6])
 	require.NoError(t, err)
-	target, err := spanconfig.MakeTenantTarget(
+	target, err := spanconfig.MakeTenantKeyspaceTarget(
 		roachpb.MakeTenantID(uint64(sourceID)), roachpb.MakeTenantID(uint64(targetID)),
 	)
 	require.NoError(t, err)
