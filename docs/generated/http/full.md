@@ -4282,6 +4282,64 @@ UserSQLRolesResponse returns a list of roles for the logged SQL user.
 
 
 
+## TxnIDResolution
+
+
+
+TxnIDResolution is used by the contention event store to resolve
+transaction ID into transaction fingerprint IDs.
+This RPC does not have a corresponding HTTP endpoint on purpose, since
+DB Console should never directly query this endpoint.
+
+The API contract is the following:
+- if the server can resolve the transaction IDs in the RPC request, it will
+  be returned in the RPC response.
+- if the server is not able to resolve the transaction IDs, it will
+  instructs the transaction ID cache to drain its write buffer. (Since
+  transaction ID cache's write path is asynchronous, the transaction ID
+  requested by the client might not be available in the cache yet).
+  Client is responsible to perform retries if the requested transaction ID
+  is not returned in the RPC response.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for issuing Transaction ID Resolution.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| coordinator_id | [string](#cockroach.server.serverpb.TxnIDResolutionRequest-string) |  | coordinator_id is either the NodeID or SQLInstanceID depending on whether the transaction is executed on a system tenant or a regular tenant. | [reserved](#support-status) |
+| txnIDs | [bytes](#cockroach.server.serverpb.TxnIDResolutionRequest-bytes) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for issuing Transaction ID Resolution.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| resolvedTxnIDs | [cockroach.sql.contentionpb.ResolvedTxnID](#cockroach.server.serverpb.TxnIDResolutionResponse-cockroach.sql.contentionpb.ResolvedTxnID) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`

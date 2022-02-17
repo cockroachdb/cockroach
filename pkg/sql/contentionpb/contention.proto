@@ -128,3 +128,18 @@ message SerializedRegistry {
   repeated SingleNonSQLKeyContention non_sql_keys_contention = 2 [(gogoproto.nullable) = false,
                                                                   (gogoproto.customname) = "NonSQLKeysContention"];
 }
+
+message ResolvedTxnID {
+  bytes txnID = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+
+  // txnFingerprintID is the corresponding transaction fingerprint ID of the
+  // txnID. However, if the transaction fingerprint ID of the txnID is not yet
+  // known, (i.e. when the transaction is still executing), this value is filled
+  // with roachpb.InvalidTransactionFingerprintID.
+  uint64 txnFingerprintID = 2 [(gogoproto.customname) = "TxnFingerprintID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
+    (gogoproto.nullable) = false];
+}
