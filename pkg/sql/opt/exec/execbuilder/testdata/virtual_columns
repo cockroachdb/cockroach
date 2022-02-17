@@ -1125,21 +1125,12 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │
-            └── • hash join (right anti)
+            └── • lookup join (anti)
                 │ columns: (v_comp, w_comp, column1, column2, column3)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (w_comp)
-                │
-                ├── • render
-                │   │ columns: (w)
-                │   │ estimated row count: 1,000 (missing stats)
-                │   │ render w: c + 1
-                │   │
-                │   └── • scan
-                │         columns: (c)
-                │         estimated row count: 1,000 (missing stats)
-                │         table: t_idx@t_idx_pkey
-                │         spans: FULL SCAN
+                │ table: t_idx@t_idx_w_key
+                │ equality: (w_comp) = (w)
+                │ equality cols are key
                 │
                 └── • render
                     │ columns: (v_comp, w_comp, column1, column2, column3)

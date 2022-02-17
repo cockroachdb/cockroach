@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -366,6 +367,100 @@ func TestReplicaCircuitBreaker_Liveness_QuorumLoss(t *testing.T) {
 	require.NoError(t, tc.Write(n1))
 }
 
+type dummyStream struct {
+	ctx  context.Context
+	recv chan *roachpb.RangeFeedEvent
+}
+
+func (s *dummyStream) Context() context.Context {
+	return s.ctx
+}
+
+func (s *dummyStream) Send(ev *roachpb.RangeFeedEvent) error {
+	if ev.Val == nil {
+		return nil
+	}
+	select {
+	case <-s.ctx.Done():
+		return s.ctx.Err()
+	case s.recv <- ev:
+		return nil
+	}
+}
+
+// This test verifies that RangeFeed bypasses the circuit breaker. When the
+// breaker is tripped, existing RangeFeeds remain in place and new ones can be
+// started. When the breaker untrips, these feeds can make progress. The test
+// goes as far as actually losing quorum to verify this end-to-end.
+func TestReplicaCircuitBreaker_RangeFeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	tc := setupCircuitBreakerTest(t)
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+
+	require.NoError(t, tc.Write(n1))
+	desc := tc.LookupRangeOrFatal(t, tc.ScratchRange(t))
+	args := &roachpb.RangeFeedRequest{
+		Span: roachpb.Span{Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey()},
+	}
+	// This test shouldn't take in excess of 45s even under the worst of conditions.
+	ctx, cancel := context.WithTimeout(ctx, testutils.DefaultSucceedsSoonDuration)
+	defer cancel()
+	stream1 := &dummyStream{ctx: ctx, recv: make(chan *roachpb.RangeFeedEvent)}
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream1", func(ctx context.Context) {
+		err := tc.repls[0].RangeFeed(args, stream1).GoError()
+		if ctx.Err() != nil {
+			return
+		}
+		assert.NoError(t, err) // avoid Fatal on goroutine
+	}))
+
+	readOneVal := func(t *testing.T, stream *dummyStream) {
+		for {
+			var done bool
+			select {
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			case ev := <-stream.recv:
+				t.Log(ev)
+				done = true
+			}
+			if done {
+				break
+			}
+		}
+	}
+
+	require.NoError(t, tc.Write(n1))
+	readOneVal(t, stream1)
+
+	// NB: keep heartbeats because we're not trying to lose the liveness range.
+	undo := tc.ExpireAllLeases(t, keepHeartbeats)
+	undo()
+	tc.SetSlowThreshold(10 * time.Millisecond)
+	tc.StopServer(n2)
+	tc.RequireIsBreakerOpen(t, tc.Write(n1))
+
+	// Start another stream during the "outage" to make sure it isn't rejected by
+	// the breaker.
+	stream2 := &dummyStream{ctx: ctx, recv: make(chan *roachpb.RangeFeedEvent)}
+	require.NoError(t, tc.Stopper().RunAsyncTask(ctx, "stream2", func(ctx context.Context) {
+		err := tc.repls[0].RangeFeed(args, stream2).GoError()
+		if ctx.Err() != nil {
+			return
+		}
+		assert.NoError(t, err) // avoid Fatal on goroutine
+	}))
+
+	tc.SetSlowThreshold(0)
+	require.NoError(t, tc.RestartServer(n2))
+
+	tc.UntripsSoon(t, tc.Write, n1)
+	readOneVal(t, stream1)
+	readOneVal(t, stream2)
+}
+
 // Test infrastructure below.
 
 func makeBreakerToggleable(b *circuit.Breaker) (setProbeEnabled func(bool)) {
@@ -587,6 +682,11 @@ func (*circuitBreakerTest) sendViaDistSender(ds *kvcoord.DistSender, req roachpb
 
 func (*circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {
 	t.Helper()
+	// We also accept an ambiguous result wrapping a breaker error; this occurs
+	// when the breaker trips while a write is already inflight.
+	if aErr := (*roachpb.AmbiguousResultError)(nil); errors.As(err, &aErr) && aErr.WrappedErr != nil {
+		err = aErr.WrappedErr.GoError()
+	}
 	require.True(t, errors.Is(err, circuit.ErrBreakerOpen), "%+v", err)
 }
 
