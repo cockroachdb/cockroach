@@ -396,6 +396,13 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	}
 }
 
+// TestStoreRangeSplitAndQueryLocks ...
+// TODO(sarkesian): add test to query locks spanning multiple ranges here?
+func TestStoreRangeSplitAndQueryLocks(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+}
+
 // TestStoreRangeSplitAtRangeBounds verifies that attempting to
 // split a range at its start key is a no-op and does not actually
 // perform a split (would create zero-length range!). This sort
