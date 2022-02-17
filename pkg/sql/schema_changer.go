@@ -1498,7 +1498,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					}
 
 					if shouldCreateScheduledJob {
-						j, err := createRowLevelTTLScheduledJob(
+						j, err := CreateRowLevelTTLScheduledJob(
 							ctx,
 							sc.execCfg,
 							txn,

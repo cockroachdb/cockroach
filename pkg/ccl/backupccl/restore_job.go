@@ -62,7 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
+	pbtypes "github.com/gogo/protobuf/types"
 )
 
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
@@ -505,7 +505,7 @@ func restore(
 		for progress := range progCh {
 			mu.Lock()
 			var progDetails RestoreProgress
-			if err := types.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
 				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 			}
 
@@ -1067,6 +1067,49 @@ func createImportingDescriptors(
 							); err != nil {
 								return err
 							}
+						}
+					}
+				}
+			}
+
+			// We could be restoring a TTL table, in which case we need to allocate
+			// a new schedule to it.
+			if details.DescriptorCoverage != tree.AllDescriptors {
+				for _, table := range mutableTables {
+					if table.HasRowLevelTTL() {
+						shouldCreateScheduledJob := false
+						existingJob, err := jobs.LoadScheduledJob(
+							ctx,
+							sql.JobSchedulerEnv(p.ExecCfg()),
+							table.RowLevelTTL.ScheduleID,
+							p.ExecCfg().InternalExecutor,
+							txn,
+						)
+						if err != nil {
+							if !jobs.HasScheduledJobNotFoundError(err) {
+								return errors.Wrapf(err, "unknown error fetching existing job for row level TTL in schema changer")
+							}
+							shouldCreateScheduledJob = true
+						} else {
+							var args catpb.ScheduledRowLevelTTLArgs
+							if err := pbtypes.UnmarshalAny(existingJob.ExecutionArgs().Args, &args); err != nil || args.TableID != table.GetID() {
+								shouldCreateScheduledJob = true
+							}
+						}
+
+						if shouldCreateScheduledJob {
+							j, err := sql.CreateRowLevelTTLScheduledJob(
+								ctx,
+								p.ExecCfg(),
+								txn,
+								p.User(),
+								table.GetID(),
+								table.GetRowLevelTTL(),
+							)
+							if err != nil {
+								return err
+							}
+							table.RowLevelTTL.ScheduleID = j.ScheduleID()
 						}
 					}
 				}
