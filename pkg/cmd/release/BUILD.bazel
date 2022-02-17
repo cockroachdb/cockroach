@@ -4,6 +4,7 @@ go_library(
     name = "release_lib",
     srcs = [
         "git.go",
+        "github.go",
         "jira.go",
         "mail.go",
         "main.go",

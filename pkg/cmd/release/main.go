@@ -26,14 +26,40 @@ var (
 	releaseObjectPrefix string
 	releaseSeries       string
 	smtpUser            string
-	smtpPassword        string
 	smtpHost            string
 	smtpPort            int
 	emailAddresses      []string
-	jiraUsername        string
-	jiraToken           string
 	dryRun              bool
+	smtpPassword        osEnv
+	jiraUsername        osEnv
+	jiraToken           osEnv
+	githubToken         osEnv
 )
+
+type osEnv struct {
+	key   string
+	value string
+	error error
+}
+
+func init() {
+	smtpPassword = osEnv{
+		key:   "SMTP_PASSWORD",
+		error: fmt.Errorf("SMTP_PASSWORD environment variable should be set"),
+	}
+	jiraUsername = osEnv{
+		key:   "JIRA_USERNAME",
+		error: fmt.Errorf("JIRA_USERNAME environment variable should be set"),
+	}
+	jiraToken = osEnv{
+		key:   "JIRA_TOKEN",
+		error: fmt.Errorf("JIRA_TOKEN environment variable should be set"),
+	}
+	githubToken = osEnv{
+		key:   "GITHUB_TOKEN",
+		error: fmt.Errorf("GITHUB_TOKEN environment variable should be set"),
+	}
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -42,25 +68,12 @@ func main() {
 }
 
 func run() error {
-	smtpPassword = os.Getenv("SMTP_PASSWORD")
-	if smtpPassword == "" {
-		return fmt.Errorf("SMTP_PASSWORD environment variable should be set")
-	}
-	jiraUsername = os.Getenv("JIRA_USERNAME")
-	if jiraUsername == "" {
-		return fmt.Errorf("JIRA_USERNAME environment variable should be set")
-	}
-	jiraToken = os.Getenv("JIRA_TOKEN")
-	if jiraToken == "" {
-		return fmt.Errorf("JIRA_TOKEN environment variable should be set")
-	}
-
 	cmdPickSHA := &cobra.Command{
 		Use:   "pick-sha",
 		Short: "Pick release git SHA for a particular version and communicate the choice via Jira and email",
 		// TODO: improve Long description
 		Long: "Pick release git SHA for a particular version and communicate the choice via Jira and email",
-		RunE: pickSHA,
+		RunE: pickSHAWrapper,
 	}
 	// TODO: improve flag usage comments
 	cmdPickSHA.Flags().StringVar(&qualifyBucket, "qualify-bucket", "", "release qualification metadata GCS bucket")
@@ -74,7 +87,7 @@ func run() error {
 	cmdPickSHA.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
 	cmdPickSHA.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
 	cmdPickSHA.Flags().BoolVar(&dryRun, "dry-run", false, "use dry run Jira project for issues")
-	requiredFlags := []string{
+	if err := setRequiredFlags(cmdPickSHA, []string{
 		"qualify-bucket",
 		"qualify-object-prefix",
 		"release-bucket",
@@ -84,22 +97,125 @@ func run() error {
 		"smtp-host",
 		"smtp-port",
 		"to",
-	}
-	for _, flag := range requiredFlags {
-		if err := cmdPickSHA.MarkFlagRequired(flag); err != nil {
-			return err
-		}
+	}); err != nil {
+		return err
 	}
 	// TODO: improve rootCmd description
 	rootCmd := &cobra.Command{Use: "release"}
 	rootCmd.AddCommand(cmdPickSHA)
+
+	cmdPostBlockers := &cobra.Command{
+		Use:   "post-blockers",
+		Short: "Get release blocker details for a particular release branch and communicate via email",
+		// TODO: improve Long description
+		Long: "Get release blocker details for a particular release branch and communicate via email",
+		RunE: postReleaseBlockersWrapper,
+	}
+	cmdPostBlockers.Flags().StringVar(&releaseSeries, "release-series", "", "major release series")
+	cmdPostBlockers.Flags().StringVar(&smtpUser, "smtp-user", os.Getenv("SMTP_USER"), "SMTP user name")
+	cmdPostBlockers.Flags().StringVar(&smtpHost, "smtp-host", "", "SMTP host")
+	cmdPostBlockers.Flags().IntVar(&smtpPort, "smtp-port", 0, "SMTP port")
+	cmdPostBlockers.Flags().StringArrayVar(&emailAddresses, "to", []string{}, "email addresses")
+	cmdPostBlockers.Flags().BoolVar(&dryRun, "dry-run", false, "use dry run Jira project for issues")
+	if err := setRequiredFlags(cmdPostBlockers, []string{
+		"release-series",
+		"smtp-user",
+		"smtp-host",
+		"smtp-port",
+		"to",
+	}); err != nil {
+		return err
+	}
+	rootCmd.AddCommand(cmdPostBlockers)
+
 	if err := rootCmd.Execute(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func pickSHA(_ *cobra.Command, _ []string) error {
+func setRequiredFlags(cmd *cobra.Command, requiredFlags []string) error {
+	for _, flag := range requiredFlags {
+		if err := cmd.MarkFlagRequired(flag); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func setRequiredEnvs(requiredEnvs ...osEnv) error {
+	var err error
+	for _, env := range requiredEnvs {
+		env.value = os.Getenv(env.key)
+		if env.value == "" {
+			if err == nil {
+				err = env.error
+			} else {
+				err = fmt.Errorf("%w\n %s", err, env.error.Error())
+			}
+			return env.error
+		}
+	}
+	return nil
+}
+
+func postReleaseBlockersWrapper(_ *cobra.Command, _ []string) error {
+	err := setRequiredEnvs(githubToken, smtpPassword)
+	if err != nil {
+		return err
+	}
+	return postReleaseBlockers(githubToken.value, smtpPassword.value, releaseSeries)
+}
+
+func postReleaseBlockers(githubToken, smtpPassword, releaseSeries string) error {
+	ctx := context.Background()
+	client := newGithubClient(ctx, githubToken)
+	openBlockers, err := findOpenBlockers(client, releaseSeries)
+	if err != nil {
+		return fmt.Errorf("was unable to fetch release blockers for releaseSeries %s: %w", releaseSeries, err)
+	}
+
+	// TODO(celia) -- set this
+	nextReleaseVersion := "v99.9.9"
+
+	args := emailBlockerArgs{
+		Version:       nextReleaseVersion,
+		ReleaseSeries: releaseSeries,
+		BlockerList:   openBlockers,
+	}
+	opts := smtpOpts{
+		from:     fmt.Sprintf("Justin Beaver <%s>", smtpUser),
+		host:     smtpHost,
+		port:     smtpPort,
+		user:     smtpUser,
+		password: smtpPassword,
+		to:       emailAddresses,
+	}
+	fmt.Println("Sending email")
+	if len(openBlockers) == 0 {
+		if err := sendmail(emailZeroBlockersTextTemplate, emailZeroBlockerHTMLTemplate, args, opts); err != nil {
+			return fmt.Errorf("cannot send email, zero blockers: %w", err)
+		}
+	} else {
+		if err != nil {
+			return fmt.Errorf("could not render template: %w", err)
+		}
+		if err := sendmail(emailOpenBlockersTextTemplate, emailOpenBlockerHTMLTemplate, args, opts); err != nil {
+			return fmt.Errorf("cannot send email, open blockers: %w", err)
+		}
+	}
+	return nil
+}
+
+func pickSHAWrapper(_ *cobra.Command, _ []string) error {
+	err := setRequiredEnvs(jiraUsername, jiraToken, smtpPassword)
+	if err != nil {
+		return err
+	}
+	return pickSHA(jiraUsername.value, jiraToken.value, smtpPassword.value)
+}
+
+func pickSHA(jiraUsername, jiraToken, smtpPassword string) error {
 	nextRelease, err := findNextRelease(releaseSeries)
 	if err != nil {
 		return fmt.Errorf("cannot find next release: %w", err)
@@ -135,7 +251,7 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 		fmt.Sprintf("https://github.com/cockroachdb/cockroach/compare/%s...%s",
 			nextRelease.prevReleaseVersion,
 			nextRelease.buildInfo.SHA))
-	args := emailArgs{
+	args := emailSHASelectedArgs{
 		Version:          nextRelease.nextReleaseVersion,
 		SHA:              nextRelease.buildInfo.SHA,
 		TrackingIssue:    trackingIssue.Key,
@@ -151,7 +267,7 @@ func pickSHA(_ *cobra.Command, _ []string) error {
 		to:       emailAddresses,
 	}
 	fmt.Println("Sending email")
-	if err := sendmail(args, opts); err != nil {
+	if err := sendmail(emailSHASelectedTextTemplate, emailSHASelectedHTMLTemplate, args, opts); err != nil {
 		return fmt.Errorf("cannot send email: %w", err)
 	}
 	return nil

@@ -19,8 +19,8 @@ import (
 	"github.com/jordan-wright/email"
 )
 
-var emailSubjectTemplate = "Release {{ .Version }}"
-var emailTextTemplate = `
+const emailSubjectTemplate = "Release {{ .Version }}"
+const emailSHASelectedTextTemplate = `
 A candidate SHA has been selected for {{ .Version }}. Proceeding to qualification shortly.
 
 	SHA: {{ .SHA }}
@@ -30,7 +30,7 @@ A candidate SHA has been selected for {{ .Version }}. Proceeding to qualificatio
 Thanks
 Release Engineering
 `
-var emailHTMLTemplate = `
+const emailSHASelectedHTMLTemplate = `
 <html>
 <body>
 <p>A candidate SHA has been selected for <strong>{{ .Version }}</strong>. Proceeding to qualification shortly.</p>
@@ -45,12 +45,42 @@ Release Engineering</p>
 </html>
 `
 
-type emailArgs struct {
+const emailZeroBlockersTextTemplate = `
+Hello! These are zero blockers for {{ .Version }} :tada:
+
+Thanks
+Release Engineering
+`
+
+// TODO(celia) - make HTML-version of this template
+const emailZeroBlockerHTMLTemplate = emailZeroBlockersTextTemplate
+
+const emailOpenBlockersTextTemplate = `
+Hello! These are the blockers for {{ .Version }}:
+
+{{ range .BlockerList }}
+  - {{ .ProjectName }}: {{ .NumBlockers }}
+{{ end }}
+
+Thanks
+Release Engineering
+`
+
+// TODO(celia) - make HTML-version of this template
+const emailOpenBlockerHTMLTemplate = emailOpenBlockersTextTemplate
+
+type emailSHASelectedArgs struct {
 	Version          string
 	SHA              string
 	TrackingIssue    string
 	TrackingIssueURL htmltemplate.URL
 	DiffURL          htmltemplate.URL
+}
+
+type emailBlockerArgs struct {
+	Version       string
+	ReleaseSeries string
+	BlockerList   []ProjectBlocker
 }
 
 type smtpOpts struct {
@@ -63,8 +93,8 @@ type smtpOpts struct {
 }
 
 // sendmail creates and sends an email to the releases mailing list
-func sendmail(args emailArgs, smtpOpts smtpOpts) error {
-	text, err := templateToText(emailTextTemplate, args)
+func sendmail(textTemplate, htmlTemplate string, args interface{}, smtpOpts smtpOpts) error {
+	text, err := templateToText(textTemplate, args)
 	if err != nil {
 		return fmt.Errorf("cannot use text template: %w", err)
 	}
@@ -72,7 +102,7 @@ func sendmail(args emailArgs, smtpOpts smtpOpts) error {
 	if err != nil {
 		return fmt.Errorf("cannot use subject template: %w", err)
 	}
-	html, err := templateToHTML(emailHTMLTemplate, args)
+	html, err := templateToHTML(htmlTemplate, args)
 	if err != nil {
 		return fmt.Errorf("cannot use html template: %w", err)
 	}
