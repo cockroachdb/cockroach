@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -394,6 +395,130 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 			t.Errorf("unexpected system key: %s; txn record should have been cleaned up", iter.Key())
 		}
 	}
+}
+
+// TestQueryLocksAcrossRanges attempts to split to create multiple ranges,
+// create transactions that hold locks on keys across the ranges, and then
+// utilize the QueryLocks API to validate the exposed lock table information.
+func TestQueryLocksAcrossRanges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	s := serv.(*server.TestServer)
+	defer s.Stopper().Stop(ctx)
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// First, write some values left and right of the proposed split key.
+	pArgs := putArgs([]byte("c"), []byte("foo"))
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	pArgs = putArgs([]byte("p"), []byte("fizzbuzz"))
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+	pArgs = putArgs([]byte("x"), []byte("bar"))
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Split the range.
+	splitKey := roachpb.Key("m")
+	args := adminSplitArgs(splitKey)
+	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rng1 := store.LookupReplica(roachpb.RKey("c")).Desc()
+	rng2 := store.LookupReplica(roachpb.RKey("p")).Desc()
+
+	// Use txn1 to get a replicated lock on "c" and an unreplicated lock on "x".
+	txn1 := kv.NewTxn(ctx, db, s.NodeID())
+	err = txn1.Put(ctx, roachpb.Key("c"), []byte("baz"))
+	require.NoError(t, err)
+	_, err = txn1.GetForUpdate(ctx, roachpb.Key("x"))
+	require.NoError(t, err)
+
+	// Use txn2 to get an unreplicated lock on "p".
+	txn2 := kv.NewTxn(ctx, db, s.NodeID())
+	_, err = txn2.GetForUpdate(ctx, roachpb.Key("p"))
+	require.NoError(t, err)
+
+	now := s.Clock().NowAsClockTimestamp()
+	txn3Proto := roachpb.MakeTransaction(
+		"waiter",
+		nil, // baseKey
+		roachpb.NormalUserPriority,
+		s.Clock().NowAsClockTimestamp().ToTimestamp(),
+		s.Clock().MaxOffset().Nanoseconds(),
+		int32(s.SQLInstanceID()),
+	)
+	txn3ID := txn3Proto.ID
+
+	// Execute a scan request that includes the locked keys, such that this
+	// operation will be forced to wait on txn1 and txn2.
+	scanRes := make(chan error)
+	go func() {
+		txn3 := kv.NewTxnFromProto(ctx, db, s.NodeID(), now, kv.RootTxn, &txn3Proto)
+		_, err = txn3.Scan(ctx, roachpb.Key("a"), roachpb.Key("z"), 0)
+		scanRes <- err
+	}()
+
+	select {
+	case err := <-scanRes:
+		t.Fatalf("scan did not wait on locks, returned err %v", err)
+	case <-time.After(10 * time.Millisecond):
+		// Before the scan can return, attempt to query locks.
+	}
+
+	// Issue QueryLocksRequest and validate results. We should see 2 locks,
+	// one replicated lock "c" held by txn1 and one unreplicated lobk on "p"
+	// held by txn2, both with txn3 currently waiting to read.
+	b := kv.Batch{}
+	b.Header.MaxSpanRequestKeys = 2
+	queryLocksRequest := &roachpb.QueryLocksRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    roachpb.Key("a"),
+			EndKey: roachpb.Key("z"),
+		},
+		IncludeUncontended: true,
+	}
+	b.AddRawRequest(queryLocksRequest)
+	err = db.Run(ctx, &b)
+	require.NoError(t, err)
+
+	res := b.RawResponse().Responses[0].GetQueryLocks()
+	require.Len(t, res.Locks, 2)
+	require.Equal(t, roachpb.RESUME_KEY_LIMIT, res.ResumeReason)
+	require.Equal(t, roachpb.Key("x"), res.ResumeSpan.Key)
+	require.Equal(t, roachpb.Key("z"), res.ResumeSpan.EndKey)
+
+	require.Equal(t, roachpb.Key("c"), res.Locks[0].Key)
+	require.NotNil(t, res.Locks[0].LockHolder)
+	require.Equal(t, txn1.ID(), res.Locks[0].LockHolder.ID)
+	require.Equal(t, rng1.RangeID, res.Locks[0].RangeID)
+	require.Equal(t, lock.Replicated, res.Locks[0].Durability)
+	require.Len(t, res.Locks[0].Waiters, 1)
+	require.Equal(t, txn3ID, res.Locks[0].Waiters[0].WaitingTxn.ID)
+
+	require.Equal(t, roachpb.Key("p"), res.Locks[1].Key)
+	require.NotNil(t, res.Locks[1].LockHolder)
+	require.Equal(t, txn2.ID(), res.Locks[1].LockHolder.ID)
+	require.Equal(t, rng2.RangeID, res.Locks[1].RangeID)
+	require.Equal(t, lock.Unreplicated, res.Locks[1].Durability)
+	require.Len(t, res.Locks[1].Waiters, 1)
+	require.Equal(t, txn3ID, res.Locks[1].Waiters[0].WaitingTxn.ID)
+
+	// Cleanup remaining transactions holding locks and unblock scan.
+	require.NoError(t, txn1.Commit(ctx))
+	require.NoError(t, txn2.Commit(ctx))
+
+	// The scan should finish once txn1 and txn2 commit and release locks.
+	err = <-scanRes
+	require.NoError(t, err, "txn3.Scan() should have finished without error after txns unlock")
 }
 
 // TestStoreRangeSplitAtRangeBounds verifies that attempting to
