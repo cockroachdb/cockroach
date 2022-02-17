@@ -35,14 +35,15 @@ import datetime
 import time
 from gitdb import exc
 import subprocess
-import os.path
+import os
 
 from optparse import OptionParser
 from gitdb import exc
 from git import Repo
 from git.repo.fun import name_to_object
 from git.util import Stats
-import os.path
+import csv
+import yaml
 
 #
 # Global behavior constants
@@ -252,31 +253,43 @@ parser.add_option("-k", "--sort-key", dest="sort_key", default="title",
 parser.add_option("-r", "--reverse", action="store_true", dest="reverse_sort", default=False,
                   help="reverse sort")
 parser.add_option("-f", "--from", dest="from_commit",
-                  help="list history from COMMIT. Note: the first commit is excluded.", metavar="COMMIT")
-parser.add_option("-t", "--until", dest="until_commit", default="HEAD",
+                  help="list history from COMMIT. Note: the first commit is excluded. Defaults to the most recent hotfix of that major version or the most recent hotfix of the previous version", metavar="COMMIT")
+parser.add_option("-t", "--until", "--release-sha", dest="until_commit", default="HEAD",
                   help="list history up and until COMMIT (default: HEAD)", metavar="COMMIT")
+parser.add_option("--release-name", dest="release_name", action="store",
+                  help="Indicate the release to which this SHA is associated (e.g., v21.2.6 or v22.1.0-alpha1). Default is the name of the git tag")
 parser.add_option("-p", "--pull-ref", dest="pull_ref_prefix", default="refs/pull/origin",
                   help="prefix for pull request refs (default: refs/pull/origin)", metavar="PREFIX")
-parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_shas", default=False,
-                  help="omit commit SHAs from the release notes and per-contributor sections")
-parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=False,
-                  help="omit the per-contributor section")
-parser.add_option("--hide-crdb-folk", dest="hide_crdb_folk", action="store_true", default=False,
-                  help="don't show crdb folk in the per-contributor section")
+parser.add_option("--hide-unambiguous-shas", action="store_true", dest="hide_shas", default=True,
+                  help="omit commit SHAs from the release notes and per-contributor sections. Default: True")
+parser.add_option("--hide-per-contributor-section", action="store_true", dest="hide_per_contributor", default=True,
+                  help="omit the per-contributor section. Default: True")
+parser.add_option("--hide-crdb-folk", dest="hide_crdb_folk", action="store_true", default=True,
+                  help="don't show crdb folk in the per-contributor section. Default: True")
 parser.add_option("--hide-downloads-section", action="store_true", dest="hide_downloads", default=False,
-                  help="omit the email sign-up and downloads section")
+                  help="omit the email sign-up and downloads section. Default: False")
 parser.add_option("--hide-header", action="store_true", dest="hide_header", default=False,
-                  help="omit the title and date header")
+                  help="omit the title and date header. Default: False")
 parser.add_option("--exclude-from", dest="exclude_from_commit",
                   help="exclude history starting after COMMIT. Note: COMMIT itself is excluded.", metavar="COMMIT")
 parser.add_option("--exclude-until", dest="exclude_until_commit",
                   help="exclude history ending at COMMIT", metavar="COMMIT")
-parser.add_option("--one-line", dest="one_line", action="store_true", default=False,
-                  help="unwrap release notes on a single line")
+parser.add_option("--one-line", dest="one_line", action="store_true", default=True,
+                  help="unwrap release notes on a single line. Default: True")
 parser.add_option("--prod-release", dest="prod_release", action="store_true", default=False,
                   help="identify release as production (e.g., v20.2.x) and omit '-unstable' from docker pull command")
+parser.add_option("--docs-dir", dest="docs_dir", action="store",
+                  help="Location of the docs repo on your local machine. Default: $CRDBDOCS, example: /path/to/docs/ ")
+parser.add_option("--release-date", dest="release_date", action="store",
+                  help="Quoted date of the release, formatted in YYYY-MM-DD. Default is today's date.")
+parser.add_option("--no-windows", dest="no_windows", action="store_true", default=False,
+                  help="Whether or not this release has a Windows download. Default: False")
+parser.add_option("--no-source", dest="no_source", action="store_true", default=False,
+                  help="Whether or not this release source code. Default: False")
 
 (options, args) = parser.parse_args()
+
+# define script variables from parser options
 
 sortkey = options.sort_key
 revsort = options.reverse_sort
@@ -286,10 +299,19 @@ hidepercontributor = options.hide_per_contributor
 hidedownloads = options.hide_downloads
 hideheader = options.hide_header
 hidecrdbfolk = options.hide_crdb_folk
+release_date = datetime.datetime.fromtimestamp(time.mktime(time.strptime(options.release_date, "%Y-%m-%d"))) if options.release_date else datetime.datetime.now()
+build_time = release_date.strftime("%Y-%m-%d %H:%M:%S")
+release_date_pretty = release_date.strftime("%B %-d, %Y")
+release_date_iso = release_date.strftime("%Y-%m-%d")
+until_commit = options.until_commit
+no_windows = options.no_windows
+no_source = options.no_source
+
+gv1 = subprocess.Popen(["git", "show", "%s:go.mod" % until_commit], stdout=subprocess.PIPE)
+go_version = subprocess.check_output(["grep", "-e", "^go 1\.\d*$"], stdin=gv1.stdout).decode("utf-8").strip().replace(" ", "")
 
 repo = Repo('.')
 heads = repo.heads
-
 
 def reformat_note(note_lines):
     sep = '\n'
@@ -297,9 +319,39 @@ def reformat_note(note_lines):
         sep = ' '
     return sep.join(note_lines).strip()
 
-
-# Check that pull_ref_prefix is valid
+# Check that the options in the script are valid
 testrefname = "%s/1" % pull_ref_prefix
+
+if not os.getenv('CRDBDOCS', options.docs_dir):
+    print("No value was passed for --docs-dir and no", file=sys.stderr)
+    print("$CRDBDOCS environment variable was found.",  file=sys.stderr)
+    print("Either configure the $CRDBDOCS variable or",  file=sys.stderr)
+    print("supply a valid --docs-dir.",  file=sys.stderr)
+    sys.exit(1)
+elif not os.path.isdir(os.getenv('CRDBDOCS', options.docs_dir)):
+    print("%s is not a valid directory and $CRDBDOCS" % options.docs_dir, file=sys.stderr)
+    print("either doesn't exist or is an invalid directory.", file=sys.stderr)
+    sys.exit(1)
+
+if options.docs_dir and os.path.isdir(options.docs_dir):
+    docsdir = options.docs_dir
+else:
+    docsdir = os.getenv('CRDBDOCS', 'error')
+
+releases_file = os.path.join(docsdir, "_data", "releases.csv")
+versions_file = os.path.join(docsdir, "_data", "versions.csv")
+
+if not os.path.isfile(releases_file):
+    print("%s does not exist. Make sure --docs-dir" % releases_file, file=sys.stderr)
+    print("is pointing to the correct path and ", file=sys.stderr)
+    print("releases.csv exists within the _data folder.", file=sys.stderr)
+    sys.exit(1)
+
+if not os.path.isfile(versions_file):
+    print("%s does not exist. Make sure --docs-dir" % versions_file, file=sys.stderr)
+    print("is pointing to the correct path and ", file=sys.stderr)
+    print("versions.csv exists within the _data folder.", file=sys.stderr)
+    sys.exit(1)
 
 try:
     repo.commit(testrefname)
@@ -309,8 +361,6 @@ except exc.ODBError:
     print("  fetch = +refs/pull/*/head:%s/*" % pull_ref_prefix, file=sys.stderr)
     print("to the GitHub remote section of .git/config.", file=sys.stderr)
     sys.exit(1)
-
-
 
 def find_commits(from_commit_ref, until_commit_ref):
     try:
@@ -329,15 +379,41 @@ def find_commits(from_commit_ref, until_commit_ref):
 
     return firstCommit, finalCommit
 
-
-if not options.until_commit:
+if not until_commit:
     print("no value specified with --until, try --until=xxxxx (without space after =)", file=sys.stderr)
     sys.exit(1)
-if not options.from_commit:
+
+# Calculating the current/previous version as well as current/previous release.
+
+# If the current release is not the first alpha of a branch, then current_version = previous_version
+
+current_release = options.release_name if options.release_name else subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", until_commit], universal_newlines=True).strip()
+current_version = ".".join(current_release.split(".")[0:2])
+
+with open(versions_file, 'r') as versions:
+    vers_list = list(csv.DictReader(versions))
+    first_alpha = True
+    prod_release = options.prod_release if options.prod_release else False
+    previous_version = sorted(vers_list, key = lambda item: item['release_date'])[-1]['major_version']
+    for x in vers_list:
+        if x['major_version'] == current_version:
+            first_alpha = False
+            previous_version = current_version
+            if x['release_date'] < time.strftime('%Y-%d-%m') and x['release_date'] != 'N/A':
+                prod_release = True
+                break
+            break
+
+with open(releases_file, 'r') as releases:
+    rel_list = sorted([x for x in list(csv.DictReader(releases)) if x['major_version'] == previous_version], key = lambda item: item['release_date'])
+    previous_release = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.from_commit], universal_newlines=True).strip() if options.from_commit else rel_list[-1]['version']
+    from_commit = options.from_commit if options.from_commit else rel_list[-1]['sha']
+
+if not from_commit:
     print("no value specified with --from, try --from=xxxx (without space after =)", file=sys.stderr)
     sys.exit(1)
 
-firstCommit, commit = find_commits(options.from_commit, options.until_commit)
+firstCommit, commit = find_commits(from_commit, until_commit)
 if commit == firstCommit:
     print("Commit range is empty!", file=sys.stderr)
     print(parser.get_usage(), file=sys.stderr)
@@ -349,50 +425,46 @@ if commit == firstCommit:
     sys.exit(0)
 
 excludedFirst, excludedLast = None, None
-if options.exclude_from_commit or options.exclude_until_commit:
-    if not options.exclude_from_commit or not options.exclude_until_commit:
-        print("Both -xf and -xt must be specified, or not at all.")
-        sys.exit(1)
-    excludedFirst, excludedLast = find_commits(options.exclude_from_commit, options.exclude_until_commit)
+if first_alpha:
+    prev_ga = previous_version + ".0"
+    exclude_from_commit = options.exclude_from_commit if options.exclude_from_commit else subprocess.check_output(["git", "merge-base", "master",  prev_ga], universal_newlines=True).strip()
+    exclude_until_commit = options.exclude_until_commit if options.exclude_until_commit else previous_release
+    excludedFirst, excludedLast = find_commits(exclude_from_commit, exclude_until_commit)
 
 #
 # Reading data from repository
 #
-
 
 def identify_commit(c):
     return '%s ("%s", %s)' % (
         c.hexsha, c.message.split('\n', 1)[0],
         datetime.datetime.fromtimestamp(c.committed_date).ctime())
 
-
 def check_reachability(start, end):
     # Is the first commit reachable from the current one?
     base = repo.merge_base(start, end)
     if len(base) == 0:
         print("error: %s:%s\nand %s:%s\nhave no common ancestor" % (
-            options.from_commit, identify_commit(start),
-            options.until_commit, identify_commit(end)), file=sys.stderr)
+            from_commit, identify_commit(start),
+            until_commit, identify_commit(end)), file=sys.stderr)
         sys.exit(1)
     commonParent = base[0]
     if start != commonParent:
         print("warning: %s:%s\nis not an ancestor of %s:%s!" % (
-            options.from_commit, identify_commit(start),
-            options.until_commit, identify_commit(end)), file=sys.stderr)
+            from_commit, identify_commit(start),
+            until_commit, identify_commit(end)), file=sys.stderr)
         print(file=sys.stderr)
         ageindays = int((start.committed_date - commonParent.committed_date) / 86400)
         prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + start.hexsha)))
         print("The first common ancestor is %s" % identify_commit(commonParent), file=sys.stderr)
         print("which is %d commits older than %s:%s\nand %d days older. Using that as origin." %\
-              (prevlen, options.from_commit, identify_commit(start), ageindays), file=sys.stderr)
+              (prevlen, from_commit, identify_commit(start), ageindays), file=sys.stderr)
         print(file=sys.stderr)
         start = commonParent
     return start, end
 
-
 firstCommit, commit = check_reachability(firstCommit, commit)
-options.from_commit = firstCommit.hexsha
-
+from_commit = firstCommit.hexsha
 
 def extract_release_notes(currentCommit):
     msglines = currentCommit.message.split('\n')
@@ -470,10 +542,8 @@ def extract_release_notes(currentCommit):
 
     return foundnote, notes
 
-
 spinner = itertools.cycle(['/', '-', '\\', '|'])
 spin_counter = 0
-
 
 def spin():
     global spin_counter
@@ -486,13 +556,11 @@ def spin():
         print(next(spinner), end='', file=sys.stderr)
         sys.stderr.flush()
 
-
 def get_direct_history(startCommit, lastCommit):
     history = []
     for c in repo.iter_commits(startCommit.hexsha + '..' + lastCommit.hexsha, first_parent=True):
         history.append(c)
     return history
-
 
 excluded_notes = set()
 if excludedFirst is not None:
@@ -533,7 +601,6 @@ print("Collecting release notes from\n%s\nuntil\n%s" % (identify_commit(firstCom
 release_notes = {}
 missing_release_notes = []
 
-
 def collect_authors(commit):
     authors = set()
     author = lookup_person(commit.author.name, commit.author.email)
@@ -548,7 +615,6 @@ def collect_authors(commit):
         author = lookup_person(aname, amail)
         authors.add(author)
     return authors
-
 
 def process_release_notes(pr, title, commit):
     authors = collect_authors(commit)
@@ -569,14 +635,12 @@ def process_release_notes(pr, title, commit):
         missing_item = makeitem(pr, title, commit.hexsha[:shamin], authors)
     return missing_item, authors
 
-
 def makeitem(pr, prtitle, sha, authors):
     return {'authors': authors,
             'sha': sha,
             'pr': pr,
             'title': prtitle,
             'note': None}
-
 
 def completenote(commit, cat, notemsg, authors, pr, title):
     item = makeitem(pr, title, commit.hexsha[:shamin], authors)
@@ -587,11 +651,9 @@ def completenote(commit, cat, notemsg, authors, pr, title):
     catnotes.append(item)
     release_notes[cat] = catnotes
 
-
 per_group_history = {}
 individual_authors = set()
 allprs = set()
-
 
 # This function groups and counts all the commits that belong to a particular PR.
 # Some description is in order regarding the logic here: it should visit all
@@ -653,7 +715,6 @@ allprs = set()
 # have statistics included.
 def analyze_pr(merge, pr, parent_idx):
     allprs.add(pr)
-
 
     noteexpr = re.compile("^%s: (?P<message>.*) r=.* a=.*" % pr[1:], flags=re.M)
     m = noteexpr.search(merge.message)
@@ -725,8 +786,6 @@ def analyze_pr(merge, pr, parent_idx):
 
     collect_item(pr, title, merge.hexsha[:shamin], ncommits, authors, stats.total, merge.committed_date)
 
-
-
 def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     individual_authors.update(authors)
     if len(authors) == 0:
@@ -746,8 +805,6 @@ def collect_item(pr, prtitle, sha, ncommits, authors, stats, prts):
     history[1].append(item)
     per_group_history[k] = history
 
-
-
 def analyze_standalone_commit(commit):
     # Some random out-of-branch commit. Let's not forget them.
     authors = collect_authors(commit)
@@ -755,7 +812,6 @@ def analyze_standalone_commit(commit):
     item = makeitem('#unknown', title, commit.hexsha[:shamin], authors)
     missing_release_notes.append(item)
     collect_item('#unknown', title, commit.hexsha[:shamin], 1, authors, commit.stats.total, commit.committed_date)
-
 
 # Collect all the merge points so we can report progress.
 mergepoints = get_direct_history(firstCommit, commit)
@@ -787,7 +843,6 @@ for commit in mergepoints:
         print("                                \r%s (%s) " % (commit.hexsha[:shamin], ctime), end='', file=sys.stderr)
         analyze_standalone_commit(commit)
 
-
 print("\b\nAnalyzing authors...", file=sys.stderr)
 sys.stderr.flush()
 
@@ -805,12 +860,62 @@ for a in individual_authors:
     hist = b''
     for al in aliases:
         spin()
-        cmd = subprocess.run(["git", "log", "--author=%s <%s>" % al, options.from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
+        cmd = subprocess.run(["git", "log", "--author=%s <%s>" % al, from_commit, '-n', '1'], stdout=subprocess.PIPE, check=True)
         hist += cmd.stdout
     if len(hist) == 0:
         # No commit from that author older than the first commit
         # selected, so that's a first-time author.
         firsttime_contributors.append(a)
+
+# update releases.csv and versions.csv
+
+docker_image = "cockroachdb/cockroach" if prod_release else "cockroachdb/cockroach-unstable"
+
+if first_alpha:
+    with open(versions_file, 'a', encoding='utf-8') as wv:
+        version_writer = csv.writer(wv, delimiter=',', lineterminator='\n',)
+        version_writer.writerow([current_version, 'N/A', 'N/A', 'N/A'])
+
+with open(releases_file, 'a', encoding='utf-8') as wr:
+    release_writer = csv.writer(wr, delimiter=',', lineterminator='\n',)
+    release_writer.writerow([current_release, current_version, release_date_iso, 'false', no_windows, "Production" if prod_release else "Testing", no_source, go_version, until_commit, docker_image])
+
+def read_file(file):
+    # Read in the file all in one go, and return the data.
+    filedata = None
+    try:
+        with open(file, 'r') as f:
+            filedata = f.read()
+    except UnicodeDecodeError:
+        # We skip files that are not text, such as tarballs like:
+        # _includes/v20.2/app/hibernate-basic-sample/hibernate-basic-sample.tgz
+        return
+    return filedata
+
+def write_file(file, data):
+    with open(file, 'w') as f:
+        f.write(data)
+
+file = os.path.join(docsdir, '_config_base.yml')
+
+filedata = read_file(file)
+
+config = yaml.load(filedata, Loader=yaml.BaseLoader)
+#     start_time: 2020-05-12 11:01:26.34274101 +0000 UTC
+
+newdata = '''
+name: {cv}
+version: {cv}
+docker_image: {di}
+build_time: {bt} ({gv})
+start_time: {st} +0000 UTC
+'''.format(cv=current_release, di=docker_image, bt=build_time, gv=go_version, st=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
+
+newdata_loaded = yaml.load(newdata, Loader=yaml.BaseLoader)
+
+config['release_info'][current_version] = newdata_loaded
+
+write_file(file, yaml.dump(config))
 
 print("\b\n", file=sys.stderr)
 sys.stderr.flush()
@@ -823,61 +928,63 @@ sys.stderr.flush()
 
 # Start with known sections.
 
-current_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.until_commit], universal_newlines=True).strip()
-previous_version = subprocess.check_output(["git", "describe", "--tags", "--match=v[0-9]*", options.from_commit], universal_newlines=True).strip()
+# Add header details if applicable
 
-if not hideheader:
-    print("---")
-    print("title: What&#39;s New in", current_version)
-    print("toc: true")
-    print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
-    print("---")
-    print()
-    print("## " + time.strftime("%B %-d, %Y"))
-    print()
+if first_alpha: #construct main release note page to loop through all available versions (e.g., 22.1.md)
 
-# Print the release notes sign-up and Downloads section.
+    current_version_file = os.path.join(docsdir, "releases", current_version + ".md")
 
-if options.prod_release:
-    print("""DOCS WRITER: PLEASE UPDATE THE VERSIONS AND LINKS IN THIS INTRO: This page lists additions and changes in <current release> since <previous_version>.
+    vf = open(current_version_file, "a")
 
-- For a comprehensive summary of features in v20.2, see the [v20.2 GA release notes](v20.2.0.html).
-- To upgrade to v20.2, see [Upgrade to CockroachDB v20.2](../v20.2/upgrade-cockroach-version.html).
-""")
+    print("""---""", file=vf)
+    print("""title: What&#39;s New in {}""".format(current_version), file=vf)
+    print("""toc: true""", file=vf)
+    print("""toc_not_nested: true""", file=vf)
+    print("""summary: Additions and changes in CockroachDB version {0} since version {1}""".format(current_version, previous_version), file=vf)
+    print("""major_version: {}""".format(current_version), file=vf)
+    print("""docs_area: releases""", file=vf)
+    print("""keywords: gin, gin index, gin indexes, inverted index, inverted indexes, accelerated index, accelerated indexes""", file=vf)
+    print("""---""", file=vf)
+    print(file=vf)
+    print("""{% assign rel = site.data.releases | where_exp: "rel", "rel.major_version == page.major_version" | sort: "release_date" | reverse %}""", file=vf)
+    print(file=vf)
+    print("""{% assign vers = site.data.versions | where_exp: "vers", "vers.major_version == page.major_version" | first %}""", file=vf)
+    print(file=vf)
+    print("""{% assign today = "today" | date: "%Y-%m-%d" %}""", file=vf)
+    print(file=vf)
+    print("""{% include releases/testing-release-notice.md major_version=vers %}""", file=vf)
+    print(file=vf)
+    print("""Get future release notes emailed to you:""", file=vf)
+    print(file=vf)
+    print("""{% include_cached marketo.html %}""", file=vf)
+    print(file=vf)
+    print("""{% unless vers.release_date == "N/A" or vers.release_date > today %}""", file=vf)
+    print("""To upgrade to {{ page.major_version }}, see [Upgrade to CockroachDB {{ page.major_version }}](../{{ page.major_version }}/upgrade-cockroach-version.html).""", file=vf)
+    print("""{% endunless %}""", file=vf)
+    print(file=vf)
+    print("""{% for r in rel %}""", file=vf)
+    print("""{% include releases/{{ page.major_version }}/{{ r.version }}.md release=r.version %}""", file=vf)
+    print("""{% endfor %}""", file=vf)
+    print(file=vf)
+
+#construct individual release note file (e.g., 22.1.1):
+
+release_file = os.path.join(docsdir, "_includes/releases", current_version, current_release + ".md")
+
+rf = open(release_file, "a")
+
+print("##", current_release, file=rf)
+print(file=rf)
+print("Release Date:", release_date_pretty, file=rf)
+print(file=rf)
 
 if not hidedownloads:
-    print("""Get future release notes emailed to you:
-
-{% include_cached marketo.html %}
-""")
-    print()
-
-    print("""### Downloads
-
-<div id="os-tabs" class="filters clearfix">
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" class="filter-button" data-scope="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" class="filter-button" data-scope="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" class="filter-button" data-scope="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
-    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" class="filter-button" data-scope="source" data-eventcategory="source-release-notes">Source</button></a>
-</div>
-
-<section class="filter-content" data-scope="windows">
-{% include_cached windows_warning.md %}
-</section>
-""")
-
-    print("""### Docker image
-
-{% include_cached copy-clipboard.html %}
-~~~shell
-$ docker pull cockroachdb/cockroach""" + (":" if options.prod_release else "-unstable:") + current_version + """
-~~~
-""")
-    print()
+    print("{% include releases/release-downloads-docker-image.md release=include.release %}", file=rf)
+    print(file=rf)
 
 seenshas = set()
 seenprs = set()
-
+pageid = current_release.lower().replace(".", "-")
 
 def renderlinks(item):
     ret = '[%(pr)s][%(pr)s]' % item
@@ -887,20 +994,21 @@ def renderlinks(item):
         seenshas.add(item['sha'])
     return ret
 
-
 for sec in relnote_sec_order:
     r = release_notes.get(sec, None)
     if r is None:
         # No change in this section, nothing to print.
         continue
     sectitle = relnotetitles[sec]
-    print("###", sectitle)
-    print()
+    secid = sectitle.lower().replace(" ", "-").replace("/", "-")
+    # <h3 id="create-a-temp-table-33">Create a temp table</h3>
+    print("""<h3 id="{0}-{1}">{2}</h3>""".format(pageid, secid, sectitle), file=rf) # this generates unique anchor links
+    print(file=rf)
 
     for item in reversed(r):
-        print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
+        print("-", item['note'].replace('\n', '\n  '), renderlinks(item), file=rf)
 
-    print()
+    print(file=rf)
 
 extrasec = set()
 for sec in release_notes:
@@ -909,60 +1017,60 @@ for sec in release_notes:
         continue
     extrasec.add(sec)
 if len(extrasec) > 0 or len(missing_release_notes) > 0:
-    print("### Miscellaneous")
-    print()
+    print("""<h3 id="{0}-miscellaneous">Miscellaneous</h3>""".format(pageid), file=rf)
+    print(file=rf)
 if len(extrasec) > 0:
     extrasec_sorted = sorted(list(extrasec))
     for extrasec in extrasec_sorted:
-        print("#### %s" % extrasec.capitalize())
-        print()
+        print("""<h4 id="{0}-{1}">{2}</h4>""".format(pageid, extrasec.lower().replace(" ", "-").replace("/", "-"), extrasec.capitalize()), file=rf)
+        print(file=rf)
         for item in release_notes[extrasec]:
-            print("-", item['note'].replace('\n', '\n  '), renderlinks(item))
-        print()
+            print("-", item['note'].replace('\n', '\n  '), renderlinks(item), file=rf)
+        print(file=rf)
 
 if len(missing_release_notes) > 0:
-    print("#### Changes without release note annotation")
-    print()
+    print("""<h4 id="{0}-changes-without-release-note-annotation">Changes without release note annotation</h4>""".format(pageid), file=rf)
+    print(file=rf)
     for item in missing_release_notes:
         authors = ', '.join(str(x) for x in sorted(item['authors']))
-        print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(title)s" % item, "(%s)" % authors)
+        print("- [%(pr)s][%(pr)s] [%(sha)s][%(sha)s] %(title)s" % item, "(%s)" % authors, file=rf)
         seenshas.add(item['sha'])
         seenprs.add(item['pr'])
-    print()
+    print(file=rf)
 
 # Print the Doc Updates section.
-print("### Doc updates")
-print()
-print("{% comment %}Docs team: Please add these manually.{% endcomment %}")
-print()
+print("""<h3 id="{0}-doc-updates">Doc updates</h3>""".format(pageid), file=rf)
+print(file=rf)
+print("{% comment %}Docs team: Please add these manually.{% endcomment %}", file=rf)
+print(file=rf)
 
 # Print the Contributors section.
-print("### Contributors")
-print()
+print("""<h3 id="{}-contributors">Contributors</h3>""".format(pageid), file=rf)
+print(file=rf)
 print("This release includes %d merged PR%s by %s author%s." %
       (len(allprs), len(allprs) != 1 and "s" or "",
-       len(individual_authors), (len(individual_authors) != 1 and "s" or "")))
+       len(individual_authors), (len(individual_authors) != 1 and "s" or "")), file=rf)
 
 ext_contributors = individual_authors - crdb_folk
 
 notified_authors = sorted(set(ext_contributors) | set(firsttime_contributors))
 if len(notified_authors) > 0:
-    print("We would like to thank the following contributors from the CockroachDB community:")
-    print()
+    print("We would like to thank the following contributors from the CockroachDB community:", file=rf)
+    print(file=rf)
     for person in notified_authors:
-        print("-", person.name, end='')
+        print("-", person.name, end='', file=rf)
         if person in firsttime_contributors:
             annot = ""
             if person.crdb:
                 annot = ", CockroachDB team member"
-            print(" (first-time contributor%s)" % annot, end='')
-        print()
-print()
+            print(" (first-time contributor%s)" % annot, end='', file=rf)
+        print(file=rf)
+print(file=rf)
 
 # Print the per-author contribution list.
 if not hidepercontributor:
-    print("### PRs merged by contributors")
-    print()
+    print("""<h3 id="{0}-prs-merged-by-contributors">PRs merged by contributors</h3>""".format(pageid), file=rf)
+    print(file=rf)
     if not hideshas:
         fmt = "  - %(date)s [%(pr)-6s][%(pr)-6s] [%(sha)s][%(sha)s] (+%(insertions)4d -%(deletions)4d ~%(lines)4d/%(files)2d) %(title)s"
     else:
@@ -973,25 +1081,29 @@ if not hidepercontributor:
         if hidecrdbfolk and all(map(lambda x: x in crdb_folk, al)):
             continue
         items.sort(key=lambda x: x[sortkey], reverse=not revsort)
-        print("- %s:" % ', '.join(a.name for a in sorted(al)))
+        print("- %s:" % ', '.join(a.name for a in sorted(al)), file=rf)
         for item in items:
-            print(fmt % item, end='')
+            print(fmt % item, end='', file=rf)
             if not hideshas:
                 seenshas.add(item['sha'])
             seenprs.add(item['pr'])
 
             ncommits = item['ncommits']
             if ncommits > 1:
-                print(" (", end='')
-                print("%d commits" % ncommits, end='')
-                print(")", end='')
-            print()
-        print()
-    print()
+                print(" (", end='', file=rf)
+                print("%d commits" % ncommits, end='', file=rf)
+                print(")", end='', file=rf)
+            print(file=rf)
+        print(file=rf)
+    print(file=rf)
 
 # Link the PRs and SHAs
 for pr in sorted(seenprs):
-    print("[%s]: https://github.com/cockroachdb/cockroach/pull/%s" % (pr, pr[1:]))
+    print("[%s]: https://github.com/cockroachdb/cockroach/pull/%s" % (pr, pr[1:]), file=rf)
 for sha in sorted(seenshas):
-    print("[%s]: https://github.com/cockroachdb/cockroach/commit/%s" % (sha, sha))
-print()
+    print("[%s]: https://github.com/cockroachdb/cockroach/commit/%s" % (sha, sha), file=rf)
+
+if first_alpha:
+    print("New version file created: " + current_version_file)
+
+print("New release note file created: " + release_file)
