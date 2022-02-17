@@ -594,6 +594,7 @@ type testCatalogChangeBatcher struct {
 	descs               []catalog.Descriptor
 	namesToDelete       map[descpb.NameInfo]descpb.ID
 	descriptorsToDelete catalog.DescriptorIDSet
+	zoneConfigsToDelete catalog.DescriptorIDSet
 }
 
 var _ scexec.CatalogChangeBatcher = (*testCatalogChangeBatcher)(nil)
@@ -617,6 +618,12 @@ func (b *testCatalogChangeBatcher) DeleteName(
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
 	b.descriptorsToDelete.Add(id)
+	return nil
+}
+
+// DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
+	b.zoneConfigsToDelete.Add(id)
 	return nil
 }
 
@@ -666,6 +673,9 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	for _, deletedID := range b.descriptorsToDelete.Ordered() {
 		b.s.LogSideEffectf("delete descriptor #%d", deletedID)
 		b.s.catalog.DeleteDescriptorEntry(deletedID)
+	}
+	for _, deletedID := range b.zoneConfigsToDelete.Ordered() {
+		b.s.LogSideEffectf("deleting zone config for #%d", deletedID)
 	}
 	ve := b.s.catalog.Validate(ctx, clusterversion.TestingClusterVersion, catalog.NoValidationTelemetry, catalog.ValidationLevelAllPreTxnCommit, b.descs...)
 	return ve.CombinedError()
