@@ -11,9 +11,20 @@
 package kvstreamer
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -40,7 +51,7 @@ type resultsBuffer interface {
 
 	// get returns all the Results that the buffer can send to the client at the
 	// moment. The boolean indicates whether all expected Results have been
-	// returned.
+	// returned. Must be called without holding the budget's mutex.
 	get(context.Context) (_ []Result, allComplete bool, _ error)
 
 	// wait blocks until there is at least one Result available to be returned
@@ -70,6 +81,14 @@ type resultsBuffer interface {
 	//   Methods that should be called by the worker coordinator goroutine.  //
 	//                                                                       //
 	///////////////////////////////////////////////////////////////////////////
+
+	// spill returns true if the resultsBuffer is able to spill already buffered
+	// results to disk so that atLeastBytes (or more) bytes are returned to the
+	// budget. Only buffered results with higher values of priority (and less
+	// "urgency") are spilled.
+	//
+	// It is assumed that the budget's mutex is already being held.
+	spill(_ context.Context, atLeastBytes int64, spillingPriority int) (bool, error)
 
 	// error returns the first error encountered by the buffer.
 	error() error
@@ -215,9 +234,464 @@ func (b *outOfOrderResultsBuffer) get(context.Context) ([]Result, bool, error) {
 	return results, allComplete, b.err
 }
 
+func (b *outOfOrderResultsBuffer) spill(context.Context, int64, int) (bool, error) {
+	// There is nothing to spill in the OutOfOrder mode, but we'll assert that
+	// the budget's mutex is held.
+	b.budget.mu.AssertHeld()
+	return false, nil
+}
+
 func (b *outOfOrderResultsBuffer) close(context.Context) {
 	// Note that only the client's goroutine can be blocked waiting for the
 	// results, and close() is called only by the same goroutine, so signaling
 	// isn't necessary. However, we choose to be safe and do it anyway.
 	b.signal()
+}
+
+// inOrderResultsBuffer is a resultsBuffer that returns the Results in the same
+// order as the original requests were Enqueued into the Streamer (in other
+// words, in non-decreasing fashion of Result.position). Internally, it
+// maintains a min heap over Result.position values, keeps track of the current
+// head-of-the-line position, and might spill some of the Results to disk when
+// asked.
+//
+// The Results that are buffered but cannot be returned to the client are not
+// considered "unreleased" - we think of them as "buffered". This matters so
+// that the Streamer could issue the head-of-the-line request with
+// headOfLine=true even if there are some buffered results.
+type inOrderResultsBuffer struct {
+	*resultsBufferBase
+	// headOfLinePosition is the position value of the next Result to be
+	// returned.
+	headOfLinePosition int
+	// buffered contains all buffered Results, regardless of whether they are
+	// stored in-memory or on disk.
+	buffered []inOrderBufferedResult
+	disk     struct {
+		// initialized is set to true when the first Result is spilled to disk.
+		initialized bool
+		// container stores all Results that have been spilled to disk since the
+		// last call to init().
+		// TODO(yuzefovich): probably move kvstreamer package into sql since we
+		// now have a dependency on sql/rowcontainer.
+		// TODO(yuzefovich): at the moment, all spilled results that have been
+		// returned to the client still exist in the row container, so they have
+		// to be skipped over many times leading to a quadratic behavior.
+		// Improve this. One idea is to track the "garbage ratio" and once that
+		// exceeds say 50%, a new container is created and non-garbage rows are
+		// inserted into it.
+		container rowcontainer.DiskRowContainer
+		// iter, if non-nil, is the iterator currently positioned at iterRowID
+		// row. If a new row is added into the container, the iterator becomes
+		// invalid, so it'll be closed and nil-ed out.
+		iter      rowcontainer.RowIterator
+		iterRowID int
+
+		engine     diskmap.Factory
+		monitor    *mon.BytesMonitor
+		rowScratch rowenc.EncDatumRow
+		alloc      tree.DatumAlloc
+	}
+}
+
+var _ resultsBuffer = &inOrderResultsBuffer{}
+var _ heap.Interface = &inOrderResultsBuffer{}
+
+func (b *inOrderResultsBuffer) Len() int {
+	return len(b.buffered)
+}
+
+func (b *inOrderResultsBuffer) Less(i, j int) bool {
+	return b.buffered[i].position < b.buffered[j].position
+}
+
+func (b *inOrderResultsBuffer) Swap(i, j int) {
+	b.buffered[i], b.buffered[j] = b.buffered[j], b.buffered[i]
+}
+
+func (b *inOrderResultsBuffer) Push(x interface{}) {
+	b.buffered = append(b.buffered, x.(inOrderBufferedResult))
+}
+
+func (b *inOrderResultsBuffer) Pop() interface{} {
+	x := b.buffered[len(b.buffered)-1]
+	b.buffered = b.buffered[:len(b.buffered)-1]
+	return x
+}
+
+func (b *inOrderResultsBuffer) init(ctx context.Context, numExpectedResponses int) error {
+	b.Lock()
+	defer b.Unlock()
+	if err := b.initLocked(len(b.buffered) == 0 /* isEmpty */, numExpectedResponses); err != nil {
+		b.setErrorLocked(err)
+		return err
+	}
+	b.headOfLinePosition = 0
+	if b.disk.initialized {
+		// If the row container was initialized, make sure to reset it.
+		if b.disk.iter != nil {
+			b.disk.iter.Close()
+			b.disk.iter = nil
+			b.disk.iterRowID = 0
+		}
+		if err := b.disk.container.UnsafeReset(ctx); err != nil {
+			b.setErrorLocked(err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *inOrderResultsBuffer) add(results []Result, numCompleteResponses int) {
+	b.Lock()
+	defer b.Unlock()
+	// Note that we don't increase b.numUnreleasedResults because all these
+	// results are "buffered".
+	b.numCompleteResponses += numCompleteResponses
+	foundHeadOfLine := false
+	for _, r := range results {
+		if debug {
+			fmt.Printf("adding a result for position %d of size %d\n", r.position, r.memoryTok.toRelease)
+		}
+		// All the Results have already been registered with the budget, so
+		// we're keeping them in-memory.
+		heap.Push(b, inOrderBufferedResult{Result: r, onDisk: false})
+		if r.position == b.headOfLinePosition {
+			foundHeadOfLine = true
+		}
+	}
+	if foundHeadOfLine {
+		if debug {
+			fmt.Println("found head-of-the-line")
+		}
+		b.signal()
+	}
+}
+
+func (b *inOrderResultsBuffer) get(ctx context.Context) ([]Result, bool, error) {
+	// Whenever a result is picked up from disk, we need to make the memory
+	// reservation for it, so we acquire the budget's mutex.
+	b.budget.mu.Lock()
+	defer b.budget.mu.Unlock()
+	b.Lock()
+	defer b.Unlock()
+	var res []Result
+	if debug {
+		fmt.Printf("attempting to get results, current headOfLinePosition = %d\n", b.headOfLinePosition)
+	}
+	for len(b.buffered) > 0 && b.buffered[0].position == b.headOfLinePosition {
+		result, toConsume, err := b.buffered[0].get(ctx, b)
+		if err != nil {
+			b.setErrorLocked(err)
+			return nil, false, err
+		}
+		if toConsume > 0 {
+			if err = b.budget.consumeLocked(ctx, toConsume, len(res) == 0 /* allowDebt */); err != nil {
+				if len(res) > 0 {
+					// Most likely this error means that we'd put the budget in
+					// debt if we keep this result in-memory. However, there are
+					// already some results to return to the client, so we'll
+					// return them and attempt to proceed with the current
+					// result the next time the client asks.
+					break
+				}
+				b.setErrorLocked(err)
+				return nil, false, err
+			}
+		}
+		res = append(res, result)
+		heap.Remove(b, 0)
+		if result.GetResp != nil || result.ScanResp.Complete {
+			// If the current Result is complete, then we need to advance the
+			// head-of-the-line position.
+			b.headOfLinePosition++
+		}
+	}
+	// Now all the Results in res are no longer "buffered" and become
+	// "unreleased", so we increment the corresponding tracker.
+	b.numUnreleasedResults += len(res)
+	if debug {
+		if len(res) > 0 {
+			fmt.Printf("returning %s to the client, headOfLinePosition is now %d\n", resultsToString(res), b.headOfLinePosition)
+		}
+	}
+	// All requests are complete IFF we have received the complete responses for
+	// all requests and there no buffered Results.
+	allComplete := b.numCompleteResponses == b.numExpectedResponses && len(b.buffered) == 0
+	return res, allComplete, b.err
+}
+
+func (b *inOrderResultsBuffer) stringLocked() string {
+	result := "buffered for "
+	for i := range b.buffered {
+		if i > 0 {
+			result += ", "
+		}
+		var onDiskInfo string
+		if b.buffered[i].onDisk {
+			onDiskInfo = " (on disk)"
+		}
+		result += fmt.Sprintf("[%d]%s: size %d", b.buffered[i].position, onDiskInfo, b.buffered[i].memoryTok.toRelease)
+	}
+	return result
+}
+
+func (b *inOrderResultsBuffer) spill(
+	ctx context.Context, atLeastBytes int64, spillingPriority int,
+) (spilled bool, _ error) {
+	b.budget.mu.AssertHeld()
+	b.Lock()
+	defer b.Unlock()
+	if buildutil.CrdbTestBuild {
+		// In test builds, if we didn't succeed in freeing up the budget, assert
+		// that all buffered results with higher priority value have been
+		// spilled.
+		defer func() {
+			if !spilled {
+				for i := range b.buffered {
+					if b.buffered[i].position > spillingPriority && !b.buffered[i].onDisk {
+						panic(errors.AssertionFailedf(
+							"unexpectedly result for position %d wasn't spilled, spilling priority %d\n%s\n",
+							b.buffered[i].position, spillingPriority, b.stringLocked()),
+						)
+					}
+				}
+			}
+		}()
+	}
+	if len(b.buffered) == 0 {
+		return false, nil
+	}
+	// Spill some results to disk.
+	if debug {
+		fmt.Printf(
+			"want to spill at least %d bytes with priority %d\t%s\n",
+			atLeastBytes, spillingPriority, b.stringLocked(),
+		)
+	}
+	if !b.disk.initialized {
+		b.disk.container = rowcontainer.MakeDiskRowContainer(
+			b.disk.monitor,
+			inOrderResultsBufferSpillTypeSchema,
+			colinfo.ColumnOrdering{},
+			b.disk.engine,
+		)
+		b.disk.initialized = true
+		b.disk.rowScratch = make(rowenc.EncDatumRow, len(inOrderResultsBufferSpillTypeSchema))
+	}
+	// Iterate in reverse order so that the results with higher priority value
+	// are spilled first (this could matter if the query has a LIMIT).
+	for idx := len(b.buffered) - 1; idx >= 0; idx-- {
+		if r := &b.buffered[idx]; !r.onDisk && r.position > spillingPriority {
+			if debug {
+				fmt.Printf(
+					"spilling a result for position %d which will free up %d bytes\n",
+					r.position, r.memoryTok.toRelease,
+				)
+			}
+			if err := b.buffered[idx].serialize(b.disk.rowScratch, &b.disk.alloc); err != nil {
+				return false, err
+			}
+			*r = inOrderBufferedResult{
+				Result:    Result{memoryTok: r.memoryTok, position: r.position},
+				onDisk:    true,
+				diskRowID: b.disk.container.Len(),
+			}
+			if err := b.disk.container.AddRow(ctx, b.disk.rowScratch); err != nil {
+				return false, err
+			}
+			// The iterator became invalid, so we need to close it.
+			if b.disk.iter != nil {
+				b.disk.iter.Close()
+				b.disk.iter = nil
+				b.disk.iterRowID = 0
+			}
+			b.budget.releaseLocked(ctx, r.memoryTok.toRelease)
+			atLeastBytes -= r.memoryTok.toRelease
+			if atLeastBytes <= 0 {
+				if debug {
+					fmt.Println("the spill was successful")
+				}
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+func (b *inOrderResultsBuffer) close(ctx context.Context) {
+	b.Lock()
+	defer b.Unlock()
+	if b.disk.initialized {
+		if b.disk.iter != nil {
+			b.disk.iter.Close()
+			b.disk.iter = nil
+		}
+		b.disk.container.Close(ctx)
+	}
+	// Note that only the client's goroutine can be blocked waiting for the
+	// results, and close() is called only by the same goroutine, so signaling
+	// isn't necessary. However, we choose to be safe and do it anyway.
+	b.signal()
+}
+
+// inOrderBufferedResult describes a single Result for InOrder mode, regardless
+// of where it is stored (in-memory or on disk).
+type inOrderBufferedResult struct {
+	// If onDisk is true, then only Result.memoryTok and Result.position are
+	// set.
+	Result
+	// If onDisk is true, then the serialized Result is stored on disk in the
+	// row container at position diskRowID.
+	onDisk    bool
+	diskRowID int
+}
+
+// get returns the Result, deserializing it from disk if necessary. toConsume
+// indicates how much memory needs to be consumed from the budget to hold this
+// Result in-memory.
+func (r *inOrderBufferedResult) get(
+	ctx context.Context, b *inOrderResultsBuffer,
+) (_ Result, toConsume int64, _ error) {
+	if !r.onDisk {
+		return r.Result, 0, nil
+	}
+	// The Result is currently on disk, so we have to position the iterator at
+	// the corresponding rowID first.
+	if b.disk.iter == nil {
+		b.disk.iter = b.disk.container.NewIterator(ctx)
+		b.disk.iter.Rewind()
+	}
+	if r.diskRowID < b.disk.iterRowID {
+		b.disk.iter.Rewind()
+		b.disk.iterRowID = 0
+	}
+	for b.disk.iterRowID < r.diskRowID {
+		b.disk.iter.Next()
+		b.disk.iterRowID++
+	}
+	// Now we take the row representing the Result and deserialize it into r.
+	serialized, err := b.disk.iter.Row()
+	if err != nil {
+		return Result{}, 0, err
+	}
+	if err = deserialize(&r.Result, serialized, &b.disk.alloc); err != nil {
+		return Result{}, 0, err
+	}
+	return r.Result, r.memoryTok.toRelease, err
+}
+
+// inOrderResultsBufferSpillTypeSchema is the type schema of a single Result
+// that is spilled to disk.
+//
+// It contains all the information except for 'ScanResp.Complete', 'memoryTok',
+// and 'position' fields which are kept in-memory (because they are allocated in
+// inOrderBufferedResult.Result anyway).
+var inOrderResultsBufferSpillTypeSchema = []*types.T{
+	types.Bool, // isGet
+	// GetResp.Value:
+	//	RawBytes []byte
+	//	Timestamp hlc.Timestamp
+	//	  WallTime int64
+	//	  Logical int32
+	//	  Synthetic bool
+	types.Bytes, types.Int, types.Int, types.Bool,
+	// ScanResp:
+	//  BatchResponses [][]byte
+	types.BytesArray,
+	types.IntArray, // EnqueueKeysSatisfied []int
+}
+
+type resultSerializationIndex int
+
+const (
+	isGetIdx resultSerializationIndex = iota
+	getRawBytesIdx
+	getTSWallTimeIdx
+	getTSLogicalIdx
+	getTSSyntheticIdx
+	scanBatchResponsesIdx
+	enqueueKeysSatisfiedIdx
+)
+
+// serialize writes the serialized representation of the Result into row
+// according to inOrderResultsBufferSpillTypeSchema.
+func (r *Result) serialize(row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
+	row[isGetIdx] = rowenc.EncDatum{Datum: tree.MakeDBool(r.GetResp != nil)}
+	if r.GetResp != nil && r.GetResp.Value != nil {
+		// We have a non-empty Get response.
+		v := r.GetResp.Value
+		row[getRawBytesIdx] = rowenc.EncDatum{Datum: alloc.NewDBytes(tree.DBytes(v.RawBytes))}
+		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.WallTime))}
+		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: alloc.NewDInt(tree.DInt(v.Timestamp.Logical))}
+		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.MakeDBool(tree.DBool(v.Timestamp.Synthetic))}
+		row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
+	} else {
+		row[getRawBytesIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		row[getTSWallTimeIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		row[getTSLogicalIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		row[getTSSyntheticIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		if r.GetResp != nil {
+			// We have an empty Get response.
+			row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: tree.DNull}
+		} else {
+			// We have a Scan response.
+			batchResponses := tree.NewDArray(types.Bytes)
+			batchResponses.Array = make(tree.Datums, 0, len(r.ScanResp.BatchResponses))
+			for _, b := range r.ScanResp.BatchResponses {
+				if err := batchResponses.Append(alloc.NewDBytes(tree.DBytes(b))); err != nil {
+					return err
+				}
+			}
+			row[scanBatchResponsesIdx] = rowenc.EncDatum{Datum: batchResponses}
+		}
+	}
+	enqueueKeysSatisfied := tree.NewDArray(types.Int)
+	enqueueKeysSatisfied.Array = make(tree.Datums, 0, len(r.EnqueueKeysSatisfied))
+	for _, k := range r.EnqueueKeysSatisfied {
+		if err := enqueueKeysSatisfied.Append(alloc.NewDInt(tree.DInt(k))); err != nil {
+			return err
+		}
+	}
+	row[enqueueKeysSatisfiedIdx] = rowenc.EncDatum{Datum: enqueueKeysSatisfied}
+	return nil
+}
+
+// deserialize updates r in-place according to row which contains the serialized
+// state of the Result according to inOrderResultsBufferSpillTypeSchema.
+//
+// 'ScanResp.Complete', 'memoryTok', and 'position' fields are left unchanged
+// since those aren't serialized.
+func deserialize(r *Result, row rowenc.EncDatumRow, alloc *tree.DatumAlloc) error {
+	for i := range row {
+		if err := row[i].EnsureDecoded(inOrderResultsBufferSpillTypeSchema[i], alloc); err != nil {
+			return err
+		}
+	}
+	if isGet := tree.MustBeDBool(row[isGetIdx].Datum); isGet {
+		r.GetResp = &roachpb.GetResponse{}
+		if row[getRawBytesIdx].Datum != tree.DNull {
+			r.GetResp.Value = &roachpb.Value{
+				RawBytes: []byte(tree.MustBeDBytes(row[getRawBytesIdx].Datum)),
+				Timestamp: hlc.Timestamp{
+					WallTime:  int64(tree.MustBeDInt(row[getTSWallTimeIdx].Datum)),
+					Logical:   int32(tree.MustBeDInt(row[getTSLogicalIdx].Datum)),
+					Synthetic: bool(tree.MustBeDBool(row[getTSSyntheticIdx].Datum)),
+				},
+			}
+		}
+	} else {
+		r.ScanResp.ScanResponse = &roachpb.ScanResponse{}
+		batchResponses := tree.MustBeDArray(row[scanBatchResponsesIdx].Datum)
+		r.ScanResp.ScanResponse.BatchResponses = make([][]byte, batchResponses.Len())
+		for i := range batchResponses.Array {
+			r.ScanResp.ScanResponse.BatchResponses[i] = []byte(tree.MustBeDBytes(batchResponses.Array[i]))
+		}
+	}
+	enqueueKeysSatisfied := tree.MustBeDArray(row[enqueueKeysSatisfiedIdx].Datum)
+	r.EnqueueKeysSatisfied = make([]int, enqueueKeysSatisfied.Len())
+	for i := range enqueueKeysSatisfied.Array {
+		r.EnqueueKeysSatisfied[i] = int(tree.MustBeDInt(enqueueKeysSatisfied.Array[i]))
+	}
+	return nil
 }

@@ -11,6 +11,7 @@
 package kvstreamer
 
 import (
+	"container/heap"
 	"fmt"
 	"sort"
 	"sync"
@@ -40,6 +41,11 @@ type singleRangeBatch struct {
 	// not be empty. Note that TargetBytes of at least minTargetBytes is
 	// necessary but might not be sufficient for the response to be non-empty.
 	minTargetBytes int64
+	// priority is the smallest number in positions. It is the priority of this
+	// singleRangeBatch where the smaller the value is, the sooner the Result
+	// will be needed, so batches with the smallest priority value has the
+	// highest "urgency".
+	priority int
 }
 
 var _ sort.Interface = &singleRangeBatch{}
@@ -195,4 +201,68 @@ func (p *outOfOrderRequestsProvider) removeFirstLocked() {
 		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
 	}
 	p.requests = p.requests[1:]
+}
+
+// inOrderRequestsProvider is a requestProvider that maintains a min heap of all
+// requests according to the priority values (the smaller the priority value is,
+// the higher actual priority of fulfilling the corresponding request).
+type inOrderRequestsProvider struct {
+	*requestsProviderBase
+}
+
+var _ requestsProvider = &inOrderRequestsProvider{}
+var _ heap.Interface = &inOrderRequestsProvider{}
+
+func (p *inOrderRequestsProvider) Len() int {
+	return len(p.requests)
+}
+
+func (p *inOrderRequestsProvider) Less(i, j int) bool {
+	return p.requests[i].priority < p.requests[j].priority
+}
+
+func (p *inOrderRequestsProvider) Swap(i, j int) {
+	p.requests[i], p.requests[j] = p.requests[j], p.requests[i]
+}
+
+func (p *inOrderRequestsProvider) Push(x interface{}) {
+	p.requests = append(p.requests, x.(singleRangeBatch))
+}
+
+func (p *inOrderRequestsProvider) Pop() interface{} {
+	x := p.requests[len(p.requests)-1]
+	p.requests = p.requests[:len(p.requests)-1]
+	return x
+}
+
+func (p *inOrderRequestsProvider) enqueue(requests []singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	p.requests = requests
+	heap.Init(p)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) add(request singleRangeBatch) {
+	p.Lock()
+	defer p.Unlock()
+	if debug {
+		fmt.Printf("adding a request for positions %v to be served, minTargetBytes=%d\n", request.positions, request.minTargetBytes)
+	}
+	heap.Push(p, request)
+	p.hasWork.Signal()
+}
+
+func (p *inOrderRequestsProvider) firstLocked() singleRangeBatch {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("firstLocked called when requestsProvider is empty"))
+	}
+	return p.requests[0]
+}
+
+func (p *inOrderRequestsProvider) removeFirstLocked() {
+	if len(p.requests) == 0 {
+		panic(errors.AssertionFailedf("removeFirstLocked called when requestsProvider is empty"))
+	}
+	heap.Remove(p, 0)
 }
