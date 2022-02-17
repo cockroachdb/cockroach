@@ -47,4 +47,5 @@ type TestingKnobs struct {
 	TelemetryLoggingKnobs       ModuleTestingKnobs
 	DialerKnobs                 ModuleTestingKnobs
 	ProtectedTS                 ModuleTestingKnobs
+	AdmissionControl            ModuleTestingKnobs
 }
