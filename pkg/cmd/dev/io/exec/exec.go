@@ -259,3 +259,9 @@ func (e *Exec) Next(command string, f func() (output string, err error)) (string
 	}
 	return e.Recorder.Next(command, f)
 }
+
+// IsDryrun returns whether or not this exec is running in "dryrun" mode, which is useful to avoid
+// behavior that would otherwise permanently block execution during testing.
+func (e *Exec) IsDryrun() bool {
+	return e.knobs.dryrun
+}
