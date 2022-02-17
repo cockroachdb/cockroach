@@ -43,6 +43,7 @@ func NewJobRunDependencies(
 	testingKnobs *scrun.TestingKnobs,
 	statements []string,
 	sessionData *sessiondata.SessionData,
+	kvTrace bool,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
 		collectionFactory:     collectionFactory,
@@ -60,6 +61,7 @@ func NewJobRunDependencies(
 		indexValidator:        indexValidator,
 		commentUpdaterFactory: commentUpdaterFactory,
 		sessionData:           sessionData,
+		kvTrace:               kvTrace,
 	}
 }
 
@@ -73,6 +75,7 @@ type jobExecutionDeps struct {
 	rangeCounter          RangeCounter
 	jobRegistry           *jobs.Registry
 	job                   *jobs.Job
+	kvTrace               bool
 
 	indexValidator scexec.IndexValidator
 
@@ -105,6 +108,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				indexValidator:     d.indexValidator,
 				eventLogger:        d.eventLoggerFactory(txn),
 				schemaChangerJobID: d.job.ID(),
+				kvTrace:            d.kvTrace,
 			},
 			backfiller: d.backfiller,
 			backfillTracker: newBackfillTracker(d.codec,

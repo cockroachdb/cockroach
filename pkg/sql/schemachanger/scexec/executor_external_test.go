@@ -60,22 +60,25 @@ type testInfra struct {
 func (ti testInfra) newExecDeps(
 	txn *kv.Txn, descsCollection *descs.Collection,
 ) scexec.Dependencies {
+	const kvTrace = true
+	const schemaChangerJobID = 1
 	return scdeps.NewExecutorDependencies(
 		ti.lm.Codec(),
-		&sessiondata.SessionData{}, /* sessionData */
+		&sessiondata.SessionData{},
 		txn,
 		security.RootUserName(),
 		descsCollection,
-		noopJobRegistry{}, /* jobRegistry */
-		noopBackfiller{},  /* backfiller */
+		noopJobRegistry{},
+		noopBackfiller{},
 		scdeps.NewNoOpBackfillTracker(ti.lm.Codec()),
 		scdeps.NewNoopPeriodicProgressFlusher(),
-		noopIndexValidator{}, /* indexValidator */
+		noopIndexValidator{},
 		scdeps.NewConstantClock(timeutil.Now()),
-		noopMetadataUpdaterFactory{}, /* commentUpdaterFactory*/
-		noopEventLogger{},            /* eventLogger */
-		1,                            /* schemaChangerJobID */
-		nil,                          /* statements */
+		noopMetadataUpdaterFactory{},
+		noopEventLogger{},
+		kvTrace,
+		schemaChangerJobID,
+		nil, /* statements */
 	)
 }
 
