@@ -6942,7 +6942,26 @@ func TestImportInMultiServerTenant(t *testing.T) {
 	require.NoError(t, putUserfile(ctx, conn2, security.RootUserName(), userfile2URI, []byte("11,22\n33,44\n55,66")))
 
 	t1.Exec(t, createStmt)
+	t1.Exec(t, "SET tracing = on")
+	t2.Exec(t, "SET tracing = on")
 	t1.Exec(t, importStmt, userfileURI, userfile2URI)
+	t1.Exec(t, "SET tracing = off")
+	t2.Exec(t, "SET tracing = off")
+	rows := t1.Query(t, "SELECT concat(location, ' ', tag, ' ', span::string, ' ', operation, ' ', message) FROM [SHOW TRACE FOR SESSION]")
+	defer rows.Close()
+	for rows.Next() {
+		var line gosql.NullString
+		require.NoError(t, rows.Scan(&line))
+		log.Infof(ctx, "%s", line)
+	}
+	rows = t2.Query(t, "SELECT concat(location, ' ', tag, ' ', span::string, ' ', operation, ' ', message) FROM [SHOW TRACE FOR SESSION]")
+	defer rows.Close()
+	for rows.Next() {
+		var line gosql.NullString
+		require.NoError(t, rows.Scan(&line))
+		log.Infof(ctx, "%s", line)
+	}
+
 	t1.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}, {"11", "22"}, {"33", "44"}, {"55", "66"}})
 	t2.CheckQueryResults(t, "SELECT * FROM foo", [][]string{{"10", "2"}, {"11", "22"}, {"33", "44"}, {"55", "66"}})
 }

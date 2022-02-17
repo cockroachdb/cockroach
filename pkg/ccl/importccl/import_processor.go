@@ -177,6 +177,8 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
+	log.Infof(ctx, "starting read import")
+	log.VEventf(ctx, 1, "starting read import")
 	go func() {
 		defer close(idp.progCh)
 		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
