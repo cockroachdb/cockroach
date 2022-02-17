@@ -8,6 +8,7 @@ go_library(
     embed = [":contentionpb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/contentionpb",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/uuid"],
 )
 
 proto_library(

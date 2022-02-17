@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestFIFOCache(t *testing.T) {
 }
 
 func removeEntryFromMap(
-	m map[uuid.UUID]roachpb.TransactionFingerprintID, filterList []ResolvedTxnID,
+	m map[uuid.UUID]roachpb.TransactionFingerprintID, filterList []contentionpb.ResolvedTxnID,
 ) map[uuid.UUID]roachpb.TransactionFingerprintID {
 	newMap := make(map[uuid.UUID]roachpb.TransactionFingerprintID)
 	for k, v := range m {
@@ -119,7 +120,7 @@ func checkEvictionListContent(t *testing.T, cache *fifoCache, expectedBlocks []*
 			"is nil", evictionListSize)
 
 		for blockIdx := 0; blockIdx < blockSize; blockIdx++ {
-			if !expectedBlocks[i][blockIdx].valid() {
+			if !expectedBlocks[i][blockIdx].Valid() {
 				break
 			}
 
@@ -131,7 +132,7 @@ func checkEvictionListContent(t *testing.T, cache *fifoCache, expectedBlocks []*
 			evictionListBlockIdx++
 
 			isEvictionListIdxStillValid :=
-				evictionListBlockIdx < blockSize && cur.block[evictionListBlockIdx].valid()
+				evictionListBlockIdx < blockSize && cur.block[evictionListBlockIdx].Valid()
 
 			if !isEvictionListIdxStillValid {
 				cur = cur.next
@@ -154,7 +155,7 @@ func checkEvictionListShape(t *testing.T, cache *fifoCache, expectedBlockSizes [
 
 		actualBlockSize := 0
 		for blockIdx := 0; blockIdx < blockSize; blockIdx++ {
-			if !cur.block[blockIdx].valid() {
+			if !cur.block[blockIdx].Valid() {
 				break
 			}
 			actualBlockSize++

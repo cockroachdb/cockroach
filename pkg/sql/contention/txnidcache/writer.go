@@ -12,6 +12,7 @@ package txnidcache
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -44,7 +45,7 @@ func newWriter(st *cluster.Settings, sink blockSink) *writer {
 }
 
 // Record implements the Writer interface.
-func (w *writer) Record(resolvedTxnID ResolvedTxnID) {
+func (w *writer) Record(resolvedTxnID contentionpb.ResolvedTxnID) {
 	if MaxSize.Get(&w.st.SV) == 0 {
 		return
 	}
@@ -53,10 +54,10 @@ func (w *writer) Record(resolvedTxnID ResolvedTxnID) {
 	buffer.Record(resolvedTxnID)
 }
 
-// Flush implements the Writer interface.
-func (w *writer) Flush() {
+// DrainWriteBuffer implements the Writer interface.
+func (w *writer) DrainWriteBuffer() {
 	for shardIdx := 0; shardIdx < shardCount; shardIdx++ {
-		w.shards[shardIdx].Flush()
+		w.shards[shardIdx].DrainWriteBuffer()
 	}
 }
 
