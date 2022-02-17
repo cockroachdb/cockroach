@@ -38,6 +38,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
