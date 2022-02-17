@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -59,6 +60,7 @@ func NewExecutorDependencies(
 	commentUpdaterFactory scexec.DescriptorMetadataUpdaterFactory,
 	eventLogger scexec.EventLogger,
 	schemaChangerJobID jobspb.JobID,
+	kvTrace bool,
 	statements []string,
 ) scexec.Dependencies {
 	return &execDeps{
@@ -70,6 +72,7 @@ func NewExecutorDependencies(
 			indexValidator:     indexValidator,
 			eventLogger:        eventLogger,
 			schemaChangerJobID: schemaChangerJobID,
+			kvTrace:            kvTrace,
 		},
 		backfiller:              backfiller,
 		backfillTracker:         backfillTracker,
@@ -91,6 +94,7 @@ type txnDeps struct {
 	eventLogger        scexec.EventLogger
 	deletedDescriptors catalog.DescriptorIDSet
 	schemaChangerJobID jobspb.JobID
+	kvTrace            bool
 }
 
 func (d *txnDeps) UpdateSchemaChangeJob(
@@ -223,20 +227,28 @@ var _ scexec.CatalogChangeBatcher = (*catalogChangeBatcher)(nil)
 func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) error {
-	return b.descsCollection.WriteDescToBatch(ctx, false /* kvTrace */, desc, b.batch)
+	return b.descsCollection.WriteDescToBatch(ctx, b.kvTrace, desc, b.batch)
 }
 
 // DeleteName implements the scexec.CatalogWriter interface.
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
-	b.batch.Del(catalogkeys.EncodeNameKey(b.codec, nameInfo))
+	marshalledKey := catalogkeys.EncodeNameKey(b.codec, nameInfo)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "Del %s", marshalledKey)
+	}
+	b.batch.Del(marshalledKey)
 	return nil
 }
 
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	b.batch.Del(catalogkeys.MakeDescMetadataKey(b.codec, id))
+	marshalledKey := catalogkeys.MakeDescMetadataKey(b.codec, id)
+	b.batch.Del(marshalledKey)
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "Del %s", marshalledKey)
+	}
 	b.deletedDescriptors.Add(id)
 	b.descsCollection.AddDeletedDescriptor(id)
 	return nil
