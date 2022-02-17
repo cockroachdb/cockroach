@@ -645,7 +645,8 @@ func (ds *DistSender) initAndVerifyBatch(
 			inner := req.GetInner()
 			switch inner.(type) {
 			case *roachpb.ScanRequest, *roachpb.ResolveIntentRangeRequest,
-				*roachpb.DeleteRangeRequest, *roachpb.RevertRangeRequest, *roachpb.ExportRequest:
+				*roachpb.DeleteRangeRequest, *roachpb.RevertRangeRequest,
+				*roachpb.ExportRequest, *roachpb.QueryLocksRequest:
 				// Accepted forward range requests.
 				if isReverse {
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")

@@ -464,6 +464,7 @@ type QueryLockTableResumeState struct {
 	ResumeSpan      *roachpb.Span
 	ResumeReason    roachpb.ResumeReason
 	ResumeNextBytes int64
+	TotalBytes      int64
 }
 
 ///////////////////////////////////
