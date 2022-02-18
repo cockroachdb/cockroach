@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go/service/s3"
+	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/errors"
 )
 
@@ -55,128 +56,206 @@ var (
 	NoCache = "no-cache"
 )
 
-// SupportedTarget contains metadata about a supported target.
-type SupportedTarget struct {
-	BuildType string
-	Suffix    string
+// Platform is an enumeration of the supported platforms for release.
+type Platform int
+
+const (
+	// PlatformLinux is the Linux x86_64 target.
+	PlatformLinux Platform = iota
+	// PlatformLinuxArm is the Linux aarch64 target.
+	PlatformLinuxArm
+	// PlatformMacOS is the Darwin x86_64 target.
+	PlatformMacOS
+	// PlatformWindows is the Windows (mingw) x86_64 target.
+	PlatformWindows
+)
+
+// ExecFn is a mockable wrapper for executing commands. The zero value
+// ExecFn executes the command normally, but a mock function can be substituted
+// in as well.
+type ExecFn struct {
+	MockExecFn func(*exec.Cmd) ([]byte, error)
 }
 
-// SupportedTargets contains the supported targets that we build.
-var SupportedTargets = []SupportedTarget{
-	{BuildType: "linux-gnu", Suffix: ".linux-2.6.32-gnu-amd64"},
-	// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for v21.1 and after.
-	// However, this seems to be hardcoded all over the place (in particular, roachprod stage),
-	// so keeping the 10.9 standard for now.
-	{BuildType: "darwin", Suffix: ".darwin-10.9-amd64"},
-	{BuildType: "windows", Suffix: ".windows-6.2-amd64.exe"},
-}
-
-// makeReleaseAndVerifyOptions are options for MakeRelease.
-type makeReleaseAndVerifyOptions struct {
-	args   []string
-	env    []string
-	execFn ExecFn
-}
-
-// ExecFn is a mockable wrapper that executes the given command.
-type ExecFn func(*exec.Cmd) ([]byte, error)
-
-// DefaultExecFn is the default exec function.
-var DefaultExecFn ExecFn = func(c *exec.Cmd) ([]byte, error) {
-	if c.Stdout != nil {
+// Run runs the given Cmd or invokes the MockExecFn as appropriate.
+func (e ExecFn) Run(cmd *exec.Cmd) ([]byte, error) {
+	if cmd.Stdout != nil {
 		return nil, errors.New("exec: Stdout already set")
 	}
 	var stdout bytes.Buffer
-	c.Stdout = io.MultiWriter(&stdout, os.Stdout)
-	err := c.Run()
-	return stdout.Bytes(), err
+	cmd.Stdout = io.MultiWriter(&stdout, os.Stdout)
+	if e.MockExecFn == nil {
+		err := cmd.Run()
+		return stdout.Bytes(), err
+	}
+	return e.MockExecFn(cmd)
 }
 
-// MakeReleaseOption as an option for the MakeRelease function.
-type MakeReleaseOption func(makeReleaseAndVerifyOptions) makeReleaseAndVerifyOptions
+// BuildOptions is a set of options that may be applied to a build.
+type BuildOptions struct {
+	// True iff this is a release build.
+	Release bool
+	// BuildTag must be set if Release is set, and vice-versea.
+	BuildTag string
 
-// WithMakeReleaseOptionBuildArg adds a build argument to release.
-func WithMakeReleaseOptionBuildArg(arg string) MakeReleaseOption {
-	return func(m makeReleaseAndVerifyOptions) makeReleaseAndVerifyOptions {
-		m.args = append(m.args, arg)
-		return m
+	// ExecFn.Run() is called to execute commands for this build.
+	// The zero value is appropriate in "real" scenarios but for
+	// tests you can update ExecFn.MockExecFn.
+	ExecFn ExecFn
+}
+
+// SuffixFromPlatform returns the suffix that will be appended to the
+// `cockroach` binary when built with the given platform. The binary
+// itself can be found in pkgDir/cockroach$SUFFIX after the build.
+func SuffixFromPlatform(platform Platform) string {
+	switch platform {
+	case PlatformLinux:
+		return ".linux-2.6.32-gnu-amd64"
+	case PlatformLinuxArm:
+		return ".linux-3.7.10-gnu-aarch64"
+	case PlatformMacOS:
+		// TODO(#release): The architecture is at least 10.10 until v20.2 and 10.15 for
+		// v21.1 and after. Check whether this can be changed.
+		return ".darwin-10.9-amd64"
+	case PlatformWindows:
+		return ".windows-6.2-amd64.exe"
+	default:
+		panic(errors.Newf("unknown platform %d", platform))
 	}
 }
 
-// WithMakeReleaseOptionExecFn changes the exec function of the given execFn.
-func WithMakeReleaseOptionExecFn(r ExecFn) MakeReleaseOption {
-	return func(m makeReleaseAndVerifyOptions) makeReleaseAndVerifyOptions {
-		m.execFn = r
-		return m
+// CrossConfigFromPlatform returns the cross*base config corresponding
+// to the given platform. (See .bazelrc for more details.)
+func CrossConfigFromPlatform(platform Platform) string {
+	switch platform {
+	case PlatformLinux:
+		return "crosslinuxbase"
+	case PlatformLinuxArm:
+		return "crosslinuxarmbase"
+	case PlatformMacOS:
+		return "crossmacosbase"
+	case PlatformWindows:
+		return "crosswindowsbase"
+	default:
+		panic(errors.Newf("unknown platform %d", platform))
 	}
 }
 
-// WithMakeReleaseOptionEnv adds an environment variable to the build.
-func WithMakeReleaseOptionEnv(env string) MakeReleaseOption {
-	return func(m makeReleaseAndVerifyOptions) makeReleaseAndVerifyOptions {
-		m.env = append(m.env, env)
-		return m
+// TargetTripleFromPlatform returns the target triple that will be baked
+// into the cockroach binary for the given platform.
+func TargetTripleFromPlatform(platform Platform) string {
+	switch platform {
+	case PlatformLinux:
+		return "x86_64-pc-linux-gnu"
+	case PlatformLinuxArm:
+		return "aarch64-unknown-linux-gnu"
+	case PlatformMacOS:
+		return "x86_64-apple-darwin19"
+	case PlatformWindows:
+		return "x86_64-w64-mingw32"
+	default:
+		panic(errors.Newf("unknown platform %d", platform))
+	}
+}
+
+// SharedLibraryExtensionFromPlatform returns the shared library extensions for a given Platform.
+func SharedLibraryExtensionFromPlatform(platform Platform) string {
+	switch platform {
+	case PlatformLinux, PlatformLinuxArm:
+		return ".so"
+	case PlatformWindows:
+		return ".dll"
+	case PlatformMacOS:
+		return ".dylib"
+	default:
+		panic(errors.Newf("unknown platform %d", platform))
 	}
 }
 
 // MakeWorkload makes the bin/workload binary.
 func MakeWorkload(pkgDir string) error {
-	cmd := exec.Command("mkrelease", "amd64-linux-gnu", "bin/workload")
+	// NB: workload doesn't need anything stamped so we can use `crosslinux`
+	// rather than `crosslinuxbase`.
+	cmd := exec.Command("bazel", "build", "//pkg/cmd/workload", "--config=crosslinux", "--config=ci")
 	cmd.Dir = pkgDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	log.Printf("%s %s", cmd.Env, cmd.Args)
-	return cmd.Run()
+	log.Printf("%s", cmd.Args)
+	err := cmd.Run()
+	if err != nil {
+		return err
+	}
+	bazelBin, err := getPathToBazelBin(ExecFn{}, pkgDir, []string{"--config=crosslinux", "--config=ci"})
+	if err != nil {
+		return err
+	}
+	return stageBinary("//pkg/cmd/workload", PlatformLinux, bazelBin, filepath.Join(pkgDir, "bin"))
 }
 
 // MakeRelease makes the release binary and associated files.
-func MakeRelease(b SupportedTarget, pkgDir string, opts ...MakeReleaseOption) error {
-	params := makeReleaseAndVerifyOptions{
-		execFn: DefaultExecFn,
+func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
+	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//c-deps:libgeos"}
+	targetTriple := TargetTripleFromPlatform(platform)
+	if opts.Release {
+		if opts.BuildTag == "" {
+			return errors.Newf("must set BuildTag if Release is set")
+		}
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary %s release", targetTriple, opts.BuildTag))
+	} else {
+		if opts.BuildTag != "" {
+			return errors.Newf("cannot set BuildTag if Release is not set")
+		}
+		buildArgs = append(buildArgs, fmt.Sprintf("--workspace_status_command=./build/bazelutil/stamp.sh %s official-binary", targetTriple))
 	}
-	for _, opt := range opts {
-		params = opt(params)
+	configs := []string{"-c", "opt", "--config=ci", "--config=with_ui", fmt.Sprintf("--config=%s", CrossConfigFromPlatform(platform))}
+	buildArgs = append(buildArgs, configs...)
+	cmd := exec.Command("bazel", buildArgs...)
+	cmd.Dir = pkgDir
+	cmd.Stderr = os.Stderr
+	log.Printf("%s", cmd.Args)
+	stdoutBytes, err := opts.ExecFn.Run(cmd)
+	if err != nil {
+		return errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
 	}
 
-	{
-		args := append(
-			[]string{b.BuildType, fmt.Sprintf("%s=%s", "SUFFIX", b.Suffix)},
-			params.args...,
-		)
-		cmd := exec.Command("mkrelease", args...)
-		cmd.Dir = pkgDir
-		cmd.Stderr = os.Stderr
-		if len(params.env) > 0 {
-			cmd.Env = append(os.Environ(), params.env...)
-		}
-		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if out, err := params.execFn(cmd); err != nil {
-			return errors.Wrapf(err, "%s %s:\n\n%s", cmd.Env, cmd.Args, out)
-		}
+	// Stage binaries from bazel-bin.
+	bazelBin, err := getPathToBazelBin(opts.ExecFn, pkgDir, configs)
+	if err != nil {
+		return err
 	}
-	if strings.Contains(b.BuildType, "linux") {
-		binaryName := "./cockroach" + b.Suffix
+	if err := stageBinary("//pkg/cmd/cockroach", platform, bazelBin, pkgDir); err != nil {
+		return err
+	}
+	if err := stageLibraries(platform, bazelBin, filepath.Join(pkgDir, "lib")); err != nil {
+		return err
+	}
+
+	if platform == PlatformLinux {
+		suffix := SuffixFromPlatform(platform)
+		binaryName := "./cockroach" + suffix
 
 		cmd := exec.Command(binaryName, "version")
 		cmd.Dir = pkgDir
 		cmd.Env = append(cmd.Env, "MALLOC_CONF=prof:true")
 		cmd.Stderr = os.Stderr
 		log.Printf("%s %s", cmd.Env, cmd.Args)
-		if out, err := params.execFn(cmd); err != nil {
-			return errors.Wrapf(err, "%s %s:\n\n%s", cmd.Env, cmd.Args, out)
+		stdoutBytes, err := opts.ExecFn.Run(cmd)
+		if err != nil {
+			return errors.Wrapf(err, "%s %s: %s", cmd.Env, cmd.Args, string(stdoutBytes))
 		}
 
 		cmd = exec.Command("ldd", binaryName)
 		cmd.Dir = pkgDir
+		cmd.Stderr = os.Stderr
 		log.Printf("%s %s", cmd.Env, cmd.Args)
-		out, err := params.execFn(cmd)
+		stdoutBytes, err = opts.ExecFn.Run(cmd)
 		if err != nil {
-			log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
+			log.Fatalf("%s %s: out=%s err=%v", cmd.Env, cmd.Args, string(stdoutBytes), err)
 		}
-		scanner := bufio.NewScanner(bytes.NewReader(out))
+		scanner := bufio.NewScanner(bytes.NewReader(stdoutBytes))
 		for scanner.Scan() {
 			if line := scanner.Text(); !linuxStaticLibsRe.MatchString(line) {
-				return errors.Newf("%s is not properly statically linked:\n%s", binaryName, out)
+				return errors.Newf("%s is not properly statically linked:\n%s", binaryName, line)
 			}
 		}
 		if err := scanner.Err(); err != nil {
@@ -200,11 +279,12 @@ type S3Putter interface {
 
 // S3KeyRelease extracts the target archive base and archive
 // name for the given parameters.
-func S3KeyRelease(suffix string, buildType string, versionStr string) (string, string) {
+func S3KeyRelease(platform Platform, versionStr string) (string, string) {
+	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
 	// TODO(tamird): remove this weirdness. Requires updating
 	// "users" e.g. docs, cockroachdb/cockroach-go, maybe others.
-	if strings.Contains(buildType, "linux") {
+	if platform == PlatformLinux {
 		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
@@ -234,9 +314,8 @@ type NonReleaseFile struct {
 
 // MakeCRDBBinaryNonReleaseFile creates a NonRelease object for the
 // CRDB binary.
-func MakeCRDBBinaryNonReleaseFile(
-	base string, localAbsolutePath string, versionStr string,
-) NonReleaseFile {
+func MakeCRDBBinaryNonReleaseFile(localAbsolutePath string, versionStr string) NonReleaseFile {
+	base := filepath.Base(localAbsolutePath)
 	remoteName, hasExe := TrimDotExe(base)
 	// TODO(tamird): do we want to keep doing this? No longer
 	// doing so requires updating cockroachlabs/production, and
@@ -256,29 +335,17 @@ func MakeCRDBBinaryNonReleaseFile(
 	}
 }
 
-// SharedLibraryExtensionFromBuildType returns the extensions for a given buildType.
-func SharedLibraryExtensionFromBuildType(buildType string) string {
-	switch buildType {
-	case "windows":
-		return ".dll"
-	case "linux-gnu", "linux":
-		return ".so"
-	case "darwin":
-		return ".dylib"
-	}
-	panic(errors.Newf("unknown build type: %s", buildType))
-}
-
 // CRDBSharedLibraries are all the shared libraries for CRDB, without the extension.
 var CRDBSharedLibraries = []string{"libgeos", "libgeos_c"}
 
 // MakeCRDBLibraryNonReleaseFiles creates the NonReleaseFile objects for relevant
 // CRDB shipped libraries.
 func MakeCRDBLibraryNonReleaseFiles(
-	localAbsoluteBasePath string, buildType string, versionStr string, suffix string,
+	localAbsoluteBasePath string, platform Platform, versionStr string,
 ) []NonReleaseFile {
 	files := []NonReleaseFile{}
-	ext := SharedLibraryExtensionFromBuildType(buildType)
+	suffix := SuffixFromPlatform(platform)
+	ext := SharedLibraryExtensionFromPlatform(platform)
 	for _, localFileName := range CRDBSharedLibraries {
 		remoteFileNameBase, _ := TrimDotExe(osVersionRe.ReplaceAllLiteralString(fmt.Sprintf("%s%s", localFileName, suffix), ""))
 		remoteFileName := fmt.Sprintf("%s.%s", remoteFileNameBase, versionStr)
@@ -364,7 +431,8 @@ type ArchiveFile struct {
 }
 
 // MakeCRDBBinaryArchiveFile generates the ArchiveFile object for a CRDB binary.
-func MakeCRDBBinaryArchiveFile(base string, localAbsolutePath string) ArchiveFile {
+func MakeCRDBBinaryArchiveFile(localAbsolutePath string) ArchiveFile {
+	base := filepath.Base(localAbsolutePath)
 	_, hasExe := TrimDotExe(base)
 	path := "cockroach"
 	if hasExe {
@@ -377,15 +445,15 @@ func MakeCRDBBinaryArchiveFile(base string, localAbsolutePath string) ArchiveFil
 }
 
 // MakeCRDBLibraryArchiveFiles generates the ArchiveFile object for relevant CRDB helper libraries.
-func MakeCRDBLibraryArchiveFiles(localBasePath string, buildType string) []ArchiveFile {
+func MakeCRDBLibraryArchiveFiles(pkgDir string, platform Platform) []ArchiveFile {
 	files := []ArchiveFile{}
-	ext := SharedLibraryExtensionFromBuildType(buildType)
+	ext := SharedLibraryExtensionFromPlatform(platform)
 	for _, lib := range CRDBSharedLibraries {
 		localFileName := lib + ext
 		files = append(
 			files,
 			ArchiveFile{
-				LocalAbsolutePath: filepath.Join(localBasePath, "lib", localFileName),
+				LocalAbsolutePath: filepath.Join(pkgDir, "lib", localFileName),
 				ArchiveFilePath:   "lib/" + localFileName,
 			},
 		)
@@ -399,10 +467,8 @@ type PutReleaseOptions struct {
 	BucketName string
 	// NoCache is true if we should set the NoCache option to S3.
 	NoCache bool
-	// Suffix is the suffix of the main CRDB binary.
-	Suffix string
-	// BuildType is the build type of the release.
-	BuildType string
+	// Platform is the platform of the release.
+	Platform Platform
 	// VersionStr is the version (SHA/branch name) of the release.
 	VersionStr string
 
@@ -413,7 +479,7 @@ type PutReleaseOptions struct {
 // PutRelease uploads a compressed archive containing the release
 // files to S3.
 func PutRelease(svc S3Putter, o PutReleaseOptions) {
-	targetArchiveBase, targetArchive := S3KeyRelease(o.Suffix, o.BuildType, o.VersionStr)
+	targetArchiveBase, targetArchive := S3KeyRelease(o.Platform, o.VersionStr)
 	var body bytes.Buffer
 
 	if strings.HasSuffix(targetArchive, ".zip") {
@@ -497,5 +563,80 @@ func PutRelease(svc S3Putter, o PutReleaseOptions) {
 	}
 	if _, err := svc.PutObject(&putObjectInput); err != nil {
 		log.Fatalf("s3 upload %s: %s", targetArchive, err)
+	}
+}
+
+func getPathToBazelBin(execFn ExecFn, pkgDir string, configArgs []string) (string, error) {
+	args := []string{"info", "bazel-bin"}
+	args = append(args, configArgs...)
+	cmd := exec.Command("bazel", args...)
+	cmd.Dir = pkgDir
+	cmd.Stderr = os.Stderr
+	stdoutBytes, err := execFn.Run(cmd)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to run %s: %s", cmd.Args, string(stdoutBytes))
+	}
+	return strings.TrimSpace(string(stdoutBytes)), nil
+}
+
+func stageBinary(target string, platform Platform, bazelBin string, dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	rel := bazelutil.OutputOfBinaryRule(target, platform == PlatformWindows)
+	src := filepath.Join(bazelBin, rel)
+	dstBase, _ := TrimDotExe(filepath.Base(rel))
+	suffix := SuffixFromPlatform(platform)
+	dstBase = dstBase + suffix
+	dst := filepath.Join(dir, dstBase)
+	srcF, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer closeFileOrPanic(srcF)
+	dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0755)
+	if err != nil {
+		return err
+	}
+	defer closeFileOrPanic(dstF)
+	_, err = io.Copy(dstF, srcF)
+	return err
+}
+
+func stageLibraries(platform Platform, bazelBin string, dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	ext := SharedLibraryExtensionFromPlatform(platform)
+	for _, lib := range CRDBSharedLibraries {
+		libDir := "lib"
+		if platform == PlatformWindows {
+			// NB: On Windows these libs end up in the `bin` subdir.
+			libDir = "bin"
+		}
+		src := filepath.Join(bazelBin, "c-deps", "libgeos", libDir, lib+ext)
+		srcF, err := os.Open(src)
+		if err != nil {
+			return err
+		}
+		defer closeFileOrPanic(srcF)
+		dst := filepath.Join(dir, filepath.Base(src))
+		dstF, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			return err
+		}
+		defer closeFileOrPanic(dstF)
+		_, err = io.Copy(dstF, srcF)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func closeFileOrPanic(f *os.File) {
+	err := f.Close()
+	if err != nil {
+		panic(errors.Wrapf(err, "could not close file"))
 	}
 }
