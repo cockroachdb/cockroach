@@ -53,6 +53,7 @@ debug zip --concurrency=1 /dev/null
 [cluster] retrieving SQL data for crdb_internal.invalid_objects... writing output: debug/crdb_internal.invalid_objects.txt... done
 [cluster] retrieving SQL data for crdb_internal.index_usage_statistics... writing output: debug/crdb_internal.index_usage_statistics.txt... done
 [cluster] retrieving SQL data for crdb_internal.table_indexes... writing output: debug/crdb_internal.table_indexes.txt... done
+[cluster] retrieving SQL data for crdb_internal.historical_contention_events... writing output: debug/crdb_internal.historical_contention_events.txt... done
 [cluster] requesting nodes... received response... converting to JSON... writing binary output: debug/nodes.json... done
 [cluster] requesting liveness... received response...
 [cluster] requesting liveness: last request failed: rpc error: ...

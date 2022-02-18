@@ -39,7 +39,12 @@ type eventWriter interface {
 
 // eventReader provides interface to read contention events from eventStore.
 type eventReader interface {
-	forEachEvent(func(*contentionpb.ExtendedContentionEvent) error) error
+	// ForEachEvent executes the callback function on every single contention
+	// event. If an error is returned from the callback, the iteration is aborted
+	// and the error returned by the callback is bubbled up. The contention event
+	// is first copied out from the store before being passed into the callback.
+	// This means ForEachEvent is thread-safe.
+	ForEachEvent(func(*contentionpb.ExtendedContentionEvent) error) error
 }
 
 type timeSource func() time.Time
@@ -238,8 +243,8 @@ func (s *eventStore) addEvent(e contentionpb.ExtendedContentionEvent) {
 	})
 }
 
-// forEachEvent implements the eventReader interface.
-func (s *eventStore) forEachEvent(
+// ForEachEvent implements the eventReader interface.
+func (s *eventStore) ForEachEvent(
 	op func(event *contentionpb.ExtendedContentionEvent) error,
 ) error {
 	// First we read all the keys in the eventStore, and then immediately release

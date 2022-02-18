@@ -588,6 +588,23 @@ CREATE TABLE crdb_internal.gossip_nodes (
    ranges INT8 NOT NULL,
    leases INT8 NOT NULL
 )  {}  {}
+CREATE TABLE crdb_internal.historical_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  CREATE TABLE crdb_internal.historical_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  {}  {}
 CREATE TABLE crdb_internal.index_columns (
    descriptor_id INT8 NULL,
    descriptor_name STRING NOT NULL,

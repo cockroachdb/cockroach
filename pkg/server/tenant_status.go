@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1069,4 +1070,74 @@ func (t *tenantStatusServer) TxnIDResolution(
 	}
 
 	return statusClient.TxnIDResolution(ctx, req)
+}
+
+func (t *tenantStatusServer) HistoricalContentionEvents(
+	ctx context.Context, req *serverpb.HistoricalContentionEventsRequest,
+) (*serverpb.HistoricalContentionEventsResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	hasViewActivity, err := t.privilegeChecker.hasViewActivityPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+	shouldRedactContendingKeys := !hasViewActivity
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	localReq := &serverpb.HistoricalContentionEventsRequest{
+		NodeID: "local",
+	}
+	resp := &serverpb.HistoricalContentionEventsResponse{}
+
+	if len(req.NodeID) > 0 {
+		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return t.localHistoricalContentionEvents(shouldRedactContendingKeys), nil
+		}
+
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		return statusClient.HistoricalContentionEvents(ctx, localReq)
+	}
+
+	rpcCallFn := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.HistoricalContentionEvents(ctx, localReq)
+	}
+
+	if err := t.iteratePods(ctx, fmt.Sprintf("historical contention events for instance %s", req.NodeID),
+		t.dialCallback,
+		rpcCallFn,
+		func(instanceID base.SQLInstanceID, nodeResp interface{}) {
+			historicalContentionEvents := nodeResp.(*serverpb.HistoricalContentionEventsResponse)
+			resp.Events = append(resp.Events, historicalContentionEvents.Events...)
+		},
+		func(_ base.SQLInstanceID, err error) {
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(resp.Events, func(i, j int) bool {
+		return resp.Events[i].CollectionTs.Before(resp.Events[j].CollectionTs)
+	})
+
+	return resp, nil
 }
