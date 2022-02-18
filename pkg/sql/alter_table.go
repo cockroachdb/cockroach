@@ -1832,7 +1832,7 @@ func handleTTLStorageParamChange(
 			if err != nil {
 				return err
 			}
-			intervalExpr, err := parser.ParseExpr(after.DurationExpr)
+			intervalExpr, err := parser.ParseExpr(string(after.DurationExpr))
 			if err != nil {
 				return errors.Wrapf(err, "unexpected expression for TTL duration")
 			}

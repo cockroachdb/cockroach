@@ -87,7 +87,7 @@ CREATE INDEX id4
 - [[Column:{DescID: 104, ColumnID: 4}, PUBLIC], ABSENT]
   details:
     columnId: 4
-    computerExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
+    computedExpr: mod(fnv32("crdb_internal.datums_to_bytes"(id, name)), 8:::INT8)
     familyName: primary
     hidden: true
     pgAttributeNum: 4

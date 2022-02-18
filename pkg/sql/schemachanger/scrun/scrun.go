@@ -12,7 +12,6 @@ package scrun
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -86,7 +85,7 @@ func RunSchemaChangesInJob(
 	descriptorIDs []descpb.ID,
 	rollback bool,
 ) error {
-	state, err := makeState(ctx, settings, deps, descriptorIDs, rollback)
+	state, err := makeState(ctx, deps, descriptorIDs, rollback)
 	if err != nil {
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
@@ -123,59 +122,22 @@ func executeStage(
 		}
 	}
 
-	log.Infof(ctx, "executing stage %d/%d in phase %v, %d ops of type %s", stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type())
+	log.Infof(ctx, "executing stage %d/%d in phase %v, %d ops of type %s (rollback=%v)",
+		stage.Ordinal, stage.StagesInPhase, stage.Phase, len(stage.Ops()), stage.Ops()[0].Type(), p.InRollback)
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
 		return errors.Wrapf(p.DecorateErrorWithPlanDetails(err), "error executing %s", stage.String())
 	}
 	return nil
 }
 
-type stateAndRanks struct {
-	*scpb.CurrentState
-	ranks []uint32
-}
-
-var _ sort.Interface = (*stateAndRanks)(nil)
-
-func (s *stateAndRanks) Len() int           { return len(s.Targets) }
-func (s *stateAndRanks) Less(i, j int) bool { return s.ranks[i] < s.ranks[j] }
-func (s *stateAndRanks) Swap(i, j int) {
-	s.ranks[i], s.ranks[j] = s.ranks[j], s.ranks[i]
-	s.Targets[i], s.Targets[j] = s.Targets[j], s.Targets[i]
-	s.Current[i], s.Current[j] = s.Current[j], s.Current[i]
-}
-
-type stmtsAndRanks struct {
-	stmts []scpb.Statement
-	ranks []uint32
-}
-
-func (s *stmtsAndRanks) Len() int           { return len(s.stmts) }
-func (s *stmtsAndRanks) Less(i, j int) bool { return s.ranks[i] < s.ranks[j] }
-func (s stmtsAndRanks) Swap(i, j int) {
-	s.ranks[i], s.ranks[j] = s.ranks[j], s.ranks[i]
-	s.stmts[i], s.stmts[j] = s.stmts[j], s.stmts[i]
-}
-
-var _ sort.Interface = (*stmtsAndRanks)(nil)
-
 func makeState(
-	ctx context.Context,
-	sv *cluster.Settings,
-	deps JobRunDependencies,
-	descriptorIDs []descpb.ID,
-	rollback bool,
+	ctx context.Context, deps JobRunDependencies, descriptorIDs []descpb.ID, rollback bool,
 ) (scpb.CurrentState, error) {
-	var s scpb.CurrentState
-	var targetRanks []uint32
-	var stmts map[uint32]scpb.Statement
+
+	var descriptorStates []*scpb.DescriptorState
 	if err := deps.WithTxnInJob(ctx, func(ctx context.Context, txnDeps scexec.Dependencies) error {
-
+		descriptorStates = nil
 		// Reset for restarts.
-		s = scpb.CurrentState{}
-		targetRanks = nil
-		stmts = make(map[uint32]scpb.Statement)
-
 		descs, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)
 		if err != nil {
 			// TODO(ajwerner): It seems possible that a descriptor could be deleted
@@ -193,50 +155,23 @@ func makeState(
 					"descriptor %d does not contain schema changer state", desc.GetID(),
 				)
 			}
-			s.Current = append(s.Current, cs.CurrentStatuses...)
-			s.Targets = append(s.Targets, cs.Targets...)
-			targetRanks = append(targetRanks, cs.TargetRanks...)
-			for _, stmt := range cs.RelevantStatements {
-				if existing, ok := stmts[stmt.StatementRank]; ok {
-					if existing.Statement != stmt.Statement.Statement {
-						return errors.AssertionFailedf(
-							"job %d: statement %q does not match %q for rank %d",
-							cs.JobID,
-							existing.Statement,
-							stmt.Statement,
-							stmt.StatementRank,
-						)
-					}
-				}
-				stmts[stmt.StatementRank] = stmt.Statement
-			}
-			s.Authorization = cs.Authorization
+			descriptorStates = append(descriptorStates, cs)
 		}
 		return nil
 	}); err != nil {
 		return scpb.CurrentState{}, err
 	}
-	sort.Sort(&stateAndRanks{
-		CurrentState: &s,
-		ranks:        targetRanks,
-	})
-	var sr stmtsAndRanks
-	for rank, stmt := range stmts {
-		sr.stmts = append(sr.stmts, stmt)
-		sr.ranks = append(sr.ranks, rank)
+	state, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
+	if err != nil {
+		return scpb.CurrentState{}, err
 	}
-	sort.Sort(&sr)
-	s.Statements = sr.stmts
-	if rollback {
-		for i := range s.Targets {
-			t := &s.Targets[i]
-			switch t.TargetStatus {
-			case scpb.Status_PUBLIC:
-				t.TargetStatus = scpb.Status_ABSENT
-			case scpb.Status_ABSENT:
-				t.TargetStatus = scpb.Status_PUBLIC
-			}
-		}
+	if !rollback && state.InRollback {
+		return scpb.CurrentState{}, errors.Errorf(
+			"job in running state but schema change in rollback, " +
+				"returning an error to restart in the reverting state")
 	}
-	return s, nil
+	if rollback && !state.InRollback {
+		state.Rollback()
+	}
+	return state, nil
 }

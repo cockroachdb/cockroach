@@ -393,7 +393,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 23 MutationType ops
+StatementPhase stage 1 of 1 with 24 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, ABSENT], PUBLIC] -> TXN_DROPPED
     [[TableComment:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
@@ -472,6 +472,8 @@ StatementPhase stage 1 of 1 with 23 MutationType ops
       DescID: 112
     *scop.MarkDescriptorAsDroppedSynthetically
       DescID: 104
+    *scop.DrainDescriptorName
+      TableID: 104
     *scop.RemoveSchemaComment
       SchemaID: 104
 PreCommitPhase stage 1 of 1 with 43 MutationType ops
@@ -675,7 +677,7 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
       - statement: DROP SCHEMA defaultdb.sc1 CASCADE
         redactedstatement: DROP SCHEMA ‹defaultdb›.‹sc1› CASCADE
         statementtag: DROP SCHEMA
-PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 32 MutationType ops
   transitions:
     [[Sequence:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
@@ -818,8 +820,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 33 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
-    *scop.DrainDescriptorName
-      TableID: 104
     *scop.LogEvent
       Authorization:
         UserName: root

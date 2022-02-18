@@ -195,7 +195,7 @@ message RowLevelTTL {
   option (gogoproto.equal) = true;
 
   // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
-  optional string duration_expr = 1 [(gogoproto.nullable)=false];
+  optional string duration_expr = 1 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
   // SelectBatchSize is the amount of rows that should be fetched at a time
   optional int64 select_batch_size = 2 [(gogoproto.nullable)=false];
   // DeleteBatchSize is the amount of rows that should be deleted at a time.

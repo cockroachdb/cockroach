@@ -249,7 +249,7 @@ var tableParams = map[string]tableParam{
 			if po.tableDesc.RowLevelTTL == nil {
 				po.tableDesc.RowLevelTTL = &catpb.RowLevelTTL{}
 			}
-			po.tableDesc.RowLevelTTL.DurationExpr = tree.Serialize(d)
+			po.tableDesc.RowLevelTTL.DurationExpr = catpb.Expression(tree.Serialize(d))
 			return nil
 		},
 		onReset: func(po *TableStorageParamObserver, evalCtx *tree.EvalContext, key string) error {

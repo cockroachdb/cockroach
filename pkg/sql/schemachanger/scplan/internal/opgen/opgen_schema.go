@@ -33,7 +33,13 @@ func init() {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
 						DescID: this.SchemaID,
 					}
-				})),
+				}),
+				emit(func(this *scpb.Schema) scop.Op {
+					return &scop.DrainDescriptorName{
+						TableID: this.SchemaID,
+					}
+				}),
+			),
 			to(scpb.Status_DROPPED,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
@@ -44,11 +50,6 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Schema) scop.Op {
-					return &scop.DrainDescriptorName{
-						TableID: this.SchemaID,
-					}
-				}),
 				emit(func(this *scpb.Schema, ts scpb.TargetState) scop.Op {
 					return newLogEventOp(this, ts)
 				}),

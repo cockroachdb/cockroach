@@ -411,11 +411,7 @@ func (mvs *mutationVisitorState) DeleteSchedule(scheduleID int64) {
 }
 
 func (mvs *mutationVisitorState) AddDrainedName(id descpb.ID, nameInfo descpb.NameInfo) {
-	if _, ok := mvs.drainedNames[id]; !ok {
-		mvs.drainedNames[id] = []descpb.NameInfo{nameInfo}
-	} else {
-		mvs.drainedNames[id] = append(mvs.drainedNames[id], nameInfo)
-	}
+	mvs.drainedNames[id] = append(mvs.drainedNames[id], nameInfo)
 }
 
 func (mvs *mutationVisitorState) AddNewGCJobForTable(table catalog.TableDescriptor) {
@@ -447,11 +443,27 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 	if mvs.schemaChangerJob != nil {
 		return errors.AssertionFailedf("cannot create more than one new schema change job")
 	}
+	mvs.schemaChangerJob = MakeDeclarativeSchemaChangeJobRecord(jobID, stmts, auth, descriptorIDs)
+	return nil
+}
+
+// MakeDeclarativeSchemaChangeJobRecord is used to construct a declarative
+// schema change job. The state of the schema change is stored in the descriptors
+// themselves rather than the job state. During execution, the only state which
+// is stored in the job itself pertains to backfill progress.
+//
+// Note that there's no way to construct a job in the reverting state. If the
+// state of the schema change according to the descriptors is InRollback, then
+// at the outset of the job, an error will be returned to move the job into
+// the reverting state.
+func MakeDeclarativeSchemaChangeJobRecord(
+	jobID jobspb.JobID, stmts []scpb.Statement, auth scpb.Authorization, descriptorIDs descpb.IDs,
+) *jobs.Record {
 	stmtStrs := make([]string, len(stmts))
 	for i, stmt := range stmts {
 		stmtStrs[i] = stmt.Statement
 	}
-	mvs.schemaChangerJob = &jobs.Record{
+	rec := &jobs.Record{
 		JobID:       jobID,
 		Description: "schema change job", // TODO(ajwerner): use const
 		Statements:  stmtStrs,
@@ -468,9 +480,9 @@ func (mvs *mutationVisitorState) AddNewSchemaChangerJob(
 
 		// TODO(ajwerner): It'd be good to populate the RunningStatus at all times.
 		RunningStatus: "",
-		NonCancelable: false,
+		NonCancelable: false, // TODO(ajwerner): Set this appropriately
 	}
-	return nil
+	return rec
 }
 
 // createGCJobRecord creates the job record for a GC job, setting some

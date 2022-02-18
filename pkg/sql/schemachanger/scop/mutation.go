@@ -204,14 +204,14 @@ type MakeAddedColumnDeleteOnly struct {
 	FamilyName                        string
 	ColumnType                        *types.T
 	Nullable                          bool
-	DefaultExpr                       string
-	OnUpdateExpr                      string
+	DefaultExpr                       catpb.Expression
+	OnUpdateExpr                      catpb.Expression
 	Hidden                            bool
 	Inaccessible                      bool
 	GeneratedAsIdentityType           catpb.GeneratedAsIdentityType
 	GeneratedAsIdentitySequenceOption string
 	UsesSequenceIDs                   []descpb.ID
-	ComputerExpr                      string
+	ComputedExpr                      catpb.Expression
 	PgAttributeNum                    uint32
 	SystemColumnKind                  catpb.SystemColumnKind
 	Virtual                           bool
