@@ -201,11 +201,13 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		keySlice = append(keySlice, key)
 	}
 
+	ctx := context.Background()
+	cs := cluster.MakeTestingClusterSettings()
 	writeSST := func(t *testing.T, offsets []int) string {
 		path := strconv.FormatInt(hlc.UnixNano(), 10)
 
 		sstFile := &storage.MemFile{}
-		sst := storage.MakeBackupSSTWriter(sstFile)
+		sst := storage.MakeBackupSSTWriter(ctx, cs, sstFile)
 		defer sst.Close()
 		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
@@ -248,8 +250,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 		},
 	}}
 
-	ctx := context.Background()
-	args := base.TestServerArgs{Knobs: knobs, ExternalIODir: dir}
+	args := base.TestServerArgs{
+		Knobs:         knobs,
+		ExternalIODir: dir,
+		Settings:      cs,
+	}
 	// TODO(dan): This currently doesn't work with AddSSTable on in-memory
 	// stores because RocksDB's InMemoryEnv doesn't support NewRandomRWFile
 	// (which breaks the global-seqno rewrite used when the added sstable
