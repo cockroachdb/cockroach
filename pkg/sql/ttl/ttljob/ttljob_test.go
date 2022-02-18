@@ -252,6 +252,18 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 			numNonExpiredRows: 5,
 		},
 		{
+			desc: "three column pk with rate limit",
+			createTable: `CREATE TABLE tbl (
+	id UUID DEFAULT gen_random_uuid(),
+	other_col INT,
+	"quote-kw-col" TIMESTAMPTZ,
+	text TEXT,
+	PRIMARY KEY (id, other_col, "quote-kw-col")
+) WITH (ttl_expire_after = '30 days', ttl_delete_rate_limit = 350)`,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
+		},
+		{
 			desc: "three column pk, concurrentSchemaChange",
 			createTable: `CREATE TABLE tbl (
 	id UUID DEFAULT gen_random_uuid(),
