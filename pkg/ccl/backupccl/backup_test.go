@@ -694,20 +694,23 @@ func TestBackupRestoreAppend(t *testing.T) {
 		return []interface{}{
 			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b1, url.QueryEscape("default")),
 			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b3, url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", b3, url.QueryEscape("dc=dc2")),
+		}
 	}
 	makeCollections := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
 			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, url.QueryEscape("default")),
 			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, url.QueryEscape("dc=dc2")),
+		}
 	}
 
 	makeCollectionsWithSubdir := func(c1, c2, c3 string) []interface{} {
 		return []interface{}{
 			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c1, "foo", url.QueryEscape("default")),
 			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c2, "foo", url.QueryEscape("dc=dc1")),
-			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, "foo", url.QueryEscape("dc=dc2"))}
+			fmt.Sprintf("%s/%s?COCKROACH_LOCALITY=%s&AUTH=implicit", c3, "foo", url.QueryEscape("dc=dc2")),
+		}
 	}
 
 	// for testing backup *into* with specified subdirectory.
@@ -877,7 +880,6 @@ func TestBackupRestoreAppend(t *testing.T) {
 
 		// TODO(dt): test restoring to other backups via AOST.
 	}
-
 }
 
 func TestBackupAndRestoreJobDescription(t *testing.T) {
@@ -1075,7 +1077,6 @@ func TestBackupRestoreNegativePrimaryKey(t *testing.T) {
 	if exportedIndexEntries != expectedIndexEntries {
 		t.Fatalf("expected %d index entries, got %d", expectedIndexEntries, exportedIndexEntries)
 	}
-
 }
 
 func backupAndRestore(
@@ -1385,7 +1386,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 }
 
 func redactTestKMSURI(path string) (string, error) {
-	var redactedQueryParams = map[string]struct{}{
+	redactedQueryParams := map[string]struct{}{
 		amazon.AWSSecretParam: {},
 	}
 
@@ -1537,7 +1538,8 @@ func checkInProgressBackupRestore(
 				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
 					<-allowResponse
 				},
-			}},
+			},
+		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 	params.ServerArgs.Knobs = knobs
@@ -1886,7 +1888,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		createAndWaitForJob(
 			t, sqlDB, []descpb.ID{restoreTableID},
 			jobspb.RestoreDetails{
-				DescriptorRewrites: map[descpb.ID]*jobspb.RestoreDetails_DescriptorRewrite{
+				DescriptorRewrites: map[descpb.ID]*jobspb.DescriptorRewrite{
 					backupTableDesc.GetID(): {
 						ParentID:       descpb.ID(restoreDatabaseID),
 						ParentSchemaID: descpb.ID(restoreDatabaseID + 1),
@@ -3558,7 +3560,6 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		)
 		db.Exec(t, `DROP DATABASE store CASCADE`)
 		db.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
-
 	})
 
 	t.Run("restore and skip missing views", func(t *testing.T) {
@@ -5145,7 +5146,6 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 		)
 
 		sqlDB.Exec(t, `RESTORE database d4 FROM $1`, d4star)
-
 	})
 
 	t.Run("db", func(t *testing.T) {
@@ -6539,8 +6539,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID)}, actualResolvedSpans)
+		require.Equal(t, []string{
+			fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID),
+		}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6556,8 +6558,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID)}, actualResolvedSpans)
+		require.Equal(t, []string{
+			fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID),
+		}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6592,8 +6596,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		// and non-drop indexes of table foo2 as all the indexes were live at some
 		// point in the interval covered by this BACKUP.
 		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{3-4}", tableID), fmt.Sprintf("/Table/%d/{1-4}", tableID2)},
+		require.Equal(t, []string{
+			fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{3-4}", tableID), fmt.Sprintf("/Table/%d/{1-4}", tableID2),
+		},
 			actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
@@ -6609,8 +6615,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
 		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
+		require.Equal(t, []string{
+			fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{1-3}", tableID2),
+		}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6628,8 +6636,10 @@ func TestProtectedTimestampSpanSelectionDuringBackup(t *testing.T) {
 		runner.Exec(t, fmt.Sprintf(`BACKUP DATABASE test INTO '%s'`, baseBackupURI+t.Name()))
 		tableID := getTableID(db, "test", "foo")
 		tableID2 := getTableID(db, "test", "foo2")
-		require.Equal(t, []string{fmt.Sprintf("/Table/%d/{1-2}", tableID),
-			fmt.Sprintf("/Table/%d/{1-3}", tableID2)}, actualResolvedSpans)
+		require.Equal(t, []string{
+			fmt.Sprintf("/Table/%d/{1-2}", tableID),
+			fmt.Sprintf("/Table/%d/{1-3}", tableID2),
+		}, actualResolvedSpans)
 		runner.Exec(t, "DROP DATABASE test;")
 		actualResolvedSpans = nil
 	})
@@ -6722,8 +6732,10 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			name:    "alternate-spans-dropped",
 			tableID: 58,
 			pkIndex: getMockIndexDesc(1),
-			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
-				getMockIndexDesc(5)},
+			indexes: []descpb.IndexDescriptor{
+				getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5),
+			},
 			droppingIndexes:     []descpb.IndexDescriptor{getMockIndexDesc(2), getMockIndexDesc(4)},
 			expectedSpans:       []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
 			expectedMergedSpans: []string{"/Table/58/{1-2}", "/Table/58/{3-4}", "/Table/58/{5-6}"},
@@ -6732,8 +6744,10 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			name:    "alternate-spans-gced",
 			tableID: 59,
 			pkIndex: getMockIndexDesc(1),
-			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
-				getMockIndexDesc(5)},
+			indexes: []descpb.IndexDescriptor{
+				getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5),
+			},
 			expectedSpans:       []string{"/Table/59/{1-2}", "/Table/59/{3-4}", "/Table/59/{5-6}"},
 			expectedMergedSpans: []string{"/Table/59/{1-2}", "/Table/59/{3-4}", "/Table/59/{5-6}"},
 		},
@@ -6741,8 +6755,10 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			name:    "one-drop-one-gc",
 			tableID: 60,
 			pkIndex: getMockIndexDesc(1),
-			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
-				getMockIndexDesc(5)},
+			indexes: []descpb.IndexDescriptor{
+				getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(5),
+			},
 			droppingIndexes:     []descpb.IndexDescriptor{getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/60/{1-2}", "/Table/60/{3-4}", "/Table/60/{5-6}"},
 			expectedMergedSpans: []string{"/Table/60/{1-2}", "/Table/60/{3-4}", "/Table/60/{5-6}"},
@@ -6753,8 +6769,10 @@ func TestPublicIndexTableSpans(t *testing.T) {
 			name:    "empty-adding-index",
 			tableID: 61,
 			pkIndex: getMockIndexDesc(1),
-			indexes: []descpb.IndexDescriptor{getMockIndexDesc(1), getMockIndexDesc(3),
-				getMockIndexDesc(4)},
+			indexes: []descpb.IndexDescriptor{
+				getMockIndexDesc(1), getMockIndexDesc(3),
+				getMockIndexDesc(4),
+			},
 			addingIndexes:       []descpb.IndexDescriptor{getMockIndexDesc(2)},
 			expectedSpans:       []string{"/Table/61/{1-2}", "/Table/61/{3-4}", "/Table/61/{4-5}"},
 			expectedMergedSpans: []string{"/Table/61/{1-2}", "/Table/61/{3-5}"},
@@ -6873,8 +6891,8 @@ func TestPaginatedBackupTenant(t *testing.T) {
 		timestamp hlc.Timestamp
 	}
 
-	var withTS = hlc.Timestamp{WallTime: 1}
-	var withoutTS = hlc.Timestamp{}
+	withTS := hlc.Timestamp{WallTime: 1}
+	withoutTS := hlc.Timestamp{}
 
 	const numAccounts = 1
 	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
@@ -7165,7 +7183,6 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 			tenant10.Exec(t, `RESTORE data.bank FROM $1`, httpAddr)
 			systemDB.CheckQueryResults(t, `SELECT * FROM data.bank`, tenant10.QueryStr(t, `SELECT * FROM data.bank`))
 		})
-
 	})
 }
 
@@ -7508,7 +7525,8 @@ func TestClientDisconnect(t *testing.T) {
 						}
 						return nil
 					},
-				}}
+				},
+			}
 			args.ServerArgs.Knobs = knobs
 			tc, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, 1 /* numAccounts */, InitManualReplication, args)
 			defer cleanup()
@@ -7764,7 +7782,7 @@ func TestOfflineDescriptorsDuringRestore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var state = struct {
+	state := struct {
 		mu syncutil.Mutex
 		// Closed when the restore job has reached the point right before publishing
 		// descriptors.
@@ -7868,8 +7886,11 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		// if it's not the ideal error.
 
 		sqlDB.CheckQueryResults(t, `SELECT database_name, owner FROM [SHOW DATABASES]`, [][]string{
-			{"data", security.RootUser}, {"defaultdb", security.RootUser},
-			{"postgres", security.RootUser}, {"system", security.NodeUser}})
+			{"data", security.RootUser},
+			{"defaultdb", security.RootUser},
+			{"postgres", security.RootUser},
+			{"system", security.NodeUser},
+		})
 
 		sqlDB.ExpectErr(t, `database "d" is offline: restoring`, `USE d`)
 
@@ -7970,7 +7991,10 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 		sqlDB.CheckQueryResults(t, `SHOW TABLES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW TYPES`, [][]string{})
 		sqlDB.CheckQueryResults(t, `SHOW SCHEMAS`, [][]string{
-			{"crdb_internal", "NULL"}, {"information_schema", "NULL"}, {"pg_catalog", "NULL"}, {"pg_extension", "NULL"},
+			{"crdb_internal", "NULL"},
+			{"information_schema", "NULL"},
+			{"pg_catalog", "NULL"},
+			{"pg_extension", "NULL"},
 			{"public", security.AdminRole},
 		})
 
@@ -7991,7 +8015,6 @@ CREATE TYPE sc.typ AS ENUM ('hello');
 
 		close(continueNotif)
 		require.NoError(t, g.Wait())
-
 	})
 }
 
@@ -8003,7 +8026,7 @@ func TestCleanupDoesNotDeleteParentsWithChildObjects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var state = struct {
+	state := struct {
 		mu syncutil.Mutex
 		// Closed when the restore job has reached the point right after publishing
 		// public descriptors.
@@ -8286,7 +8309,6 @@ func TestManifestTooNew(t *testing.T) {
 	// Prove we can restore again.
 	sqlDB.Exec(t, `RESTORE DATABASE r1 FROM 'nodelocal://0/too_new'`)
 	sqlDB.Exec(t, `DROP DATABASE r1`)
-
 }
 
 // TestManifestBitFlip tests that we can detect a corrupt manifest when a bit
@@ -8530,8 +8552,10 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
 	row.Scan(&jobID)
 
-	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
-		string(jobs.StatusRunning)}
+	expectedStatus = []string{
+		string(jobs.StatusFailed), string(jobs.StatusReverting),
+		string(jobs.StatusRunning),
+	}
 	CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
 		"restore", "RESTORE")
 }
@@ -9044,7 +9068,6 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 
 	// Ensure restore fails with new_db_name on cluster, table, and multiple database restores
 	t.Run("new_db_name syntax checks", func(t *testing.T) {
-
 		expectedErr := "new_db_name can only be used for RESTORE DATABASE with a single target database"
 
 		sqlDB.ExpectErr(t, expectedErr, "RESTORE FROM $1 with new_db_name = 'new_fkdb'", localFoo)
@@ -9054,7 +9077,6 @@ func TestRestoreNewDatabaseName(t *testing.T) {
 
 		sqlDB.ExpectErr(t, expectedErr, "RESTORE TABLE fkdb.fk FROM $1 with new_db_name = 'new_fkdb'",
 			localFoo)
-
 	})
 
 	// Should fail because 'fkbd' database is still in cluster
@@ -9225,7 +9247,8 @@ func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
 		DistSQL: &execinfra.TestingKnobs{
 			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
 				BackupMemMonitor: memoryMonitor,
-			}},
+			},
+		},
 	}
 	params.ServerArgs.Knobs = knobs
 
@@ -9274,8 +9297,10 @@ func TestBackupRestoreSeparateIncrementalPrefix(t *testing.T) {
 	tests := []struct {
 		dest []string
 		inc  []string
-	}{{dest: []string{collections[0]}, inc: []string{incrementals[0]}},
-		{dest: collections, inc: incrementals}}
+	}{
+		{dest: []string{collections[0]}, inc: []string{incrementals[0]}},
+		{dest: collections, inc: incrementals},
+	}
 
 	for _, br := range tests {
 
