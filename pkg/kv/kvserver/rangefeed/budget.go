@@ -14,12 +14,38 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// useBudgets controls if RangeFeed memory budgets are enabled. Overridable by
+// environment variable.
+var useBudgets = envutil.EnvOrDefaultBool("COCKROACH_USE_RANGEFEED_MEM_BUDGETS", true)
+
+// totalSharedFeedBudgetFraction is maximum percentage of SQL memory pool that
+// could be used by all feed budgets together. Overridable by environment
+// variable.
+var totalSharedFeedBudgetFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGEFEED_FEED_MEM_FRACTION",
+	0.5)
+
+// maxFeedFraction is maximum percentage of feed memory pool that could be
+// allocated to a single feed budget. Overridable by environment variable.
+// With 32 GB node and 0.25 sql memory budget (8 GB) each range would get max of
+// 8 * 0.5 * 0.1 = 400 MB budget limit.
+var maxFeedFraction = envutil.EnvOrDefaultFloat64("COCKROACH_RANGEFEED_TOTAL_MEM_FRACTION", 0.1)
+
+// Pre allocated memory limit for system RangeFeeds. Each event should never
+// exceed 64 MB as it would fail to write to raft log. We don't expect system
+// ranges to have such objects, but we'll have a multiple of those just in case.
+var systemRangeFeedBudget = envutil.EnvOrDefaultInt64("COCKROACH_RANGEFEED_SYSTEM_BUDGET",
+	2*64*1024*1024 /* 128MB */)
 
 var budgetAllocationSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -201,4 +227,80 @@ func (a *SharedBudgetAllocation) Release(ctx context.Context) {
 		a.feed.returnAllocation(ctx, a.size)
 		putPooledBudgetAllocation(a)
 	}
+}
+
+// BudgetFactory creates memory budget for rangefeed according to system
+// settings.
+type BudgetFactory struct {
+	limit              int64
+	feedBytesMon       *mon.BytesMonitor
+	systemFeedBytesMon *mon.BytesMonitor
+
+	metrics *FeedBudgetPoolMetrics
+}
+
+// NewBudgetFactory creates a factory callback that would create RangeFeed
+// memory budget according to system policy.
+func NewBudgetFactory(
+	ctx context.Context,
+	rootMon *mon.BytesMonitor,
+	memoryPoolSize int64,
+	histogramWindowInterval time.Duration,
+) *BudgetFactory {
+	if !useBudgets || rootMon == nil {
+		return nil
+	}
+	totalRangeReedBudget := int64(float64(memoryPoolSize) * totalSharedFeedBudgetFraction)
+	feedSizeLimit := int64(float64(totalRangeReedBudget) * maxFeedFraction)
+
+	metrics := NewFeedBudgetMetrics(histogramWindowInterval)
+	systemRangeMonitor := mon.NewMonitorInheritWithLimit("rangefeed-system-monitor",
+		systemRangeFeedBudget, rootMon)
+	systemRangeMonitor.SetMetrics(metrics.SystemBytesCount, nil /* maxHist */)
+	systemRangeMonitor.Start(ctx, rootMon,
+		mon.MakeStandaloneBudget(systemRangeFeedBudget))
+
+	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit("rangefeed-monitor", totalRangeReedBudget,
+		rootMon)
+	rangeFeedPoolMonitor.SetMetrics(metrics.SharedBytesCount, nil /* maxHist */)
+	rangeFeedPoolMonitor.Start(ctx, rootMon, mon.BoundAccount{})
+
+	return &BudgetFactory{
+		limit:              feedSizeLimit,
+		feedBytesMon:       rangeFeedPoolMonitor,
+		systemFeedBytesMon: systemRangeMonitor,
+		metrics:            metrics,
+	}
+}
+
+// Stop stops underlying memory monitors used by factory.
+// Safe to call on nil factory.
+func (f *BudgetFactory) Stop(ctx context.Context) {
+	if f == nil {
+		return
+	}
+	f.systemFeedBytesMon.Stop(ctx)
+	f.feedBytesMon.Stop(ctx)
+}
+
+// CreateBudget creates feed budget using memory pools configured in the
+// factory. It is safe to call on nil factory as it will produce nil budget
+// which in turn disables memory accounting on range feed.
+func (f *BudgetFactory) CreateBudget(key roachpb.RKey) *FeedBudget {
+	if f == nil {
+		return nil
+	}
+	// We use any table with reserved ID in system tenant as system case.
+	if key.Less(roachpb.RKey(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1))) {
+		acc := f.systemFeedBytesMon.MakeBoundAccount()
+		return NewFeedBudget(&acc, 0)
+	}
+	acc := f.feedBytesMon.MakeBoundAccount()
+	return NewFeedBudget(&acc, f.limit)
+}
+
+// Metrics exposes Metrics for BudgetFactory so that they could be registered
+// in the metric registry.
+func (f *BudgetFactory) Metrics() *FeedBudgetPoolMetrics {
+	return f.metrics
 }
