@@ -1220,6 +1220,20 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaConcurrencyAverageLockHoldDurationNanos = metric.Metadata{
+		Name: "kv.concurrency.avg_lock_hold_duration_nanos",
+		Help: "Average lock hold duration across locks currently held in lock tables. " +
+			"Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaConcurrencyMaxLockHoldDurationNanos = metric.Metadata{
+		Name: "kv.concurrency.max_lock_hold_duration_nanos",
+		Help: "Maximum length of time any lock in a lock table is held. " +
+			"Does not include replicated locks (intents) that are not held in memory",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaConcurrencyLocksWithWaitQueues = metric.Metadata{
 		Name:        "kv.concurrency.locks_with_wait_queues",
 		Help:        "Number of active locks held in lock tables with active wait-queues",
@@ -1231,6 +1245,18 @@ throttled they do count towards 'delay.total' and 'delay.enginebackpressure'.
 		Help:        "Number of requests actively waiting in a lock wait-queue",
 		Measurement: "Lock-Queue Waiters",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaConcurrencyAverageLockWaitDurationNanos = metric.Metadata{
+		Name:        "kv.concurrency.avg_lock_wait_duration_nanos",
+		Help:        "Average lock wait duration across requests currently waiting in lock wait-queues",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaConcurrencyMaxLockWaitDurationNanos = metric.Metadata{
+		Name:        "kv.concurrency.max_lock_wait_duration_nanos",
+		Help:        "Maximum lock wait duration across requests currently waiting in lock wait-queues",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaConcurrencyMaxLockWaitQueueWaitersForLock = metric.Metadata{
 		Name:        "kv.concurrency.max_lock_wait_queue_waiters_for_lock",
@@ -1484,8 +1510,12 @@ type StoreMetrics struct {
 
 	// Concurrency control metrics.
 	Locks                          *metric.Gauge
+	AverageLockHoldDurationNanos   *metric.Gauge
+	MaxLockHoldDurationNanos       *metric.Gauge
 	LocksWithWaitQueues            *metric.Gauge
 	LockWaitQueueWaiters           *metric.Gauge
+	AverageLockWaitDurationNanos   *metric.Gauge
+	MaxLockWaitDurationNanos       *metric.Gauge
 	MaxLockWaitQueueWaitersForLock *metric.Gauge
 
 	// Closed timestamp metrics.
@@ -1926,8 +1956,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Concurrency control metrics.
 		Locks:                          metric.NewGauge(metaConcurrencyLocks),
+		AverageLockHoldDurationNanos:   metric.NewGauge(metaConcurrencyAverageLockHoldDurationNanos),
+		MaxLockHoldDurationNanos:       metric.NewGauge(metaConcurrencyMaxLockHoldDurationNanos),
 		LocksWithWaitQueues:            metric.NewGauge(metaConcurrencyLocksWithWaitQueues),
 		LockWaitQueueWaiters:           metric.NewGauge(metaConcurrencyLockWaitQueueWaiters),
+		AverageLockWaitDurationNanos:   metric.NewGauge(metaConcurrencyAverageLockWaitDurationNanos),
+		MaxLockWaitDurationNanos:       metric.NewGauge(metaConcurrencyMaxLockWaitDurationNanos),
 		MaxLockWaitQueueWaitersForLock: metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 
 		// Closed timestamp metrics.
