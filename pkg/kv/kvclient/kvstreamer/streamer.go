@@ -1502,14 +1502,14 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 	// the client as an atomic operation so that Complete is set to true only on
 	// the last partial scan response.
 	if hasNonEmptyScanResponse {
-		for _, r := range results {
-			if r.ScanResp.ScanResponse != nil {
-				if r.ScanResp.ResumeSpan == nil {
+		for i := range results {
+			if results[i].ScanResp.ScanResponse != nil {
+				if results[i].ScanResp.ResumeSpan == nil {
 					// The scan within the range is complete.
-					w.s.mu.numRangesLeftPerScanRequest[r.position]--
-					if w.s.mu.numRangesLeftPerScanRequest[r.position] == 0 {
+					w.s.mu.numRangesLeftPerScanRequest[results[i].position]--
+					if w.s.mu.numRangesLeftPerScanRequest[results[i].position] == 0 {
 						// The scan across all ranges is now complete too.
-						r.ScanResp.Complete = true
+						results[i].ScanResp.Complete = true
 						numCompleteResponses++
 					}
 				} else {
@@ -1517,7 +1517,7 @@ func (w *workerCoordinator) finalizeSingleRangeResults(
 					// confuse the user of the Streamer. Non-nil resume span was
 					// already included into resumeReq populated in
 					// performRequestAsync.
-					r.ScanResp.ResumeSpan = nil
+					results[i].ScanResp.ResumeSpan = nil
 				}
 			}
 		}
