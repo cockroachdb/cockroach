@@ -934,7 +934,7 @@ func (p *Pebble) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
+	summary, k, err := pebbleExportToSst(ctx, p.settings, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -1602,6 +1602,10 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
+	case !version.Less(clusterversion.ByKey(clusterversion.EnsurePebbleFormatVersionRangeKeys)):
+		if formatVers < pebble.FormatRangeKeys {
+			formatVers = pebble.FormatRangeKeys
+		}
 	case !version.Less(clusterversion.ByKey(clusterversion.PebbleFormatBlockPropertyCollector)):
 		if formatVers < pebble.FormatBlockPropertyCollector {
 			formatVers = pebble.FormatBlockPropertyCollector
@@ -1707,7 +1711,7 @@ func (p *pebbleReadOnly) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
+	summary, k, err := pebbleExportToSst(ctx, p.parent.settings, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -1964,7 +1968,7 @@ func (p *pebbleSnapshot) ExportMVCCToSst(
 ) (roachpb.BulkOpSummary, roachpb.Key, hlc.Timestamp, error) {
 	r := wrapReader(p)
 	// Doing defer r.Free() does not inline.
-	summary, k, err := pebbleExportToSst(ctx, r, exportOptions, dest)
+	summary, k, err := pebbleExportToSst(ctx, p.settings, r, exportOptions, dest)
 	r.Free()
 	return summary, k.Key, k.Timestamp, err
 }
@@ -2085,13 +2089,12 @@ func (e *ExceedMaxSizeError) Error() string {
 }
 
 func pebbleExportToSst(
-	ctx context.Context, reader Reader, options ExportOptions, dest io.Writer,
+	ctx context.Context, cs *cluster.Settings, reader Reader, options ExportOptions, dest io.Writer,
 ) (roachpb.BulkOpSummary, MVCCKey, error) {
 	var span *tracing.Span
 	ctx, span = tracing.ChildSpan(ctx, "pebbleExportToSst")
-	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
 	defer span.Finish()
-	sstWriter := MakeBackupSSTWriter(dest)
+	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
 	defer sstWriter.Close()
 
 	var rows RowCounter

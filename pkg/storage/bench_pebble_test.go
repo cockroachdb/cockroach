@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,7 +33,8 @@ func setupMVCCPebble(b testing.TB, dir string) Engine {
 	peb, err := Open(
 		context.Background(),
 		Filesystem(dir),
-		CacheSize(testCacheSize))
+		CacheSize(testCacheSize),
+		Settings(cluster.MakeTestingClusterSettings()))
 	if err != nil {
 		b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
 	}
