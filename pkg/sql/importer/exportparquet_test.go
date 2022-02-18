@@ -171,7 +171,7 @@ func validateDatum(t *testing.T,expected tree.Datum,actual tree.Datum){
 			// NaN != NaN, therefore stringify the comparison.
 			require.Equal(t, "NaN", actual.(*tree.DFloat).String())
 		}else{
-			require.Equal(t, expected, actual)
+			require.Equal(t, expected.String(), actual.String())
 		}
 	default:
 		require.Equal(t, expected, actual)
@@ -300,9 +300,9 @@ func TestBasicParquetTypes(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob', 2, 24.1, 
-false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 'Bobby', 2, 3.4,false),
-(6, NULL, NULL, 4.5, NULL)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 14.3, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, 'Carl', 1, 34.214,true),(4, 'Alex', 3, 14.3, NULL), (5, 
+'Bobby', 2, 3.4,false), (6, NULL, NULL, 4.5, NULL)`)
 
 	tests := []parquetTest{
 		{
