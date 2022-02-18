@@ -1448,7 +1448,7 @@ vectorized: true
         └── • filter
             │ columns: (k int, v int)
             │ ordering: +v
-            │ estimated row count: 333 (missing stats)
+            │ estimated row count: 332 (missing stats)
             │ filter: ((k)[int] != (4)[int])[bool]
             │
             └── • scan

@@ -162,12 +162,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── immutable
- ├── stats: [rows=9.856012, distinct(1)=9.85601, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=647.4279, distinct(1)=647.428, null(1)=0, avgsize(1)=4]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:12(string!null) unnest:13(string) generate_series:14(int) lower:15(string)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=9.85601, null(1)=0, avgsize(1)=4, distinct(4)=9.9, null(4)=0, avgsize(4)=4, distinct(12)=9.9, null(12)=0, avgsize(12)=4]
+      ├── stats: [rows=990, distinct(1)=647.428, null(1)=0, avgsize(1)=4, distinct(4)=99, null(4)=0, avgsize(4)=4, distinct(12)=99, null(12)=0, avgsize(12)=4]
       ├── fd: (1)-->(4,6), (4)==(12), (12)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string)
@@ -196,12 +196,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── immutable
- ├── stats: [rows=13.91354, distinct(1)=13.9135, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, avgsize(1)=4]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:12(string) unnest:13(string!null) generate_series:14(int) lower:15(string)
       ├── immutable
-      ├── stats: [rows=14.00143, distinct(1)=13.9135, null(1)=0, avgsize(1)=4, distinct(4)=14.0014, null(4)=0, avgsize(4)=4, distinct(13)=14.0014, null(13)=0, avgsize(13)=4]
+      ├── stats: [rows=9801, distinct(1)=1000, null(1)=0, avgsize(1)=4, distinct(4)=99, null(4)=0, avgsize(4)=4, distinct(13)=99, null(13)=0, avgsize(13)=4]
       ├── fd: (1)-->(4,6), (4)==(13), (13)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string)
@@ -235,7 +235,7 @@ distinct-on
  └── select
       ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int!null) lower:15(string)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=6, null(1)=0, avgsize(1)=4, distinct(14)=6, null(14)=0, avgsize(14)=4]
+      ├── stats: [rows=9900, distinct(1)=6, null(1)=0, avgsize(1)=4, distinct(14)=6, null(14)=0, avgsize(14)=4]
       ├── fd: (1)-->(4,6), (1)==(14), (14)==(1)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string)
@@ -264,12 +264,12 @@ distinct-on
  ├── columns: id:1(int!null)
  ├── grouping columns: id:1(int!null)
  ├── immutable
- ├── stats: [rows=9.856012, distinct(1)=9.85601, null(1)=0, avgsize(1)=4]
+ ├── stats: [rows=647.4279, distinct(1)=647.428, null(1)=0, avgsize(1)=4]
  ├── key: (1)
  └── select
       ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string!null)
       ├── immutable
-      ├── stats: [rows=9.9, distinct(1)=9.85601, null(1)=0, avgsize(1)=4, distinct(4)=1e-10, null(4)=0, avgsize(4)=4, distinct(15)=1e-10, null(15)=0, avgsize(15)=4]
+      ├── stats: [rows=990, distinct(1)=647.428, null(1)=0, avgsize(1)=4, distinct(4)=1e-10, null(4)=0, avgsize(4)=4, distinct(15)=1e-10, null(15)=0, avgsize(15)=4]
       ├── fd: (1)-->(4,6), (4)==(15), (15)==(4)
       ├── project-set
       │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:12(string) unnest:13(string) generate_series:14(int) lower:15(string)

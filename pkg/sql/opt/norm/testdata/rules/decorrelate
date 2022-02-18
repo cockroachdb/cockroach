@@ -3311,7 +3311,7 @@ project
  │    │    │    │    │    ├── outer: (1)
  │    │    │    │    │    ├── key: (5,9)
  │    │    │    │    │    ├── fd: ()-->(10), (5)-->(6), (9)-->(11)
- │    │    │    │    │    ├── limit hint: 8999.57
+ │    │    │    │    │    ├── limit hint: 9.00
  │    │    │    │    │    ├── inner-join (cross)
  │    │    │    │    │    │    ├── columns: u:5!null uv.v:6 k:9!null i:10!null f:11
  │    │    │    │    │    │    ├── outer: (1)

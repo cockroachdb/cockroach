@@ -145,7 +145,7 @@ SELECT a, b, c FROM abcd WHERE a=0 AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.663, distinct(1)=0.663, null(1)=0, avgsize(1)=4, distinct(2)=0.663, null(2)=0, avgsize(2)=4, distinct(1,2)=0.663, null(1,2)=0, avgsize(1,2)=8]
  ├── fd: ()-->(1,2)
  └── span
       ├── 0
@@ -170,7 +170,7 @@ SELECT a, b, c FROM abcd WHERE a=1+2 AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.663, distinct(1)=0.663, null(1)=0, avgsize(1)=4, distinct(2)=0.663, null(2)=0, avgsize(2)=4, distinct(1,2)=0.663, null(1,2)=0, avgsize(1,2)=8]
  ├── fd: ()-->(1,2)
  └── span
       ├── 3
@@ -182,7 +182,7 @@ SELECT a, b, c FROM abcd WHERE a=fnv32a('foo') AND b=$1
 placeholder-scan abcd@abcd_a_b_idx
  ├── columns: a:1!null b:2!null c:3
  ├── has-placeholder
- ├── stats: [rows=0.666, distinct(1)=0.666, null(1)=0, avgsize(1)=4, distinct(2)=0.666, null(2)=0, avgsize(2)=4, distinct(1,2)=0.666, null(1,2)=0, avgsize(1,2)=8]
+ ├── stats: [rows=0.663, distinct(1)=0.663, null(1)=0, avgsize(1)=4, distinct(2)=0.663, null(2)=0, avgsize(2)=4, distinct(1,2)=0.663, null(1,2)=0, avgsize(1,2)=8]
  ├── fd: ()-->(1,2)
  └── span
       ├── 2851307223
@@ -230,7 +230,7 @@ SELECT a, d FROM abcd WHERE d=$1 AND c=$2
 placeholder-scan abcd@abcd_d_c_a_idx
  ├── columns: a:1 d:4!null
  ├── has-placeholder
- ├── stats: [rows=1.0989]
+ ├── stats: [rows=1.09395]
  ├── fd: ()-->(4)
  └── span
       ├── $1

@@ -666,22 +666,24 @@ ordinality
       ├── key: (1)
       ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
       ├── ordering: +(2|3),+4 [actual: +2,+4]
-      ├── sort
+      ├── select
       │    ├── columns: k:1!null i:2!null f:3!null s:4 j:5
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
       │    ├── ordering: +(2|3),+4 [actual: +2,+4]
       │    ├── limit hint: 10.00
-      │    └── select
-      │         ├── columns: k:1!null i:2!null f:3!null s:4 j:5
-      │         ├── key: (1)
-      │         ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
-      │         ├── scan a
-      │         │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │         │    ├── key: (1)
-      │         │    └── fd: (1)-->(2-5)
-      │         └── filters
-      │              └── i:2 = f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+      │    ├── sort
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-5)
+      │    │    ├── ordering: +2,+4
+      │    │    ├── limit hint: 10.20
+      │    │    └── scan a
+      │    │         ├── columns: k:1!null i:2 f:3 s:4 j:5
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2-5)
+      │    └── filters
+      │         └── i:2 = f:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
       └── 10
 
 norm expect-not=PushLimitIntoOrdinality

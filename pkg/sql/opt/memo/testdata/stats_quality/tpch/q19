@@ -66,20 +66,20 @@ scalar-group-by
  │    ├── save-table-name: q19_project_2
  │    ├── columns: column30:30(float!null)
  │    ├── immutable
- │    ├── stats: [rows=269.4049, distinct(30)=269.319, null(30)=0, avgsize(30)=8]
+ │    ├── stats: [rows=271.3274, distinct(30)=271.241, null(30)=0, avgsize(30)=8]
  │    ├── inner-join (hash)
  │    │    ├── save-table-name: q19_inner_join_3
  │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) p_partkey:19(int!null) p_brand:22(char!null) p_size:24(int!null) p_container:25(char!null)
  │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
- │    │    ├── stats: [rows=269.4049, distinct(2)=269.405, null(2)=0, avgsize(2)=4, distinct(5)=5.55556, null(5)=0, avgsize(5)=4, distinct(6)=269.302, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=2, null(15)=0, avgsize(15)=4, distinct(19)=269.405, null(19)=0, avgsize(19)=4, distinct(22)=3, null(22)=0, avgsize(22)=4, distinct(24)=16.6667, null(24)=0, avgsize(24)=4, distinct(25)=12, null(25)=0, avgsize(25)=4, distinct(6,7)=269.319, null(6,7)=0, avgsize(6,7)=8, distinct(22,24,25)=269.405, null(22,24,25)=0, avgsize(22,24,25)=12]
+ │    │    ├── stats: [rows=271.3274, distinct(2)=271.327, null(2)=0, avgsize(2)=4, distinct(5)=5.55556, null(5)=0, avgsize(5)=4, distinct(6)=271.224, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=2, null(15)=0, avgsize(15)=4, distinct(19)=271.327, null(19)=0, avgsize(19)=4, distinct(22)=3, null(22)=0, avgsize(22)=4, distinct(24)=16.6667, null(24)=0, avgsize(24)=4, distinct(25)=12, null(25)=0, avgsize(25)=4, distinct(6,7)=271.241, null(6,7)=0, avgsize(6,7)=8, distinct(22,24,25)=271.327, null(22,24,25)=0, avgsize(22,24,25)=12]
  │    │    ├── fd: ()-->(14), (19)-->(22,24,25), (2)==(19), (19)==(2)
  │    │    ├── select
  │    │    │    ├── save-table-name: q19_select_4
  │    │    │    ├── columns: l_partkey:2(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null)
- │    │    │    ├── stats: [rows=422702.4, distinct(2)=177164, null(2)=0, avgsize(2)=4, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=352755, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=2, null(15)=0, avgsize(15)=4, distinct(6,7)=422702, null(6,7)=0, avgsize(6,7)=8, distinct(14,15)=2, null(14,15)=0, avgsize(14,15)=8]
- │    │    │    │   histogram(14)=  0       4.227e+05
+ │    │    │    ├── stats: [rows=425718.8, distinct(2)=177521, null(2)=0, avgsize(2)=4, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=354818, null(6)=0, avgsize(6)=4, distinct(7)=11, null(7)=0, avgsize(7)=4, distinct(14)=1, null(14)=0, avgsize(14)=4, distinct(15)=2, null(15)=0, avgsize(15)=4, distinct(6,7)=425719, null(6,7)=0, avgsize(6,7)=8, distinct(14,15)=2, null(14,15)=0, avgsize(14,15)=8]
+ │    │    │    │   histogram(14)=  0      4.2572e+05
  │    │    │    │                 <--- 'DELIVER IN PERSON'
- │    │    │    │   histogram(15)=  0 2.1259e+05 0 2.1011e+05
+ │    │    │    │   histogram(15)=  0 2.1411e+05 0 2.1161e+05
  │    │    │    │                 <---- 'AIR' ----- 'AIR REG'
  │    │    │    ├── fd: ()-->(14)
  │    │    │    ├── scan lineitem
@@ -146,7 +146,7 @@ column_names  row_count  distinct_count  null_count
 {column30}    121        121             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{column30}    269.00         2.22 <==       269.00              2.22 <==            0.00            1.00
+{column30}    271.00         2.24 <==       271.00              2.24 <==            0.00            1.00
 
 ----Stats for q19_inner_join_3----
 column_names       row_count  distinct_count  null_count
@@ -162,16 +162,16 @@ column_names       row_count  distinct_count  null_count
 {p_size}           121        14              0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       269.00         2.22 <==       11.00               1.00                0.00            1.00
-{l_extendedprice}  269.00         2.22 <==       269.00              2.28 <==            0.00            1.00
-{l_partkey}        269.00         2.22 <==       269.00              2.61 <==            0.00            1.00
-{l_quantity}       269.00         2.22 <==       6.00                4.83 <==            0.00            1.00
-{l_shipinstruct}   269.00         2.22 <==       1.00                1.00                0.00            1.00
-{l_shipmode}       269.00         2.22 <==       2.00                2.00 <==            0.00            1.00
-{p_brand}          269.00         2.22 <==       3.00                1.00                0.00            1.00
-{p_container}      269.00         2.22 <==       12.00               1.00                0.00            1.00
-{p_partkey}        269.00         2.22 <==       269.00              2.61 <==            0.00            1.00
-{p_size}           269.00         2.22 <==       17.00               1.21                0.00            1.00
+{l_discount}       271.00         2.24 <==       11.00               1.00                0.00            1.00
+{l_extendedprice}  271.00         2.24 <==       271.00              2.30 <==            0.00            1.00
+{l_partkey}        271.00         2.24 <==       271.00              2.63 <==            0.00            1.00
+{l_quantity}       271.00         2.24 <==       6.00                4.83 <==            0.00            1.00
+{l_shipinstruct}   271.00         2.24 <==       1.00                1.00                0.00            1.00
+{l_shipmode}       271.00         2.24 <==       2.00                2.00 <==            0.00            1.00
+{p_brand}          271.00         2.24 <==       3.00                1.00                0.00            1.00
+{p_container}      271.00         2.24 <==       12.00               1.00                0.00            1.00
+{p_partkey}        271.00         2.24 <==       271.00              2.63 <==            0.00            1.00
+{p_size}           271.00         2.24 <==       17.00               1.21                0.00            1.00
 
 ----Stats for q19_select_4----
 column_names       row_count  distinct_count  null_count
@@ -183,12 +183,12 @@ column_names       row_count  distinct_count  null_count
 {l_shipmode}       214377     1               0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_discount}       422702.00      1.97 <==       11.00               1.00                0.00            1.00
-{l_extendedprice}  422702.00      1.97 <==       352755.00           1.87                0.00            1.00
-{l_partkey}        422702.00      1.97 <==       177164.00           1.35                0.00            1.00
-{l_quantity}       422702.00      1.97 <==       50.00               1.00                0.00            1.00
-{l_shipinstruct}   422702.00      1.97 <==       1.00                1.00                0.00            1.00
-{l_shipmode}       422702.00      1.97 <==       2.00                2.00 <==            0.00            1.00
+{l_discount}       425719.00      1.99 <==       11.00               1.00                0.00            1.00
+{l_extendedprice}  425719.00      1.99 <==       354818.00           1.88                0.00            1.00
+{l_partkey}        425719.00      1.99 <==       177521.00           1.35                0.00            1.00
+{l_quantity}       425719.00      1.99 <==       50.00               1.00                0.00            1.00
+{l_shipinstruct}   425719.00      1.99 <==       1.00                1.00                0.00            1.00
+{l_shipmode}       425719.00      1.99 <==       2.00                2.00 <==            0.00            1.00
 
 ----Stats for q19_scan_5----
 column_names       row_count  distinct_count  null_count

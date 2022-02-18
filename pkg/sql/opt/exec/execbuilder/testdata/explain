@@ -1219,7 +1219,7 @@ vectorized: true
 ·
 • filter
 │ columns: (x int, y int)
-│ estimated row count: 311 (missing stats)
+│ estimated row count: 211 (missing stats)
 │ filter: ((((x)[int] < (10)[int])[bool]) AND (((y)[int] > (10)[int])[bool]))[bool]
 │
 └── • scan

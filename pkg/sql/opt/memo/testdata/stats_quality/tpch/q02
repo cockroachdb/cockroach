@@ -73,7 +73,7 @@ project
  ├── save-table-name: q2_project_1
  ├── columns: s_acctbal:17(float!null) s_name:13(char!null) n_name:29(char!null) p_partkey:1(int!null) p_mfgr:3(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_comment:18(varchar!null)
  ├── cardinality: [0 - 100]
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=8, distinct(3)=1, null(3)=0, avgsize(3)=8, distinct(13)=1, null(13)=0, avgsize(13)=8, distinct(14)=1, null(14)=0, avgsize(14)=8, distinct(16)=1, null(16)=0, avgsize(16)=8, distinct(17)=1, null(17)=0, avgsize(17)=8, distinct(18)=1, null(18)=0, avgsize(18)=8, distinct(29)=1, null(29)=0, avgsize(29)=8]
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=8, distinct(3)=100, null(3)=0, avgsize(3)=8, distinct(13)=100, null(13)=0, avgsize(13)=8, distinct(14)=100, null(14)=0, avgsize(14)=8, distinct(16)=100, null(16)=0, avgsize(16)=8, distinct(17)=100, null(17)=0, avgsize(17)=8, distinct(18)=100, null(18)=0, avgsize(18)=8, distinct(29)=100, null(29)=0, avgsize(29)=8]
  ├── fd: (1)-->(3)
  ├── ordering: -17,+29,+13,+1
  └── top-k
@@ -82,56 +82,56 @@ project
       ├── internal-ordering: -17,+29,+13,+(1|21)
       ├── k: 100
       ├── cardinality: [0 - 100]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=8, distinct(3)=1, null(3)=0, avgsize(3)=8, distinct(13)=1, null(13)=0, avgsize(13)=8, distinct(14)=1, null(14)=0, avgsize(14)=8, distinct(16)=1, null(16)=0, avgsize(16)=8, distinct(17)=1, null(17)=0, avgsize(17)=8, distinct(18)=1, null(18)=0, avgsize(18)=8, distinct(21)=0.999912, null(21)=0, avgsize(21)=4, distinct(22)=0.999982, null(22)=0, avgsize(22)=4, distinct(24)=1, null(24)=0, avgsize(24)=8, distinct(29)=1, null(29)=0, avgsize(29)=8, distinct(66)=1, null(66)=0, avgsize(66)=8]
+      ├── stats: [rows=100, distinct(1)=100, null(1)=0, avgsize(1)=8, distinct(3)=100, null(3)=0, avgsize(3)=8, distinct(13)=100, null(13)=0, avgsize(13)=8, distinct(14)=100, null(14)=0, avgsize(14)=8, distinct(16)=100, null(16)=0, avgsize(16)=8, distinct(17)=100, null(17)=0, avgsize(17)=8, distinct(18)=100, null(18)=0, avgsize(18)=8, distinct(21)=99.1065, null(21)=0, avgsize(21)=4, distinct(22)=99.8173, null(22)=0, avgsize(22)=4, distinct(24)=100, null(24)=0, avgsize(24)=8, distinct(29)=100, null(29)=0, avgsize(29)=8, distinct(66)=100, null(66)=0, avgsize(66)=8]
       ├── key: (21,22)
       ├── fd: (1)-->(3), (21,22)-->(1,3,13,14,16-18,24,29,66), (1)==(21), (21)==(1), (22)-->(13,14,16-18,29), (24)==(66), (66)==(24)
       ├── ordering: -17,+29,+13,+(1|21) [actual: -17,+29,+13,+1]
       └── select
            ├── save-table-name: q2_select_3
            ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:13(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_name:29(char!null) min:66(float!null)
-           ├── stats: [rows=1, distinct(1)=1, null(1)=0, avgsize(1)=8, distinct(3)=1, null(3)=0, avgsize(3)=8, distinct(13)=1, null(13)=0, avgsize(13)=8, distinct(14)=1, null(14)=0, avgsize(14)=8, distinct(16)=1, null(16)=0, avgsize(16)=8, distinct(17)=1, null(17)=0, avgsize(17)=8, distinct(18)=1, null(18)=0, avgsize(18)=8, distinct(21)=0.999912, null(21)=0, avgsize(21)=4, distinct(22)=0.999982, null(22)=0, avgsize(22)=4, distinct(24)=1, null(24)=0, avgsize(24)=8, distinct(29)=1, null(29)=0, avgsize(29)=8, distinct(66)=1, null(66)=0, avgsize(66)=8]
+           ├── stats: [rows=1479.485, distinct(1)=1479.49, null(1)=0, avgsize(1)=8, distinct(3)=1479.49, null(3)=0, avgsize(3)=8, distinct(13)=1479.49, null(13)=0, avgsize(13)=8, distinct(14)=1479.49, null(14)=0, avgsize(14)=8, distinct(16)=1479.49, null(16)=0, avgsize(16)=8, distinct(17)=1479.49, null(17)=0, avgsize(17)=8, distinct(18)=1479.49, null(18)=0, avgsize(18)=8, distinct(21)=1174.26, null(21)=0, avgsize(21)=4, distinct(22)=1405.15, null(22)=0, avgsize(22)=4, distinct(24)=1479.49, null(24)=0, avgsize(24)=8, distinct(29)=1479.49, null(29)=0, avgsize(29)=8, distinct(66)=1479.49, null(66)=0, avgsize(66)=8]
            ├── key: (21,22)
            ├── fd: (1)-->(3), (21,22)-->(1,3,13,14,16-18,24,29,66), (1)==(21), (21)==(1), (22)-->(13,14,16-18,29), (24)==(66), (66)==(24)
            ├── group-by (hash)
            │    ├── save-table-name: q2_group_by_4
            │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) s_name:13(char!null) s_address:14(varchar!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_name:29(char!null) min:66(float!null)
            │    ├── grouping columns: ps_partkey:21(int!null) ps_suppkey:22(int!null)
-           │    ├── stats: [rows=1482.014, distinct(1)=1482.01, null(1)=0, avgsize(1)=8, distinct(3)=1482.01, null(3)=0, avgsize(3)=8, distinct(13)=1482.01, null(13)=0, avgsize(13)=8, distinct(14)=1482.01, null(14)=0, avgsize(14)=8, distinct(16)=1482.01, null(16)=0, avgsize(16)=8, distinct(17)=1482.01, null(17)=0, avgsize(17)=8, distinct(18)=1482.01, null(18)=0, avgsize(18)=8, distinct(21)=1176.27, null(21)=0, avgsize(21)=4, distinct(22)=1407.43, null(22)=0, avgsize(22)=4, distinct(24)=1482.01, null(24)=0, avgsize(24)=8, distinct(29)=1482.01, null(29)=0, avgsize(29)=8, distinct(66)=1482.01, null(66)=0, avgsize(66)=8, distinct(21,22)=1482.01, null(21,22)=0, avgsize(21,22)=8]
+           │    ├── stats: [rows=1479.485, distinct(1)=1479.49, null(1)=0, avgsize(1)=8, distinct(3)=1479.49, null(3)=0, avgsize(3)=8, distinct(13)=1479.49, null(13)=0, avgsize(13)=8, distinct(14)=1479.49, null(14)=0, avgsize(14)=8, distinct(16)=1479.49, null(16)=0, avgsize(16)=8, distinct(17)=1479.49, null(17)=0, avgsize(17)=8, distinct(18)=1479.49, null(18)=0, avgsize(18)=8, distinct(21)=1174.26, null(21)=0, avgsize(21)=4, distinct(22)=1405.15, null(22)=0, avgsize(22)=4, distinct(24)=1479.49, null(24)=0, avgsize(24)=8, distinct(29)=1479.49, null(29)=0, avgsize(29)=8, distinct(66)=1479.49, null(66)=0, avgsize(66)=8, distinct(21,22)=1479.49, null(21,22)=0, avgsize(21,22)=8]
            │    ├── key: (21,22)
            │    ├── fd: (1)-->(3), (21,22)-->(1,3,13,14,16-18,24,29,66), (1)==(21), (21)==(1), (22)-->(13,14,16-18,29)
            │    ├── inner-join (hash)
            │    │    ├── save-table-name: q2_inner_join_5
            │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:12(int!null) s_name:13(char!null) s_address:14(varchar!null) s_nationkey:15(int!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_nationkey:28(int!null) n_name:29(char!null) n_regionkey:30(int!null) r_regionkey:34(int!null) r_name:35(char!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null) s_suppkey:46(int!null) s_nationkey:49(int!null) n_nationkey:55(int!null) n_regionkey:57(int!null) r_regionkey:61(int!null) r_name:62(char!null)
            │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           │    │    ├── stats: [rows=2827.737, distinct(1)=1337.9, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=1407.43, null(12)=0, avgsize(12)=4, distinct(13)=1407.99, null(13)=0, avgsize(13)=4, distinct(14)=1408.06, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4, distinct(16)=1406.78, null(16)=0, avgsize(16)=4, distinct(17)=1408.06, null(17)=0, avgsize(17)=4, distinct(18)=1407.29, null(18)=0, avgsize(18)=4, distinct(21)=1176.27, null(21)=0, avgsize(21)=4, distinct(22)=1407.43, null(22)=0, avgsize(22)=4, distinct(24)=824.603, null(24)=0, avgsize(24)=4, distinct(28)=5, null(28)=0, avgsize(28)=4, distinct(29)=5, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=0.996222, null(35)=0, avgsize(35)=4, distinct(39)=1337.9, null(39)=0, avgsize(39)=4, distinct(40)=1446.46, null(40)=0, avgsize(40)=4, distinct(42)=940.854, null(42)=0, avgsize(42)=4, distinct(46)=1446.46, null(46)=0, avgsize(46)=4, distinct(49)=5, null(49)=0, avgsize(49)=4, distinct(55)=5, null(55)=0, avgsize(55)=4, distinct(57)=1, null(57)=0, avgsize(57)=4, distinct(61)=1, null(61)=0, avgsize(61)=4, distinct(62)=0.996222, null(62)=0, avgsize(62)=4, distinct(21,22)=1482.01, null(21,22)=0, avgsize(21,22)=8]
+           │    │    ├── stats: [rows=2822.893, distinct(1)=1335.61, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=1405.15, null(12)=0, avgsize(12)=4, distinct(13)=1405.71, null(13)=0, avgsize(13)=4, distinct(14)=1405.79, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4, distinct(16)=1404.51, null(16)=0, avgsize(16)=4, distinct(17)=1405.79, null(17)=0, avgsize(17)=4, distinct(18)=1405.02, null(18)=0, avgsize(18)=4, distinct(21)=1174.26, null(21)=0, avgsize(21)=4, distinct(22)=1405.15, null(22)=0, avgsize(22)=4, distinct(24)=824.022, null(24)=0, avgsize(24)=4, distinct(28)=5, null(28)=0, avgsize(28)=4, distinct(29)=5, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=0.996222, null(35)=0, avgsize(35)=4, distinct(39)=1335.61, null(39)=0, avgsize(39)=4, distinct(40)=1445.42, null(40)=0, avgsize(40)=4, distinct(42)=940.567, null(42)=0, avgsize(42)=4, distinct(46)=1445.42, null(46)=0, avgsize(46)=4, distinct(49)=5, null(49)=0, avgsize(49)=4, distinct(55)=5, null(55)=0, avgsize(55)=4, distinct(57)=1, null(57)=0, avgsize(57)=4, distinct(61)=1, null(61)=0, avgsize(61)=4, distinct(62)=0.996222, null(62)=0, avgsize(62)=4, distinct(21,22)=1479.49, null(21,22)=0, avgsize(21,22)=8]
            │    │    ├── key: (22,39,46)
            │    │    ├── fd: ()-->(6,35,62), (1)-->(3,5), (12)-->(13-18), (21,22)-->(24), (12)==(22), (22)==(12), (28)-->(29,30), (30)==(34), (34)==(30), (15)==(28), (28)==(15), (1)==(21,39), (21)==(1,39), (39,40)-->(42), (46)-->(49), (55)-->(57), (57)==(61), (61)==(57), (49)==(55), (55)==(49), (40)==(46), (46)==(40), (39)==(1,21)
            │    │    ├── inner-join (lookup partsupp)
            │    │    │    ├── save-table-name: q2_lookup_join_6
            │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:12(int!null) s_name:13(char!null) s_address:14(varchar!null) s_nationkey:15(int!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_nationkey:28(int!null) n_name:29(char!null) n_regionkey:30(int!null) r_regionkey:34(int!null) r_name:35(char!null) ps_partkey:39(int!null) ps_suppkey:40(int!null) ps_supplycost:42(float!null)
            │    │    │    ├── key columns: [1] = [39]
-           │    │    │    ├── stats: [rows=4467.679, distinct(1)=1337.9, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=3597.08, null(12)=0, avgsize(12)=4, distinct(13)=3602.34, null(13)=0, avgsize(13)=4, distinct(14)=3603.08, null(14)=0, avgsize(14)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(16)=3591, null(16)=0, avgsize(16)=4, distinct(17)=3603.08, null(17)=0, avgsize(17)=4, distinct(18)=3595.8, null(18)=0, avgsize(18)=4, distinct(21)=1337.9, null(21)=0, avgsize(21)=4, distinct(22)=3597.08, null(22)=0, avgsize(22)=4, distinct(24)=988.526, null(24)=0, avgsize(24)=4, distinct(28)=25, null(28)=0, avgsize(28)=4, distinct(29)=25, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(39)=4416.62, null(39)=0, avgsize(39)=4, distinct(40)=3597.08, null(40)=0, avgsize(40)=4, distinct(42)=988.526, null(42)=0, avgsize(42)=4]
+           │    │    │    ├── stats: [rows=4460.027, distinct(1)=1335.61, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=3592.2, null(12)=0, avgsize(12)=4, distinct(13)=3597.44, null(13)=0, avgsize(13)=4, distinct(14)=3598.19, null(14)=0, avgsize(14)=4, distinct(15)=25, null(15)=0, avgsize(15)=4, distinct(16)=3586.13, null(16)=0, avgsize(16)=4, distinct(17)=3598.19, null(17)=0, avgsize(17)=4, distinct(18)=3590.92, null(18)=0, avgsize(18)=4, distinct(21)=1335.61, null(21)=0, avgsize(21)=4, distinct(22)=3592.2, null(22)=0, avgsize(22)=4, distinct(24)=988.438, null(24)=0, avgsize(24)=4, distinct(28)=25, null(28)=0, avgsize(28)=4, distinct(29)=25, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=1, null(35)=0, avgsize(35)=4, distinct(39)=4409.15, null(39)=0, avgsize(39)=4, distinct(40)=3592.2, null(40)=0, avgsize(40)=4, distinct(42)=988.438, null(42)=0, avgsize(42)=4]
            │    │    │    ├── key: (22,39,40)
            │    │    │    ├── fd: ()-->(6,35), (1)-->(3,5), (28)-->(29,30), (12)-->(13-18), (21,22)-->(24), (39,40)-->(42), (21)==(1,39), (39)==(1,21), (12)==(22), (22)==(12), (15)==(28), (28)==(15), (30)==(34), (34)==(30), (1)==(21,39)
            │    │    │    ├── inner-join (hash)
            │    │    │    │    ├── save-table-name: q2_inner_join_7
            │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) s_suppkey:12(int!null) s_name:13(char!null) s_address:14(varchar!null) s_nationkey:15(int!null) s_phone:16(char!null) s_acctbal:17(float!null) s_comment:18(varchar!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null) n_nationkey:28(int!null) n_name:29(char!null) n_regionkey:30(int!null) r_regionkey:34(int!null) r_name:35(char!null)
            │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-           │    │    │    │    ├── stats: [rows=1938.482, distinct(1)=1337.9, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=1760.85, null(12)=0, avgsize(12)=4, distinct(13)=1762.01, null(13)=0, avgsize(13)=4, distinct(14)=1762.18, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4, distinct(16)=1759.49, null(16)=0, avgsize(16)=4, distinct(17)=1762.18, null(17)=0, avgsize(17)=4, distinct(18)=1760.56, null(18)=0, avgsize(18)=4, distinct(21)=1337.9, null(21)=0, avgsize(21)=4, distinct(22)=1760.85, null(22)=0, avgsize(22)=4, distinct(24)=856.079, null(24)=0, avgsize(24)=4, distinct(28)=5, null(28)=0, avgsize(28)=4, distinct(29)=5, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=0.996222, null(35)=0, avgsize(35)=4, distinct(21,22)=1925.19, null(21,22)=0, avgsize(21,22)=8]
+           │    │    │    │    ├── stats: [rows=1935.162, distinct(1)=1335.61, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(12)=1758.11, null(12)=0, avgsize(12)=4, distinct(13)=1759.28, null(13)=0, avgsize(13)=4, distinct(14)=1759.44, null(14)=0, avgsize(14)=4, distinct(15)=5, null(15)=0, avgsize(15)=4, distinct(16)=1756.77, null(16)=0, avgsize(16)=4, distinct(17)=1759.44, null(17)=0, avgsize(17)=4, distinct(18)=1757.83, null(18)=0, avgsize(18)=4, distinct(21)=1335.61, null(21)=0, avgsize(21)=4, distinct(22)=1758.11, null(22)=0, avgsize(22)=4, distinct(24)=855.6, null(24)=0, avgsize(24)=4, distinct(28)=5, null(28)=0, avgsize(28)=4, distinct(29)=5, null(29)=0, avgsize(29)=4, distinct(30)=1, null(30)=0, avgsize(30)=4, distinct(34)=1, null(34)=0, avgsize(34)=4, distinct(35)=0.996222, null(35)=0, avgsize(35)=4, distinct(21,22)=1921.91, null(21,22)=0, avgsize(21,22)=8]
            │    │    │    │    ├── key: (21,22)
            │    │    │    │    ├── fd: ()-->(6,35), (1)-->(3,5), (12)-->(13-18), (21,22)-->(24), (12)==(22), (22)==(12), (28)-->(29,30), (30)==(34), (34)==(30), (15)==(28), (28)==(15), (1)==(21), (21)==(1)
            │    │    │    │    ├── inner-join (lookup partsupp)
            │    │    │    │    │    ├── save-table-name: q2_lookup_join_8
            │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null) ps_partkey:21(int!null) ps_suppkey:22(int!null) ps_supplycost:24(float!null)
            │    │    │    │    │    ├── key columns: [1] = [21]
-           │    │    │    │    │    ├── stats: [rows=5372.054, distinct(1)=1337.9, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(21)=1337.9, null(21)=0, avgsize(21)=4, distinct(22)=4148.03, null(22)=0, avgsize(22)=4, distinct(24)=995.355, null(24)=0, avgsize(24)=4]
+           │    │    │    │    │    ├── stats: [rows=5362.852, distinct(1)=1335.61, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4, distinct(21)=1335.61, null(21)=0, avgsize(21)=4, distinct(22)=4142.67, null(22)=0, avgsize(22)=4, distinct(24)=995.313, null(24)=0, avgsize(24)=4]
            │    │    │    │    │    ├── key: (21,22)
            │    │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5), (21,22)-->(24), (1)==(21), (21)==(1)
            │    │    │    │    │    ├── select
            │    │    │    │    │    │    ├── save-table-name: q2_select_9
            │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(char!null) p_type:5(varchar!null) p_size:6(int!null)
-           │    │    │    │    │    │    ├── stats: [rows=1337.917, distinct(1)=1337.9, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
-           │    │    │    │    │    │    │   histogram(6)=  0 1337.9
+           │    │    │    │    │    │    ├── stats: [rows=1335.625, distinct(1)=1335.61, null(1)=0, avgsize(1)=4, distinct(3)=5, null(3)=0, avgsize(3)=4, distinct(5)=150, null(5)=0, avgsize(5)=4, distinct(6)=1, null(6)=0, avgsize(6)=4]
+           │    │    │    │    │    │    │   histogram(6)=  0 1335.6
            │    │    │    │    │    │    │                <---- 15 -
            │    │    │    │    │    │    ├── key: (1)
            │    │    │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5)
@@ -300,14 +300,14 @@ column_names  row_count  distinct_count  null_count
 {s_phone}     100        89              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}      1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
-{p_mfgr}      1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
-{p_partkey}   1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
-{s_acctbal}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_address}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_comment}   1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_name}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_phone}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{n_name}      100.00         1.00           100.00              20.00 <==           0.00            1.00
+{p_mfgr}      100.00         1.00           100.00              20.00 <==           0.00            1.00
+{p_partkey}   100.00         1.00           100.00              1.00                0.00            1.00
+{s_acctbal}   100.00         1.00           100.00              1.12                0.00            1.00
+{s_address}   100.00         1.00           100.00              1.12                0.00            1.00
+{s_comment}   100.00         1.00           100.00              1.12                0.00            1.00
+{s_name}      100.00         1.00           100.00              1.12                0.00            1.00
+{s_phone}     100.00         1.00           100.00              1.12                0.00            1.00
 
 ----Stats for q2_top_k_2----
 column_names     row_count  distinct_count  null_count
@@ -325,18 +325,18 @@ column_names     row_count  distinct_count  null_count
 {s_phone}        100        89              0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{min}            1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
-{n_name}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
-{p_mfgr}         1.00           100.00 <==     1.00                5.00 <==            0.00            1.00
-{p_partkey}      1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
-{ps_partkey}     1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
-{ps_suppkey}     1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{ps_supplycost}  1.00           100.00 <==     1.00                100.00 <==          0.00            1.00
-{s_acctbal}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_address}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_comment}      1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_name}         1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
-{s_phone}        1.00           100.00 <==     1.00                89.00 <==           0.00            1.00
+{min}            100.00         1.00           100.00              1.00                0.00            1.00
+{n_name}         100.00         1.00           100.00              20.00 <==           0.00            1.00
+{p_mfgr}         100.00         1.00           100.00              20.00 <==           0.00            1.00
+{p_partkey}      100.00         1.00           100.00              1.00                0.00            1.00
+{ps_partkey}     100.00         1.00           99.00               1.01                0.00            1.00
+{ps_suppkey}     100.00         1.00           100.00              1.12                0.00            1.00
+{ps_supplycost}  100.00         1.00           100.00              1.00                0.00            1.00
+{s_acctbal}      100.00         1.00           100.00              1.12                0.00            1.00
+{s_address}      100.00         1.00           100.00              1.12                0.00            1.00
+{s_comment}      100.00         1.00           100.00              1.12                0.00            1.00
+{s_name}         100.00         1.00           100.00              1.12                0.00            1.00
+{s_phone}        100.00         1.00           100.00              1.12                0.00            1.00
 
 ----Stats for q2_select_3----
 column_names     row_count  distinct_count  null_count
@@ -354,18 +354,18 @@ column_names     row_count  distinct_count  null_count
 {s_phone}        460        406             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{min}            1.00           460.00 <==     1.00                458.00 <==          0.00            1.00
-{n_name}         1.00           460.00 <==     1.00                5.00 <==            0.00            1.00
-{p_mfgr}         1.00           460.00 <==     1.00                5.00 <==            0.00            1.00
-{p_partkey}      1.00           460.00 <==     1.00                460.00 <==          0.00            1.00
-{ps_partkey}     1.00           460.00 <==     1.00                460.00 <==          0.00            1.00
-{ps_suppkey}     1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
-{ps_supplycost}  1.00           460.00 <==     1.00                458.00 <==          0.00            1.00
-{s_acctbal}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
-{s_address}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
-{s_comment}      1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
-{s_name}         1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
-{s_phone}        1.00           460.00 <==     1.00                406.00 <==          0.00            1.00
+{min}            1479.00        3.22 <==       1479.00             3.23 <==            0.00            1.00
+{n_name}         1479.00        3.22 <==       1479.00             295.80 <==          0.00            1.00
+{p_mfgr}         1479.00        3.22 <==       1479.00             295.80 <==          0.00            1.00
+{p_partkey}      1479.00        3.22 <==       1479.00             3.22 <==            0.00            1.00
+{ps_partkey}     1479.00        3.22 <==       1174.00             2.55 <==            0.00            1.00
+{ps_suppkey}     1479.00        3.22 <==       1405.00             3.46 <==            0.00            1.00
+{ps_supplycost}  1479.00        3.22 <==       1479.00             3.23 <==            0.00            1.00
+{s_acctbal}      1479.00        3.22 <==       1479.00             3.64 <==            0.00            1.00
+{s_address}      1479.00        3.22 <==       1479.00             3.64 <==            0.00            1.00
+{s_comment}      1479.00        3.22 <==       1479.00             3.64 <==            0.00            1.00
+{s_name}         1479.00        3.22 <==       1479.00             3.64 <==            0.00            1.00
+{s_phone}        1479.00        3.22 <==       1479.00             3.64 <==            0.00            1.00
 
 ----Stats for q2_group_by_4----
 column_names     row_count  distinct_count  null_count
@@ -383,18 +383,18 @@ column_names     row_count  distinct_count  null_count
 {s_phone}        642        548             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{min}            1482.00        2.31 <==       1482.00             3.24 <==            0.00            1.00
-{n_name}         1482.00        2.31 <==       1482.00             296.40 <==          0.00            1.00
-{p_mfgr}         1482.00        2.31 <==       1482.00             296.40 <==          0.00            1.00
-{p_partkey}      1482.00        2.31 <==       1482.00             3.22 <==            0.00            1.00
-{ps_partkey}     1482.00        2.31 <==       1176.00             2.56 <==            0.00            1.00
-{ps_suppkey}     1482.00        2.31 <==       1407.00             2.57 <==            0.00            1.00
-{ps_supplycost}  1482.00        2.31 <==       1482.00             2.32 <==            0.00            1.00
-{s_acctbal}      1482.00        2.31 <==       1482.00             2.70 <==            0.00            1.00
-{s_address}      1482.00        2.31 <==       1482.00             2.70 <==            0.00            1.00
-{s_comment}      1482.00        2.31 <==       1482.00             2.70 <==            0.00            1.00
-{s_name}         1482.00        2.31 <==       1482.00             2.70 <==            0.00            1.00
-{s_phone}        1482.00        2.31 <==       1482.00             2.70 <==            0.00            1.00
+{min}            1479.00        2.30 <==       1479.00             3.23 <==            0.00            1.00
+{n_name}         1479.00        2.30 <==       1479.00             295.80 <==          0.00            1.00
+{p_mfgr}         1479.00        2.30 <==       1479.00             295.80 <==          0.00            1.00
+{p_partkey}      1479.00        2.30 <==       1479.00             3.22 <==            0.00            1.00
+{ps_partkey}     1479.00        2.30 <==       1174.00             2.55 <==            0.00            1.00
+{ps_suppkey}     1479.00        2.30 <==       1405.00             2.56 <==            0.00            1.00
+{ps_supplycost}  1479.00        2.30 <==       1479.00             2.31 <==            0.00            1.00
+{s_acctbal}      1479.00        2.30 <==       1479.00             2.70 <==            0.00            1.00
+{s_address}      1479.00        2.30 <==       1479.00             2.70 <==            0.00            1.00
+{s_comment}      1479.00        2.30 <==       1479.00             2.70 <==            0.00            1.00
+{s_name}         1479.00        2.30 <==       1479.00             2.70 <==            0.00            1.00
+{s_phone}        1479.00        2.30 <==       1479.00             2.70 <==            0.00            1.00
 
 ----Stats for q2_inner_join_5----
 column_names       row_count  distinct_count  null_count
@@ -428,34 +428,34 @@ column_names       row_count  distinct_count  null_count
 {s_suppkey}        1070       548             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}           2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{n_nationkey}      2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{n_nationkey_1}    2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{n_regionkey}      2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{n_regionkey_1}    2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{p_mfgr}           2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{p_partkey}        2828.00        2.64 <==       1338.00             2.91 <==            0.00            1.00
-{p_size}           2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{p_type}           2828.00        2.64 <==       150.00              5.00 <==            0.00            1.00
-{ps_partkey}       2828.00        2.64 <==       1176.00             2.56 <==            0.00            1.00
-{ps_partkey_1}     2828.00        2.64 <==       1338.00             2.91 <==            0.00            1.00
-{ps_suppkey}       2828.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
-{ps_suppkey_1}     2828.00        2.64 <==       1446.00             2.64 <==            0.00            1.00
-{ps_supplycost}    2828.00        2.64 <==       825.00              1.29                0.00            1.00
-{ps_supplycost_1}  2828.00        2.64 <==       941.00              1.47                0.00            1.00
-{r_name}           2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{r_name_1}         2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{r_regionkey}      2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{r_regionkey_1}    2828.00        2.64 <==       1.00                1.00                0.00            1.00
-{s_acctbal}        2828.00        2.64 <==       1408.00             2.57 <==            0.00            1.00
-{s_address}        2828.00        2.64 <==       1408.00             2.57 <==            0.00            1.00
-{s_comment}        2828.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
-{s_name}           2828.00        2.64 <==       1408.00             2.57 <==            0.00            1.00
-{s_nationkey}      2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{s_nationkey_1}    2828.00        2.64 <==       5.00                1.00                0.00            1.00
-{s_phone}          2828.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
-{s_suppkey}        2828.00        2.64 <==       1407.00             2.57 <==            0.00            1.00
-{s_suppkey_1}      2828.00        2.64 <==       1446.00             2.64 <==            0.00            1.00
+{n_name}           2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_nationkey}      2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_nationkey_1}    2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{n_regionkey}      2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{n_regionkey_1}    2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{p_mfgr}           2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{p_partkey}        2823.00        2.64 <==       1336.00             2.90 <==            0.00            1.00
+{p_size}           2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{p_type}           2823.00        2.64 <==       150.00              5.00 <==            0.00            1.00
+{ps_partkey}       2823.00        2.64 <==       1174.00             2.55 <==            0.00            1.00
+{ps_partkey_1}     2823.00        2.64 <==       1336.00             2.90 <==            0.00            1.00
+{ps_suppkey}       2823.00        2.64 <==       1405.00             2.56 <==            0.00            1.00
+{ps_suppkey_1}     2823.00        2.64 <==       1445.00             2.64 <==            0.00            1.00
+{ps_supplycost}    2823.00        2.64 <==       824.00              1.29                0.00            1.00
+{ps_supplycost_1}  2823.00        2.64 <==       941.00              1.47                0.00            1.00
+{r_name}           2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_name_1}         2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_regionkey}      2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{r_regionkey_1}    2823.00        2.64 <==       1.00                1.00                0.00            1.00
+{s_acctbal}        2823.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{s_address}        2823.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{s_comment}        2823.00        2.64 <==       1405.00             2.56 <==            0.00            1.00
+{s_name}           2823.00        2.64 <==       1406.00             2.57 <==            0.00            1.00
+{s_nationkey}      2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{s_nationkey_1}    2823.00        2.64 <==       5.00                1.00                0.00            1.00
+{s_phone}          2823.00        2.64 <==       1405.00             2.56 <==            0.00            1.00
+{s_suppkey}        2823.00        2.64 <==       1405.00             2.56 <==            0.00            1.00
+{s_suppkey_1}      2823.00        2.64 <==       1445.00             2.64 <==            0.00            1.00
 
 ----Stats for q2_lookup_join_6----
 column_names       row_count  distinct_count  null_count
@@ -483,28 +483,28 @@ column_names       row_count  distinct_count  null_count
 {s_suppkey}        2568       548             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}           4468.00        1.74           25.00               5.00 <==            0.00            1.00
-{n_nationkey}      4468.00        1.74           25.00               5.00 <==            0.00            1.00
-{n_regionkey}      4468.00        1.74           1.00                1.00                0.00            1.00
-{p_mfgr}           4468.00        1.74           5.00                1.00                0.00            1.00
-{p_partkey}        4468.00        1.74           1338.00             2.91 <==            0.00            1.00
-{p_size}           4468.00        1.74           1.00                1.00                0.00            1.00
-{p_type}           4468.00        1.74           150.00              5.00 <==            0.00            1.00
-{ps_partkey}       4468.00        1.74           1338.00             2.91 <==            0.00            1.00
-{ps_partkey_1}     4468.00        1.74           4417.00             9.60 <==            0.00            1.00
-{ps_suppkey}       4468.00        1.74           3597.00             6.56 <==            0.00            1.00
-{ps_suppkey_1}     4468.00        1.74           3597.00             2.17 <==            0.00            1.00
-{ps_supplycost}    4468.00        1.74           989.00              1.55                0.00            1.00
-{ps_supplycost_1}  4468.00        1.74           989.00              1.85                0.00            1.00
-{r_name}           4468.00        1.74           1.00                1.00                0.00            1.00
-{r_regionkey}      4468.00        1.74           1.00                1.00                0.00            1.00
-{s_acctbal}        4468.00        1.74           3603.00             6.57 <==            0.00            1.00
-{s_address}        4468.00        1.74           3603.00             6.57 <==            0.00            1.00
-{s_comment}        4468.00        1.74           3596.00             6.56 <==            0.00            1.00
-{s_name}           4468.00        1.74           3602.00             6.57 <==            0.00            1.00
-{s_nationkey}      4468.00        1.74           25.00               5.00 <==            0.00            1.00
-{s_phone}          4468.00        1.74           3591.00             6.55 <==            0.00            1.00
-{s_suppkey}        4468.00        1.74           3597.00             6.56 <==            0.00            1.00
+{n_name}           4460.00        1.74           25.00               5.00 <==            0.00            1.00
+{n_nationkey}      4460.00        1.74           25.00               5.00 <==            0.00            1.00
+{n_regionkey}      4460.00        1.74           1.00                1.00                0.00            1.00
+{p_mfgr}           4460.00        1.74           5.00                1.00                0.00            1.00
+{p_partkey}        4460.00        1.74           1336.00             2.90 <==            0.00            1.00
+{p_size}           4460.00        1.74           1.00                1.00                0.00            1.00
+{p_type}           4460.00        1.74           150.00              5.00 <==            0.00            1.00
+{ps_partkey}       4460.00        1.74           1336.00             2.90 <==            0.00            1.00
+{ps_partkey_1}     4460.00        1.74           4409.00             9.58 <==            0.00            1.00
+{ps_suppkey}       4460.00        1.74           3592.00             6.55 <==            0.00            1.00
+{ps_suppkey_1}     4460.00        1.74           3592.00             2.16 <==            0.00            1.00
+{ps_supplycost}    4460.00        1.74           988.00              1.54                0.00            1.00
+{ps_supplycost_1}  4460.00        1.74           988.00              1.85                0.00            1.00
+{r_name}           4460.00        1.74           1.00                1.00                0.00            1.00
+{r_regionkey}      4460.00        1.74           1.00                1.00                0.00            1.00
+{s_acctbal}        4460.00        1.74           3598.00             6.57 <==            0.00            1.00
+{s_address}        4460.00        1.74           3598.00             6.57 <==            0.00            1.00
+{s_comment}        4460.00        1.74           3591.00             6.55 <==            0.00            1.00
+{s_name}           4460.00        1.74           3597.00             6.56 <==            0.00            1.00
+{s_nationkey}      4460.00        1.74           25.00               5.00 <==            0.00            1.00
+{s_phone}          4460.00        1.74           3586.00             6.54 <==            0.00            1.00
+{s_suppkey}        4460.00        1.74           3592.00             6.55 <==            0.00            1.00
 
 ----Stats for q2_inner_join_7----
 column_names     row_count  distinct_count  null_count
@@ -529,25 +529,25 @@ column_names     row_count  distinct_count  null_count
 {s_suppkey}      642        548             0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}         1938.00        3.02 <==       5.00                1.00                0.00            1.00
-{n_nationkey}    1938.00        3.02 <==       5.00                1.00                0.00            1.00
-{n_regionkey}    1938.00        3.02 <==       1.00                1.00                0.00            1.00
-{p_mfgr}         1938.00        3.02 <==       5.00                1.00                0.00            1.00
-{p_partkey}      1938.00        3.02 <==       1338.00             2.91 <==            0.00            1.00
-{p_size}         1938.00        3.02 <==       1.00                1.00                0.00            1.00
-{p_type}         1938.00        3.02 <==       150.00              5.00 <==            0.00            1.00
-{ps_partkey}     1938.00        3.02 <==       1338.00             2.91 <==            0.00            1.00
-{ps_suppkey}     1938.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
-{ps_supplycost}  1938.00        3.02 <==       856.00              1.34                0.00            1.00
-{r_name}         1938.00        3.02 <==       1.00                1.00                0.00            1.00
-{r_regionkey}    1938.00        3.02 <==       1.00                1.00                0.00            1.00
-{s_acctbal}      1938.00        3.02 <==       1762.00             3.22 <==            0.00            1.00
-{s_address}      1938.00        3.02 <==       1762.00             3.22 <==            0.00            1.00
-{s_comment}      1938.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
-{s_name}         1938.00        3.02 <==       1762.00             3.22 <==            0.00            1.00
-{s_nationkey}    1938.00        3.02 <==       5.00                1.00                0.00            1.00
-{s_phone}        1938.00        3.02 <==       1759.00             3.21 <==            0.00            1.00
-{s_suppkey}      1938.00        3.02 <==       1761.00             3.21 <==            0.00            1.00
+{n_name}         1935.00        3.01 <==       5.00                1.00                0.00            1.00
+{n_nationkey}    1935.00        3.01 <==       5.00                1.00                0.00            1.00
+{n_regionkey}    1935.00        3.01 <==       1.00                1.00                0.00            1.00
+{p_mfgr}         1935.00        3.01 <==       5.00                1.00                0.00            1.00
+{p_partkey}      1935.00        3.01 <==       1336.00             2.90 <==            0.00            1.00
+{p_size}         1935.00        3.01 <==       1.00                1.00                0.00            1.00
+{p_type}         1935.00        3.01 <==       150.00              5.00 <==            0.00            1.00
+{ps_partkey}     1935.00        3.01 <==       1336.00             2.90 <==            0.00            1.00
+{ps_suppkey}     1935.00        3.01 <==       1758.00             3.21 <==            0.00            1.00
+{ps_supplycost}  1935.00        3.01 <==       856.00              1.34                0.00            1.00
+{r_name}         1935.00        3.01 <==       1.00                1.00                0.00            1.00
+{r_regionkey}    1935.00        3.01 <==       1.00                1.00                0.00            1.00
+{s_acctbal}      1935.00        3.01 <==       1759.00             3.21 <==            0.00            1.00
+{s_address}      1935.00        3.01 <==       1759.00             3.21 <==            0.00            1.00
+{s_comment}      1935.00        3.01 <==       1758.00             3.21 <==            0.00            1.00
+{s_name}         1935.00        3.01 <==       1759.00             3.21 <==            0.00            1.00
+{s_nationkey}    1935.00        3.01 <==       5.00                1.00                0.00            1.00
+{s_phone}        1935.00        3.01 <==       1757.00             3.21 <==            0.00            1.00
+{s_suppkey}      1935.00        3.01 <==       1758.00             3.21 <==            0.00            1.00
 
 ----Stats for q2_lookup_join_8----
 column_names     row_count  distinct_count  null_count
@@ -560,13 +560,13 @@ column_names     row_count  distinct_count  null_count
 {ps_supplycost}  2988       2948            0
 ~~~~
 column_names     row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_mfgr}         5372.00        1.80           5.00                1.00                0.00            1.00
-{p_partkey}      5372.00        1.80           1338.00             1.79                0.00            1.00
-{p_size}         5372.00        1.80           1.00                1.00                0.00            1.00
-{p_type}         5372.00        1.80           150.00              5.00 <==            0.00            1.00
-{ps_partkey}     5372.00        1.80           1338.00             1.79                0.00            1.00
-{ps_suppkey}     5372.00        1.80           4148.00             1.61                0.00            1.00
-{ps_supplycost}  5372.00        1.80           995.00              2.96 <==            0.00            1.00
+{p_mfgr}         5363.00        1.79           5.00                1.00                0.00            1.00
+{p_partkey}      5363.00        1.79           1336.00             1.79                0.00            1.00
+{p_size}         5363.00        1.79           1.00                1.00                0.00            1.00
+{p_type}         5363.00        1.79           150.00              5.00 <==            0.00            1.00
+{ps_partkey}     5363.00        1.79           1336.00             1.79                0.00            1.00
+{ps_suppkey}     5363.00        1.79           4143.00             1.61                0.00            1.00
+{ps_supplycost}  5363.00        1.79           995.00              2.96 <==            0.00            1.00
 
 ----Stats for q2_select_9----
 column_names  row_count  distinct_count  null_count
@@ -576,10 +576,10 @@ column_names  row_count  distinct_count  null_count
 {p_type}      747        30              0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_mfgr}      1338.00        1.79           5.00                1.00                0.00            1.00
-{p_partkey}   1338.00        1.79           1338.00             1.79                0.00            1.00
-{p_size}      1338.00        1.79           1.00                1.00                0.00            1.00
-{p_type}      1338.00        1.79           150.00              5.00 <==            0.00            1.00
+{p_mfgr}      1336.00        1.79           5.00                1.00                0.00            1.00
+{p_partkey}   1336.00        1.79           1336.00             1.79                0.00            1.00
+{p_size}      1336.00        1.79           1.00                1.00                0.00            1.00
+{p_type}      1336.00        1.79           150.00              5.00 <==            0.00            1.00
 
 ----Stats for q2_scan_10----
 column_names  row_count  distinct_count  null_count

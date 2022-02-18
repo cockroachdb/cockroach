@@ -142,23 +142,22 @@ sort (segmented)
 opt
 SELECT * FROM abc  WHERE a = b ORDER BY b, a, c
 ----
-sort (segmented)
+select
  ├── columns: a:1!null b:2!null c:3
- ├── stats: [rows=2000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(1,2)=4, null(1,2)=0, avgsize(1,2)=8]
- ├── cost: 11292.8376
+ ├── stats: [rows=10000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(1,2)=4, null(1,2)=0, avgsize(1,2)=8]
+ ├── cost: 13610.2519
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
- └── select
-      ├── columns: a:1!null b:2!null c:3
-      ├── stats: [rows=2000, distinct(1)=2, null(1)=0, avgsize(1)=4, distinct(2)=2, null(2)=0, avgsize(2)=4, distinct(1,2)=4, null(1,2)=0, avgsize(1,2)=8]
-      ├── cost: 10814.05
-      ├── fd: (1)==(2), (2)==(1)
-      ├── ordering: +(1|2) [actual: +1]
-      ├── scan abc@ab
-      │    ├── columns: a:1!null b:2 c:3
-      │    ├── constraint: /1/2/4: (/NULL - ]
-      │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4]
-      │    ├── cost: 10714.02
-      │    └── ordering: +1
-      └── filters
-           └── a:1 = b:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ ├── sort (segmented)
+ │    ├── columns: a:1!null b:2 c:3
+ │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4]
+ │    ├── cost: 13510.2219
+ │    ├── ordering: +1,+3
+ │    └── scan abc@ab
+ │         ├── columns: a:1!null b:2 c:3
+ │         ├── constraint: /1/2/4: (/NULL - ]
+ │         ├── stats: [rows=10000, distinct(1)=5, null(1)=0, avgsize(1)=4]
+ │         ├── cost: 10714.02
+ │         └── ordering: +1
+ └── filters
+      └── a:1 = b:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]

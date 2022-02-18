@@ -2034,7 +2034,7 @@ memo (optimized, ~16KB, required=[presentation: a:1,b:2,c:3,x:7,y:8,z:9])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:7,y:8,z:9]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 1239.31
+ │         └── cost: 2231.04
  ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
  │    └── []
  │         ├── best: (select G7 G6)
@@ -2090,18 +2090,24 @@ memo (optimized, ~12KB, required=[presentation: a:1,b:2,c:3,k:7])
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND a=y
 ----
-inner-join (lookup abc@ab)
+inner-join (merge)
  ├── columns: a:1!null b:2 c:3 x:7!null y:8!null z:9
- ├── key columns: [7] = [1]
+ ├── left ordering: +7
+ ├── right ordering: +1
  ├── fd: (7)==(1,8), (8)==(1,7), (1)==(7,8)
  ├── select
  │    ├── columns: x:7!null y:8!null z:9
  │    ├── fd: (7)==(8), (8)==(7)
+ │    ├── ordering: +(7|8) [actual: +8]
  │    ├── scan xyz@yz
  │    │    ├── columns: x:7 y:8!null z:9
- │    │    └── constraint: /8/9/10: (/NULL - ]
+ │    │    ├── constraint: /8/9/10: (/NULL - ]
+ │    │    └── ordering: +8
  │    └── filters
  │         └── x:7 = y:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+ ├── scan abc@ab
+ │    ├── columns: a:1 b:2 c:3
+ │    └── ordering: +1
  └── filters (true)
 
 # Verify multiple merge-joins can be chained.
