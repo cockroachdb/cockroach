@@ -74,7 +74,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // and this method will always return at least one entry even if it exceeds
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	readonly := r.store.Engine().NewReadOnly()
+	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {
@@ -280,7 +280,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	if e, ok := r.store.raftEntryCache.Get(r.RangeID, i); ok {
 		return e.Term, nil
 	}
-	readonly := r.store.Engine().NewReadOnly()
+	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)

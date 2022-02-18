@@ -653,6 +653,22 @@ type ReadWriter interface {
 	Writer
 }
 
+// DurabilityRequirement is an advanced option. If in doubt, use
+// StandardDurability.
+//
+// GuranteedDurability maps to pebble.IterOptions.OnlyReadGuaranteedDurable.
+// This acknowledges the fact that we do not (without sacrificing correctness)
+// sync the WAL for many writes, and there are some advanced cases
+// (raftLogTruncator) that need visibility into what is guaranteed durable.
+type DurabilityRequirement int8
+
+const (
+	// StandardDurability is what should normally be used.
+	StandardDurability DurabilityRequirement = iota
+	// GuaranteedDurability is an advanced option (only for raftLogTruncator).
+	GuaranteedDurability
+)
+
 // Engine is the interface that wraps the core operations of a key/value store.
 type Engine interface {
 	ReadWriter
@@ -685,14 +701,15 @@ type Engine interface {
 	// them atomically on a call to Commit().
 	NewBatch() Batch
 	// NewReadOnly returns a new instance of a ReadWriter that wraps this
-	// engine. This wrapper panics when unexpected operations (e.g., write
-	// operations) are executed on it and caches iterators to avoid the overhead
-	// of creating multiple iterators for batched reads.
+	// engine, and with the given durability requirement. This wrapper panics
+	// when unexpected operations (e.g., write operations) are executed on it
+	// and caches iterators to avoid the overhead of creating multiple iterators
+	// for batched reads.
 	//
 	// All iterators created from a read-only engine are guaranteed to provide a
 	// consistent snapshot of the underlying engine. See the comment on the
 	// Reader interface and the Reader.ConsistentIterators method.
-	NewReadOnly() ReadWriter
+	NewReadOnly(durability DurabilityRequirement) ReadWriter
 	// NewUnindexedBatch returns a new instance of a batched engine which wraps
 	// this engine. It is unindexed, in that writes to the batch are not
 	// visible to reads until after it commits. The batch accumulates all
@@ -740,7 +757,13 @@ type Engine interface {
 	// addSSTablePreApply to select alternate code paths, but really there should
 	// be a unified code path there.
 	InMem() bool
-
+	// RegisterFlushCompletedCallback registers a callback that will be run for
+	// every successful flush. Only one callback can be registered at a time, so
+	// registering again replaces the previous callback. The callback must
+	// return quickly and must not call any methods on the Engine in the context
+	// of the callback since it could cause a deadlock (since the callback may
+	// be invoked while holding mutexes).
+	RegisterFlushCompletedCallback(cb func())
 	// Filesystem functionality.
 	fs.FS
 	// ReadFile reads the content from the file with the given filename int this RocksDB's env.
