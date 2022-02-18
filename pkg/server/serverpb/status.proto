@@ -1512,6 +1512,16 @@ message TxnIDResolutionResponse {
     (gogoproto.nullable) = false];
 }
 
+message TransactionContentionEventsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message TransactionContentionEventsResponse {
+  repeated cockroach.sql.contentionpb.ExtendedContentionEvent events = 1 [
+    (gogoproto.nullable) = false
+  ];
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -1920,4 +1930,12 @@ service Status {
   //   Client is responsible to perform retries if the requested transaction ID
   //   is not returned in the RPC response.
   rpc TxnIDResolution(TxnIDResolutionRequest) returns (TxnIDResolutionResponse) {}
+
+  // TransactionContentionEvents returns a list of un-aggregated contention
+  // events sorted by the collection timestamp.
+  rpc TransactionContentionEvents(TransactionContentionEventsRequest) returns (TransactionContentionEventsResponse) {
+    option (google.api.http) = {
+      get: "/_status/transactioncontentionevents"
+    };
+  }
 }

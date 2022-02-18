@@ -61,6 +61,7 @@ crdb_internal  gossip_alerts                    table  NULL  NULL  NULL
 crdb_internal  gossip_liveness                  table  NULL  NULL  NULL
 crdb_internal  gossip_network                   table  NULL  NULL  NULL
 crdb_internal  gossip_nodes                     table  NULL  NULL  NULL
+crdb_internal  historical_contention_events     table  NULL  NULL  NULL
 crdb_internal  index_columns                    table  NULL  NULL  NULL
 crdb_internal  index_usage_statistics           table  NULL  NULL  NULL
 crdb_internal  invalid_objects                  table  NULL  NULL  NULL

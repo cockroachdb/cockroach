@@ -3293,6 +3293,26 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 	return nil
 }
 
+func (c *adminPrivilegeChecker) hasViewActivityRedactedRoleOption(
+	ctx context.Context,
+) (hasViewActivityPermission bool, _ error) {
+	userName, _, err := c.getUserAndRole(ctx)
+	if err != nil {
+		return false /* hasViewActivityRedactedRoleOption */, serverError(ctx, err)
+	}
+
+	hasViewActivity, err := c.hasRoleOption(ctx, userName, roleoption.VIEWACTIVITYREDACTED)
+	if err != nil {
+		return false /* hasViewActivityRedactedRoleOption */, serverError(ctx, err)
+	}
+
+	if hasViewActivity {
+		return true /* hasViewActivityRedactedRoleOption */, nil
+	}
+
+	return false /* hasViewActivityRedactedRoleOption */, nil
+}
+
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
 func (c *adminPrivilegeChecker) getUserAndRole(

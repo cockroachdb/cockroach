@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -1147,4 +1149,80 @@ func (t *tenantStatusServer) GetFiles(
 	}
 
 	return getLocalFiles(req, t.sqlServer.cfg.HeapProfileDirName, t.sqlServer.cfg.GoroutineDumpDirName)
+}
+
+func (t *tenantStatusServer) TransactionContentionEvents(
+	ctx context.Context, req *serverpb.TransactionContentionEventsRequest,
+) (*serverpb.TransactionContentionEventsResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+
+	if err := t.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	roles, err := t.UserSQLRoles(ctx, &serverpb.UserSQLRolesRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	shouldRedactContendingKey := false
+	for _, role := range roles.Roles {
+		if role == roleoption.VIEWACTIVITYREDACTED.String() {
+			shouldRedactContendingKey = true
+			break
+		}
+	}
+
+	if t.sqlServer.SQLInstanceID() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "instanceID not set")
+	}
+
+	resp := &serverpb.TransactionContentionEventsResponse{}
+
+	if len(req.NodeID) > 0 {
+		parsedInstanceID, local, err := t.parseInstanceID(req.NodeID)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return t.localTransactionContentionEvents(shouldRedactContendingKey), nil
+		}
+
+		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		if err != nil {
+			return nil, err
+		}
+		statusClient, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		return statusClient.TransactionContentionEvents(ctx, req)
+	}
+
+	rpcCallFn := func(ctx context.Context, client interface{}, _ base.SQLInstanceID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.TransactionContentionEvents(ctx, &serverpb.TransactionContentionEventsRequest{
+			NodeID: "local",
+		})
+	}
+
+	if err := t.iteratePods(ctx, "txn contention events for instance",
+		t.dialCallback,
+		rpcCallFn,
+		func(instanceID base.SQLInstanceID, nodeResp interface{}) {
+			txnContentionEvents := nodeResp.(*serverpb.TransactionContentionEventsResponse)
+			resp.Events = append(resp.Events, txnContentionEvents.Events...)
+		},
+		func(_ base.SQLInstanceID, err error) {
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(resp.Events, func(i, j int) bool {
+		return resp.Events[i].CollectionTs.Before(resp.Events[j].CollectionTs)
+	})
+
+	return resp, nil
 }

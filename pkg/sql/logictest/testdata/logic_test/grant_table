@@ -91,6 +91,7 @@ test           crdb_internal       table_indexes                          public
 test           crdb_internal       table_row_statistics                   public   SELECT
 test           crdb_internal       tables                                 public   SELECT
 test           crdb_internal       tenant_usage_details                   public   SELECT
+test           crdb_internal       transaction_contention_events          public   SELECT
 test           crdb_internal       transaction_statistics                 public   SELECT
 test           crdb_internal       zones                                  public   SELECT
 test           information_schema  NULL                                   public   USAGE

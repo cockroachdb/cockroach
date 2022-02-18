@@ -4342,6 +4342,51 @@ Response object for issuing Transaction ID Resolution.
 
 
 
+## HistoricalContentionEvents
+
+`GET /_status/historicalcontentionevents`
+
+HistoricalContentionEvents returns a list of un-aggregated contention
+events sorted by the collection timestamp.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [string](#cockroach.server.serverpb.HistoricalContentionEventsRequest-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| events | [cockroach.sql.contentionpb.ExtendedContentionEvent](#cockroach.server.serverpb.HistoricalContentionEventsResponse-cockroach.sql.contentionpb.ExtendedContentionEvent) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+
+
 ## RequestCA
 
 `GET /_join/v1/ca`
