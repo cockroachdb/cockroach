@@ -25,14 +25,6 @@ enum MVCCFilter {
   All = 1;
 }
 
-// RowCount tracks the size and row/index entry counts.
-message RowCount {
-  int64 data_size = 1;
-  int64 rows = 2;
-  int64 index_entries = 3;
-  reserved 4; // was BulkOpSummary's system_records.
-}
-
 // BackupManifest represents a consistent snapshot of ranges.
 //
 // Each range snapshot includes a path to data that is a diff of the data in
@@ -48,7 +40,7 @@ message BackupManifest {
     reserved 3;
     reserved 4;
     reserved 5;
-    RowCount entry_counts = 6 [(gogoproto.nullable) = false];
+    roachpb.RowCount entry_counts = 6 [(gogoproto.nullable) = false];
 
     // StartTime 0 is sometimes legitimately used, so it is only meaningful if
     // EndTime is non-zero, otherwise both just inherit from containing backup.
@@ -102,7 +94,7 @@ message BackupManifest {
   repeated uint32 complete_dbs = 14 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"];
   reserved 6;
-  RowCount entry_counts = 12 [(gogoproto.nullable) = false];
+  roachpb.RowCount entry_counts = 12 [(gogoproto.nullable) = false];
 
   roachpb.ExternalStorage dir = 7 [(gogoproto.nullable) = false];
 
@@ -212,7 +204,7 @@ message ScheduledBackupExecutionArgs {
 // RestoreProgress is the information that the RestoreData processor sends back
 // to the restore coordinator to update the job progress.
 message RestoreProgress {
-  RowCount summary = 1 [(gogoproto.nullable) = false];
+  roachpb.RowCount summary = 1 [(gogoproto.nullable) = false];
   int64 progressIdx = 2;
   roachpb.Span dataSpan = 3 [(gogoproto.nullable) = false];
 }
@@ -224,7 +216,7 @@ message BackupProcessorPlanningTraceEvent {
 
 message BackupProgressTraceEvent {
   int64 total_num_files = 1;
-  RowCount total_entry_counts = 2 [(gogoproto.nullable) = false];
+  roachpb.RowCount total_entry_counts = 2 [(gogoproto.nullable) = false];
   util.hlc.Timestamp revision_start_time = 3 [(gogoproto.nullable) = false];
 }
 
@@ -242,7 +234,7 @@ message BackupExportTraceRequestEvent {
 message BackupExportTraceResponseEvent {
   string duration = 1;
   int32 num_files = 2;
-  repeated RowCount file_summaries = 3 [(gogoproto.nullable) = false];
+  repeated roachpb.RowCount file_summaries = 3 [(gogoproto.nullable) = false];
   reserved 4 ;
   string retryable_error = 5;
 }
