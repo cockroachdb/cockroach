@@ -111,7 +111,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 		}
 		nextKey = nextKey.Next()
 	}
-	sst, start, end := sstutil.MakeSST(ctx, ts.ClusterSettings(), t, sstKeys)
+	sst, start, end := sstutil.MakeSST(t, ts.ClusterSettings(), sstKeys)
 	requestSize := float64(len(sst))
 
 	sstReq := &roachpb.AddSSTableRequest{
