@@ -251,17 +251,18 @@ func (w column) HasGeneratedAsIdentitySequenceOption() bool {
 
 // columnCache contains precomputed slices of catalog.Column interfaces.
 type columnCache struct {
-	all        []catalog.Column
-	public     []catalog.Column
-	writable   []catalog.Column
-	deletable  []catalog.Column
-	nonDrop    []catalog.Column
-	visible    []catalog.Column
-	accessible []catalog.Column
-	readable   []catalog.Column
-	withUDTs   []catalog.Column
-	system     []catalog.Column
-	index      []indexColumnCache
+	all                  []catalog.Column
+	public               []catalog.Column
+	writable             []catalog.Column
+	deletable            []catalog.Column
+	nonDrop              []catalog.Column
+	visible              []catalog.Column
+	accessible           []catalog.Column
+	readable             []catalog.Column
+	withUDTs             []catalog.Column
+	system               []catalog.Column
+	familyDefaultColumns []descpb.IndexFetchSpec_FamilyDefaultColumn
+	index                []indexColumnCache
 }
 
 type indexColumnCache struct {
@@ -337,6 +338,20 @@ func newColumnCache(desc *descpb.TableDescriptor, mutations *mutationCache) *col
 			lazyAllocAppendColumn(&c.withUDTs, col, numDeletable)
 		}
 	}
+
+	// Populate familyDefaultColumns.
+	for i := range desc.Families {
+		if f := &desc.Families[i]; f.DefaultColumnID != 0 {
+			if c.familyDefaultColumns == nil {
+				c.familyDefaultColumns = make([]descpb.IndexFetchSpec_FamilyDefaultColumn, 0, len(desc.Families)-i)
+			}
+			c.familyDefaultColumns = append(c.familyDefaultColumns, descpb.IndexFetchSpec_FamilyDefaultColumn{
+				FamilyID:        f.ID,
+				DefaultColumnID: f.DefaultColumnID,
+			})
+		}
+	}
+
 	// Populate the per-index column cache
 	c.index = make([]indexColumnCache, 0, 1+len(desc.Indexes)+len(mutations.indexes))
 	c.index = append(c.index, makeIndexColumnCache(&desc.PrimaryIndex, c.all))
