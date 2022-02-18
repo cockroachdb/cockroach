@@ -2073,11 +2073,15 @@ func (s *statusServer) rangesHelper(
 			// All ranges requested.
 			store.VisitReplicas(
 				func(rep *kvserver.Replica) bool {
+					metrics := rep.Metrics(ctx, now, isLiveMap, clusterNodes)
+					if req.OnlyLeaseholderReplicas && (!metrics.Leaseholder || !metrics.LeaseValid) {
+						return true // continue
+					}
 					output.Ranges = append(output.Ranges,
 						constructRangeInfo(
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, now, isLiveMap, clusterNodes),
+							metrics,
 						))
 					return true // continue.
 				},
@@ -2093,11 +2097,15 @@ func (s *statusServer) rangesHelper(
 				// Not found: continue.
 				continue
 			}
+			metrics := rep.Metrics(ctx, now, isLiveMap, clusterNodes)
+			if req.OnlyLeaseholderReplicas && (!metrics.Leaseholder || !metrics.LeaseValid) {
+				continue
+			}
 			output.Ranges = append(output.Ranges,
 				constructRangeInfo(
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, now, isLiveMap, clusterNodes),
+					metrics,
 				))
 		}
 		return nil

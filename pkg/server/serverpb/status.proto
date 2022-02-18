@@ -459,6 +459,10 @@ message RangesRequest {
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
+  // only_leaseholder_replicas causes the endpoint to only return
+  // metadata about leaseholder replicas on the provided node_id's
+  // KV stores. Ranges without a valid lease will also be filtered.
+  bool only_leaseholder_replicas = 3;
 }
 
 message RangesResponse {

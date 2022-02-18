@@ -1416,6 +1416,7 @@ Support status: [reserved](#support-status)
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [string](#cockroach.server.serverpb.RangesRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
 | range_ids | [int64](#cockroach.server.serverpb.RangesRequest-int64) | repeated |  | [reserved](#support-status) |
+| only_leaseholder_replicas | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  | only_leaseholder_replicas causes the endpoint to only return metadata about leaseholder replicas on the provided node_id's KV stores. Ranges without a valid lease will also be filtered. | [reserved](#support-status) |
 
 
 
