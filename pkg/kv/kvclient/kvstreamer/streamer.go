@@ -550,7 +550,14 @@ func (s *Streamer) Enqueue(
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
-	s.mu.requestsToServe = requestsToServe
+	//
+	// Note that we do not just overwrite s.mu.requestsToServe because it is
+	// possible that the worker coordinator has not sliced off the issued
+	// requests yet. In other words, it is possible for a request to be issued,
+	// responded to, returned to the client before the deferred function in
+	// issueRequestsForAsyncProcessing is executed.
+	// TODO(yuzefovich): clean this up.
+	s.mu.requestsToServe = append(s.mu.requestsToServe, requestsToServe...)
 	s.mu.hasWork.Signal()
 	return nil
 }
@@ -969,7 +976,36 @@ func (w *workerCoordinator) addRequest(req singleRangeBatch) {
 	w.s.mu.hasWork.Signal()
 }
 
-func (w *workerCoordinator) asyncRequestCleanup() {
+// budgetMuAlreadyLocked must be true if the caller is currently holding the
+// budget's mutex.
+func (w *workerCoordinator) asyncRequestCleanup(budgetMuAlreadyLocked bool) {
+	if !budgetMuAlreadyLocked {
+		// Since we're decrementing the number of requests in flight, we want to
+		// make sure that the budget's mutex is locked, and it currently isn't.
+		// This is needed so that if we signal the budget in
+		// adjustNumRequestsInFlight, the worker coordinator doesn't miss the
+		// signal.
+		//
+		// If we don't do this, then it is possible for the worker coordinator
+		// to be blocked forever in waitUntilEnoughBudget. Namely, the following
+		// sequence of events is possible:
+		// 1. the worker coordinator checks that there are some requests in
+		//    progress, then it goes to sleep before waiting on waitForBudget
+		//    condition variable;
+		// 2. the last request in flight exits without creating any Results (so
+		//    that no Release() calls will happen in the future), it decrements
+		//    the number of requests in flight, signals waitForBudget condition
+		//    variable, but nobody is waiting on that, so no goroutine is woken
+		//    up;
+		// 3. the worker coordinator wakes up and starts waiting on the
+		//    condition variable, forever.
+		// Acquiring the budget's mutex makes sure that such sequence doesn't
+		// occur.
+		w.s.budget.mu.Lock()
+		defer w.s.budget.mu.Unlock()
+	} else {
+		w.s.budget.mu.AssertHeld()
+	}
 	w.s.adjustNumRequestsInFlight(-1 /* delta */)
 	w.s.waitGroup.Done()
 }
@@ -1007,7 +1043,7 @@ func (w *workerCoordinator) performRequestAsync(
 			WaitForSem: true,
 		},
 		func(ctx context.Context) {
-			defer w.asyncRequestCleanup()
+			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
 			var ba roachpb.BatchRequest
 			ba.Header.WaitPolicy = w.lockWaitPolicy
 			ba.Header.TargetBytes = targetBytes
@@ -1123,7 +1159,7 @@ func (w *workerCoordinator) performRequestAsync(
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
-		w.asyncRequestCleanup()
+		w.asyncRequestCleanup(true /* budgetMuAlreadyLocked */)
 		w.s.setError(err)
 	}
 }
