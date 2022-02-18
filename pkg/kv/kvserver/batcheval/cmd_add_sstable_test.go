@@ -660,7 +660,7 @@ func TestEvalAddSSTable(t *testing.T) {
 				stats := engineStats(t, engine)
 
 				// Build and add SST.
-				sst, start, end := sstutil.MakeSST(ctx, st, t, tc.sst)
+				sst, start, end := sstutil.MakeSST(t, st, tc.sst)
 				reqTS := hlc.Timestamp{WallTime: defaultReqTS}
 				if tc.atReqTS != 0 {
 					reqTS.WallTime = tc.atReqTS
@@ -823,7 +823,7 @@ func TestEvalAddSSTableRangefeed(t *testing.T) {
 			opLogger := storage.NewOpLoggerBatch(engine.NewBatch())
 
 			// Build and add SST.
-			sst, start, end := sstutil.MakeSST(ctx, st, t, tc.sst)
+			sst, start, end := sstutil.MakeSST(t, st, tc.sst)
 			result, err := batcheval.EvalAddSSTable(ctx, opLogger, batcheval.CommandArgs{
 				EvalCtx: (&batcheval.MockEvalCtx{ClusterSettings: st}).EvalContext(),
 				Header: roachpb.Header{
@@ -905,7 +905,7 @@ func runTestDBAddSSTable(
 	cs := cluster.MakeTestingClusterSettings()
 
 	{
-		sst, start, end := sstutil.MakeSST(ctx, cs, t, []sstutil.KV{{"bb", 2, "1"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 2, "1"}})
 
 		// Key is before the range in the request span.
 		err := db.AddSSTable(
@@ -947,7 +947,7 @@ func runTestDBAddSSTable(
 	// Check that ingesting a key with an earlier mvcc timestamp doesn't affect
 	// the value returned by Get.
 	{
-		sst, start, end := sstutil.MakeSST(ctx, cs, t, []sstutil.KV{{"bb", 1, "2"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bb", 1, "2"}})
 		require.NoError(t, db.AddSSTable(
 			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS))
 		r, err := db.Get(ctx, "bb")
@@ -961,7 +961,7 @@ func runTestDBAddSSTable(
 	// Key range in request span is not empty. First time through a different
 	// key is present. Second time through checks the idempotency.
 	{
-		sst, start, end := sstutil.MakeSST(ctx, cs, t, []sstutil.KV{{"bc", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bc", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -997,7 +997,7 @@ func runTestDBAddSSTable(
 
 	// ... and doing the same thing but via write-batch works the same.
 	{
-		sst, start, end := sstutil.MakeSST(ctx, cs, t, []sstutil.KV{{"bd", 1, "3"}})
+		sst, start, end := sstutil.MakeSST(t, cs, []sstutil.KV{{"bd", 1, "3"}})
 
 		var before int64
 		if store != nil {
@@ -1073,7 +1073,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		require.NoError(t, engine.PutMVCC(kv.MVCCKey(), kv.ValueBytes()))
 	}
 
-	sst, start, end := sstutil.MakeSST(ctx, st, t, []sstutil.KV{
+	sst, start, end := sstutil.MakeSST(t, st, []sstutil.KV{
 		{"a", 4, "aaaaaa"}, // mvcc-shadowed by existing delete.
 		{"a", 2, "aa"},     // mvcc-shadowed within SST.
 		{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
@@ -1125,7 +1125,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 	require.Equal(t, engineStats(t, engine), statsEvaled)
 
 	// Check stats for a single KV.
-	sst, start, end = sstutil.MakeSST(ctx, st, t, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{{"zzzzzzz", ts.WallTime, "zzz"}})
 	cArgs = batcheval.CommandArgs{
 		EvalCtx: evalCtx,
 		Header:  roachpb.Header{Timestamp: ts},
@@ -1189,7 +1189,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 		{"c", 2, "bb"},
 		{"h", 6, "hh"},
 	}
-	sst, start, end := sstutil.MakeSST(ctx, st, t, kvs)
+	sst, start, end := sstutil.MakeSST(t, st, kvs)
 
 	// Accumulate stats across SST ingestion.
 	commandStats := enginepb.MVCCStats{}
@@ -1220,7 +1220,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the second SST. Both the KVs are perfectly shadowing and should
 	// not contribute to the stats.
-	sst, start, end = sstutil.MakeSST(ctx, st, t, []sstutil.KV{
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
 	})
@@ -1239,7 +1239,7 @@ func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
 
 	// Evaluate the third SST. Two of the three KVs are perfectly shadowing, but
 	// there is one valid KV which should contribute to the stats.
-	sst, start, end = sstutil.MakeSST(ctx, st, t, []sstutil.KV{
+	sst, start, end = sstutil.MakeSST(t, st, []sstutil.KV{
 		{"c", 2, "bb"}, // key has the same timestamp and value as the one present in the existing data.
 		{"e", 2, "ee"},
 		{"h", 6, "hh"}, // key has the same timestamp and value as the one present in the existing data.
@@ -1288,7 +1288,7 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := sstutil.MakeSST(ctx, s.ClusterSettings(), t, []sstutil.KV{
+	sst, start, end := sstutil.MakeSST(t, s.ClusterSettings(), []sstutil.KV{
 		{"a", 1, "1"},
 		{"b", 1, "2"},
 		{"c", 1, "3"},
@@ -1330,7 +1330,7 @@ func TestAddSSTableWriteAtRequestTimestampRespectsTSCache(t *testing.T) {
 	txnTS := txn.CommitTimestamp()
 
 	// Add an SST writing below the previous write.
-	sst, start, end := sstutil.MakeSST(ctx, s.ClusterSettings(), t, []sstutil.KV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, s.ClusterSettings(), []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:                    sst,
@@ -1390,7 +1390,7 @@ func TestAddSSTableWriteAtRequestTimestampRespectsClosedTS(t *testing.T) {
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
-	sst, start, end := sstutil.MakeSST(ctx, store.ClusterSettings(), t, []sstutil.KV{{"key", 1, "sst"}})
+	sst, start, end := sstutil.MakeSST(t, store.ClusterSettings(), []sstutil.KV{{"key", 1, "sst"}})
 	sstReq := &roachpb.AddSSTableRequest{
 		RequestHeader:           roachpb.RequestHeader{Key: start, EndKey: end},
 		Data:                    sst,
