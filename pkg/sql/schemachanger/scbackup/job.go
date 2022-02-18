@@ -65,7 +65,7 @@ func CreateDeclarativeSchemaChangeJobs(
 			newID,
 			currentState.Statements,
 			currentState.Authorization,
-			screl.GetDescIDs(currentState.TargetState).Ordered(),
+			screl.AllTargetDescIDs(currentState.TargetState).Ordered(),
 		))
 	}
 	_, err := registry.CreateJobsWithTxn(ctx, txn, records)

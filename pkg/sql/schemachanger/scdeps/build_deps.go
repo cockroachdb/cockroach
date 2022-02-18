@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -197,11 +198,18 @@ func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 		IncludeOffline: true,
 		IncludeDropped: true,
 	}
+
 	desc, err := d.descsCollection.GetImmutableDescriptorByID(ctx, d.txn, id, flags)
-	if err != nil {
-		panic(err)
+	if err == nil {
+		return desc
 	}
-	return desc
+	// Perhaps this ID refers to a temporary schema, in which case we need to
+	// look it up using a dedicated Collection method.
+	flags.Required = false
+	if desc, _ = d.descsCollection.GetImmutableSchemaByID(ctx, d.txn, id, flags); desc != nil {
+		return desc
+	}
+	panic(err)
 }
 
 // MustGetSchemasForDatabase  implements the scbuild.CatalogReader interface.
@@ -269,8 +277,20 @@ func (d *buildDeps) FeatureChecker() scbuild.FeatureChecker {
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
 func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
 	if CreatePartitioningCCL == nil {
-		panic(sqlerrors.NewCCLRequiredError(errors.New(
-			"creating or manipulating partitions requires a CCL binary")))
+		return func(
+			_ context.Context,
+			_ *cluster.Settings,
+			_ *tree.EvalContext,
+			_ func(tree.Name) (catalog.Column, error),
+			_ int,
+			_ []string,
+			_ *tree.PartitionBy,
+			_ []tree.Name,
+			_ bool,
+		) ([]catalog.Column, catpb.PartitioningDescriptor, error) {
+			return nil, catpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
+				"creating or manipulating partitions requires a CCL binary"))
+		}
 	}
 	return CreatePartitioningCCL
 }

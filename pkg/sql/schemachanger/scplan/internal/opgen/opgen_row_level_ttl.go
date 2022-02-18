@@ -28,7 +28,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PostCommitNonRevertiblePhase),
+				minPhase(scop.PostCommitPhase),
+				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				emit(func(this *scpb.RowLevelTTL) scop.Op {
 					return &scop.DeleteSchedule{

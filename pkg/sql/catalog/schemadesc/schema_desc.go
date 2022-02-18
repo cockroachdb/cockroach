@@ -207,6 +207,10 @@ func (desc *immutable) ValidateCrossReferences(
 		vea.Report(err)
 		return
 	}
+	if db.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
+			db.GetName(), db.GetID()))
+	}
 
 	// Check that parent has correct entry in schemas mapping.
 	isInDBSchemas := false
