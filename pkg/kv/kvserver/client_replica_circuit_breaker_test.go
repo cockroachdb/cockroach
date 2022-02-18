@@ -48,7 +48,7 @@ const (
 	n2 = 1
 
 	pauseHeartbeats = true
-	keepHeartbeats  = true
+	keepHeartbeats  = false
 )
 
 // This is a sanity check in which the breaker plays no role.

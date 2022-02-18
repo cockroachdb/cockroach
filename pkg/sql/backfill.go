@@ -1537,77 +1537,12 @@ func ValidateInvertedIndexes(
 		})
 
 		grp.GoCtx(func(ctx context.Context) error {
-			defer close(countReady[i])
-			desc := tableDesc
-			if withFirstMutationPublic {
-				// Make the mutations public in an in-memory copy of the descriptor and
-				// add it to the Collection's synthetic descriptors, so that we can use
-				// SQL below to perform the validation.
-				fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
-				if err != nil {
-					return err
-				}
-				desc = fakeDesc
-			}
-
-			start := timeutil.Now()
-
-			colID := idx.InvertedColumnID()
-			col, err := desc.FindColumnWithID(colID)
+			c, err := countExpectedRowsForInvertedIndex(ctx, tableDesc, idx, runHistoricalTxn, withFirstMutationPublic, execOverride)
 			if err != nil {
 				return err
 			}
-
-			// colNameOrExpr is the column or expression indexed by the inverted
-			// index. It is used in the query below that verifies that the
-			// number of entries in the inverted index is correct. If the index
-			// is an expression index, the column name cannot be used because it
-			// is inaccessible; the query would result in a "column does not
-			// exist" error.
-			var colNameOrExpr string
-			if col.IsExpressionIndexColumn() {
-				colNameOrExpr = col.GetComputeExpr()
-			} else {
-				// Wrap the column name in double-quotes because it might
-				// contain special characters, like "-".
-				colNameOrExpr = fmt.Sprintf("%q", col.ColName())
-			}
-
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-				var stmt string
-				geoConfig := idx.GetGeoConfig()
-				if geoindex.IsEmptyConfig(&geoConfig) {
-					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
-						colNameOrExpr, idx.GetVersion(), desc.GetID(),
-					)
-				} else {
-					stmt = fmt.Sprintf(
-						`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %s)), 0) FROM [%d AS t]`,
-						desc.GetID(), idx.GetID(), colNameOrExpr, desc.GetID(),
-					)
-				}
-				// If the index is a partial index the predicate must be added
-				// as a filter to the query.
-				if idx.IsPartial() {
-					stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
-				}
-				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, execOverride, stmt)
-					if err != nil {
-						return err
-					}
-					if row == nil {
-						return errors.New("failed to verify inverted index count")
-					}
-					expectedCount[i] = int64(tree.MustBeDInt(row[0]))
-					return nil
-				})
-			}); err != nil {
-				return err
-			}
-			log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
-				desc.GetName(), colNameOrExpr, expectedCount[i], timeutil.Since(start))
+			expectedCount[i] = c
+			close(countReady[i])
 			return nil
 		})
 	}
@@ -1624,6 +1559,88 @@ func ValidateInvertedIndexes(
 		return invalidErr
 	}
 	return nil
+}
+
+func countExpectedRowsForInvertedIndex(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	idx catalog.Index,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	withFirstMutationPublic bool,
+	execOverride sessiondata.InternalExecutorOverride,
+) (int64, error) {
+	desc := tableDesc
+	start := timeutil.Now()
+	if withFirstMutationPublic {
+		// Make the mutations public in an in-memory copy of the descriptor and
+		// add it to the Collection's synthetic descriptors, so that we can use
+		// SQL below to perform the validation.
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+		if err != nil {
+			return 0, err
+		}
+		desc = fakeDesc
+	}
+
+	colID := idx.InvertedColumnID()
+	col, err := desc.FindColumnWithID(colID)
+	if err != nil {
+		return 0, err
+	}
+
+	// colNameOrExpr is the column or expression indexed by the inverted
+	// index. It is used in the query below that verifies that the
+	// number of entries in the inverted index is correct. If the index
+	// is an expression index, the column name cannot be used because it
+	// is inaccessible; the query would result in a "column does not
+	// exist" error.
+	var colNameOrExpr string
+	if col.IsExpressionIndexColumn() {
+		colNameOrExpr = col.GetComputeExpr()
+	} else {
+		// Wrap the column name in double-quotes because it might
+		// contain special characters, like "-".
+		colNameOrExpr = fmt.Sprintf("%q", col.ColName())
+	}
+
+	var expectedCount int64
+	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		var stmt string
+		geoConfig := idx.GetGeoConfig()
+		if geoindex.IsEmptyConfig(&geoConfig) {
+			stmt = fmt.Sprintf(
+				`SELECT coalesce(sum_int(crdb_internal.num_inverted_index_entries(%s, %d)), 0) FROM [%d AS t]`,
+				colNameOrExpr, idx.GetVersion(), desc.GetID(),
+			)
+		} else {
+			stmt = fmt.Sprintf(
+				`SELECT coalesce(sum_int(crdb_internal.num_geo_inverted_index_entries(%d, %d, %s)), 0) FROM [%d AS t]`,
+				desc.GetID(), idx.GetID(), colNameOrExpr, desc.GetID(),
+			)
+		}
+		// If the index is a partial index the predicate must be added
+		// as a filter to the query.
+		if idx.IsPartial() {
+			stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
+		}
+		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+			row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, execOverride, stmt)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.New("failed to verify inverted index count")
+			}
+			expectedCount = int64(tree.MustBeDInt(row[0]))
+			return nil
+		})
+	}); err != nil {
+		return 0, err
+	}
+	log.Infof(ctx, "%s %s expected inverted index count = %d, took %s",
+		desc.GetName(), colNameOrExpr, expectedCount, timeutil.Since(start))
+	return expectedCount, nil
+
 }
 
 // ValidateForwardIndexes checks that the indexes have entries for all the rows.
@@ -1663,89 +1680,10 @@ func ValidateForwardIndexes(
 
 		grp.GoCtx(func(ctx context.Context) error {
 			start := timeutil.Now()
-
-			// If we are doing a REGIONAL BY ROW locality change, we can bypass
-			// the uniqueness check below as we are only adding or removing
-			// an implicit partitioning column.
-			// Scan the mutations if we're assuming the first mutation to be public
-			// to see if we have a locality config swap.
-			skipUniquenessChecks := false
-			if withFirstMutationPublic {
-				mutations := tableDesc.AllMutations()
-				if len(mutations) > 0 {
-					mutationID := mutations[0].MutationID()
-					for _, mut := range tableDesc.AllMutations() {
-						// We only want to check the first mutation, so break
-						// if we detect a new one.
-						if mut.MutationID() != mutationID {
-							break
-						}
-						if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
-							if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
-								if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil ||
-									lcSwap.NewLocalityConfig.GetRegionalByRow() != nil {
-									skipUniquenessChecks = true
-									break
-								}
-							}
-						}
-					}
-				}
-			}
-
-			desc := tableDesc
-			if withFirstMutationPublic {
-				// Make the mutations public in an in-memory copy of the descriptor and
-				// add it to the Collection's synthetic descriptors, so that we can use
-				// SQL below to perform the validation.
-				fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
-				if err != nil {
-					return err
-				}
-				desc = fakeDesc
-			}
-
-			// Retrieve the row count in the index.
-			var idxLen int64
-			if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-				query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
-				// If the index is a partial index the predicate must be added
-				// as a filter to the query to force scanning the index.
-				if idx.IsPartial() {
-					query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
-				}
-				return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-					row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, execOverride, query)
-					if err != nil {
-						return err
-					}
-					if row == nil {
-						return errors.New("failed to verify index count")
-					}
-					idxLen = int64(tree.MustBeDInt(row[0]))
-
-					// For implicitly partitioned unique indexes, we need to independently
-					// validate that the non-implicitly partitioned columns are unique.
-					if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 && !skipUniquenessChecks {
-						if err := validateUniqueConstraint(
-							ctx,
-							tableDesc,
-							idx.GetName(),
-							idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
-							idx.GetPredicate(),
-							ie,
-							txn,
-							false, /* preExisting */
-						); err != nil {
-							return err
-						}
-					}
-					return nil
-				})
-			}); err != nil {
+			idxLen, err := countIndexRowsAndMaybeCheckUniqueness(ctx, tableDesc, idx, withFirstMutationPublic, runHistoricalTxn, execOverride)
+			if err != nil {
 				return err
 			}
-
 			log.Infof(ctx, "validation: index %s/%s row count = %d, time so far %s",
 				tableDesc.GetName(), idx.GetName(), idxLen, timeutil.Since(start))
 
@@ -1771,7 +1709,6 @@ func ValidateForwardIndexes(
 						idx.GetName())
 
 				}
-
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -1781,66 +1718,15 @@ func ValidateForwardIndexes(
 	}
 
 	grp.GoCtx(func(ctx context.Context) error {
-		defer close(tableCountsReady)
-		var tableRowCountTime time.Duration
 		start := timeutil.Now()
-
-		desc := tableDesc
-		if withFirstMutationPublic {
-			// The query to count the expected number of rows can reference columns
-			// added earlier in the same mutation. Make the mutations public in an
-			// in-memory copy of the descriptor and add it to the Collection's synthetic
-			// descriptors, so that we can use SQL below to perform the validation.
-			fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
-			if err != nil {
-				return err
-			}
-			desc = fakeDesc
-		}
-
-		// Count the number of rows in the table.
-		if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-			var s strings.Builder
-			for _, idx := range indexes {
-				// For partial indexes, count the number of rows in the table
-				// for which the predicate expression evaluates to true.
-				if idx.IsPartial() {
-					s.WriteString(fmt.Sprintf(`, count(1) FILTER (WHERE %s)`, idx.GetPredicate()))
-				}
-			}
-			partialIndexCounts := s.String()
-
-			// Force the primary index so that the optimizer does not create a
-			// query plan that uses the indexes being backfilled.
-			query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
-
-			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
-				cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, execOverride, query)
-				if err != nil {
-					return err
-				}
-				if cnt == nil {
-					return errors.New("failed to verify index")
-				}
-
-				tableRowCount = int64(tree.MustBeDInt(cnt[0]))
-				cntIdx := 1
-				for _, idx := range indexes {
-					if idx.IsPartial() {
-						partialIndexExpectedCounts[idx.GetID()] = int64(tree.MustBeDInt(cnt[cntIdx]))
-						cntIdx++
-					}
-				}
-
-				return nil
-			})
-		}); err != nil {
+		c, err := populateExpectedCounts(ctx, tableDesc, indexes, partialIndexExpectedCounts, withFirstMutationPublic, runHistoricalTxn, execOverride)
+		if err != nil {
 			return err
 		}
-
-		tableRowCountTime = timeutil.Since(start)
 		log.Infof(ctx, "validation: table %s row count = %d, took %s",
-			tableDesc.GetName(), tableRowCount, tableRowCountTime)
+			tableDesc.GetName(), c, timeutil.Since(start))
+		tableRowCount = c
+		defer close(tableCountsReady)
 		return nil
 	})
 
@@ -1856,6 +1742,164 @@ func ValidateForwardIndexes(
 		return invalidErr
 	}
 	return nil
+}
+
+// populateExpectedCounts returns the row count for the primary index
+// of the given table and, for each partial index, populates the given
+// map.
+func populateExpectedCounts(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexes []catalog.Index,
+	partialIndexExpectedCounts map[descpb.IndexID]int64,
+	withFirstMutationPublic bool,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) (int64, error) {
+	desc := tableDesc
+	if withFirstMutationPublic {
+		// The query to count the expected number of rows can reference columns
+		// added earlier in the same mutation. Make the mutations public in an
+		// in-memory copy of the descriptor and add it to the Collection's synthetic
+		// descriptors, so that we can use SQL below to perform the validation.
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraintsAndPKSwaps)
+		if err != nil {
+			return 0, err
+		}
+		desc = fakeDesc
+	}
+	var tableRowCount int64
+	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		var s strings.Builder
+		for _, idx := range indexes {
+			// For partial indexes, count the number of rows in the table
+			// for which the predicate expression evaluates to true.
+			if idx.IsPartial() {
+				s.WriteString(fmt.Sprintf(`, count(1) FILTER (WHERE %s)`, idx.GetPredicate()))
+			}
+		}
+		partialIndexCounts := s.String()
+
+		// Force the primary index so that the optimizer does not create a
+		// query plan that uses the indexes being backfilled.
+		query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
+
+		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, execOverride, query)
+			if err != nil {
+				return err
+			}
+			if cnt == nil {
+				return errors.New("failed to verify index")
+			}
+
+			tableRowCount = int64(tree.MustBeDInt(cnt[0]))
+			cntIdx := 1
+			for _, idx := range indexes {
+				if idx.IsPartial() {
+					partialIndexExpectedCounts[idx.GetID()] = int64(tree.MustBeDInt(cnt[cntIdx]))
+					cntIdx++
+				}
+			}
+
+			return nil
+		})
+	}); err != nil {
+		return 0, err
+	}
+	return tableRowCount, nil
+}
+
+func countIndexRowsAndMaybeCheckUniqueness(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	idx catalog.Index,
+	withFirstMutationPublic bool,
+	runHistoricalTxn sqlutil.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) (int64, error) {
+	// If we are doing a REGIONAL BY ROW locality change, we can
+	// bypass the uniqueness check below as we are only adding or
+	// removing an implicit partitioning column.  Scan the
+	// mutations if we're assuming the first mutation to be public
+	// to see if we have a locality config swap.
+	skipUniquenessChecks := false
+	if withFirstMutationPublic {
+		mutations := tableDesc.AllMutations()
+		if len(mutations) > 0 {
+			mutationID := mutations[0].MutationID()
+			for _, mut := range tableDesc.AllMutations() {
+				// We only want to check the first mutation, so break
+				// if we detect a new one.
+				if mut.MutationID() != mutationID {
+					break
+				}
+				if pkSwap := mut.AsPrimaryKeySwap(); pkSwap != nil {
+					if lcSwap := pkSwap.PrimaryKeySwapDesc().LocalityConfigSwap; lcSwap != nil {
+						if lcSwap.OldLocalityConfig.GetRegionalByRow() != nil ||
+							lcSwap.NewLocalityConfig.GetRegionalByRow() != nil {
+							skipUniquenessChecks = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	desc := tableDesc
+	if withFirstMutationPublic {
+		// Make the mutations public in an in-memory copy of the descriptor and
+		// add it to the Collection's synthetic descriptors, so that we can use
+		// SQL below to perform the validation.
+		fakeDesc, err := tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
+		if err != nil {
+			return 0, err
+		}
+		desc = fakeDesc
+	}
+
+	// Retrieve the row count in the index.
+	var idxLen int64
+	if err := runHistoricalTxn(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		query := fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d]`, desc.GetID(), idx.GetID())
+		// If the index is a partial index the predicate must be added
+		// as a filter to the query to force scanning the index.
+		if idx.IsPartial() {
+			query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
+		}
+		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+			row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, execOverride, query)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return errors.New("failed to verify index count")
+			}
+			idxLen = int64(tree.MustBeDInt(row[0]))
+
+			// For implicitly partitioned unique indexes, we need to independently
+			// validate that the non-implicitly partitioned columns are unique.
+			if idx.IsUnique() && idx.GetPartitioning().NumImplicitColumns() > 0 && !skipUniquenessChecks {
+				if err := validateUniqueConstraint(
+					ctx,
+					tableDesc,
+					idx.GetName(),
+					idx.IndexDesc().KeyColumnIDs[idx.GetPartitioning().NumImplicitColumns():],
+					idx.GetPredicate(),
+					ie,
+					txn,
+					false, /* preExisting */
+				); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}); err != nil {
+		return 0, err
+	}
+	return idxLen, nil
 }
 
 // backfillIndexes fills the missing columns in the indexes of the
