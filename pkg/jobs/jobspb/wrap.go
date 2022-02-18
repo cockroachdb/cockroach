@@ -33,35 +33,39 @@ const InvalidJobID = catpb.InvalidJobID
 // Details is a marker interface for job details proto structs.
 type Details interface{}
 
-var _ Details = BackupDetails{}
-var _ Details = RestoreDetails{}
-var _ Details = SchemaChangeDetails{}
-var _ Details = ChangefeedDetails{}
-var _ Details = CreateStatsDetails{}
-var _ Details = SchemaChangeGCDetails{}
-var _ Details = StreamIngestionDetails{}
-var _ Details = NewSchemaChangeDetails{}
-var _ Details = MigrationDetails{}
-var _ Details = AutoSpanConfigReconciliationDetails{}
-var _ Details = ImportDetails{}
-var _ Details = StreamReplicationDetails{}
-var _ Details = RowLevelTTLDetails{}
+var (
+	_ Details = BackupDetails{}
+	_ Details = RestoreDetails{}
+	_ Details = SchemaChangeDetails{}
+	_ Details = ChangefeedDetails{}
+	_ Details = CreateStatsDetails{}
+	_ Details = SchemaChangeGCDetails{}
+	_ Details = StreamIngestionDetails{}
+	_ Details = NewSchemaChangeDetails{}
+	_ Details = MigrationDetails{}
+	_ Details = AutoSpanConfigReconciliationDetails{}
+	_ Details = ImportDetails{}
+	_ Details = StreamReplicationDetails{}
+	_ Details = RowLevelTTLDetails{}
+)
 
 // ProgressDetails is a marker interface for job progress details proto structs.
 type ProgressDetails interface{}
 
-var _ ProgressDetails = BackupProgress{}
-var _ ProgressDetails = RestoreProgress{}
-var _ ProgressDetails = SchemaChangeProgress{}
-var _ ProgressDetails = ChangefeedProgress{}
-var _ ProgressDetails = CreateStatsProgress{}
-var _ ProgressDetails = SchemaChangeGCProgress{}
-var _ ProgressDetails = StreamIngestionProgress{}
-var _ ProgressDetails = NewSchemaChangeProgress{}
-var _ ProgressDetails = MigrationProgress{}
-var _ ProgressDetails = AutoSpanConfigReconciliationDetails{}
-var _ ProgressDetails = StreamReplicationProgress{}
-var _ ProgressDetails = RowLevelTTLProgress{}
+var (
+	_ ProgressDetails = BackupProgress{}
+	_ ProgressDetails = RestoreProgress{}
+	_ ProgressDetails = SchemaChangeProgress{}
+	_ ProgressDetails = ChangefeedProgress{}
+	_ ProgressDetails = CreateStatsProgress{}
+	_ ProgressDetails = SchemaChangeGCProgress{}
+	_ ProgressDetails = StreamIngestionProgress{}
+	_ ProgressDetails = NewSchemaChangeProgress{}
+	_ ProgressDetails = MigrationProgress{}
+	_ ProgressDetails = AutoSpanConfigReconciliationDetails{}
+	_ ProgressDetails = StreamReplicationProgress{}
+	_ ProgressDetails = RowLevelTTLProgress{}
+)
 
 // Type returns the payload's job type.
 func (p *Payload) Type() Type {
@@ -348,6 +352,9 @@ func (m ChangefeedDetails) MarshalJSONPB(marshaller *jsonpb.Marshaler) ([]byte, 
 	}
 	return json.Marshal(m)
 }
+
+// DescRewriteMap maps old descriptor IDs to new descriptor and parent IDs.
+type DescRewriteMap map[descpb.ID]*DescriptorRewrite
 
 func init() {
 	if len(Type_name) != NumJobTypes {
