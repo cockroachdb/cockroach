@@ -296,6 +296,8 @@ func max(a, b int64) int64 {
 
 // NewStreamer creates a new Streamer.
 //
+// txn must be a LeafTxn.
+//
 // limitBytes determines the maximum amount of memory this Streamer is allowed
 // to use (i.e. it'll be used lazily, as needed). The more memory it has, the
 // higher its internal concurrency and throughput.
@@ -315,6 +317,9 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 ) *Streamer {
+	if txn.Type() != kv.LeafTxn {
+		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
+	}
 	s := &Streamer{
 		distSender: distSender,
 		stopper:    stopper,

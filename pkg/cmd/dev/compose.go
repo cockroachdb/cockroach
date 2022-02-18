@@ -12,6 +12,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -27,6 +28,7 @@ func makeComposeCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.C
 	}
 	addCommonBuildFlags(composeCmd)
 	addCommonTestFlags(composeCmd)
+	composeCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
 	return composeCmd
 }
 
@@ -37,6 +39,23 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 		short   = mustGetFlagBool(cmd, shortFlag)
 		timeout = mustGetFlagDuration(cmd, timeoutFlag)
 	)
+
+	crossArgs, targets, err := d.getBasicBuildArgs(ctx, []string{"//pkg/cmd/cockroach:cockroach", "//pkg/compose/compare/compare:compare_test"})
+	if err != nil {
+		return err
+	}
+	volume := mustGetFlagString(cmd, volumeFlag)
+	err = d.crossBuild(ctx, crossArgs, targets, "crosslinux", volume)
+	if err != nil {
+		return err
+	}
+
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	cockroachBin := filepath.Join(workspace, "artifacts", "cockroach")
+	compareBin := filepath.Join(workspace, "artifacts", "compare_test")
 
 	var args []string
 	args = append(args, "run", "//pkg/compose:compose_test", "--config=test")
@@ -52,6 +71,9 @@ func (d *dev) compose(cmd *cobra.Command, _ []string) error {
 	if timeout > 0 {
 		args = append(args, fmt.Sprintf("--test_timeout=%d", int(timeout.Seconds())))
 	}
+
+	args = append(args, "--test_arg", "-cockroach", "--test_arg", cockroachBin)
+	args = append(args, "--test_arg", "-compare", "--test_arg", compareBin)
 
 	logCommand("bazel", args...)
 	return d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...)
