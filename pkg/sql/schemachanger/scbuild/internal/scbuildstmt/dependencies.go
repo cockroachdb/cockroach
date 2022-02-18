@@ -46,6 +46,7 @@ type BuildCtx interface {
 	TargetEnqueuerAndChecker
 	TableElementIDGenerator
 	SchemaFeatureChecker
+	TelemetryFeatureCounter
 
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
 	// BuildCtx return type.
@@ -85,6 +86,9 @@ type Dependencies interface {
 	// IndexPartitioningCCLCallback returns the CCL callback for creating
 	// partitioning descriptors for indexes.
 	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
+
+	// TelemetryCounter returns the telemetry feature counter.
+	TelemetryCounter() TelemetryFeatureCounter
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating
@@ -350,4 +354,19 @@ type SchemaFeatureChecker interface {
 	// CheckFeature returns if the feature name specified is allowed or disallowed,
 	// by the database administrator.
 	CheckFeature(ctx context.Context, featureName tree.SchemaFeatureName) error
+}
+
+// TelemetryFeatureCounter tracks telemetry metrics for schema change features.
+type TelemetryFeatureCounter interface {
+	// IncrementDropCounterForRelation increments telemetry counters for dropping
+	// relations.
+	IncrementDropCounterForRelation(tbl catalog.TableDescriptor)
+
+	// IncrementDropCounterForSchema increments telemetry counters for dropping
+	// schemas.
+	IncrementDropCounterForSchema()
+
+	// IncrementDropCounterForDatabase increments telemetry counters for dropping
+	// databases.
+	IncrementDropCounterForDatabase()
 }

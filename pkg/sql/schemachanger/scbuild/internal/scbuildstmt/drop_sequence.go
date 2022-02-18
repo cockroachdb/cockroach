@@ -43,6 +43,7 @@ func DropSequence(b BuildCtx, n *tree.DropSequence) {
 		}
 		dropSequence(b, seq, n.DropBehavior)
 		b.IncrementSubWorkID()
+		b.IncrementDropCounterForRelation(seq)
 	}
 }
 
