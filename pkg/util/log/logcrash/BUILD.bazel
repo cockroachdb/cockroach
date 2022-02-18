@@ -5,6 +5,9 @@ go_library(
     srcs = ["crash_reporting.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/log/logcrash",
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/cockroachdb/cockroach/pkg/util/log/logcrash.crashReportEnv": "{STABLE_CRASH_REPORT_ENV}",
+    },
     deps = [
         "//pkg/build",
         "//pkg/settings",
