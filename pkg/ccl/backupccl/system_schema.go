@@ -399,6 +399,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optInToClusterBackup,
 		customRestoreFunc:            tenantSettingsTableRestoreFunc,
 	},
+	systemschema.SpanCountTable.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 // GetSystemTablesToIncludeInClusterBackup returns a set of system table names that

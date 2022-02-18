@@ -522,7 +522,7 @@ func (p *planner) replaceViewDesc(
 	// Compare toReplace against its ClusterVersion to verify if
 	// its new set of columns is valid for a replacement view.
 	if err := verifyReplacingViewColumns(
-		toReplace.ClusterVersion.Columns,
+		toReplace.ClusterVersion().Columns,
 		toReplace.Columns,
 	); err != nil {
 		return nil, err

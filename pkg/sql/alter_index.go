@@ -154,7 +154,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 	}
 	mutationID := descpb.InvalidMutationID
 	if addedMutations {
-		mutationID = n.tableDesc.ClusterVersion.NextMutationID
+		mutationID = n.tableDesc.ClusterVersion().NextMutationID
 	}
 	if err := params.p.writeSchemaChange(
 		params.ctx, n.tableDesc, mutationID, tree.AsStringWithFQNames(n.n, params.Ann()),
