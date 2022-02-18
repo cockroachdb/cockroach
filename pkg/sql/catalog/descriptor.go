@@ -345,11 +345,6 @@ type TableDescriptor interface {
 	// 1. Whether the index is a mutation
 	// 2. if so, is it in state DELETE_AND_WRITE_ONLY
 	GetIndexMutationCapabilities(id descpb.IndexID) (isMutation, isWriteOnly bool)
-	// KeysPerRow returns the maximum number of keys used to encode a row for the
-	// given index. If a secondary index doesn't store any columns, then it only
-	// has one k/v pair, but if it stores some columns, it can return up to one
-	// k/v pair per family in the table, just like a primary index.
-	KeysPerRow(id descpb.IndexID) (int, error)
 
 	// AllIndexes returns a slice with all indexes, public and non-public,
 	// in the underlying proto, in their canonical order:
@@ -508,6 +503,12 @@ type TableDescriptor interface {
 	// IndexStoredColumns returns a slice of Column interfaces containing all
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column
+
+	// IndexKeysPerRow returns the maximum number of keys used to encode a row for
+	// the given index. If a secondary index doesn't store any columns, then it
+	// only has one k/v pair, but if it stores some columns, it can return up to
+	// one k/v pair per family in the table, just like a primary index.
+	IndexKeysPerRow(idx Index) int
 
 	// FetchSpecKeyAndSuffixColumns returns information about the key and suffix
 	// columns, suitable for populating a descpb.IndexFetchSpec.
