@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,8 +47,9 @@ func InitIndexFetchSpec(
 
 	maxKeysPerRow := table.IndexKeysPerRow(index)
 	s.MaxKeysPerRow = uint32(maxKeysPerRow)
-	// TODO(radu): calculate the length without actually generating a throw-away key.
-	s.KeyPrefixLength = uint32(len(MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())))
+	s.KeyPrefixLength = uint32(len(codec.TenantPrefix()) +
+		encoding.EncodedLengthUvarintAscending(uint64(s.TableID)) +
+		encoding.EncodedLengthUvarintAscending(uint64(index.GetID())))
 
 	s.FamilyDefaultColumns = table.FamilyDefaultColumns()
 
