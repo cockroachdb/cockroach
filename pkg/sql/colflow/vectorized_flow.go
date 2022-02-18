@@ -180,7 +180,7 @@ func (f *vectorizedFlow) Setup(
 	if err != nil {
 		return ctx, nil, err
 	}
-	log.VEvent(ctx, 2, "setting up vectorized flow")
+	log.VEventf(ctx, 2, "setting up vectorized flow %s", spec.FlowID.String())
 	recordingStats := false
 	if execinfra.ShouldCollectStats(ctx, &f.FlowCtx) {
 		recordingStats = true

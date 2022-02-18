@@ -467,8 +467,11 @@ func (dsp *DistSQLPlanner) Run(
 		leafInputState = tis
 	}
 
-	if logPlanDiagram {
+	if logPlanDiagram && len(flows) > 1 {
 		log.VEvent(ctx, 3, "creating plan diagram for logging")
+		for _, f := range flows {
+			log.VEventf(ctx, 3, "creating plan diagram for logging %s", f.FlowID.String())
+		}
 		var stmtStr string
 		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
 			stmtStr = planCtx.planner.stmt.String()

@@ -206,6 +206,7 @@ func vEventf(
 		sp, el, ok := getSpanOrEventLog(ctx)
 		if !ok {
 			// Nothing to log. Skip the work.
+			Infof(ctx, "No span / event log for %s", format)
 			return
 		}
 		entry := makeUnstructuredEntry(ctx,
