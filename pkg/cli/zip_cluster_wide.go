@@ -110,6 +110,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.invalid_objects",
 	"crdb_internal.index_usage_statistics",
 	"crdb_internal.table_indexes",
+	"crdb_internal.transaction_contention_events",
 }
 
 // nodesInfo holds node details pulled from a SQL or storage node.

@@ -10,6 +10,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security",
         "//pkg/server/serverpb",
+        "//pkg/sql",
+        "//pkg/sql/contention",
         "//pkg/sql/pgwire",
         "//pkg/sql/sqlstats/persistedsqlstats",
         "//pkg/sql/tests",

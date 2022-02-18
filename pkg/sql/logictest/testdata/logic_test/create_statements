@@ -1558,6 +1558,23 @@ CREATE VIEW crdb_internal.tenant_usage_details (
        WHERE
            instance_id = 0
     )  {}  {}
+CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  {}  {}
 CREATE VIEW crdb_internal.transaction_statistics (
   aggregated_ts,
   fingerprint_id,

@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -37,11 +39,12 @@ type serverIdx int
 const randomServer serverIdx = -1
 
 type testTenant struct {
-	tenant         serverutils.TestTenantInterface
-	tenantConn     *gosql.DB
-	tenantDB       *sqlutils.SQLRunner
-	tenantStatus   serverpb.SQLStatusServer
-	tenantSQLStats *persistedsqlstats.PersistedSQLStats
+	tenant                   serverutils.TestTenantInterface
+	tenantConn               *gosql.DB
+	tenantDB                 *sqlutils.SQLRunner
+	tenantStatus             serverpb.SQLStatusServer
+	tenantSQLStats           *persistedsqlstats.PersistedSQLStats
+	tenantContentionRegistry *contention.Registry
 }
 
 func newTestTenant(
@@ -62,13 +65,15 @@ func newTestTenant(
 	status := tenant.StatusServer().(serverpb.SQLStatusServer)
 	sqlStats := tenant.PGServer().(*pgwire.Server).SQLServer.
 		GetSQLStatsProvider().(*persistedsqlstats.PersistedSQLStats)
+	contentionRegistry := tenant.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
 
 	return &testTenant{
-		tenant:         tenant,
-		tenantConn:     tenantConn,
-		tenantDB:       sqlDB,
-		tenantStatus:   status,
-		tenantSQLStats: sqlStats,
+		tenant:                   tenant,
+		tenantConn:               tenantConn,
+		tenantDB:                 sqlDB,
+		tenantStatus:             status,
+		tenantSQLStats:           sqlStats,
+		tenantContentionRegistry: contentionRegistry,
 	}
 }
 
@@ -170,6 +175,10 @@ func (c tenantCluster) tenantSQLStats(idx serverIdx) *persistedsqlstats.Persiste
 
 func (c tenantCluster) tenantStatusSrv(idx serverIdx) serverpb.SQLStatusServer {
 	return c.tenant(idx).tenantStatus
+}
+
+func (c tenantCluster) tenantContentionRegistry(idx serverIdx) *contention.Registry {
+	return c.tenant(idx).tenantContentionRegistry
 }
 
 func (c tenantCluster) cleanup(t *testing.T) {

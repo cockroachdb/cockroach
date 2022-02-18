@@ -97,6 +97,7 @@ crdb_internal  table_indexes                    table  NULL  NULL  NULL
 crdb_internal  table_row_statistics             table  NULL  NULL  NULL
 crdb_internal  tables                           table  NULL  NULL  NULL
 crdb_internal  tenant_usage_details             view   NULL  NULL  NULL
+crdb_internal  transaction_contention_events    table  NULL  NULL  NULL
 crdb_internal  transaction_statistics           view   NULL  NULL  NULL
 crdb_internal  zones                            table  NULL  NULL  NULL
 
