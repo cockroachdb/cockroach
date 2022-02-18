@@ -48,7 +48,7 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: problem => problem.no_raft_leader_range_ids.length,
   },
   {
-    title: "Invalid Lease",
+    title: "Expired Lease",
     extract: problem => problem.no_lease_range_ids.length,
   },
   {

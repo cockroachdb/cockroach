@@ -78,7 +78,7 @@ func seedTenantSpanConfigsMigration(
 				return err
 			}
 			if len(scRecords) != 0 {
-				// This tenant already has span config entries. It was either
+				// This tenant already has span config records. It was either
 				// already migrated (migrations need to be idempotent) or it was
 				// created after PreSeedTenantSpanConfigs was activated. There's
 				// nothing left to do here.
