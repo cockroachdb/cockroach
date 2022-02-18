@@ -198,8 +198,12 @@ func (w watcher) stageBinaryArtifacts() error {
 		// These targets don't have stable, predictable locations, so
 		// they have to be hardcoded.
 		var ext string
+		libDir := "lib"
 		if usingCrossWindowsConfig() {
 			ext = "dll"
+			// NB: the libs end up in the "bin" subdir of libgeos
+			// on Windows.
+			libDir = "bin"
 		} else if usingCrossDarwinConfig() {
 			ext = "dylib"
 		} else {
@@ -208,8 +212,8 @@ func (w watcher) stageBinaryArtifacts() error {
 		switch bin {
 		case "//c-deps:libgeos":
 			for _, relBinPath := range []string{
-				fmt.Sprintf("c-deps/libgeos/lib/libgeos_c.%s", ext),
-				fmt.Sprintf("c-deps/libgeos/lib/libgeos.%s", ext),
+				fmt.Sprintf("c-deps/libgeos/%s/libgeos_c.%s", libDir, ext),
+				fmt.Sprintf("c-deps/libgeos/%s/libgeos.%s", libDir, ext),
 			} {
 				err := w.maybeStageArtifact(w.info.binDir, relBinPath, 0644, finalizePhase, copyContentTo)
 				if err != nil {

@@ -2,13 +2,13 @@
 
 set -euo pipefail
 
-source "$(dirname "${0}")/teamcity-support.sh"
+dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
+source "$dir/release/teamcity-support.sh"
+source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
-export BUILDER_HIDE_GOPATH_SRC=1
 
-build/builder.sh make .buildinfo/tag
-build_name="${TAG_NAME:-$(cat .buildinfo/tag)}"
+build_name=$(git describe --tags --dirty --match=v[0-9]* 2> /dev/null || git rev-parse --short HEAD;)
 
 # On no match, `grep -Eo` returns 1. `|| echo""` makes the script not error.
 release_branch="$(echo "$build_name" | grep -Eo "^v[0-9]+\.[0-9]+" || echo"")"
@@ -44,20 +44,13 @@ tc_start_block "Tag the release"
 git tag "${build_name}"
 tc_end_block "Tag the release"
 
-
-tc_start_block "Compile publish-provisional-artifacts"
-build/builder.sh go install ./pkg/cmd/publish-provisional-artifacts
-tc_end_block "Compile publish-provisional-artifacts"
-
-
 tc_start_block "Compile and publish S3 artifacts"
-build/builder.sh env \
-  AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  TC_BUILD_BRANCH="$build_name" \
-  publish-provisional-artifacts -provisional -release -bucket "$bucket"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
+bazel build --config ci //pkg/cmd/publish-provisional-artifacts
+BAZEL_BIN=$(bazel info bazel-bin --config ci)
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release -bucket "$bucket"
+EOF
 tc_end_block "Compile and publish S3 artifacts"
-
 
 tc_start_block "Make and push docker image"
 configure_docker_creds
@@ -73,7 +66,6 @@ cp -r licenses build/deploy/
 docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
 tc_end_block "Make and push docker image"
-
 
 tc_start_block "Push release tag to github.com/cockroachdb/cockroach"
 github_ssh_key="${GITHUB_COCKROACH_TEAMCITY_PRIVATE_SSH_KEY}"
