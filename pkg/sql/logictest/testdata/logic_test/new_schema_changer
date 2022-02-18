@@ -457,12 +457,11 @@ CREATE TABLE defaultdb.sq1dep (
 	rand_col INT8 DEFAULT nextval('defaultdb.sq1')
 );
 
-statement error cannot drop table shipments because other objects depend on it
+statement ok
 DROP TABLE defaultdb.shipments;
 
 statement ok
 DROP TABLE defaultdb.sq1dep;
-DROP TABLE defaultdb.shipments;
 
 statement ok
 CREATE TABLE defaultdb.shipments (

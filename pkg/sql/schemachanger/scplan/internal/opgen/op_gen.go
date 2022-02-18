@@ -59,13 +59,13 @@ func (r *registry) buildGraph(cs scpb.CurrentState) (*scgraph.Graph, error) {
 		}); err != nil {
 			return nil, err
 		}
-		for _, op := range edgesToAdd {
+		for _, e := range edgesToAdd {
 			var ops []scop.Op
-			if op.ops != nil {
-				ops = op.ops(op.n.Element(), cs.TargetState)
+			if e.ops != nil {
+				ops = e.ops(e.n.Element(), cs.TargetState)
 			}
 			if err := g.AddOpEdges(
-				op.n.Target, op.from, op.to, op.revertible, op.minPhase, ops...,
+				e.n.Target, e.from, e.to, e.revertible, e.minPhase, ops...,
 			); err != nil {
 				return nil, err
 			}

@@ -82,7 +82,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 	// equivalent of deleting the comment.
 	if n.n.Comment != nil {
 		err := n.metadataUpdater.UpsertConstraintComment(
-			n.tableDesc,
+			n.tableDesc.GetID(),
 			constraint.ConstraintID,
 			*n.n.Comment,
 		)
@@ -91,7 +91,7 @@ func (n *commentOnConstraintNode) startExec(params runParams) error {
 		}
 	} else {
 		err := n.metadataUpdater.DeleteConstraintComment(
-			n.tableDesc,
+			n.tableDesc.GetID(),
 			constraint.ConstraintID,
 		)
 		if err != nil {

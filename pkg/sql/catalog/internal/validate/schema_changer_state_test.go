@@ -49,19 +49,16 @@ func TestValidateSchemaChangerState(t *testing.T) {
 	const prefix = validate.InvalidSchemaChangerStatePrefix
 	testCases := []testCase{
 		{
-			name: "no targets or job ID",
+			name: "no job ID",
 			ds:   ds{},
 			expectedErrors: []string{
 				prefix + " empty job ID",
-				prefix + " no targets",
 			},
 		},
 		{
-			name: "no targets",
-			ds:   ds{JobID: 1},
-			expectedErrors: []string{
-				prefix + " no targets",
-			},
+			name:           "no targets",
+			ds:             ds{JobID: 1},
+			expectedErrors: []string{},
 		},
 		{
 			name: "target desc ID mismatch, and missing ranks and status",
@@ -116,7 +113,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			},
 			expectedErrors: []string{
 				prefix + ` unexpected statement 0 \(ALTER TABLE a RENAME TO b\)`,
-				prefix + ` missing statement for targets \(0\) / \(Namespace:\{DescID: 3, Name: foo\}\)`,
+				prefix + ` missing statement for targets \(0\) / \(Namespace:\{DescID: 3, ReferencedDescID: 2, Name: foo\}\)`,
 			},
 		},
 		{

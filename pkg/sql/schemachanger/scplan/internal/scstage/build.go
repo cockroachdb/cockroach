@@ -437,7 +437,7 @@ func (bc buildContext) createSchemaChangeJobOp() scop.Op {
 		JobID:         bc.scJobIDSupplier(),
 		Statements:    bc.targetState.Statements,
 		Authorization: bc.targetState.Authorization,
-		DescriptorIDs: screl.GetDescIDs(bc.targetState).Ordered(),
+		DescriptorIDs: screl.AllTargetDescIDs(bc.targetState).Ordered(),
 	}
 }
 
@@ -450,7 +450,7 @@ func (bc buildContext) updateJobProgressOp(isNonCancellable bool) scop.Op {
 
 func (bc buildContext) removeJobReferenceOps() (ops []scop.Op) {
 	jobID := bc.scJobIDSupplier()
-	screl.GetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
+	screl.AllTargetDescIDs(bc.targetState).ForEach(func(descID descpb.ID) {
 		ops = append(ops, &scop.RemoveJobStateFromDescriptor{
 			DescriptorID: descID,
 			JobID:        jobID,
@@ -491,11 +491,12 @@ func (bc buildContext) setJobStateOnDescriptorOps(initialize bool, after []scpb.
 func makeDescriptorStates(
 	jobID jobspb.JobID, inRollback bool, ts scpb.TargetState, statuses []scpb.Status,
 ) (catalog.DescriptorIDSet, map[descpb.ID]*scpb.DescriptorState) {
-	descIDs := screl.GetDescIDs(ts)
+	descIDs := screl.AllTargetDescIDs(ts)
 	states := make(map[descpb.ID]*scpb.DescriptorState, descIDs.Len())
 	descIDs.ForEach(func(id descpb.ID) {
 		states[id] = &scpb.DescriptorState{
 			Authorization: ts.Authorization,
+			JobID:         jobID,
 		}
 	})
 	noteRelevantStatement := func(state *scpb.DescriptorState, stmtRank uint32) {
@@ -515,7 +516,6 @@ func makeDescriptorStates(
 	for i, t := range ts.Targets {
 		descID := screl.GetDescID(t.Element())
 		state := states[descID]
-		state.JobID = jobID
 		stmtID := t.Metadata.StatementID
 		noteRelevantStatement(state, stmtID)
 		state.Targets = append(state.Targets, t)

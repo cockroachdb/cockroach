@@ -1229,7 +1229,7 @@ func rewriteSchemaChangerState(
 			// element as opposed to just an extension of the namespace table that only
 			// ops know about.
 			switch el := t.Element().(type) {
-			case *scpb.DatabaseSchemaEntry:
+			case *scpb.SchemaParent:
 				_, scExists := descriptorRewrites[el.SchemaID]
 				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
 					state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)

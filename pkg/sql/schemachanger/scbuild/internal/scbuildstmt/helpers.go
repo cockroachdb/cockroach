@@ -1,0 +1,142 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package scbuildstmt
+
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+)
+
+func qualifiedName(b BuildCtx, id catid.DescID) string {
+	_, _, ns := scpb.FindNamespace(b.QueryByID(id))
+	_, _, sc := scpb.FindNamespace(b.QueryByID(ns.SchemaID))
+	_, _, db := scpb.FindNamespace(b.QueryByID(ns.DatabaseID))
+	if db == nil {
+		return ns.Name
+	}
+	if sc == nil {
+		return db.Name + "." + ns.Name
+	}
+	return db.Name + "." + sc.Name + "." + ns.Name
+}
+
+func simpleName(b BuildCtx, id catid.DescID) string {
+	_, _, ns := scpb.FindNamespace(b.QueryByID(id))
+	return ns.Name
+}
+
+// dropRestrictDescriptor contains the common logic for dropping something with
+// RESTRICT.
+func dropRestrictDescriptor(b BuildCtx, id catid.DescID) (hasChanged bool) {
+	b.QueryByID(id).ForEachElementStatus(func(status, targetStatus scpb.Status, e scpb.Element) {
+		if targetStatus == scpb.Status_ABSENT {
+			return
+		}
+		b.CheckPrivilege(e, privilege.DROP)
+		dropElement(b, e)
+		hasChanged = true
+	})
+	return hasChanged
+}
+
+func dropElement(b BuildCtx, e scpb.Element) {
+	// TODO(postamar): remove this dirty hack ASAP, see column/index dep rules.
+	switch t := e.(type) {
+	case *scpb.ColumnType:
+		t.IsRelationBeingDropped = true
+	case *scpb.SecondaryIndexPartial:
+		t.IsRelationBeingDropped = true
+	}
+	b.Drop(e)
+}
+
+// dropCascadeDescriptor contains the common logic for dropping something with
+// CASCADE.
+func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
+	elts := b.QueryByID(id)
+	next := b.WithNewSourceElementID()
+	// Skip synthetic descriptors.
+	var isPrivilegeCheckSkipped, isDropSkipped bool
+	if _, _, sc := scpb.FindSchema(elts); sc != nil {
+		if sc.IsTemporary {
+			panic(scerrors.NotImplementedErrorf(nil, "dropping a temporary schema"))
+		}
+		isDropSkipped = sc.IsVirtual
+		isPrivilegeCheckSkipped = true
+	}
+	// Mark element targets as ABSENT.
+	if !isDropSkipped {
+		var hasChanged bool
+		elts.ForEachElementStatus(func(_, targetStatus scpb.Status, e scpb.Element) {
+			if targetStatus == scpb.Status_ABSENT {
+				return
+			}
+			if !isPrivilegeCheckSkipped {
+				b.CheckPrivilege(e, privilege.DROP)
+			}
+			dropElement(b, e)
+			switch t := e.(type) {
+			case *scpb.EnumType:
+				dropCascadeDescriptor(next, t.ArrayTypeID)
+			}
+			hasChanged = true
+		})
+		// Exit early if all elements already had ABSENT targets.
+		if !hasChanged {
+			return
+		}
+	}
+	// Recurse on back-referenced elements.
+	undroppedBackrefs(b, id).ForEachElementStatus(func(status, _ scpb.Status, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.SchemaParent:
+			dropCascadeDescriptor(next, t.SchemaID)
+		case *scpb.ObjectParent:
+			dropCascadeDescriptor(next, t.ObjectID)
+		case *scpb.View:
+			dropCascadeDescriptor(next, t.ViewID)
+		case *scpb.Sequence:
+			dropCascadeDescriptor(next, t.SequenceID)
+		case *scpb.AliasType:
+			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.EnumType:
+			dropCascadeDescriptor(next, t.TypeID)
+		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
+			// These only have type references.
+			break
+		case
+			*scpb.ColumnDefaultExpression,
+			*scpb.ColumnOnUpdateExpression,
+			*scpb.CheckConstraint,
+			*scpb.ForeignKeyConstraint,
+			*scpb.SequenceOwner,
+			*scpb.DatabaseRegionConfig:
+			dropElement(b, e)
+		}
+	})
+}
+
+func undroppedBackrefs(b BuildCtx, id catid.DescID) ElementResultSet {
+	return b.BackReferences(id).Filter(func(_, targetStatus scpb.Status, e scpb.Element) bool {
+		return targetStatus != scpb.Status_ABSENT && screl.AllDescIDs(e).Contains(id)
+	})
+}
+
+func descIDs(input ElementResultSet) (ids catalog.DescriptorIDSet) {
+	input.ForEachElementStatus(func(_, _ scpb.Status, e scpb.Element) {
+		ids.Add(screl.GetDescID(e))
+	})
+	return ids
+}
