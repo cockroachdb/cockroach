@@ -16,10 +16,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// Environment variable controlling rangefeed budgets. If false budgets are
+// disabled otherwise enabled.
+const rangeFeedBudgetEnvVarName = "COCKROACH_USE_RANGEFEED_MEM_BUDGETS"
+
+// Pre allocated memory limit for system rangefeeds.
+const systemRangeFeedLimit = int64(64 * 1024 * 1024)
 
 var budgetAllocationSyncPool = sync.Pool{
 	New: func() interface{} {
@@ -246,4 +256,65 @@ func (a *SharedBudgetAllocation) Release(ctx context.Context) {
 		a.feed.returnAllocation(ctx, a.size)
 		putPooledBudgetAllocation(a)
 	}
+}
+
+// BudgetFactory creates memory budget for rangefeed according to system
+// settings.
+type BudgetFactory struct {
+	limit              int64
+	feedBytesMon       *mon.BytesMonitor
+	systemFeedBytesMon *mon.BytesMonitor
+}
+
+// NewBudgetFactory creates a factory callback that would create RangeFeed
+// memory budget according to system policy.
+func NewBudgetFactory(rootMon *mon.BytesMonitor, limit int64) *BudgetFactory {
+	useBudgets := envutil.EnvOrDefaultBool(rangeFeedBudgetEnvVarName, true)
+	if !useBudgets || rootMon == nil {
+		return &BudgetFactory{}
+	}
+
+	// System range feeds borrow memory from air and don't use SQL/KV mem budget.
+	systemRangeMonitor := mon.NewMonitorInheritWithLimit("rangefeed-system-monitor",
+		systemRangeFeedLimit, rootMon)
+	// TODO(oleg): replace with proper metrics
+	systemRangeMonitor.SetMetrics(nil, nil)
+	systemRangeMonitor.Start(context.Background(), rootMon,
+		mon.MakeStandaloneBudget(systemRangeFeedLimit))
+
+	rangeFeedPoolMonitor := mon.NewMonitorInheritWithLimit("rangefeed-monitor", 0, rootMon)
+	// TODO(oleg): replace with proper metrics
+	rangeFeedPoolMonitor.SetMetrics(nil, nil)
+	rangeFeedPoolMonitor.Start(context.Background(), rootMon, mon.BoundAccount{})
+
+	return &BudgetFactory{
+		limit:              limit,
+		feedBytesMon:       rangeFeedPoolMonitor,
+		systemFeedBytesMon: systemRangeMonitor,
+	}
+}
+
+// Stop stops underlying memory monitors used by factory.
+// Safe to call on nil factory.
+func (f *BudgetFactory) Stop(ctx context.Context) {
+	if f == nil {
+		return
+	}
+	f.systemFeedBytesMon.Stop(ctx)
+	f.feedBytesMon.Stop(ctx)
+}
+
+// CreateBudget creates feed budget using memory pools configured in the
+// factory. It is safe to call on nil factory as it will produce nil budget
+// which in turn disables memory accounting on range feed.
+func (f *BudgetFactory) CreateBudget(key roachpb.RKey, metrics *Metrics) *FeedBudget {
+	if f == nil {
+		return nil
+	}
+	if rpc.ConnectionClassForKey(key) == rpc.SystemClass {
+		acc := f.systemFeedBytesMon.MakeBoundAccount()
+		return NewFeedBudget(&acc, f.limit, metrics)
+	}
+	acc := f.feedBytesMon.MakeBoundAccount()
+	return NewFeedBudget(&acc, f.limit, metrics)
 }

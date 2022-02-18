@@ -17,9 +17,11 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/log",

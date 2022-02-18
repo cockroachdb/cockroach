@@ -552,7 +552,6 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 		EventChanTimeout:     time.Millisecond,
 	})
@@ -623,7 +622,6 @@ func TestProcessorMemoryBudgetLargeEvent(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         testProcessorEventCCap,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 	})
 	p.Start(stopper, nil)
@@ -1162,7 +1160,6 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 	})
 	p.Start(stopper, nil)
@@ -1325,7 +1322,6 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 	})
 	p.Start(stopper, nil)

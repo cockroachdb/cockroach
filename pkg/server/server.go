@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
+	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -487,6 +488,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	stopper.AddCloser(stop.CloserFn(func() {
 		kvMemoryMonitor.Stop(ctx)
 	}))
+	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(kvMemoryMonitor, cfg.MemoryPoolSize/5)
 
 	tsDB := ts.NewDB(db, cfg.Settings)
 	registry.AddMetricStruct(tsDB.Metrics())
@@ -529,6 +531,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
+		RangefeedBudgetFactory:  rangeReedBudgetFactory,
 		SystemConfigProvider:    systemConfigWatcher,
 	}
 
