@@ -12,6 +12,7 @@ package scbuildstmt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -95,14 +96,14 @@ func columnDescToElement(
 		FamilyName:                        *familyName,
 		FamilyID:                          *familyID,
 		Nullable:                          column.Nullable,
-		DefaultExpr:                       nilToEmptyString(column.DefaultExpr),
-		OnUpdateExpr:                      nilToEmptyString(column.OnUpdateExpr),
+		DefaultExpr:                       catpb.Expression(nilToEmptyString(column.DefaultExpr)),
+		OnUpdateExpr:                      catpb.Expression(nilToEmptyString(column.OnUpdateExpr)),
 		Hidden:                            column.Hidden,
 		Inaccessible:                      column.Inaccessible,
 		GeneratedAsIdentitySequenceOption: nilToEmptyString(column.GeneratedAsIdentitySequenceOption),
 		GeneratedAsIdentityType:           column.GeneratedAsIdentityType,
 		UsesSequenceIDs:                   column.UsesSequenceIds,
-		ComputerExpr:                      nilToEmptyString(column.ComputeExpr),
+		ComputedExpr:                      catpb.Expression(nilToEmptyString(column.ComputeExpr)),
 		PgAttributeNum:                    column.GetPGAttributeNum(),
 		SystemColumnKind:                  column.SystemColumnKind,
 		Virtual:                           column.Virtual,
@@ -212,7 +213,7 @@ func decomposeDefaultExprToElements(
 	expressionElem := scpb.DefaultExpression{
 		TableID:         table.GetID(),
 		ColumnID:        column.GetID(),
-		DefaultExpr:     defaultExpr,
+		DefaultExpr:     catpb.Expression(defaultExpr),
 		UsesSequenceIDs: sequenceIDs,
 	}
 	if !b.HasTarget(targetStatus, &expressionElem) {
@@ -520,7 +521,7 @@ func decomposeTableDescToElements(
 			Name:              constraint.Name,
 			Validated:         constraint.Validity == descpb.ConstraintValidity_Validated,
 			ColumnIDs:         constraint.ColumnIDs,
-			Expr:              constraint.Expr,
+			Expr:              catpb.Expression(constraint.Expr),
 		})
 		if targetStatus == scpb.Status_ABSENT {
 			enqueue(b, targetStatus, &scpb.ConstraintComment{

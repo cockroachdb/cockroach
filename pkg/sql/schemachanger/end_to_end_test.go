@@ -11,14 +11,10 @@
 package schemachanger_test
 
 import (
-	"context"
-	gosql "database/sql"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -26,23 +22,19 @@ import (
 func TestSchemaChangerSideEffects(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	sctest.EndToEndSideEffects(t, newCluster)
+	sctest.EndToEndSideEffects(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
 }
 
 func TestRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	sctest.Rollback(t, newCluster)
+	sctest.Rollback(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
 }
 
-func newCluster(t *testing.T, knobs *scrun.TestingKnobs) (*gosql.DB, func()) {
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			SQLDeclarativeSchemaChanger: knobs,
-		},
-	})
-	return db, func() {
-		s.Stopper().Stop(context.Background())
-	}
+func TestPause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	sctest.Pause(t, testutils.TestDataPath(t), sctest.SingleNodeCluster)
 }

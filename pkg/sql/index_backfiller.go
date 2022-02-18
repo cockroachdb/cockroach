@@ -103,6 +103,9 @@ func (ib *IndexBackfillPlanner) BackfillIndex(
 		g.Sub(progress.CompletedSpans...)
 		spansToDo = g.Slice()
 	}
+	if len(spansToDo) == 0 { // already done
+		return nil
+	}
 	now := ib.execCfg.DB.Clock().Now()
 	run, err := ib.plan(
 		ctx,
