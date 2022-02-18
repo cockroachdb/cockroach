@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -681,7 +682,7 @@ func getStatisticsFromBackup(
 func remapRelevantStatistics(
 	ctx context.Context,
 	tableStatistics []*stats.TableStatisticProto,
-	descriptorRewrites DescRewriteMap,
+	descriptorRewrites jobspb.DescRewriteMap,
 	tableDescs []*descpb.TableDescriptor,
 ) []*stats.TableStatisticProto {
 	relevantTableStatistics := make([]*stats.TableStatisticProto, 0, len(tableStatistics))
@@ -899,7 +900,7 @@ func createImportingDescriptors(
 	log.Eventf(ctx, "starting restore for %d tables", len(mutableTables))
 
 	// Assign new IDs to the database descriptors.
-	if err := rewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
+	if err := rewrite.RewriteDatabaseDescs(mutableDatabases, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -922,7 +923,7 @@ func createImportingDescriptors(
 		}
 	}
 
-	if err := rewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
+	if err := rewrite.RewriteSchemaDescs(schemasToWrite, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
@@ -932,7 +933,7 @@ func createImportingDescriptors(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := RewriteTableDescs(
+	if err := rewrite.RewriteTableDescs(
 		mutableTables, details.DescriptorRewrites, details.OverrideDB,
 	); err != nil {
 		return nil, nil, err
@@ -972,7 +973,7 @@ func createImportingDescriptors(
 	// the ID the descriptor had when it was backed up. Changes to existing type
 	// descriptors will not be written to disk, and is only for accurate,
 	// in-memory resolution hereon out.
-	if err := rewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
+	if err := rewrite.RewriteTypeDescs(types, details.DescriptorRewrites); err != nil {
 		return nil, nil, err
 	}
 
