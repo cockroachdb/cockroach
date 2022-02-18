@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -71,22 +70,20 @@ func (mu metadataUpdater) DeleteDescriptorComment(
 
 // UpsertConstraintComment implements scexec.CommentUpdater.
 func (mu metadataUpdater) UpsertConstraintComment(
-	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
+	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
-	return mu.UpsertDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType, comment)
+	return mu.UpsertDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType, comment)
 }
 
 // DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteConstraintComment(
-	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
+	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
-	return mu.DeleteDescriptorComment(int64(desc.GetID()), int64(constraintID), keys.ConstraintCommentType)
+	return mu.DeleteDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType)
 }
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
-func (mu metadataUpdater) DeleteDatabaseRoleSettings(
-	ctx context.Context, database catalog.DatabaseDescriptor,
-) error {
+func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
 	rowsDeleted, err := mu.ie.ExecEx(ctx,
 		"delete-db-role-setting",
 		mu.txn,
@@ -95,7 +92,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(
 			`DELETE FROM %s WHERE database_id = $1`,
 			sessioninit.DatabaseRoleSettingsTableName,
 		),
-		database.GetID(),
+		dbID,
 	)
 	if err != nil {
 		return err

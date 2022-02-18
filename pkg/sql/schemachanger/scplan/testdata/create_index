@@ -10,17 +10,19 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
-      IndexID: 2
-      KeyColumnDirections:
-      - 0
-      - 0
-      KeyColumnIDs:
-      - 1
-      - 2
+      Index:
+        IndexID: 2
+        KeyColumnDirections:
+        - 0
+        - 0
+        KeyColumnIDs:
+        - 1
+        - 2
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 3
+        TableID: 104
       SecondaryIndex: true
-      StoreColumnIDs:
-      - 3
-      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -64,7 +66,7 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -82,14 +84,14 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+- from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
-  to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index existence precedes naming
+  rule: index existence precedes index dependents
 
 ops
 CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
@@ -99,19 +101,21 @@ PreCommitPhase stage 1 of 1 with 3 MutationType ops
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> DELETE_ONLY
   ops:
     *scop.MakeAddedIndexDeleteOnly
-      Concurrently: true
-      IndexID: 2
-      Inverted: true
-      KeyColumnDirections:
-      - 0
-      - 0
-      KeyColumnIDs:
-      - 1
-      - 2
+      Index:
+        IndexID: 2
+        IsConcurrently: true
+        IsInverted: true
+        KeyColumnDirections:
+        - 0
+        - 0
+        KeyColumnIDs:
+        - 1
+        - 2
+        SourceIndexID: 1
+        StoringColumnIDs:
+        - 3
+        TableID: 104
       SecondaryIndex: true
-      StoreColumnIDs:
-      - 3
-      TableID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -156,7 +160,7 @@ PostCommitPhase stage 3 of 4 with 1 ValidationType ops
 PostCommitPhase stage 4 of 4 with 4 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC], VALIDATED] -> PUBLIC
-    [[IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -174,11 +178,11 @@ PostCommitPhase stage 4 of 4 with 4 MutationType ops
 deps
 CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
-- from: [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+- from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
   rule: index named right before index becomes public
 - from: [SecondaryIndex:{DescID: 104, IndexID: 2}, DELETE_ONLY]
-  to:   [IndexName:{DescID: 104, IndexID: 2, Name: id1}, PUBLIC]
+  to:   [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   kind: Precedence
-  rule: index existence precedes naming
+  rule: index existence precedes index dependents

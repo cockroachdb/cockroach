@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -33,7 +34,7 @@ import (
 
 func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []scop.Op) error {
 	mvs := newMutationVisitorState(deps.Catalog())
-	v := scmutationexec.NewMutationVisitor(deps.Catalog(), mvs, deps.Clock())
+	v := scmutationexec.NewMutationVisitor(mvs, deps.Catalog(), deps.Catalog(), deps.Clock())
 	for _, op := range ops {
 		if err := op.(scop.MutationOp).Visit(ctx, v); err != nil {
 			return err
@@ -157,18 +158,18 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 	for _, comment := range mvs.constraintCommentsToUpdate {
 		if len(comment.comment) > 0 {
 			if err := metadataUpdater.UpsertConstraintComment(
-				comment.tbl, comment.constraintID, comment.comment); err != nil {
+				comment.tblID, comment.constraintID, comment.comment); err != nil {
 				return err
 			}
 		} else {
 			if err := metadataUpdater.DeleteConstraintComment(
-				comment.tbl, comment.constraintID); err != nil {
+				comment.tblID, comment.constraintID); err != nil {
 				return err
 			}
 		}
 	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
-		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.database)
+		err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {
 			return err
 		}
@@ -300,7 +301,7 @@ type mutationVisitorState struct {
 }
 
 type constraintCommentToUpdate struct {
-	tbl          catalog.TableDescriptor
+	tblID        catid.DescID
 	constraintID descpb.ConstraintID
 	comment      string
 }
@@ -313,7 +314,7 @@ type commentToUpdate struct {
 }
 
 type databaseRoleSettingToDelete struct {
-	database catalog.DatabaseDescriptor
+	dbID catid.DescID
 }
 
 type eventPayload struct {
@@ -354,6 +355,19 @@ func newMutationVisitorState(c Catalog) *mutationVisitorState {
 
 var _ scmutationexec.MutationVisitorStateUpdater = (*mutationVisitorState)(nil)
 
+func (mvs *mutationVisitorState) GetDescriptor(
+	ctx context.Context, id descpb.ID,
+) (catalog.Descriptor, error) {
+	if entry := mvs.checkedOutDescriptors.GetByID(id); entry != nil {
+		return entry.(catalog.Descriptor), nil
+	}
+	descs, err := mvs.c.MustReadImmutableDescriptors(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return descs[0], nil
+}
+
 func (mvs *mutationVisitorState) CheckOutDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
@@ -368,6 +382,14 @@ func (mvs *mutationVisitorState) CheckOutDescriptor(
 	mut.MaybeIncrementVersion()
 	mvs.checkedOutDescriptors.Upsert(mut)
 	return mut, nil
+}
+
+func (mvs *mutationVisitorState) MaybeCheckedOutDescriptor(id descpb.ID) catalog.Descriptor {
+	entry := mvs.checkedOutDescriptors.GetByID(id)
+	if entry == nil {
+		return nil
+	}
+	return entry.(catalog.Descriptor)
 }
 
 func (mvs *mutationVisitorState) DeleteDescriptor(id descpb.ID) {
@@ -386,22 +408,22 @@ func (mvs *mutationVisitorState) DeleteComment(
 }
 
 func (mvs *mutationVisitorState) DeleteConstraintComment(
-	ctx context.Context, tbl catalog.TableDescriptor, constraintID descpb.ConstraintID,
+	ctx context.Context, tblID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
 	mvs.constraintCommentsToUpdate = append(mvs.constraintCommentsToUpdate,
 		constraintCommentToUpdate{
-			tbl:          tbl,
+			tblID:        tblID,
 			constraintID: constraintID,
 		})
 	return nil
 }
 
 func (mvs *mutationVisitorState) DeleteDatabaseRoleSettings(
-	ctx context.Context, db catalog.DatabaseDescriptor,
+	ctx context.Context, dbID descpb.ID,
 ) error {
 	mvs.databaseRoleSettingsToDelete = append(mvs.databaseRoleSettingsToDelete,
 		databaseRoleSettingToDelete{
-			database: db,
+			dbID: dbID,
 		})
 	return nil
 }

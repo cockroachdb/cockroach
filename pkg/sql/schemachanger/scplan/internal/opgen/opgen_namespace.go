@@ -13,6 +13,7 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -30,10 +31,11 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PreCommitPhase),
+				// TODO(postamar): remove revertibility constraint when possible
 				revertible(false),
 				emit(func(this *scpb.Namespace) scop.Op {
 					return &scop.DrainDescriptorName{
-						TableID: this.DescriptorID,
+						Namespace: *protoutil.Clone(this).(*scpb.Namespace),
 					}
 				}),
 			),

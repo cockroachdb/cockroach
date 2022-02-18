@@ -41,7 +41,7 @@ func (m *visitor) CreateGcJobForDatabase(
 }
 
 func (m *visitor) CreateGcJobForIndex(ctx context.Context, op scop.CreateGcJobForIndex) error {
-	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
+	desc, err := m.s.GetDescriptor(ctx, op.TableID)
 	if err != nil {
 		return err
 	}
@@ -61,7 +61,7 @@ func (m *visitor) MarkDescriptorAsDropped(
 	ctx context.Context, op scop.MarkDescriptorAsDropped,
 ) error {
 	// Before we can mutate the descriptor, get rid of any synthetic descriptor.
-	m.cr.RemoveSyntheticDescriptor(op.DescID)
+	m.sd.RemoveSyntheticDescriptor(op.DescID)
 	desc, err := m.s.CheckOutDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
@@ -73,27 +73,27 @@ func (m *visitor) MarkDescriptorAsDropped(
 func (m *visitor) MarkDescriptorAsDroppedSynthetically(
 	ctx context.Context, op scop.MarkDescriptorAsDroppedSynthetically,
 ) error {
-	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
+	if co := m.s.MaybeCheckedOutDescriptor(op.DescID); co != nil {
+		return errors.AssertionFailedf("cannot mark already checked-out descriptor %q (%d) as synthetic",
+			co.GetName(), co.GetID())
+	}
+	desc, err := m.s.GetDescriptor(ctx, op.DescID)
 	if err != nil {
 		return err
 	}
 	mut := desc.NewBuilder().BuildCreatedMutable()
 	mut.SetDropped()
-	m.cr.AddSyntheticDescriptor(mut)
+	m.sd.AddSyntheticDescriptor(mut)
 	return nil
 }
 
-func (m *visitor) DrainDescriptorName(ctx context.Context, op scop.DrainDescriptorName) error {
-	descriptor, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
-	if err != nil {
-		return err
-	}
-	// Queue up names for draining.
+func (m *visitor) DrainDescriptorName(_ context.Context, op scop.DrainDescriptorName) error {
 	nameDetails := descpb.NameInfo{
-		ParentID:       descriptor.GetParentID(),
-		ParentSchemaID: descriptor.GetParentSchemaID(),
-		Name:           descriptor.GetName()}
-	m.s.AddDrainedName(descriptor.GetID(), nameDetails)
+		ParentID:       op.Namespace.DatabaseID,
+		ParentSchemaID: op.Namespace.SchemaID,
+		Name:           op.Namespace.Name,
+	}
+	m.s.AddDrainedName(op.Namespace.DescriptorID, nameDetails)
 	return nil
 }
 
@@ -130,24 +130,16 @@ func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnCom
 func (m *visitor) RemoveConstraintComment(
 	ctx context.Context, op scop.RemoveConstraintComment,
 ) error {
-	tbl, err := MustReadImmutableDescriptor(ctx, m.cr, op.TableID)
-	if err != nil {
-		return err
-	}
-	return m.s.DeleteConstraintComment(ctx, tbl.(catalog.TableDescriptor), op.ConstraintID)
+	return m.s.DeleteConstraintComment(ctx, op.TableID, op.ConstraintID)
 }
 
 func (m *visitor) RemoveDatabaseRoleSettings(
 	ctx context.Context, op scop.RemoveDatabaseRoleSettings,
 ) error {
-	db, err := MustReadImmutableDescriptor(ctx, m.cr, op.DatabaseID)
-	if err != nil {
-		return err
-	}
-	return m.s.DeleteDatabaseRoleSettings(ctx, db.(catalog.DatabaseDescriptor))
+	return m.s.DeleteDatabaseRoleSettings(ctx, op.DatabaseID)
 }
 
-func (m *visitor) DeleteSchedule(ctx context.Context, op scop.DeleteSchedule) error {
+func (m *visitor) DeleteSchedule(_ context.Context, op scop.DeleteSchedule) error {
 	if op.ScheduleID != 0 {
 		m.s.DeleteSchedule(op.ScheduleID)
 	}

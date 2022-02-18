@@ -64,7 +64,7 @@ func (m *visitor) RemoveJobStateFromDescriptor(
 	ctx context.Context, op scop.RemoveJobStateFromDescriptor,
 ) error {
 	{
-		_, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescriptorID)
+		_, err := m.s.GetDescriptor(ctx, op.DescriptorID)
 
 		// If we're clearing the status, we might have already deleted the
 		// descriptor. Permit that by detecting the prior deletion and
