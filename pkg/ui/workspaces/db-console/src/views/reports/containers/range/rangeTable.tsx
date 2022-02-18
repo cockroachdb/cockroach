@@ -244,6 +244,11 @@ const rangeTableDisplayList: RangeTableRow[] = [
     display: "Circuit Breaker Error",
     compareToLeader: false,
   },
+  {
+    variable: "locality",
+    display: "Locality Info",
+    compareToLeader: false,
+  },
 ];
 
 const rangeTableEmptyContent: RangeTableCellContent = {
@@ -862,6 +867,12 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         circuitBreakerError: this.createContent(
           info.state.circuit_breaker_error,
         ),
+        locality: this.contentIf(_.size(info.locality.tiers) > 0, () => ({
+          value: _.map(
+            info.locality.tiers,
+            tier => `${tier.key}: ${tier.value}`,
+          ),
+        })),
       });
     });
 

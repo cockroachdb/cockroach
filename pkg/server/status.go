@@ -1923,6 +1923,13 @@ func (s *statusServer) rangesHelper(
 			})
 		}
 		qps, _ := rep.QueriesPerSecond()
+		locality := serverpb.Locality{}
+		for _, tier := range rep.GetNodeLocality().Tiers {
+			locality.Tiers = append(locality.Tiers, serverpb.Tier{
+				Key:   tier.Key,
+				Value: tier.Value,
+			})
+		}
 		return serverpb.RangeInfo{
 			Span:          span,
 			RaftState:     raftState,
@@ -1954,6 +1961,7 @@ func (s *statusServer) rangesHelper(
 			LocksWithWaitQueues:         metrics.LockTableMetrics.LocksWithWaitQueues,
 			LockWaitQueueWaiters:        metrics.LockTableMetrics.Waiters,
 			TopKLocksByWaitQueueWaiters: topKLocksByWaiters,
+			Locality:                    &locality,
 		}
 	}
 
