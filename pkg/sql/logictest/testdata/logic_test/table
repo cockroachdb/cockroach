@@ -579,6 +579,7 @@ gossip_alerts                          NULL
 gossip_liveness                        NULL
 gossip_network                         NULL
 gossip_nodes                           NULL
+historical_contention_events           NULL
 index_columns                          NULL
 index_usage_statistics                 NULL
 invalid_objects                        NULL

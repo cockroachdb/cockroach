@@ -37,6 +37,7 @@ type SQLStatusServer interface {
 	TableIndexStats(context.Context, *TableIndexStatsRequest) (*TableIndexStatsResponse, error)
 	UserSQLRoles(ctx context.Context, request *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
 	TxnIDResolution(context.Context, *TxnIDResolutionRequest) (*TxnIDResolutionResponse, error)
+	HistoricalContentionEvents(context.Context, *HistoricalContentionEventsRequest) (*HistoricalContentionEventsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present

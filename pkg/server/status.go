@@ -401,6 +401,27 @@ func (b *baseStatusServer) localTxnIDResolution(
 	return resp
 }
 
+func (b *baseStatusServer) localHistoricalContentionEvents(
+	shouldRedactContendingKey bool,
+) *serverpb.HistoricalContentionEventsResponse {
+	registry := b.sqlServer.execCfg.ContentionRegistry
+
+	resp := &serverpb.HistoricalContentionEventsResponse{
+		Events: make([]contentionpb.ExtendedContentionEvent, 0),
+	}
+	// Ignore error returned by ForEachEvent() since if our own callback doesn't
+	// return error, ForEachEvent() also doesn't return error.
+	_ = registry.ForEachEvent(func(event *contentionpb.ExtendedContentionEvent) error {
+		if shouldRedactContendingKey {
+			event.BlockingEvent.Key = []byte{}
+		}
+		resp.Events = append(resp.Events, *event)
+		return nil
+	})
+
+	return resp
+}
+
 // A statusServer provides a RESTful status API.
 type statusServer struct {
 	*baseStatusServer
@@ -3086,4 +3107,77 @@ func (s *statusServer) TxnIDResolution(
 	}
 
 	return statusClient.TxnIDResolution(ctx, req)
+}
+
+func (s *statusServer) HistoricalContentionEvents(
+	ctx context.Context, req *serverpb.HistoricalContentionEventsRequest,
+) (*serverpb.HistoricalContentionEventsResponse, error) {
+	ctx = s.AnnotateCtx(propagateGatewayMetadata(ctx))
+
+	if err := s.privilegeChecker.requireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	hasViewActivity, err := s.privilegeChecker.hasViewActivityPermission(ctx)
+	if err != nil {
+		return nil, err
+	}
+	shouldRedactContendingKeys := !hasViewActivity
+
+	if s.gossip.NodeID.Get() == 0 {
+		return nil, status.Errorf(codes.Unavailable, "nodeID not set")
+	}
+
+	if len(req.NodeID) > 0 {
+		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+		}
+		if local {
+			return s.localHistoricalContentionEvents(shouldRedactContendingKeys), nil
+		}
+
+		statusClient, err := s.dialNode(ctx, requestedNodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.HistoricalContentionEvents(ctx, req)
+	}
+
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
+		statusClient, err := s.dialNode(ctx, nodeID)
+		return statusClient, err
+	}
+
+	localReq := &serverpb.HistoricalContentionEventsRequest{
+		NodeID: "local",
+	}
+
+	rpcCallFn := func(ctx context.Context, client interface{}, _ roachpb.NodeID) (interface{}, error) {
+		statusClient := client.(serverpb.StatusClient)
+		return statusClient.HistoricalContentionEvents(ctx, localReq)
+	}
+
+	resp := &serverpb.HistoricalContentionEventsResponse{
+		Events: make([]contentionpb.ExtendedContentionEvent, 0),
+	}
+
+	if err := s.iterateNodes(ctx, fmt.Sprintf("historical contention events for node %s", req.NodeID),
+		dialFn,
+		rpcCallFn,
+		func(nodeID roachpb.NodeID, nodeResp interface{}) {
+			historicalContentionEvents := nodeResp.(*serverpb.HistoricalContentionEventsResponse)
+			resp.Events = append(resp.Events, historicalContentionEvents.Events...)
+		},
+		func(nodeID roachpb.NodeID, nodeFnError error) {
+		},
+	); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(resp.Events, func(i, j int) bool {
+		return resp.Events[i].CollectionTs.Before(resp.Events[j].CollectionTs)
+	})
+
+	return resp, nil
 }
