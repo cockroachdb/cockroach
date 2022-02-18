@@ -143,7 +143,7 @@ func (p *pebbleBatch) MVCCGet(key MVCCKey) ([]byte, error) {
 	return v, err
 }
 
-func (p *pebbleBatch) rawGet(key []byte) ([]byte, error) {
+func (p *pebbleBatch) rawMVCCGet(key []byte) ([]byte, error) {
 	r := pebble.Reader(p.batch)
 	if p.writeOnly {
 		panic("write-only batch")
@@ -209,7 +209,7 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 
 	if !opts.MinTimestampHint.IsEmpty() {
 		// MVCCIterators that specify timestamp bounds cannot be cached.
-		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts))
+		iter := MVCCIterator(newPebbleIterator(p.batch, nil, opts, StandardDurability))
 		if util.RaceEnabled {
 			iter = wrapInUnsafeIter(iter)
 		}
@@ -230,9 +230,9 @@ func (p *pebbleBatch) NewMVCCIterator(iterKind MVCCIterKind, opts IterOptions) M
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts)
+			iter.init(p.batch, p.iter, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts)
+			iter.init(p.db, p.iter, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
@@ -272,9 +272,9 @@ func (p *pebbleBatch) NewEngineIterator(opts IterOptions) EngineIterator {
 		iter.setBounds(opts.LowerBound, opts.UpperBound)
 	} else {
 		if p.batch.Indexed() {
-			iter.init(p.batch, p.iter, opts)
+			iter.init(p.batch, p.iter, opts, StandardDurability)
 		} else {
-			iter.init(p.db, p.iter, opts)
+			iter.init(p.db, p.iter, opts, StandardDurability)
 		}
 		if p.iter == nil {
 			// For future cloning.
