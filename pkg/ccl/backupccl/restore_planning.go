@@ -310,6 +310,7 @@ func allocateDescriptorRewrites(
 	opts tree.RestoreOptions,
 	intoDB string,
 	newDBName string,
+	restoreSystemUsers bool,
 ) (DescRewriteMap, error) {
 	descriptorRewrites := make(DescRewriteMap)
 
@@ -421,38 +422,47 @@ func allocateDescriptorRewrites(
 	}
 
 	needsNewParentIDs := make(map[string][]descpb.ID)
-	// Increment the DescIDSequenceKey so that it is higher than the max desc ID
-	// in the backup. This generator keeps produced the next descriptor ID.
+
+	// Increment the DescIDSequenceKey so that it is higher than both the max desc ID
+	// in the backup and current max desc ID in the restoring cluster. This generator
+	// keeps produced the next descriptor ID.
 	var tempSysDBID descpb.ID
-	if descriptorCoverage == tree.AllDescriptors {
+	if descriptorCoverage == tree.AllDescriptors || restoreSystemUsers {
 		var err error
-		// Restore the key which generates descriptor IDs.
-		if err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			v, err := txn.Get(ctx, p.ExecCfg().Codec.DescIDSequenceKey())
+		if descriptorCoverage == tree.AllDescriptors {
+			// Restore the key which generates descriptor IDs.
+			if err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				v, err := txn.Get(ctx, p.ExecCfg().Codec.DescIDSequenceKey())
+				if err != nil {
+					return err
+				}
+				newValue := maxDescIDInBackup + 1
+				if newValue <= v.ValueInt() {
+					// This case may happen when restoring backups from older versions.
+					newValue = v.ValueInt() + 1
+				}
+				b := txn.NewBatch()
+				// N.B. This key is usually mutated using the Inc command. That
+				// command warns that if the key was every Put directly, Inc will
+				// return an error. This is only to ensure that the type of the key
+				// doesn't change. Here we just need to be very careful that we only
+				// write int64 values.
+				// The generator's value should be set to the value of the next ID
+				// to generate.
+				b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), newValue)
+				return txn.Run(ctx, b)
+			}); err != nil {
+				return nil, err
+			}
+			tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			newValue := maxDescIDInBackup + 1
-			if newValue <= v.ValueInt() {
-				// This case may happen when restoring backups from older versions.
-				newValue = v.ValueInt() + 1
+		} else if restoreSystemUsers {
+			tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+			if err != nil {
+				return nil, err
 			}
-			b := txn.NewBatch()
-			// N.B. This key is usually mutated using the Inc command. That
-			// command warns that if the key was every Put directly, Inc will
-			// return an error. This is only to ensure that the type of the key
-			// doesn't change. Here we just need to be very careful that we only
-			// write int64 values.
-			// The generator's value should be set to the value of the next ID
-			// to generate.
-			b.Put(p.ExecCfg().Codec.DescIDSequenceKey(), newValue)
-			return txn.Run(ctx, b)
-		}); err != nil {
-			return nil, err
-		}
-		tempSysDBID, err = descidgen.GenerateUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
-		if err != nil {
-			return nil, err
 		}
 		// Remap all of the descriptor belonging to system tables to the temp system
 		// DB.
@@ -831,7 +841,7 @@ func allocateDescriptorRewrites(
 	// backup should have the same ID as they do in the backup.
 	descriptorsToRemap := make([]catalog.Descriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
-		if descriptorCoverage == tree.AllDescriptors {
+		if descriptorCoverage == tree.AllDescriptors || restoreSystemUsers {
 			if table.ParentID == systemschema.SystemDB.GetID() {
 				// This is a system table that should be marked for descriptor creation.
 				descriptorsToRemap = append(descriptorsToRemap, table)
@@ -1522,6 +1532,7 @@ func restoreJobDescription(
 	kmsURIs []string,
 ) (string, error) {
 	r := &tree.Restore{
+		SystemUsers:        restore.SystemUsers,
 		DescriptorCoverage: restore.DescriptorCoverage,
 		AsOf:               restore.AsOf,
 		Targets:            restore.Targets,
@@ -1598,6 +1609,9 @@ func restorePlanHook(
 
 	var intoDBFn func() (string, error)
 	if restoreStmt.Options.IntoDB != nil {
+		if restoreStmt.SystemUsers {
+			return nil, nil, nil, false, errors.New("cannot set into_db option when only restoring system users")
+		}
 		intoDBFn, err = p.TypeAsString(ctx, restoreStmt.Options.IntoDB, "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
@@ -1632,6 +1646,9 @@ func restorePlanHook(
 			err = errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
 				" database")
 			return nil, nil, nil, false, err
+		}
+		if restoreStmt.SystemUsers {
+			return nil, nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
 		}
 		newDBNameFn, err = p.TypeAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
 		if err != nil {
@@ -2030,7 +2047,7 @@ func doRestorePlan(
 	}
 
 	sqlDescs, restoreDBs, tenants, err := selectTargets(
-		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime,
+		ctx, p, mainBackupManifests, restoreStmt.Targets, restoreStmt.DescriptorCoverage, endTime, restoreStmt.SystemUsers,
 	)
 	if err != nil {
 		return errors.Wrap(err,
@@ -2158,7 +2175,8 @@ func doRestorePlan(
 		restoreStmt.DescriptorCoverage,
 		restoreStmt.Options,
 		intoDB,
-		newDBName)
+		newDBName,
+		restoreStmt.SystemUsers)
 	if err != nil {
 		return err
 	}
@@ -2241,6 +2259,7 @@ func doRestorePlan(
 			RevalidateIndexes:  revalidateIndexes,
 			DatabaseModifiers:  databaseModifiers,
 			DebugPauseOn:       debugPauseOn,
+			RestoreSystemUsers: restoreStmt.SystemUsers,
 		},
 		Progress: jobspb.RestoreProgress{},
 	}

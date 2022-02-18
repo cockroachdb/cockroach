@@ -1278,8 +1278,11 @@ func TestPGPreparedExec(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	runTests := func(
-		t *testing.T, query string, tests []preparedExecTest, execFunc func(...interface{},
-		) (gosql.Result, error)) {
+		t *testing.T,
+		query string,
+		tests []preparedExecTest,
+		execFunc func(...interface{}) (gosql.Result, error),
+	) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {

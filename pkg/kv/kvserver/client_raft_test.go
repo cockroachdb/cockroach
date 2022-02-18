@@ -3826,16 +3826,25 @@ func TestLeaseHolderRemoveSelf(t *testing.T) {
 		})
 	defer tc.Stopper().Stop(ctx)
 
-	leaseHolder := tc.GetFirstStoreFromServer(t, 0)
-	key := []byte("a")
-	tc.SplitRangeOrFatal(t, key)
-	tc.AddVotersOrFatal(t, key, tc.Target(1))
+	_, desc := tc.SplitRangeOrFatal(t, bootstrap.TestingUserTableDataMin())
+	key := desc.StartKey.AsRawKey()
+	tc.AddVotersOrFatal(t, key, tc.Targets(1)...)
 
-	// Attempt to remove the replica from first store.
-	expectedErr := "invalid ChangeReplicasTrigger"
-	if _, err := tc.RemoveVoters(key, tc.Target(0)); !testutils.IsError(err, expectedErr) {
-		t.Fatalf("expected %q error trying to remove leaseholder replica; got %v", expectedErr, err)
+	// Remove the replica from first store.
+	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0))
+
+	// Check that lease moved to server 2.
+	leaseInfo := getLeaseInfoOrFatal(t, context.Background(), tc.Servers[1].DB(), key)
+	rangeDesc, err := tc.LookupRange(key)
+	if err != nil {
+		t.Fatal(err)
 	}
+	replica, ok := rangeDesc.GetReplicaDescriptor(tc.Servers[1].GetFirstStoreID())
+	if !ok {
+		t.Fatalf("expected to find replica in server 2")
+	}
+	require.Equal(t, leaseInfo.Lease.Replica, replica)
+	leaseHolder := tc.GetFirstStoreFromServer(t, 1)
 
 	// Expect that we can still successfully do a get on the range.
 	getArgs := getArgs(key)

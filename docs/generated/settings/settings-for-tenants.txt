@@ -51,6 +51,7 @@ server.eventlog.enabled	boolean	true	if set, logged notable events are also stor
 server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
 server.identity_map.configuration	string		system-identity to database-username mappings
+server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
 server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
 server.oidc_authentication.claim_json_key	string		sets JSON key of principal to extract from payload after OIDC authentication completes (usually email or sid)
@@ -179,4 +180,4 @@ trace.debug.enable	boolean	false	if set, traces for recent requests can be seen 
 trace.jaeger.agent	string		the address of a Jaeger agent to receive traces using the Jaeger UDP Thrift protocol, as <host>:<port>. If no port is specified, 6381 will be used.
 trace.opentelemetry.collector	string		address of an OpenTelemetry trace collector to receive traces using the otel gRPC protocol, as <host>:<port>. If no port is specified, 4317 will be used.
 trace.zipkin.collector	string		the address of a Zipkin instance to receive traces, as <host>:<port>. If no port is specified, 9411 will be used.
-version	version	21.2-68	set the active cluster version in the format '<major>.<minor>'
+version	version	21.2-70	set the active cluster version in the format '<major>.<minor>'

@@ -485,6 +485,18 @@ func (r ReplicaDescriptor) IsVoterNewConfig() bool {
 	}
 }
 
+// IsAnyVoter returns true if the replica is a voter in the previous
+// config (pre-reconfiguration) or the incoming config. Can be used as a filter
+// for ReplicaDescriptors.Filter(ReplicaDescriptor.IsVoterOldConfig).
+func (r ReplicaDescriptor) IsAnyVoter() bool {
+	switch r.GetType() {
+	case VOTER_FULL, VOTER_INCOMING, VOTER_OUTGOING, VOTER_DEMOTING_NON_VOTER, VOTER_DEMOTING_LEARNER:
+		return true
+	default:
+		return false
+	}
+}
+
 // PercentilesFromData derives percentiles from a slice of data points.
 // Sorts the input data if it isn't already sorted.
 func PercentilesFromData(data []float64) Percentiles {

@@ -12,6 +12,7 @@ go_library(
         "//pkg/security",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
         "//pkg/util/timeutil",
     ],
 )
