@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -133,5 +134,34 @@ func (s *TestState) CheckFeature(ctx context.Context, featureName tree.SchemaFea
 
 // FeatureChecker implements scbuild.Dependencies
 func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
+	return s
+}
+
+// IncrementDropCounterForRelation implements scbuild.TelemetryCounter.
+func (s *TestState) IncrementDropCounterForRelation(tbl catalog.TableDescriptor) {
+	typ := "table"
+	if tbl.IsView() {
+		typ = "view"
+		if tbl.MaterializedView() {
+			typ = "materialized view"
+		}
+	} else if tbl.IsSequence() {
+		typ = "sequence"
+	}
+	s.LogSideEffectf(fmt.Sprintf("increment telemetry for dropped %s", typ))
+}
+
+// IncrementDropCounterForSchema implements scbuild.TelemetryCounter.
+func (s *TestState) IncrementDropCounterForSchema() {
+	s.LogSideEffectf("increment telemetry for dropped schema")
+}
+
+// IncrementDropCounterForDatabase implements scbuild.TelemetryCounter.
+func (s *TestState) IncrementDropCounterForDatabase() {
+	s.LogSideEffectf("increment telemetry for dropped database")
+}
+
+// TelemetryCounter implements scbuild.Dependencies
+func (s *TestState) TelemetryCounter() scbuild.TelemetryCounter {
 	return s
 }

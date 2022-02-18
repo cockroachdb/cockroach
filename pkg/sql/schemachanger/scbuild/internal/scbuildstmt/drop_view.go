@@ -59,6 +59,7 @@ func DropView(b BuildCtx, n *tree.DropView) {
 			buildCtx: newCtx,
 		})
 		b.IncrementSubWorkID()
+		b.IncrementDropCounterForRelation(view)
 	}
 	// Validate if the dependent objects need to be dropped, if necessary
 	// this will cascade.

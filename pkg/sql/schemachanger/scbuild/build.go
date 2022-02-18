@@ -37,12 +37,13 @@ func Build(
 		return scpb.CurrentState{}, err
 	}
 	b := buildCtx{
-		Context:              ctx,
-		Dependencies:         dependencies,
-		BuilderState:         bs,
-		EventLogState:        els,
-		TreeAnnotator:        an,
-		SchemaFeatureChecker: dependencies.FeatureChecker(),
+		Context:                 ctx,
+		Dependencies:            dependencies,
+		BuilderState:            bs,
+		EventLogState:           els,
+		TreeAnnotator:           an,
+		SchemaFeatureChecker:    dependencies.FeatureChecker(),
+		TelemetryFeatureCounter: dependencies.TelemetryCounter(),
 	}
 	defer func() {
 		if recErr := recover(); recErr != nil {
@@ -95,6 +96,10 @@ type (
 	// CreatePartitioningCCLCallback is the function type for the CCL callback
 	// which creates partition descriptors for indexes.
 	CreatePartitioningCCLCallback = scbuildstmt.CreatePartitioningCCLCallback
+
+	// TelemetryCounter tracks telemetry counters for different schema change
+	// features.
+	TelemetryCounter = scbuildstmt.TelemetryFeatureCounter
 )
 
 type elementState struct {
@@ -181,6 +186,7 @@ type buildCtx struct {
 	scbuildstmt.EventLogState
 	scbuildstmt.TreeAnnotator
 	scbuildstmt.SchemaFeatureChecker
+	scbuildstmt.TelemetryFeatureCounter
 }
 
 var _ scbuildstmt.BuildCtx = buildCtx{}
@@ -188,10 +194,12 @@ var _ scbuildstmt.BuildCtx = buildCtx{}
 // WithNewSourceElementID implements the scbuildstmt.BuildCtx interface.
 func (b buildCtx) WithNewSourceElementID() scbuildstmt.BuildCtx {
 	return buildCtx{
-		Context:       b.Context,
-		Dependencies:  b.Dependencies,
-		BuilderState:  b.BuilderState,
-		TreeAnnotator: b.TreeAnnotator,
-		EventLogState: b.EventLogStateWithNewSourceElementID(),
+		Context:                 b.Context,
+		Dependencies:            b.Dependencies,
+		BuilderState:            b.BuilderState,
+		TreeAnnotator:           b.TreeAnnotator,
+		EventLogState:           b.EventLogStateWithNewSourceElementID(),
+		SchemaFeatureChecker:    b.SchemaFeatureChecker,
+		TelemetryFeatureCounter: b.TelemetryFeatureCounter,
 	}
 }

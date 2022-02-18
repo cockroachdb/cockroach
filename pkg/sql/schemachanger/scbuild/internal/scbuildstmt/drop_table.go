@@ -54,6 +54,7 @@ func DropTable(b BuildCtx, n *tree.DropTable) {
 			buildCtx: newCtx,
 		})
 		b.IncrementSubWorkID()
+		b.IncrementDropCounterForRelation(tbl)
 	}
 	// Validate if the dependent objects need to be dropped, if necessary
 	// this will cascade.
