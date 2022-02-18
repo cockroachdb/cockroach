@@ -389,10 +389,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				mockRestoreDataSpec)
 			require.NoError(t, err)
 			ssts := make(chan mergedSST, 1)
-			require.NoError(t, mockRestoreDataProcessor.openSSTs(restoreSpanEntry, ssts))
+			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts))
 			close(ssts)
 			sst := <-ssts
-			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(sst)
+			_, err = mockRestoreDataProcessor.processRestoreSpanEntry(ctx, sst)
 			require.NoError(t, err)
 
 			clientKVs, err := kvDB.Scan(ctx, reqStartKey, reqEndKey, 0)
