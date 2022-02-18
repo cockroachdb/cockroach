@@ -134,7 +134,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		}
 	}
 	span := tableDesc.PrimaryIndexSpan(p.ExecCfg().Codec)
-	for i := len(tableDesc.ClusterVersion.Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
+	for i := len(tableDesc.ClusterVersion().Mutations) + len(spanList); i < len(tableDesc.Mutations); i++ {
 		var resumeSpans []roachpb.Span
 		mut := tableDesc.Mutations[i]
 		if mut.GetIndex() != nil && mut.GetIndex().UseDeletePreservingEncoding {
