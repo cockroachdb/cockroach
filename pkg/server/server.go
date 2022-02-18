@@ -11,11 +11,9 @@
 package server
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/gob"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -64,7 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -104,7 +101,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
-	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -1889,153 +1885,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	log.Event(ctx, "server initialized")
 
 	return maybeImportTS(ctx, s)
-}
-
-func maybeImportTS(ctx context.Context, s *Server) error {
-	knobs, _ := s.cfg.TestingKnobs.Server.(*TestingKnobs)
-	if knobs == nil {
-		return nil
-	}
-	tsImport := knobs.ImportTimeseriesFile
-	if tsImport == "" {
-		return nil
-	}
-
-	// In practice we only allow populating time series in `start-single-node` due
-	// to complexities detailed below. Additionally, we allow it only on a fresh
-	// single-node single-store cluster and we also guard against join flags even
-	// though there shouldn't be any.
-	if !s.InitialStart() || len(s.cfg.JoinList) > 0 || len(s.cfg.Stores.Specs) != 1 {
-		return errors.New("cannot import timeseries into an existing cluster or a multi-{store,node} cluster")
-	}
-
-	// Also do a best effort at disabling the timeseries of the local node to cause
-	// confusion.
-	ts.TimeseriesStorageEnabled.Override(ctx, &s.ClusterSettings().SV, false)
-
-	// Suppress writing of node statuses for the local node (n1). If it wrote one,
-	// and the imported data also contains n1 but with a different set of stores,
-	// we'd effectively clobber the timeseries display for n1 (which relies on the
-	// store statuses to map the store timeseries to the node under which they
-	// fall). An alternative to this is setting a FirstStoreID and FirstNodeID that
-	// is not in use in the data set to import.
-	s.node.suppressNodeStatus.Set(true)
-
-	f, err := os.Open(tsImport)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	b := &kv.Batch{}
-	var n int
-	maybeFlush := func(force bool) error {
-		if n < 100 && !force {
-			return nil
-		}
-		err := s.db.Run(ctx, b)
-		if err != nil {
-			return err
-		}
-		log.Infof(ctx, "imported %d ts pairs\n", n)
-		*b, n = kv.Batch{}, 0
-		return nil
-	}
-
-	nodeIDs := map[string]struct{}{}
-	storeIDs := map[string]struct{}{}
-	dec := gob.NewDecoder(f)
-	for {
-		var v roachpb.KeyValue
-		err := dec.Decode(&v)
-		if err != nil {
-			if err == io.EOF {
-				if err := maybeFlush(true /* force */); err != nil {
-					return err
-				}
-				break
-			}
-			return err
-		}
-
-		name, source, _, _, err := ts.DecodeDataKey(v.Key)
-		if err != nil {
-			return err
-		}
-		if strings.HasPrefix(name, "cr.node.") {
-			nodeIDs[source] = struct{}{}
-		} else if strings.HasPrefix(name, "cr.store.") {
-			storeIDs[source] = struct{}{}
-		} else {
-			return errors.Errorf("unknown metric %s", name)
-		}
-
-		p := roachpb.NewPut(v.Key, v.Value)
-		p.(*roachpb.PutRequest).Inline = true
-		b.AddRawRequest(p)
-		n++
-		if err := maybeFlush(false /* force */); err != nil {
-			return err
-		}
-	}
-
-	nodeToStore := map[string][]string{}
-	for n := range nodeIDs {
-		// By default, assume that each node has one store, with a
-		// matching ID, i.e. n1->s1, n2->s2, etc.
-		nodeToStore[n] = []string{n}
-	}
-	storeToNode := map[string]string{}
-	if knobs.ImportTimeseriesMappingFile == "" {
-		return errors.Errorf("need to specify COCKROACH_DEBUG_TS_IMPORT_MAPPING_FILE; it should point at " +
-			"a YAML file that maps StoreID to NodeID. For example, if s1 is on n1 and s2 is on n5:\n\n1: 1\n2:5")
-	}
-	mapBytes, err := ioutil.ReadFile(knobs.ImportTimeseriesMappingFile)
-	if err != nil {
-		return err
-	}
-	if err := yaml.NewDecoder(bytes.NewReader(mapBytes)).Decode(&storeToNode); err != nil {
-		return err
-	}
-	for sid, nid := range storeToNode {
-		nodeToStore[nid] = append(nodeToStore[nid], sid)
-	}
-
-	for nodeString, storeStrings := range nodeToStore {
-		nid, err := strconv.ParseInt(nodeString, 10, 32)
-		if err != nil {
-			return err
-		}
-		nodeID := roachpb.NodeID(nid)
-
-		var ss []statuspb.StoreStatus
-		for _, storeString := range storeStrings {
-			sid, err := strconv.ParseInt(storeString, 10, 32)
-			if err != nil {
-				return err
-			}
-			ss = append(ss, statuspb.StoreStatus{Desc: roachpb.StoreDescriptor{StoreID: roachpb.StoreID(sid)}})
-			delete(storeIDs, nodeString)
-		}
-
-		ns := statuspb.NodeStatus{
-			Desc: roachpb.NodeDescriptor{
-				NodeID: nodeID,
-			},
-			StoreStatuses: ss,
-		}
-		key := keys.NodeStatusKey(nodeID)
-		if err := s.db.PutInline(ctx, key, &ns); err != nil {
-			return err
-		}
-	}
-	if len(storeIDs) > 0 {
-		return errors.Errorf(
-			"need to map the remaining stores %v to nodes %v, please provide an updated mapping file %s",
-			storeIDs, nodeIDs, knobs.ImportTimeseriesMappingFile)
-	}
-
-	return nil
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.
