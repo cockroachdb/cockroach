@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rules",
+    srcs = [
+        "dep_drop.go",
+        "dep_index_and_column.go",
+        "helpers.go",
+        "op_drop.go",
+        "registry.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules",
+    visibility = ["//pkg/sql/schemachanger/scplan:__subpackages__"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/schemachanger/rel",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/schemachanger/scplan/internal/scgraph",
+        "//pkg/sql/schemachanger/screl",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "rules_test",
+    srcs = ["rules_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":rules"],
+    deps = [
+        "//pkg/testutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
+)

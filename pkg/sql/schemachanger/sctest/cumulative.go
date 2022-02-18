@@ -132,6 +132,12 @@ func Rollback(t *testing.T, dir string, newCluster NewClusterFunc) {
 
 		db, cleanup := newCluster(t, &scrun.TestingKnobs{
 			BeforeStage: beforeStage,
+			OnPostCommitError: func(p scplan.Plan, stageIdx int, err error) error {
+				if strings.Contains(err.Error(), "boom") {
+					return err
+				}
+				panic(fmt.Sprintf("%+v", err))
+			},
 		})
 		defer cleanup()
 
@@ -279,7 +285,7 @@ func Backup(t *testing.T, dir string, newCluster NewClusterFunc) {
 			}, func(db *gosql.DB) {
 				tdb := sqlutils.MakeSQLRunner(db)
 				var ok bool
-				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.GetDescIDs(pl.TargetState))
+				dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetDescIDs(pl.TargetState))
 				if ok {
 					tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
 				}
