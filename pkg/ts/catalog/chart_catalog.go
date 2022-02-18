@@ -567,10 +567,17 @@ var charts = []sectionDescription{
 				},
 			},
 			{
-				Title: "Rangefeed Memory Budgeting",
+				Title: "Rangefeed Memory Allocations",
 				Metrics: []string{
 					"kv.rangefeed.budget_allocation_failed",
 					"kv.rangefeed.budget_allocation_blocked",
+				},
+			},
+			{
+				Title: "Memory Usage",
+				Metrics: []string{
+					"kv.rangefeed.mem_shared",
+					"kv.rangefeed.mem_system",
 				},
 			},
 			{

@@ -67,3 +67,32 @@ func NewMetrics() *Metrics {
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}
 }
+
+// FeedBudgetPoolMetrics holds metrics for RangeFeed budgets for the purpose
+// or registration in a metric registry.
+type FeedBudgetPoolMetrics struct {
+	SystemBytesCount *metric.Gauge
+	SharedBytesCount *metric.Gauge
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (FeedBudgetPoolMetrics) MetricStruct() {}
+
+// NewFeedBudgetMetrics creates new metrics for RangeFeed budgets.
+func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics {
+	makeMemMetricMetadata := func(name, help string) metric.Metadata {
+		return metric.Metadata{
+			Name:        "kv.rangefeed.mem_" + name,
+			Help:        help,
+			Measurement: "Memory",
+			Unit:        metric.Unit_BYTES,
+		}
+	}
+
+	return &FeedBudgetPoolMetrics{
+		SystemBytesCount: metric.NewGauge(makeMemMetricMetadata("system",
+			"Memory usage by rangefeeds on system ranges")),
+		SharedBytesCount: metric.NewGauge(makeMemMetricMetadata("shared",
+			"Memory usage by rangefeeds")),
+	}
+}
