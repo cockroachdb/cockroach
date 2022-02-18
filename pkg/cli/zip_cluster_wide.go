@@ -110,6 +110,7 @@ var debugZipTablesPerCluster = []string{
 	"crdb_internal.invalid_objects",
 	"crdb_internal.index_usage_statistics",
 	"crdb_internal.table_indexes",
+	"crdb_internal.historical_contention_events",
 }
 
 // getNodesList constructs a NodesListResponse using the Nodes API. We need this while building
