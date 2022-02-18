@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
@@ -46,7 +47,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbackup"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -134,7 +134,7 @@ func WriteDescriptors(
 	wroteDBs := make(map[descpb.ID]catalog.DatabaseDescriptor)
 	for i := range databases {
 		desc := databases[i]
-		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := ingesting.GetIngestingDescriptorPrivileges(ctx, txn, descsCol, desc, user, wroteDBs, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -148,7 +148,9 @@ func WriteDescriptors(
 		}
 		privilegeDesc := desc.GetPrivileges()
 		catprivilege.MaybeFixUsagePrivForTablesAndDBs(&privilegeDesc)
-		wroteDBs[desc.GetID()] = desc
+		if descCoverage == tree.RequestedDescriptors || desc.GetName() == restoreTempSystemDB {
+			wroteDBs[desc.GetID()] = desc
+		}
 		if err := descsCol.WriteDescToBatch(
 			ctx, false /* kvTrace */, desc.(catalog.MutableDescriptor), b,
 		); err != nil {
@@ -166,7 +168,7 @@ func WriteDescriptors(
 	// Write namespace and descriptor entries for each schema.
 	for i := range schemas {
 		sc := schemas[i]
-		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := ingesting.GetIngestingDescriptorPrivileges(ctx, txn, descsCol, sc, user, wroteDBs, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -188,7 +190,7 @@ func WriteDescriptors(
 
 	for i := range tables {
 		table := tables[i]
-		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := ingesting.GetIngestingDescriptorPrivileges(ctx, txn, descsCol, table, user, wroteDBs, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -219,7 +221,7 @@ func WriteDescriptors(
 	// the system.descriptor table.
 	for i := range types {
 		typ := types[i]
-		updatedPrivileges, err := getRestoringPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
+		updatedPrivileges, err := ingesting.GetIngestingDescriptorPrivileges(ctx, txn, descsCol, typ, user, wroteDBs, descCoverage)
 		if err != nil {
 			return err
 		}
@@ -2465,98 +2467,6 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 	}
 
 	return nil
-}
-
-func getRestoringPrivileges(
-	ctx context.Context,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	desc catalog.Descriptor,
-	user security.SQLUsername,
-	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
-	descCoverage tree.DescriptorCoverage,
-) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
-	switch desc := desc.(type) {
-	case catalog.TableDescriptor:
-		return getRestorePrivilegesForTableOrSchema(
-			ctx,
-			txn,
-			descsCol,
-			desc,
-			user,
-			wroteDBs,
-			descCoverage,
-			privilege.Table,
-		)
-	case catalog.SchemaDescriptor:
-		return getRestorePrivilegesForTableOrSchema(
-			ctx,
-			txn,
-			descsCol,
-			desc,
-			user,
-			wroteDBs,
-			descCoverage,
-			privilege.Schema,
-		)
-	case catalog.TypeDescriptor:
-		// If the restore is not a cluster restore we cannot know that the users on
-		// the restoring cluster match the ones that were on the cluster that was
-		// backed up. So we wipe the privileges on the type.
-		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = catpb.NewBasePrivilegeDescriptor(user)
-		}
-	case catalog.DatabaseDescriptor:
-		// If the restore is not a cluster restore we cannot know that the users on
-		// the restoring cluster match the ones that were on the cluster that was
-		// backed up. So we wipe the privileges on the database.
-		if descCoverage == tree.RequestedDescriptors {
-			updatedPrivileges = catpb.NewBaseDatabasePrivilegeDescriptor(user)
-		}
-	}
-	return updatedPrivileges, nil
-}
-
-func getRestorePrivilegesForTableOrSchema(
-	ctx context.Context,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	desc catalog.Descriptor,
-	user security.SQLUsername,
-	wroteDBs map[descpb.ID]catalog.DatabaseDescriptor,
-	descCoverage tree.DescriptorCoverage,
-	privilegeType privilege.ObjectType,
-) (updatedPrivileges *catpb.PrivilegeDescriptor, err error) {
-	if wrote, ok := wroteDBs[desc.GetParentID()]; ok {
-		// If we're creating a new database in this restore, the privileges of the
-		// table and schema should be that of the parent DB.
-		//
-		// Leave the privileges of the temp system tables as the default too.
-		if descCoverage == tree.RequestedDescriptors || wrote.GetName() == restoreTempSystemDB {
-			updatedPrivileges = wrote.GetPrivileges()
-			for i, u := range updatedPrivileges.Users {
-				privObjectType := privilege.Table
-				if _, ok := desc.(catalog.SchemaDescriptor); ok {
-					privObjectType = privilege.Schema
-				}
-				updatedPrivileges.Users[i].Privileges =
-					privilege.ListFromBitField(u.Privileges, privObjectType).ToBitField()
-			}
-		}
-	} else if descCoverage == tree.RequestedDescriptors {
-		parentDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
-		if err != nil {
-			return nil, errors.Wrapf(err, "failed to lookup parent DB %d", errors.Safe(desc.GetParentID()))
-		}
-
-		// TODO(dt): Make this more configurable.
-		immutableDefaultPrivileges := parentDB.GetDefaultPrivilegeDescriptor()
-		updatedPrivileges = catprivilege.CreatePrivilegesFromDefaultPrivileges(
-			immutableDefaultPrivileges,
-			nil, /* schemaDefaultPrivilegeDescriptor */
-			parentDB.GetID(), user, tree.Tables, parentDB.GetPrivileges())
-	}
-	return updatedPrivileges, nil
 }
 
 type systemTableNameWithConfig struct {
