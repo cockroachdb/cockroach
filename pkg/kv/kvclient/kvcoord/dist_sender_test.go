@@ -1025,7 +1025,12 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 		calls = append(calls, ba.Replica.NodeID)
 		if ba.Replica.NodeID == 2 {
 			reply := &roachpb.BatchResponse{}
-			err := &roachpb.NotLeaseHolderError{Lease: &ambiguousLease, DescriptorGeneration: oldGeneration}
+			err := &roachpb.NotLeaseHolderError{
+				Lease: &ambiguousLease,
+				RangeDesc: roachpb.RangeDescriptor{
+					Generation: oldGeneration,
+				},
+			}
 			reply.Error = roachpb.NewError(err)
 			return reply, nil
 		}
