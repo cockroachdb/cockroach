@@ -33,7 +33,6 @@ func InitIndexFetchSpec(
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
 	oldFetchedCols := s.FetchedColumns
-	oldFamilies := s.FamilyDefaultColumns
 	*s = descpb.IndexFetchSpec{
 		Version:             descpb.IndexFetchSpecVersionInitial,
 		TableName:           table.GetName(),
@@ -50,20 +49,12 @@ func InitIndexFetchSpec(
 	// TODO(radu): calculate the length without actually generating a throw-away key.
 	s.KeyPrefixLength = uint32(len(MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())))
 
+	s.FamilyDefaultColumns = table.FamilyDefaultColumns()
+
 	families := table.GetFamilies()
 	for i := range families {
-		f := &families[i]
-		if f.DefaultColumnID != 0 {
-			if s.FamilyDefaultColumns == nil {
-				s.FamilyDefaultColumns = oldFamilies[:0]
-			}
-			s.FamilyDefaultColumns = append(s.FamilyDefaultColumns, descpb.IndexFetchSpec_FamilyDefaultColumn{
-				FamilyID:        f.ID,
-				DefaultColumnID: f.DefaultColumnID,
-			})
-		}
-		if f.ID > s.MaxFamilyID {
-			s.MaxFamilyID = f.ID
+		if id := families[i].ID; id > s.MaxFamilyID {
+			s.MaxFamilyID = id
 		}
 	}
 
@@ -72,19 +63,6 @@ func InitIndexFetchSpec(
 	var invertedColumnID descpb.ColumnID
 	if index.GetType() == descpb.IndexDescriptor_INVERTED {
 		invertedColumnID = index.InvertedColumnID()
-	}
-
-	mkCol := func(col catalog.Column, colID descpb.ColumnID) descpb.IndexFetchSpec_Column {
-		typ := col.GetType()
-		if colID == invertedColumnID {
-			typ = index.InvertedColumnKeyType()
-		}
-		return descpb.IndexFetchSpec_Column{
-			Name:          col.GetName(),
-			ColumnID:      colID,
-			Type:          typ,
-			IsNonNullable: !col.IsNullable() && col.Public(),
-		}
 	}
 
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
@@ -97,7 +75,16 @@ func InitIndexFetchSpec(
 		if err != nil {
 			return err
 		}
-		s.FetchedColumns[i] = mkCol(col, colID)
+		typ := col.GetType()
+		if colID == invertedColumnID {
+			typ = index.InvertedColumnKeyType()
+		}
+		s.FetchedColumns[i] = descpb.IndexFetchSpec_Column{
+			Name:          col.GetName(),
+			ColumnID:      colID,
+			Type:          typ,
+			IsNonNullable: !col.IsNullable() && col.Public(),
+		}
 	}
 
 	// In test builds, verify that we aren't trying to fetch columns that are not

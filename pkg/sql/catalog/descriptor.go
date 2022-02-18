@@ -557,6 +557,10 @@ type TableDescriptor interface {
 	// IDs are unique per table, but not unique globally.
 	GetNextFamilyID() descpb.FamilyID
 
+	// FamilyDefaultColumns returns the default column IDs for families with a
+	// default column. See IndexFetchSpec.FamilyDefaultColumns.
+	FamilyDefaultColumns() []descpb.IndexFetchSpec_FamilyDefaultColumn
+
 	// HasColumnBackfillMutation returns whether the table has any queued column
 	// mutations that require a backfill.
 	HasColumnBackfillMutation() bool
