@@ -106,4 +106,5 @@ func DropDatabase(b BuildCtx, n *tree.DropDatabase) {
 		DatabaseID: db.GetID(),
 		RoleName:   scpb.PlaceHolderRoleName,
 	})
+	b.IncrementDropCounterForDatabase()
 }
