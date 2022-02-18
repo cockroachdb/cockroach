@@ -550,7 +550,14 @@ func (s *Streamer) Enqueue(
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
-	s.mu.requestsToServe = requestsToServe
+	//
+	// Note that we do not just overwrite s.mu.requestsToServe because it is
+	// possible that the worker coordinator has not sliced off the issued
+	// requests yet. In other words, it is possible for a request to be issued,
+	// responded to, returned to the client before the deferred function in
+	// issueRequestsForAsyncProcessing is executed.
+	// TODO(yuzefovich): clean this up.
+	s.mu.requestsToServe = append(s.mu.requestsToServe, requestsToServe...)
 	s.mu.hasWork.Signal()
 	return nil
 }
@@ -675,6 +682,29 @@ func (s *Streamer) signalBudgetIfNoRequestsInProgressLocked() {
 // adjustNumRequestsInFlight updates the number of requests that are currently
 // in flight. This method should be called without holding the lock of s.
 func (s *Streamer) adjustNumRequestsInFlight(delta int) {
+	if delta < 0 {
+		// If we're decrementing the number of requests in flight, we want to
+		// acquire the budget's mutex so that if we signal the budget below, the
+		// worker coordinator doesn't miss the signal.
+		//
+		// If we don't do this, then it is possible for the worker coordinator
+		// to be blocked forever in waitUntilEnoughBudget. Namely, the following
+		// sequence of events is possible:
+		// 1. the worker coordinator checks that there are some requests in
+		//    progress, then it goes to sleep before waiting on waitForBudget
+		//    condition variable;
+		// 2. the last request in flight exits without creating any Results (so
+		//    that no Release() calls will happen in the future), it decrements
+		//    the number of requests in flight, signals waitForBudget condition
+		//    variable, but nobody is waiting on that, so no goroutine is woken
+		//    up;
+		// 3. the worker coordinator wakes up and starts waiting on the
+		//    condition variable, forever.
+		// Acquiring the budget's mutex first makes sure that such sequence
+		// doesn't occur.
+		s.budget.mu.Lock()
+		defer s.budget.mu.Unlock()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.numRequestsInFlight += delta
