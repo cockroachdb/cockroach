@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -69,6 +70,19 @@ func gcTables(
 			ctx, execCfg.DB, execCfg.DistSender, execCfg.Codec, &execCfg.Settings.SV, table,
 		); err != nil {
 			return errors.Wrapf(err, "clearing data for table %d", table.GetID())
+		}
+
+		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
+		if err != nil {
+			return err
+		}
+
+		// Deduct from system.span_count appropriately.
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := execCfg.SpanConfigLimiter.ShouldLimit(ctx, txn, delta)
+			return err
+		}); err != nil {
+			return errors.Wrapf(err, "deducting span count for table %d", table.GetID())
 		}
 
 		// Finished deleting all the table data, now delete the table meta data.

@@ -240,7 +240,7 @@ func TestSafeMessage(t *testing.T) {
 				mutable.Families[0].ColumnNames = append(mutable.Families[0].ColumnNames, "c")
 				mutable.Families[0].ColumnIDs = append(mutable.Families[0].ColumnIDs, 5)
 				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9}
-				mutable.ClusterVersion = *mutable.TableDesc()
+				mutable.TestingSetClusterVersion(*mutable.TableDesc())
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
 			},
 		},
@@ -262,7 +262,7 @@ func TestSafeMessage(t *testing.T) {
 				"Indexes: [{ID: 1, Unique: true, KeyColumns: [{ID: 1, Dir: ASC}]}]" +
 				"}",
 			f: func(mutable *tabledesc.Mutable) catalog.TableDescriptor {
-				mutable.ClusterVersion = *mutable.TableDesc()
+				mutable.TestingSetClusterVersion(*mutable.TableDesc())
 				return mutable.ImmutableCopy().(catalog.TableDescriptor)
 			},
 		},
