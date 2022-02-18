@@ -540,7 +540,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
         family: IntFamily
         oid: 20
         width: 64
-      ComputerExpr: i + 1:::INT8
+      ComputedExpr: i + 1:::INT8
       FamilyName: primary
       Nullable: true
       PgAttributeNum: 2
@@ -551,7 +551,7 @@ PreCommitPhase stage 1 of 1 with 5 MutationType ops
       Element:
         Column:
           columnId: 2
-          computerExpr: i + 1:::INT8
+          computedExpr: i + 1:::INT8
           familyName: primary
           nullable: true
           pgAttributeNum: 2
