@@ -1155,11 +1155,9 @@ func Test_makeFakeNodeStatuses(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := makeFakeNodeStatuses(tt.mapping)
-			if err == nil {
-				err = checkFakeStatuses(result, tt.storesSeen)
-			}
-			if err != nil {
+			result := makeFakeNodeStatuses(tt.mapping)
+			var err error
+			if err = checkFakeStatuses(result, tt.storesSeen); err != nil {
 				result = nil
 			}
 			require.Equal(t, tt.exp, result)
