@@ -34,7 +34,7 @@ var (
 	metaRangeFeedOverBudgetAllocation = metric.Metadata{
 		Name:        "kv.rangefeed.allocated_over_budget",
 		Help:        "Amount of bytes currently used by RangeFeeds for sending single events exceeding whole range budget",
-		Measurement: "Bytes",
+		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaRangeFeedExhausted = metric.Metadata{
@@ -73,5 +73,44 @@ func NewMetrics() *Metrics {
 		RangeFeedBudgetExhausted:             metric.NewCounter(metaRangeFeedExhausted),
 		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
 		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
+	}
+}
+
+// FeedBudgetPoolMetrics holds metrics for RangeFeed budgets for the purpose
+// or registration in a metric registry.
+type FeedBudgetPoolMetrics struct {
+	SystemMaxBytesHist  *metric.Histogram
+	SystemCurBytesCount *metric.Gauge
+	SharedMaxBytesHist  *metric.Histogram
+	SharedCurBytesCount *metric.Gauge
+}
+
+// MetricStruct implements metrics.Struct interface.
+func (FeedBudgetPoolMetrics) MetricStruct() {}
+
+// See pkg/sql/mem_metrics.go
+// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+const log10int64times1000 = 19 * 1000
+
+// NewFeedBudgetMetrics creates new metrics for RangeFeed budgets.
+func NewFeedBudgetMetrics(histogramWindow time.Duration) *FeedBudgetPoolMetrics {
+	makeMemMetricMetadata := func(name, help string) metric.Metadata {
+		return metric.Metadata{
+			Name:        "kv.rangefeed.mem_" + name,
+			Help:        help,
+			Measurement: "Memory",
+			Unit:        metric.Unit_BYTES,
+		}
+	}
+
+	return &FeedBudgetPoolMetrics{
+		SystemMaxBytesHist: metric.NewHistogram(makeMemMetricMetadata("system_max",
+			"Max memory usage by rangefeeds on system ranges"), histogramWindow, log10int64times1000, 3),
+		SystemCurBytesCount: metric.NewGauge(makeMemMetricMetadata("system_cur",
+			"Current memory usage by rangefeeds on system ranges")),
+		SharedMaxBytesHist: metric.NewHistogram(makeMemMetricMetadata("shared_max",
+			"Max memory usage by rangefeeds"), histogramWindow, log10int64times1000, 3),
+		SharedCurBytesCount: metric.NewGauge(makeMemMetricMetadata("shared_cur",
+			"Current memory usage by rangefeeds")),
 	}
 }

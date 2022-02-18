@@ -364,6 +364,9 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	}
 	r.rangefeedMu.Unlock()
 
+	feedBudget := r.store.GetStoreConfig().RangefeedBudgetFactory.CreateBudget(r.startKey,
+		r.store.metrics.RangeFeedMetrics)
+
 	// Create a new rangefeed.
 	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
@@ -378,6 +381,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
+		MemBudget:        feedBudget,
 	}
 	p = rangefeed.NewProcessor(cfg)
 

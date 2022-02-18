@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
+	serverrangefeed "github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/reports"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -484,6 +485,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	kvMemoryMonitor := mon.NewMonitorInheritWithLimit(
 		"kv-mem", 0 /* limit */, sqlMonitorAndMetrics.rootSQLMemoryMonitor)
 	kvMemoryMonitor.Start(ctx, sqlMonitorAndMetrics.rootSQLMemoryMonitor, mon.BoundAccount{})
+	rangeReedBudgetFactory := serverrangefeed.NewBudgetFactory(ctx, kvMemoryMonitor, cfg.MemoryPoolSize,
+		cfg.HistogramWindowInterval())
+	if rangeReedBudgetFactory != nil {
+		registry.AddMetricStruct(rangeReedBudgetFactory.Metrics())
+	}
+	// Closer order is important with BytesMonitor.
+	stopper.AddCloser(stop.CloserFn(func() {
+		rangeReedBudgetFactory.Stop(ctx)
+	}))
 	stopper.AddCloser(stop.CloserFn(func() {
 		kvMemoryMonitor.Stop(ctx)
 	}))
@@ -529,6 +539,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ExternalStorageFromURI:  externalStorageFromURI,
 		ProtectedTimestampCache: protectedtsProvider,
 		KVMemoryMonitor:         kvMemoryMonitor,
+		RangefeedBudgetFactory:  rangeReedBudgetFactory,
 		SystemConfigProvider:    systemConfigWatcher,
 	}
 
