@@ -11,7 +11,6 @@
 package scbuildstmt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
 
 // DropType implements DROP TYPE.
@@ -29,78 +27,46 @@ func DropType(b BuildCtx, n *tree.DropType) {
 		panic(unimplemented.NewWithIssue(51480, "DROP TYPE CASCADE is not yet supported"))
 	}
 	for _, name := range n.Names {
-		prefix, typ := b.ResolveType(name, ResolveParams{
+		elts := b.ResolveEnumType(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
 			RequiredPrivilege:   privilege.DROP,
 		})
+		_, _, typ := scpb.FindEnumType(elts)
 		if typ == nil {
 			continue
 		}
+		prefix := b.NamePrefix(typ)
 		// Mutate the AST to have the fully resolved name from above, which will be
 		// used for both event logging and errors.
-		tn := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), typ.GetName())
+		tn := tree.MakeTypeNameWithPrefix(prefix, name.Object())
 		b.SetUnresolvedNameAnnotation(name, &tn)
-		// If the descriptor is already being dropped, nothing to do.
-		if checkIfDescOrElementAreDropped(b, typ.GetID()) {
-			return
+		// Drop the type.
+		if n.DropBehavior == tree.DropCascade {
+			dropCascadeDescriptor(b, typ.TypeID)
+		} else {
+			dropTypeRestrict(b, typ.TypeID)
+			dropTypeRestrict(b.WithNewSourceElementID(), typ.ArrayTypeID)
 		}
-		dropType(b, typ, n.DropBehavior)
 		b.IncrementSubWorkID()
 	}
 }
 
-func dropType(b BuildCtx, typ catalog.TypeDescriptor, behavior tree.DropBehavior) {
-	switch typ.GetKind() {
-	case descpb.TypeDescriptor_ALIAS:
-		// Ignore alias types.
+func dropTypeRestrict(b BuildCtx, id descpb.ID) {
+	if !dropRestrict(b, id) {
 		return
-	case descpb.TypeDescriptor_ENUM:
+	}
+	if _, _, enumType := scpb.FindEnumType(b.QueryByID(id)); enumType != nil && !enumType.IsMultiRegion {
 		sqltelemetry.IncrementEnumCounter(sqltelemetry.EnumDrop)
-	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		// Keep going.
-	default:
-		panic(errors.AssertionFailedf("unexpected kind %s for type %q", typ.GetKind(), typ.GetName()))
 	}
-	canDrop := func(desc catalog.TypeDescriptor) {
-		b.MustOwn(desc)
-		if desc.NumReferencingDescriptors() > 0 && behavior != tree.DropCascade {
-			dependentNames := make([]string, 0, desc.NumReferencingDescriptors())
-			for i := 0; i < desc.NumReferencingDescriptors(); i++ {
-				id := desc.GetReferencingDescriptorID(i)
-				name, err := b.CatalogReader().GetQualifiedTableNameByID(b, int64(id), tree.ResolveAnyTableKind)
-				if err != nil {
-					panic(errors.WithAssertionFailure(err))
-				}
-				dependentNames = append(dependentNames, name.String())
-			}
-			panic(pgerror.Newf(
-				pgcode.DependentObjectsStillExist,
-				"cannot drop type %q because other objects (%v) still depend on it.",
-				desc.GetName(),
-				dependentNames,
-			))
-		}
+	if backrefs := undroppedBackrefs(b, id); !backrefs.IsEmpty() {
+		var dependentNames []string
+		descIDs(backrefs).ForEach(func(depID descpb.ID) {
+			dependentNames = append(dependentNames, qualifiedName(b, depID))
+		})
+		panic(pgerror.Newf(
+			pgcode.DependentObjectsStillExist,
+			"cannot drop type %q because other objects (%v) still depend on it.",
+			simpleName(b, id), dependentNames,
+		))
 	}
-
-	canDrop(typ)
-	// Get the arrayType type that needs to be dropped as well.
-	arrayType := b.MustReadType(typ.GetArrayTypeID())
-	// Ensure that we can drop the arrayType type as well.
-	canDrop(arrayType)
-	// Create drop elements for both.
-	b.EnqueueDrop(&scpb.Type{TypeID: typ.GetID()})
-	b.EnqueueDrop(&scpb.Namespace{
-		DatabaseID:   typ.GetParentID(),
-		SchemaID:     typ.GetParentSchemaID(),
-		DescriptorID: typ.GetID(),
-		Name:         typ.GetName(),
-	})
-	b.IncrementSubWorkID()
-	b.EnqueueDrop(&scpb.Type{TypeID: arrayType.GetID()})
-	b.EnqueueDrop(&scpb.Namespace{
-		DatabaseID:   arrayType.GetParentID(),
-		SchemaID:     arrayType.GetParentSchemaID(),
-		DescriptorID: arrayType.GetID(),
-		Name:         arrayType.GetName(),
-	})
 }

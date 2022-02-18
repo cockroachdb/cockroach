@@ -12,10 +12,9 @@ package scop
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 //go:generate go run ./generate_visitor.go scop Mutation mutation.go mutation_visitor_generated.go
@@ -38,22 +37,8 @@ type NotImplemented struct {
 // table.
 type MakeAddedIndexDeleteOnly struct {
 	mutationOp
-	TableID descpb.ID
-
-	// Various components needed to build an
-	// index descriptor.
-	PrimaryIndex        descpb.IndexID
-	IndexID             descpb.IndexID
-	Unique              bool
-	KeyColumnIDs        []descpb.ColumnID
-	KeyColumnDirections []descpb.IndexDescriptor_Direction
-	KeySuffixColumnIDs  []descpb.ColumnID
-	StoreColumnIDs      []descpb.ColumnID
-	CompositeColumnIDs  []descpb.ColumnID
-	ShardedDescriptor   *catpb.ShardedDescriptor
-	Inverted            bool
-	Concurrently        bool
-	SecondaryIndex      bool
+	Index          scpb.Index
+	SecondaryIndex bool
 }
 
 // MakeAddedIndexDeleteAndWriteOnly transitions an index addition mutation from
@@ -126,43 +111,6 @@ type DrainDescriptorName struct {
 	TableID descpb.ID
 }
 
-// RemoveColumnDefaultExpression removes the default expression on a given table column.
-type RemoveColumnDefaultExpression struct {
-	mutationOp
-	TableID  descpb.ID
-	ColumnID descpb.ColumnID
-}
-
-// RemoveColumnSequenceReferences strips the depended-on-by references
-// from references to usage of the specified sequences by the specified column.
-type RemoveColumnSequenceReferences struct {
-	mutationOp
-	TableID     descpb.ID
-	ColumnID    descpb.ColumnID
-	SequenceIDs []descpb.ID
-}
-
-// AddTypeBackRef adds a type back references from a relation.
-type AddTypeBackRef struct {
-	mutationOp
-	DescID descpb.ID
-	TypeID descpb.ID
-}
-
-// RemoveRelationDependedOnBy removes a depended on by reference from a given relation.
-type RemoveRelationDependedOnBy struct {
-	mutationOp
-	TableID      descpb.ID
-	DependedOnBy descpb.ID
-}
-
-// RemoveTypeBackRef removes type back references from a relation.
-type RemoveTypeBackRef struct {
-	mutationOp
-	DescID descpb.ID
-	TypeID descpb.ID
-}
-
 // MakeAddedColumnDeleteAndWriteOnly transitions a column addition mutation from
 // DELETE_ONLY to DELETE_AND_WRITE_ONLY.
 type MakeAddedColumnDeleteAndWriteOnly struct {
@@ -198,23 +146,7 @@ type MakeIndexAbsent struct {
 // MakeAddedColumnDeleteOnly adds a new column in the DELETE_ONLY state.
 type MakeAddedColumnDeleteOnly struct {
 	mutationOp
-	ColumnID                          descpb.ColumnID
-	TableID                           descpb.ID
-	FamilyID                          descpb.FamilyID
-	FamilyName                        string
-	ColumnType                        *types.T
-	Nullable                          bool
-	DefaultExpr                       catpb.Expression
-	OnUpdateExpr                      catpb.Expression
-	Hidden                            bool
-	Inaccessible                      bool
-	GeneratedAsIdentityType           catpb.GeneratedAsIdentityType
-	GeneratedAsIdentitySequenceOption string
-	UsesSequenceIDs                   []descpb.ID
-	ComputedExpr                      catpb.Expression
-	PgAttributeNum                    uint32
-	SystemColumnKind                  catpb.SystemColumnKind
-	Virtual                           bool
+	Column scpb.Column
 }
 
 // MakeColumnPublic moves a new column from its mutation to public.
@@ -248,50 +180,37 @@ type MakeColumnAbsent struct {
 	ColumnID descpb.ColumnID
 }
 
-// AddCheckConstraint adds a check constraint in the unvalidated state.
-type AddCheckConstraint struct {
+// RemoveSequenceOwner removes a sequence ownership relation.
+type RemoveSequenceOwner struct {
 	mutationOp
-	TableID     descpb.ID
-	Name        string
-	Expr        string
-	ColumnIDs   descpb.ColumnIDs
-	Unvalidated bool
-	Hidden      bool
+	Owner scpb.SequenceOwner
 }
 
-// AddColumnFamily adds a column family with the provided descriptor.
-//
-// TODO(ajwerner): Decide whether this should happen explicitly or should be a
-// side-effect of adding a column. My hunch is the latter.
-type AddColumnFamily struct {
-	mutationOp
-	TableID descpb.ID
-	Family  descpb.ColumnFamilyDescriptor
-}
-
-// DropForeignKeyRef drops a foreign key reference with
-// support for outbound/inbound keys.
-type DropForeignKeyRef struct {
-	mutationOp
-	TableID  descpb.ID
-	Name     string
-	Outbound bool
-}
-
-// RemoveSequenceOwnedBy removes a sequence owned by
-// reference.
-type RemoveSequenceOwnedBy struct {
-	mutationOp
-	SequenceID descpb.ID
-}
-
-// AddIndexPartitionInfo adds partitoning information into
-// an index
-type AddIndexPartitionInfo struct {
+// RemoveCheckConstraint removes a check constraint from a table.
+type RemoveCheckConstraint struct {
 	mutationOp
 	TableID      descpb.ID
-	IndexID      descpb.IndexID
-	Partitioning catpb.PartitioningDescriptor
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveForeignKeyConstraintAndBackReference removes a foreign key from the
+// origin and referenced tables.
+type RemoveForeignKeyConstraintAndBackReference struct {
+	mutationOp
+	TableID, ReferencedTableID descpb.ID
+	ConstraintID               descpb.ConstraintID
+}
+
+// RemoveSchemaParent removes the schema - parent database relationship.
+type RemoveSchemaParent struct {
+	mutationOp
+	Parent scpb.SchemaParent
+}
+
+// AddIndexPartitionInfo adds a partitioning descriptor to an existing index.
+type AddIndexPartitionInfo struct {
+	mutationOp
+	Partitioning scpb.IndexPartitioning
 }
 
 // LogEvent logs an event for a given descriptor.
@@ -305,8 +224,66 @@ type LogEvent struct {
 	TargetStatus   scpb.Status
 }
 
-// SetColumnName makes a column only to allocate
-// the name and ID.
+// AddColumnFamily adds a new column family to the table.
+type AddColumnFamily struct {
+	mutationOp
+	TableID  descpb.ID
+	FamilyID descpb.FamilyID
+	Name     string
+}
+
+// AddColumnDefaultExpression adds a DEFAULT expression to a column.
+type AddColumnDefaultExpression struct {
+	mutationOp
+	Default scpb.ColumnDefaultExpression
+}
+
+// RemoveColumnDefaultExpression removes a DEFAULT expression from a column.
+type RemoveColumnDefaultExpression struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// AddColumnOnUpdateExpression adds an ON UPDATE expression to a column.
+type AddColumnOnUpdateExpression struct {
+	mutationOp
+	OnUpdate scpb.ColumnOnUpdateExpression
+}
+
+// RemoveColumnOnUpdateExpression removes an ON UPDATE expression from a column.
+type RemoveColumnOnUpdateExpression struct {
+	mutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// UpdateBackReferencesInTypes updates back references to a descriptor in the
+// specified types.
+type UpdateBackReferencesInTypes struct {
+	mutationOp
+	TypeIDs              catalog.DescriptorIDSet
+	BackReferencedDescID descpb.ID
+}
+
+// UpdateBackReferencesInSequences updates back references to a table expression
+// (in a column or a check constraint) in the specified sequences.
+type UpdateBackReferencesInSequences struct {
+	mutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedColumnID descpb.ColumnID
+	SequenceIDs            catalog.DescriptorIDSet
+}
+
+// RemoveViewBackReferencesInRelations removes back references to a view in
+// the specified tables, views or sequences.
+type RemoveViewBackReferencesInRelations struct {
+	mutationOp
+	BackReferencedViewID descpb.ID
+	RelationIDs          catalog.DescriptorIDSet
+}
+
+// SetColumnName renames a column.
 type SetColumnName struct {
 	mutationOp
 	TableID  descpb.ID
@@ -314,8 +291,7 @@ type SetColumnName struct {
 	Name     string
 }
 
-// SetIndexName makes an index name only to allocate
-// the name and ID.
+// SetIndexName renames an index.
 type SetIndexName struct {
 	mutationOp
 	TableID descpb.ID
@@ -327,13 +303,6 @@ type SetIndexName struct {
 type DeleteDescriptor struct {
 	mutationOp
 	DescriptorID descpb.ID
-}
-
-// DeleteDatabaseSchemaEntry deletes an entry for a schema.
-type DeleteDatabaseSchemaEntry struct {
-	mutationOp
-	DatabaseID descpb.ID
-	SchemaID   descpb.ID
 }
 
 // RemoveJobStateFromDescriptor removes the reference to a job from the

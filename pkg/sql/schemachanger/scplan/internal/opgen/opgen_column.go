@@ -11,8 +11,10 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
@@ -23,24 +25,17 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.Column) scop.Op {
 					return &scop.MakeAddedColumnDeleteOnly{
-						TableID:                           this.TableID,
-						ColumnID:                          this.ColumnID,
-						FamilyName:                        this.FamilyName,
-						FamilyID:                          this.FamilyID,
-						ColumnType:                        this.Type,
-						Nullable:                          this.Nullable,
-						DefaultExpr:                       this.DefaultExpr,
-						OnUpdateExpr:                      this.OnUpdateExpr,
-						Hidden:                            this.Hidden,
-						Inaccessible:                      this.Inaccessible,
-						GeneratedAsIdentityType:           this.GeneratedAsIdentityType,
-						GeneratedAsIdentitySequenceOption: this.GeneratedAsIdentitySequenceOption,
-						UsesSequenceIDs:                   this.UsesSequenceIDs,
-						ComputedExpr:                      this.ComputedExpr,
-						PgAttributeNum:                    this.PgAttributeNum,
-						SystemColumnKind:                  this.SystemColumnKind,
-						Virtual:                           this.Virtual,
+						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
+				}),
+				emit(func(this *scpb.Column) scop.Op {
+					if ids := referencedTypeIDs(this); !ids.Empty() {
+						return &scop.UpdateBackReferencesInTypes{
+							TypeIDs:              ids,
+							BackReferencedDescID: this.TableID,
+						}
+					}
+					return nil
 				}),
 				emit(func(this *scpb.Column, ts scpb.TargetState) scop.Op {
 					return newLogEventOp(this, ts)
@@ -94,7 +89,28 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
+				emit(func(this *scpb.Column) scop.Op {
+					if ids := referencedTypeIDs(this); !ids.Empty() {
+						return &scop.UpdateBackReferencesInTypes{
+							TypeIDs:              ids,
+							BackReferencedDescID: this.TableID,
+						}
+					}
+					return nil
+				}),
 			),
 		),
 	)
+}
+
+func referencedTypeIDs(this *scpb.Column) (ids catalog.DescriptorIDSet) {
+	if this.ComputeExpr != nil {
+		for _, id := range this.ComputeExpr.UsesTypeIDs {
+			ids.Add(id)
+		}
+	}
+	for _, id := range this.ClosedTypeIDs {
+		ids.Add(id)
+	}
+	return ids
 }

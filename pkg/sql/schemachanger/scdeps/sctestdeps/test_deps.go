@@ -449,6 +449,9 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 }
 
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
+	if s.synthetic.LookupDescriptorEntry(id) != nil {
+		return nil, errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
+	}
 	b := s.descBuilder(id)
 	if b == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)

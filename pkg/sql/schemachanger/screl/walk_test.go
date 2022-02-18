@@ -55,20 +55,20 @@ func TestWalk(t *testing.T) {
 	}
 	for _, tc := range []testCase{
 		func() testCase {
-			v := scpb.Column{UsesSequenceIDs: []catid.DescID{1, 2}, Type: types.Timestamp}
+			v := scpb.ColumnDefaultExpression{Expression: scpb.Expression{UsesSequenceIDs: []catid.DescID{1, 2}}}
 			return testCase{
 				elem:           &v,
 				expIDs:         []*catid.DescID{&v.TableID, &v.UsesSequenceIDs[0], &v.UsesSequenceIDs[1]},
-				expTypes:       []*types.T{types.Timestamp},
-				expExpressions: []*catpb.Expression{&v.DefaultExpr, &v.OnUpdateExpr, &v.ComputedExpr},
+				expExpressions: []*catpb.Expression{&v.Expression.Expr},
 			}
 		}(),
 		func() testCase {
-			v := scpb.Column{}
+			v := scpb.Column{ComputeExpr: &scpb.Expression{}, TypeT: scpb.TypeT{Type: types.Timestamp}}
 			return testCase{
 				elem:           &v,
 				expIDs:         []*catid.DescID{&v.TableID},
-				expExpressions: []*catpb.Expression{&v.DefaultExpr, &v.OnUpdateExpr, &v.ComputedExpr},
+				expTypes:       []*types.T{types.Timestamp},
+				expExpressions: []*catpb.Expression{&v.ComputeExpr.Expr},
 			}
 		}(),
 		func() testCase {
@@ -86,14 +86,7 @@ func TestWalk(t *testing.T) {
 			}
 		}(),
 		func() testCase {
-			v := scpb.SequenceDependency{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.SequenceID},
-			}
-		}(),
-		func() testCase {
-			v := scpb.UniqueConstraint{}
+			v := scpb.UniqueWithoutIndexConstraint{}
 			return testCase{
 				elem:   &v,
 				expIDs: []*catid.DescID{&v.TableID},
@@ -115,46 +108,10 @@ func TestWalk(t *testing.T) {
 			}
 		}(),
 		func() testCase {
-			v := scpb.DefaultExpression{UsesSequenceIDs: []catid.DescID{1, 3}}
-			return testCase{
-				elem:           &v,
-				expIDs:         []*catid.DescID{&v.TableID, &v.UsesSequenceIDs[0], &v.UsesSequenceIDs[1]},
-				expExpressions: []*catpb.Expression{&v.DefaultExpr},
-			}
-		}(),
-		func() testCase {
-			v := scpb.DefaultExprTypeReference{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.TypeID},
-			}
-		}(),
-		func() testCase {
-			v := scpb.ComputedExprTypeReference{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.TypeID},
-			}
-		}(),
-		func() testCase {
-			v := scpb.OnUpdateExprTypeReference{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.TypeID},
-			}
-		}(),
-		func() testCase {
 			v := scpb.View{}
 			return testCase{
 				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID},
-			}
-		}(),
-		func() testCase {
-			v := scpb.ViewDependsOnType{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.TypeID},
+				expIDs: []*catid.DescID{&v.ViewID},
 			}
 		}(),
 		func() testCase {
@@ -165,31 +122,17 @@ func TestWalk(t *testing.T) {
 			}
 		}(),
 		func() testCase {
-			v := scpb.ForeignKey{}
+			v := scpb.ForeignKeyConstraint{}
 			return testCase{
 				elem:   &v,
-				expIDs: []*catid.DescID{&v.OriginID, &v.ReferenceID},
+				expIDs: []*catid.DescID{&v.TableID, &v.ReferencedTableID},
 			}
 		}(),
 		func() testCase {
-			v := scpb.ForeignKeyBackReference{}
+			v := scpb.SequenceOwner{}
 			return testCase{
 				elem:   &v,
-				expIDs: []*catid.DescID{&v.OriginID, &v.ReferenceID},
-			}
-		}(),
-		func() testCase {
-			v := scpb.RelationDependedOnBy{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.TableID, &v.DependedOnBy},
-			}
-		}(),
-		func() testCase {
-			v := scpb.SequenceOwnedBy{}
-			return testCase{
-				elem:   &v,
-				expIDs: []*catid.DescID{&v.SequenceID, &v.OwnerTableID},
+				expIDs: []*catid.DescID{&v.SequenceID, &v.TableID},
 			}
 		}(),
 	} {

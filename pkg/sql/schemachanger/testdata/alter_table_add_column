@@ -15,7 +15,7 @@ begin transaction #1
 # begin StatementPhase
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 5 MutationType ops
+## PreCommitPhase stage 1 of 1 with 6 MutationType ops
 create job #1: "schema change job"
   descriptor IDs: [106]
 write *eventpb.AlterTable to event log for descriptor #106: ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN ‹j› INT8 NOT NULL DEFAULT ‹42›
@@ -26,12 +26,13 @@ upsert descriptor #106
   +  declarativeSchemaChangerState:
   +    authorization: {}
   +    currentStatuses:
+  +    - PUBLIC
+  +    - PUBLIC
+  +    - PUBLIC
   +    - DELETE_ONLY
   +    - ABSENT
   +    - DELETE_ONLY
   +    - ABSENT
-  +    - PUBLIC
-  +    - PUBLIC
   +    jobId: "1"
   +    relevantStatements:
   +    - statement:
@@ -46,18 +47,50 @@ upsert descriptor #106
   +    - 3
   +    - 4
   +    - 5
+  +    - 6
   +    targets:
+  +    - elementProto:
+  +        primaryIndex:
+  +          embeddedIndex:
+  +            indexId: 1
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            tableId: 106
+  +            unique: true
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        indexName:
+  +          indexId: 1
+  +          name: tbl_pkey
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: ABSENT
+  +    - elementProto:
+  +        columnDefaultExpression:
+  +          columnId: 2
+  +          embeddedExpr:
+  +            expr: 42:::INT8
+  +          tableId: 106
+  +      metadata:
+  +        sourceElementId: 1
+  +        subWorkId: 1
+  +      targetStatus: PUBLIC
   +    - elementProto:
   +        column:
   +          columnId: 2
-  +          defaultExpr: 42:::INT8
-  +          familyName: primary
-  +          pgAttributeNum: 2
+  +          embeddedTypeT:
+  +            type:
+  +              family: IntFamily
+  +              oid: 20
+  +              width: 64
   +          tableId: 106
-  +          type:
-  +            family: IntFamily
-  +            oid: 20
-  +            width: 64
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -73,17 +106,17 @@ upsert descriptor #106
   +      targetStatus: PUBLIC
   +    - elementProto:
   +        primaryIndex:
-  +          indexId: 2
-  +          keyColumnDirections:
-  +          - ASC
-  +          keyColumnIds:
-  +          - 1
-  +          shardedDescriptor: {}
-  +          sourceIndexId: 1
-  +          storingColumnIds:
-  +          - 2
-  +          tableId: 106
-  +          unique: true
+  +          embeddedIndex:
+  +            indexId: 2
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 1
+  +            sourceIndexId: 1
+  +            storingColumnIds:
+  +            - 2
+  +            tableId: 106
+  +            unique: true
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -97,30 +130,6 @@ upsert descriptor #106
   +        sourceElementId: 1
   +        subWorkId: 1
   +      targetStatus: PUBLIC
-  +    - elementProto:
-  +        primaryIndex:
-  +          indexId: 1
-  +          keyColumnDirections:
-  +          - ASC
-  +          keyColumnIds:
-  +          - 1
-  +          shardedDescriptor: {}
-  +          sourceIndexId: 1
-  +          tableId: 106
-  +          unique: true
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
-  +    - elementProto:
-  +        indexName:
-  +          indexId: 1
-  +          name: tbl_pkey
-  +          tableId: 106
-  +      metadata:
-  +        sourceElementId: 1
-  +        subWorkId: 1
-  +      targetStatus: ABSENT
      families:
      - columnIds:
        - 1
@@ -137,7 +146,6 @@ upsert descriptor #106
   +      defaultExpr: 42:::INT8
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
-  +      pgAttributeNum: 2
   +      type:
   +        family: IntFamily
   +        oid: 20
@@ -196,15 +204,15 @@ begin transaction #3
 update progress of schema change job #1
 upsert descriptor #106
   ...
-       authorization: {}
-       currentStatuses:
-  -    - DELETE_ONLY
-  +    - DELETE_AND_WRITE_ONLY
-       - ABSENT
-  -    - DELETE_ONLY
-  +    - DELETE_AND_WRITE_ONLY
-       - ABSENT
        - PUBLIC
+       - PUBLIC
+  -    - DELETE_ONLY
+  +    - DELETE_AND_WRITE_ONLY
+       - ABSENT
+  -    - DELETE_ONLY
+  +    - DELETE_AND_WRITE_ONLY
+       - ABSENT
+       jobId: "1"
   ...
        direction: ADD
        mutationId: 1
@@ -243,7 +251,6 @@ upsert descriptor #106
   +  - defaultExpr: 42:::INT8
   +    id: 2
   +    name: j
-  +    pgAttributeNum: 2
   +    type:
   +      family: IntFamily
   +      oid: 20
@@ -253,16 +260,17 @@ upsert descriptor #106
   ...
        authorization: {}
        currentStatuses:
-  -    - DELETE_AND_WRITE_ONLY
-  -    - ABSENT
-  -    - DELETE_AND_WRITE_ONLY
-  -    - ABSENT
-       - PUBLIC
-       - PUBLIC
-  +    - PUBLIC
-  +    - PUBLIC
   +    - VALIDATED
   +    - ABSENT
+       - PUBLIC
+       - PUBLIC
+       - PUBLIC
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  -    - DELETE_AND_WRITE_ONLY
+  -    - ABSENT
+  +    - PUBLIC
+  +    - PUBLIC
        jobId: "1"
        relevantStatements:
   ...
@@ -279,7 +287,6 @@ upsert descriptor #106
   -      defaultExpr: 42:::INT8
   -      id: 2
   -      name: crdb_internal_column_2_name_placeholder
-  -      pgAttributeNum: 2
   -      type:
   -        family: IntFamily
   -        oid: 20
@@ -349,12 +356,12 @@ update progress of schema change job #1
 set schema change job #1 to non-cancellable
 upsert descriptor #106
   ...
-       - PUBLIC
-       - PUBLIC
+       authorization: {}
+       currentStatuses:
   -    - VALIDATED
   +    - DELETE_ONLY
        - ABSENT
-       jobId: "1"
+       - PUBLIC
   ...
          version: 4
        mutationId: 1
@@ -380,12 +387,13 @@ upsert descriptor #106
   -  declarativeSchemaChangerState:
   -    authorization: {}
   -    currentStatuses:
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
-  -    - PUBLIC
   -    - DELETE_ONLY
   -    - ABSENT
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
+  -    - PUBLIC
   -    jobId: "1"
   -    relevantStatements:
   -    - statement:
@@ -400,18 +408,50 @@ upsert descriptor #106
   -    - 3
   -    - 4
   -    - 5
+  -    - 6
   -    targets:
+  -    - elementProto:
+  -        primaryIndex:
+  -          embeddedIndex:
+  -            indexId: 1
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            tableId: 106
+  -            unique: true
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        indexName:
+  -          indexId: 1
+  -          name: tbl_pkey
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: ABSENT
+  -    - elementProto:
+  -        columnDefaultExpression:
+  -          columnId: 2
+  -          embeddedExpr:
+  -            expr: 42:::INT8
+  -          tableId: 106
+  -      metadata:
+  -        sourceElementId: 1
+  -        subWorkId: 1
+  -      targetStatus: PUBLIC
   -    - elementProto:
   -        column:
   -          columnId: 2
-  -          defaultExpr: 42:::INT8
-  -          familyName: primary
-  -          pgAttributeNum: 2
+  -          embeddedTypeT:
+  -            type:
+  -              family: IntFamily
+  -              oid: 20
+  -              width: 64
   -          tableId: 106
-  -          type:
-  -            family: IntFamily
-  -            oid: 20
-  -            width: 64
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -427,17 +467,17 @@ upsert descriptor #106
   -      targetStatus: PUBLIC
   -    - elementProto:
   -        primaryIndex:
-  -          indexId: 2
-  -          keyColumnDirections:
-  -          - ASC
-  -          keyColumnIds:
-  -          - 1
-  -          shardedDescriptor: {}
-  -          sourceIndexId: 1
-  -          storingColumnIds:
-  -          - 2
-  -          tableId: 106
-  -          unique: true
+  -          embeddedIndex:
+  -            indexId: 2
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 1
+  -            sourceIndexId: 1
+  -            storingColumnIds:
+  -            - 2
+  -            tableId: 106
+  -            unique: true
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -451,30 +491,6 @@ upsert descriptor #106
   -        sourceElementId: 1
   -        subWorkId: 1
   -      targetStatus: PUBLIC
-  -    - elementProto:
-  -        primaryIndex:
-  -          indexId: 1
-  -          keyColumnDirections:
-  -          - ASC
-  -          keyColumnIds:
-  -          - 1
-  -          shardedDescriptor: {}
-  -          sourceIndexId: 1
-  -          tableId: 106
-  -          unique: true
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
-  -    - elementProto:
-  -        indexName:
-  -          indexId: 1
-  -          name: tbl_pkey
-  -          tableId: 106
-  -      metadata:
-  -        sourceElementId: 1
-  -        subWorkId: 1
-  -      targetStatus: ABSENT
      families:
      - columnIds:
   ...

@@ -16,13 +16,13 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.Type)(nil),
+	opRegistry.register((*scpb.AliasType)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			equiv(scpb.Status_TXN_DROPPED),
 			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.Type) scop.Op {
+				emit(func(this *scpb.AliasType) scop.Op {
 					return notImplemented(this)
 				}),
 			),
@@ -30,7 +30,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.Type) scop.Op {
+				emit(func(this *scpb.AliasType) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
 						DescID: this.TypeID,
 					}
@@ -39,7 +39,7 @@ func init() {
 			to(scpb.Status_DROPPED,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
-				emit(func(this *scpb.Type) scop.Op {
+				emit(func(this *scpb.AliasType) scop.Op {
 					return &scop.MarkDescriptorAsDropped{
 						DescID: this.TypeID,
 					}
@@ -47,10 +47,10 @@ func init() {
 			),
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PostCommitPhase),
-				emit(func(this *scpb.Type, ts scpb.TargetState) scop.Op {
+				emit(func(this *scpb.AliasType, ts scpb.TargetState) scop.Op {
 					return newLogEventOp(this, ts)
 				}),
-				emit(func(this *scpb.Type) scop.Op {
+				emit(func(this *scpb.AliasType) scop.Op {
 					return &scop.DeleteDescriptor{
 						DescriptorID: this.TypeID,
 					}

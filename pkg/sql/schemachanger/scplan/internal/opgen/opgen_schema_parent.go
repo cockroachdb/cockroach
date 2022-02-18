@@ -13,15 +13,15 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
-	opRegistry.register(
-		(*scpb.DatabaseSchemaEntry)(nil),
+	opRegistry.register((*scpb.SchemaParent)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DatabaseSchemaEntry) scop.Op {
+				emit(func(this *scpb.SchemaParent) scop.Op {
 					return notImplemented(this)
 				}),
 			),
@@ -31,10 +31,9 @@ func init() {
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
-				emit(func(this *scpb.DatabaseSchemaEntry) scop.Op {
-					return &scop.DeleteDatabaseSchemaEntry{
-						DatabaseID: this.DatabaseID,
-						SchemaID:   this.SchemaID,
+				emit(func(this *scpb.SchemaParent) scop.Op {
+					return &scop.RemoveSchemaParent{
+						Parent: *protoutil.Clone(this).(*scpb.SchemaParent),
 					}
 				}),
 			),

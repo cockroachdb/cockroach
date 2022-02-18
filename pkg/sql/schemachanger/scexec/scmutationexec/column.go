@@ -12,8 +12,8 @@ package scmutationexec
 
 import (
 	"context"
-	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -25,68 +25,46 @@ import (
 func (m *visitor) MakeAddedColumnDeleteOnly(
 	ctx context.Context, op scop.MakeAddedColumnDeleteOnly,
 ) error {
-	name := tabledesc.ColumnNamePlaceholder(op.ColumnID)
-	emptyStrToNil := func(v string) *string {
-		if v == "" {
-			return nil
-		}
-		return &v
+	col := &descpb.ColumnDescriptor{
+		ID:                      op.Column.ColumnID,
+		Name:                    tabledesc.ColumnNamePlaceholder(op.Column.ColumnID),
+		Type:                    op.Column.Type,
+		Nullable:                op.Column.Nullable,
+		Hidden:                  op.Column.Hidden,
+		Inaccessible:            op.Column.Inaccessible,
+		GeneratedAsIdentityType: op.Column.GeneratedAsIdentityType,
+		PGAttributeNum:          op.Column.PgAttributeNum,
+		SystemColumnKind:        op.Column.SystemColumnKind,
+		Virtual:                 op.Column.Virtual,
 	}
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if o := op.Column.GeneratedAsIdentitySequenceOption; o != "" {
+		col.GeneratedAsIdentitySequenceOption = &o
+	}
+	if ce := op.Column.ComputeExpr; ce != nil {
+		expr := string(ce.Expr)
+		col.ComputeExpr = &expr
+		col.UsesSequenceIds = ce.UsesSequenceIDs
+	}
+
+	tbl, err := m.checkOutTable(ctx, op.Column.TableID)
 	if err != nil {
 		return err
 	}
-
-	if op.ComputedExpr == "" ||
-		!op.Virtual {
-		foundFamily := false
+	if col.ComputeExpr == nil || !op.Column.Virtual {
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
-			if foundFamily = fam.ID == op.FamilyID; foundFamily {
-				fam.ColumnIDs = append(fam.ColumnIDs, op.ColumnID)
-				fam.ColumnNames = append(fam.ColumnNames, name)
+			if fam.ID == op.Column.FamilyID {
+				fam.ColumnIDs = append(fam.ColumnIDs, col.ID)
+				fam.ColumnNames = append(fam.ColumnNames, col.Name)
 				break
 			}
 		}
-		if !foundFamily {
-			tbl.Families = append(tbl.Families, descpb.ColumnFamilyDescriptor{
-				Name:        op.FamilyName,
-				ID:          op.FamilyID,
-				ColumnNames: []string{name},
-				ColumnIDs:   []descpb.ColumnID{op.ColumnID},
-			})
-			sort.Slice(tbl.Families, func(i, j int) bool {
-				return tbl.Families[i].ID < tbl.Families[j].ID
-			})
-			if tbl.NextFamilyID <= op.FamilyID {
-				tbl.NextFamilyID = op.FamilyID + 1
-			}
-		}
 	}
 
-	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
-	// or what-not.
-	if op.ColumnID >= tbl.NextColumnID {
-		tbl.NextColumnID = op.ColumnID + 1
+	if op.Column.ColumnID >= tbl.NextColumnID {
+		tbl.NextColumnID = op.Column.ColumnID + 1
 	}
-
-	return enqueueAddColumnMutation(tbl, &descpb.ColumnDescriptor{
-		ID:                                op.ColumnID,
-		Name:                              name,
-		Type:                              op.ColumnType,
-		Nullable:                          op.Nullable,
-		DefaultExpr:                       emptyStrToNil(string(op.DefaultExpr)),
-		OnUpdateExpr:                      emptyStrToNil(string(op.OnUpdateExpr)),
-		Hidden:                            op.Hidden,
-		Inaccessible:                      op.Inaccessible,
-		GeneratedAsIdentityType:           op.GeneratedAsIdentityType,
-		GeneratedAsIdentitySequenceOption: emptyStrToNil(op.GeneratedAsIdentitySequenceOption),
-		UsesSequenceIds:                   op.UsesSequenceIDs,
-		ComputeExpr:                       emptyStrToNil(string(op.ComputedExpr)),
-		PGAttributeNum:                    op.PgAttributeNum,
-		SystemColumnKind:                  op.SystemColumnKind,
-		Virtual:                           op.Virtual,
-	})
+	return enqueueAddColumnMutation(tbl, col)
 }
 
 func (m *visitor) MakeAddedColumnDeleteAndWriteOnly(
@@ -139,7 +117,8 @@ func (m *visitor) MakeDroppedColumnDeleteAndWriteOnly(
 			return enqueueDropColumnMutation(tbl, &desc)
 		}
 	}
-	return errors.AssertionFailedf("failed to find column %d in %v", op.ColumnID, tbl)
+	return errors.AssertionFailedf("failed to find column %d in table %q (%d)",
+		op.ColumnID, tbl.GetName(), tbl.GetID())
 }
 
 func (m *visitor) MakeDroppedColumnDeleteOnly(
@@ -159,7 +138,7 @@ func (m *visitor) MakeDroppedColumnDeleteOnly(
 
 func (m *visitor) MakeColumnAbsent(ctx context.Context, op scop.MakeColumnAbsent) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	mut, err := removeMutation(
@@ -180,9 +159,13 @@ func (m *visitor) AddColumnFamily(ctx context.Context, op scop.AddColumnFamily) 
 	if err != nil {
 		return err
 	}
-	tbl.AddFamily(op.Family)
-	if op.Family.ID >= tbl.NextFamilyID {
-		tbl.NextFamilyID = op.Family.ID + 1
+	family := descpb.ColumnFamilyDescriptor{
+		Name: op.Name,
+		ID:   op.FamilyID,
+	}
+	tbl.AddFamily(family)
+	if family.ID >= tbl.NextFamilyID {
+		tbl.NextFamilyID = family.ID + 1
 	}
 	return nil
 }
@@ -199,21 +182,84 @@ func (m *visitor) SetColumnName(ctx context.Context, op scop.SetColumnName) erro
 	return tabledesc.RenameColumnInTable(tbl, col, tree.Name(op.Name), nil /* isShardColumnRenameable */)
 }
 
+func (m *visitor) AddColumnDefaultExpression(
+	ctx context.Context, op scop.AddColumnDefaultExpression,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.Default.TableID)
+	if err != nil {
+		return err
+	}
+	col, err := tbl.FindColumnWithID(op.Default.ColumnID)
+	if err != nil {
+		return err
+	}
+	d := col.ColumnDesc()
+	expr := string(op.Default.Expr)
+	d.DefaultExpr = &expr
+	refs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
+	for _, seqID := range op.Default.UsesSequenceIDs {
+		if refs.Contains(seqID) {
+			continue
+		}
+		d.UsesSequenceIds = append(d.UsesSequenceIds, seqID)
+		refs.Add(seqID)
+	}
+	return nil
+}
+
 func (m *visitor) RemoveColumnDefaultExpression(
 	ctx context.Context, op scop.RemoveColumnDefaultExpression,
 ) error {
-	// Remove the descriptors namespaces as the last stage
 	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	col, err := tbl.FindColumnWithID(op.ColumnID)
 	if err != nil {
 		return err
 	}
-	column, err := tbl.FindColumnWithID(op.ColumnID)
-	if err != nil {
-		return err
-	}
+	d := col.ColumnDesc()
+	d.DefaultExpr = nil
+	return updateColumnExprSequenceUsage(d)
+}
 
-	// Clean up the default expression and the sequence ID's
-	column.ColumnDesc().DefaultExpr = nil
-	column.ColumnDesc().UsesSequenceIds = nil
+func (m *visitor) AddColumnOnUpdateExpression(
+	ctx context.Context, op scop.AddColumnOnUpdateExpression,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.OnUpdate.TableID)
+	if err != nil {
+		return err
+	}
+	col, err := tbl.FindColumnWithID(op.OnUpdate.ColumnID)
+	if err != nil {
+		return err
+	}
+	d := col.ColumnDesc()
+	expr := string(op.OnUpdate.Expr)
+	d.OnUpdateExpr = &expr
+	refs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
+	for _, seqID := range op.OnUpdate.UsesSequenceIDs {
+		if refs.Contains(seqID) {
+			continue
+		}
+		d.UsesSequenceIds = append(d.UsesSequenceIds, seqID)
+		refs.Add(seqID)
+	}
 	return nil
+}
+
+func (m *visitor) RemoveColumnOnUpdateExpression(
+	ctx context.Context, op scop.RemoveColumnOnUpdateExpression,
+) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	col, err := tbl.FindColumnWithID(op.ColumnID)
+	if err != nil {
+		return err
+	}
+	d := col.ColumnDesc()
+	d.OnUpdateExpr = nil
+	return updateColumnExprSequenceUsage(d)
 }

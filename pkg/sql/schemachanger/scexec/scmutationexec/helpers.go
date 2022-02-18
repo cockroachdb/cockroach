@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/errors"
 )
 
@@ -202,4 +204,35 @@ func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescripto
 	}
 	tbl.NextMutationID--
 	return nil
+}
+
+func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
+	var all catalog.DescriptorIDSet
+	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+		if expr == nil {
+			continue
+		}
+		ids, err := sequenceIDsInExpr(*expr)
+		if err != nil {
+			return err
+		}
+		ids.ForEach(all.Add)
+	}
+	d.UsesSequenceIds = all.Ordered()
+	return nil
+}
+
+func sequenceIDsInExpr(expr string) (ids catalog.DescriptorIDSet, _ error) {
+	e, err := parser.ParseExpr(expr)
+	if err != nil {
+		return ids, err
+	}
+	seqIdents, err := seqexpr.GetUsedSequences(e)
+	if err != nil {
+		return ids, err
+	}
+	for _, si := range seqIdents {
+		ids.Add(descpb.ID(si.SeqID))
+	}
+	return ids, nil
 }

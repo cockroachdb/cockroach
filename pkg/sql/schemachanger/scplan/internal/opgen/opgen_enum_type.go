@@ -16,31 +16,43 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.DefaultExpression)(nil),
+	opRegistry.register((*scpb.EnumType)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			equiv(scpb.Status_TXN_DROPPED),
+			equiv(scpb.Status_DROPPED),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.DefaultExpression) scop.Op {
+				emit(func(this *scpb.EnumType) scop.Op {
 					return notImplemented(this)
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
-			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
-				emit(func(this *scpb.DefaultExpression) scop.Op {
-					return &scop.RemoveColumnDefaultExpression{
-						TableID:  this.TableID,
-						ColumnID: this.ColumnID,
+			to(scpb.Status_TXN_DROPPED,
+				emit(func(this *scpb.EnumType) scop.Op {
+					return &scop.MarkDescriptorAsDroppedSynthetically{
+						DescID: this.TypeID,
 					}
 				}),
-				emit(func(this *scpb.DefaultExpression) scop.Op {
-					return &scop.RemoveColumnSequenceReferences{
-						TableID:     this.TableID,
-						ColumnID:    this.ColumnID,
-						SequenceIDs: this.UsesSequenceIDs,
+			),
+			to(scpb.Status_DROPPED,
+				minPhase(scop.PreCommitPhase),
+				revertible(false),
+				emit(func(this *scpb.EnumType) scop.Op {
+					return &scop.MarkDescriptorAsDropped{
+						DescID: this.TypeID,
+					}
+				}),
+			),
+			to(scpb.Status_ABSENT,
+				minPhase(scop.PostCommitPhase),
+				emit(func(this *scpb.EnumType, ts scpb.TargetState) scop.Op {
+					return newLogEventOp(this, ts)
+				}),
+				emit(func(this *scpb.EnumType) scop.Op {
+					return &scop.DeleteDescriptor{
+						DescriptorID: this.TypeID,
 					}
 				}),
 			),

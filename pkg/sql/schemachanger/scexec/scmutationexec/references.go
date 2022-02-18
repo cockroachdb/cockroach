@@ -16,210 +16,300 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
-func (m *visitor) DropForeignKeyRef(ctx context.Context, op scop.DropForeignKeyRef) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+func (m *visitor) RemoveSchemaParent(ctx context.Context, op scop.RemoveSchemaParent) error {
+	refID := op.Parent.ParentDatabaseID
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, refID); err != nil || desc.Dropped() {
+		return err
+	}
+	db, err := m.checkOutDatabase(ctx, refID)
 	if err != nil {
 		return err
 	}
-	fks := tbl.TableDesc().OutboundFKs
-	if !op.Outbound {
-		fks = tbl.TableDesc().InboundFKs
-	}
-	newFks := make([]descpb.ForeignKeyConstraint, 0, len(fks)-1)
-	for _, fk := range fks {
-		if op.Outbound && (fk.OriginTableID != op.TableID ||
-			op.Name != fk.Name) {
-			newFks = append(newFks, fk)
-		} else if !op.Outbound && (fk.ReferencedTableID != op.TableID ||
-			op.Name != fk.Name) {
-			newFks = append(newFks, fk)
+	for name, info := range db.Schemas {
+		if info.ID == op.Parent.SchemaID {
+			delete(db.Schemas, name)
 		}
 	}
-	if op.Outbound {
-		tbl.TableDesc().OutboundFKs = newFks
-	} else {
-		tbl.TableDesc().InboundFKs = newFks
-	}
 	return nil
 }
 
-func (m *visitor) AddCheckConstraint(ctx context.Context, op scop.AddCheckConstraint) error {
+func (m *visitor) RemoveSequenceOwner(ctx context.Context, op scop.RemoveSequenceOwner) error {
+	refID := op.Owner.SequenceID
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, refID); err != nil || desc.Dropped() {
+		return err
+	}
+	seq, err := m.checkOutTable(ctx, refID)
+	if err != nil {
+		return err
+	}
+	if !seq.Dropped() {
+		seq.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
+		seq.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
+	}
+	tbl, err := m.checkOutTable(ctx, op.Owner.TableID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	col, err := tbl.FindColumnWithID(op.Owner.ColumnID)
+	if err != nil {
+		return err
+	}
+	ids := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
+	ids.Remove(seq.GetID())
+	col.ColumnDesc().OwnsSequenceIds = ids.Ordered()
+	return nil
+}
+
+func (m *visitor) RemoveCheckConstraint(ctx context.Context, op scop.RemoveCheckConstraint) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
-	ck := &descpb.TableDescriptor_CheckConstraint{
-		Expr:      op.Expr,
-		Name:      op.Name,
-		ColumnIDs: op.ColumnIDs,
-		Hidden:    op.Hidden,
-	}
-	if op.Unvalidated {
-		ck.Validity = descpb.ConstraintValidity_Unvalidated
-	} else {
-		ck.Validity = descpb.ConstraintValidity_Validating
-	}
-	tbl.Checks = append(tbl.Checks, ck)
-	return nil
-}
-
-func (m *visitor) AddTypeBackRef(ctx context.Context, op scop.AddTypeBackRef) error {
-	typ, err := m.checkOutType(ctx, op.TypeID)
-	if err != nil {
-		return err
-	}
-	typ.AddReferencingDescriptorID(op.DescID)
-	// Sanity: Validate that a back reference exists by now.
-	desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.DescID)
-	if err != nil {
-		return err
-	}
-	refDescIDs, err := desc.GetReferencedDescIDs()
-	if err != nil {
-		return err
-	}
-	if !refDescIDs.Contains(op.TypeID) {
-		return errors.AssertionFailedf("Back reference for type %d is missing inside descriptor %d.",
-			op.TypeID, op.DescID)
-	}
-	return nil
-}
-
-func (m *visitor) RemoveRelationDependedOnBy(
-	ctx context.Context, op scop.RemoveRelationDependedOnBy,
-) error {
-	// Clean up dependencies for the relationship.
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	depDesc, err := m.checkOutTable(ctx, op.DependedOnBy)
-	if err != nil {
-		return err
-	}
-	// DependedOnBy can contain multiple entries per-dependency, so
-	// this isn't a single delete operation.
-	newDependedOnBy := make([]descpb.TableDescriptor_Reference, 0, len(tbl.DependedOnBy))
-	for _, dependsOnBy := range tbl.DependedOnBy {
-		if dependsOnBy.ID != op.DependedOnBy {
-			newDependedOnBy = append(newDependedOnBy, dependsOnBy)
-		}
-	}
-	tbl.DependedOnBy = newDependedOnBy
-	// Intentionally set empty slices to nil, so that for our data driven tests
-	// these fields are omitted in the output.
-	if len(tbl.DependedOnBy) == 0 {
-		tbl.DependedOnBy = nil
-	}
-
-	for depIdx, dependsOn := range depDesc.DependsOn {
-		if dependsOn == op.TableID {
-			depDesc.DependsOn = append(depDesc.DependsOn[:depIdx], depDesc.DependsOn[depIdx+1:]...)
+	var found bool
+	for i, c := range tbl.Checks {
+		if c.ConstraintID == op.ConstraintID {
+			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
+			found = true
 			break
 		}
 	}
-	// Intentionally set empty slices to nil, so that for our data driven tests
-	// these fields are omitted in the output.
-	if len(depDesc.DependsOn) == 0 {
-		depDesc.DependsOn = nil
-	}
-	return nil
-}
-
-func (m *visitor) RemoveSequenceOwnedBy(ctx context.Context, op scop.RemoveSequenceOwnedBy) error {
-	tbl, err := m.checkOutTable(ctx, op.SequenceID)
-	if err != nil {
-		return err
-	}
-	// Clean up the ownership inside the owning table first.
-	sequenceOwner := &tbl.GetSequenceOpts().SequenceOwner
-	ownedByTbl, err := m.checkOutTable(ctx, sequenceOwner.OwnerTableID)
-	if err != nil {
-		return err
-	}
-	col, err := ownedByTbl.FindColumnWithID(sequenceOwner.OwnerColumnID)
-	if err != nil {
-		return err
-	}
-	if found := removeOwnedByFromColumn(col.ColumnDesc(), op.SequenceID); !found {
-		return errors.AssertionFailedf("unable to find sequence (%d) owned by"+
-			" inside table (%d) and column (%d)",
-			op.SequenceID,
-			sequenceOwner.OwnerTableID,
-			sequenceOwner.OwnerColumnID)
-	}
-	// Next, clean the ownership on the sequence.
-	tbl.GetSequenceOpts().SequenceOwner.OwnerTableID = descpb.InvalidID
-	tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID = 0
-	return nil
-}
-
-func removeOwnedByFromColumn(col *descpb.ColumnDescriptor, seqID descpb.ID) (found bool) {
-	for idx := range col.OwnsSequenceIds {
-		if col.OwnsSequenceIds[idx] == seqID {
-			col.OwnsSequenceIds = append(
-				col.OwnsSequenceIds[:idx],
-				col.OwnsSequenceIds[idx+1:]...)
-			return true
+	for i, m := range tbl.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType != descpb.ConstraintToUpdate_CHECK &&
+			c.Check.ConstraintID == op.ConstraintID {
+			tbl.Mutations = append(tbl.Mutations[:i], tbl.Mutations[i+1:]...)
+			found = true
+			break
 		}
 	}
-	return false
-}
-
-func (m *visitor) RemoveTypeBackRef(ctx context.Context, op scop.RemoveTypeBackRef) error {
-	typ, err := m.checkOutType(ctx, op.TypeID)
-	if err != nil {
-		return err
+	if !found {
+		return errors.AssertionFailedf("failed to find check constraint %d in table %q (%d)",
+			op.ConstraintID, tbl.GetName(), tbl.GetID())
 	}
-	typ.RemoveReferencingDescriptorID(op.DescID)
 	return nil
 }
 
-func (m *visitor) RemoveColumnSequenceReferences(
-	ctx context.Context, op scop.RemoveColumnSequenceReferences,
+func (m *visitor) RemoveForeignKeyConstraintAndBackReference(
+	ctx context.Context, op scop.RemoveForeignKeyConstraintAndBackReference,
 ) error {
-	seqIDs := catalog.MakeDescriptorIDSet(op.SequenceIDs...)
-	if seqIDs.Empty() {
-		return nil
+	var name string
+	// Remove forward reference, and retrieve name to make it possible to remove
+	// the back reference afterwards.
+	{
+		out, err := m.checkOutTable(ctx, op.TableID)
+		if err != nil {
+			return err
+		}
+		for i, fk := range out.OutboundFKs {
+			if fk.ConstraintID == op.ConstraintID {
+				name = fk.Name
+				out.OutboundFKs = append(out.OutboundFKs[:i], out.OutboundFKs[i+1:]...)
+				break
+			}
+		}
+		for i, m := range out.Mutations {
+			if c := m.GetConstraint(); c != nil &&
+				c.ConstraintType != descpb.ConstraintToUpdate_FOREIGN_KEY &&
+				c.ForeignKey.ConstraintID == op.ConstraintID {
+				name = c.Name
+				out.Mutations = append(out.Mutations[:i], out.Mutations[i+1:]...)
+				break
+			}
+		}
+		if name == "" {
+			return errors.AssertionFailedf("failed to find foreign constraint %d in table %q (%d)",
+				op.ConstraintID, out.GetName(), out.GetID())
+		}
 	}
-
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	// Remove back reference.
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.ReferencedTableID); err != nil || desc.Dropped() {
+		return err
+	}
+	in, err := m.checkOutTable(ctx, op.ReferencedTableID)
 	if err != nil {
 		return err
 	}
-	newRefs := make([]descpb.TableDescriptor_Reference, 0, len(tbl.DependedOnBy))
-	for _, ref := range tbl.DependedOnBy {
-		if seqIDs.Contains(ref.ID) {
-			for j, colID := range ref.ColumnIDs {
-				if colID == op.ColumnID {
-					ref.ColumnIDs = append(ref.ColumnIDs[:j], ref.ColumnIDs[j+1:]...)
-					break
+	for i, fk := range in.InboundFKs {
+		if fk.OriginTableID == op.TableID && fk.Name == name {
+			in.InboundFKs = append(in.InboundFKs[:i], in.InboundFKs[i+1:]...)
+			break
+		}
+	}
+	for i, m := range in.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType != descpb.ConstraintToUpdate_FOREIGN_KEY &&
+			c.ForeignKey.OriginTableID == op.TableID &&
+			c.Name == name {
+			in.Mutations = append(in.Mutations[:i], in.Mutations[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+func (m *visitor) UpdateBackReferencesInTypes(
+	ctx context.Context, op scop.UpdateBackReferencesInTypes,
+) error {
+	if op.TypeIDs.Empty() {
+		return nil
+	}
+	var forwardRefs catalog.DescriptorIDSet
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.BackReferencedDescID); err != nil {
+		return err
+	} else if !desc.Dropped() {
+		desc, err = m.s.CheckOutDescriptor(ctx, desc.GetID())
+		if err != nil {
+			return err
+		}
+		if !desc.Dropped() {
+			forwardRefs, err = desc.GetReferencedDescIDs()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	for _, typeID := range op.TypeIDs.Ordered() {
+		if desc, err := MustReadImmutableDescriptor(ctx, m.cr, typeID); err != nil {
+			return err
+		} else if desc.Dropped() {
+			continue
+		}
+		typ, err := m.checkOutType(ctx, typeID)
+		if err != nil {
+			return err
+		}
+		if typ.Dropped() {
+			continue
+		}
+		backRefs := catalog.MakeDescriptorIDSet(typ.ReferencingDescriptorIDs...)
+		if forwardRefs.Contains(typeID) {
+			if backRefs.Contains(op.BackReferencedDescID) {
+				continue
+			}
+			backRefs.Add(op.BackReferencedDescID)
+		} else {
+			if !backRefs.Contains(op.BackReferencedDescID) {
+				continue
+			}
+			backRefs.Remove(op.BackReferencedDescID)
+		}
+		typ.ReferencingDescriptorIDs = backRefs.Ordered()
+	}
+	return nil
+}
+
+func (m *visitor) UpdateBackReferencesInSequences(
+	ctx context.Context, op scop.UpdateBackReferencesInSequences,
+) error {
+	if op.SequenceIDs.Empty() {
+		return nil
+	}
+	var forwardRefs catalog.DescriptorIDSet
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, op.BackReferencedTableID); err != nil {
+		return err
+	} else if !desc.Dropped() {
+		tbl, err := m.checkOutTable(ctx, op.BackReferencedTableID)
+		if err != nil {
+			return err
+		}
+		if !tbl.Dropped() {
+			if op.BackReferencedColumnID != 0 {
+				col, err := tbl.FindColumnWithID(op.BackReferencedColumnID)
+				if err != nil {
+					return err
+				}
+				for i, n := 0, col.NumUsesSequences(); i < n; i++ {
+					forwardRefs.Add(col.GetUsesSequenceID(i))
+				}
+				for i, n := 0, col.NumOwnsSequences(); i < n; i++ {
+					forwardRefs.Add(col.GetOwnsSequenceID(i))
+				}
+			} else {
+				for _, c := range tbl.AllActiveAndInactiveChecks() {
+					ids, err := sequenceIDsInExpr(c.Expr)
+					if err != nil {
+						return err
+					}
+					ids.ForEach(forwardRefs.Add)
 				}
 			}
 		}
-		newRefs = append(newRefs, ref)
 	}
-	if len(newRefs) == 0 {
-		newRefs = nil
+	for _, seqID := range op.SequenceIDs.Ordered() {
+		if err := updateBackReferencesInSequences(ctx, m, seqID, op.BackReferencedTableID, op.BackReferencedColumnID, forwardRefs); err != nil {
+			return err
+		}
 	}
-	tbl.DependedOnBy = newRefs
 	return nil
 }
 
-func (m *visitor) DeleteDatabaseSchemaEntry(
-	ctx context.Context, op scop.DeleteDatabaseSchemaEntry,
+func updateBackReferencesInSequences(
+	ctx context.Context,
+	m *visitor,
+	seqID, tblID descpb.ID,
+	colID descpb.ColumnID,
+	forwardRefs catalog.DescriptorIDSet,
 ) error {
-	db, err := m.checkOutDatabase(ctx, op.DatabaseID)
-	if err != nil {
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, seqID); err != nil || desc.Dropped() {
 		return err
 	}
-	sc, err := MustReadImmutableDescriptor(ctx, m.cr, op.SchemaID)
-	if err != nil {
+	seq, err := m.checkOutTable(ctx, seqID)
+	if err != nil || seq.Dropped() {
 		return err
 	}
-	delete(db.Schemas, sc.GetName())
+	var current, updated catalog.TableColSet
+	_ = seq.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+		if dep.ID == tblID {
+			current = catalog.MakeTableColSet(dep.ColumnIDs...)
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	if forwardRefs.Contains(seqID) {
+		if current.Contains(colID) {
+			return nil
+		}
+		updated.UnionWith(current)
+		updated.Add(colID)
+	} else {
+		if !current.Contains(colID) {
+			return nil
+		}
+		current.ForEach(func(id descpb.ColumnID) {
+			if id != colID {
+				updated.Add(id)
+			}
+		})
+	}
+	seq.UpdateColumnsDependedOnBy(tblID, updated)
+	return nil
+}
+
+func (m *visitor) RemoveViewBackReferencesInRelations(
+	ctx context.Context, op scop.RemoveViewBackReferencesInRelations,
+) error {
+	for _, relationID := range op.RelationIDs.Ordered() {
+		if err := removeViewBackReferencesInRelation(ctx, m, relationID, op.BackReferencedViewID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeViewBackReferencesInRelation(
+	ctx context.Context, m *visitor, relationID, viewID descpb.ID,
+) error {
+	if desc, err := MustReadImmutableDescriptor(ctx, m.cr, relationID); err != nil || desc.Dropped() {
+		return err
+	}
+	tbl, err := m.checkOutTable(ctx, relationID)
+	if err != nil || tbl.Dropped() {
+		return err
+	}
+	tbl.UpdateColumnsDependedOnBy(viewID, catalog.TableColSet{})
 	return nil
 }

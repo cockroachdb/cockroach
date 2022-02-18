@@ -16,19 +16,25 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.SequenceDependency)(nil),
+	opRegistry.register(
+		(*scpb.ColumnFamily)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SequenceDependency) scop.Op {
-					return notImplemented(this)
+				minPhase(scop.PreCommitPhase),
+				emit(func(this *scpb.ColumnFamily) scop.Op {
+					return &scop.AddColumnFamily{
+						TableID:  this.TableID,
+						FamilyID: this.FamilyID,
+						Name:     this.Name,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SequenceDependency) scop.Op {
+				emit(func(this *scpb.ColumnFamily) scop.Op {
 					return notImplemented(this)
 				}),
 			),

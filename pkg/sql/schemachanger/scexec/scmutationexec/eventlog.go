@@ -55,7 +55,7 @@ func asEventPayload(
 			return &eventpb.DropDatabase{DatabaseName: fullName}, nil
 		case *scpb.Schema:
 			return &eventpb.DropSchema{SchemaName: fullName}, nil
-		case *scpb.Type:
+		case *scpb.AliasType, *scpb.EnumType:
 			return &eventpb.DropType{TypeName: fullName}, nil
 		}
 	}

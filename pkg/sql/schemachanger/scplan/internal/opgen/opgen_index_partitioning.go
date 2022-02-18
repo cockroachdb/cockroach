@@ -11,7 +11,6 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -25,9 +24,7 @@ func init() {
 				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.IndexPartitioning) scop.Op {
 					return &scop.AddIndexPartitionInfo{
-						TableID:      this.TableID,
-						IndexID:      this.IndexID,
-						Partitioning: *protoutil.Clone(this.Partitioning).(*catpb.PartitioningDescriptor),
+						Partitioning: *protoutil.Clone(this).(*scpb.IndexPartitioning),
 					}
 				}),
 			),

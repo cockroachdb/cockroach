@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -32,7 +33,19 @@ func init() {
 			to(scpb.Status_TXN_DROPPED,
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.MarkDescriptorAsDroppedSynthetically{
-						DescID: this.TableID,
+						DescID: this.ViewID,
+					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.UpdateBackReferencesInTypes{
+						BackReferencedDescID: this.ViewID,
+						TypeIDs:              catalog.MakeDescriptorIDSet(this.UsesTypeIDs...),
+					}
+				}),
+				emit(func(this *scpb.View) scop.Op {
+					return &scop.RemoveViewBackReferencesInRelations{
+						BackReferencedViewID: this.ViewID,
+						RelationIDs:          catalog.MakeDescriptorIDSet(this.UsesRelationIDs...),
 					}
 				}),
 			),
@@ -41,7 +54,7 @@ func init() {
 				revertible(false),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.MarkDescriptorAsDropped{
-						DescID: this.TableID,
+						DescID: this.ViewID,
 					}
 				}),
 			),
@@ -52,7 +65,7 @@ func init() {
 				}),
 				emit(func(this *scpb.View) scop.Op {
 					return &scop.CreateGcJobForTable{
-						TableID: this.TableID,
+						TableID: this.ViewID,
 					}
 				}),
 			),

@@ -13,19 +13,16 @@ package opgen
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 func init() {
-	opRegistry.register((*scpb.ComputedExprTypeReference)(nil),
+	opRegistry.register((*scpb.SequenceOwner)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
-				emit(func(this *scpb.ComputedExprTypeReference) scop.Op {
-					return &scop.AddTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
-					}
+				emit(func(this *scpb.SequenceOwner) scop.Op {
+					return notImplemented(this)
 				}),
 			),
 		),
@@ -34,10 +31,9 @@ func init() {
 			to(scpb.Status_ABSENT,
 				minPhase(scop.PreCommitPhase),
 				revertible(false),
-				emit(func(this *scpb.ComputedExprTypeReference) scop.Op {
-					return &scop.RemoveTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
+				emit(func(this *scpb.SequenceOwner) scop.Op {
+					return &scop.RemoveSequenceOwner{
+						Owner: *protoutil.Clone(this).(*scpb.SequenceOwner),
 					}
 				}),
 			),

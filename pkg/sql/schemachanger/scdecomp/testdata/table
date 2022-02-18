@@ -1,0 +1,394 @@
+setup
+CREATE TABLE parent (id INT PRIMARY KEY);
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  name STRING NOT NULL,
+  price DECIMAL(8,2),
+  INDEX sec (name) STORING (price),
+  CONSTRAINT myfk FOREIGN KEY (id) REFERENCES parent (id)
+);
+----
+
+decompose
+parent
+----
+BackReferencedIDs:
+  - 105
+ElementState:
+- Table:
+    tableId: 104
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 104
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      tableId: 104
+      unique: true
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: parent_pkey
+    tableId: 104
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: parent
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 105
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: StringFamily
+        oid: 25
+    tableId: 105
+  Status: PUBLIC
+- Column:
+    columnId: 3
+    embeddedTypeT:
+      type:
+        family: DecimalFamily
+        oid: 1700
+        precision: 8
+        width: 2
+    nullable: true
+    tableId: 105
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      - 3
+      tableId: 105
+      unique: true
+  Status: PUBLIC
+- SecondaryIndex:
+    embeddedIndex:
+      indexId: 2
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 2
+      keySuffixColumnIds:
+      - 1
+      storingColumnIds:
+      - 3
+      tableId: 105
+  Status: PUBLIC
+- ForeignKeyConstraint:
+    columnIds:
+    - 1
+    constraintId: 2
+    referencedColumnIds:
+    - 1
+    referencedTableId: 104
+    tableId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: name
+    tableId: 105
+  Status: PUBLIC
+- ColumnName:
+    columnId: 3
+    name: price
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 105
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 3
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 105
+  Status: PUBLIC
+- IndexName:
+    indexId: 2
+    name: sec
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 2
+    tableId: 105
+  Status: PUBLIC
+- ConstraintName:
+    constraintId: 2
+    name: myfk
+    tableId: 105
+  Status: PUBLIC
+- ConstraintComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    constraintId: 2
+    tableId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 105
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 101
+  Status: PUBLIC
+
+setup
+ALTER TABLE parent ADD COLUMN j INT CREATE FAMILY f2;
+----
+
+decompose
+parent
+----
+BackReferencedIDs:
+  - 105
+ElementState:
+- Table:
+    tableId: 104
+  Status: PUBLIC
+- ColumnFamily:
+    familyId: 1
+    name: f2
+    tableId: 104
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 104
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    familyId: 1
+    nullable: true
+    tableId: 104
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 104
+      unique: true
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 104
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: j
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: parent_pkey
+    tableId: 104
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: parent
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC

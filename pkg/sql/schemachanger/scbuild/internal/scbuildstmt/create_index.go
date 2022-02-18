@@ -13,58 +13,95 @@ package scbuildstmt
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	prefix, rel, idx := b.ResolveIndex(n.Table.ToUnresolvedObjectName(), n.Name, ResolveParams{
-		IsExistenceOptional: true,
+	// Resolve the table name and start building the new index element.
+	relationElements := b.ResolveRelation(n.Table.ToUnresolvedObjectName(), ResolveParams{
+		IsExistenceOptional: false,
 		RequiredPrivilege:   privilege.CREATE,
 	})
-	if rel == nil {
-		// Table must exist.
-		panic(sqlerrors.NewUndefinedRelationError(n.Table.ToUnresolvedObjectName()))
+	index := scpb.Index{
+		Unique:       n.Unique,
+		Inverted:     n.Inverted,
+		Concurrently: n.Concurrently,
 	}
-	// Mutate the AST to have the fully resolved name from above, which will be
-	// used for both event logging and errors.
-	n.Table.ObjectNamePrefix = prefix.NamePrefix()
-	if idx != nil {
-		if n.IfNotExists {
-			return
-		}
-		// Index must not exist.
-		if idx.Dropped() {
-			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"index %q being dropped, try again later", n.Name.String()))
-		}
-		panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
-	}
+	var relation scpb.Element
+	var source *scpb.PrimaryIndex
+	relationElements.ForEachElementStatus(func(status, targetStatus scpb.Status, e scpb.Element) {
+		switch t := e.(type) {
+		case *scpb.Table:
+			n.Table.ObjectNamePrefix = b.NamePrefix(t)
+			if descpb.IsVirtualTable(t.TableID) {
+				return
+			}
+			index.TableID = t.TableID
+			relation = e
 
-	if rel.MaterializedView() {
-		if n.Sharded != nil {
-			panic(pgerror.New(pgcode.InvalidObjectDefinition,
-				"cannot create hash sharded index on materialized view"))
+		case *scpb.View:
+			n.Table.ObjectNamePrefix = b.NamePrefix(t)
+			if !t.IsMaterialized {
+				return
+			}
+			if n.Sharded != nil {
+				panic(pgerror.New(pgcode.InvalidObjectDefinition,
+					"cannot create hash sharded index on materialized view"))
+			}
+			index.TableID = t.ViewID
+			relation = e
+
+		case *scpb.TableLocality:
+			if n.PartitionByIndex != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported,
+					"cannot define PARTITION BY on a new INDEX in a multi-region database",
+				))
+			}
+			if n.Sharded != nil && t.LocalityConfig.GetRegionalByRow() != nil {
+				panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
+			}
+
+		case *scpb.PrimaryIndex:
+			if targetStatus == scpb.Status_PUBLIC {
+				source = t
+			}
+		}
+	})
+	if index.TableID == catid.InvalidDescID || source == nil {
+		panic(pgerror.Newf(pgcode.WrongObjectType,
+			"%q is not an indexable table or a materialized view", n.Table.ObjectName))
+	}
+	// Resolve the index name and make sure it doesn't exist yet.
+	{
+		indexElements := b.ResolveIndex(index.TableID, n.Name, ResolveParams{
+			IsExistenceOptional: true,
+			RequiredPrivilege:   privilege.CREATE,
+		})
+		if _, targetStatus, sec := scpb.FindSecondaryIndex(indexElements); sec != nil {
+			if n.IfNotExists {
+				return
+			}
+			if targetStatus == scpb.Status_ABSENT {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"index %q being dropped, try again later", n.Name.String()))
+			}
+			panic(pgerror.Newf(pgcode.DuplicateRelation, "index with name %q already exists", n.Name))
 		}
 	}
-
-	if n.PartitionByIndex != nil && rel.GetLocalityConfig() != nil {
-		panic(pgerror.New(
-			pgcode.FeatureNotSupported,
-			"cannot define PARTITION BY on a new INDEX in a multi-region database",
-		))
-	}
+	// Check that the index creation spec is sane.
 	columnRefs := map[string]struct{}{}
 	for _, columnNode := range n.Columns {
 		colName := columnNode.Column.String()
@@ -82,257 +119,165 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		}
 		columnRefs[colName] = struct{}{}
 	}
-
-	// Setup a secondary index node.
-	secondaryIndex := &scpb.SecondaryIndex{
-		TableID:            rel.GetID(),
-		Unique:             n.Unique,
-		KeyColumnIDs:       make([]descpb.ColumnID, 0, len(n.Columns)),
-		StoringColumnIDs:   make([]descpb.ColumnID, 0, len(n.Storing)),
-		Inverted:           n.Inverted,
-		Concurrently:       n.Concurrently,
-		KeySuffixColumnIDs: nil,
-		ShardedDescriptor:  nil,
-
-		// TODO(ajwerner): If there exists a new primary index due to a column
-		// set change in this transaction, we may need this to refer to the
-		// new primary index as opposed to the old primary index.
-		SourceIndexID: rel.GetPrimaryIndexID(),
-	}
-	colNames := make([]string, 0, len(n.Columns))
-	// Setup the column ID.
-	for _, columnNode := range n.Columns {
-		// If the column was just added the new schema changer is not supported.
-		if b.HasElementStatus(func(status, _ scpb.Status, elem scpb.Element) bool {
-			if status != scpb.Status_ABSENT {
-				return false
-			}
-			if col, ok := elem.(*scpb.ColumnName); ok {
-				return col.TableID == rel.GetID() && col.Name == columnNode.Column.String()
-			}
-			return false
-		}) {
-			panic(scerrors.NotImplementedErrorf(n, "column was added in the current transaction"))
-		}
+	// Set key column IDs and directions.
+	keyColNames := make([]string, len(n.Columns))
+	for i, columnNode := range n.Columns {
+		colName := columnNode.Column.String()
 		if columnNode.Expr != nil {
-			// TODO(fqazi): We need to deal with columns added in the same
-			// transaction here as well.
-			_, typ, _, err := schemaexpr.DequalifyAndValidateExpr(
-				b,
-				rel,
-				columnNode.Expr,
-				types.Any,
-				"index expression",
-				b.SemaCtx(),
-				tree.VolatilityImmutable,
-				&n.Table,
-			)
-			if err != nil {
-				panic(err)
+			tbl, ok := relation.(*scpb.Table)
+			if !ok {
+				panic(scerrors.NotImplementedErrorf(n,
+					"indexing virtual column expressions in materialized views is not supported"))
 			}
-			// Create a new virtual column and add it to the rel
-			// descriptor.
-			colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) bool {
-				_, err := rel.FindColumnWithName(tree.Name(name))
-				return err == nil
-			})
-			addCol := &tree.AlterTableAddColumn{
-				ColumnDef: &tree.ColumnTableDef{
-					Name:   tree.Name(colName),
-					Type:   typ,
-					Hidden: true,
-				},
-			}
-			addCol.ColumnDef.Computed.Computed = true
-			addCol.ColumnDef.Computed.Expr = columnNode.Expr
-			addCol.ColumnDef.Computed.Virtual = true
-			addCol.ColumnDef.Nullable.Nullability = tree.Null
-
-			// Add a new column element
-			alterTableAddColumn(b, rel, addCol, &n.Table)
-			var addColumn *scpb.ColumnName
-			scpb.ForEachColumnName(b, func(_, targetStatus scpb.Status, col *scpb.ColumnName) {
-				if targetStatus == scpb.Status_PUBLIC {
-					if col.TableID == rel.GetID() && col.Name == colName {
-						addColumn = col
-					}
-				}
-			})
-
-			// Set up the index based on the new column.
-			colNames = append(colNames, colName)
-			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, addColumn.ColumnID)
+			colName = createVirtualColumnForIndex(b, &n.Table, tbl, columnNode.Expr)
+			relationElements = b.QueryByID(index.TableID)
 		}
-		if columnNode.Expr == nil {
-			column, err := rel.FindColumnWithName(columnNode.Column)
-			if err != nil {
-				panic(err)
+		var columnID catid.ColumnID
+		scpb.ForEachColumnName(relationElements, func(_, targetStatus scpb.Status, e *scpb.ColumnName) {
+			if targetStatus == scpb.Status_PUBLIC && e.Name == colName {
+				columnID = e.ColumnID
 			}
-			colNames = append(colNames, column.GetName())
-			secondaryIndex.KeyColumnIDs = append(secondaryIndex.KeyColumnIDs, column.GetID())
+		})
+		if columnID == 0 {
+			panic(colinfo.NewUndefinedColumnError(colName))
 		}
-		// Convert the key column directions.
-		switch columnNode.Direction {
-		case tree.Ascending, tree.DefaultDirection:
-			secondaryIndex.KeyColumnDirections = append(secondaryIndex.KeyColumnDirections, scpb.SecondaryIndex_ASC)
-		case tree.Descending:
-			secondaryIndex.KeyColumnDirections = append(secondaryIndex.KeyColumnDirections, scpb.SecondaryIndex_DESC)
-		default:
-			panic(errors.AssertionFailedf("Unknown direction type %s", columnNode.Direction))
+		keyColNames[i] = colName
+		index.KeyColumnIDs = append(index.KeyColumnIDs, columnID)
+		direction := scpb.Index_ASC
+		if columnNode.Direction == tree.Descending {
+			direction = scpb.Index_DESC
+		}
+		index.KeyColumnDirections = append(index.KeyColumnDirections, direction)
+	}
+	// Set the key suffix column IDs.
+	keyColIDs := catalog.MakeTableColSet(index.KeyColumnIDs...)
+	for _, id := range source.KeyColumnIDs {
+		if !keyColIDs.Contains(id) {
+			index.KeySuffixColumnIDs = append(index.KeySuffixColumnIDs, id)
 		}
 	}
-	// Setup the storing columns.
+	// Set the storing column IDs.
 	for _, storingNode := range n.Storing {
-		column, err := rel.FindColumnWithName(storingNode)
-		if err != nil {
-			panic(err)
+		var columnID catid.ColumnID
+		scpb.ForEachColumnName(relationElements, func(_, targetStatus scpb.Status, e *scpb.ColumnName) {
+			if targetStatus == scpb.Status_PUBLIC && tree.Name(e.Name) == storingNode {
+				columnID = e.ColumnID
+			}
+		})
+		if columnID == 0 {
+			panic(colinfo.NewUndefinedColumnError(storingNode.String()))
 		}
-		secondaryIndex.StoringColumnIDs = append(secondaryIndex.StoringColumnIDs, column.GetID())
+		index.StoringColumnIDs = append(index.StoringColumnIDs, columnID)
 	}
+	// Set up sharding.
 	if n.Sharded != nil {
-		if n.PartitionByIndex.ContainsPartitions() {
-			panic(pgerror.New(pgcode.FeatureNotSupported, "sharded indexes don't support partitioning"))
-		}
-		if rel.IsLocalityRegionalByRow() {
-			panic(pgerror.New(pgcode.FeatureNotSupported, "hash sharded indexes are not compatible with REGIONAL BY ROW tables"))
-		}
 		buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), n.Sharded.ShardBuckets, n.StorageParams)
 		if err != nil {
 			panic(err)
 		}
-		shardColName := tabledesc.GetShardColumnName(colNames, buckets)
-		_, err = maybeCreateAndAddShardCol(b, int(buckets), rel, colNames, false)
-		if err != nil {
-			panic(err)
-		}
-		secondaryIndex.ShardedDescriptor = &catpb.ShardedDescriptor{
+		shardColName := maybeCreateAndAddShardCol(b, int(buckets), relation.(*scpb.Table), keyColNames)
+		index.Sharding = &catpb.ShardedDescriptor{
 			IsSharded:    true,
 			Name:         shardColName,
 			ShardBuckets: buckets,
-			ColumnNames:  colNames,
+			ColumnNames:  keyColNames,
 		}
 	}
 	// Assign the ID here, since we may have added columns
 	// and made a new primary key above.
-	secondaryIndex.IndexID = b.NextIndexID(rel)
-	secondaryIndexName := &scpb.IndexName{
-		TableID: secondaryIndex.TableID,
-		IndexID: secondaryIndex.IndexID,
+	index.SourceIndexID = source.IndexID
+	switch t := relation.(type) {
+	case *scpb.Table:
+		index.IndexID = b.NextTableIndexID(t)
+	case *scpb.View:
+		index.IndexID = b.NextViewIndexID(t)
+	}
+	sec := &scpb.SecondaryIndex{Index: index}
+	b.Add(sec)
+	b.Add(&scpb.IndexName{
+		TableID: index.TableID,
+		IndexID: index.IndexID,
 		Name:    string(n.Name),
-	}
-
-	// KeySuffixColumnIDs is only populated for indexes using the secondary
-	// index encoding. It is the set difference of the primary key minus the
-	// index's key.
-	colIDs := catalog.MakeTableColSet(secondaryIndex.KeyColumnIDs...)
-	for i := 0; i < rel.GetPrimaryIndex().NumKeyColumns(); i++ {
-		primaryColID := rel.GetPrimaryIndex().GetKeyColumnID(i)
-		if !colIDs.Contains(primaryColID) {
-			secondaryIndex.KeySuffixColumnIDs = append(secondaryIndex.KeySuffixColumnIDs, primaryColID)
-			colIDs.Add(primaryColID)
-		}
-	}
-
-	// Handle partitioning.
-	if n.PartitionByIndex.ContainsPartitions() {
-		addPartitioning(b, n.PartitionByIndex.PartitionBy, rel, secondaryIndex)
-	}
-
-	b.EnqueueAdd(secondaryIndex)
-	b.EnqueueAdd(secondaryIndexName)
-}
-
-func addPartitioning(
-	b BuildCtx, partBy *tree.PartitionBy, rel catalog.TableDescriptor, idx *scpb.SecondaryIndex,
-) {
-	oldKeyColumnNames := make([]string, len(idx.KeyColumnIDs))
-	for i, id := range idx.KeyColumnIDs {
-		col, err := rel.FindColumnWithID(id)
-		onErrPanic(err)
-		oldKeyColumnNames[i] = col.GetName()
-	}
-	_, part := b.CreatePartitioningDescriptor(
-		b,
-		rel.FindColumnWithName,
-		0, /* oldNumImplicitColumns */
-		oldKeyColumnNames,
-		partBy,
-		nil,   /* allowedNewColumnNames */
-		false, /* allowImplicitPartitioning */
-	)
-	b.EnqueueAdd(&scpb.IndexPartitioning{
-		TableID:      rel.GetID(),
-		IndexID:      idx.IndexID,
-		Partitioning: &part,
 	})
+	if n.PartitionByIndex.ContainsPartitions() {
+		b.Add(&scpb.IndexPartitioning{
+			TableID:                index.TableID,
+			IndexID:                index.IndexID,
+			PartitioningDescriptor: b.SecondaryIndexPartitioningDescriptor(sec, n.PartitionByIndex.PartitionBy),
+		})
+	}
 }
 
 // maybeCreateAndAddShardCol adds a new hidden computed shard column (or its mutation) to
 // `desc`, if one doesn't already exist for the given index column set and number of shard
 // buckets.
 func maybeCreateAndAddShardCol(
-	b BuildCtx, shardBuckets int, desc catalog.TableDescriptor, colNames []string, isNewTable bool,
-) (created bool, err error) {
-	shardColDesc, err := makeShardColumnDesc(colNames, shardBuckets)
-	if err != nil {
-		return false, err
-	}
-	existingShardCol, err := desc.FindColumnWithName(tree.Name(shardColDesc.Name))
-	if err == nil && !existingShardCol.Dropped() {
-		// TODO(ajwerner): In what ways is existingShardCol allowed to differ from
-		// the newly made shardCol? Should there be some validation of
-		// existingShardCol?
-		if !existingShardCol.IsHidden() {
+	b BuildCtx, shardBuckets int, tbl *scpb.Table, colNames []string,
+) (shardColName string) {
+	shardColName = tabledesc.GetShardColumnName(colNames, int32(shardBuckets))
+	elts := b.QueryByID(tbl.TableID)
+	// TODO(ajwerner): In what ways is the column referenced by
+	//  existingShardColID allowed to differ from the newly made shard column?
+	//  Should there be some validation of the existing shard column?
+	var existingShardColID catid.ColumnID
+	scpb.ForEachColumnName(elts, func(status, targetStatus scpb.Status, name *scpb.ColumnName) {
+		if targetStatus == scpb.Status_PUBLIC && name.Name == shardColName {
+			existingShardColID = name.ColumnID
+		}
+	})
+	scpb.ForEachColumn(elts, func(_, targetStatus scpb.Status, col *scpb.Column) {
+		if col.ColumnID == existingShardColID && !col.Hidden {
 			// The user managed to reverse-engineer our crazy shard column name, so
 			// we'll return an error here rather than try to be tricky.
-			return false, pgerror.Newf(pgcode.DuplicateColumn,
-				"column %s already specified; can't be used for sharding", shardColDesc.Name)
+			panic(pgerror.Newf(pgcode.DuplicateColumn,
+				"column %s already specified; can't be used for sharding", shardColName))
 		}
-		return false, nil
+	})
+	if existingShardColID != 0 {
+		return shardColName
 	}
-	columnIsUndefined := sqlerrors.IsUndefinedColumnError(err)
-	if err != nil && !columnIsUndefined {
-		return false, err
+	expr := schemaexpr.MakeHashShardComputeExpr(colNames, shardBuckets)
+	parsedExpr, err := parser.ParseExpr(*expr)
+	if err != nil {
+		panic(err)
 	}
-	if columnIsUndefined || existingShardCol.Dropped() {
-		if isNewTable {
-			panic(false)
-			//desc.AddColumn(shardColDesc)
-		} else {
-			shardColDesc.ID = b.NextColumnID(desc)
-			column := columnDescToElement(desc,
-				*shardColDesc,
-				&desc.GetFamilies()[0].Name,
-				&desc.GetFamilies()[0].ID)
-			b.EnqueueAdd(column)
-		}
-		if !shardColDesc.Virtual {
-			// Replace the primary index
-			oldPrimaryIndex, oldPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
-			newPrimaryIndex, newPrimaryIndexName := primaryIndexElemFromDescriptor(desc.GetPrimaryIndex().IndexDesc(), desc)
-			newPrimaryIndex.IndexID = b.NextIndexID(desc)
-			newPrimaryIndexName.IndexID = newPrimaryIndex.IndexID
-			newPrimaryIndexName.Name = tabledesc.PrimaryKeyIndexName(desc.GetName())
-			newPrimaryIndex.StoringColumnIDs = append(newPrimaryIndex.StoringColumnIDs, shardColDesc.ID)
-			b.EnqueueDrop(oldPrimaryIndex)
-			b.EnqueueDrop(oldPrimaryIndexName)
-			b.EnqueueAdd(newPrimaryIndex)
-			b.EnqueueAdd(newPrimaryIndexName)
-		}
-		created = true
+	col := &scpb.Column{
+		TableID:     tbl.TableID,
+		ColumnID:    b.NextTableColumnID(tbl),
+		TypeT:       scpb.TypeT{Type: types.Int4},
+		Hidden:      true,
+		ComputeExpr: newExpression(b, parsedExpr),
 	}
-	return created, nil
+	b.Add(col)
+	b.Add(&scpb.ColumnName{
+		TableID:  col.TableID,
+		ColumnID: col.ColumnID,
+		Name:     shardColName,
+	})
+	addOrUpdatePrimaryIndexTargetsForAddColumn(b, tbl, col)
+	return shardColName
 }
 
-// makeShardColumnDesc returns a new column descriptor for a hidden computed shard column
-// based on all the `colNames`.
-func makeShardColumnDesc(colNames []string, buckets int) (*descpb.ColumnDescriptor, error) {
-	col := &descpb.ColumnDescriptor{
-		Hidden:   true,
-		Nullable: false,
-		Type:     types.Int4,
+func createVirtualColumnForIndex(
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, expr tree.Expr,
+) string {
+	colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) (found bool) {
+		scpb.ForEachColumnName(b.QueryByID(tbl.TableID), func(_, targetStatus scpb.Status, cn *scpb.ColumnName) {
+			if targetStatus == scpb.Status_PUBLIC && cn.Name == name {
+				found = true
+			}
+		})
+		return found
+	})
+	d := &tree.ColumnTableDef{
+		Name:   tree.Name(colName),
+		Type:   types.Any,
+		Hidden: true,
 	}
-	col.Name = tabledesc.GetShardColumnName(colNames, int32(buckets))
-	col.ComputeExpr = schemaexpr.MakeHashShardComputeExpr(colNames, buckets)
-	return col, nil
+	d.Computed.Computed = true
+	d.Computed.Virtual = true
+	d.Computed.Expr = expr
+	d.Nullable.Nullability = tree.Null
+	alterTableAddColumn(b, tn, tbl, &tree.AlterTableAddColumn{ColumnDef: d})
+	return colName
 }

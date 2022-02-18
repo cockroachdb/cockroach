@@ -27,14 +27,14 @@ func NewMutationVisitor(
 	}
 }
 
+var _ scop.MutationVisitor = (*visitor)(nil)
+
 type visitor struct {
 	clock Clock
 	cr    CatalogReader
 	s     MutationVisitorStateUpdater
 }
 
-var _ scop.MutationVisitor = (*visitor)(nil)
-
-func (m *visitor) NotImplemented(_ context.Context, op scop.NotImplemented) error {
+func (m *visitor) NotImplemented(_ context.Context, _ scop.NotImplemented) error {
 	return nil
 }

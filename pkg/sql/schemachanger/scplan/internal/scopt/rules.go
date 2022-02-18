@@ -16,42 +16,65 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
-// When dropping relation objects, we need to mark the DROP op edges for their
+// When dropping objects, we need to mark the DROP op edges for their
 // dependent elements as no-op.
 func init() {
 	// Dependent objects that will have edges marked as no-op.
 	dep, depTarget, depNode := targetNodeVars("dep")
-	// Relation that is being dropped.
-	relation, relationTarget, relationNode := targetNodeVars("rel")
+	// Object that is being dropped.
+	object, objectTarget, objectNode := targetNodeVars("obj")
 	var id rel.Var = "id"
+
+	// Skip the column and index intermediate transitions, go straight from PUBLIC
+	// to ABSENT when dropping a relation.
 	registerNoOpEdges(
 		depNode, // source node of op edge to mark as no-op.
 		screl.MustQuery(
-			relation.Type(
+			object.Type(
 				(*scpb.Table)(nil),
 				(*scpb.View)(nil),
-				(*scpb.Sequence)(nil)),
+			),
 			dep.Type(
+				(*scpb.Column)(nil),
 				(*scpb.PrimaryIndex)(nil),
 				(*scpb.SecondaryIndex)(nil),
-				(*scpb.IndexName)(nil),
-				(*scpb.Column)(nil),
-				(*scpb.ColumnName)(nil),
-				(*scpb.ForeignKeyBackReference)(nil),
-				(*scpb.ForeignKey)(nil),
-				(*scpb.CheckConstraint)(nil),
-				(*scpb.UniqueConstraint)(nil),
-				(*scpb.ConstraintName)(nil),
-				(*scpb.Owner)(nil),
-				(*scpb.Locality)(nil),
-				(*scpb.UserPrivileges)(nil),
 			),
-			id.Entities(screl.DescID, relation, dep),
+			id.Entities(screl.DescID, object, dep),
 
-			// If the relation is in any drop state in the current phase,
-			// then any dependent edges should be cleaned up.
-			screl.JoinTargetNode(relation, relationTarget, relationNode),
-			relationTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			screl.JoinTargetNode(object, objectTarget, objectNode),
+			objectTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+
+			screl.JoinTargetNode(dep, depTarget, depNode),
+			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+		),
+	)
+
+	// Skip ops on other skippable dependent elements when dropping a descriptor.
+	registerNoOpEdges(
+		depNode, // source node of op edge to mark as no-op.
+		screl.MustQuery(
+			object.Type(
+				// Top-level elements which own a descriptor.
+				(*scpb.Database)(nil),
+				(*scpb.Schema)(nil),
+				(*scpb.Table)(nil),
+				(*scpb.View)(nil),
+				(*scpb.Sequence)(nil),
+				(*scpb.AliasType)(nil),
+				(*scpb.EnumType)(nil),
+			),
+			dep.Type(
+				(*scpb.TableLocality)(nil),
+				(*scpb.ColumnFamily)(nil),
+				(*scpb.UniqueWithoutIndexConstraint)(nil),
+				(*scpb.Owner)(nil),
+				(*scpb.UserPrivileges)(nil),
+				(*scpb.DatabaseRegionConfig)(nil),
+			),
+			id.Entities(screl.DescID, object, dep),
+
+			screl.JoinTargetNode(object, objectTarget, objectNode),
+			objectTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(dep, depTarget, depNode),
 			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
@@ -62,20 +85,20 @@ func init() {
 // When dropping a column we need to mark the DROP op edges for its column name
 // element as no-op.
 func init() {
-	name, nameTarget, nameNode := targetNodeVars("dep")
-	col, colTarget, colNode := targetNodeVars("col")
-	var id rel.Var = "id"
+	dep, depTarget, depNode := targetNodeVars("dep")
+	col, colTarget, colNode := targetNodeVars("column")
+	var descID rel.Var = "desc-id"
+	var colID rel.Var = "column-id"
 	registerNoOpEdges(
-		nameNode,
+		depNode,
 		screl.MustQuery(
 			col.Type((*scpb.Column)(nil)),
-			name.Type((*scpb.ColumnName)(nil)),
-			id.Entities(screl.ColumnID, col, name),
+			dep.Type((*scpb.ColumnName)(nil)),
+			descID.Entities(screl.DescID, col, dep),
+			colID.Entities(screl.ColumnID, col, dep),
 
-			// If the relation is in any drop state in the current phase,
-			// then any dependent edges should be cleaned up.
-			screl.JoinTargetNode(name, nameTarget, nameNode),
-			name.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			screl.JoinTargetNode(dep, depTarget, depNode),
+			dep.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(col, colTarget, colNode),
 			col.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
@@ -84,25 +107,53 @@ func init() {
 }
 
 // When dropping an index we need to mark the DROP op edges for its index name
-// element as no-op.
+// and partitioning element as no-op.
 func init() {
-	name, nameTarget, nameNode := targetNodeVars("dep")
-	idx, idxTarget, idxNode := targetNodeVars("idx")
-	var id rel.Var = "id"
+	dep, depTarget, depNode := targetNodeVars("dep")
+	idx, idxTarget, idxNode := targetNodeVars("index")
+	var descID rel.Var = "desc-id"
+	var idxID rel.Var = "index-id"
 	registerNoOpEdges(
-		nameNode,
+		depNode,
 		screl.MustQuery(
 			idx.Type((*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-			name.Type((*scpb.IndexName)(nil)),
-			id.Entities(screl.IndexID, idx, name),
+			dep.Type((*scpb.IndexName)(nil), (*scpb.IndexPartitioning)(nil)),
+			descID.Entities(screl.DescID, idx, dep),
+			idxID.Entities(screl.IndexID, idx, dep),
 
-			// If the relation is in any drop state in the current phase,
-			// then any dependent edges should be cleaned up.
-			screl.JoinTargetNode(name, nameTarget, nameNode),
-			name.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+			screl.JoinTargetNode(dep, depTarget, depNode),
+			dep.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 
 			screl.JoinTargetNode(idx, idxTarget, idxNode),
 			idx.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+		),
+	)
+}
+
+// When dropping a constraint we need to mark the DROP op edges for its
+// constraint name element as no-op.
+func init() {
+	dep, depTarget, depNode := targetNodeVars("dep")
+	constraint, constraintTarget, constraintNode := targetNodeVars("constraint")
+	var descID rel.Var = "desc-id"
+	var constraintID rel.Var = "constraint-id"
+	registerNoOpEdges(
+		depNode,
+		screl.MustQuery(
+			constraint.Type(
+				(*scpb.UniqueWithoutIndexConstraint)(nil),
+				(*scpb.CheckConstraint)(nil),
+				(*scpb.ForeignKeyConstraint)(nil),
+			),
+			dep.Type((*scpb.ConstraintName)(nil)),
+			descID.Entities(screl.DescID, constraint, dep),
+			constraintID.Entities(screl.ConstraintID, constraint, dep),
+
+			screl.JoinTargetNode(dep, depTarget, depNode),
+			depTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
+
+			screl.JoinTargetNode(constraint, constraintTarget, constraintNode),
+			constraintTarget.AttrEq(screl.TargetStatus, scpb.Status_ABSENT),
 		),
 	)
 }

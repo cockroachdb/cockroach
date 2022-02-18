@@ -48,14 +48,19 @@ const (
 	_ Attr = iota // reserve 0 for rel.Type
 	// DescID is the descriptor ID to which this element belongs.
 	DescID
-	// ReferencedDescID is the descriptor ID to which this element refers.
-	ReferencedDescID
-	//ColumnID is the column ID to which this element corresponds.
-	ColumnID
-	// Name is the name of the element.
-	Name
 	// IndexID is the index ID to which this element corresponds.
 	IndexID
+	// ColumnFamilyID is the ID of the column family for this element.
+	ColumnFamilyID
+	// ColumnID is the ID of the column for this element.
+	ColumnID
+	// ConstraintID is the ID of a constraint
+	ConstraintID
+	// Name is the name of the element.
+	Name
+	// ReferencedDescID is the descriptor ID to which this element refers.
+	ReferencedDescID
+
 	// TargetStatus is the target status of an element.
 	TargetStatus
 	// CurrentStatus is the current status of an element.
@@ -64,33 +69,49 @@ const (
 	Element
 	// Target is the reference from a node to a target.
 	Target
-	// Username is the username of the element
-	Username
-	// ConstraintType is the ID of a constraint
-	ConstraintType
-	// ConstraintOrdinal is the ordinal of the constraints
-	ConstraintOrdinal
-	// ConstraintID is the ID of a constraint
-	ConstraintID
-	// RoleName is the name of a roleset element.
-	RoleName
+	// AttrMax is the largest possible Attr value.
+	// Note: add any new enum values before TargetStatus, leave these at the end.
+	AttrMax = Target
 )
 
 var t = reflect.TypeOf
 
-// Schema is the schema exported by this package covering the elements of scpb.
-var Schema = rel.MustSchema("screl",
+var elementSchemaOptions = []rel.SchemaOption{
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
-	rel.EntityMapping(t((*Node)(nil)),
-		rel.EntityAttr(CurrentStatus, "CurrentStatus"),
-		rel.EntityAttr(Target, "Target"),
+	// Top-level elements.
+	rel.EntityMapping(t((*scpb.Database)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
 	),
-	rel.EntityMapping(t((*scpb.Target)(nil)),
-		rel.EntityAttr(TargetStatus, "TargetStatus"),
-		rel.EntityAttr(Element, elementProtoElementSelectors...),
+	rel.EntityMapping(t((*scpb.Schema)(nil)),
+		rel.EntityAttr(DescID, "SchemaID"),
+	),
+	rel.EntityMapping(t((*scpb.AliasType)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+	),
+	rel.EntityMapping(t((*scpb.EnumType)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+	),
+	rel.EntityMapping(t((*scpb.View)(nil)),
+		rel.EntityAttr(DescID, "ViewID"),
+	),
+	rel.EntityMapping(t((*scpb.Sequence)(nil)),
+		rel.EntityAttr(DescID, "SequenceID"),
+	),
+	rel.EntityMapping(t((*scpb.Table)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	// Table elements.
+	rel.EntityMapping(t((*scpb.TableLocality)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnFamily)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnFamilyID, "FamilyID"),
+		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Column)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnFamilyID, "FamilyID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
 	rel.EntityMapping(t((*scpb.PrimaryIndex)(nil)),
@@ -101,96 +122,53 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 	),
-	rel.EntityMapping(t((*scpb.SequenceDependency)(nil)),
-		rel.EntityAttr(DescID, "SequenceID"),
-		rel.EntityAttr(ReferencedDescID, "TableID"),
-		rel.EntityAttr(ColumnID, "ColumnID"),
-	),
-	rel.EntityMapping(t((*scpb.UniqueConstraint)(nil)),
+	rel.EntityMapping(t((*scpb.UniqueWithoutIndexConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(IndexID, "IndexID"),
-		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
 	rel.EntityMapping(t((*scpb.CheckConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Name, "Name"),
-		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
-	rel.EntityMapping(t((*scpb.Sequence)(nil)),
-		rel.EntityAttr(DescID, "SequenceID"),
+	rel.EntityMapping(t((*scpb.ForeignKeyConstraint)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ReferencedDescID, "ReferencedTableID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
-	rel.EntityMapping(t((*scpb.DefaultExpression)(nil)),
+	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	// Column elements.
+	rel.EntityMapping(t((*scpb.ColumnName)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
-	),
-	rel.EntityMapping(t((*scpb.View)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-	),
-	rel.EntityMapping(t((*scpb.DefaultExprTypeReference)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.ComputedExprTypeReference)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.OnUpdateExprTypeReference)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.ColumnTypeReference)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.CheckConstraintTypeReference)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.ViewDependsOnType)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ReferencedDescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.Table)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-	),
-	rel.EntityMapping(t((*scpb.ForeignKeyBackReference)(nil)),
-		rel.EntityAttr(DescID, "OriginID"),
-		rel.EntityAttr(ReferencedDescID, "ReferenceID"),
 		rel.EntityAttr(Name, "Name"),
 	),
-	rel.EntityMapping(t((*scpb.ForeignKey)(nil)),
-		rel.EntityAttr(DescID, "OriginID"),
-		rel.EntityAttr(ReferencedDescID, "ReferenceID"),
-		rel.EntityAttr(Name, "Name"),
-	),
-	rel.EntityMapping(t((*scpb.RelationDependedOnBy)(nil)),
+	rel.EntityMapping(t((*scpb.ColumnDefaultExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(ReferencedDescID, "DependedOnBy"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
-	rel.EntityMapping(t((*scpb.SequenceOwnedBy)(nil)),
-		rel.EntityAttr(DescID, "SequenceID"),
-		rel.EntityAttr(ReferencedDescID, "OwnerTableID"),
+	rel.EntityMapping(t((*scpb.ColumnOnUpdateExpression)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
-	rel.EntityMapping(t((*scpb.Type)(nil)),
-		rel.EntityAttr(DescID, "TypeID"),
-	),
-	rel.EntityMapping(t((*scpb.Schema)(nil)),
-		rel.EntityAttr(DescID, "SchemaID"),
-	),
-	rel.EntityMapping(t((*scpb.Database)(nil)),
-		rel.EntityAttr(DescID, "DatabaseID"),
+	// Index elements.
+	rel.EntityMapping(t((*scpb.IndexName)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(IndexID, "IndexID"),
+		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.IndexPartitioning)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 	),
+	// Constraint elements.
+	rel.EntityMapping(t((*scpb.ConstraintName)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(Name, "Name"),
+	),
+	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
 		rel.EntityAttr(Name, "Name"),
@@ -200,31 +178,33 @@ var Schema = rel.MustSchema("screl",
 	),
 	rel.EntityMapping(t((*scpb.UserPrivileges)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
-		rel.EntityAttr(Username, "Username"),
+		rel.EntityAttr(Name, "UserName"),
 	),
-	rel.EntityMapping(t((*scpb.ColumnName)(nil)),
+	// Database elements.
+	rel.EntityMapping(t((*scpb.DatabaseRegionConfig)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
+	),
+	rel.EntityMapping(t((*scpb.DatabaseRoleSetting)(nil)),
+		rel.EntityAttr(DescID, "DatabaseID"),
+		rel.EntityAttr(Name, "RoleName"),
+	),
+	// Sequence elements.
+	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
+		rel.EntityAttr(ReferencedDescID, "SequenceID"),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(Name, "Name"),
 	),
-	rel.EntityMapping(t((*scpb.Locality)(nil)),
-		rel.EntityAttr(DescID, "DescriptorID"),
+	// Parent elements.
+	rel.EntityMapping(t((*scpb.SchemaParent)(nil)),
+		rel.EntityAttr(DescID, "SchemaID"),
+		rel.EntityAttr(ReferencedDescID, "ParentDatabaseID"),
 	),
-	rel.EntityMapping(t((*scpb.IndexName)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(IndexID, "IndexID"),
-		rel.EntityAttr(Name, "Name"),
+	rel.EntityMapping(t((*scpb.ObjectParent)(nil)),
+		rel.EntityAttr(DescID, "ObjectID"),
+		rel.EntityAttr(ReferencedDescID, "ParentSchemaID"),
 	),
-	rel.EntityMapping(t((*scpb.ConstraintName)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Name, "Name"),
-		rel.EntityAttr(ConstraintType, "ConstraintType"),
-		rel.EntityAttr(ConstraintOrdinal, "ConstraintOrdinal"),
-	),
-	rel.EntityMapping(t((*scpb.DatabaseSchemaEntry)(nil)),
-		rel.EntityAttr(DescID, "DatabaseID"),
-		rel.EntityAttr(ReferencedDescID, "SchemaID"),
-	),
+	// Comment elements.
 	rel.EntityMapping(t((*scpb.TableComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
@@ -246,14 +226,21 @@ var Schema = rel.MustSchema("screl",
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
-	rel.EntityMapping(t((*scpb.DatabaseRoleSetting)(nil)),
-		rel.EntityAttr(DescID, "DatabaseID"),
-		rel.EntityAttr(RoleName, "RoleName"),
+}
+
+// Schema is the schema exported by this package covering the elements of scpb.
+var Schema = rel.MustSchema("screl", append(
+	elementSchemaOptions,
+	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
+	rel.EntityMapping(t((*Node)(nil)),
+		rel.EntityAttr(CurrentStatus, "CurrentStatus"),
+		rel.EntityAttr(Target, "Target"),
 	),
-	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
+	rel.EntityMapping(t((*scpb.Target)(nil)),
+		rel.EntityAttr(TargetStatus, "TargetStatus"),
+		rel.EntityAttr(Element, elementProtoElementSelectors...),
 	),
-)
+)...)
 
 // JoinTargetNode generates a clause that joins the target and node vars
 // to the corresponding element.

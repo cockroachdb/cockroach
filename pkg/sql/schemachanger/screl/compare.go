@@ -16,20 +16,14 @@ import (
 )
 
 // equalityAttrs are used to sort elements.
-var equalityAttrs = []rel.Attr{
-	rel.Type,
-	DescID,
-	ReferencedDescID,
-	ColumnID,
-	ConstraintID,
-	ConstraintType,
-	ConstraintOrdinal,
-	Name,
-	Username,
-	IndexID,
-	TargetStatus,
-	CurrentStatus,
-}
+var equalityAttrs = func() []rel.Attr {
+	s := make([]rel.Attr, AttrMax)
+	s[0] = rel.Type
+	for i := range s[1:] {
+		s[i+1] = Attr(i + 1)
+	}
+	return s
+}()
 
 // EqualElements returns true if the two elements are equal.
 func EqualElements(a, b scpb.Element) bool {

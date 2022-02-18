@@ -49,19 +49,16 @@ func TestValidateSchemaChangerState(t *testing.T) {
 	const prefix = validate.InvalidSchemaChangerStatePrefix
 	testCases := []testCase{
 		{
-			name: "no targets or job ID",
+			name: "no job ID",
 			ds:   ds{},
 			expectedErrors: []string{
 				prefix + " empty job ID",
-				prefix + " no targets",
 			},
 		},
 		{
-			name: "no targets",
-			ds:   ds{JobID: 1},
-			expectedErrors: []string{
-				prefix + " no targets",
-			},
+			name:           "no targets",
+			ds:             ds{JobID: 1},
+			expectedErrors: []string{},
 		},
 		{
 			name: "target desc ID mismatch, and missing ranks and status",

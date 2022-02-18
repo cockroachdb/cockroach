@@ -16,11 +16,11 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.RelationDependedOnBy)(nil),
+	opRegistry.register((*scpb.UniqueWithoutIndexConstraint)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) scop.Op {
 					return notImplemented(this)
 				}),
 			),
@@ -28,13 +28,8 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
-				emit(func(this *scpb.RelationDependedOnBy) scop.Op {
-					return &scop.RemoveRelationDependedOnBy{
-						TableID:      this.TableID,
-						DependedOnBy: this.DependedOnBy,
-					}
+				emit(func(this *scpb.UniqueWithoutIndexConstraint) scop.Op {
+					return notImplemented(this)
 				}),
 			),
 		),

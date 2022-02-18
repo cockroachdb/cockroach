@@ -47,33 +47,28 @@ func init() {
 
 func init() {
 	depRule(
-		"index existence precedes partitioning",
+		"index existence precedes index dependents",
 		scgraph.Precedence,
 		scpb.Status_PUBLIC,
 		element(scpb.Status_DELETE_ONLY, (*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-		element(scpb.Status_PUBLIC, (*scpb.IndexPartitioning)(nil)),
+		element(scpb.Status_PUBLIC,
+			(*scpb.IndexName)(nil),
+			(*scpb.IndexPartitioning)(nil),
+			(*scpb.IndexComment)(nil),
+		),
 		screl.DescID,
 		screl.IndexID,
 	).register()
 
 	depRule(
-		"index partitioning precedes allowing writes",
+		"dependents existence precedes writes to index",
 		scgraph.Precedence,
 		scpb.Status_PUBLIC,
-		element(scpb.Status_PUBLIC, (*scpb.IndexPartitioning)(nil)),
+		element(scpb.Status_PUBLIC,
+			(*scpb.IndexPartitioning)(nil),
+			(*scpb.IndexComment)(nil),
+		),
 		element(scpb.Status_DELETE_AND_WRITE_ONLY, (*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-		screl.DescID,
-		screl.IndexID,
-	).register()
-}
-
-func init() {
-	depRule(
-		"index existence precedes naming",
-		scgraph.Precedence,
-		scpb.Status_PUBLIC,
-		element(scpb.Status_DELETE_ONLY, (*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-		element(scpb.Status_PUBLIC, (*scpb.IndexName)(nil)),
 		screl.DescID,
 		screl.IndexID,
 	).register()
@@ -89,20 +84,28 @@ func init() {
 	).register()
 
 	depRule(
-		"index unnamed after index no longer public",
+		"dependents removed after index no longer public",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
 		element(scpb.Status_VALIDATED, (*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
-		element(scpb.Status_ABSENT, (*scpb.IndexName)(nil)),
+		element(scpb.Status_ABSENT,
+			(*scpb.IndexName)(nil),
+			(*scpb.IndexPartitioning)(nil),
+			(*scpb.IndexComment)(nil),
+		),
 		screl.DescID,
 		screl.IndexID,
 	).register()
 
 	depRule(
-		"index unnamed before index no longer exists",
+		"dependents removed before index",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
-		element(scpb.Status_ABSENT, (*scpb.IndexName)(nil)),
+		element(scpb.Status_ABSENT,
+			(*scpb.IndexName)(nil),
+			(*scpb.IndexPartitioning)(nil),
+			(*scpb.IndexComment)(nil),
+		),
 		element(scpb.Status_ABSENT, (*scpb.PrimaryIndex)(nil), (*scpb.SecondaryIndex)(nil)),
 		screl.DescID,
 		screl.IndexID,
@@ -111,11 +114,32 @@ func init() {
 
 func init() {
 	depRule(
-		"column must come into existence before being named",
+		"column existence precedes column dependents",
 		scgraph.Precedence,
 		scpb.Status_PUBLIC,
 		element(scpb.Status_DELETE_ONLY, (*scpb.Column)(nil)),
-		element(scpb.Status_PUBLIC, (*scpb.ColumnName)(nil)),
+		element(scpb.Status_PUBLIC,
+			(*scpb.ColumnName)(nil),
+			(*scpb.ColumnDefaultExpression)(nil),
+			(*scpb.ColumnOnUpdateExpression)(nil),
+			(*scpb.SequenceOwner)(nil),
+			(*scpb.ColumnComment)(nil),
+		),
+		screl.DescID,
+		screl.ColumnID,
+	).register()
+
+	depRule(
+		"column dependents precedes writes to column",
+		scgraph.Precedence,
+		scpb.Status_PUBLIC,
+		element(scpb.Status_PUBLIC,
+			(*scpb.ColumnDefaultExpression)(nil),
+			(*scpb.ColumnOnUpdateExpression)(nil),
+			(*scpb.SequenceOwner)(nil),
+			(*scpb.ColumnComment)(nil),
+		),
+		element(scpb.Status_DELETE_AND_WRITE_ONLY, (*scpb.Column)(nil)),
 		screl.DescID,
 		screl.ColumnID,
 	).register()
@@ -131,20 +155,32 @@ func init() {
 	).register()
 
 	depRule(
-		"column unnamed after column no longer public",
+		"dependents removed after column no longer public",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
 		element(scpb.Status_DELETE_AND_WRITE_ONLY, (*scpb.Column)(nil)),
-		element(scpb.Status_ABSENT, (*scpb.ColumnName)(nil)),
+		element(scpb.Status_ABSENT,
+			(*scpb.ColumnName)(nil),
+			(*scpb.ColumnDefaultExpression)(nil),
+			(*scpb.ColumnOnUpdateExpression)(nil),
+			(*scpb.SequenceOwner)(nil),
+			(*scpb.ColumnComment)(nil),
+		),
 		screl.DescID,
 		screl.ColumnID,
 	).register()
 
 	depRule(
-		"column unnamed before column no longer exists",
+		"dependents removed before column",
 		scgraph.Precedence,
 		scpb.Status_ABSENT,
-		element(scpb.Status_ABSENT, (*scpb.ColumnName)(nil)),
+		element(scpb.Status_ABSENT,
+			(*scpb.ColumnName)(nil),
+			(*scpb.ColumnDefaultExpression)(nil),
+			(*scpb.ColumnOnUpdateExpression)(nil),
+			(*scpb.SequenceOwner)(nil),
+			(*scpb.ColumnComment)(nil),
+		),
 		element(scpb.Status_ABSENT, (*scpb.Column)(nil)),
 		screl.DescID,
 		screl.ColumnID,

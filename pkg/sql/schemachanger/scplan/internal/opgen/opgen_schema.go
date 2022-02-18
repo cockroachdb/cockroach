@@ -34,11 +34,6 @@ func init() {
 						DescID: this.SchemaID,
 					}
 				}),
-				emit(func(this *scpb.Schema) scop.Op {
-					return &scop.DrainDescriptorName{
-						TableID: this.SchemaID,
-					}
-				}),
 			),
 			to(scpb.Status_DROPPED,
 				minPhase(scop.PreCommitPhase),

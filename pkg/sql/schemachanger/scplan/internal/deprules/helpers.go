@@ -11,22 +11,12 @@
 package deprules
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
 )
-
-func idInIDs(objects []descpb.ID, id descpb.ID) bool {
-	for _, other := range objects {
-		if other == id {
-			return true
-		}
-	}
-	return false
-}
 
 func targetNodeVars(el rel.Var) (element, target, node rel.Var) {
 	return el, el + "-target", el + "-node"

@@ -16,27 +16,23 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.ViewDependsOnType)(nil),
-		toPublic(scpb.Status_ABSENT,
+	opRegistry.register((*scpb.ForeignKeyConstraint)(nil),
+		toPublic(
+			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
-				emit(func(this *scpb.ViewDependsOnType) scop.Op {
-					return &scop.AddTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
-					}
+				emit(func(this *scpb.ForeignKeyConstraint) scop.Op {
+					return notImplemented(this)
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
-				emit(func(this *scpb.ViewDependsOnType) scop.Op {
-					return &scop.RemoveTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
+				emit(func(this *scpb.ForeignKeyConstraint) scop.Op {
+					return &scop.RemoveForeignKeyConstraintAndBackReference{
+						TableID:           this.TableID,
+						ReferencedTableID: this.ReferencedTableID,
+						ConstraintID:      this.ConstraintID,
 					}
 				}),
 			),

@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -29,7 +30,22 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
 				emit(func(this *scpb.CheckConstraint) scop.Op {
-					return notImplemented(this)
+					return &scop.RemoveCheckConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
+				}),
+				emit(func(this *scpb.CheckConstraint) scop.Op {
+					return &scop.UpdateBackReferencesInTypes{
+						TypeIDs:              catalog.MakeDescriptorIDSet(this.UsesTypeIDs...),
+						BackReferencedDescID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.CheckConstraint) scop.Op {
+					return &scop.UpdateBackReferencesInSequences{
+						SequenceIDs:           catalog.MakeDescriptorIDSet(this.UsesSequenceIDs...),
+						BackReferencedTableID: this.TableID,
+					}
 				}),
 			),
 		),

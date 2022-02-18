@@ -16,29 +16,20 @@ import (
 )
 
 func init() {
-	opRegistry.register((*scpb.CheckConstraintTypeReference)(nil),
+	opRegistry.register((*scpb.TableLocality)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				minPhase(scop.PreCommitPhase),
-				emit(func(this *scpb.CheckConstraintTypeReference) scop.Op {
-					return &scop.AddTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
-					}
+				emit(func(this *scpb.TableLocality) scop.Op {
+					return notImplemented(this)
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				minPhase(scop.PreCommitPhase),
-				revertible(false),
-				emit(func(this *scpb.CheckConstraintTypeReference) scop.Op {
-					return &scop.RemoveTypeBackRef{
-						TypeID: this.TypeID,
-						DescID: this.TableID,
-					}
+				emit(func(this *scpb.TableLocality) scop.Op {
+					return notImplemented(this)
 				}),
 			),
 		),

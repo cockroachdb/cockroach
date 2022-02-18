@@ -1,0 +1,456 @@
+setup
+CREATE SEQUENCE seq;
+CREATE SEQUENCE otherseq;
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE TYPE salutation AS ENUM('bonjour', 'hi');
+CREATE TABLE tbl (
+  id INT PRIMARY KEY,
+  cexpr INT DEFAULT (nextval('seq')) ON UPDATE (nextval('seq')+nextval('otherseq')),
+  CONSTRAINT mycheck CHECK ('hi'::greeting::STRING = 'hi'::salutation::STRING AND nextval('seq') > 0)
+);
+----
+
+decompose
+greeting
+----
+BackReferencedIDs:
+  - 110
+ElementState:
+- EnumType:
+    arrayTypeId: 107
+    typeId: 106
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 106
+    name: greeting
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 106
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 106
+    privileges: 512
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 106
+    parentSchemaId: 101
+  Status: PUBLIC
+
+
+decompose
+seq
+----
+BackReferencedIDs:
+  - 110
+ElementState:
+- Sequence:
+    sequenceId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: seq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC
+
+setup
+ALTER SEQUENCE otherseq OWNED BY tbl.cexpr;
+----
+
+decompose
+otherseq
+----
+BackReferencedIDs:
+  - 110
+ElementState:
+- Sequence:
+    sequenceId: 105
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 105
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 105
+    name: otherseq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 105
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 105
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 105
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 110
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    nullable: true
+    tableId: 110
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 110
+      unique: true
+  Status: PUBLIC
+- CheckConstraint:
+    constraintId: 2
+    embeddedExpr:
+      expr: (x'80':::@100106::STRING = x'80':::@100108::STRING) AND (nextval('seq':::STRING)
+        > 0:::INT8)
+      usesSequenceIds:
+      - 0
+      usesTypeIds:
+      - 106
+      - 108
+    tableId: 110
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: cexpr
+    tableId: 110
+  Status: PUBLIC
+- ColumnDefaultExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: nextval(104:::REGCLASS) + nextval(105:::REGCLASS)
+      usesSequenceIds:
+      - 104
+      - 105
+    tableId: 110
+  Status: PUBLIC
+- ColumnOnUpdateExpression:
+    columnId: 2
+    embeddedExpr:
+      expr: nextval('seq':::STRING) + nextval('otherseq':::STRING)
+      usesSequenceIds:
+      - 0
+    tableId: 110
+  Status: PUBLIC
+- SequenceOwner:
+    columnId: 2
+    sequenceId: 105
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 110
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 110
+  Status: PUBLIC
+- ConstraintName:
+    constraintId: 2
+    name: mycheck
+    tableId: 110
+  Status: PUBLIC
+- ConstraintComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    constraintId: 2
+    tableId: 110
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 110
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 110
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 110
+    parentSchemaId: 101
+  Status: PUBLIC
+
+setup
+ALTER TABLE tbl ALTER COLUMN cexpr DROP DEFAULT;
+ALTER TABLE tbl ALTER COLUMN cexpr DROP ON UPDATE;
+ALTER TABLE tbl DROP CONSTRAINT mycheck;
+DROP SEQUENCE otherseq CASCADE;
+----
+
+decompose
+tbl
+----
+BackReferencedIDs:
+ElementState:
+- Table:
+    tableId: 110
+  Status: PUBLIC
+- ColumnFamily:
+    name: primary
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 1
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    tableId: 110
+  Status: PUBLIC
+- Column:
+    columnId: 2
+    embeddedTypeT:
+      type:
+        family: IntFamily
+        oid: 20
+        width: 64
+    nullable: true
+    tableId: 110
+  Status: PUBLIC
+- PrimaryIndex:
+    embeddedIndex:
+      indexId: 1
+      keyColumnDirections:
+      - ASC
+      keyColumnIds:
+      - 1
+      storingColumnIds:
+      - 2
+      tableId: 110
+      unique: true
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 1
+    name: id
+    tableId: 110
+  Status: PUBLIC
+- ColumnName:
+    columnId: 2
+    name: cexpr
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 1
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- ColumnComment:
+    columnId: 2
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 110
+  Status: PUBLIC
+- IndexName:
+    indexId: 1
+    name: tbl_pkey
+    tableId: 110
+  Status: PUBLIC
+- IndexComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    indexId: 1
+    tableId: 110
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 110
+    name: tbl
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 110
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 110
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 110
+    parentSchemaId: 101
+  Status: PUBLIC
+
+decompose
+seq
+----
+BackReferencedIDs:
+ElementState:
+- Sequence:
+    sequenceId: 104
+  Status: PUBLIC
+- TableComment:
+    comment: TODO(fqazi) Comments are not currently fetched from system.comments when
+      doing decomposition
+    tableId: 104
+  Status: PUBLIC
+- Namespace:
+    databaseId: 100
+    descriptorId: 104
+    name: seq
+    schemaId: 101
+  Status: PUBLIC
+- Owner:
+    descriptorId: 104
+    owner: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: admin
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    privileges: 2
+    userName: root
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
+    userName: public
+  Status: PUBLIC
+- ObjectParent:
+    objectId: 104
+    parentSchemaId: 101
+  Status: PUBLIC

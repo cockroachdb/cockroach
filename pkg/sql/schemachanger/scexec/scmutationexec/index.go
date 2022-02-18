@@ -16,33 +16,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/errors"
 )
 
 func (m *visitor) MakeAddedIndexDeleteOnly(
 	ctx context.Context, op scop.MakeAddedIndexDeleteOnly,
 ) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.Index.TableID)
 	if err != nil {
 		return err
 	}
 	// TODO(ajwerner): deal with ordering the indexes or sanity checking this
 	// or what-not.
-	if op.IndexID >= tbl.NextIndexID {
-		tbl.NextIndexID = op.IndexID + 1
+	if op.Index.IndexID >= tbl.NextIndexID {
+		tbl.NextIndexID = op.Index.IndexID + 1
 	}
 	// Resolve column names
-	colNames, err := columnNamesFromIDs(tbl, op.KeyColumnIDs)
+	colNames, err := columnNamesFromIDs(tbl, op.Index.KeyColumnIDs)
 	if err != nil {
 		return err
 	}
-	storeColNames, err := columnNamesFromIDs(tbl, op.StoreColumnIDs)
+	storeColNames, err := columnNamesFromIDs(tbl, op.Index.StoringColumnIDs)
 	if err != nil {
 		return err
+	}
+	colDirs := make([]descpb.IndexDescriptor_Direction, len(op.Index.KeyColumnIDs))
+	for i, dir := range op.Index.KeyColumnDirections {
+		if dir == scpb.Index_DESC {
+			colDirs[i] = descpb.IndexDescriptor_DESC
+		}
 	}
 	// Set up the index descriptor type.
 	indexType := descpb.IndexDescriptor_FORWARD
-	if op.Inverted {
+	if op.Index.Inverted {
 		indexType = descpb.IndexDescriptor_INVERTED
 	}
 	// Set up the encoding type.
@@ -53,24 +60,24 @@ func (m *visitor) MakeAddedIndexDeleteOnly(
 	}
 	// Create an index descriptor from the operation.
 	idx := &descpb.IndexDescriptor{
-		ID:                  op.IndexID,
-		Name:                tabledesc.IndexNamePlaceholder(op.IndexID),
-		Unique:              op.Unique,
+		ID:                  op.Index.IndexID,
+		Name:                tabledesc.IndexNamePlaceholder(op.Index.IndexID),
+		Unique:              op.Index.Unique,
 		Version:             indexVersion,
 		KeyColumnNames:      colNames,
-		KeyColumnIDs:        op.KeyColumnIDs,
-		StoreColumnIDs:      op.StoreColumnIDs,
+		KeyColumnIDs:        op.Index.KeyColumnIDs,
+		StoreColumnIDs:      op.Index.StoringColumnIDs,
 		StoreColumnNames:    storeColNames,
-		KeyColumnDirections: op.KeyColumnDirections,
+		KeyColumnDirections: colDirs,
 		Type:                indexType,
-		KeySuffixColumnIDs:  op.KeySuffixColumnIDs,
-		CompositeColumnIDs:  op.CompositeColumnIDs,
+		KeySuffixColumnIDs:  op.Index.KeySuffixColumnIDs,
+		CompositeColumnIDs:  op.Index.CompositeColumnIDs,
 		CreatedExplicitly:   true,
 		EncodingType:        encodingType,
 		ConstraintID:        tbl.GetNextConstraintID(),
 	}
-	if op.ShardedDescriptor != nil {
-		idx.Sharded = *op.ShardedDescriptor
+	if op.Index.Sharding != nil {
+		idx.Sharded = *op.Index.Sharding
 	}
 	tbl.NextConstraintID++
 	return enqueueAddIndexMutation(tbl, idx)
@@ -165,7 +172,6 @@ func (m *visitor) MakeDroppedNonPrimaryIndexDeleteAndWriteOnly(
 			desc := idx.IndexDescDeepCopy()
 			tbl.Indexes = append(tbl.Indexes[:i], tbl.Indexes[i+1:]...)
 			return enqueueDropIndexMutation(tbl, &desc)
-
 		}
 	}
 	return errors.AssertionFailedf("failed to find secondary index %d in descriptor %v", op.IndexID, tbl)
@@ -188,7 +194,7 @@ func (m *visitor) MakeDroppedIndexDeleteOnly(
 
 func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
+	if err != nil || tbl.Dropped() {
 		return err
 	}
 	_, err = removeMutation(
@@ -200,15 +206,15 @@ func (m *visitor) MakeIndexAbsent(ctx context.Context, op scop.MakeIndexAbsent) 
 }
 
 func (m *visitor) AddIndexPartitionInfo(ctx context.Context, op scop.AddIndexPartitionInfo) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
+	tbl, err := m.checkOutTable(ctx, op.Partitioning.TableID)
 	if err != nil {
 		return err
 	}
-	index, err := tbl.FindIndexWithID(op.IndexID)
+	index, err := tbl.FindIndexWithID(op.Partitioning.IndexID)
 	if err != nil {
 		return err
 	}
-	index.IndexDesc().Partitioning = op.Partitioning
+	index.IndexDesc().Partitioning = op.Partitioning.PartitioningDescriptor
 	return nil
 }
 
