@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -74,7 +75,7 @@ var _ jobs.Resumer = &importResumer{}
 
 type preparedSchemaMetadata struct {
 	schemaPreparedDetails jobspb.ImportDetails
-	schemaRewrites        backupccl.DescRewriteMap
+	schemaRewrites        jobspb.DescRewriteMap
 	newSchemaIDToName     map[descpb.ID]string
 	oldSchemaIDToName     map[descpb.ID]string
 	queuedSchemaJobs      []jobspb.JobID
@@ -480,7 +481,7 @@ func prepareNewTablesForIngestion(
 	p sql.JobExecContext,
 	importTables []jobspb.ImportDetails_Table,
 	parentID descpb.ID,
-	schemaRewrites backupccl.DescRewriteMap,
+	schemaRewrites jobspb.DescRewriteMap,
 ) ([]*descpb.TableDescriptor, error) {
 	newMutableTableDescriptors := make([]*tabledesc.Mutable, len(importTables))
 	for i := range importTables {
@@ -497,7 +498,7 @@ func prepareNewTablesForIngestion(
 	// schema ID.
 	tableRewrites := schemaRewrites
 	if tableRewrites == nil {
-		tableRewrites = make(backupccl.DescRewriteMap)
+		tableRewrites = make(jobspb.DescRewriteMap)
 	}
 	seqVals := make(map[descpb.ID]int64, len(importTables))
 	for _, tableDesc := range importTables {
@@ -510,14 +511,14 @@ func prepareNewTablesForIngestion(
 		if rw, ok := schemaRewrites[oldParentSchemaID]; ok {
 			parentSchemaID = rw.ID
 		}
-		tableRewrites[tableDesc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
+		tableRewrites[tableDesc.Desc.ID] = &jobspb.DescriptorRewrite{
 			ID:             id,
 			ParentSchemaID: parentSchemaID,
 			ParentID:       parentID,
 		}
 		seqVals[id] = tableDesc.SeqVal
 	}
-	if err := backupccl.RewriteTableDescs(
+	if err := rewrite.RewriteTableDescs(
 		newMutableTableDescriptors, tableRewrites, "",
 	); err != nil {
 		return nil, err
@@ -607,7 +608,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 			details.ParentID)
 	}
 
-	schemaMetadata.schemaRewrites = make(backupccl.DescRewriteMap)
+	schemaMetadata.schemaRewrites = make(jobspb.DescRewriteMap)
 	mutableSchemaDescs := make([]*schemadesc.Mutable, 0)
 	for _, desc := range details.Schemas {
 		schemaMetadata.oldSchemaIDToName[desc.Desc.GetID()] = desc.Desc.GetName()
@@ -630,7 +631,7 @@ func (r *importResumer) prepareSchemasForIngestion(
 		dbDesc.AddSchemaToDatabase(newMutableSchemaDescriptor.Name,
 			descpb.DatabaseDescriptor_SchemaInfo{ID: newMutableSchemaDescriptor.ID})
 
-		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.RestoreDetails_DescriptorRewrite{
+		schemaMetadata.schemaRewrites[desc.Desc.ID] = &jobspb.DescriptorRewrite{
 			ID: id,
 		}
 	}
