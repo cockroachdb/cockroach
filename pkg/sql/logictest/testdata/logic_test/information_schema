@@ -424,6 +424,7 @@ crdb_internal       gossip_alerts
 crdb_internal       gossip_liveness
 crdb_internal       gossip_network
 crdb_internal       gossip_nodes
+crdb_internal       historical_contention_events
 crdb_internal       index_columns
 crdb_internal       index_usage_statistics
 crdb_internal       invalid_objects
@@ -744,6 +745,7 @@ gossip_alerts
 gossip_liveness
 gossip_network
 gossip_nodes
+historical_contention_events
 index_columns
 index_usage_statistics
 invalid_objects
@@ -1102,6 +1104,7 @@ system         crdb_internal       gossip_alerts                          SYSTEM
 system         crdb_internal       gossip_liveness                        SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_network                         SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_nodes                           SYSTEM VIEW  NO                  1
+system         crdb_internal       historical_contention_events           SYSTEM VIEW  NO                  1
 system         crdb_internal       index_columns                          SYSTEM VIEW  NO                  1
 system         crdb_internal       index_usage_statistics                 SYSTEM VIEW  NO                  1
 system         crdb_internal       invalid_objects                        SYSTEM VIEW  NO                  1
@@ -2694,6 +2697,7 @@ NULL     public   system         crdb_internal       gossip_alerts              
 NULL     public   system         crdb_internal       gossip_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
+NULL     public   system         crdb_internal       historical_contention_events           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES
@@ -3312,6 +3316,7 @@ NULL     public   system         crdb_internal       gossip_alerts              
 NULL     public   system         crdb_internal       gossip_liveness                        SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_network                         SELECT          NO            YES
 NULL     public   system         crdb_internal       gossip_nodes                           SELECT          NO            YES
+NULL     public   system         crdb_internal       historical_contention_events           SELECT          NO            YES
 NULL     public   system         crdb_internal       index_columns                          SELECT          NO            YES
 NULL     public   system         crdb_internal       index_usage_statistics                 SELECT          NO            YES
 NULL     public   system         crdb_internal       invalid_objects                        SELECT          NO            YES

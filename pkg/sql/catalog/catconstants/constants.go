@@ -114,6 +114,7 @@ const (
 	CrdbInternalGossipAlertsTableID
 	CrdbInternalGossipLivenessTableID
 	CrdbInternalGossipNetworkTableID
+	CrdbInternalHistoricalContentionEvents
 	CrdbInternalIndexColumnsTableID
 	CrdbInternalIndexUsageStatisticsTableID
 	CrdbInternalInflightTraceSpanTableID

@@ -75,6 +75,8 @@ var (
 	// maxNumTxns specifies the maximum number of txns that caused contention
 	// events to keep track of.
 	maxNumTxns = 10
+
+	_ eventReader = &Registry{}
 )
 
 var orderedKeyMapCfg = cache.Config{
@@ -283,6 +285,17 @@ func (r *Registry) AddContentionEvent(event contentionpb.ExtendedContentionEvent
 	}
 
 	r.eventStore.addEvent(event)
+}
+
+// ForEachEvent implements the eventReader interface.
+func (r *Registry) ForEachEvent(op func(event *contentionpb.ExtendedContentionEvent) error) error {
+	return r.eventStore.ForEachEvent(op)
+}
+
+// FlushEventsForTest flushes contention events in the write-buffer into the in-memory
+// store.
+func (r *Registry) FlushEventsForTest(ctx context.Context) error {
+	return r.eventStore.flushAndResolve(ctx)
 }
 
 func serializeTxnCache(txnCache *cache.UnorderedCache) []contentionpb.SingleTxnContention {
