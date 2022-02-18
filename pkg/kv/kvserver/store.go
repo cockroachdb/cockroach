@@ -3060,8 +3060,12 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		behindCount               int64
 
 		locks                          int64
+		totalLockHoldDurationNanos     int64
+		maxLockHoldDurationNanos       int64
 		locksWithWaitQueues            int64
 		lockWaitQueueWaiters           int64
+		totalLockWaitDurationNanos     int64
+		maxLockWaitDurationNanos       int64
 		maxLockWaitQueueWaitersForLock int64
 
 		minMaxClosedTS hlc.Timestamp
@@ -3119,10 +3123,18 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			averageWritesPerSecond += wps
 		}
 		locks += metrics.LockTableMetrics.Locks
+		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
 		locksWithWaitQueues += metrics.LockTableMetrics.LocksWithWaitQueues
 		lockWaitQueueWaiters += metrics.LockTableMetrics.Waiters
+		totalLockWaitDurationNanos += metrics.LockTableMetrics.TotalWaitDurationNanos
 		if w := metrics.LockTableMetrics.TopKLocksByWaiters[0].Waiters; w > maxLockWaitQueueWaitersForLock {
 			maxLockWaitQueueWaitersForLock = w
+		}
+		if w := metrics.LockTableMetrics.TopKLocksByHoldDuration[0].HoldDurationNanos; w > maxLockHoldDurationNanos {
+			maxLockHoldDurationNanos = w
+		}
+		if w := metrics.LockTableMetrics.TopKLocksByWaitDuration[0].MaxWaitDurationNanos; w > maxLockWaitDurationNanos {
+			maxLockWaitDurationNanos = w
 		}
 		mc := rep.GetClosedTimestamp(ctx)
 		if minMaxClosedTS.IsEmpty() || mc.Less(minMaxClosedTS) {
@@ -3148,9 +3160,22 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 
+	var averageLockHoldDurationNanos int64
+	var averageLockWaitDurationNanos int64
+	if locks > 0 {
+		averageLockHoldDurationNanos = totalLockHoldDurationNanos / locks
+	}
+	if lockWaitQueueWaiters > 0 {
+		averageLockWaitDurationNanos = totalLockWaitDurationNanos / lockWaitQueueWaiters
+	}
+
 	s.metrics.Locks.Update(locks)
+	s.metrics.AverageLockHoldDurationNanos.Update(averageLockHoldDurationNanos)
+	s.metrics.MaxLockHoldDurationNanos.Update(maxLockHoldDurationNanos)
 	s.metrics.LocksWithWaitQueues.Update(locksWithWaitQueues)
 	s.metrics.LockWaitQueueWaiters.Update(lockWaitQueueWaiters)
+	s.metrics.AverageLockWaitDurationNanos.Update(averageLockWaitDurationNanos)
+	s.metrics.MaxLockWaitDurationNanos.Update(maxLockWaitDurationNanos)
 	s.metrics.MaxLockWaitQueueWaitersForLock.Update(maxLockWaitQueueWaitersForLock)
 
 	if !minMaxClosedTS.IsEmpty() {
