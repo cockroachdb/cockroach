@@ -45,13 +45,10 @@ func InitIndexFetchSpec(
 		NumKeySuffixColumns: uint32(index.NumKeySuffixColumns()),
 	}
 
-	indexID := index.GetID()
-	maxKeysPerRow, err := table.KeysPerRow(indexID)
-	if err != nil {
-		return err
-	}
+	maxKeysPerRow := table.IndexKeysPerRow(index)
 	s.MaxKeysPerRow = uint32(maxKeysPerRow)
-	s.KeyPrefixLength = uint32(len(MakeIndexKeyPrefix(codec, table.GetID(), indexID)))
+	// TODO(radu): calculate the length without actually generating a throw-away key.
+	s.KeyPrefixLength = uint32(len(MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())))
 
 	families := table.GetFamilies()
 	for i := range families {
