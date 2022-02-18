@@ -56,10 +56,10 @@ import (
 type importResumer struct {
 	job      *jobs.Job
 	settings *cluster.Settings
-	res      backupccl.RowCount
+	res      roachpb.RowCount
 
 	testingKnobs struct {
-		afterImport            func(summary backupccl.RowCount) error
+		afterImport            func(summary roachpb.RowCount) error
 		alwaysFlushJobProgress bool
 	}
 }
@@ -364,10 +364,12 @@ func (r *importResumer) prepareTablesForIngestion(
 			if err != nil {
 				return importDetails, err
 			}
-			importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc, Name: table.Name,
+			importDetails.Tables[i] = jobspb.ImportDetails_Table{
+				Desc: desc, Name: table.Name,
 				SeqVal:     table.SeqVal,
 				IsNew:      table.IsNew,
-				TargetCols: table.TargetCols}
+				TargetCols: table.TargetCols,
+			}
 
 			hasExistingTables = true
 		} else {
@@ -410,11 +412,13 @@ func (r *importResumer) prepareTablesForIngestion(
 			}
 			i := newSchemaAndTableNameToIdx[key.String()]
 			table := details.Tables[i]
-			importDetails.Tables[i] = jobspb.ImportDetails_Table{Desc: desc,
+			importDetails.Tables[i] = jobspb.ImportDetails_Table{
+				Desc:       desc,
 				Name:       table.Name,
 				SeqVal:     table.SeqVal,
 				IsNew:      table.IsNew,
-				TargetCols: table.TargetCols}
+				TargetCols: table.TargetCols,
+			}
 		}
 	}
 

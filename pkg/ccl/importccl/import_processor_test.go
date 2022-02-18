@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -206,6 +205,7 @@ func (a *doNothingKeyAdder) Add(_ context.Context, k roachpb.Key, _ []byte) erro
 	}
 	return nil
 }
+
 func (a *doNothingKeyAdder) Flush(_ context.Context) error {
 	if a.onFlush != nil {
 		a.onFlush(roachpb.BulkOpSummary{})
@@ -302,7 +302,6 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 			post := execinfrapb.PostProcessSpec{}
 
 			processor, err := newReadImportDataProcessor(flowCtx, 0, *spec, &post, &errorReportingRowReceiver{t})
-
 			if err != nil {
 				t.Fatalf("Could not create data processor: %v", err)
 			}
@@ -418,7 +417,6 @@ func TestImportHonorsResumePosition(t *testing.T) {
 				}()
 
 				_, err := runImport(ctx, flowCtx, spec, progCh, nil /* seqChunkProvider */)
-
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -665,16 +663,15 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	jobCtx, cancelImport := context.WithCancel(ctx)
 	jobIDCh := make(chan jobspb.JobID)
 	var jobID jobspb.JobID = -1
-	var importSummary backupccl.RowCount
+	var importSummary roachpb.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
 		// returned the very first time we start the import.
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
-
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+			resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
 				importSummary = summary
 				return nil
 			}
@@ -771,7 +768,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	controllerBarrier, importBarrier := newSyncBarrier()
 
 	var jobID jobspb.JobID = -1
-	var importSummary backupccl.RowCount
+	var importSummary roachpb.RowCount
 
 	registry.TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 		// Arrange for our special job resumer to be
@@ -779,7 +776,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 		jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 			resumer := raw.(*importResumer)
 			resumer.testingKnobs.alwaysFlushJobProgress = true
-			resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+			resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
 				importSummary = summary
 				return nil
 			}
