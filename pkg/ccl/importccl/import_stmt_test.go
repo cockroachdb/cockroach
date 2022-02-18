@@ -879,7 +879,8 @@ END;
 	CONSTRAINT a_pkey PRIMARY KEY (i ASC),
 	CONSTRAINT a_i_fkey FOREIGN KEY (i) REFERENCES public.b(j) NOT VALID,
 	CONSTRAINT a_k_fkey FOREIGN KEY (k) REFERENCES public.a(i) NOT VALID
-)`}, {
+)`,
+				}, {
 					`CREATE TABLE public.b (
 	j INT8 NOT NULL,
 	CONSTRAINT b_pkey PRIMARY KEY (j ASC),
@@ -1891,7 +1892,7 @@ func TestFailedImportGC(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
 						return errors.New("testing injected failure")
 					}
@@ -1986,7 +1987,7 @@ func TestImportCSVStmt(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
 						return errors.New("testing injected failure")
 					}
@@ -2804,7 +2805,7 @@ func TestImportIntoCSV(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if importBodyFinished != nil {
 						importBodyFinished <- struct{}{}
 					}
@@ -3532,7 +3533,6 @@ func TestImportIntoCSV(t *testing.T) {
 
 	// Tests that IMPORT INTO invalidates FK and CHECK constraints.
 	t.Run("import-into-invalidate-constraints", func(t *testing.T) {
-
 		sqlDB.Exec(t, `CREATE TABLE ref (b STRING PRIMARY KEY)`)
 		defer sqlDB.Exec(t, `DROP TABLE ref`)
 		sqlDB.Exec(t, `CREATE TABLE t (a INT CHECK (a >= 0), b STRING, CONSTRAINT fk_ref FOREIGN KEY (b) REFERENCES ref)`)
@@ -4147,7 +4147,6 @@ func TestImportDefault(t *testing.T) {
 				sqlDB.QueryRow(t, `SELECT COUNT (*) FROM t`).Scan(&numRows)
 				require.Equal(t, numDistinctRows, len(test.rowIDCols)*numRows)
 			})
-
 		}
 	})
 	t.Run("random-functions", func(t *testing.T) {
@@ -4323,8 +4322,10 @@ func TestImportDefaultNextVal(t *testing.T) {
 				name:       "two-nextval-diff-seq",
 				create:     "a INT, b INT DEFAULT nextval('myseq') + nextval('myseq2'), c STRING",
 				targetCols: []string{"a", "c"},
-				seqToNumNextval: map[string]seqMetadata{"myseq": {1, 1, 1116, 116},
-					"myseq2": {1, 1, 1116, 116}},
+				seqToNumNextval: map[string]seqMetadata{
+					"myseq":  {1, 1, 1116, 116},
+					"myseq2": {1, 1, 1116, 116},
+				},
 				insertData: `(1, 'cat'), (2, 'him'), (3, 'meme')`,
 			},
 			// TODO(adityamaru): Unskip once #56387 is fixed.
@@ -4434,7 +4435,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 				jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 					resumer := raw.(*importResumer)
 					resumer.testingKnobs.alwaysFlushJobProgress = true
-					resumer.testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+					resumer.testingKnobs.afterImport = func(summary roachpb.RowCount) error {
 						return nil
 					}
 					if jobID == -1 {
@@ -5887,7 +5888,6 @@ func TestImportPgDumpDropTable(t *testing.T) {
 
 	// If the target table for a DROP exists, we throw an error.
 	t.Run("table exists", func(t *testing.T) {
-
 		// Set up table `t` exists for testing.
 		sqlDB.Exec(t, `DROP TABLE IF EXISTS t; CREATE TABLE t (a INT);`)
 
@@ -5905,7 +5905,6 @@ func TestImportPgDumpDropTable(t *testing.T) {
 
 	// If the target table for a DROP does not exist, we ignore the statement.
 	t.Run("table does not exist", func(t *testing.T) {
-
 		// Set up table `t` does not exist for testing.
 		sqlDB.Exec(t, `DROP TABLE IF EXISTS t;`)
 
@@ -5983,8 +5982,14 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		expectedSeqName := "testseq"
 		sqlDB.CheckQueryResults(t, `SELECT schema_name,
 	table_name FROM [SHOW TABLES] ORDER BY (schema_name, table_name)`,
-			[][]string{{"bar", expectedTableName}, {"bar", expectedTableName2}, {"bar", expectedSeqName},
-				{"baz", expectedTableName}, {"foo", expectedTableName}, {"public", expectedTableName}})
+			[][]string{
+				{"bar", expectedTableName},
+				{"bar", expectedTableName2},
+				{"bar", expectedSeqName},
+				{"baz", expectedTableName},
+				{"foo", expectedTableName},
+				{"public", expectedTableName},
+			})
 
 		for _, schemaCollection := range expectedSchemaNames {
 			for _, schema := range schemaCollection {
@@ -6067,7 +6072,7 @@ func TestImportPgDumpSchemas(t *testing.T) {
 				map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 					jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 						r := raw.(*importResumer)
-						r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+						r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 							return errors.New("testing injected failure")
 						}
 						return r
@@ -6092,8 +6097,10 @@ func TestImportPgDumpSchemas(t *testing.T) {
 		schemaIDs := []descpb.ID{descpb.ID(publicSchemaID + 1), descpb.ID(publicSchemaID + 2), descpb.ID(publicSchemaID + 3)}
 		// The table IDs are allocated after the schemas are created. There is one
 		// extra table in the "public" schema.
-		tableIDs := []descpb.ID{descpb.ID(publicSchemaID + 4), descpb.ID(publicSchemaID + 5), descpb.ID(publicSchemaID + 6),
-			descpb.ID(publicSchemaID + 7)}
+		tableIDs := []descpb.ID{
+			descpb.ID(publicSchemaID + 4), descpb.ID(publicSchemaID + 5), descpb.ID(publicSchemaID + 6),
+			descpb.ID(publicSchemaID + 7),
+		}
 
 		// At this point we expect to see three jobs related to the cleanup.
 		// - SCHEMA CHANGE GC job for the table cleanup.
@@ -6396,7 +6403,7 @@ func TestImportMultiRegion(t *testing.T) {
 		tc.Server(i).JobRegistry().(*jobs.Registry).
 			TestingResumerCreationKnobs = map[jobspb.Type]func(jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(resumer jobs.Resumer) jobs.Resumer {
-				resumer.(*importResumer).testingKnobs.afterImport = func(summary backupccl.RowCount) error {
+				resumer.(*importResumer).testingKnobs.afterImport = func(summary roachpb.RowCount) error {
 					return duringImportFunc.Load().(func() error)()
 				}
 				return resumer
@@ -7078,7 +7085,7 @@ func TestImportJobEventLogging(t *testing.T) {
 		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ backupccl.RowCount) error {
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
 					if forceFailure {
 						return errors.New("testing injected failure")
 					}
@@ -7121,8 +7128,10 @@ func TestImportJobEventLogging(t *testing.T) {
 	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE status = 'failed'")
 	row.Scan(&jobID)
 
-	expectedStatus = []string{string(jobs.StatusFailed), string(jobs.StatusReverting),
-		string(jobs.StatusRunning)}
+	expectedStatus = []string{
+		string(jobs.StatusFailed), string(jobs.StatusReverting),
+		string(jobs.StatusRunning),
+	}
 	backupccl.CheckEmittedEvents(t, expectedStatus, beforeSecondImport.UnixNano(), jobID, "import", "IMPORT")
 }
 
@@ -7289,7 +7298,8 @@ func TestUDTChangeDuringImport(t *testing.T) {
 								}
 								return nil
 							},
-						}},
+						},
+					},
 				}})
 			defer tc.Stopper().Stop(ctx)
 			conn := tc.Conns[0]

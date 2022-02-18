@@ -311,7 +311,7 @@ func restoreWithRetry(
 	dataToRestore restorationData,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
-) (RowCount, error) {
+) (roachpb.RowCount, error) {
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
 	// errors that are also rpc errors. Don't retry to aggressively.
@@ -322,7 +322,7 @@ func restoreWithRetry(
 
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
-	var res RowCount
+	var res roachpb.RowCount
 	var err error
 	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
 		res, err = restore(
@@ -341,14 +341,14 @@ func restoreWithRetry(
 		}
 
 		if utilccl.IsPermanentBulkJobError(err) {
-			return RowCount{}, err
+			return roachpb.RowCount{}, err
 		}
 
 		log.Warningf(restoreCtx, `encountered retryable error: %+v`, err)
 	}
 
 	if err != nil {
-		return RowCount{}, errors.Wrap(err, "exhausted retries")
+		return roachpb.RowCount{}, errors.Wrap(err, "exhausted retries")
 	}
 	return res, nil
 }
@@ -390,12 +390,12 @@ func restore(
 	dataToRestore restorationData,
 	job *jobs.Job,
 	encryption *jobspb.BackupEncryptionOptions,
-) (RowCount, error) {
+) (roachpb.RowCount, error) {
 	user := execCtx.User()
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
-	emptyRowCount := RowCount{}
+	emptyRowCount := roachpb.RowCount{}
 
 	// If there isn't any data to restore, then return early.
 	if dataToRestore.isEmpty() {
@@ -413,7 +413,7 @@ func restore(
 	mu := struct {
 		syncutil.Mutex
 		highWaterMark     int
-		res               RowCount
+		res               roachpb.RowCount
 		requestsCompleted []bool
 	}{
 		highWaterMark: -1,
@@ -511,7 +511,7 @@ func restore(
 				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
 			}
 
-			mu.res.add(progDetails.Summary)
+			mu.res.Add(progDetails.Summary)
 			idx := progDetails.ProgressIdx
 
 			// Assert that we're actually marking the correct span done. See #23977.
@@ -619,7 +619,7 @@ type restoreResumer struct {
 
 	settings     *cluster.Settings
 	execCfg      *sql.ExecutorConfig
-	restoreStats RowCount
+	restoreStats roachpb.RowCount
 
 	testingKnobs struct {
 		// beforePublishingDescriptors is called right before publishing
@@ -1534,7 +1534,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		numNodes = 1
 	}
 
-	var resTotal RowCount
+	var resTotal roachpb.RowCount
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
@@ -1551,7 +1551,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 
-		resTotal.add(res)
+		resTotal.Add(res)
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, preData.systemTables); err != nil {
@@ -1586,7 +1586,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 
-		resTotal.add(res)
+		resTotal.Add(res)
 	}
 
 	if err := insertStats(ctx, r.job, p.ExecCfg(), remappedStats); err != nil {
