@@ -359,7 +359,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.TenantSettingsTable.GetName(): {
-		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+		shouldIncludeInClusterBackup: optInToClusterBackup,
 	},
 }
 

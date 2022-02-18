@@ -233,6 +233,33 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// Splitter returns the set of all possible split points for the given table
+// descriptor. It steps through every "unit" that we can apply configurations
+// over (table, indexes, partitions and sub-partitions) and figures out the
+// actual key boundaries that we may need to split over. For example:
+//
+//		CREATE TABLE db.parts(i INT PRIMARY KEY, j INT) PARTITION BY LIST (i) (
+//			PARTITION one_and_five    VALUES IN (1, 5),
+//			PARTITION four_and_three  VALUES IN (4, 3),
+//			PARTITION everything_else VALUES IN (6, default)
+//		);
+//
+//  Assuming a table ID of 108, we'd generate:
+//
+//		/Table/108
+//		/Table/108/1
+//		/Table/108/1/1
+//		/Table/108/1/2
+//		/Table/108/1/3
+//		/Table/108/1/4
+//		/Table/108/1/5
+//		/Table/108/1/6
+//		/Table/108/1/7
+//		/Table/108/2
+type Splitter interface {
+	Splits(ctx context.Context, desc catalog.TableDescriptor) ([]roachpb.Key, error)
+}
+
 // Record ties a target to its corresponding config.
 type Record struct {
 	// Target specifies the target (keyspan(s)) the config applies over.
