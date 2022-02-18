@@ -119,8 +119,8 @@ sort
       │    │    │                        │    ├── save-table-name: q22_select_8
       │    │    │                        │    ├── columns: c_phone:15(char!null) c_acctbal:16(float!null)
       │    │    │                        │    ├── immutable
-      │    │    │                        │    ├── stats: [rows=45460.66, distinct(15)=45460.7, null(15)=0, avgsize(15)=4, distinct(16)=45460.7, null(16)=0, avgsize(16)=4]
-      │    │    │                        │    │   histogram(16)=  0   0   45456         5
+      │    │    │                        │    ├── stats: [rows=45462.56, distinct(15)=45462.6, null(15)=0, avgsize(15)=4, distinct(16)=45462.6, null(16)=0, avgsize(16)=4]
+      │    │    │                        │    │   histogram(16)=  0   0   45458      5.0002
       │    │    │                        │    │                 <--- 0.0 ------- 9999.6904296875
       │    │    │                        │    ├── scan customer
       │    │    │                        │    │    ├── save-table-name: q22_scan_9
@@ -221,8 +221,8 @@ column_names  row_count  distinct_count  null_count
 {c_phone}     38120      38046           0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{c_acctbal}   45461.00       1.19           45461.00            1.22                0.00            1.00
-{c_phone}     45461.00       1.19           45461.00            1.19                0.00            1.00
+{c_acctbal}   45463.00       1.19           45463.00            1.22                0.00            1.00
+{c_phone}     45463.00       1.19           45463.00            1.19                0.00            1.00
 
 ----Stats for q22_scan_9----
 column_names  row_count  distinct_count  null_count

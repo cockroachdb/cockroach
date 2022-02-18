@@ -62,21 +62,21 @@ project
  │    │    ├── key columns: [1 4] = [1 4]
  │    │    ├── lookup columns are key
  │    │    ├── immutable
- │    │    ├── stats: [rows=2852.285, distinct(2)=284.037, null(2)=0, avgsize(2)=4, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=2848.1, null(6)=0, avgsize(6)=4, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(49)=284.037, null(49)=0, avgsize(49)=4]
+ │    │    ├── stats: [rows=2860.7, distinct(2)=284.875, null(2)=0, avgsize(2)=4, distinct(5)=50, null(5)=0, avgsize(5)=4, distinct(6)=2856.49, null(6)=0, avgsize(6)=4, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(49)=284.875, null(49)=0, avgsize(49)=4]
  │    │    ├── fd: (19)-->(49), (2)==(19), (19)==(2)
  │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    ├── save-table-name: q17_lookup_join_4
  │    │    │    ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_linenumber:4(int!null) p_partkey:19(int!null) "?column?":49(float!null)
  │    │    │    ├── key columns: [19] = [2]
  │    │    │    ├── immutable
- │    │    │    ├── stats: [rows=8556.854, distinct(1)=8532.95, null(1)=0, avgsize(1)=4, distinct(2)=284.037, null(2)=0, avgsize(2)=4, distinct(4)=7, null(4)=0, avgsize(4)=4, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(49)=284.037, null(49)=0, avgsize(49)=4]
+ │    │    │    ├── stats: [rows=8582.1, distinct(1)=8558.05, null(1)=0, avgsize(1)=4, distinct(2)=284.875, null(2)=0, avgsize(2)=4, distinct(4)=7, null(4)=0, avgsize(4)=4, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(49)=284.875, null(49)=0, avgsize(49)=4]
  │    │    │    ├── key: (1,4)
  │    │    │    ├── fd: (19)-->(49), (1,4)-->(2), (2)==(19), (19)==(2)
  │    │    │    ├── project
  │    │    │    │    ├── save-table-name: q17_project_5
  │    │    │    │    ├── columns: "?column?":49(float!null) p_partkey:19(int!null)
  │    │    │    │    ├── immutable
- │    │    │    │    ├── stats: [rows=284.0375, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(49)=284.037, null(49)=0, avgsize(49)=4]
+ │    │    │    │    ├── stats: [rows=284.8755, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(49)=284.875, null(49)=0, avgsize(49)=4]
  │    │    │    │    ├── key: (19)
  │    │    │    │    ├── fd: (19)-->(49)
  │    │    │    │    ├── group-by (streaming)
@@ -84,7 +84,7 @@ project
  │    │    │    │    │    ├── columns: p_partkey:19(int!null) avg:48(float!null)
  │    │    │    │    │    ├── grouping columns: p_partkey:19(int!null)
  │    │    │    │    │    ├── internal-ordering: +(19|31) opt(22,25)
- │    │    │    │    │    ├── stats: [rows=284.0375, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(48)=284.037, null(48)=0, avgsize(48)=4]
+ │    │    │    │    │    ├── stats: [rows=284.8755, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(48)=284.875, null(48)=0, avgsize(48)=4]
  │    │    │    │    │    ├── key: (19)
  │    │    │    │    │    ├── fd: (19)-->(48)
  │    │    │    │    │    ├── inner-join (lookup lineitem)
@@ -92,24 +92,24 @@ project
  │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null) l_partkey:31(int!null) l_quantity:34(float!null)
  │    │    │    │    │    │    ├── key columns: [30 33] = [30 33]
  │    │    │    │    │    │    ├── lookup columns are key
- │    │    │    │    │    │    ├── stats: [rows=8556.877, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(31)=284.037, null(31)=0, avgsize(31)=4, distinct(34)=50, null(34)=0, avgsize(34)=4]
+ │    │    │    │    │    │    ├── stats: [rows=8582.123, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(31)=284.875, null(31)=0, avgsize(31)=4, distinct(34)=50, null(34)=0, avgsize(34)=4]
  │    │    │    │    │    │    ├── fd: ()-->(22,25), (19)==(31), (31)==(19)
  │    │    │    │    │    │    ├── ordering: +(19|31) opt(22,25) [actual: +19]
  │    │    │    │    │    │    ├── inner-join (lookup lineitem@l_pk)
  │    │    │    │    │    │    │    ├── save-table-name: q17_lookup_join_8
  │    │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null) l_orderkey:30(int!null) l_partkey:31(int!null) l_linenumber:33(int!null)
  │    │    │    │    │    │    │    ├── key columns: [19] = [31]
- │    │    │    │    │    │    │    ├── stats: [rows=8556.877, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(30)=8532.97, null(30)=0, avgsize(30)=4, distinct(31)=284.037, null(31)=0, avgsize(31)=4, distinct(33)=7, null(33)=0, avgsize(33)=4]
+ │    │    │    │    │    │    │    ├── stats: [rows=8582.123, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(30)=8558.08, null(30)=0, avgsize(30)=4, distinct(31)=284.875, null(31)=0, avgsize(31)=4, distinct(33)=7, null(33)=0, avgsize(33)=4]
  │    │    │    │    │    │    │    ├── key: (30,33)
  │    │    │    │    │    │    │    ├── fd: ()-->(22,25), (30,33)-->(31), (19)==(31), (31)==(19)
  │    │    │    │    │    │    │    ├── ordering: +(19|31) opt(22,25) [actual: +19]
  │    │    │    │    │    │    │    ├── select
  │    │    │    │    │    │    │    │    ├── save-table-name: q17_select_9
  │    │    │    │    │    │    │    │    ├── columns: p_partkey:19(int!null) p_brand:22(char!null) p_container:25(char!null)
- │    │    │    │    │    │    │    │    ├── stats: [rows=284.0382, distinct(19)=284.037, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(22,25)=1, null(22,25)=0, avgsize(22,25)=8]
- │    │    │    │    │    │    │    │    │   histogram(22)=  0    284.04
+ │    │    │    │    │    │    │    │    ├── stats: [rows=284.8763, distinct(19)=284.875, null(19)=0, avgsize(19)=4, distinct(22)=1, null(22)=0, avgsize(22)=4, distinct(25)=1, null(25)=0, avgsize(25)=4, distinct(22,25)=1, null(22,25)=0, avgsize(22,25)=8]
+ │    │    │    │    │    │    │    │    │   histogram(22)=  0    284.88
  │    │    │    │    │    │    │    │    │                 <--- 'Brand#23'
- │    │    │    │    │    │    │    │    │   histogram(25)=  0   284.04
+ │    │    │    │    │    │    │    │    │   histogram(25)=  0   284.88
  │    │    │    │    │    │    │    │    │                 <--- 'MED BOX'
  │    │    │    │    │    │    │    │    ├── key: (19)
  │    │    │    │    │    │    │    │    ├── fd: ()-->(22,25)
@@ -169,11 +169,11 @@ column_names       row_count  distinct_count  null_count
 {p_partkey}        587        195             0
 ~~~~
 column_names       row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{?column?}         2852.00        4.86 <==       284.00              1.54                0.00            1.00
-{l_extendedprice}  2852.00        4.86 <==       2848.00             6.62 <==            0.00            1.00
-{l_partkey}        2852.00        4.86 <==       284.00              1.46                0.00            1.00
-{l_quantity}       2852.00        4.86 <==       50.00               8.33 <==            0.00            1.00
-{p_partkey}        2852.00        4.86 <==       284.00              1.46                0.00            1.00
+{?column?}         2861.00        4.87 <==       285.00              1.54                0.00            1.00
+{l_extendedprice}  2861.00        4.87 <==       2856.00             6.64 <==            0.00            1.00
+{l_partkey}        2861.00        4.87 <==       285.00              1.46                0.00            1.00
+{l_quantity}       2861.00        4.87 <==       50.00               8.33 <==            0.00            1.00
+{p_partkey}        2861.00        4.87 <==       285.00              1.46                0.00            1.00
 
 ----Stats for q17_lookup_join_4----
 column_names    row_count  distinct_count  null_count
@@ -184,11 +184,11 @@ column_names    row_count  distinct_count  null_count
 {p_partkey}     6088       204             0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{?column?}      8557.00        1.41           284.00              1.46                0.00            1.00
-{l_linenumber}  8557.00        1.41           7.00                1.00                0.00            1.00
-{l_orderkey}    8557.00        1.41           8533.00             1.40                0.00            1.00
-{l_partkey}     8557.00        1.41           284.00              1.39                0.00            1.00
-{p_partkey}     8557.00        1.41           284.00              1.39                0.00            1.00
+{?column?}      8582.00        1.41           285.00              1.47                0.00            1.00
+{l_linenumber}  8582.00        1.41           7.00                1.00                0.00            1.00
+{l_orderkey}    8582.00        1.41           8558.00             1.41                0.00            1.00
+{l_partkey}     8582.00        1.41           285.00              1.40                0.00            1.00
+{p_partkey}     8582.00        1.41           285.00              1.40                0.00            1.00
 
 ----Stats for q17_project_5----
 column_names  row_count  distinct_count  null_count
@@ -196,8 +196,8 @@ column_names  row_count  distinct_count  null_count
 {p_partkey}   204        204             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{?column?}    284.00         1.39           284.00              1.46                0.00            1.00
-{p_partkey}   284.00         1.39           284.00              1.39                0.00            1.00
+{?column?}    285.00         1.40           285.00              1.47                0.00            1.00
+{p_partkey}   285.00         1.40           285.00              1.40                0.00            1.00
 
 ----Stats for q17_group_by_6----
 column_names  row_count  distinct_count  null_count
@@ -205,8 +205,8 @@ column_names  row_count  distinct_count  null_count
 {p_partkey}   204        204             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{avg}         284.00         1.39           284.00              1.46                0.00            1.00
-{p_partkey}   284.00         1.39           284.00              1.39                0.00            1.00
+{avg}         285.00         1.40           285.00              1.47                0.00            1.00
+{p_partkey}   285.00         1.40           285.00              1.40                0.00            1.00
 
 ----Stats for q17_lookup_join_7----
 column_names   row_count  distinct_count  null_count
@@ -217,11 +217,11 @@ column_names   row_count  distinct_count  null_count
 {p_partkey}    6088       204             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_partkey}    8557.00        1.41           284.00              1.39                0.00            1.00
-{l_quantity}   8557.00        1.41           50.00               1.00                0.00            1.00
-{p_brand}      8557.00        1.41           1.00                1.00                0.00            1.00
-{p_container}  8557.00        1.41           1.00                1.00                0.00            1.00
-{p_partkey}    8557.00        1.41           284.00              1.39                0.00            1.00
+{l_partkey}    8582.00        1.41           285.00              1.40                0.00            1.00
+{l_quantity}   8582.00        1.41           50.00               1.00                0.00            1.00
+{p_brand}      8582.00        1.41           1.00                1.00                0.00            1.00
+{p_container}  8582.00        1.41           1.00                1.00                0.00            1.00
+{p_partkey}    8582.00        1.41           285.00              1.40                0.00            1.00
 
 ----Stats for q17_lookup_join_8----
 column_names    row_count  distinct_count  null_count
@@ -233,12 +233,12 @@ column_names    row_count  distinct_count  null_count
 {p_partkey}     6088       204             0
 ~~~~
 column_names    row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{l_linenumber}  8557.00        1.41           7.00                1.00                0.00            1.00
-{l_orderkey}    8557.00        1.41           8533.00             1.40                0.00            1.00
-{l_partkey}     8557.00        1.41           284.00              1.39                0.00            1.00
-{p_brand}       8557.00        1.41           1.00                1.00                0.00            1.00
-{p_container}   8557.00        1.41           1.00                1.00                0.00            1.00
-{p_partkey}     8557.00        1.41           284.00              1.39                0.00            1.00
+{l_linenumber}  8582.00        1.41           7.00                1.00                0.00            1.00
+{l_orderkey}    8582.00        1.41           8558.00             1.41                0.00            1.00
+{l_partkey}     8582.00        1.41           285.00              1.40                0.00            1.00
+{p_brand}       8582.00        1.41           1.00                1.00                0.00            1.00
+{p_container}   8582.00        1.41           1.00                1.00                0.00            1.00
+{p_partkey}     8582.00        1.41           285.00              1.40                0.00            1.00
 
 ----Stats for q17_select_9----
 column_names   row_count  distinct_count  null_count
@@ -247,9 +247,9 @@ column_names   row_count  distinct_count  null_count
 {p_partkey}    204        204             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_brand}      284.00         1.39           1.00                1.00                0.00            1.00
-{p_container}  284.00         1.39           1.00                1.00                0.00            1.00
-{p_partkey}    284.00         1.39           284.00              1.39                0.00            1.00
+{p_brand}      285.00         1.40           1.00                1.00                0.00            1.00
+{p_container}  285.00         1.40           1.00                1.00                0.00            1.00
+{p_partkey}    285.00         1.40           285.00              1.40                0.00            1.00
 
 ----Stats for q17_scan_10----
 column_names   row_count  distinct_count  null_count

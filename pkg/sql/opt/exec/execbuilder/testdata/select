@@ -363,7 +363,7 @@ vectorized: true
 ·
 • filter
 │ columns: (x, y)
-│ estimated row count: 311 (missing stats)
+│ estimated row count: 211 (missing stats)
 │ filter: y < 30
 │
 └── • scan

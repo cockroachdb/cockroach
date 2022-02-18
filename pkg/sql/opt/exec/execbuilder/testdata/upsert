@@ -627,7 +627,7 @@ vectorized: true
     │
     └── • render
         │ columns: (upsert_b, x, y, z, a, b, c)
-        │ estimated row count: 311 (missing stats)
+        │ estimated row count: 211 (missing stats)
         │ render upsert_b: CASE WHEN a IS NULL THEN y ELSE 5 END
         │ render x: x
         │ render y: y
@@ -638,7 +638,7 @@ vectorized: true
         │
         └── • merge join (right outer)
             │ columns: (a, b, c, x, y, z)
-            │ estimated row count: 311 (missing stats)
+            │ estimated row count: 211 (missing stats)
             │ equality: (b, c) = (y, z)
             │ merge ordering: +"(b=y)",+"(c=z)"
             │
@@ -652,7 +652,7 @@ vectorized: true
             └── • distinct
                 │ columns: (x, y, z)
                 │ ordering: +y,+z
-                │ estimated row count: 311 (missing stats)
+                │ estimated row count: 211 (missing stats)
                 │ distinct on: y, z
                 │ nulls are distinct
                 │ error on duplicate
@@ -661,7 +661,7 @@ vectorized: true
                 └── • filter
                     │ columns: (x, y, z)
                     │ ordering: +y,+z
-                    │ estimated row count: 311 (missing stats)
+                    │ estimated row count: 211 (missing stats)
                     │ filter: x != 1
                     │
                     └── • scan

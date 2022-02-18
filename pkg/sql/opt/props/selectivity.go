@@ -75,6 +75,12 @@ func MinSelectivity(a, b Selectivity) Selectivity {
 	return b
 }
 
+// AverageSelectivity returns the average of the two selectivities in the valid
+// range.
+func AverageSelectivity(a, b Selectivity) Selectivity {
+	return MakeSelectivity((a.selectivity + b.selectivity) / 2)
+}
+
 // selectivityInRange performs the range check, if the selectivity falls
 // outside of the range, this method will return the appropriate min/max value.
 func selectivityInRange(sel float64) float64 {

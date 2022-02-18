@@ -1650,7 +1650,7 @@ SELECT * FROM xysd, uv WHERE (s = 'foo' AND u = 3 AND v = 4) OR (s = 'bar' AND u
 ----
 inner-join (cross)
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null) u:7(int!null) v:8(int!null)
- ├── stats: [rows=11979.69, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(7)=2, null(7)=0, avgsize(7)=5, distinct(8)=2, null(8)=0, avgsize(8)=6, distinct(7,8)=2.19139, null(7,8)=0, avgsize(7,8)=8]
+ ├── stats: [rows=6123.178, distinct(3)=2, null(3)=0, avgsize(3)=9, distinct(7)=2, null(7)=0, avgsize(7)=5, distinct(8)=2, null(8)=0, avgsize(8)=6, distinct(7,8)=2.19139, null(7,8)=0, avgsize(7,8)=8]
  ├── fd: (1)-->(2-4), (3,4)-->(1,2)
  ├── scan uv
  │    ├── columns: u:7(int) v:8(int!null)

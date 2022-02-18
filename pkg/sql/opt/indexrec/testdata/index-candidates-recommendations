@@ -200,7 +200,7 @@ index recommendations: 1
 Optimal Plan.
 project
  ├── columns: i:2!null
- ├── cost: 377.181111
+ ├── cost: 376.181111
  └── select
       ├── columns: k:1!null i:2!null
       ├── cost: 374.05
@@ -231,21 +231,21 @@ index recommendations: 2
 Optimal Plan.
 project
  ├── columns: i:2
- ├── cost: 816.218448
+ ├── cost: 807.200872
  └── project
       ├── columns: k:1 i:2 f:3
-      ├── cost: 809.754004
+      ├── cost: 801.736427
       └── distinct-on
            ├── columns: k:1 i:2 f:3 rowid:5!null
            ├── grouping columns: rowid:5!null
-           ├── cost: 803.289559
+           ├── cost: 796.271983
            ├── key: (5)
            ├── fd: (5)-->(1-3)
            ├── union-all
            │    ├── columns: k:1 i:2 f:3 rowid:5!null
            │    ├── left columns: k:8 i:9 f:10 rowid:12
            │    ├── right columns: k:15 i:16 f:17 rowid:19
-           │    ├── cost: 764.534444
+           │    ├── cost: 763.534444
            │    ├── select
            │    │    ├── columns: k:8!null i:9!null f:10 rowid:12!null
            │    │    ├── cost: 380.716667
@@ -641,7 +641,7 @@ inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── eq columns: [5] = [5]
  ├── left fixed columns: [1] = [1]
  ├── right fixed columns: [2] = [2]
- ├── cost: 11.9982432
+ ├── cost: 11.1266216
  ├── fd: ()-->(1,2)
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
@@ -667,7 +667,7 @@ Optimal Plan.
 scan t1@_hyp_3
  ├── columns: k:1!null i:2 f:3!null s:4
  ├── constraint: /1/3/5: [/1/5e-324 - /1]
- ├── cost: 24.1933333
+ ├── cost: 20.9233333
  └── fd: ()-->(1)
 
 # Multi-column combinations used: EQ, EQ + R.
@@ -696,7 +696,7 @@ inner-join (zigzag t1@_hyp_1 t1@_hyp_2)
  ├── eq columns: [5] = [5]
  ├── left fixed columns: [1] = [1]
  ├── right fixed columns: [2] = [2]
- ├── cost: 11.8278162
+ ├── cost: 10.9749081
  ├── fd: ()-->(1,2)
  └── filters
       ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
@@ -763,11 +763,11 @@ index recommendations: 2
 Optimal Plan.
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 1111.17702
+ ├── cost: 1104.91573
  ├── fd: ()-->(2,4)
  └── inner-join (cross)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
-      ├── cost: 1108.1814
+      ├── cost: 1103.24457
       ├── fd: ()-->(2,4)
       ├── scan t2
       │    ├── columns: t2.k:8
@@ -777,7 +777,7 @@ project
       │    ├── eq columns: [5] = [5]
       │    ├── left fixed columns: [2] = [2]
       │    ├── right fixed columns: [4] = ['NG']
-      │    ├── cost: 12.0073514
+      │    ├── cost: 11.1316757
       │    ├── fd: ()-->(2,4)
       │    └── filters
       │         ├── t1.i:2 = 2 [outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
@@ -840,7 +840,7 @@ union-all
  ├── left columns: count_rows:14
  ├── right columns: count_rows:22
  ├── cardinality: [1 - ]
- ├── cost: 25598.0782
+ ├── cost: 25598.0289
  ├── project
  │    ├── columns: count_rows:14!null
  │    ├── cost: 25563.0458
@@ -866,17 +866,17 @@ union-all
  └── scalar-group-by
       ├── columns: count_rows:22!null
       ├── cardinality: [1 - 1]
-      ├── cost: 25.002367
+      ├── cost: 24.9530185
       ├── key: ()
       ├── fd: ()-->(22)
       ├── select
       │    ├── columns: t1.i:16!null f:17!null t1.s:18!null
-      │    ├── cost: 24.9391
+      │    ├── cost: 24.89005
       │    ├── fd: ()-->(18)
       │    ├── scan t1@_hyp_5
       │    │    ├── columns: t1.i:16 f:17!null t1.s:18!null
       │    │    ├── constraint: /18/17/19: (/'NG'/NULL - /'NG']
-      │    │    ├── cost: 24.8092
+      │    │    ├── cost: 24.7606
       │    │    └── fd: ()-->(18)
       │    └── filters
       │         └── f:17 > t1.i:16 [outer=(16,17), constraints=(/16: (/NULL - ]; /17: (/NULL - ])]
@@ -920,21 +920,21 @@ index recommendations: 3
 Optimal Plan.
 sort (segmented)
  ├── columns: k:1 i:2 i:9
- ├── cost: 2416.08954
+ ├── cost: 2416.11916
  ├── ordering: +1,+9,-2
  └── project
       ├── columns: t1.k:1 t1.i:2 t2.i:9
-      ├── cost: 2263.40821
+      ├── cost: 2263.43784
       ├── ordering: +1
       └── left-join (merge)
            ├── columns: t1.k:1 t1.i:2 t2.k:8 t2.i:9
            ├── left ordering: +1
            ├── right ordering: +8
-           ├── cost: 2252.08102
+           ├── cost: 2252.11064
            ├── ordering: +1
            ├── select
            │    ├── columns: t1.k:1 t1.i:2
-           │    ├── cost: 1122.09358
+           │    ├── cost: 1122.10839
            │    ├── ordering: +1
            │    ├── scan t1@_hyp_1
            │    │    ├── columns: t1.k:1 t1.i:2
@@ -945,24 +945,24 @@ sort (segmented)
            │              └── limit
            │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
            │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 17.3435766
+           │                   ├── cost: 17.3583892
            │                   ├── key: ()
            │                   ├── fd: ()-->(14-16)
            │                   ├── select
            │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 17.3235766
+           │                   │    ├── cost: 17.3383892
            │                   │    ├── limit hint: 1.00
            │                   │    ├── scan t3@_hyp_1
            │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
            │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 17.2632432
-           │                   │    │    └── limit hint: 3.00
+           │                   │    │    ├── cost: 17.2779186
+           │                   │    │    └── limit hint: 3.02
            │                   │    └── filters
            │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │                   └── 1
            ├── select
            │    ├── columns: t2.k:8 t2.i:9
-           │    ├── cost: 1111.99358
+           │    ├── cost: 1112.00839
            │    ├── ordering: +8
            │    ├── scan t2@_hyp_2
            │    │    ├── columns: t2.k:8 t2.i:9
@@ -973,18 +973,18 @@ sort (segmented)
            │              └── limit
            │                   ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
            │                   ├── cardinality: [0 - 1]
-           │                   ├── cost: 17.3435766
+           │                   ├── cost: 17.3583892
            │                   ├── key: ()
            │                   ├── fd: ()-->(14-16)
            │                   ├── select
            │                   │    ├── columns: t3.k:14!null t3.i:15 t3.f:16!null
-           │                   │    ├── cost: 17.3235766
+           │                   │    ├── cost: 17.3383892
            │                   │    ├── limit hint: 1.00
            │                   │    ├── scan t3@_hyp_1
            │                   │    │    ├── columns: t3.k:14 t3.i:15 t3.f:16!null
            │                   │    │    ├── constraint: /16/18: (/NULL - ]
-           │                   │    │    ├── cost: 17.2632432
-           │                   │    │    └── limit hint: 3.00
+           │                   │    │    ├── cost: 17.2779186
+           │                   │    │    └── limit hint: 3.02
            │                   │    └── filters
            │                   │         └── t3.f:16 > t3.k:14 [outer=(14,16), constraints=(/14: (/NULL - ]; /16: (/NULL - ])]
            │                   └── 1
@@ -1401,7 +1401,7 @@ Optimal Plan.
 project
  ├── columns: k:1!null f:3
  ├── immutable
- ├── cost: 10.7379279
+ ├── cost: 10.4406306
  ├── fd: ()-->(1)
  └── inner-join (zigzag t4@_hyp_1 t4@_hyp_2)
       ├── columns: t4.k:1!null i:2!null f:3 j:4
@@ -1409,7 +1409,7 @@ project
       ├── left fixed columns: [1] = [1]
       ├── right fixed columns: [2] = [2]
       ├── immutable
-      ├── cost: 10.7148919
+      ├── cost: 10.4189459
       ├── fd: ()-->(1,2)
       └── filters
            ├── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
@@ -1635,12 +1635,12 @@ No index recommendations.
 Optimal Plan.
 project
  ├── columns: i:2!null
- ├── cost: 23.84
+ ├── cost: 20.69
  ├── fd: ()-->(2)
  └── scan t4@partial_idx,partial
       ├── columns: i:2!null rowid:6!null
       ├── constraint: /2/6: [/1 - /1]
-      ├── cost: 23.7266667
+      ├── cost: 20.6066667
       ├── key: (6)
       └── fd: ()-->(2)
 
@@ -1656,11 +1656,11 @@ No index recommendations.
 Optimal Plan.
 project
  ├── columns: f:3!null
- ├── cost: 340.706667
+ ├── cost: 235.706667
  └── scan t4@partial_unique_idx,partial
       ├── columns: f:3!null rowid:6!null
       ├── constraint: /3: [/5.000000000000001 - ]
-      ├── cost: 337.575556
+      ├── cost: 233.575556
       ├── key: (6)
       └── fd: (6)-->(3), (3)-->(6)
 
@@ -1765,12 +1765,12 @@ Optimal Plan.
 project
  ├── columns: k:1!null
  ├── immutable
- ├── cost: 15.0296847
+ ├── cost: 14.604009
  ├── fd: ()-->(1)
  └── scan t1@expr
       ├── columns: k:1!null rowid:5!null
       ├── constraint: /1/8/5: [/1/'cockroach' - /1/'cockroach']
-      ├── cost: 14.9763514
+      ├── cost: 14.5506757
       ├── key: (5)
       └── fd: ()-->(1)
 

@@ -864,11 +864,11 @@ vectorized: true
 ·
 • project
 │ columns: (a)
-│ estimated row count: 110 (missing stats)
+│ estimated row count: 109 (missing stats)
 │
 └── • filter
     │ columns: (a, b, d)
-    │ estimated row count: 110 (missing stats)
+    │ estimated row count: 109 (missing stats)
     │ filter: (a >= b) AND (a <= d)
     │
     └── • scan

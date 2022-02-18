@@ -1336,7 +1336,7 @@ values
       │         │    │    │    ├── columns: y:9 z:10!null
       │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
       │         │    │    │    ├── ordering: +10
-      │         │    │    │    └── limit hint: 2.97
+      │         │    │    │    └── limit hint: 2.99
       │         │    │    └── filters
       │         │    │         └── y:9 > 0 [outer=(9), constraints=(/9: [/1 - ]; tight)]
       │         │    └── 1
@@ -1403,7 +1403,7 @@ values
       │         │    │    │    ├── columns: y:9 z:10!null
       │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
       │         │    │    │    ├── ordering: -10
-      │         │    │    │    └── limit hint: 1.00
+      │         │    │    │    └── limit hint: 1.01
       │         │    │    └── filters
       │         │    │         └── y:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │         │    └── 1
@@ -1505,7 +1505,7 @@ values
       │         │    │    │    ├── columns: y:9 z:10!null
       │         │    │    │    ├── constraint: /10/9/8: (/NULL - ]
       │         │    │    │    ├── ordering: -10
-      │         │    │    │    └── limit hint: 1.00
+      │         │    │    │    └── limit hint: 1.01
       │         │    │    └── filters
       │         │    │         └── y:9 IS NOT NULL [outer=(9), constraints=(/9: (/NULL - ]; tight)]
       │         │    └── 1

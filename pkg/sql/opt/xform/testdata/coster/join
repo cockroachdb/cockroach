@@ -603,18 +603,18 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)
 ----
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
- ├── stats: [rows=4.504399]
- ├── cost: 12253.73
+ ├── stats: [rows=2.252202]
+ ├── cost: 12240.005
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:14!null b:15!null c:16!null
       ├── key columns: [1 2 3] = [14 15 16]
-      ├── stats: [rows=4.504399, distinct(1)=0.9, null(1)=0, avgsize(1)=4, distinct(2)=0.9, null(2)=0, avgsize(2)=4, distinct(3)=0.884032, null(3)=0, avgsize(3)=4, distinct(14)=0.9, null(14)=0, avgsize(14)=4, distinct(15)=0.9, null(15)=0, avgsize(15)=4, distinct(16)=0.884032, null(16)=0, avgsize(16)=4]
-      ├── cost: 12253.665
+      ├── stats: [rows=2.252202, distinct(1)=0.450001, null(1)=0, avgsize(1)=4, distinct(2)=0.450001, null(2)=0, avgsize(2)=4, distinct(3)=0.445985, null(3)=0, avgsize(3)=4, distinct(14)=0.450001, null(14)=0, avgsize(14)=4, distinct(15)=0.450001, null(15)=0, avgsize(15)=4, distinct(16)=0.445985, null(16)=0, avgsize(16)=4]
+      ├── cost: 12239.9625
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=0.9000001, distinct(1)=0.9, null(1)=0, avgsize(1)=4, distinct(2)=0.9, null(2)=0, avgsize(2)=4, distinct(3)=0.884032, null(3)=0, avgsize(3)=4, distinct(4)=0.899636, null(4)=0, avgsize(4)=4, distinct(5)=0.9, null(5)=0, avgsize(5)=4, distinct(6)=0.9, null(6)=0, avgsize(6)=4, distinct(7)=0.9, null(7)=0, avgsize(7)=4, distinct(8)=0.9, null(8)=0, avgsize(8)=4, distinct(9)=0.9, null(9)=0, avgsize(9)=4, distinct(10)=0.9, null(10)=0, avgsize(10)=4, distinct(5-10)=0.9, null(5-10)=0, avgsize(5-10)=24]
+      │    ├── stats: [rows=0.4500005, distinct(1)=0.450001, null(1)=0, avgsize(1)=4, distinct(2)=0.450001, null(2)=0, avgsize(2)=4, distinct(3)=0.445985, null(3)=0, avgsize(3)=4, distinct(4)=0.449909, null(4)=0, avgsize(4)=4, distinct(5)=0.450001, null(5)=0, avgsize(5)=4, distinct(6)=0.450001, null(6)=0, avgsize(6)=4, distinct(7)=0.450001, null(7)=0, avgsize(7)=4, distinct(8)=0.450001, null(8)=0, avgsize(8)=4, distinct(9)=0.450001, null(9)=0, avgsize(9)=4, distinct(10)=0.450001, null(10)=0, avgsize(10)=4, distinct(5-10)=0.450001, null(5-10)=0, avgsize(5-10)=24]
       │    ├── cost: 12226.22
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
