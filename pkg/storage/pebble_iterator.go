@@ -84,11 +84,14 @@ type testingSetBoundsListener interface {
 
 // Instantiates a new Pebble iterator, or gets one from the pool.
 func newPebbleIterator(
-	handle pebble.Reader, iterToClone cloneableIter, opts IterOptions,
+	handle pebble.Reader,
+	iterToClone cloneableIter,
+	opts IterOptions,
+	durability DurabilityRequirement,
 ) *pebbleIterator {
 	iter := pebbleIterPool.Get().(*pebbleIterator)
 	iter.reusable = false // defensive
-	iter.init(handle, iterToClone, opts)
+	iter.init(handle, iterToClone, opts, durability)
 	return iter
 }
 
@@ -97,7 +100,15 @@ func newPebbleIterator(
 // pebbleBatch), or a newly-instantiated one through newPebbleIterator. The
 // underlying *pebble.Iterator is created using iterToClone, if non-nil and
 // there are no timestamp hints, else it is created using handle.
-func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, opts IterOptions) {
+//
+// **NOTE**: the durability parameter may be ignored if iterToClone is
+// non-nil, so make sure that the desired durability is the same.
+func (p *pebbleIterator) init(
+	handle pebble.Reader,
+	iterToClone cloneableIter,
+	opts IterOptions,
+	durability DurabilityRequirement,
+) {
 	*p = pebbleIterator{
 		keyBuf:        p.keyBuf,
 		lowerBoundBuf: p.lowerBoundBuf,
@@ -110,6 +121,10 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 		panic("iterator must set prefix or upper bound or lower bound")
 	}
 
+	p.options.OnlyReadGuaranteedDurable = false
+	if durability == GuaranteedDurability {
+		p.options.OnlyReadGuaranteedDurable = true
+	}
 	if opts.LowerBound != nil {
 		// This is the same as
 		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound})

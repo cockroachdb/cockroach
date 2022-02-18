@@ -101,7 +101,9 @@ func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
 // code probably uses an MVCCIterator.
 type wrappableReader interface {
 	Reader
-	rawGet(key []byte) (value []byte, err error)
+	// rawMVCCGet is only used for Reader.MVCCGet which is deprecated and not
+	// performance sensitive.
+	rawMVCCGet(key []byte) (value []byte, err error)
 }
 
 // wrapReader wraps the provided reader, to return an implementation of MVCCIterator
@@ -126,7 +128,7 @@ var intentInterleavingReaderPool = sync.Pool{
 
 // Get implements the Reader interface.
 func (imr *intentInterleavingReader) MVCCGet(key MVCCKey) ([]byte, error) {
-	val, err := imr.wrappableReader.rawGet(EncodeMVCCKey(key))
+	val, err := imr.wrappableReader.rawMVCCGet(EncodeMVCCKey(key))
 	if val != nil || err != nil || !key.Timestamp.IsEmpty() {
 		return val, err
 	}
