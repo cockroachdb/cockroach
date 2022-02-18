@@ -14,7 +14,7 @@ Column :  Inaccessible
 Column :  GeneratedAsIdentityType
 Column :  GeneratedAsIdentitySequenceOption
 Column : []UsesSequenceIDs
-Column :  ComputerExpr
+Column :  ComputedExpr
 Column :  PgAttributeNum
 Column :  SystemColumnKind
 Column :  Virtual

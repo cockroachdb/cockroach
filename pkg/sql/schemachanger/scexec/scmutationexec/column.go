@@ -37,7 +37,7 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		return err
 	}
 
-	if op.ComputerExpr == "" ||
+	if op.ComputedExpr == "" ||
 		!op.Virtual {
 		foundFamily := false
 		for i := range tbl.Families {
@@ -75,14 +75,14 @@ func (m *visitor) MakeAddedColumnDeleteOnly(
 		Name:                              name,
 		Type:                              op.ColumnType,
 		Nullable:                          op.Nullable,
-		DefaultExpr:                       emptyStrToNil(op.DefaultExpr),
-		OnUpdateExpr:                      emptyStrToNil(op.OnUpdateExpr),
+		DefaultExpr:                       emptyStrToNil(string(op.DefaultExpr)),
+		OnUpdateExpr:                      emptyStrToNil(string(op.OnUpdateExpr)),
 		Hidden:                            op.Hidden,
 		Inaccessible:                      op.Inaccessible,
 		GeneratedAsIdentityType:           op.GeneratedAsIdentityType,
 		GeneratedAsIdentitySequenceOption: emptyStrToNil(op.GeneratedAsIdentitySequenceOption),
 		UsesSequenceIds:                   op.UsesSequenceIDs,
-		ComputeExpr:                       emptyStrToNil(op.ComputerExpr),
+		ComputeExpr:                       emptyStrToNil(string(op.ComputedExpr)),
 		PGAttributeNum:                    op.PgAttributeNum,
 		SystemColumnKind:                  op.SystemColumnKind,
 		Virtual:                           op.Virtual,

@@ -191,7 +191,7 @@ ALTER TABLE defaultdb.foo ADD COLUMN a INT AS (i+1) STORED
 - [[Column:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
   details:
     columnId: 2
-    computerExpr: i + 1:::INT8
+    computedExpr: i + 1:::INT8
     familyName: primary
     nullable: true
     pgAttributeNum: 2

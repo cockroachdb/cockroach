@@ -70,14 +70,14 @@ message Column {
   string family_name = 5;
   sql.sem.types.T type = 6;
   bool nullable = 7;
-  string default_expr = 8;
-  string on_update_expr = 9;
+  string default_expr = 8 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
+  string on_update_expr = 9 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
   bool hidden = 10;
   bool inaccessible = 11;
   uint32 generated_as_identity_type = 12 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
   string generated_as_identity_sequence_option = 13;
   repeated uint32 uses_sequence_ids = 14 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string computer_expr = 15;
+  string computed_expr = 15 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
   uint32 pg_attribute_num = 16;
   uint32 system_column_kind = 17 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.SystemColumnKind"];
   bool virtual = 18;
@@ -156,7 +156,7 @@ message CheckConstraint {
   uint32 constraint_ordinal = 2;
   uint32 table_id = 3 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string name = 4;
-  string expr = 5;
+  string expr = 5 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
   repeated uint32 column_ids = 6 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   bool validated = 7;
 }
@@ -169,7 +169,7 @@ message DefaultExpression {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   repeated uint32 uses_sequence_ids = 3 [(gogoproto.customname) = "UsesSequenceIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  string default_expr = 4;
+  string default_expr = 4 [(gogoproto.casttype)="github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.Expression"];
 }
 
 message View {

@@ -2417,7 +2417,7 @@ func rowLevelTTLAutomaticColumnDef(ttl *catpb.RowLevelTTL) (*tree.ColumnTableDef
 		Type:   types.TimestampTZ,
 		Hidden: true,
 	}
-	intervalExpr, err := parser.ParseExpr(ttl.DurationExpr)
+	intervalExpr, err := parser.ParseExpr(string(ttl.DurationExpr))
 	if err != nil {
 		return nil, errors.Wrapf(err, "unexpected expression for TTL duration")
 	}

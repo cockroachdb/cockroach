@@ -101,7 +101,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[Column:{DescID: 109, ColumnID: 6}, ABSENT], PUBLIC]
   details:
     columnId: 6
-    computerExpr: x'80':::@100107
+    computedExpr: x'80':::@100107
     familyName: primary
     nullable: true
     pgAttributeNum: 6
