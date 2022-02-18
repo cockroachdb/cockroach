@@ -2503,3 +2503,10 @@ func (ri RangeInfo) String() string {
 	return fmt.Sprintf("desc: %s, lease: %s, closed_timestamp_policy: %s",
 		ri.Desc, ri.Lease, ri.ClosedTimestampPolicy)
 }
+
+// Add adds another RowCount to the receiver.
+func (r *RowCount) Add(other RowCount) {
+	r.DataSize += other.DataSize
+	r.Rows += other.Rows
+	r.IndexEntries += other.IndexEntries
+}

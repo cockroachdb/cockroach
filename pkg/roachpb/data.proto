@@ -752,3 +752,11 @@ message TenantID {
   // InternalValue should not be set or accessed directly; use ToUint64.
   uint64 id = 1 [(gogoproto.customname) = "InternalValue"];
 }
+
+// RowCount tracks the size and row/index entry counts.
+message RowCount {
+  int64 data_size = 1;
+  int64 rows = 2;
+  int64 index_entries = 3;
+  reserved 4; // was BulkOpSummary's system_records.
+}
