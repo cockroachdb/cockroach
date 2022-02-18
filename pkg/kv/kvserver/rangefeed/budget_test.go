@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/stretchr/testify/require"
 )
@@ -169,4 +170,24 @@ func TestFeedBudget(t *testing.T) {
 		_, err = f.TryGet(ctx, 20)
 		require.Error(t, err)
 	})
+}
+
+func TestBudgetFactory(t *testing.T) {
+	rootMon := mon.NewMonitor("rangefeed", mon.MemoryResource, nil, nil, 1, math.MaxInt64, nil)
+	rootMon.Start(context.Background(), nil, mon.MakeStandaloneBudget(10000000))
+	bf := NewBudgetFactory(context.Background(), rootMon, 10000, time.Second*5)
+
+	// Verify system ranges use own budget.
+	bSys := bf.CreateBudget(keys.MustAddr(keys.Meta1Prefix))
+	_, e := bSys.TryGet(context.Background(), 199)
+	require.NoError(t, e, "failed to obtain system range budget")
+	require.Equal(t, int64(0), rootMon.AllocBytes(), "System feeds should borrow from own budget")
+	require.Equal(t, int64(199), bf.Metrics().SystemBytesCount.Value(), "Metric was not updated")
+
+	// Verify user feeds use shared root budget.
+	bUsr := bf.CreateBudget(keys.MustAddr(keys.SystemSQLCodec.TablePrefix(keys.MaxReservedDescID + 1)))
+	_, e = bUsr.TryGet(context.Background(), 99)
+	require.NoError(t, e, "failed to obtain non-system budget")
+	require.Equal(t, int64(99), rootMon.AllocBytes(), "Non-system feeds should borrow from shared budget")
+	require.Equal(t, int64(99), bf.Metrics().SharedBytesCount.Value(), "Metric was not updated")
 }

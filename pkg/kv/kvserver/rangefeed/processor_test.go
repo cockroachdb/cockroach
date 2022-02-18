@@ -1101,7 +1101,6 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 	})
 	require.NoError(t, p.Start(stopper, nil))
@@ -1264,7 +1263,6 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 		PushTxnsAge:          pushTxnAge,
 		EventChanCap:         channelCapacity,
 		CheckStreamsInterval: 10 * time.Millisecond,
-		Metrics:              NewMetrics(),
 		MemBudget:            fb,
 	})
 	require.NoError(t, p.Start(stopper, nil))
