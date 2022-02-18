@@ -395,7 +395,7 @@ func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
 	// durable state after merging
 	// https://github.com/cockroachdb/pebble/pull/1490 and incorporating into
 	// CockroachDB.
-	reader := t.store.getEngine().NewReadOnly()
+	reader := t.store.getEngine().NewReadOnly(storage.StandardDurability)
 	defer reader.Close()
 	for _, rangeID := range ranges {
 		t.tryEnactTruncations(ctx, rangeID, reader)

@@ -857,7 +857,7 @@ func TestEngineScan1(t *testing.T) {
 			}
 
 			// Test iterator stats.
-			ro := engine.NewReadOnly()
+			ro := engine.NewReadOnly(StandardDurability)
 			iter := ro.NewMVCCIterator(MVCCKeyIterKind,
 				IterOptions{LowerBound: roachpb.Key("cat"), UpperBound: roachpb.Key("server")})
 			iter.SeekGE(MVCCKey{Key: roachpb.Key("cat")})

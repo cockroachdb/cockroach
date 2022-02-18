@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -174,7 +175,7 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
-	rw := r.Engine().NewReadOnly()
+	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr :=
@@ -217,7 +218,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(keys.SystemConfigSpan)})
 	// Call evaluateBatch instead of Send to avoid reacquiring latches.
 	rec := NewReplicaEvalContext(r, todoSpanSet)
-	rw := r.Engine().NewReadOnly()
+	rw := r.Engine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr := evaluateBatch(
