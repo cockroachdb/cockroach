@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -317,29 +316,24 @@ func changefeedPlanHook(
 			return err
 		}
 
-		// The below block creates the job and if there's an initial scan, protects
-		// the data required for that scan. We protect the data here rather than in
+		// The below block creates the job and protects the data required for the
+		// changefeed to function from being garbage collected even if the
+		// changefeed lags behind the gcttl. We protect the data here rather than in
 		// Resume to shorten the window that data may be GC'd. The protected
-		// timestamps are removed and created during the execution of the changefeed
-		// by the changeFrontier when checkpointing progress. Additionally protected
-		// timestamps are removed in OnFailOrCancel. See the comment on
-		// changeFrontier.manageProtectedTimestamps for more details on the handling of
-		// protected timestamps.
+		// timestamps are updated to the highwater mark periodically during the
+		// execution of the changefeed by the changeFrontier. Protected timestamps
+		// are removed in OnFailOrCancel. See
+		// changeFrontier.manageProtectedTimestamps for more details on the handling
+		// of protected timestamps.
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		{
-
-			var protectedTimestampID uuid.UUID
 			var ptr *ptpb.Record
-
-			shouldProtectTimestamp := initialScanFromOptions(details.Opts) && p.ExecCfg().Codec.ForSystemTenant()
-			if shouldProtectTimestamp {
-				protectedTimestampID = uuid.MakeV4()
-				deprecatedSpansToProtect := makeSpansToProtect(p.ExecCfg().Codec, details.Targets)
-				targetToProtect := makeTargetToProtect(details.Targets)
-				progress.GetChangefeed().ProtectedTimestampRecord = protectedTimestampID
-				ptr = jobsprotectedts.MakeRecord(protectedTimestampID, int64(jobID), statementTime,
-					deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
+			var protectedTimestampID uuid.UUID
+			codec := p.ExecCfg().Codec
+			if shouldProtectTimestamps(codec) {
+				ptr = createProtectedTimestampRecord(ctx, codec, jobID, details.Targets, statementTime, progress.GetChangefeed())
+				protectedTimestampID = ptr.ID.GetUUID()
 			}
 
 			jr := jobs.Record{
@@ -900,38 +894,27 @@ func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
 var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 
 // OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
-// paused, we want to install a protected timestamp at the most recent high
-// watermark if there isn't already one.
+// paused, we may want to clear the protected timestamp record.
 func (b *changefeedResumer) OnPauseRequest(
 	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
-	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
-		return nil
-	}
 
 	cp := progress.GetChangefeed()
-
-	// If we already have a protected timestamp record, keep it where it is.
-	if cp.ProtectedTimestampRecord != uuid.Nil {
-		return nil
-	}
-
-	resolved := progress.GetHighWater()
-	if resolved == nil {
-		// This should only happen if the job was created in a version that did not
-		// use protected timestamps but has yet to checkpoint its high water.
-		// Changefeeds from older versions didn't get protected timestamps so it's
-		// fine to not protect this one. In newer versions changefeeds which perform
-		// an initial scan at the statement time (and don't have an initial high
-		// water) will have a protected timestamp.
-		return nil
-	}
-
 	execCfg := jobExec.(sql.JobExecContext).ExecCfg()
-	pts := execCfg.ProtectedTimestampProvider
-	return createProtectedTimestampRecord(ctx, execCfg.Codec, pts, txn, b.job.ID(),
-		details.Targets, *resolved, cp)
+
+	if _, shouldProtect := details.Opts[changefeedbase.OptProtectDataFromGCOnPause]; !shouldProtect {
+		// Release existing pts record to avoid a single changefeed left on pause
+		// resulting in storage issues
+		if cp.ProtectedTimestampRecord != uuid.Nil {
+			if err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, cp.ProtectedTimestampRecord); err != nil {
+				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
+			} else {
+				cp.ProtectedTimestampRecord = uuid.Nil
+			}
+		}
+	}
+	return nil
 }
 
 // getQualifiedTableName returns the database-qualified name of the table
