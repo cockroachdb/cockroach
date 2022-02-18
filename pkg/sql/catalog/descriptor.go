@@ -509,6 +509,10 @@ type TableDescriptor interface {
 	// stored columns in the specified Index.
 	IndexStoredColumns(idx Index) []Column
 
+	// FetchSpecKeyAndSuffixColumns returns information about the key and suffix
+	// columns, suitable for populating a descpb.IndexFetchSpec.
+	IndexFetchSpecKeyAndSuffixColumns(idx Index) []descpb.IndexFetchSpec_KeyColumn
+
 	// FindColumnWithID returns the first column found whose ID matches the
 	// provided target ID, in the canonical order.
 	// If no column is found then an error is also returned.

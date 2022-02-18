@@ -32,7 +32,7 @@ func InitIndexFetchSpec(
 	index catalog.Index,
 	fetchColumnIDs []descpb.ColumnID,
 ) error {
-	oldKeyAndSuffixCols := s.KeyAndSuffixColumns
+	//oldKeyAndSuffixCols := s.KeyAndSuffixColumns
 	oldFetchedCols := s.FetchedColumns
 	oldFamilies := s.FamilyDefaultColumns
 	*s = descpb.IndexFetchSpec{
@@ -71,9 +71,7 @@ func InitIndexFetchSpec(
 		}
 	}
 
-	indexCols := table.IndexColumns(index)
-	keyDirs := table.IndexFullColumnDirections(index)
-	compositeIDs := index.CollectCompositeColumnIDs()
+	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
 	if index.GetType() == descpb.IndexDescriptor_INVERTED {
@@ -93,28 +91,40 @@ func InitIndexFetchSpec(
 		}
 	}
 
-	numKeyCols := index.NumKeyColumns() + index.NumKeySuffixColumns()
-	if cap(oldKeyAndSuffixCols) >= numKeyCols {
-		s.KeyAndSuffixColumns = oldKeyAndSuffixCols[:numKeyCols]
-	} else {
-		s.KeyAndSuffixColumns = make([]descpb.IndexFetchSpec_KeyColumn, numKeyCols)
-	}
-	for i := range s.KeyAndSuffixColumns {
-		col := indexCols[i]
-		colID := col.GetID()
-		dir := descpb.IndexDescriptor_ASC
-		// If this is a unique index, the suffix columns are not part of the full
-		// index columns and are always ascending.
-		if i < len(keyDirs) {
-			dir = keyDirs[i]
+	/*
+		indexCols := table.IndexColumns(index)
+		keyDirs := table.IndexFullColumnDirections(index)
+		compositeIDs := index.CollectCompositeColumnIDs()
+
+
+		numKeyCols := index.NumKeyColumns() + index.NumKeySuffixColumns()
+		if cap(oldKeyAndSuffixCols) >= numKeyCols {
+			s.KeyAndSuffixColumns = oldKeyAndSuffixCols[:numKeyCols]
+		} else {
+			s.KeyAndSuffixColumns = make([]descpb.IndexFetchSpec_KeyColumn, numKeyCols)
 		}
-		s.KeyAndSuffixColumns[i] = descpb.IndexFetchSpec_KeyColumn{
-			IndexFetchSpec_Column: mkCol(col, colID),
-			Direction:             dir,
-			IsComposite:           compositeIDs.Contains(colID),
-			IsInverted:            colID == invertedColumnID,
+		for i := range s.KeyAndSuffixColumns {
+			col := indexCols[i]
+			if !col.Public() {
+				// Key columns must be public.
+				return fmt.Errorf("column %q (%d) is not public", col.GetName(), col.GetID())
+			}
+			colID := col.GetID()
+			dir := descpb.IndexDescriptor_ASC
+			// If this is a unique index, the suffix columns are not part of the full
+			// index columns and are always ascending.
+			if i < len(keyDirs) {
+				dir = keyDirs[i]
+			}
+			s.KeyAndSuffixColumns[i] = descpb.IndexFetchSpec_KeyColumn{
+				IndexFetchSpec_Column: mkCol(col, colID),
+				Direction:             dir,
+				IsComposite:           compositeIDs.Contains(colID),
+				IsInverted:            colID == invertedColumnID,
+			}
 		}
-	}
+
+	*/
 
 	if cap(oldFetchedCols) >= len(fetchColumnIDs) {
 		s.FetchedColumns = oldFetchedCols[:len(fetchColumnIDs)]
