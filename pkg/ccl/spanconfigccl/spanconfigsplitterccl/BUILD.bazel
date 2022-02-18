@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
+
+go_test(
+    name = "spanconfigsplitterccl_test",
+    srcs = [
+        "datadriven_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/ccl/kvccl/kvtenantccl",
+        "//pkg/ccl/partitionccl",
+        "//pkg/ccl/utilccl",
+        "//pkg/roachpb",
+        "//pkg/security",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigsplitter",
+        "//pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)

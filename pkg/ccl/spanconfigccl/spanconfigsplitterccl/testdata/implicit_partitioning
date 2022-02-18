@@ -1,0 +1,38 @@
+exec-sql
+CREATE DATABASE db;
+----
+
+exec-sql
+SET experimental_enable_implicit_column_partitioning = true;
+----
+
+exec-sql
+CREATE TABLE db.partition_all_by_list (N1 INT PRIMARY KEY, S2 STRING) PARTITION ALL BY LIST (S2) (
+   PARTITION one VALUES IN ('mid'),
+   PARTITION two VALUES IN ('fin')
+);
+----
+
+splits database=db table=partition_all_by_list
+----
+/Table/106
+/Table/106/1
+/Table/106/1/"fin"
+/Table/106/1/"fin"/PrefixEnd
+/Table/106/1/"mid"
+/Table/106/1/"mid"/PrefixEnd
+/Table/106/2
+
+exec-sql
+CREATE TABLE db.partition_all_by_range(N1 INT PRIMARY KEY, S2 STRING) PARTITION ALL BY RANGE (S2) (
+  PARTITION one VALUES FROM (MINVALUE) TO ('mid'),
+  PARTITION two VALUES FROM ('mid') TO (MAXVALUE)
+)
+----
+
+splits database=db table=partition_all_by_range
+----
+/Table/107
+/Table/107/1
+/Table/107/1/"mid"
+/Table/107/2
