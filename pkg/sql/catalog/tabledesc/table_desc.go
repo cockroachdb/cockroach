@@ -492,6 +492,16 @@ func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
 	return nil
 }
 
+// IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.
+func (desc *wrapper) IndexFetchSpecKeyAndSuffixColumns(
+	idx catalog.Index,
+) []descpb.IndexFetchSpec_KeyColumn {
+	if ic := desc.getExistingOrNewIndexColumnCache(idx); ic != nil {
+		return ic.keyAndSuffix
+	}
+	return nil
+}
+
 // getExistingOrNewIndexColumnCache is a convenience method for Index*Columns
 // methods.
 func (desc *wrapper) getExistingOrNewIndexColumnCache(idx catalog.Index) *indexColumnCache {
