@@ -21,6 +21,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/alessio/shellescape"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/cockroachdb/cockroach/pkg/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -66,48 +67,63 @@ func (s *mockS3) PutObject(i *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
 }
 
 type mockExecRunner struct {
-	cmds []string
+	fakeBazelBin string
+	cmds         []string
 }
 
 func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
+	if r.fakeBazelBin == "" {
+		panic("r.fakeBazelBin not set")
+	}
 	if c.Dir == `` {
 		return nil, errors.Errorf(`Dir must be specified`)
 	}
-	cmd := fmt.Sprintf("env=%s args=%s", c.Env, c.Args)
+	cmd := fmt.Sprintf("env=%s args=%s", c.Env, shellescape.QuoteCommand(c.Args))
+	r.cmds = append(r.cmds, cmd)
 
 	var paths []string
-	if c.Args[0] == `mkrelease` {
-		path := filepath.Join(c.Dir, `cockroach`)
+	if c.Args[0] == "bazel" && c.Args[1] == "info" && c.Args[2] == "bazel-bin" {
+		return []byte(r.fakeBazelBin), nil
+	}
+	if c.Args[0] == "bazel" && c.Args[1] == "build" {
+		path := filepath.Join(r.fakeBazelBin, "pkg", "cmd", "cockroach", "cockroach_", "cockroach")
+		var platform release.Platform
 		for _, arg := range c.Args {
-			if strings.HasPrefix(arg, `SUFFIX=`) {
-				path += strings.TrimPrefix(arg, `SUFFIX=`)
+			if strings.HasPrefix(arg, `--config=`) {
+				switch strings.TrimPrefix(arg, `--config=`) {
+				case "crosslinuxbase":
+					platform = release.PlatformLinux
+				case "crosslinuxarmbase":
+					platform = release.PlatformLinuxArm
+				case "crossmacosbase":
+					platform = release.PlatformMacOS
+				case "crosswindowsbase":
+					platform = release.PlatformWindows
+					path += ".exe"
+				case "ci", "with_ui":
+				default:
+					panic(fmt.Sprintf("Unexpected configuration %s", arg))
+				}
 			}
 		}
 		paths = append(paths, path)
-		ext := release.SharedLibraryExtensionFromBuildType(c.Args[1])
+		ext := release.SharedLibraryExtensionFromPlatform(platform)
 		for _, lib := range release.CRDBSharedLibraries {
-			paths = append(paths, filepath.Join(c.Dir, "lib", lib+ext))
-		}
-		// Make the lib directory as it exists after `make`.
-		if err := os.MkdirAll(filepath.Join(c.Dir, "lib"), 0755); err != nil {
-			return nil, err
-		}
-	} else if c.Args[0] == `make` && c.Args[1] == `archive` {
-		for _, arg := range c.Args {
-			if strings.HasPrefix(arg, `ARCHIVE=`) {
-				paths = append(paths, filepath.Join(c.Dir, strings.TrimPrefix(arg, `ARCHIVE=`)))
-				break
+			libDir := "lib"
+			if platform == release.PlatformWindows {
+				libDir = "bin"
 			}
+			paths = append(paths, filepath.Join(r.fakeBazelBin, "c-deps", "libgeos", libDir, lib+ext))
 		}
 	}
 
 	for _, path := range paths {
+		if err := os.MkdirAll(filepath.Dir(path), 0777); err != nil {
+			return nil, err
+		}
 		if err := ioutil.WriteFile(path, []byte(cmd), 0666); err != nil {
 			return nil, err
 		}
-	}
-	if len(paths) > 0 {
-		r.cmds = append(r.cmds, cmd)
 	}
 
 	var output []byte
@@ -130,10 +146,14 @@ func TestProvisional(t *testing.T) {
 				branch:        `provisional_201901010101_v0.0.1-alpha`,
 			},
 			expectedCmds: []string{
-				"env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
-				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
-				"env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary BUILDINFO_TAG=v0.0.1-alpha BUILD_TAGGED_RELEASE=true]",
-				"env=[] args=[make archive ARCHIVE_BASE=cockroach-v0.0.1-alpha ARCHIVE=cockroach-v0.0.1-alpha.src.tgz BUILDINFO_TAG=v0.0.1-alpha]",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary v0.0.1-alpha release' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary v0.0.1-alpha release' -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary v0.0.1-alpha release' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosswindowsbase",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
@@ -143,8 +163,6 @@ func TestProvisional(t *testing.T) {
 					"CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.windows-6.2-amd64.zip " +
 					"CONTENTS <binary stuff>",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.src.tgz " +
-					"CONTENTS env=[] args=[make archive ARCHIVE_BASE=cockroach-v0.0.1-alpha ARCHIVE=cockroach-v0.0.1-alpha.src.tgz BUILDINFO_TAG=v0.0.1-alpha]",
 			},
 		},
 		{
@@ -156,35 +174,40 @@ func TestProvisional(t *testing.T) {
 				sha:           `00SHA00`,
 			},
 			expectedCmds: []string{
-				"env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
-				"env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
-				"env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosslinuxbase",
+				"env=[MALLOC_CONF=prof:true] args=./cockroach.linux-2.6.32-gnu-amd64 version",
+				"env=[] args=ldd ./cockroach.linux-2.6.32-gnu-amd64",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crossmacosbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
+				"env=[] args=bazel info bazel-bin -c opt --config=ci --config=with_ui --config=crosswindowsbase",
 			},
 			expectedGets: nil,
 			expectedPuts: []string{
 				"s3://cockroach//cockroach/cockroach.linux-gnu-amd64.00SHA00 " +
-					"CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+					"CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
 				"s3://cockroach/cockroach/cockroach.linux-gnu-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.linux-gnu-amd64.00SHA00",
-				"s3://cockroach//cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
 				"s3://cockroach/cockroach/lib/libgeos.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-amd64.00SHA00.so",
-				"s3://cockroach//cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=[mkrelease linux-gnu SUFFIX=.linux-2.6.32-gnu-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-pc-linux-gnu official-binary' -c opt --config=ci --config=with_ui --config=crosslinuxbase",
 				"s3://cockroach/cockroach/lib/libgeos_c.linux-gnu-amd64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-amd64.00SHA00.so",
 				"s3://cockroach//cockroach/cockroach.darwin-amd64.00SHA00 " +
-					"CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+					"CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=with_ui --config=crossmacosbase",
 				"s3://cockroach/cockroach/cockroach.darwin-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.darwin-amd64.00SHA00",
-				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=with_ui --config=crossmacosbase",
 				"s3://cockroach/cockroach/lib/libgeos.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-amd64.00SHA00.dylib",
-				"s3://cockroach//cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=[mkrelease darwin SUFFIX=.darwin-10.9-amd64 GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-apple-darwin19 official-binary' -c opt --config=ci --config=with_ui --config=crossmacosbase",
 				"s3://cockroach/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.00SHA00.dylib",
 				"s3://cockroach//cockroach/cockroach.windows-amd64.00SHA00.exe " +
-					"CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+					"CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
 				"s3://cockroach/cockroach/cockroach.windows-amd64.LATEST/no-cache " +
 					"REDIRECT /cockroach/cockroach.windows-amd64.00SHA00.exe",
-				"s3://cockroach//cockroach/lib/libgeos.windows-amd64.00SHA00.dll CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos.windows-amd64.00SHA00.dll CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
 				"s3://cockroach/cockroach/lib/libgeos.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.windows-amd64.00SHA00.dll",
-				"s3://cockroach//cockroach/lib/libgeos_c.windows-amd64.00SHA00.dll CONTENTS env=[] args=[mkrelease windows SUFFIX=.windows-6.2-amd64.exe GOFLAGS= TAGS= BUILDCHANNEL=official-binary]",
+				"s3://cockroach//cockroach/lib/libgeos_c.windows-amd64.00SHA00.dll CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh x86_64-w64-mingw32 official-binary' -c opt --config=ci --config=with_ui --config=crosswindowsbase",
 				"s3://cockroach/cockroach/lib/libgeos_c.windows-amd64.dll.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.windows-amd64.00SHA00.dll",
 			},
 		},
@@ -196,9 +219,13 @@ func TestProvisional(t *testing.T) {
 
 			var s3 mockS3
 			var exec mockExecRunner
+			fakeBazelBin, cleanup := testutils.TempDir(t)
+			defer cleanup()
+			exec.fakeBazelBin = fakeBazelBin
 			flags := test.flags
 			flags.pkgDir = dir
-			run(&s3, exec.run, flags)
+			execFn := release.ExecFn{MockExecFn: exec.run}
+			run(&s3, flags, execFn)
 			require.Equal(t, test.expectedCmds, exec.cmds)
 			require.Equal(t, test.expectedGets, s3.gets)
 			require.Equal(t, test.expectedPuts, s3.puts)
@@ -234,7 +261,6 @@ func TestBless(t *testing.T) {
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.linux-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1.src.tgz",
 			},
 			expectedPuts: []string{
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz/no-cache " +
@@ -243,8 +269,6 @@ func TestBless(t *testing.T) {
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip/no-cache " +
 					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.windows-6.2-amd64.zip",
-				"s3://binaries.cockroachdb.com/cockroach-latest.src.tgz/no-cache " +
-					"CONTENTS s3://binaries.cockroachdb.com/cockroach-v0.0.1.src.tgz",
 			},
 		},
 	}
@@ -253,7 +277,7 @@ func TestBless(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var s3 mockS3
 			var execFn release.ExecFn // bless shouldn't exec anything
-			run(&s3, execFn, test.flags)
+			run(&s3, test.flags, execFn)
 			require.Equal(t, test.expectedGets, s3.gets)
 			require.Equal(t, test.expectedPuts, s3.puts)
 		})
