@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -22,12 +23,14 @@ import (
 
 // CollectionFactory is used to construct a new Collection.
 type CollectionFactory struct {
-	settings       *cluster.Settings
-	codec          keys.SQLCodec
-	leaseMgr       *lease.Manager
-	virtualSchemas catalog.VirtualSchemas
-	hydratedTables *hydratedtables.Cache
-	systemDatabase *systemDatabaseNamespaceCache
+	settings           *cluster.Settings
+	codec              keys.SQLCodec
+	leaseMgr           *lease.Manager
+	virtualSchemas     catalog.VirtualSchemas
+	hydratedTables     *hydratedtables.Cache
+	systemDatabase     *systemDatabaseNamespaceCache
+	spanConfigSplitter spanconfig.Splitter
+	spanConfigLimiter  spanconfig.Limiter
 }
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
@@ -37,14 +40,18 @@ func NewCollectionFactory(
 	leaseMgr *lease.Manager,
 	virtualSchemas catalog.VirtualSchemas,
 	hydratedTables *hydratedtables.Cache,
+	spanConfigSplitter spanconfig.Splitter,
+	spanConfigLimiter spanconfig.Limiter,
 ) *CollectionFactory {
 	return &CollectionFactory{
-		settings:       settings,
-		codec:          leaseMgr.Codec(),
-		leaseMgr:       leaseMgr,
-		virtualSchemas: virtualSchemas,
-		hydratedTables: hydratedTables,
-		systemDatabase: newSystemDatabaseNamespaceCache(leaseMgr.Codec()),
+		settings:           settings,
+		codec:              leaseMgr.Codec(),
+		leaseMgr:           leaseMgr,
+		virtualSchemas:     virtualSchemas,
+		hydratedTables:     hydratedTables,
+		systemDatabase:     newSystemDatabaseNamespaceCache(leaseMgr.Codec()),
+		spanConfigSplitter: spanConfigSplitter,
+		spanConfigLimiter:  spanConfigLimiter,
 	}
 }
 

@@ -131,6 +131,18 @@ var migrations = []migration.Migration{
 		NoPrecondition,
 		fixCastForStyleMigration,
 	),
+	migration.NewTenantMigration(
+		"add the system.span_count table",
+		toCV(clusterversion.SpanCountTable),
+		NoPrecondition,
+		spanCountTableMigration,
+	),
+	migration.NewTenantMigration(
+		"seed system.span_count with span count for existing tenants",
+		toCV(clusterversion.SeedSpanCountTable),
+		NoPrecondition,
+		seedSpanCountTableMigration,
+	),
 }
 
 func init() {

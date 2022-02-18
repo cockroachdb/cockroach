@@ -48,8 +48,9 @@ import (
 type Mutable struct {
 	wrapper
 
-	// ClusterVersion represents the version of the table descriptor read from the store.
-	ClusterVersion descpb.TableDescriptor
+	// original represents the version of the table descriptor read from the
+	// store.
+	original *immutable
 }
 
 const (
@@ -983,7 +984,7 @@ func fitColumnToFamily(desc *Mutable, col descpb.ColumnDescriptor) (int, bool) {
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.
-	if desc.Version == desc.ClusterVersion.Version+1 || desc.ClusterVersion.Version == 0 {
+	if desc.Version == desc.ClusterVersion().Version+1 || desc.ClusterVersion().Version == 0 {
 		return
 	}
 	desc.Version++
@@ -996,17 +997,37 @@ func (desc *Mutable) MaybeIncrementVersion() {
 
 // OriginalName implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalName() string {
-	return desc.ClusterVersion.Name
+	return desc.ClusterVersion().Name
 }
 
 // OriginalID implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalID() descpb.ID {
-	return desc.ClusterVersion.ID
+	return desc.ClusterVersion().ID
 }
 
 // OriginalVersion implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
-	return desc.ClusterVersion.Version
+	return desc.ClusterVersion().Version
+}
+
+// ClusterVersion returns the version of the table descriptor read from the
+// store, if any.
+//
+// TODO(ajwerner): Make this deal in catalog.TableDescriptor instead.
+func (desc *Mutable) ClusterVersion() descpb.TableDescriptor {
+	if desc.original == nil {
+		return descpb.TableDescriptor{}
+	}
+	return desc.original.TableDescriptor
+}
+
+// OriginalDescriptor returns the original state of the descriptor prior to
+// the mutations.
+func (desc *Mutable) OriginalDescriptor() catalog.Descriptor {
+	if desc.original != nil {
+		return desc.original
+	}
+	return nil
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the
@@ -1263,7 +1284,7 @@ func (desc *Mutable) RenameColumnDescriptor(column catalog.Column, newColName st
 // It returns either an active column or a column that was added in the
 // same transaction that is currently running.
 func (desc *Mutable) FindActiveOrNewColumnByName(name tree.Name) (catalog.Column, error) {
-	currentMutationID := desc.ClusterVersion.NextMutationID
+	currentMutationID := desc.ClusterVersion().NextMutationID
 	for _, col := range desc.DeletableColumns() {
 		if col.ColName() == name &&
 			((col.Public()) ||
@@ -2170,8 +2191,8 @@ func (desc *Mutable) addMutationWithNextID(m descpb.DescriptorMutation) {
 	// For tables created in the same transaction the next mutation ID will
 	// not have been allocated and the added mutation will use an invalid ID.
 	// This is fine because the mutation will be processed immediately.
-	m.MutationID = desc.ClusterVersion.NextMutationID
-	desc.NextMutationID = desc.ClusterVersion.NextMutationID + 1
+	m.MutationID = desc.ClusterVersion().NextMutationID
+	desc.NextMutationID = desc.ClusterVersion().NextMutationID + 1
 	desc.Mutations = append(desc.Mutations, m)
 }
 
@@ -2233,7 +2254,7 @@ func (desc *wrapper) HasColumnBackfillMutation() bool {
 // IsNew returns true if the table was created in the current
 // transaction.
 func (desc *Mutable) IsNew() bool {
-	return desc.ClusterVersion.ID == descpb.InvalidID
+	return desc.ClusterVersion().ID == descpb.InvalidID
 }
 
 // ColumnsSelectors generates Select expressions for cols.

@@ -1278,6 +1278,13 @@ type ExecutorConfig struct {
 	// and related migrations.
 	SpanConfigReconciler spanconfig.Reconciler
 
+	// SpanConfigSplitter is used during migrations to seed system.span_count with
+	// the right number of tenant spans.
+	SpanConfigSplitter spanconfig.Splitter
+
+	// SpanConfigLimiter is used to limit how many span configs installed.
+	SpanConfigLimiter spanconfig.Limiter
+
 	// SpanConfigKVAccessor is used when creating and deleting tenant
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor

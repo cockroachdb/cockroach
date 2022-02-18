@@ -2791,10 +2791,10 @@ func (sc *SchemaChanger) queueCleanupJob(
 	ctx context.Context, scDesc *tabledesc.Mutable, txn *kv.Txn,
 ) (jobspb.JobID, error) {
 	// Create jobs for dropped columns / indexes to be deleted.
-	mutationID := scDesc.ClusterVersion.NextMutationID
+	mutationID := scDesc.ClusterVersion().NextMutationID
 	span := scDesc.PrimaryIndexSpan(sc.execCfg.Codec)
 	var spanList []jobspb.ResumeSpanList
-	for j := len(scDesc.ClusterVersion.Mutations); j < len(scDesc.Mutations); j++ {
+	for j := len(scDesc.ClusterVersion().Mutations); j < len(scDesc.Mutations); j++ {
 		spanList = append(spanList,
 			jobspb.ResumeSpanList{
 				ResumeSpans: roachpb.Spans{span},

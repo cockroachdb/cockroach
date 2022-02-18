@@ -83,6 +83,7 @@ upsert /Tenant/10/Table/4{2-3}             database system (tenant)
 upsert /Tenant/10/Table/4{3-4}             database system (tenant)
 upsert /Tenant/10/Table/4{4-5}             database system (tenant)
 upsert /Tenant/10/Table/4{6-7}             database system (tenant)
+upsert /Tenant/10/Table/5{0-1}             database system (tenant)
 
 exec-sql tenant=10
 CREATE DATABASE db;

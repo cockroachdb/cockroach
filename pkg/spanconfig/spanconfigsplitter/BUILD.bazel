@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "spanconfigsplitter",
-    srcs = ["splitter.go"],
+    srcs = [
+        "noop.go",
+        "splitter.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsplitter",
     visibility = ["//visibility:public"],
     deps = [

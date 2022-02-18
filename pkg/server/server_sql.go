@@ -51,8 +51,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfiglimiter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreconciler"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsplitter"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -550,11 +552,33 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		compactEngineSpanFunc = cli.CompactEngineSpan
 	}
 
+	spanConfig := struct {
+		manager              *spanconfigmanager.Manager
+		sqlTranslatorFactory *spanconfigsqltranslator.Factory
+		sqlWatcher           *spanconfigsqlwatcher.SQLWatcher
+		splitter             spanconfig.Splitter
+		limiter              spanconfig.Limiter
+	}{}
+	if codec.ForSystemTenant() {
+		spanConfig.limiter = spanconfiglimiter.NoopLimiter{}
+		spanConfig.splitter = spanconfigsplitter.NoopSplitter{}
+	} else {
+		spanConfigKnobs, _ := cfg.TestingKnobs.SpanConfig.(*spanconfig.TestingKnobs)
+		spanConfig.splitter = spanconfigsplitter.New(codec, spanConfigKnobs)
+		spanConfig.limiter = spanconfiglimiter.New(
+			cfg.circularInternalExecutor,
+			cfg.Settings,
+			spanConfigKnobs,
+		)
+	}
+
 	collectionFactory := descs.NewCollectionFactory(
 		cfg.Settings,
 		leaseMgr,
 		virtualSchemas,
 		hydratedTablesCache,
+		spanConfig.splitter,
+		spanConfig.limiter,
 	)
 
 	// Set up the DistSQL server.
@@ -928,11 +952,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.MigrationTestingKnobs = knobs
 	}
 
-	spanConfig := struct {
-		manager              *spanconfigmanager.Manager
-		sqlTranslatorFactory *spanconfigsqltranslator.Factory
-		sqlWatcher           *spanconfigsqlwatcher.SQLWatcher
-	}{}
 	if !codec.ForSystemTenant() || !cfg.SpanConfigsDisabled {
 		// Instantiate a span config manager. If we're the host tenant we'll
 		// only do it unless COCKROACH_DISABLE_SPAN_CONFIGS is set.
@@ -972,6 +991,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		execCfg.SpanConfigReconciler = spanConfigReconciler
 	}
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
+	execCfg.SpanConfigLimiter = spanConfig.limiter
+	execCfg.SpanConfigSplitter = spanConfig.splitter
 
 	temporaryObjectCleaner := sql.NewTemporaryObjectCleaner(
 		cfg.Settings,

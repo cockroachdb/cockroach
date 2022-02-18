@@ -94,6 +94,10 @@ type TestingKnobs struct {
 	// ProtectedTSReaderOverrideFn returns a ProtectedTSReader which is used to
 	// override the ProtectedTSReader used when setting up a new store.
 	ProtectedTSReaderOverrideFn func(clock *hlc.Clock) ProtectedTSReader
+
+	// LimiterLimitOverride, if set, allows tests to dynamically override the span
+	// config limit.
+	LimiterLimitOverride func() int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
