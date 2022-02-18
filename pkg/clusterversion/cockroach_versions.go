@@ -288,7 +288,9 @@ const (
 	// preserving temporary indexes, and a post-backfill merging
 	// processing.
 	MVCCIndexBackfiller
-
+	// EnableLeaseHolderRemoval enables removing a leaseholder and transferring the lease
+	// during joint configuration, including to VOTER_INCOMING replicas.
+	EnableLeaseHolderRemoval
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -459,6 +461,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
+	},
+	{
+		Key:     EnableLeaseHolderRemoval,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
