@@ -1,15 +1,81 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package sql
 
 import (
 	"context"
+	"hash/fnv"
+
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"hash/fnv"
 )
+
+// GetUserIDWithCache returns id of the user if role exists
+func GetUserIDWithCache(
+	ctx context.Context,
+	execCfg *ExecutorConfig,
+	descsCol *descs.Collection,
+	executor *InternalExecutor,
+	txn *kv.Txn,
+	role security.SQLUsername,
+) (uuid.UUID, error) {
+
+	var userID uuid.UUID
+	roleMembersCache := execCfg.RoleMemberCache
+
+	// Lookup table version.
+	_, tableDesc, err := descsCol.GetImmutableTableByName(
+		ctx,
+		txn,
+		&roleMembersTableName,
+		tree.ObjectLookupFlagsWithRequired(),
+	)
+	if err != nil {
+		return userID, err
+	}
+
+	tableVersion := tableDesc.GetVersion()
+	if tableDesc.IsUncommittedVersion() {
+		return GetUserID(ctx, executor, txn, role)
+	}
+
+	userID, found := func() (uuid.UUID, bool) {
+		roleMembersCache.Lock()
+		defer roleMembersCache.Unlock()
+		if roleMembersCache.tableVersion != tableVersion {
+			// Update version and drop the map.
+			roleMembersCache.tableVersion = tableVersion
+			roleMembersCache.userCache = make(map[security.SQLUsername]userRoleMembership)
+			roleMembersCache.userIDCache = make(map[security.SQLUsername]uuid.UUID)
+			roleMembersCache.boundAccount.Empty(ctx)
+		}
+		userMapping, ok := roleMembersCache.userIDCache[role]
+		return userMapping, ok
+	}()
+
+	if found {
+		// Found: return.
+		return userID, nil
+	}
+
+	// Lookup memberships outside the lock.
+	userID, err = GetUserID(ctx, executor, txn, role)
+	//if err != nil {
+	return userID, err
+}
 
 // GetUserID returns id of the user if role exists
 func GetUserID(
@@ -17,7 +83,7 @@ func GetUserID(
 ) (uuid.UUID, error) {
 
 	var userID uuid.UUID
-	query := `SELECT id FROM system.users WHERE username=$1`
+	query := `SELECT user_id FROM system.users WHERE username=$1`
 
 	values, err := executor.QueryRowEx(ctx, "GetUserID", txn, sessiondata.InternalExecutorOverride{
 		User: security.RootUserName(),
@@ -44,12 +110,18 @@ func HashString(str string) int {
 	return int(h.Sum32())
 }
 
-// ToSQLIDs converts a NameList containing SQL input of usernames,
-// normalizes the names and returns them as a list of SQLUsernames.
-func ToSQLIDs(l []security.SQLUsername, ctx context.Context, executor *InternalExecutor, txn *kv.Txn) (map[security.SQLUsername]string, error) {
+// ToSQLIDs convert a list of SQLUsernames to a map of SQLUsernames to ids
+func ToSQLIDs(
+	ctx context.Context,
+	l []security.SQLUsername,
+	execCfg *ExecutorConfig,
+	descsCol *descs.Collection,
+	executor *InternalExecutor,
+	txn *kv.Txn,
+) (map[security.SQLUsername]string, error) {
 	targetRoles := make(map[security.SQLUsername]string)
 	for _, role := range l {
-		roleID, err := GetUserID(ctx, executor, txn, role)
+		roleID, err := GetUserIDWithCache(ctx, execCfg, descsCol, executor, txn, role)
 		if err != nil {
 			return nil, err
 		}

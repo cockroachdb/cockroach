@@ -86,9 +86,9 @@ CREATE TABLE system.users (
   username         STRING,
   "hashedPassword" BYTES,
   "isRole"         BOOL NOT NULL DEFAULT false,
-	id               UUID DEFAULT gen_random_uuid(),
+	user_id          UUID NOT NULL DEFAULT gen_random_uuid(),
   CONSTRAINT "primary" PRIMARY KEY (username),
-	INDEX (id)
+	INDEX (user_id)
 );`
 
 	RoleOptionsTableSchema = `
@@ -96,9 +96,9 @@ CREATE TABLE system.role_options (
 	username STRING NOT NULL,
 	option STRING NOT NULL,
 	value STRING,
-	id UUID,
-	CONSTRAINT "primary" PRIMARY KEY (username, option, id),
-	FAMILY "primary" (username, option, value, id)
+	user_id UUID,
+	CONSTRAINT "primary" PRIMARY KEY (username, option, user_id),
+	FAMILY "primary" (username, option, value, user_id)
 )`
 
 	// Zone settings per DB/Table.
@@ -897,22 +897,23 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "hashedPassword", ID: 2, Type: types.Bytes, Nullable: true},
 				{Name: "isRole", ID: 3, Type: types.Bool, DefaultExpr: &falseBoolString},
-				{Name: "id", ID: 4, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "user_id", ID: 4, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
 				{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []descpb.ColumnID{2}, DefaultColumnID: 2},
 				{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []descpb.ColumnID{3}, DefaultColumnID: 3},
-				{Name: "fam_4_id", ID: 4, ColumnNames: []string{"id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+				{Name: "fam_4_id", ID: 4, ColumnNames: []string{"user_id"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 			},
 			pk("username"),
 			descpb.IndexDescriptor{
-				Name:                "users_username_id_idx",
+				Name:                "users_user_id_idx",
 				ID:                  2,
-				Unique:              true,
-				KeyColumnNames:      []string{"username", "id"},
-				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
-				KeyColumnIDs:        []descpb.ColumnID{1, 4},
+				KeyColumnNames:      []string{"user_id"},
+				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             4,
 			},
 		))
 
@@ -1403,14 +1404,14 @@ var (
 				{Name: "role", ID: 1, Type: types.String},
 				{Name: "member", ID: 2, Type: types.String},
 				{Name: "isAdmin", ID: 3, Type: types.Bool},
-				{Name: "roleId", ID: 4, Type: types.Uuid},
-				{Name: "memberId", ID: 5, Type: types.Uuid},
+				{Name: "role_id", ID: 4, Type: types.Uuid},
+				{Name: "member_id", ID: 5, Type: types.Uuid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"role", "member", "roleId", "memberId"},
+					ColumnNames: []string{"role", "member", "role_id", "member_id"},
 					ColumnIDs:   []descpb.ColumnID{1, 2, 4, 5},
 				},
 				{
@@ -1425,25 +1426,25 @@ var (
 				Name:                "primary",
 				ID:                  1,
 				Unique:              true,
-				KeyColumnNames:      []string{"role", "member", "roleId", "memberId"},
+				KeyColumnNames:      []string{"role", "member", "role_id", "member_id"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 4, 5},
 			},
 			descpb.IndexDescriptor{
-				Name:                "role_members_role_idx",
+				Name:                "role_members_role_role_id_idx",
 				ID:                  2,
 				Unique:              false,
-				KeyColumnNames:      []string{"role", "roleId"},
+				KeyColumnNames:      []string{"role", "role_id"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 4},
 				KeySuffixColumnIDs:  []descpb.ColumnID{2, 5},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 			descpb.IndexDescriptor{
-				Name:                "role_members_member_idx",
+				Name:                "role_members_member_member_id_idx",
 				ID:                  3,
 				Unique:              false,
-				KeyColumnNames:      []string{"member", "memberId"},
+				KeyColumnNames:      []string{"member", "member_id"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2, 5},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1, 4},
@@ -1740,12 +1741,12 @@ var (
 				{Name: "username", ID: 1, Type: types.String},
 				{Name: "option", ID: 2, Type: types.String},
 				{Name: "value", ID: 3, Type: types.String, Nullable: true},
-				{Name: "id", ID: 4, Type: types.Uuid},
+				{Name: "user_id", ID: 4, Type: types.Uuid},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:            "primary",
-					ColumnNames:     []string{"username", "option", "value", "id"},
+					ColumnNames:     []string{"username", "option", "value", "user_id"},
 					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
 					DefaultColumnID: 3,
 				},
@@ -1754,7 +1755,7 @@ var (
 				Name:                "primary",
 				ID:                  1,
 				Unique:              true,
-				KeyColumnNames:      []string{"username", "option", "id"},
+				KeyColumnNames:      []string{"username", "option", "user_id"},
 				KeyColumnDirections: []descpb.IndexDescriptor_Direction{descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC, descpb.IndexDescriptor_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{1, 2, 4},
 			},

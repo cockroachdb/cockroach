@@ -167,7 +167,7 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 	opName := "grant-role"
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "roleId", "memberId") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "roleId", "memberId")`
+	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member", "role_id", "member_id")`
 	if n.adminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`
@@ -175,12 +175,12 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 		// admin option: false, do not clear it from existing memberships.
 		memberStmt += ` DO NOTHING`
 	}
-	ruids, err := ToSQLIDs(n.roles, params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil)
+	ruids, err := ToSQLIDs(params.ctx, n.roles, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn)
 	fmt.Printf("ruid %s", ruids)
 	if err != nil {
 		return err
 	}
-	muids, err := ToSQLIDs(n.members, params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil)
+	muids, err := ToSQLIDs(params.ctx, n.members, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn)
 	if err != nil {
 		return err
 	}
@@ -188,16 +188,10 @@ func (n *GrantRoleNode) startExec(params runParams) error {
 
 	var rowsAffected int
 	for _, r := range n.roles {
-		ruid, _ := ruids[r]
-		//if err != nil {
-		//	return err
-		//}
+		ruid := ruids[r]
 
 		for _, m := range n.members {
-			muid, _ := muids[m]
-			//if err != nil {
-			//	return err
-			//}
+			muid := muids[m]
 
 			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
 				params.ctx,

@@ -3354,12 +3354,11 @@ func (c *adminPrivilegeChecker) hasRoleOption(
 		// Shortcut.
 		return true, nil
 	}
-	roleID, err := sql.GetUserID(ctx, c.ie, nil, user)
 
 	row, err := c.ie.QueryRowEx(
 		ctx, "check-role-option", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: user},
-		"SELECT crdb_internal.has_role_option($1, $2)", roleOption.String(), roleID.String())
+		"SELECT crdb_internal.has_role_option($1)", roleOption.String())
 	if err != nil {
 		return false, err
 	}

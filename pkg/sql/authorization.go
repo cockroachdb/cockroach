@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -55,6 +56,8 @@ type MembershipCache struct {
 	// for each key.
 	populateCacheGroup singleflight.Group
 	stopper            *stop.Stopper
+	// userIDCache is a mapping from username to user ID.
+	userIDCache map[security.SQLUsername]uuid.UUID
 }
 
 // NewMembershipCache initializes a new MembershipCache.
@@ -619,7 +622,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 		fmt.Sprintf(
-			`SELECT 1 from %s WHERE option = '%s' AND username = $1 AND id = $2 LIMIT 1`,
+			`SELECT 1 from %s WHERE option = '%s' AND username = $1 AND user_id = $2 LIMIT 1`,
 			sessioninit.RoleOptionsTableName, roleOption.String()), user.Normalized(), roleID.String())
 	if err != nil {
 		return false, err

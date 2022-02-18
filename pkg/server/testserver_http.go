@@ -14,7 +14,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -154,7 +154,7 @@ func (ts *httpTestServer) createAuthUser(userName security.SQLUsername, isAdmin 
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sessiondata.InternalExecutorOverride{User: security.RootUserName()},
-			`INSERT INTO system.role_members ("role", "member", "isAdmin", "roleId", "memberId") VALUES ('admin', $1, true, $2, $3)`, userName.Normalized(), adminID.String(), userID.String(),
+			`INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ('admin', $1, true, $2, $3)`, userName.Normalized(), adminID.String(), userID.String(),
 		); err != nil {
 			return err
 		}

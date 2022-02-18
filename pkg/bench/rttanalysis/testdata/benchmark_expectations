@@ -36,8 +36,8 @@ exp,benchmark
 16,DropDatabase/drop_database_2_tables
 17,DropDatabase/drop_database_3_tables
 20,DropRole/drop_1_role
-27,DropRole/drop_2_roles
-34,DropRole/drop_3_roles
+29,DropRole/drop_2_roles
+37,DropRole/drop_3_roles
 14,DropSequence/drop_1_sequence
 16,DropSequence/drop_2_sequences
 18,DropSequence/drop_3_sequences
@@ -50,8 +50,8 @@ exp,benchmark
 14,Grant/grant_all_on_1_table
 14,Grant/grant_all_on_2_tables
 14,Grant/grant_all_on_3_tables
-10,GrantRole/grant_1_role
-12,GrantRole/grant_2_roles
+12,GrantRole/grant_1_role
+15,GrantRole/grant_2_roles
 2,ORMQueries/activerecord_type_introspection_query
 2,ORMQueries/django_table_introspection_1_table
 2,ORMQueries/django_table_introspection_4_tables

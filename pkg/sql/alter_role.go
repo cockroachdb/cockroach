@@ -209,7 +209,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			}
 		}
 	}
-	roleID, err := GetUserID(params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, n.roleName)
+	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, n.roleName)
 	if err != nil {
 		return err
 	}
@@ -419,7 +419,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		return nil
 	}
 
-	roleID, err := GetUserID(params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, nil, roleName)
+	roleID, err := GetUserIDWithCache(params.ctx, params.extendedEvalCtx.ExecCfg, params.extendedEvalCtx.Descs, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.extendedEvalCtx.Txn, roleName)
 	if err != nil {
 		return err
 	}
