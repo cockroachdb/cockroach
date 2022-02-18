@@ -39,6 +39,7 @@ type TenantDeps struct {
 
 	SpanConfig struct { // deps for span config migrations; can be removed accordingly
 		spanconfig.KVAccessor
+		spanconfig.Splitter
 		Default roachpb.SpanConfig
 	}
 

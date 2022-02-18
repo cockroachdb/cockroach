@@ -162,6 +162,7 @@ func (tdb *tableDescriptorBuilder) BuildExistingMutableTable() *Mutable {
 			changes:         tdb.changes,
 		},
 		ClusterVersion: *tdb.original,
+		original:       makeImmutable(tdb.original),
 	}
 }
 
