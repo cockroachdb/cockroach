@@ -609,6 +609,9 @@ func (desc *immutable) ValidateCrossReferences(
 	dbDesc, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
 	if err != nil {
 		vea.Report(err)
+	} else if dbDesc.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
+			dbDesc.GetName(), dbDesc.GetID()))
 	}
 
 	// Check that the parent schema exists.
@@ -620,6 +623,10 @@ func (desc *immutable) ValidateCrossReferences(
 			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
 				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
 		}
+		if schemaDesc != nil && schemaDesc.Dropped() {
+			vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
+				schemaDesc.GetName(), schemaDesc.GetID()))
+		}
 	}
 
 	if desc.GetKind() == descpb.TypeDescriptor_MULTIREGION_ENUM && dbDesc != nil {
@@ -630,8 +637,10 @@ func (desc *immutable) ValidateCrossReferences(
 	switch desc.GetKind() {
 	case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 		// Ensure that the referenced array type exists.
-		if _, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
+		if typ, err := vdg.GetTypeDescriptor(desc.GetArrayTypeID()); err != nil {
 			vea.Report(errors.Wrapf(err, "arrayTypeID %d does not exist for %q", desc.GetArrayTypeID(), desc.GetKind()))
+		} else if typ.Dropped() {
+			vea.Report(errors.AssertionFailedf("array type %q (%d) is dropped", typ.GetName(), typ.GetID()))
 		}
 	case descpb.TypeDescriptor_ALIAS:
 		if desc.GetAlias().UserDefined() {
@@ -639,8 +648,10 @@ func (desc *immutable) ValidateCrossReferences(
 			if err != nil {
 				vea.Report(err)
 			}
-			if _, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
+			if typ, err := vdg.GetTypeDescriptor(aliasedID); err != nil {
 				vea.Report(errors.Wrapf(err, "aliased type %d does not exist", aliasedID))
+			} else if typ.Dropped() {
+				vea.Report(errors.AssertionFailedf("aliased type %q (%d) is dropped", typ.GetName(), typ.GetID()))
 			}
 		}
 	}

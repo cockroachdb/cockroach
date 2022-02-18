@@ -103,13 +103,13 @@ func CreateImplicitRecordTypeFromTableDesc(
 	}, nil
 }
 
-// GetName implements the NameKey interface.
+// GetName implements the Namespace interface.
 func (v TableImplicitRecordType) GetName() string { return v.desc.GetName() }
 
-// GetParentID implements the NameKey interface.
+// GetParentID implements the Namespace interface.
 func (v TableImplicitRecordType) GetParentID() descpb.ID { return v.desc.GetParentID() }
 
-// GetParentSchemaID implements the NameKey interface.
+// GetParentSchemaID implements the Namespace interface.
 func (v TableImplicitRecordType) GetParentSchemaID() descpb.ID { return v.desc.GetParentSchemaID() }
 
 // GetID implements the NameEntry interface.

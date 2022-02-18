@@ -67,6 +67,10 @@ func ValidateTableLocalityConfig(
 	if err != nil {
 		return errors.Wrapf(err, "multi-region enum with ID %d does not exist", regionsEnumID)
 	}
+	if regionsEnumDesc.Dropped() {
+		return errors.AssertionFailedf("multi-region enum type %q (%d) is dropped",
+			regionsEnumDesc.GetName(), regionsEnumDesc.GetID())
+	}
 
 	// Check non-table items have a correctly set locality.
 	if desc.IsSequence() {

@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -11,7 +11,6 @@
 package opgen
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -23,11 +22,11 @@ func init() {
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
 				minPhase(scop.PreCommitPhase),
+				// TODO(postamar): remove revertibility constraint when possible
+				revertible(false),
 				emit(func(this *scpb.IndexPartitioning) scop.Op {
 					return &scop.AddIndexPartitionInfo{
-						TableID:      this.TableID,
-						IndexID:      this.IndexID,
-						Partitioning: *protoutil.Clone(this.Partitioning).(*catpb.PartitioningDescriptor),
+						Partitioning: *protoutil.Clone(this).(*scpb.IndexPartitioning),
 					}
 				}),
 			),

@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -20,6 +20,7 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
+				minPhase(scop.PreCommitPhase),
 				emit(func(this *scpb.ConstraintName) scop.Op {
 					return notImplemented(this)
 				}),
@@ -28,6 +29,9 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
+				minPhase(scop.PreCommitPhase),
+				// TODO(postamar): remove revertibility constraint when possible
+				revertible(false),
 				emit(func(this *scpb.ConstraintName) scop.Op {
 					return notImplemented(this)
 				}),

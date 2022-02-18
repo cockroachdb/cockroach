@@ -14,11 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/deprules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraphviz"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scopt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/errors"
 )
@@ -121,7 +120,7 @@ func buildGraph(cs scpb.CurrentState) *scgraph.Graph {
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}
-	err = deprules.Apply(g)
+	err = rules.ApplyDepRules(g)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph dep edges"))
 	}
@@ -129,7 +128,7 @@ func buildGraph(cs scpb.CurrentState) *scgraph.Graph {
 	if err != nil {
 		panic(errors.Wrapf(err, "validate graph"))
 	}
-	g, err = scopt.OptimizeGraph(g)
+	g, err = rules.ApplyOpRules(g)
 	if err != nil {
 		panic(errors.Wrapf(err, "mark op edges as no-op"))
 	}

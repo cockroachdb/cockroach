@@ -53,11 +53,11 @@ func getTableDescriptorsForBackfills(
 	}
 	tables := make(map[descpb.ID]catalog.TableDescriptor, descIDs.Len())
 	for _, id := range descIDs.Ordered() {
-		desc, err := scmutationexec.MustReadImmutableDescriptor(ctx, cat, id)
+		desc, err := cat.MustReadImmutableDescriptors(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		tbl, ok := desc.(catalog.TableDescriptor)
+		tbl, ok := desc[0].(catalog.TableDescriptor)
 		if !ok {
 			return nil, errors.AssertionFailedf("descriptor %d is not a table", id)
 		}

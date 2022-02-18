@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -98,6 +99,9 @@ func (desc *wrapper) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
 	})
 	// Add collected Oids to return set.
 	for oid := range visitor.OIDs {
+		if !types.IsOIDUserDefinedType(oid) {
+			continue
+		}
 		id, err := typedesc.UserDefinedTypeOIDToID(oid)
 		if err != nil {
 			return catalog.DescriptorIDSet{}, err
@@ -127,6 +131,9 @@ func (desc *wrapper) ValidateCrossReferences(
 	dbDesc, err := vdg.GetDatabaseDescriptor(desc.GetParentID())
 	if err != nil {
 		vea.Report(err)
+	} else if dbDesc.Dropped() {
+		vea.Report(errors.AssertionFailedf("parent database %q (%d) is dropped",
+			dbDesc.GetName(), dbDesc.GetID()))
 	}
 
 	// Check that parent schema exists.
@@ -139,6 +146,10 @@ func (desc *wrapper) ValidateCrossReferences(
 		if schemaDesc != nil && dbDesc != nil && schemaDesc.GetParentID() != dbDesc.GetID() {
 			vea.Report(errors.AssertionFailedf("parent schema %d is in different database %d",
 				desc.GetParentSchemaID(), schemaDesc.GetParentID()))
+		}
+		if schemaDesc != nil && schemaDesc.Dropped() {
+			vea.Report(errors.AssertionFailedf("parent schema %q (%d) is dropped",
+				schemaDesc.GetName(), schemaDesc.GetID()))
 		}
 	}
 
@@ -214,6 +225,10 @@ func (desc *wrapper) validateOutboundTableRef(
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on relation reference")
 	}
+	if referencedTable.Dropped() {
+		return errors.AssertionFailedf("depends-on relation %q (%d) is dropped",
+			referencedTable.GetName(), referencedTable.GetID())
+	}
 	for _, by := range referencedTable.TableDesc().DependedOnBy {
 		if by.ID == desc.GetID() {
 			return nil
@@ -224,9 +239,13 @@ func (desc *wrapper) validateOutboundTableRef(
 }
 
 func (desc *wrapper) validateOutboundTypeRef(id descpb.ID, vdg catalog.ValidationDescGetter) error {
-	_, err := vdg.GetTypeDescriptor(id)
+	typ, err := vdg.GetTypeDescriptor(id)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depends-on type reference")
+	}
+	if typ.Dropped() {
+		return errors.AssertionFailedf("depends-on type %q (%d) is dropped",
+			typ.GetName(), typ.GetID())
 	}
 	// TODO(postamar): maintain back-references in type, and validate these.
 	return nil
@@ -239,7 +258,10 @@ func (desc *wrapper) validateInboundTableRef(
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid depended-on-by relation back reference")
 	}
-
+	if backReferencedTable.Dropped() {
+		return errors.AssertionFailedf("depended-on-by relation %q (%d) is dropped",
+			backReferencedTable.GetName(), backReferencedTable.GetID())
+	}
 	if desc.IsSequence() {
 		// The ColumnIDs field takes a different meaning when the validated
 		// descriptor is for a sequence. In this case, they refer to the columns
@@ -287,6 +309,10 @@ func (desc *wrapper) validateOutboundFK(
 		return errors.Wrapf(err,
 			"invalid foreign key: missing table=%d", fk.ReferencedTableID)
 	}
+	if referencedTable.Dropped() {
+		return errors.AssertionFailedf("referenced table %q (%d) is dropped",
+			referencedTable.GetName(), referencedTable.GetID())
+	}
 	found := false
 	_ = referencedTable.ForeachInboundFK(func(backref *descpb.ForeignKeyConstraint) error {
 		if !found && backref.OriginTableID == desc.ID && backref.Name == fk.Name {
@@ -308,6 +334,10 @@ func (desc *wrapper) validateInboundFK(
 	if err != nil {
 		return errors.Wrapf(err,
 			"invalid foreign key backreference: missing table=%d", backref.OriginTableID)
+	}
+	if originTable.Dropped() {
+		return errors.AssertionFailedf("origin table %q (%d) is dropped",
+			originTable.GetName(), originTable.GetID())
 	}
 	found := false
 	_ = originTable.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {

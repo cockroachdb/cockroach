@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -257,15 +258,19 @@ func (d *dummyColumn) ResolvedType() *types.T {
 	return d.typ
 }
 
-// replaceColumnVars replaces the occurrences of column names in an expression with
+// ReplaceColumnVars replaces the occurrences of column names in an expression with
 // dummyColumns containing their type, so that they may be type-checked. It
 // returns this new expression tree alongside a set containing the ColumnID of
 // each column seen in the expression.
 //
 // If the expression references a column that does not exist in the table
 // descriptor, replaceColumnVars errs with pgcode.UndefinedColumn.
-func replaceColumnVars(
-	desc catalog.TableDescriptor, rootExpr tree.Expr,
+//
+// The column lookup function allows looking up columns both in the descriptor
+// or in declarative schema changer elements.
+func ReplaceColumnVars(
+	rootExpr tree.Expr,
+	columnLookupFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T),
 ) (tree.Expr, catalog.TableColSet, error) {
 	var colIDs catalog.TableColSet
 
@@ -286,22 +291,36 @@ func replaceColumnVars(
 			return true, expr, nil
 		}
 
-		col, err := desc.FindColumnWithName(c.ColumnName)
-		if err != nil || col.Dropped() {
+		colExists, colIsAccessible, colID, colType := columnLookupFn(c.ColumnName)
+		if !colExists {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
 		}
-		if col.IsInaccessible() {
+		if !colIsAccessible {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q is inaccessible and cannot be referenced", c.ColumnName)
 		}
-		colIDs.Add(col.GetID())
+		colIDs.Add(colID)
 
 		// Convert to a dummyColumn of the correct type.
-		return false, &dummyColumn{typ: col.GetType(), name: c.ColumnName}, nil
+		return false, &dummyColumn{typ: colType, name: c.ColumnName}, nil
 	})
 
 	return newExpr, colIDs, err
+}
+
+// replaceColumnVars is a convenience function for ReplaceColumnVars.
+func replaceColumnVars(
+	tbl catalog.TableDescriptor, rootExpr tree.Expr,
+) (tree.Expr, catalog.TableColSet, error) {
+	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		col, err := tbl.FindColumnWithName(columnName)
+		if err != nil || col.Dropped() {
+			return false, false, 0, nil
+		}
+		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+	}
+	return ReplaceColumnVars(rootExpr, lookupFn)
 }
 
 // ReplaceIDsWithFQNames walks the given expr and replaces occurrences

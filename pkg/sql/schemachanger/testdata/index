@@ -36,16 +36,16 @@ upsert descriptor #104
   +    targets:
   +    - elementProto:
   +        secondaryIndex:
-  +          indexId: 2
-  +          keyColumnDirections:
-  +          - ASC
-  +          keyColumnIds:
-  +          - 2
-  +          keySuffixColumnIds:
-  +          - 1
-  +          sourceIndexId: 1
-  +          storingColumnIds: []
-  +          tableId: 104
+  +          embeddedIndex:
+  +            indexId: 2
+  +            keyColumnDirections:
+  +            - ASC
+  +            keyColumnIds:
+  +            - 2
+  +            keySuffixColumnIds:
+  +            - 1
+  +            sourceIndexId: 1
+  +            tableId: 104
   +      metadata:
   +        sourceElementId: 1
   +        subWorkId: 1
@@ -84,7 +84,6 @@ upsert descriptor #104
   +      name: crdb_internal_index_2_name_placeholder
   +      partitioning: {}
   +      sharded: {}
-  +      storeColumnIds: []
   +      storeColumnNames: []
   +      version: 4
   +    mutationId: 1
@@ -164,16 +163,16 @@ upsert descriptor #104
   -    targets:
   -    - elementProto:
   -        secondaryIndex:
-  -          indexId: 2
-  -          keyColumnDirections:
-  -          - ASC
-  -          keyColumnIds:
-  -          - 2
-  -          keySuffixColumnIds:
-  -          - 1
-  -          sourceIndexId: 1
-  -          storingColumnIds: []
-  -          tableId: 104
+  -          embeddedIndex:
+  -            indexId: 2
+  -            keyColumnDirections:
+  -            - ASC
+  -            keyColumnIds:
+  -            - 2
+  -            keySuffixColumnIds:
+  -            - 1
+  -            sourceIndexId: 1
+  -            tableId: 104
   -      metadata:
   -        sourceElementId: 1
   -        subWorkId: 1
@@ -210,7 +209,6 @@ upsert descriptor #104
   +    name: idx1
   +    partitioning: {}
   +    sharded: {}
-  +    storeColumnIds: []
   +    storeColumnNames: []
   +    version: 4
      modificationTime: {}
@@ -234,7 +232,6 @@ upsert descriptor #104
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
-  -      storeColumnIds: []
   -      storeColumnNames: []
   -      version: 4
   -    mutationId: 1

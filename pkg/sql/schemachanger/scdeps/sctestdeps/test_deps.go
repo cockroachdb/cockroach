@@ -449,6 +449,9 @@ func (s *TestState) MustReadDescriptor(ctx context.Context, id descpb.ID) catalo
 }
 
 func (s *TestState) mustReadMutableDescriptor(id descpb.ID) (catalog.MutableDescriptor, error) {
+	if s.synthetic.LookupDescriptorEntry(id) != nil {
+		return nil, errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
+	}
 	b := s.descBuilder(id)
 	if b == nil {
 		return nil, errors.Wrapf(catalog.ErrDescriptorNotFound, "reading mutable descriptor #%d", id)
@@ -497,7 +500,7 @@ func (s *TestState) Catalog() scexec.Catalog {
 	return s
 }
 
-var _ scmutationexec.CatalogReader = (*TestState)(nil)
+var _ scexec.Catalog = (*TestState)(nil)
 
 // MustReadImmutableDescriptors implements the scmutationexec.CatalogReader interface.
 func (s *TestState) MustReadImmutableDescriptors(
@@ -523,8 +526,6 @@ func (s *TestState) AddSyntheticDescriptor(desc catalog.Descriptor) {
 func (s *TestState) RemoveSyntheticDescriptor(id descpb.ID) {
 	s.synthetic.DeleteDescriptorEntry(id)
 }
-
-var _ scexec.Catalog = (*TestState)(nil)
 
 // MustReadMutableDescriptor implements the scexec.Catalog interface.
 func (s *TestState) MustReadMutableDescriptor(
@@ -873,27 +874,25 @@ func (s *TestState) DeleteDescriptorComment(
 
 //UpsertConstraintComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) UpsertConstraintComment(
-	desc catalog.TableDescriptor, constraintID descpb.ConstraintID, comment string,
+	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
 	s.LogSideEffectf("upsert comment %s for constraint on #%d, constraint id: %d"+
-		comment, desc.GetID(), constraintID)
+		comment, tableID, constraintID)
 	return nil
 }
 
 //DeleteConstraintComment implements scexec.DescriptorMetaDataUpdater.
 func (s *TestState) DeleteConstraintComment(
-	desc catalog.TableDescriptor, constraintID descpb.ConstraintID,
+	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
 	s.LogSideEffectf("delete comment for constraint on #%d, constraint id: %d",
-		desc.GetID(), constraintID)
+		tableID, constraintID)
 	return nil
 }
 
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetaDataUpdater.
-func (s *TestState) DeleteDatabaseRoleSettings(
-	_ context.Context, database catalog.DatabaseDescriptor,
-) error {
-	s.LogSideEffectf("delete role settings for database on #%d", database.GetID())
+func (s *TestState) DeleteDatabaseRoleSettings(_ context.Context, dbID descpb.ID) error {
+	s.LogSideEffectf("delete role settings for database on #%d", dbID)
 	return nil
 }
 

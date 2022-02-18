@@ -102,6 +102,9 @@ func RunSchemaChangesInJob(
 		if err := deps.WithTxnInJob(ctx, func(ctx context.Context, td scexec.Dependencies) error {
 			return executeStage(ctx, knobs, td, sc, i, sc.Stages[i])
 		}); err != nil {
+			if knobs.OnPostCommitError != nil {
+				return knobs.OnPostCommitError(sc, i, err)
+			}
 			return err
 		}
 	}
@@ -133,7 +136,6 @@ func executeStage(
 func makeState(
 	ctx context.Context, deps JobRunDependencies, descriptorIDs []descpb.ID, rollback bool,
 ) (scpb.CurrentState, error) {
-
 	var descriptorStates []*scpb.DescriptorState
 	if err := deps.WithTxnInJob(ctx, func(ctx context.Context, txnDeps scexec.Dependencies) error {
 		descriptorStates = nil
@@ -152,7 +154,7 @@ func makeState(
 			cs := desc.GetDeclarativeSchemaChangerState()
 			if cs == nil {
 				return errors.Errorf(
-					"descriptor %d does not contain schema changer state", desc.GetID(),
+					"descriptor %q (%d) does not contain schema changer state", desc.GetName(), desc.GetID(),
 				)
 			}
 			descriptorStates = append(descriptorStates, cs)

@@ -17,8 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,9 +48,6 @@ func (m *visitor) checkOutDatabase(ctx context.Context, id descpb.ID) (*dbdesc.M
 	return mut, nil
 }
 
-// Stop the linter from complaining.
-var _ = ((*visitor)(nil)).checkOutDatabase
-
 func (m *visitor) checkOutSchema(ctx context.Context, id descpb.ID) (*schemadesc.Mutable, error) {
 	desc, err := m.s.CheckOutDescriptor(ctx, id)
 	if err != nil {
@@ -74,18 +73,6 @@ func (m *visitor) checkOutType(ctx context.Context, id descpb.ID) (*typedesc.Mut
 		return nil, catalog.WrapTypeDescRefErr(id, catalog.NewDescriptorTypeError(desc))
 	}
 	return mut, nil
-}
-
-// MustReadImmutableDescriptor is a shorthand for invoking
-// CatalogReader.MustReadImmutableDescriptors for a single ID.
-func MustReadImmutableDescriptor(
-	ctx context.Context, cr CatalogReader, id descpb.ID,
-) (catalog.Descriptor, error) {
-	descs, err := cr.MustReadImmutableDescriptors(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return descs[0], nil
 }
 
 func mutationStateChange(
@@ -202,4 +189,35 @@ func enqueueDropIndexMutation(tbl *tabledesc.Mutable, idx *descpb.IndexDescripto
 	}
 	tbl.NextMutationID--
 	return nil
+}
+
+func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
+	var all catalog.DescriptorIDSet
+	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+		if expr == nil {
+			continue
+		}
+		ids, err := sequenceIDsInExpr(*expr)
+		if err != nil {
+			return err
+		}
+		ids.ForEach(all.Add)
+	}
+	d.UsesSequenceIds = all.Ordered()
+	return nil
+}
+
+func sequenceIDsInExpr(expr string) (ids catalog.DescriptorIDSet, _ error) {
+	e, err := parser.ParseExpr(expr)
+	if err != nil {
+		return ids, err
+	}
+	seqIdents, err := seqexpr.GetUsedSequences(e)
+	if err != nil {
+		return ids, err
+	}
+	for _, si := range seqIdents {
+		ids.Add(descpb.ID(si.SeqID))
+	}
+	return ids, nil
 }
