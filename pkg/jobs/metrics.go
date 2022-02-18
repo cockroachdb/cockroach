@@ -25,6 +25,7 @@ import (
 type Metrics struct {
 	JobMetrics [jobspb.NumJobTypes]*JobTypeMetrics
 
+	RowLevelTTL  metric.Struct
 	Changefeed   metric.Struct
 	StreamIngest metric.Struct
 
@@ -179,6 +180,9 @@ func (Metrics) MetricStruct() {}
 
 // init initializes the metrics for job monitoring.
 func (m *Metrics) init(histogramWindowInterval time.Duration) {
+	if MakeRowLevelTTLMetricsHook != nil {
+		m.RowLevelTTL = MakeRowLevelTTLMetricsHook(histogramWindowInterval)
+	}
 	if MakeChangefeedMetricsHook != nil {
 		m.Changefeed = MakeChangefeedMetricsHook(histogramWindowInterval)
 	}
@@ -214,6 +218,9 @@ var MakeChangefeedMetricsHook func(time.Duration) metric.Struct
 // MakeStreamIngestMetricsHook allows for registration of streaming metrics from
 // ccl code.
 var MakeStreamIngestMetricsHook func(duration time.Duration) metric.Struct
+
+// MakeRowLevelTTLMetricsHook allows for registration of row-level TTL metrics.
+var MakeRowLevelTTLMetricsHook func(time.Duration) metric.Struct
 
 // JobTelemetryMetrics is a telemetry metrics for individual job types.
 type JobTelemetryMetrics struct {
