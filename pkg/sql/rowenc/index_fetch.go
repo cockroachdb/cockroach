@@ -11,8 +11,6 @@
 package rowenc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -103,10 +101,6 @@ func InitIndexFetchSpec(
 	}
 	for i := range s.KeyAndSuffixColumns {
 		col := indexCols[i]
-		if !col.Public() {
-			// Key columns must be public.
-			return fmt.Errorf("column %q (%d) is not public", col.GetName(), col.GetID())
-		}
 		colID := col.GetID()
 		dir := descpb.IndexDescriptor_ASC
 		// If this is a unique index, the suffix columns are not part of the full
