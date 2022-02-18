@@ -75,17 +75,21 @@ const (
 	// ExplainGist generates a plan "gist".
 	ExplainGist
 
+	// ExplainOptSteps shows the optsteps output for the plan.
+	ExplainOptSteps
+
 	numExplainModes = iota
 )
 
 var explainModeStrings = [...]string{
-	ExplainPlan:    "PLAN",
-	ExplainDistSQL: "DISTSQL",
-	ExplainOpt:     "OPT",
-	ExplainVec:     "VEC",
-	ExplainDebug:   "DEBUG",
-	ExplainDDL:     "DDL",
-	ExplainGist:    "GIST",
+	ExplainPlan:     "PLAN",
+	ExplainDistSQL:  "DISTSQL",
+	ExplainOpt:      "OPT",
+	ExplainVec:      "VEC",
+	ExplainDebug:    "DEBUG",
+	ExplainDDL:      "DDL",
+	ExplainGist:     "GIST",
+	ExplainOptSteps: "OPTSTEPS",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
@@ -117,19 +121,21 @@ const (
 	ExplainFlagDeps
 	ExplainFlagMemo
 	ExplainFlagShape
+	ExplainFlagOptSteps
 	numExplainFlags = iota
 )
 
 var explainFlagStrings = [...]string{
-	ExplainFlagVerbose: "VERBOSE",
-	ExplainFlagTypes:   "TYPES",
-	ExplainFlagEnv:     "ENV",
-	ExplainFlagCatalog: "CATALOG",
-	ExplainFlagJSON:    "JSON",
-	ExplainFlagStages:  "STAGES",
-	ExplainFlagDeps:    "DEPS",
-	ExplainFlagMemo:    "MEMO",
-	ExplainFlagShape:   "SHAPE",
+	ExplainFlagVerbose:  "VERBOSE",
+	ExplainFlagTypes:    "TYPES",
+	ExplainFlagEnv:      "ENV",
+	ExplainFlagCatalog:  "CATALOG",
+	ExplainFlagJSON:     "JSON",
+	ExplainFlagStages:   "STAGES",
+	ExplainFlagDeps:     "DEPS",
+	ExplainFlagMemo:     "MEMO",
+	ExplainFlagShape:    "SHAPE",
+	ExplainFlagOptSteps: "OPTSTEPS",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
