@@ -71,6 +71,14 @@ func gcTables(
 			return errors.Wrapf(err, "clearing data for table %d", table.GetID())
 		}
 
+		// Deduct from system.span_count appropriately.
+		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := execCfg.SpanConfigLimiter.ShouldLimit(ctx, txn, table, nil)
+			return err
+		}); err != nil {
+			return errors.Wrapf(err, "reducing span count for table %d", table.GetID())
+		}
+
 		// Finished deleting all the table data, now delete the table meta data.
 		if err := sql.DeleteTableDescAndZoneConfig(
 			ctx, execCfg.DB, execCfg.Settings, execCfg.Codec, table,

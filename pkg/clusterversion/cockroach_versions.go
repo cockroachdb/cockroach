@@ -313,6 +313,15 @@ const (
 	// PebbleFormatSplitUserKeysMarked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatSplitUserKeysMarked.
 	PebbleFormatSplitUserKeysMarked
+	// SpanCountTable adds system.span_count to track the number of committed
+	// tenant spans.
+	SpanCountTable
+	// PreSeedSpanCountTable precedes PreSeedSpanCountTable, it enables span
+	// accounting for incremental schema changes.
+	PreSeedSpanCountTable
+	// SeedSpanCountTable seeds system.span_count with the number of committed
+	// tenant spans.
+	SeedSpanCountTable
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -519,6 +528,18 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     PebbleFormatSplitUserKeysMarked,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 90},
+	},
+	{
+		Key:     SpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 92},
+	},
+	{
+		Key:     PreSeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 94},
+	},
+	{
+		Key:     SeedSpanCountTable,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 96},
 	},
 
 	// *************************************************

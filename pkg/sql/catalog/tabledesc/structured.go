@@ -50,6 +50,7 @@ type Mutable struct {
 
 	// ClusterVersion represents the version of the table descriptor read from the store.
 	ClusterVersion descpb.TableDescriptor
+	original       *immutable
 }
 
 const (
@@ -1007,6 +1008,12 @@ func (desc *Mutable) OriginalID() descpb.ID {
 // OriginalVersion implements the MutableDescriptor interface.
 func (desc *Mutable) OriginalVersion() descpb.DescriptorVersion {
 	return desc.ClusterVersion.Version
+}
+
+// OriginalDescriptor returns the original state of the descriptor prior to
+// the mutations.
+func (desc *Mutable) OriginalDescriptor() catalog.Descriptor {
+	return desc.original
 }
 
 // FamilyHeuristicTargetBytes is the target total byte size of columns that the

@@ -250,6 +250,18 @@ type StoreReader interface {
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 }
 
+// Limiter is used to limit the number of span configs installed by secondary
+// tenants. It considers the committed and uncommitted state of a table
+// descriptor and computes the "span" delta, each unit we can apply a
+// configuration over. It uses these deltas to maintain an aggregate counter,
+// informing the caller if exceeding the configured limit.
+type Limiter interface {
+	ShouldLimit(
+		ctx context.Context, txn *kv.Txn,
+		committed, uncommitted catalog.TableDescriptor,
+	) (bool, error)
+}
+
 // Splitter returns the number of split points for the given table descriptor.
 // It steps through every "unit" that we can apply configurations over (table,
 // indexes, partitions and sub-partitions) and figures out the actual key

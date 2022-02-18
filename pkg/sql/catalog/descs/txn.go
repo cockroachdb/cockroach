@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -26,6 +27,7 @@ import (
 )
 
 var errTwoVersionInvariantViolated = errors.Errorf("two version invariant violated")
+var errExceededSpanCountLimit = errors.Errorf("exceeded limit for number of table spans")
 
 // Txn enables callers to run transactions with a *Collection such that all
 // retrieved immutable descriptors are properly leased and all mutable
@@ -90,6 +92,9 @@ func (cf *CollectionFactory) Txn(
 				return err
 			}
 			modifiedDescriptors = descsCol.GetDescriptorsWithNewVersion()
+			if err := CheckSpanCountLimit(ctx, &descsCol, cf.spanConfigLimiter, txn); err != nil {
+				return err
+			}
 			retryErr, err := CheckTwoVersionInvariant(
 				ctx, db.Clock(), ie, &descsCol, txn, nil /* onRetryBackoff */)
 			if retryErr {
@@ -215,4 +220,31 @@ func CheckTwoVersionInvariant(
 		}
 	}
 	return true, retryErr
+}
+
+// CheckSpanCountLimit checks whether committing the set of uncommitted tables
+// would exceed the span count limit we're allowed (applicable only to secondary
+// tenants).
+func CheckSpanCountLimit(
+	ctx context.Context, descsCol *Collection, spanConfigLimiter spanconfig.Limiter, txn *kv.Txn,
+) error {
+	if !descsCol.codec().ForSystemTenant() {
+		for _, ut := range descsCol.GetUncommittedTables() {
+			uncommittedMutTable, err := descsCol.GetUncommittedMutableTableByID(ut.GetID())
+			if err != nil {
+				return err
+			}
+
+			originalTableDesc := uncommittedMutTable.OriginalDescriptor().(catalog.TableDescriptor)
+			shouldLimit, err := spanConfigLimiter.ShouldLimit(ctx, txn, originalTableDesc, uncommittedMutTable)
+			if err != nil {
+				return err
+			}
+			if shouldLimit {
+				return errExceededSpanCountLimit
+			}
+		}
+	}
+
+	return nil
 }
