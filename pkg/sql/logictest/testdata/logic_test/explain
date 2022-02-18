@@ -22,3 +22,113 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUUF9L6zAUf7-fI
 # needed to make the physical plan is rejected. See #40677.
 statement error running EXPLAIN \(DISTSQL\) on this query is unsupported because of the presence of subqueries
 EXPLAIN (DISTSQL) SELECT avg(a) OVER (ROWS (SELECT count(*) FROM t) PRECEDING) FROM t
+
+# Test that optsteps is runnable from EXPLAIN.
+
+query T
+EXPLAIN(OPTSTEPS) SELECT * from t
+----
+================================================================================
+Initial expression
+  Cost: 1114.86
+================================================================================
+  explain
+   ├── columns: info:4(string)
+   ├── mode: optsteps
+   ├── stats: [rows=10]
+   ├── cost: 1114.86
+   ├── distribution: test
+   └── project
+        ├── columns: a:1(int!null)
+        ├── stats: [rows=1000]
+        ├── cost: 1114.84
+        ├── key: (1)
+        ├── distribution: test
+        ├── prune: (1)
+        └── scan test.public.t
+             ├── columns: test.public.t.a:1(int!null) test.public.t.crdb_internal_mvcc_timestamp:2(decimal) test.public.t.tableoid:3(oid)
+             ├── stats: [rows=1000]
+             ├── cost: 1104.82
+             ├── key: (1)
+             ├── fd: (1)-->(2,3)
+             ├── distribution: test
+             └── prune: (1-3)
+================================================================================
+PruneScanCols
+  Cost: 1074.46
+================================================================================
+   explain
+    ├── columns: info:4(string)
+    ├── mode: optsteps
+    ├── stats: [rows=10]
+  - ├── cost: 1114.86
+  + ├── cost: 1074.46
+    ├── distribution: test
+    └── project
+         ├── columns: a:1(int!null)
+         ├── stats: [rows=1000]
+  -      ├── cost: 1114.84
+  +      ├── cost: 1074.44
+         ├── key: (1)
+         ├── distribution: test
+         ├── prune: (1)
+         └── scan test.public.t
+  -           ├── columns: test.public.t.a:1(int!null) test.public.t.crdb_internal_mvcc_timestamp:2(decimal) test.public.t.tableoid:3(oid)
+  +           ├── columns: test.public.t.a:1(int!null)
+              ├── stats: [rows=1000]
+  -           ├── cost: 1104.82
+  +           ├── cost: 1064.42
+              ├── key: (1)
+  -           ├── fd: (1)-->(2,3)
+              ├── distribution: test
+  -           └── prune: (1-3)
+  +           └── prune: (1)
+================================================================================
+EliminateProject
+  Cost: 1064.44
+================================================================================
+   explain
+    ├── columns: info:4(string)
+    ├── mode: optsteps
+    ├── stats: [rows=10]
+  - ├── cost: 1074.46
+  + ├── cost: 1064.44
+    ├── distribution: test
+  - └── project
+  + └── scan test.public.t
+         ├── columns: a:1(int!null)
+         ├── stats: [rows=1000]
+  -      ├── cost: 1074.44
+  +      ├── cost: 1064.42
+         ├── key: (1)
+         ├── distribution: test
+  -      ├── prune: (1)
+  -      └── scan test.public.t
+  -           ├── columns: test.public.t.a:1(int!null)
+  -           ├── stats: [rows=1000]
+  -           ├── cost: 1064.42
+  -           ├── key: (1)
+  -           ├── distribution: test
+  -           └── prune: (1)
+  +      └── prune: (1)
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 1064.44
+================================================================================
+  explain
+   ├── columns: info:4(string)
+   ├── mode: optsteps
+   ├── stats: [rows=10]
+   ├── cost: 1064.44
+   ├── distribution: test
+   └── scan test.public.t
+        ├── columns: a:1(int!null)
+        ├── stats: [rows=1000]
+        ├── cost: 1064.42
+        ├── key: (1)
+        ├── distribution: test
+        └── prune: (1)
+·

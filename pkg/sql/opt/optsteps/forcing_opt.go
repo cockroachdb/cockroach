@@ -1,4 +1,4 @@
-// Copyright 2018 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -8,15 +8,20 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package opttester
+package optsteps
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // forcingOptimizer is a wrapper around an Optimizer which adds low-level
@@ -53,18 +58,21 @@ type forcingOptimizer struct {
 	lastAppliedTarget opt.Expr
 }
 
+// RuleSet efficiently stores an unordered set of RuleNames.
+type RuleSet = util.FastIntSet
+
 // newForcingOptimizer creates a forcing optimizer that stops applying any rules
 // after <steps> rules are matched. If ignoreNormRules is true, normalization
 // rules don't count against this limit. If disableCheckExpr is true, expression
 // validation in CheckExpr will not run.
 func newForcingOptimizer(
-	tester *OptTester, steps int, ignoreNormRules bool, disableCheckExpr bool,
+	ctx context.Context, os *OptSteps, steps int, ignoreNormRules bool, disableCheckExpr bool,
 ) (*forcingOptimizer, error) {
 	fo := &forcingOptimizer{
 		remaining:   steps,
 		lastMatched: opt.InvalidRuleName,
 	}
-	fo.o.Init(&tester.evalCtx, tester.catalog)
+	fo.o.Init(os.evalCtx, os.catalog)
 	fo.o.Factory().FoldingControl().AllowStableFolds()
 	fo.coster.Init(&fo.o, &fo.groups)
 	fo.o.SetCoster(&fo.coster)
@@ -76,7 +84,7 @@ func newForcingOptimizer(
 		if fo.remaining == 0 {
 			return false
 		}
-		if tester.Flags.DisableRules.Contains(int(ruleName)) {
+		if os.flags.DisableRules.Contains(int(ruleName)) {
 			return false
 		}
 		fo.remaining--
@@ -105,10 +113,17 @@ func newForcingOptimizer(
 		fo.o.Memo().DisableCheckExpr()
 	}
 
-	if err := tester.buildExpr(fo.o.Factory()); err != nil {
-		return nil, err
+	stmt, err := parser.ParseOne(os.sql)
+	if err != nil {
+		return fo, err
 	}
-	return fo, nil
+	if err := os.semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */); err != nil {
+		return fo, err
+	}
+	os.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
+	os.semaCtx.TypeResolver = os.catalog
+	b := optbuilder.New(ctx, &os.semaCtx, os.evalCtx, os.catalog, fo.o.Factory(), stmt.AST)
+	return fo, b.Build()
 }
 
 func (fo *forcingOptimizer) Optimize() opt.Expr {

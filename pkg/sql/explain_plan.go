@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optsteps"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -51,9 +53,20 @@ func (e *explainPlanNode) startExec(params runParams) error {
 	plan := e.plan.WrappedPlan.(*planComponents)
 
 	var rows []string
-	if e.options.Mode == tree.ExplainGist {
+	switch e.options.Mode {
+	case tree.ExplainGist:
 		rows = []string{e.plan.Gist.String()}
-	} else {
+	case tree.ExplainOptSteps:
+		os := optsteps.NewOptSteps(params.p.EvalContext(), &params.p.optPlanningCtx.catalog,
+			params.p.stmt.String(),
+			optsteps.Flags{},
+		)
+		s, err := os.OptSteps(params.ctx)
+		if err != nil {
+			return err
+		}
+		rows = strings.Split(s, "\n")
+	default:
 		// Determine the "distribution" and "vectorized" values, which we will emit as
 		// special rows.
 

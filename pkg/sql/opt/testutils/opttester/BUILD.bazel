@@ -3,10 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "opttester",
     srcs = [
-        "explore_trace.go",
-        "forcing_opt.go",
-        "memo_groups.go",
-        "opt_steps.go",
         "opt_tester.go",
         "reorder_joins.go",
         "stats_tester.go",
@@ -32,8 +28,8 @@ go_library(
         "//pkg/sql/opt/norm",
         "//pkg/sql/opt/optbuilder",
         "//pkg/sql/opt/optgen/exprgen",
+        "//pkg/sql/opt/optsteps",
         "//pkg/sql/opt/ordering",
-        "//pkg/sql/opt/props/physical",
         "//pkg/sql/opt/testutils/testcat",
         "//pkg/sql/opt/xform",
         "//pkg/sql/parser",
@@ -50,7 +46,6 @@ go_library(
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_pmezard_go_difflib//difflib",
     ],
 )
 

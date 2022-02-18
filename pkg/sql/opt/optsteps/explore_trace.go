@@ -8,9 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package opttester
+package optsteps
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
@@ -23,8 +25,7 @@ import (
 // normalization rules pass through; and instead of tracking the best expression
 // via diffs, we just show (separately) what each rule application does.
 type exploreTracer struct {
-	tester *OptTester
-	fo     *forcingOptimizer
+	fo *forcingOptimizer
 
 	srcExpr  opt.Expr
 	newExprs []opt.Expr
@@ -32,10 +33,12 @@ type exploreTracer struct {
 	// steps is the maximum number of exploration rules that can be applied by the
 	// optimizer during the current iteration.
 	steps int
+
+	optSteps *OptSteps
 }
 
-func newExploreTracer(tester *OptTester) *exploreTracer {
-	return &exploreTracer{tester: tester, steps: 1}
+func newExploreTracer(optSteps *OptSteps) *exploreTracer {
+	return &exploreTracer{optSteps: optSteps, steps: 1}
 }
 
 func (et *exploreTracer) LastRuleName() opt.RuleName {
@@ -59,12 +62,12 @@ func (et *exploreTracer) Done() bool {
 	return et.fo != nil && et.fo.remaining != 0
 }
 
-func (et *exploreTracer) Next() error {
+func (et *exploreTracer) Next(ctx context.Context) error {
 	if et.Done() {
 		panic("iteration already complete")
 	}
 
-	fo, err := newForcingOptimizer(et.tester, et.steps, true /* ignoreNormRules */, false /* disableCheckExpr */)
+	fo, err := newForcingOptimizer(ctx, et.optSteps, et.steps, true /* ignoreNormRules */, false /* disableCheckExpr */)
 	if err != nil {
 		return err
 	}
@@ -75,12 +78,12 @@ func (et *exploreTracer) Next() error {
 	}
 
 	// Compute the lowest cost tree for the source expression.
-	et.srcExpr = et.restrictToExpr(fo.LookupPath(fo.lastAppliedSource))
+	et.srcExpr = et.restrictToExpr(ctx, fo.LookupPath(fo.lastAppliedSource))
 
 	// Compute the lowest code tree for any target expressions.
 	et.newExprs = et.newExprs[:0]
 	if fo.lastAppliedTarget != nil {
-		et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(fo.lastAppliedTarget)))
+		et.newExprs = append(et.newExprs, et.restrictToExpr(ctx, fo.LookupPath(fo.lastAppliedTarget)))
 
 		if rel, ok := fo.lastAppliedTarget.(memo.RelExpr); ok {
 			for {
@@ -88,7 +91,7 @@ func (et *exploreTracer) Next() error {
 				if rel == nil {
 					break
 				}
-				et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(rel)))
+				et.newExprs = append(et.newExprs, et.restrictToExpr(ctx, fo.LookupPath(rel)))
 			}
 		}
 	}
@@ -97,8 +100,8 @@ func (et *exploreTracer) Next() error {
 	return nil
 }
 
-func (et *exploreTracer) restrictToExpr(path []memoLoc) opt.Expr {
-	fo2, err := newForcingOptimizer(et.tester, et.steps, true /* ignoreNormRules */, false /* disableCheckExpr */)
+func (et *exploreTracer) restrictToExpr(ctx context.Context, path []memoLoc) opt.Expr {
+	fo2, err := newForcingOptimizer(ctx, et.optSteps, et.steps, true /* ignoreNormRules */, false /* disableCheckExpr */)
 	if err != nil {
 		// We should have already built the query successfully once.
 		panic(err)

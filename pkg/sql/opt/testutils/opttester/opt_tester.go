@@ -12,16 +12,13 @@ package opttester
 
 import (
 	"bytes"
-	"compress/zlib"
 	"context"
 	gosql "database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"math"
-	"net/url"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -49,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optsteps"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -65,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/pmezard/go-difflib/difflib"
 )
 
 const rewriteActualFlag = "rewrite-actual-stats"
@@ -1409,352 +1406,38 @@ func (ot *OptTester) RuleStats() (string, error) {
 // the rule, even if the total expression tree cost worsened.
 //
 func (ot *OptTester) OptSteps() (string, error) {
-	var prevBest, prev, next string
-	ot.builder.Reset()
+	ctx := context.Background()
+	os := optsteps.NewOptSteps(&ot.evalCtx, ot.catalog, ot.sql, ot.optStepsFlags())
+	return os.OptSteps(ctx)
+}
 
-	os := newOptSteps(ot)
-	for {
-		err := os.Next()
-		if err != nil {
-			return "", err
-		}
-
-		next = os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat)
-
-		// This call comes after setting "next", because we want to output the
-		// final expression, even though there were no diffs from the previous
-		// iteration.
-		if os.Done() {
-			break
-		}
-
-		if prev == "" {
-			// Output starting tree.
-			ot.optStepsDisplay("", next, os)
-			prevBest = next
-		} else if next == prev || next == prevBest {
-			ot.optStepsDisplay(next, next, os)
-		} else if os.IsBetter() {
-			// New expression is better than the previous expression. Diff
-			// it against the previous *best* expression (might not be the
-			// previous expression).
-			ot.optStepsDisplay(prevBest, next, os)
-			prevBest = next
-		} else {
-			// New expression is not better than the previous expression, but
-			// still show the change. Diff it against the previous expression,
-			// regardless if it was a "best" expression or not.
-			ot.optStepsDisplay(prev, next, os)
-		}
-
-		prev = next
+func (ot *OptTester) optStepsFlags() optsteps.Flags {
+	return optsteps.Flags{
+		DisableRules:         ot.Flags.DisableRules,
+		OptStepsSplitDiff:    ot.Flags.OptStepsSplitDiff,
+		Verbose:              ot.Flags.Verbose,
+		ExprFormat:           ot.Flags.ExprFormat,
+		ExploreTraceRule:     ot.Flags.ExploreTraceRule,
+		ExploreTraceSkipNoop: ot.Flags.ExploreTraceSkipNoop,
 	}
-
-	// Output ending tree.
-	ot.optStepsDisplay(next, "", os)
-
-	return ot.builder.String(), nil
 }
 
 // OptStepsWeb is similar to Optsteps but it uses a special web page for
 // formatting the output. The result will be an URL which contains the encoded
 // data.
 func (ot *OptTester) OptStepsWeb() (string, error) {
-	normDiffStr, err := ot.optStepsNormDiff()
-	if err != nil {
-		return "", err
-	}
-
-	exploreDiffStr, err := ot.optStepsExploreDiff()
-	if err != nil {
-		return "", err
-	}
-	url, err := ot.encodeOptstepsURL(normDiffStr, exploreDiffStr)
-	if err != nil {
-		return "", err
-	}
-	return url.String(), nil
-}
-
-// optStepsNormDiff produces the normalization steps as a diff where each step
-// is a pair of "files" (showing the before and after plans).
-func (ot *OptTester) optStepsNormDiff() (string, error) {
-	// Store all the normalization steps.
-	type step struct {
-		Name string
-		Expr string
-	}
-	var normSteps []step
-	for os := newOptSteps(ot); !os.Done(); {
-		err := os.Next()
-		if err != nil {
-			return "", err
-		}
-		expr := os.fo.o.FormatExpr(os.Root(), ot.Flags.ExprFormat)
-		name := "Initial"
-		if len(normSteps) > 0 {
-			rule := os.LastRuleName()
-			if rule.IsExplore() {
-				// Stop at the first exploration rule.
-				break
-			}
-			name = rule.String()
-		}
-		normSteps = append(normSteps, step{Name: name, Expr: expr})
-	}
-
-	var buf bytes.Buffer
-	for i, s := range normSteps {
-		before := ""
-		if i > 0 {
-			before = normSteps[i-1].Expr
-		}
-		after := s.Expr
-		diff := difflib.UnifiedDiff{
-			A:        difflib.SplitLines(before),
-			FromFile: fmt.Sprintf("a/%s", s.Name),
-			B:        difflib.SplitLines(after),
-			ToFile:   fmt.Sprintf("b/%s", s.Name),
-			Context:  10000,
-		}
-		diffStr, err := difflib.GetUnifiedDiffString(diff)
-		if err != nil {
-			return "", err
-		}
-		diffStr = strings.TrimRight(diffStr, " \r\t\n")
-		buf.WriteString(diffStr)
-		buf.WriteString("\n")
-	}
-	return buf.String(), nil
-}
-
-// optStepsExploreDiff produces the exploration steps as a diff where each new
-// expression is shown as a pair of "files" (showing the before and after
-// expression). Note that normalization rules that are applied as part of
-// creating the new expression are not shown separately.
-func (ot *OptTester) optStepsExploreDiff() (string, error) {
-	et := newExploreTracer(ot)
-
-	var buf bytes.Buffer
-
-	for step := 0; ; step++ {
-		if step > 2000 {
-			ot.output("step limit reached\n")
-			break
-		}
-		err := et.Next()
-		if err != nil {
-			return "", err
-		}
-		if et.Done() {
-			break
-		}
-
-		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
-			et.LastRuleName() != ot.Flags.ExploreTraceRule {
-			continue
-		}
-		newNodes := et.NewExprs()
-		before := et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat)
-
-		for i := range newNodes {
-			name := et.LastRuleName().String()
-			after := memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog)
-
-			diff := difflib.UnifiedDiff{
-				A:        difflib.SplitLines(before),
-				FromFile: fmt.Sprintf("a/%s", name),
-				B:        difflib.SplitLines(after),
-				ToFile:   fmt.Sprintf("b/%s", name),
-				Context:  10000,
-			}
-			diffStr, err := difflib.GetUnifiedDiffString(diff)
-			if err != nil {
-				return "", err
-			}
-			diffStr = strings.TrimRight(diffStr, " \r\t\n")
-			if diffStr == "" {
-				// It's possible that the "new" expression is identical to the original
-				// one; ignore it in that case.
-				continue
-			}
-			buf.WriteString(diffStr)
-			buf.WriteString("\n")
-		}
-	}
-	return buf.String(), nil
-}
-
-func (ot *OptTester) encodeOptstepsURL(normDiff, exploreDiff string) (url.URL, error) {
-	output := struct {
-		SQL         string
-		NormDiff    string
-		ExploreDiff string
-	}{
-		SQL:         ot.sql,
-		NormDiff:    normDiff,
-		ExploreDiff: exploreDiff,
-	}
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(output); err != nil {
-		return url.URL{}, err
-	}
-	var compressed bytes.Buffer
-
-	encoder := base64.NewEncoder(base64.URLEncoding, &compressed)
-	compressor := zlib.NewWriter(encoder)
-	if _, err := buf.WriteTo(compressor); err != nil {
-		return url.URL{}, err
-	}
-	if err := compressor.Close(); err != nil {
-		return url.URL{}, err
-	}
-	if err := encoder.Close(); err != nil {
-		return url.URL{}, err
-	}
-	url := url.URL{
-		Scheme: "https",
-		Host:   "raduberinde.github.io",
-		Path:   "optsteps.html",
-	}
-	const githubPagesMaxURLLength = 8100
-	if compressed.Len() > githubPagesMaxURLLength {
-		// If the compressed data is longer than the maximum allowed URL length
-		// for the GitHub Pages server, we include it as a fragment. This
-		// prevents the browser from sending this data to the server, avoiding a
-		// 414 error from GitHub Pages.
-		url.Fragment = compressed.String()
-	} else {
-		// Otherwise, the compressed data is included as a query parameter. This
-		// is preferred because the URL remains valid when anchor links are
-		// clicked and fragments are added to the URL by the browser.
-		url.RawQuery = compressed.String()
-	}
-	return url, nil
-}
-
-func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) {
-	// bestHeader is used when the expression is an improvement over the previous
-	// expression.
-	bestHeader := func(e opt.Expr, format string, args ...interface{}) {
-		ot.separator("=")
-		ot.output(format, args...)
-		if rel, ok := e.(memo.RelExpr); ok {
-			ot.output("  Cost: %.2f\n", rel.Cost())
-		} else {
-			ot.output("\n")
-		}
-		ot.separator("=")
-	}
-
-	// altHeader is used when the expression doesn't improve over the previous
-	// expression, but it's still desirable to see what changed.
-	altHeader := func(format string, args ...interface{}) {
-		ot.separator("-")
-		ot.output(format, args...)
-		ot.separator("-")
-	}
-
-	if before == "" {
-		if ot.Flags.Verbose {
-			fmt.Print("------ optsteps verbose output starts ------\n")
-		}
-		bestHeader(os.Root(), "Initial expression\n")
-		ot.indent(after)
-		return
-	}
-
-	if before == after {
-		altHeader("%s (no changes)\n", os.LastRuleName())
-		return
-	}
-
-	if after == "" {
-		bestHeader(os.Root(), "Final best expression\n")
-		ot.indent(before)
-
-		if ot.Flags.Verbose {
-			fmt.Print("------ optsteps verbose output ends ------\n")
-		}
-		return
-	}
-
-	if os.IsBetter() {
-		// New expression is better than the previous expression. Diff
-		// it against the previous *best* expression (might not be the
-		// previous expression).
-		bestHeader(os.Root(), "%s\n", os.LastRuleName())
-	} else {
-		altHeader("%s (higher cost)\n", os.LastRuleName())
-	}
-
-	if ot.Flags.OptStepsSplitDiff {
-		ot.output("<<<<<<< before\n")
-		ot.indent(before)
-		ot.output("=======\n")
-		ot.indent(after)
-		ot.output(">>>>>>> after\n")
-	} else {
-		diff := difflib.UnifiedDiff{
-			A:       difflib.SplitLines(before),
-			B:       difflib.SplitLines(after),
-			Context: 100,
-		}
-		text, _ := difflib.GetUnifiedDiffString(diff)
-		// Skip the "@@ ... @@" header (first line).
-		text = strings.SplitN(text, "\n", 2)[1]
-		ot.indent(text)
-	}
+	ctx := context.Background()
+	os := optsteps.NewOptSteps(&ot.evalCtx, ot.catalog, ot.sql, ot.optStepsFlags())
+	return os.OptStepsWeb(ctx)
 }
 
 // ExploreTrace steps through exploration transformations performed by the
 // optimizer, one-by-one. The output of each step is the expression on which the
 // rule was applied, and the expressions that were generated by the rule.
 func (ot *OptTester) ExploreTrace() (string, error) {
-	ot.builder.Reset()
-
-	et := newExploreTracer(ot)
-
-	for step := 0; ; step++ {
-		if step > 2000 {
-			ot.output("step limit reached\n")
-			break
-		}
-		err := et.Next()
-		if err != nil {
-			return "", err
-		}
-		if et.Done() {
-			break
-		}
-
-		if ot.Flags.ExploreTraceRule != opt.InvalidRuleName &&
-			et.LastRuleName() != ot.Flags.ExploreTraceRule {
-			continue
-		}
-		newNodes := et.NewExprs()
-		if ot.Flags.ExploreTraceSkipNoop && len(newNodes) == 0 {
-			continue
-		}
-
-		if ot.builder.Len() > 0 {
-			ot.output("\n")
-		}
-		ot.separator("=")
-		ot.output("%s\n", et.LastRuleName())
-		ot.separator("=")
-		ot.output("Source expression:\n")
-		ot.indent(et.fo.o.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat))
-		if len(newNodes) == 0 {
-			ot.output("\nNo new expressions.\n")
-		}
-		for i := range newNodes {
-			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
-			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat, et.fo.o.Memo(), ot.catalog))
-		}
-	}
-	return ot.builder.String(), nil
+	ctx := context.Background()
+	os := optsteps.NewOptSteps(&ot.evalCtx, ot.catalog, ot.sql, ot.optStepsFlags())
+	return os.ExploreTrace(ctx)
 }
 
 // Import imports a file containing exec-ddl commands in order to add tables
