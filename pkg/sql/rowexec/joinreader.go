@@ -484,10 +484,7 @@ func newJoinReader(
 		)
 		jr.streamerInfo.unlimitedMemMonitor.Start(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 		jr.streamerInfo.budgetAcc = jr.streamerInfo.unlimitedMemMonitor.MakeBoundAccount()
-		jr.streamerInfo.maxKeysPerRow, err = jr.desc.KeysPerRow(jr.index.GetID())
-		if err != nil {
-			return nil, err
-		}
+		jr.streamerInfo.maxKeysPerRow = jr.desc.IndexKeysPerRow(jr.index)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint
 		// to at most half of the workmem limit. Note that it is ok if it is set

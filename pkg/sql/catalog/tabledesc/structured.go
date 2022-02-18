@@ -105,17 +105,13 @@ func (desc *wrapper) GetParentSchemaID() descpb.ID {
 	return parentSchemaID
 }
 
-// KeysPerRow implements the TableDescriptor interface.
-func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
-	if desc.PrimaryIndex.ID == indexID {
-		return len(desc.Families), nil
-	}
-	idx, err := desc.FindIndexWithID(indexID)
-	if err != nil {
-		return 0, err
+// IndexKeysPerRow implements the TableDescriptor interface.
+func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
+	if desc.PrimaryIndex.ID == idx.GetID() {
+		return len(desc.Families)
 	}
 	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
-		return 1, nil
+		return 1
 	}
 	// Calculate the number of column families used by the secondary index. We
 	// only need to look at the stored columns because column families are only
@@ -132,7 +128,7 @@ func (desc *wrapper) KeysPerRow(indexID descpb.IndexID) (int, error) {
 			}
 		}
 	}
-	return numUsedFamilies, nil
+	return numUsedFamilies
 }
 
 // BuildIndexName returns an index name that is not equal to any
