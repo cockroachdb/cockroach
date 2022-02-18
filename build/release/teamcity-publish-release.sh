@@ -3,9 +3,10 @@
 set -euxo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
+source "$root/build/teamcity-bazel-support.sh"  # for run_bazel
 
 tc_start_block "Variable Setup"
-export BUILDER_HIDE_GOPATH_SRC=1
+
 
 # Matching the version name regex from within the cockroach code except
 # for the `metadata` part at the end because Docker tags don't support
@@ -73,19 +74,14 @@ git tag "${build_name}"
 tc_end_block "Tag the release"
 
 
-tc_start_block "Compile publish-provisional-artifacts"
-build/builder.sh go install ./pkg/cmd/publish-provisional-artifacts
-tc_end_block "Compile publish-provisional-artifacts"
-
-
 tc_start_block "Make and publish release S3 artifacts"
 # Using publish-provisional-artifacts here is funky. We're directly publishing
 # the official binaries, not provisional ones. Legacy naming. To clean up...
-build/builder.sh env \
-  AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  TC_BUILD_BRANCH="$build_name" \
-  publish-provisional-artifacts -provisional -release -bucket "$bucket"
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
+bazel build --config ci //pkg/cmd/publish-provisional-artifacts
+BAZEL_BIN=$(bazel info bazel-bin --config ci)
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -provisional -release -bucket "$bucket"
+EOF
 tc_end_block "Make and publish release S3 artifacts"
 
 
@@ -131,11 +127,12 @@ tc_start_block "Publish S3 binaries and archive as latest"
 # Only push the "latest" for our most recent release branch.
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && -z "${PRE_RELEASE}" ]]; then
-  build/builder.sh env \
-    AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-    AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-    TC_BUILD_BRANCH="$build_name" \
-    publish-provisional-artifacts -bless -release -bucket "${bucket}"
+    BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e TC_BUILD_BRANCH=$build_name -e bucket=$bucket" run_bazel << 'EOF'
+bazel build --config ci //pkg/cmd/publish-provisional-artifacts
+BAZEL_BIN=$(bazel info bazel-bin --config ci)
+$BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/publish-provisional-artifacts -bless -release -bucket "$bucket"
+EOF
+
 else
   echo "The latest S3 binaries and archive were _not_ updated."
 fi
