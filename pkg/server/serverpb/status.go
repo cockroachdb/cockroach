@@ -29,13 +29,14 @@ type SQLStatusServer interface {
 	ResetSQLStats(context.Context, *ResetSQLStatsRequest) (*ResetSQLStatsResponse, error)
 	CombinedStatementStats(context.Context, *CombinedStatementsStatsRequest) (*StatementsResponse, error)
 	Statements(context.Context, *StatementsRequest) (*StatementsResponse, error)
+	StatementDetails(context.Context, *StatementDetailsRequest) (*StatementDetailsResponse, error)
 	ListDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
 	ListLocalDistSQLFlows(context.Context, *ListDistSQLFlowsRequest) (*ListDistSQLFlowsResponse, error)
-	Profile(ctx context.Context, request *ProfileRequest) (*JSONResponse, error)
+	Profile(context.Context, *ProfileRequest) (*JSONResponse, error)
 	IndexUsageStatistics(context.Context, *IndexUsageStatisticsRequest) (*IndexUsageStatisticsResponse, error)
 	ResetIndexUsageStats(context.Context, *ResetIndexUsageStatsRequest) (*ResetIndexUsageStatsResponse, error)
 	TableIndexStats(context.Context, *TableIndexStatsRequest) (*TableIndexStatsResponse, error)
-	UserSQLRoles(ctx context.Context, request *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
+	UserSQLRoles(context.Context, *UserSQLRolesRequest) (*UserSQLRolesResponse, error)
 	TxnIDResolution(context.Context, *TxnIDResolutionRequest) (*TxnIDResolutionResponse, error)
 }
 
