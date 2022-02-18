@@ -48,8 +48,9 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	}
 
 	// Create SST with keys equal to intents at txn2TS.
+	cs := cluster.MakeTestingClusterSettings()
 	sstFile := &MemFile{}
-	sstWriter := MakeBackupSSTWriter(sstFile)
+	sstWriter := MakeBackupSSTWriter(context.Background(), cs, sstFile)
 	defer sstWriter.Close()
 	for _, k := range intents {
 		key := MVCCKey{Key: roachpb.Key(k), Timestamp: txn2TS}
@@ -64,7 +65,7 @@ func TestCheckSSTConflictsMaxIntents(t *testing.T) {
 	for _, engineImpl := range mvccEngineImpls {
 		t.Run(engineImpl.name, func(t *testing.T) {
 			ctx := context.Background()
-			engine := engineImpl.create()
+			engine := engineImpl.create(Settings(cs))
 			defer engine.Close()
 
 			// Write some committed keys and intents at txn1TS.

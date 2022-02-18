@@ -785,7 +785,7 @@ func (s *sstSink) open(ctx context.Context) error {
 		}
 	}
 	s.out = w
-	s.sst = storage.MakeBackupSSTWriter(s.out)
+	s.sst = storage.MakeBackupSSTWriter(ctx, s.dest.Settings(), s.out)
 
 	return nil
 }
