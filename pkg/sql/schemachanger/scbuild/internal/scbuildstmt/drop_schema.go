@@ -36,6 +36,7 @@ func DropSchema(b BuildCtx, n *tree.DropSchema) {
 		dropSchema(b,
 			db, sc, n.DropBehavior, false /* databaseIsBeingDropped */)
 		b.IncrementSubWorkID()
+		b.IncrementDropCounterForSchema()
 	}
 }
 

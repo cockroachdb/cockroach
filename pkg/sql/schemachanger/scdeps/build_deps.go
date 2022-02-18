@@ -41,37 +41,40 @@ func NewBuilderDependencies(
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
 	featureChecker scbuild.FeatureChecker,
+	telemetryCounter scbuild.TelemetryCounter,
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
 ) scbuild.Dependencies {
 	return &buildDeps{
-		clusterID:       clusterID,
-		codec:           codec,
-		txn:             txn,
-		descsCollection: descsCollection,
-		schemaResolver:  schemaResolver,
-		authAccessor:    authAccessor,
-		sessionData:     sessionData,
-		settings:        settings,
-		statements:      statements,
-		astFormatter:    astFormatter,
-		featureChecker:  featureChecker,
+		clusterID:        clusterID,
+		codec:            codec,
+		txn:              txn,
+		descsCollection:  descsCollection,
+		schemaResolver:   schemaResolver,
+		authAccessor:     authAccessor,
+		sessionData:      sessionData,
+		settings:         settings,
+		statements:       statements,
+		astFormatter:     astFormatter,
+		featureChecker:   featureChecker,
+		telemetryCounter: telemetryCounter,
 	}
 }
 
 type buildDeps struct {
-	clusterID       uuid.UUID
-	codec           keys.SQLCodec
-	txn             *kv.Txn
-	descsCollection *descs.Collection
-	schemaResolver  resolver.SchemaResolver
-	authAccessor    scbuild.AuthorizationAccessor
-	sessionData     *sessiondata.SessionData
-	settings        *cluster.Settings
-	statements      []string
-	astFormatter    scbuild.AstFormatter
-	featureChecker  scbuild.FeatureChecker
+	clusterID        uuid.UUID
+	codec            keys.SQLCodec
+	txn              *kv.Txn
+	descsCollection  *descs.Collection
+	schemaResolver   resolver.SchemaResolver
+	authAccessor     scbuild.AuthorizationAccessor
+	sessionData      *sessiondata.SessionData
+	settings         *cluster.Settings
+	statements       []string
+	astFormatter     scbuild.AstFormatter
+	featureChecker   scbuild.FeatureChecker
+	telemetryCounter scbuild.TelemetryCounter
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -264,6 +267,11 @@ func (d *buildDeps) AstFormatter() scbuild.AstFormatter {
 // FeatureChecker implements the scbuild.Dependencies interface.
 func (d *buildDeps) FeatureChecker() scbuild.FeatureChecker {
 	return d.featureChecker
+}
+
+// TelemetryCounter implement the scbuild.Dependencies interface.
+func (d *buildDeps) TelemetryCounter() scbuild.TelemetryCounter {
+	return d.telemetryCounter
 }
 
 // IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
