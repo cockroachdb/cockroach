@@ -201,11 +201,15 @@ func getResultColumns(
 func tableColumns(table cat.Table, ordinals exec.TableColumnOrdinalSet) colinfo.ResultColumns {
 	cols := make(colinfo.ResultColumns, 0, ordinals.Len())
 	for i, ok := ordinals.Next(0); ok; i, ok = ordinals.Next(i + 1) {
-		col := table.Column(i)
-		cols = append(cols, colinfo.ResultColumn{
-			Name: string(col.ColName()),
-			Typ:  col.DatumType(),
-		})
+		// Be defensive about bitset values because they may come from cached
+		// gists and the columns they refer to could have been removed.
+		if i < table.ColumnCount() {
+			col := table.Column(i)
+			cols = append(cols, colinfo.ResultColumn{
+				Name: string(col.ColName()),
+				Typ:  col.DatumType(),
+			})
+		}
 	}
 	return cols
 }
