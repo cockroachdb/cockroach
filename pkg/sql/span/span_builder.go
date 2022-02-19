@@ -263,7 +263,8 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 	// We need to advance the end key if it is inclusive or the index is
 	// inverted.
-	if cs.EndBoundary() == constraint.IncludeBoundary || s.index.GetType() == descpb.IndexDescriptor_INVERTED {
+	//if cs.EndBoundary() == constraint.IncludeBoundary || s.index.GetType() == descpb.IndexDescriptor_INVERTED {
+	if cs.EndBoundary() == constraint.IncludeBoundary {
 		span.EndKey = span.EndKey.PrefixEnd()
 	}
 
