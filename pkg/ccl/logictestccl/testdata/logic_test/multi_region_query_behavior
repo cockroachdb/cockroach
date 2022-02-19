@@ -13,6 +13,9 @@ USE multi_region_test_db
 
 # NB: This doesn't include the foreign key reference to warehouse since we
 # don't need the warehouse table for this test.
+# NB: The crdb_region columns have been changed from computed columns to columns
+# with default values since a foreign key check with a computed region column
+# would only require a lookup in a single region.
 statement ok
 CREATE TABLE district (
         d_id INT8 NOT NULL,
@@ -26,7 +29,7 @@ CREATE TABLE district (
         d_tax DECIMAL(4,4) NOT NULL,
         d_ytd DECIMAL(12,2) NOT NULL,
         d_next_o_id INT8 NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN d_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN d_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN d_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (d_w_id ASC, d_id ASC),
         FAMILY "primary" (d_id, d_w_id, d_name, d_street_1, d_street_2, d_city, d_state, d_zip, d_tax, d_ytd, d_next_o_id, crdb_region)
 ) LOCALITY REGIONAL BY ROW
@@ -54,7 +57,7 @@ CREATE TABLE customer (
         c_payment_cnt INT8 NOT NULL,
         c_delivery_cnt INT8 NOT NULL,
         c_data VARCHAR(500) NOT NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN c_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN c_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN c_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (c_w_id ASC, c_d_id ASC, c_id ASC),
         CONSTRAINT fk_c_w_id_ref_district FOREIGN KEY (c_w_id, c_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,
         INDEX customer_idx (c_w_id ASC, c_d_id ASC, c_last ASC, c_first ASC),
@@ -72,7 +75,7 @@ CREATE TABLE history (
         h_date TIMESTAMP NULL,
         h_amount DECIMAL(6,2) NULL,
         h_data VARCHAR(24) NULL,
-        crdb_region crdb_internal_region NOT VISIBLE NOT NULL AS (CASE WHEN h_w_id BETWEEN 0:::INT8 AND 1665:::INT8 THEN 'ap-southeast-2':::crdb_internal_region WHEN h_w_id BETWEEN 1666:::INT8 AND 3332:::INT8 THEN 'us-east-1':::crdb_internal_region WHEN h_w_id BETWEEN 3333:::INT8 AND 4999:::INT8 THEN 'ca-central-1':::crdb_internal_region END) STORED,
+        crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT gateway_region()::crdb_internal_region,
         CONSTRAINT "primary" PRIMARY KEY (h_w_id ASC, rowid ASC),
         CONSTRAINT fk_h_c_w_id_ref_customer FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES customer(c_w_id, c_d_id, c_id) NOT VALID,
         CONSTRAINT fk_h_w_id_ref_district FOREIGN KEY (h_w_id, h_d_id) REFERENCES district(d_w_id, d_id) NOT VALID,

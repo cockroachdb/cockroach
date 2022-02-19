@@ -293,6 +293,16 @@ func (tm *TableMeta) AddComputedCol(colID ColumnID, computedCol ScalarExpr) {
 	tm.ComputedCols[colID] = computedCol
 }
 
+// ComputedColExpr returns the computed expression for the given column, if it
+// is a computed column. If it is not a computed column, ok=false is returned.
+func (tm *TableMeta) ComputedColExpr(id ColumnID) (_ ScalarExpr, ok bool) {
+	if tm.ComputedCols == nil {
+		return nil, false
+	}
+	e, ok := tm.ComputedCols[id]
+	return e, ok
+}
+
 // AddPartialIndexPredicate adds a partial index predicate to the table's
 // metadata.
 func (tm *TableMeta) AddPartialIndexPredicate(ord cat.IndexOrdinal, pred ScalarExpr) {
