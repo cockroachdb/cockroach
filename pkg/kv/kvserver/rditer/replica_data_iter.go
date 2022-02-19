@@ -195,12 +195,13 @@ func MakeUserKeyRange(d *roachpb.RangeDescriptor) KeyRange {
 }
 
 // NewReplicaMVCCDataIterator creates a ReplicaMVCCDataIterator for the given
-// replica. It iterates over the replicated key ranges excluding the lock
-// table key range. Separated locks are made to appear as interleaved. The
-// iterator can do one of reverse or forward iteration, based on whether
-// seekEnd is true or false, respectively. With reverse iteration, it is
-// initially positioned at the end of the last range, else it is initially
-// positioned at the start of the first range.
+// replica. It iterates over the replicated key ranges excluding the lock table
+// key range. Separated locks are made to appear as interleaved. Range keys are
+// surfaced when overlapping point keys, but not otherwise. The iterator can do
+// one of reverse or forward iteration, based on whether seekEnd is true or
+// false, respectively. With reverse iteration, it is initially positioned at
+// the end of the last range, else it is initially positioned at the start of
+// the first range.
 //
 // The iterator requires the reader.ConsistentIterators is true, since it
 // creates a different iterator for each replicated key range. This is because
@@ -238,6 +239,7 @@ func (ri *ReplicaMVCCDataIterator) tryCloseAndCreateIter() {
 		ri.it = ri.reader.NewMVCCIterator(
 			storage.MVCCKeyAndIntentsIterKind,
 			storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsWithRanges,
 				LowerBound: ri.ranges[ri.curIndex].Start,
 				UpperBound: ri.ranges[ri.curIndex].End,
 			})
@@ -331,6 +333,11 @@ func (ri *ReplicaMVCCDataIterator) UnsafeKey() storage.MVCCKey {
 // the next call to {Next,Prev,Close}.
 func (ri *ReplicaMVCCDataIterator) UnsafeValue() []byte {
 	return ri.it.UnsafeValue()
+}
+
+// RangeKeys returns the range keys overlapping the current point.
+func (ri *ReplicaMVCCDataIterator) RangeKeys() []storage.MVCCRangeKeyValue {
+	return ri.it.RangeKeys()
 }
 
 // NewReplicaEngineDataIterator creates a ReplicaEngineDataIterator for the given replica.

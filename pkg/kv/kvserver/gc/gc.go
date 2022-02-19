@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -120,7 +121,7 @@ type Thresholder interface {
 
 // PureGCer is part of the GCer interface.
 type PureGCer interface {
-	GC(context.Context, []roachpb.GCRequest_GCKey) error
+	GC(context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey) error
 }
 
 // A GCer is an abstraction used by the MVCC GC queue to carry out chunked deletions.
@@ -138,7 +139,11 @@ var _ GCer = NoopGCer{}
 func (NoopGCer) SetGCThreshold(context.Context, Threshold) error { return nil }
 
 // GC implements storage.GCer.
-func (NoopGCer) GC(context.Context, []roachpb.GCRequest_GCKey) error { return nil }
+func (NoopGCer) GC(
+	context.Context, []roachpb.GCRequest_GCKey, []roachpb.GCRequest_GCRangeKey,
+) error {
+	return nil
+}
 
 // Threshold holds the key and txn span GC thresholds, respectively.
 type Threshold struct {
@@ -152,10 +157,12 @@ type Info struct {
 	Now hlc.Timestamp
 	// GCTTL is the TTL this garbage collection cycle.
 	GCTTL time.Duration
-	// Stats about the userspace key-values considered, namely the number of
-	// keys with GC'able data, the number of "old" intents and the number of
-	// associated distinct transactions.
-	NumKeysAffected, IntentsConsidered, IntentTxns int
+	// Stats about the userspace key-values considered, namely the number of keys
+	// with GC'able data, the number of range key versions GCed, the number of
+	// "old" intents and the number of associated distinct transactions.
+	//
+	// TODO(erikgrinaker): Add metric for range keys?
+	NumKeysAffected, NumRangeKeyVersionsAffected, IntentsConsidered, IntentTxns int
 	// TransactionSpanTotal is the total number of entries in the transaction span.
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
@@ -181,13 +188,15 @@ type Info struct {
 	ResolveTotal int
 	// Threshold is the computed expiration timestamp. Equal to `Now - GCTTL`.
 	Threshold hlc.Timestamp
-	// AffectedVersionsKeyBytes is the number of (fully encoded) bytes deleted from keys in the storage engine.
-	// Note that this does not account for compression that the storage engine uses to store data on disk. Real
-	// space savings tends to be smaller due to this compression, and space may be released only at a later point
-	// in time.
+	// AffectedVersionsKeyBytes is the number of (fully encoded) bytes deleted
+	// from keys in the storage engine.  Note that this does not account for
+	// compression that the storage engine uses to store data on disk, nor range
+	// key fragmentation. Real space savings tends to be smaller due to this
+	// compression, and space may be released only at a later point in time.
 	AffectedVersionsKeyBytes int64
-	// AffectedVersionsValBytes is the number of (fully encoded) bytes deleted from values in the storage engine.
-	// See AffectedVersionsKeyBytes for caveats.
+	// AffectedVersionsValBytes is the number of (fully encoded) bytes deleted
+	// from values in the storage engine. See AffectedVersionsKeyBytes for
+	// caveats.
 	AffectedVersionsValBytes int64
 }
 
@@ -342,13 +351,38 @@ func processReplicatedKeyRange(
 	// be added with that version and the batch will be sent. When the newest
 	// version for a key has been reached, if haveGarbageForThisKey, we'll add the
 	// current key to the batch with the gcTimestampForThisKey.
+	//
+	// TODO(erikgrinaker): We should use Pebble range tombstones to clear long
+	// runs of garbage with no visible versions, especially below MVCC range
+	// tombstones.
 	var (
-		batchGCKeys           []roachpb.GCRequest_GCKey
-		batchGCKeysBytes      int64
-		haveGarbageForThisKey bool
-		gcTimestampForThisKey hlc.Timestamp
-		sentBatchForThisKey   bool
+		batchGCKeys             []roachpb.GCRequest_GCKey
+		batchGCKeysBytes        int64
+		haveGarbageForThisKey   bool
+		gcTimestampForThisKey   hlc.Timestamp
+		sentBatchForThisKey     bool
+		preventRangeTombstoneGC bool
 	)
+	flushKeys := func() error {
+		if len(batchGCKeys) == 0 {
+			return ctx.Err()
+		}
+		if err := gcer.GC(ctx, batchGCKeys, nil); err != nil {
+			if errors.Is(err, ctx.Err()) {
+				return err
+			}
+			// It's safe to continue because we bumped the GC threshold. We may leave
+			// some inconsistent history behind, but nobody can read it. However, we
+			// must make sure any range tombstones above these points aren't removed.
+			log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+			preventRangeTombstoneGC = true
+		}
+		batchGCKeys = nil
+		batchGCKeysBytes = 0
+		alloc = bufalloc.ByteAllocator{}
+		return nil
+	}
+
 	it := makeGCIterator(desc, snap)
 	defer it.close()
 	for ; ; it.step() {
@@ -369,7 +403,7 @@ func processReplicatedKeyRange(
 			continue
 		}
 		isNewest := s.curIsNewest()
-		if isGarbage(threshold, s.cur, s.next, isNewest) {
+		if isGarbage(threshold, s.cur, s.next, isNewest, s.nextRangeTombstone) {
 			keyBytes := int64(s.cur.Key.EncodedSize())
 			batchGCKeysBytes += keyBytes
 			haveGarbageForThisKey = true
@@ -397,19 +431,9 @@ func processReplicatedKeyRange(
 			sentBatchForThisKey = shouldSendBatch && !isNewest
 		}
 		if shouldSendBatch {
-			if err := gcer.GC(ctx, batchGCKeys); err != nil {
-				if errors.Is(err, ctx.Err()) {
-					return err
-				}
-				// Even though we are batching the GC process, it's
-				// safe to continue because we bumped the GC
-				// thresholds. We may leave some inconsistent history
-				// behind, but nobody can read it.
-				log.Warningf(ctx, "failed to GC a batch of keys: %v", err)
+			if err := flushKeys(); err != nil {
+				return err
 			}
-			batchGCKeys = nil
-			batchGCKeysBytes = 0
-			alloc = bufalloc.ByteAllocator{}
 		}
 	}
 	// We need to send out last intent cleanup batch.
@@ -419,10 +443,78 @@ func processReplicatedKeyRange(
 		}
 		log.Warningf(ctx, "failed to cleanup intents batch: %v", err)
 	}
-	if len(batchGCKeys) > 0 {
-		if err := gcer.GC(ctx, batchGCKeys); err != nil {
-			return err
+	if err := flushKeys(); err != nil {
+		return err
+	}
+
+	// Iterate over all range keys below the GC threshold. We currently assume all
+	// range keys are range tombstones (no value), since the semantics of
+	// non-tombstone range keys are undefined.
+	var (
+		batchGCRangeKeys      []roachpb.GCRequest_GCRangeKey
+		batchGCRangeKeysBytes int64
+	)
+	flushRangeKeys := func() error {
+		if len(batchGCRangeKeys) == 0 {
+			return ctx.Err()
 		}
+		if err := gcer.GC(ctx, nil, batchGCRangeKeys); err != nil {
+			if errors.Is(err, ctx.Err()) {
+				return err
+			}
+			log.Warningf(ctx, "failed to GC a batch of range keys: %v", err)
+		}
+		batchGCRangeKeys = nil
+		batchGCRangeKeysBytes = 0
+		return nil
+	}
+
+	if preventRangeTombstoneGC {
+		// We failed to GC some point keys above, so it's not safe to GC the range
+		// tombstones since that could undelete those points.
+		return nil
+	}
+
+	for _, keyRange := range rditer.MakeReplicatedKeyRangesExceptLockTable(desc) {
+		iter := storage.NewMVCCRangeKeyIterator(snap, storage.MVCCRangeKeyIterOptions{
+			LowerBound:   keyRange.Start,
+			UpperBound:   keyRange.End,
+			MaxTimestamp: threshold,
+		})
+		defer iter.Close()
+		for {
+			if ok, err := iter.Valid(); err != nil {
+				return err
+			} else if !ok {
+				break
+			}
+			key, value := iter.Key(), iter.Value()
+			if len(value) > 0 {
+				return errors.AssertionFailedf("unexpected non-tombstone range key %s with value %x",
+					iter.Key(), iter.Value())
+			}
+			batchGCRangeKeys = append(batchGCRangeKeys, roachpb.GCRequest_GCRangeKey{
+				StartKey:  key.StartKey,
+				EndKey:    key.EndKey,
+				Timestamp: key.Timestamp,
+			})
+			keySize := int64(key.EncodedSize())
+			batchGCRangeKeysBytes += keySize
+
+			if batchGCRangeKeysBytes >= KeyVersionChunkBytes {
+				if err := flushRangeKeys(); err != nil {
+					return err
+				}
+			}
+
+			info.NumRangeKeyVersionsAffected++
+			info.AffectedVersionsKeyBytes += keySize
+			info.AffectedVersionsValBytes += int64(len(value))
+			iter.Next()
+		}
+	}
+	if err := flushRangeKeys(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -561,23 +653,28 @@ func (b *intentBatcher) maybeFlushPendingIntents(ctx context.Context) error {
 // guaranteed as described above. However if this were the only rule, then if
 // the most recent write was a delete, it would never be removed. Thus, when a
 // deleted value is the most recent before expiration, it can be deleted.
-func isGarbage(threshold hlc.Timestamp, cur, next *storage.MVCCKeyValue, isNewest bool) bool {
+func isGarbage(
+	threshold hlc.Timestamp,
+	cur, next *storage.MVCCKeyValue,
+	isNewest bool,
+	nextRangeTombstone hlc.Timestamp,
+) bool {
 	// If the value is not at or below the threshold then it's not garbage.
 	if belowThreshold := cur.Key.Timestamp.LessEq(threshold); !belowThreshold {
 		return false
 	}
-	isDelete := len(cur.Value) == 0
-	if isNewest && !isDelete {
+	// If this is a delete then it's garbage.
+	if isDelete := len(cur.Value) == 0; isDelete {
+		return true
+	}
+	// If this is the newest non-tombstone value then it must remain visible.
+	if isNewest && nextRangeTombstone.IsEmpty() {
 		return false
 	}
 	// If this value is not a delete, then we need to make sure that the next
 	// value is also at or below the threshold.
-	// NB: This doesn't need to check whether next is nil because we know
-	// isNewest is false when evaluating rhs of the or below.
-	if !isDelete && next == nil {
-		panic("huh")
-	}
-	return isDelete || next.Key.Timestamp.LessEq(threshold)
+	return (next != nil && next.Key.Timestamp.LessEq(threshold)) ||
+		(!nextRangeTombstone.IsEmpty() && nextRangeTombstone.LessEq(threshold))
 }
 
 // processLocalKeyRange scans the local range key entries, consisting of
@@ -732,7 +829,7 @@ func (b *batchingInlineGCer) FlushingAdd(ctx context.Context, key roachpb.Key) {
 }
 
 func (b *batchingInlineGCer) Flush(ctx context.Context) {
-	err := b.gcer.GC(ctx, b.gcKeys)
+	err := b.gcer.GC(ctx, b.gcKeys, nil)
 	b.gcKeys = nil
 	b.size = 0
 	if err != nil {

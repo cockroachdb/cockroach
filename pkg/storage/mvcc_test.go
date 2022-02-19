@@ -5105,6 +5105,109 @@ func TestMVCCGarbageCollectPanicsWithMixOfLocalAndGlobalKeys(t *testing.T) {
 	}
 }
 
+// TestMVCCGarbageCollectBelowRangeTombstones tests that point keys can be
+// garbage collected below a range tombstone.
+func TestMVCCGarbageCollectBelowRangeTombstones(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	threshold := hlc.Timestamp{Logical: 10}
+
+	pointKeys := []MVCCKeyValue{
+		pointKV("a", 1, "a1"),   // GCed, below [a-c)@10
+		pointKV("a", 5, "a5"),   // GCed, below [a-c)@10
+		pointKV("a", 11, "a11"), // not GCed, above threshold
+		pointKV("b", 11, ""),    // not GCed, above threshold
+		pointKV("d", 9, "d9"),   // not GCed, only below [a-z)@100
+		pointKV("e", 7, "e7"),   // GCed, below [e-g)@9
+		pointKV("f", 10, "f10"), // not GCed, above [e-g)@9
+		pointKV("g", 7, "g7"),   // not GCed, only below [a-z)@100
+		pointKV("j", 3, "j3"),   // GCed, below point tombstone
+		pointKV("j", 8, ""),     // GCed, point tombstone below threshold
+	}
+	for _, kv := range pointKeys {
+		require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+	}
+
+	rangeKeys := []MVCCRangeKeyValue{
+		rangeKV("a", "c", 10, ""), // at threshold
+		rangeKV("e", "g", 9, ""),  // below threshold
+		rangeKV("a", "z", 100, ""),
+	}
+	for _, rkv := range rangeKeys {
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rkv.Key, rkv.Value))
+	}
+
+	ms := &enginepb.MVCCStats{}
+	gcKeys := []roachpb.GCRequest_GCKey{
+		{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{Logical: 5}},
+		{Key: roachpb.Key("e"), Timestamp: hlc.Timestamp{Logical: 7}},
+		{Key: roachpb.Key("j"), Timestamp: hlc.Timestamp{Logical: 8}},
+	}
+
+	require.NoError(t, MVCCGarbageCollect(ctx, eng, ms, gcKeys, threshold))
+
+	// Assert point KVs were GCed as expected.
+	expectKVs := []MVCCKeyValue{
+		pointKV("a", 11, "a11"),
+		pointKV("b", 11, ""),
+		pointKV("d", 9, "d9"),
+		pointKV("f", 10, "f10"),
+		pointKV("g", 7, "g7"),
+	}
+	actualKVs := []MVCCKeyValue{}
+
+	iter := eng.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
+		LowerBound: roachpb.Key("a"),
+		UpperBound: roachpb.Key("z"),
+	})
+	defer iter.Close()
+	iter.SeekGE(MVCCKey{Key: roachpb.Key("a")})
+	for {
+		ok, err := iter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		actualKVs = append(actualKVs, MVCCKeyValue{Key: iter.Key(), Value: iter.Value()})
+		iter.Next()
+	}
+
+	require.Equal(t, expectKVs, actualKVs)
+
+	// Assert no range keys themselves were GCed.
+	expectRKVs := []MVCCRangeKeyValue{
+		rangeKV("a", "c", 10, ""),
+		rangeKV("e", "g", 9, ""),
+		rangeKV("a", "z", 100, ""),
+	}
+	actualRKVs := []MVCCRangeKeyValue{}
+
+	rkIter := NewMVCCRangeKeyIterator(eng, MVCCRangeKeyIterOptions{
+		LowerBound: roachpb.Key("a"),
+		UpperBound: roachpb.Key("z"),
+	})
+	defer rkIter.Close()
+	for {
+		ok, err := rkIter.Valid()
+		require.NoError(t, err)
+		if !ok {
+			break
+		}
+		actualRKVs = append(actualRKVs, MVCCRangeKeyValue{Key: rkIter.Key(), Value: rkIter.Value()})
+		rkIter.Next()
+	}
+
+	require.Equal(t, expectRKVs, actualRKVs)
+
+	// TODO(erikgrinaker): Assert MVCCStats once range tombstones are properly
+	// taken into account.
+}
+
 // readWriterReturningSeekLTTrackingIterator is used in a test to inject errors
 // and ensure that SeekLT is returned an appropriate number of times.
 type readWriterReturningSeekLTTrackingIterator struct {

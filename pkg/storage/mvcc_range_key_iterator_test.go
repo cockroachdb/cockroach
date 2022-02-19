@@ -299,3 +299,7 @@ func rangeKV(start, end string, ts int, value string) MVCCRangeKeyValue {
 func pointKey(key string, ts int) MVCCKey {
 	return MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{Logical: int32(ts)}}
 }
+
+func pointKV(key string, ts int, value string) MVCCKeyValue {
+	return MVCCKeyValue{Key: pointKey(key, ts), Value: []byte(value)}
+}

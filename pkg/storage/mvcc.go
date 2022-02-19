@@ -3463,11 +3463,11 @@ func MVCCResolveWriteIntentRange(
 	return num, nil, nil
 }
 
-// MVCCGarbageCollect creates an iterator on the ReadWriter. In parallel
-// it iterates through the keys listed for garbage collection by the
-// keys slice. The iterator is seeked in turn to each listed
-// key, clearing all values with timestamps <= to expiration. The
-// timestamp parameter is used to compute the intent age on GC.
+// MVCCGarbageCollect garbage collects the given point keys. It creates an
+// iterator on the ReadWriter, and in parallel it iterates through the keys
+// listed for garbage collection by the keys slice. The iterator is seeked in
+// turn to each listed key, clearing all values with timestamps <= to
+// expiration. The timestamp parameter is used to compute the intent age on GC.
 //
 // Note that this method will be sorting the keys.
 //
@@ -3475,6 +3475,8 @@ func MVCCResolveWriteIntentRange(
 // not a mix of the two. This is to accommodate the implementation below
 // that creates an iterator with bounds that span from the first to last
 // key (in sorted order).
+//
+// TODO(erikgrinaker): This needs to adjust MVCCStats for range tombstones.
 func MVCCGarbageCollect(
 	ctx context.Context,
 	rw ReadWriter,
@@ -3507,6 +3509,7 @@ func MVCCGarbageCollect(
 	iter := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		LowerBound: keys[0].Key,
 		UpperBound: keys[len(keys)-1].Key.Next(),
+		KeyTypes:   IterKeyTypePointsWithRanges,
 	})
 	defer iter.Close()
 	supportsPrev := iter.SupportsPrev()
@@ -3525,6 +3528,26 @@ func MVCCGarbageCollect(
 		}
 		inlinedValue := meta.IsInline()
 		implicitMeta := iter.UnsafeKey().IsValue()
+
+		// Check whether the key is below a range tombstone, and get the lowest
+		// tombstone's timestamp.
+		//
+		// TODO(erikgrinaker): This should possibly be done in mvccGetMetadata.
+		var nextRangeTombstone hlc.Timestamp
+		if rangeKeys := iter.RangeKeys(); len(rangeKeys) > 0 {
+			for i := len(rangeKeys) - 1; i >= 0; i-- {
+				rkv := rangeKeys[i]
+				if len(rkv.Value) > 0 {
+					return errors.AssertionFailedf("unexpected non-tombstone range key %s with value %x",
+						rkv.Key, rkv.Value)
+				}
+				if gcKey.Timestamp.LessEq(rkv.Key.Timestamp) {
+					nextRangeTombstone = rkv.Key.Timestamp
+					break
+				}
+			}
+		}
+
 		// First, check whether all values of the key are being deleted.
 		//
 		// Note that we naively can't terminate GC'ing keys loop early if we
@@ -3538,7 +3561,7 @@ func MVCCGarbageCollect(
 			// not marked deleted. However, for inline values we allow it;
 			// they are internal and GCing them directly saves the extra
 			// deletion step.
-			if !meta.Deleted && !inlinedValue {
+			if !meta.Deleted && nextRangeTombstone.IsEmpty() && !inlinedValue {
 				return errors.Errorf("request to GC non-deleted, latest value of %q", gcKey.Key)
 			}
 			if meta.Txn != nil {
@@ -3681,6 +3704,36 @@ func MVCCGarbageCollect(
 		}
 	}
 
+	return nil
+}
+
+// ExperimentalMVCCGarbageCollectRangeKeys garbage collects the given range
+// keys. Only the range keys themselves are cleared, point keys below them must
+// be garbage collected separately with MVCCGarbageCollect.
+//
+// This method is EXPERIMENTAL: range keys are under active development, and
+// have severe limitations including being ignored by all KV and MVCC APIs and
+// only being stored in memory.
+//
+// TODO(erikgrinaker): Needs MVCCStats handling.
+// TODO(erikgrinaker): Should verify that there are no point keys below them.
+func ExperimentalMVCCGarbageCollectRangeKeys(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	rangeKeys []roachpb.GCRequest_GCRangeKey,
+	timestamp hlc.Timestamp,
+) error {
+	for _, rk := range rangeKeys {
+		err := rw.ExperimentalClearMVCCRangeKey(MVCCRangeKey{
+			StartKey:  rk.StartKey,
+			EndKey:    rk.EndKey,
+			Timestamp: rk.Timestamp,
+		})
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

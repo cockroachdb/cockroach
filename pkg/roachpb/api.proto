@@ -927,7 +927,26 @@ message GCRequest {
     bytes key = 1 [(gogoproto.casttype) = "Key"];
     util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   }
+
+  message GCRangeKey {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  }
+
+  // Keys specifies any point keys to GC. Only versions up to and including
+  // the given timestamp are GCed.
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
+
+  // ExperimentalRangeKeys specifies any range keys to GC. Only the range keys
+  // themselves are cleared, any point keys they overlap are not touched.
+  //
+  // Range keys are currently experimental, and only written when
+  // storage.CanUseExperimentalMVCCRangeTombstones() is enabled. We don't need
+  // to check this during GC, because if a range key exists to be GCed then it
+  // must have been written while the check succeeded.
+  repeated GCRangeKey experimental_range_keys = 6 [(gogoproto.nullable) = false];
+
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];
 

@@ -45,11 +45,23 @@ func TestCalculateThreshold(t *testing.T) {
 }
 
 type collectingGCer struct {
-	keys [][]roachpb.GCRequest_GCKey
+	keys      [][]roachpb.GCRequest_GCKey
+	rangeKeys [][]roachpb.GCRequest_GCRangeKey
 }
 
-func (c *collectingGCer) GC(_ context.Context, keys []roachpb.GCRequest_GCKey) error {
-	c.keys = append(c.keys, keys)
+func (c *collectingGCer) GC(
+	_ context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
+	if len(keys) > 0 {
+		c.keys = append(c.keys, keys)
+	}
+	if len(rangeKeys) > 0 {
+		c.rangeKeys = append(c.rangeKeys, rangeKeys)
+	}
+	return nil
+}
+
+func (c *collectingGCer) SetGCThreshold(context.Context, Threshold) error {
 	return nil
 }
 
@@ -378,4 +390,80 @@ func TestGCIntentBatcherErrorHandling(t *testing.T) {
 	}, opts, &info)
 	cancel()
 	require.Error(t, batcher.maybeFlushPendingIntents(ctx))
+}
+
+func TestGCRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	pointKV := func(key string, ts int, value string) storage.MVCCKeyValue {
+		return storage.MVCCKeyValue{
+			Key:   storage.MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{Logical: int32(ts)}},
+			Value: []byte(value),
+		}
+	}
+
+	rangeKey := func(start, end string, ts int) storage.MVCCRangeKey {
+		return storage.MVCCRangeKey{
+			StartKey:  roachpb.Key(start),
+			EndKey:    roachpb.Key(end),
+			Timestamp: hlc.Timestamp{Logical: int32(ts)},
+		}
+	}
+
+	for _, kv := range []storage.MVCCKeyValue{
+		pointKV("a", 3, "a3"),
+		pointKV("a", 7, ""),
+		pointKV("b", 5, "b5"),
+		pointKV("c", 8, ""),
+		pointKV("d", 9, "d9"),
+		pointKV("x", 3, "x3"), // outside range descriptor
+	} {
+		require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+	}
+
+	for _, rk := range []storage.MVCCRangeKey{
+		rangeKey("a", "z", 1),
+		rangeKey("f", "o", 3),
+		rangeKey("q", "x", 7), // outside range descriptor
+		rangeKey("c", "g", 10),
+		rangeKey("a", "z", 12),
+	} {
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rk, nil))
+	}
+
+	gcThreshold := hlc.Timestamp{Logical: 10}
+	snap := eng.NewSnapshot()
+	desc := roachpb.RangeDescriptor{
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("k"),
+	}
+
+	gcer := &collectingGCer{}
+	info, err := Run(ctx, &desc, snap, gcThreshold, gcThreshold, RunOptions{}, 0,
+		gcer, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, Info{
+		Now:                         gcThreshold,
+		Threshold:                   gcThreshold,
+		NumKeysAffected:             3,
+		NumRangeKeyVersionsAffected: 3,
+		AffectedVersionsKeyBytes:    107,
+		AffectedVersionsValBytes:    4,
+	}, info)
+
+	require.Equal(t, [][]roachpb.GCRequest_GCKey{{
+		{Key: roachpb.Key("d"), Timestamp: hlc.Timestamp{Logical: 9}},
+		{Key: roachpb.Key("c"), Timestamp: hlc.Timestamp{Logical: 8}},
+		{Key: roachpb.Key("a"), Timestamp: hlc.Timestamp{Logical: 7}},
+	}}, gcer.keys)
+
+	require.Equal(t, [][]roachpb.GCRequest_GCRangeKey{{
+		{StartKey: roachpb.Key("c"), EndKey: roachpb.Key("g"), Timestamp: hlc.Timestamp{Logical: 10}},
+		{StartKey: roachpb.Key("f"), EndKey: roachpb.Key("k"), Timestamp: hlc.Timestamp{Logical: 3}},
+		{StartKey: roachpb.Key("a"), EndKey: roachpb.Key("k"), Timestamp: hlc.Timestamp{Logical: 1}},
+	}}, gcer.rangeKeys)
 }

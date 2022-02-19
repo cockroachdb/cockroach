@@ -688,9 +688,13 @@ type Writer interface {
 
 	// ExperimentalPutMVCCRangeKey writes a value to an MVCC range key. It is
 	// currently only used for range tombstones, which have a value of nil. Range
-	// keys exist separately from point keys in Pebble, and must be accessed via
-	// specialized iterator options and methods -- see e.g. IterOptions.KeyTypes,
-	// SimpleMVCCIterator.RangeKeys(), and MVCCRangeKeyIterator.
+	// keys with non-nil values will currently cause e.g. GC, backups, and
+	// rangefeeds to fail, as their semantics are not yet specified.
+	//
+	// Range keys exist separately from point keys in Pebble, and must be accessed
+	// via specialized iterator options and methods -- see e.g.
+	// IterOptions.KeyTypes, SimpleMVCCIterator.RangeKeys(), and
+	// MVCCRangeKeyIterator.
 	//
 	// A range key does not have a distinct identity, but should be considered a
 	// key continuum. They can be non-deterministically fragmented by Pebble,
