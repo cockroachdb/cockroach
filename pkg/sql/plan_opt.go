@@ -655,8 +655,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	return nil
 }
 
-// DecodeGist Avoid an import cycle by keeping the cat out of the tree, RFC: is
-// there a better way?
+// DecodeGist Avoid an import cycle by keeping the cat out of the tree.
 func (p *planner) DecodeGist(gist string) ([]string, error) {
 	return explain.DecodePlanGistToRows(gist, &p.optPlanningCtx.catalog)
 }
