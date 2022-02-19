@@ -147,7 +147,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
-        "//pkg/ccl/backupccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
@@ -164,6 +163,7 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobstest",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver",
