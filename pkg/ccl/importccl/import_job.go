@@ -15,7 +15,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -564,9 +564,9 @@ func prepareNewTablesForIngestion(
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
+	if err := ingesting.WriteDescriptors(ctx, p.ExecCfg().Codec, txn, p.User(), descsCol,
 		nil /* databases */, nil, /* schemas */
-		tableDescs, nil, tree.RequestedDescriptors, seqValKVs); err != nil {
+		tableDescs, nil, tree.RequestedDescriptors, seqValKVs, "" /* inheritParentName */); err != nil {
 		return nil, errors.Wrapf(err, "creating importTables")
 	}
 
