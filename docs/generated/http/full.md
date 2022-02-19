@@ -3782,6 +3782,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | Field | Type | Label | Description | Support status |
 | ----- | ---- | ----- | ----------- | -------------- |
 | key_data | [cockroach.sql.StatementStatisticsKey](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatisticsKey) |  |  | [reserved](#support-status) |
+| formatted_query | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | Formatted query is the return of the key_data.query after prettify_statement. The value from the key_data cannot be replaced by the fomratted value, because is used as is for diagnostic bundle. | [reserved](#support-status) |
 | app_names | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
 | stats | [cockroach.sql.StatementStatistics](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.sql.StatementStatistics) |  |  | [reserved](#support-status) |
 | aggregation_interval | [google.protobuf.Duration](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Duration) |  |  | [reserved](#support-status) |

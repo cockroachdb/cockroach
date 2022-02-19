@@ -407,17 +407,19 @@ func getStatementDetailsQueryClausesAndArgs(
 	// Statements are grouped ignoring the app name in the Statements/Transactions page, so when
 	// calling for the Statement Details endpoint, this value can be empty or a list of app names.
 	if len(req.AppNames) > 0 {
-		buffer.WriteString(" AND (")
-		for i, app := range req.AppNames {
-			if i != 0 {
-				args = append(args, app)
-				buffer.WriteString(fmt.Sprintf(" OR app_name = $%d", len(args)))
-			} else {
-				args = append(args, app)
-				buffer.WriteString(fmt.Sprintf(" app_name = $%d", len(args)))
+		if !(len(req.AppNames) == 1 && req.AppNames[0] == "") {
+			buffer.WriteString(" AND (")
+			for i, app := range req.AppNames {
+				if i != 0 {
+					args = append(args, app)
+					buffer.WriteString(fmt.Sprintf(" OR app_name = $%d", len(args)))
+				} else {
+					args = append(args, app)
+					buffer.WriteString(fmt.Sprintf(" app_name = $%d", len(args)))
+				}
 			}
+			buffer.WriteString(" )")
 		}
-		buffer.WriteString(" )")
 	}
 
 	start := getTimeFromSeconds(req.Start)
@@ -497,10 +499,10 @@ func getTotalStatementDetails(
 		return statement, err
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
-	statistics.Key.Query = queryPrettify
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
 		KeyData:             statistics.Key,
+		FormattedQuery:      queryPrettify,
 		AppNames:            appNames,
 		AggregationInterval: time.Duration(aggInterval.Nanos()),
 		Stats:               statistics.Stats,

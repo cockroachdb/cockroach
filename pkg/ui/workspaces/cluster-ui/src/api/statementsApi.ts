@@ -13,6 +13,10 @@ import { fetchData } from "src/api";
 import { propsToQueryString } from "src/util";
 
 const STATEMENTS_PATH = "/_status/statements";
+const STATEMENT_DETAILS_PATH = "/_status/stmtdetails";
+
+export type StatementsRequest = cockroach.server.serverpb.StatementsRequest;
+export type StatementDetailsRequest = cockroach.server.serverpb.StatementDetailsRequest;
 
 export const getStatements = (): Promise<cockroach.server.serverpb.StatementsResponse> => {
   return fetchData(
@@ -20,8 +24,6 @@ export const getStatements = (): Promise<cockroach.server.serverpb.StatementsRes
     STATEMENTS_PATH,
   );
 };
-
-export type StatementsRequest = cockroach.server.serverpb.StatementsRequest;
 
 export const getCombinedStatements = (
   req: StatementsRequest,
@@ -34,5 +36,21 @@ export const getCombinedStatements = (
   return fetchData(
     cockroach.server.serverpb.StatementsResponse,
     `${STATEMENTS_PATH}?${queryStr}`,
+  );
+};
+
+export const getStatementDetails = (
+  req: StatementDetailsRequest,
+): Promise<cockroach.server.serverpb.StatementDetailsResponse> => {
+  let queryStr = propsToQueryString({
+    start: req.start.toInt(),
+    end: req.end.toInt(),
+  });
+  for (const app of req.app_names) {
+    queryStr += `&appNames=${app}`;
+  }
+  return fetchData(
+    cockroach.server.serverpb.StatementDetailsResponse,
+    `${STATEMENT_DETAILS_PATH}/${req.fingerprint_id}?${queryStr}`,
   );
 };

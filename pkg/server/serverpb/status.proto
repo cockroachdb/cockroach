@@ -1335,9 +1335,13 @@ message StatementDetailsRequest {
 message StatementDetailsResponse {
   message CollectedStatementSummary {
     cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
-    repeated string app_names = 2 [(gogoproto.nullable) = false];
-    cockroach.sql.StatementStatistics stats = 3 [(gogoproto.nullable) = false];
-    google.protobuf.Duration aggregation_interval = 4 [(gogoproto.nullable) = false,
+    // Formatted query is the return of the key_data.query after prettify_statement.
+    // The value from the key_data cannot be replaced by the fomratted value, because is used as is for
+    // diagnostic bundle.
+    string formatted_query = 2;
+    repeated string app_names = 3;
+    cockroach.sql.StatementStatistics stats = 4 [(gogoproto.nullable) = false];
+    google.protobuf.Duration aggregation_interval = 5 [(gogoproto.nullable) = false,
       (gogoproto.stdduration) = true];
   }
 
