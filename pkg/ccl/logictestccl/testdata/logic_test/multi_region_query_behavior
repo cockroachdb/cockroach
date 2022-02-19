@@ -219,16 +219,12 @@ vectorized: true
 │   └── • error if rows
 │       │
 │       └── • lookup join (anti)
-│           │ estimated row count: 0
 │           │ table: customer@primary
+│           │ equality: (crdb_region_eq, h_c_w_id, h_c_d_id, h_c_id) = (crdb_region,c_w_id,c_d_id,c_id)
 │           │ equality cols are key
-│           │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
 │           │
-│           └── • lookup join (anti)
+│           └── • render
 │               │ estimated row count: 1
-│               │ table: customer@primary
-│               │ equality cols are key
-│               │ lookup condition: (((column3 = c_w_id) AND (column2 = c_d_id)) AND (column1 = c_id)) AND (crdb_region = 'ap-southeast-2')
 │               │
 │               └── • scan buffer
 │                     label: buffer 1
@@ -238,16 +234,12 @@ vectorized: true
     └── • error if rows
         │
         └── • lookup join (anti)
-            │ estimated row count: 0
             │ table: district@primary
+            │ equality: (crdb_region_eq, h_w_id, h_d_id) = (crdb_region,d_w_id,d_id)
             │ equality cols are key
-            │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region IN ('ca-central-1', 'us-east-1'))
             │
-            └── • lookup join (anti)
+            └── • render
                 │ estimated row count: 1
-                │ table: district@primary
-                │ equality cols are key
-                │ lookup condition: ((column5 = d_w_id) AND (column4 = d_id)) AND (crdb_region = 'ap-southeast-2')
                 │
                 └── • scan buffer
                       label: buffer 1
