@@ -467,17 +467,26 @@ func (f *txnKVFetcher) nextBatch(
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			// Note that t.Rows and batchResp might be nil when the ScanResponse
-			// is empty, and the caller (the KVFetcher) will skip over it.
-			return true, t.Rows, batchResp, nil
+			if len(t.Rows) > 0 {
+				return false, nil, nil, errors.AssertionFailedf(
+					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+				)
+			}
+			// Note that batchResp might be nil when the ScanResponse is empty,
+			// and the caller (the KVFetcher) will skip over it.
+			return true, nil, batchResp, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
 				batchResp, f.remainingBatches = popBatch(t.BatchResponses)
 			}
-			// Note that t.Rows and batchResp might be nil when the
-			// ReverseScanResponse is empty, and the caller (the KVFetcher) will
-			// skip over it.
-			return true, t.Rows, batchResp, nil
+			if len(t.Rows) > 0 {
+				return false, nil, nil, errors.AssertionFailedf(
+					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+				)
+			}
+			// Note that batchResp might be nil when the ReverseScanResponse is
+			// empty, and the caller (the KVFetcher) will skip over it.
+			return true, nil, batchResp, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {
 				return false, nil, nil, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
@@ -525,6 +534,10 @@ func (f *txnKVFetcher) close(ctx context.Context) {
 	f.acc.Clear(ctx)
 }
 
+// spansToRequests converts the provided spans to the corresponding requests. If
+// a span doesn't have the EndKey set, then a Get request is used for it;
+// otherwise, a Scan (or ReverseScan if reverse is true) request is used with
+// BATCH_RESPONSE format.
 func spansToRequests(
 	spans roachpb.Spans, reverse bool, keyLocking lock.Strength,
 ) []roachpb.RequestUnion {

@@ -75,12 +75,15 @@ type Result struct {
 	// The responses are to be considered immutable; the Streamer might hold on
 	// to the respective memory. Calling Result.Release() tells the Streamer
 	// that the response is no longer needed.
+	//
+	// GetResp is guaranteed to have nil IntentValue.
 	GetResp *roachpb.GetResponse
 	// ScanResp can contain a partial response to a ScanRequest (when Complete
 	// is false). In that case, there will be a further result with the
 	// continuation; that result will use the same Key. Notably, SQL rows will
 	// never be split across multiple results.
 	ScanResp struct {
+		// The response is always using BATCH_RESPONSE format.
 		*roachpb.ScanResponse
 		// If the Result represents a scan result, Complete indicates whether
 		// this is the last response for the respective scan, or if there are
@@ -1236,10 +1239,12 @@ func (w *workerCoordinator) performRequestAsync(
 
 			// Finally, process the results and add the ResumeSpans to be
 			// processed as well.
-			w.processSingleRangeResults(
+			if err := w.processSingleRangeResults(
 				req, br, memoryFootprintBytes, resumeReqsMemUsage,
 				numIncompleteGets, numIncompleteScans,
-			)
+			); err != nil {
+				w.s.setError(err)
+			}
 		}); err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
@@ -1318,7 +1323,7 @@ func (w *workerCoordinator) processSingleRangeResults(
 	memoryFootprintBytes int64,
 	resumeReqsMemUsage int64,
 	numIncompleteGets, numIncompleteScans int,
-) {
+) error {
 	numIncompleteRequests := numIncompleteGets + numIncompleteScans
 	var resumeReq singleRangeBatch
 	// We have to allocate the new slice for requests, but we can reuse the
@@ -1372,6 +1377,11 @@ func (w *workerCoordinator) processSingleRangeResults(
 				resumeReqIdx++
 			} else {
 				// This Get was completed.
+				if get.IntentValue != nil {
+					return errors.AssertionFailedf(
+						"unexpectedly got an IntentValue back from a SQL GetRequest %v", *get.IntentValue,
+					)
+				}
 				result := Result{
 					GetResp: get,
 					// This currently only works because all requests are
@@ -1388,8 +1398,13 @@ func (w *workerCoordinator) processSingleRangeResults(
 
 		case *roachpb.ScanRequest:
 			scan := reply.(*roachpb.ScanResponse)
-			if len(scan.Rows) > 0 || len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
-				// Only the last part of the conditional is true whenever we
+			if len(scan.Rows) > 0 {
+				return errors.AssertionFailedf(
+					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+				)
+			}
+			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
+				// Only the second part of the conditional is true whenever we
 				// received an empty response for the Scan request (i.e. there
 				// was no data in the span to scan). In such a scenario we still
 				// create a Result with no data that the client will skip over
@@ -1470,6 +1485,8 @@ func (w *workerCoordinator) processSingleRangeResults(
 	if len(resumeReq.reqs) > 0 {
 		w.addRequest(resumeReq)
 	}
+
+	return nil
 }
 
 // finalizeSingleRangeResults "finalizes" the results of evaluation of a
