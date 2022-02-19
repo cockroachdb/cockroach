@@ -177,7 +177,7 @@ func (s *ColIndexJoin) Next() coldata.Batch {
 				// Because index joins discard input rows, we do not have to maintain a
 				// reference to input tuples after span generation. So, we can discard
 				// the input batch reference on each iteration.
-				endIdx := s.findEndIndex(len(spans) > 0)
+				endIdx := s.findEndIndex(rowCount > 0)
 				rowCount += endIdx - s.startIdx
 				s.spanAssembler.ConsumeBatch(s.batch, s.startIdx, endIdx)
 				s.startIdx = endIdx
