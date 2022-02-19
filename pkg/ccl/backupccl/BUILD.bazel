@@ -69,7 +69,6 @@ go_library(
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catconstants",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descbuilder",
