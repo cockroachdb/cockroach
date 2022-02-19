@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -8539,7 +8540,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		&unused)
 
 	expectedStatus := []string{string(jobs.StatusSucceeded), string(jobs.StatusRunning)}
-	CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeRestore.UnixNano(), jobID, "restore",
 		"RESTORE")
 
 	sqlDB.Exec(t, `DROP DATABASE r1`)
@@ -8556,7 +8557,7 @@ func TestRestoreJobEventLogging(t *testing.T) {
 		string(jobs.StatusFailed), string(jobs.StatusReverting),
 		string(jobs.StatusRunning),
 	}
-	CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
+	jobstest.CheckEmittedEvents(t, expectedStatus, beforeSecondRestore.UnixNano(), jobID,
 		"restore", "RESTORE")
 }
 

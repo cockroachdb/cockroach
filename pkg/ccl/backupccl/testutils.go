@@ -11,18 +11,15 @@ package backupccl
 import (
 	"context"
 	gosql "database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -36,8 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -403,56 +398,6 @@ func uriFmtStringAndArgs(uris []string) (string, []interface{}) {
 	}
 	return fmtString.String(), urisForFormat
 }
-
-// CheckEmittedEvents is a helper method used by IMPORT and RESTORE tests to
-// ensure events are emitted deterministically.
-func CheckEmittedEvents(
-	t *testing.T,
-	expectedStatus []string,
-	startTime int64,
-	jobID int64,
-	expectedMessage, expectedJobType string,
-) {
-	// Check that the structured event was logged.
-	testutils.SucceedsSoon(t, func() error {
-		log.Flush()
-		entries, err := log.FetchEntriesFromFiles(startTime,
-			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
-		if err != nil {
-			t.Fatal(err)
-		}
-		foundEntry := false
-		var matchingEntryIndex int
-		for _, e := range entries {
-			if !strings.Contains(e.Message, expectedMessage) {
-				continue
-			}
-			foundEntry = true
-			// TODO(knz): Remove this when crdb-v2 becomes the new format.
-			e.Message = strings.TrimPrefix(e.Message, "Structured entry:")
-			// crdb-v2 starts json with an equal sign.
-			e.Message = strings.TrimPrefix(e.Message, "=")
-			jsonPayload := []byte(e.Message)
-			var ev eventpb.CommonJobEventDetails
-			if err := json.Unmarshal(jsonPayload, &ev); err != nil {
-				t.Errorf("unmarshalling %q: %v", e.Message, err)
-			}
-			require.Equal(t, expectedJobType, ev.JobType)
-			require.Equal(t, jobID, ev.JobID)
-			if matchingEntryIndex >= len(expectedStatus) {
-				return errors.New("more events fround in log than expected")
-			}
-			require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
-			matchingEntryIndex++
-		}
-		if !foundEntry {
-			return errors.New("structured entry for import not found in log")
-		}
-		return nil
-	})
-}
-
-var cmLogRe = regexp.MustCompile(`event_log\.go`)
 
 // waitForTableSplit waits for the dbName.tableName range to split. This is
 // often used by tests that rely on SpanConfig fields being applied to the table
