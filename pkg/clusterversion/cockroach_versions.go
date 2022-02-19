@@ -306,6 +306,9 @@ const (
 	// ExperimentalMVCCRangeTombstones enables the use of highly experimental MVCC
 	// range tombstones.
 	ExperimentalMVCCRangeTombstones
+	// ExperimentalGCRanges is the version where the ExperimentalRanges parameter
+	// for GCRequest was added.
+	ExperimentalGCRanges
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -498,7 +501,10 @@ var versionsSingleton = keyedVersions{
 		Key:     ExperimentalMVCCRangeTombstones,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 78},
 	},
-
+	{
+		Key:     ExperimentalGCRanges,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 80},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
