@@ -75,13 +75,24 @@ func (idw intentDemuxWriter) PutIntent(
 func (idw intentDemuxWriter) ClearMVCCRangeAndIntents(
 	start, end roachpb.Key, buf []byte,
 ) ([]byte, error) {
+	// Clear point keys.
 	err := idw.w.ClearRawRange(start, end)
 	if err != nil {
 		return buf, err
 	}
+	// Clear separated intents.
 	lstart, buf := keys.LockTableSingleKey(start, buf)
 	lend, _ := keys.LockTableSingleKey(end, nil)
-	return buf, idw.w.ClearRawRange(lstart, lend)
+	err = idw.w.ClearRawRange(lstart, lend)
+	if err != nil {
+		return buf, err
+	}
+	// Clear range keys.
+	err = idw.w.ExperimentalClearMVCCRangeKeys(start, end)
+	if err != nil {
+		return buf, err
+	}
+	return buf, nil
 }
 
 // wrappableReader is used to implement a wrapped Reader. A wrapped Reader

@@ -67,7 +67,7 @@ import (
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
-// clear_range     k=<key> end=<key>
+// clear_range     k=<key> end=<key> [useIter]
 // clear_range_key k=<key> end=<key> [ts=<int>[,<int>]]
 // revert_range    [ts=<int>[,<int>]] k=<key> end=<key> revertTS=<int>[,int] [deleteRangeThreshold=<int>] [maxBatchSize=<int>] [maxBatchBytes=<int>]
 //
@@ -606,27 +606,15 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	if err := e.engine.ClearMVCCRangeAndIntents(key, endKey); err != nil {
-		return err
+	useIter := e.hasArg("useIter")
+	if !useIter {
+		return e.engine.ClearMVCCRangeAndIntents(key, endKey)
 	}
-	// TODO(erikgrinaker): Consider removing range keys in ClearMVCCRangeAndIntents.
-	iter := NewMVCCRangeKeyIterator(e.engine, MVCCRangeKeyIterOptions{
-		LowerBound: key,
+	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 		UpperBound: endKey,
 	})
 	defer iter.Close()
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return err
-		} else if !ok {
-			break
-		}
-		if err := e.engine.ExperimentalClearMVCCRangeKey(iter.Key()); err != nil {
-			return err
-		}
-		iter.Next()
-	}
-	return nil
+	return e.engine.ClearIterRange(iter, key, endKey)
 }
 
 func cmdClearRangeKey(e *evalCtx) error {
