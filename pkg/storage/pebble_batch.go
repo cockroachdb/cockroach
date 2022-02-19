@@ -410,6 +410,10 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 			return err
 		}
 	}
+	err := p.ExperimentalClearMVCCRangeKeys(start, end)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -422,6 +426,14 @@ func (p *pebbleBatch) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error
 		encodeMVCCKeyPrefix(rangeKey.StartKey),
 		encodeMVCCKeyPrefix(rangeKey.EndKey),
 		encodeMVCCTimestampSuffix(rangeKey.Timestamp),
+		nil)
+}
+
+// ExperimentalClearMVCCRangeKeys implements the Engine interface.
+func (p *pebbleBatch) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
+	return p.batch.Experimental().RangeKeyDelete(
+		encodeMVCCKeyPrefix(start),
+		encodeMVCCKeyPrefix(end),
 		nil)
 }
 

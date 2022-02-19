@@ -67,7 +67,7 @@ import (
 //
 // merge     [ts=<int>[,<int>]] k=<key> v=<string> [raw]
 //
-// clear_range     k=<key> end=<key>
+// clear_range     k=<key> end=<key> [useIter]
 // clear_range_key k=<key> end=<key> [ts=<int>[,<int>]]
 //
 // Where `<key>` can be a simple string, or a string
@@ -604,7 +604,15 @@ func cmdCheckIntent(e *evalCtx) error {
 
 func cmdClearRange(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
-	return e.engine.ClearMVCCRangeAndIntents(key, endKey)
+	useIter := e.hasArg("useIter")
+	if !useIter {
+		return e.engine.ClearMVCCRangeAndIntents(key, endKey)
+	}
+	iter := e.engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		UpperBound: endKey,
+	})
+	defer iter.Close()
+	return e.engine.ClearIterRange(iter, key, endKey)
 }
 
 func cmdClearRangeKey(e *evalCtx) error {

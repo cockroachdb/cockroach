@@ -624,6 +624,10 @@ func (s spanSetWriter) ExperimentalClearMVCCRangeKey(rangeKey storage.MVCCRangeK
 	panic("not implemented")
 }
 
+func (s spanSetWriter) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
+	panic("not implemented")
+}
+
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {

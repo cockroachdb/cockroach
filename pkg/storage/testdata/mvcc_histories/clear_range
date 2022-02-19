@@ -9,9 +9,15 @@ with t=A v=abc resolve
   put  k=b
   put  k=b/123
   put  k=c
+del_range_ts k=a end=d ts=50 # range tombstone
+del_range_ts k=ba end=f ts=60 # range tombstone
 ----
+del_range_ts: {a-d}/50.000000000,0
+del_range_ts: {ba-f}/60.000000000,0
 >> at end:
 txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
+range key: {a-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
 data: "a"/44.000000000,0 -> /BYTES/abc
 data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
@@ -23,6 +29,8 @@ run ok
 clear_range k=a end=+a
 ----
 >> at end:
+range key: {a\x00-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
 data: "a/123"/44.000000000,0 -> /BYTES/abc
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
@@ -32,6 +40,8 @@ run ok
 clear_range k=a end=-a
 ----
 >> at end:
+range key: {b-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
@@ -40,6 +50,8 @@ run ok
 clear_range k=a end==b
 ----
 >> at end:
+range key: {b-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
 data: "b"/44.000000000,0 -> /BYTES/abc
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
@@ -48,6 +60,8 @@ run ok
 clear_range k=a end=+b
 ----
 >> at end:
+range key: {b\x00-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
 data: "b/123"/44.000000000,0 -> /BYTES/abc
 data: "c"/44.000000000,0 -> /BYTES/abc
 
@@ -55,10 +69,104 @@ run ok
 clear_range k=a end=-b
 ----
 >> at end:
+range key: {c-d}/50.000000000,0 -> []
+range key: {c-f}/60.000000000,0 -> []
 data: "c"/44.000000000,0 -> /BYTES/abc
 
 run ok
 clear_range k=a end=-c
+----
+>> at end:
+range key: {d-f}/60.000000000,0 -> []
+
+run ok
+clear_range k=a end=z
+----
+>> at end:
+<no data>
+
+# Now do it again using an iterator, i.e. Engine.ClearIterRange().
+
+run ok
+with t=B v=abc resolve
+  txn_begin ts=44
+  put  k=a
+  put  k=a/123
+  put  k=b
+  put  k=b/123
+  put  k=c
+del_range_ts k=a end=d ts=50 # range tombstone
+del_range_ts k=ba end=f ts=60 # range tombstone
+----
+del_range_ts: {a-d}/50.000000000,0
+del_range_ts: {ba-f}/60.000000000,0
+>> at end:
+txn: "B" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=44.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
+range key: {a-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
+data: "a"/44.000000000,0 -> /BYTES/abc
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+
+run ok
+clear_range k=a end=+a useIter
+----
+>> at end:
+range key: {a\x00-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
+data: "a/123"/44.000000000,0 -> /BYTES/abc
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-a useIter
+----
+>> at end:
+range key: {b-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end==b useIter
+----
+>> at end:
+range key: {b-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
+data: "b"/44.000000000,0 -> /BYTES/abc
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=+b useIter
+----
+>> at end:
+range key: {b\x00-d}/50.000000000,0 -> []
+range key: {ba-f}/60.000000000,0 -> []
+data: "b/123"/44.000000000,0 -> /BYTES/abc
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-b useIter
+----
+>> at end:
+range key: {c-d}/50.000000000,0 -> []
+range key: {c-f}/60.000000000,0 -> []
+data: "c"/44.000000000,0 -> /BYTES/abc
+
+run ok
+clear_range k=a end=-c useIter
+----
+>> at end:
+range key: {d-f}/60.000000000,0 -> []
+
+run ok
+clear_range k=a end=z useIter
 ----
 >> at end:
 <no data>

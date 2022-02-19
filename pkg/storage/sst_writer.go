@@ -141,6 +141,11 @@ func (fw *SSTWriter) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error 
 	panic("not implemented")
 }
 
+// ExperimentalClearMVCCRangeKeys implements the Writer interface.
+func (fw *SSTWriter) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
+	panic("not implemented")
+}
+
 func (fw *SSTWriter) clearRange(start, end MVCCKey) error {
 	if fw.fw == nil {
 		return errors.New("cannot call ClearRange on a closed writer")

@@ -358,11 +358,11 @@ message DeleteRangeResponse {
   repeated bytes keys = 2 [(gogoproto.casttype) = "Key"];
 }
 
-// A ClearRangeRequest is the argument to the ClearRange() method. It
-// specifies a range of keys to clear from the underlying engine. Note
-// that this differs from the behavior of DeleteRange, which sets
-// transactional intents and writes tombstones to the deleted
-// keys. ClearRange is used when permanently dropping or truncating
+// A ClearRangeRequest is the argument to the ClearRange() method. It specifies
+// a range of keys to clear from the underlying engine, removing both point keys
+// and any MVCC range tombstones. Note that this differs from the behavior of
+// DeleteRange, which sets transactional intents and writes tombstones to the
+// deleted keys. ClearRange is used when permanently dropping or truncating
 // table data.
 //
 // ClearRange also updates the GC threshold for the range to the

@@ -51,7 +51,8 @@ func declareKeysClearRange(
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
-// span, adjusting the MVCC stats accordingly.
+// span, adjusting the MVCC stats accordingly. It clears both point keys
+// and range tombstones.
 //
 // Note that "correct" use of this command is only possible for key
 // spans consisting of user data that we know is not being written to

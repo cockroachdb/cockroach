@@ -1138,6 +1138,14 @@ func (p *Pebble) ExperimentalClearMVCCRangeKey(rangeKey MVCCRangeKey) error {
 		pebble.Sync)
 }
 
+// ExperimentalClearMVCCRangeKeys implements the Engine interface.
+func (p *Pebble) ExperimentalClearMVCCRangeKeys(start, end roachpb.Key) error {
+	return p.db.Experimental().RangeKeyDelete(
+		encodeMVCCKeyPrefix(start),
+		encodeMVCCKeyPrefix(end),
+		pebble.Sync)
+}
+
 // ExperimentalPutMVCCRangeKey implements the Engine interface.
 func (p *Pebble) ExperimentalPutMVCCRangeKey(rangeKey MVCCRangeKey, value []byte) error {
 	if err := rangeKey.Validate(); err != nil {
@@ -1940,6 +1948,10 @@ func (p *pebbleReadOnly) ExperimentalPutMVCCRangeKey(_ MVCCRangeKey, _ []byte) e
 }
 
 func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKey(_ MVCCRangeKey) error {
+	panic("not implemented")
+}
+
+func (p *pebbleReadOnly) ExperimentalClearMVCCRangeKeys(_, _ roachpb.Key) error {
 	panic("not implemented")
 }
 
