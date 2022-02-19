@@ -11,6 +11,7 @@ package sqlproxyccl
 import (
 	"context"
 	"crypto/tls"
+	gosql "database/sql"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl/denylist"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -749,6 +752,264 @@ func TestDirectoryConnect(t *testing.T) {
 			// Ensure failure was due to forced drain disconnection.
 			require.Equal(t, int64(1), proxy.metrics.IdleDisconnectCount.Count())
 		})
+	})
+}
+
+func TestConnectionMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	defer log.Scope(t).Close(t)
+
+	params, _ := tests.CreateTestServerParams()
+	s, _, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+	tenantID := serverutils.TestTenantID()
+
+	// Start first SQL pod.
+	tenant1, mainDB1 := serverutils.StartTenant(t, s, tests.CreateTestTenantParams(tenantID))
+	tenant1.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant1.Stopper().Stop(ctx)
+	defer mainDB1.Close()
+
+	// Start second SQL pod.
+	params2 := tests.CreateTestTenantParams(tenantID)
+	params2.Existing = true
+	tenant2, mainDB2 := serverutils.StartTenant(t, s, params2)
+	tenant2.PGServer().(*pgwire.Server).TestingSetTrustClientProvidedRemoteAddr(true)
+	defer tenant2.Stopper().Stop(ctx)
+	defer mainDB2.Close()
+
+	_, err := mainDB1.Exec("CREATE USER testuser WITH PASSWORD 'hunter2'")
+	require.NoError(t, err)
+	_, err = mainDB1.Exec("GRANT admin TO testuser")
+	require.NoError(t, err)
+	_, err = mainDB1.Exec("SET CLUSTER SETTING server.user_login.session_revival_token.enabled = true")
+	require.NoError(t, err)
+
+	// Create a proxy server without using a directory. The directory is very
+	// difficult to work with, and there isn't a way to easily stub out fake
+	// loads without using testutils.TestingHook. We want to move away from
+	// TestingHook and use testingKnobs instead.
+	//
+	// For this test, we will stub out lookupAddr in the connector. We will
+	// alternate between tenant1 and tenant2, starting with tenant1.
+	var connForwarder *forwarder
+	var lookupAddrDelayDuration time.Duration
+	var mu struct {
+		syncutil.Mutex
+		lookupAddrCount, validateStartTransferStateCount int
+	}
+	opts := &ProxyOptions{SkipVerify: true, RoutingRule: tenant1.SQLAddr()}
+	opts.testingKnobs.afterForward = func(f *forwarder) {
+		require.Nil(t, connForwarder, "only one connection is allowed")
+		connForwarder = f
+
+		f.connect.testingKnobs.lookupAddr = func(ctx context.Context) (string, error) {
+			mu.Lock()
+			mu.lookupAddrCount++
+			count := mu.lookupAddrCount
+			mu.Unlock()
+			if lookupAddrDelayDuration != 0 {
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				case <-time.After(lookupAddrDelayDuration):
+				}
+			}
+			if count%2 == 0 {
+				return tenant1.SQLAddr(), nil
+			}
+			return tenant2.SQLAddr(), nil
+		}
+		// Just a hook to count how many times we attempted a transfer since we
+		// don't have metrics yet.
+		f.testingKnobs.isValidStartTransferStateResponse = func(m *pgproto3.RowDescription) bool {
+			mu.Lock()
+			mu.validateStartTransferStateCount++
+			mu.Unlock()
+			return isValidStartTransferStateResponse(m)
+		}
+	}
+	_, addr := newSecureProxyServer(ctx, t, s.Stopper(), opts)
+
+	// The tenant ID does not matter here since we stubbed RoutingRule.
+	connectionString := fmt.Sprintf("postgres://testuser:hunter2@%s/?sslmode=require&options=--cluster=tenant-cluster-28", addr)
+
+	type queryer interface {
+		QueryRow(string, ...interface{}) *gosql.Row
+	}
+	// queryAddr queries the SQL node that `db` is connected to for its address.
+	queryAddr := func(t *testing.T, db queryer) string {
+		t.Helper()
+		var host, port string
+		require.NoError(t, db.QueryRow(`
+			SELECT
+				a.value AS "host", b.value AS "port"
+			FROM crdb_internal.node_runtime_info a, crdb_internal.node_runtime_info b
+			WHERE a.component = 'DB' AND a.field = 'Host'
+				AND b.component = 'DB' AND b.field = 'Port'
+		`).Scan(&host, &port))
+		return fmt.Sprintf("%s:%s", host, port)
+	}
+
+	reset := func() {
+		mu.Lock()
+		defer mu.Unlock()
+
+		connForwarder = nil
+		mu.lookupAddrCount = 0
+		mu.validateStartTransferStateCount = 0
+		lookupAddrDelayDuration = 0
+	}
+
+	// Test that connection transfers are successful.
+	t.Run("successful", func(t *testing.T) {
+		testCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer reset()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Run query once to ensure that connection is opened.
+		require.Equal(t, tenant1.SQLAddr(), queryAddr(t, db))
+		require.NotNil(t, connForwarder)
+
+		// Show that we get alternating SQL pods when we transfer.
+		connForwarder.RequestTransfer()
+		require.Eventually(t, func() bool {
+			return tenant2.SQLAddr() == queryAddr(t, db)
+		}, 3*time.Second, 100*time.Millisecond)
+
+		connForwarder.RequestTransfer()
+		require.Eventually(t, func() bool {
+			return tenant1.SQLAddr() == queryAddr(t, db)
+		}, 3*time.Second, 100*time.Millisecond)
+
+		// Now attempt a transfer concurrently with requests. Goroutine attempts
+		// a transfer every 500ms.
+		go func() {
+			for {
+				if testCtx.Err() != nil {
+					return
+				}
+				connForwarder.RequestTransfer()
+				time.Sleep(500 * time.Millisecond)
+			}
+		}()
+
+		// This test runs for 5 seconds.
+		var tenant1Addr, tenant2Addr int
+		for i := 0; i < 100; i++ {
+			addr := queryAddr(t, db)
+			if addr == tenant1.SQLAddr() {
+				tenant1Addr++
+			} else {
+				require.Equal(t, tenant2.SQLAddr(), addr)
+				tenant2Addr++
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+
+		// Ensure that lookupAddr is called more than 2 (the first 2 were manual).
+		mu.Lock()
+		defer mu.Unlock()
+		require.True(t, mu.lookupAddrCount > 2)
+
+		// Since we transfer once every 500ms for a 5 second test, we'd expect
+		// ~10 transfers. Just check that we have at least 4 transfers here,
+		// two per node.
+		//
+		// TODO(jaylim-crl): Once we have transfer-related metrics, we could
+		// update this logic to be more concise.
+		require.True(t, mu.validateStartTransferStateCount > 4)
+		require.True(t, tenant1Addr > 2)
+		require.True(t, tenant2Addr > 2)
+	})
+
+	// Test that connections cannot be transferred in some cases, e.g. with
+	// transactions, but can be transferred once the they are closed.
+	t.Run("cannot_transfer", func(t *testing.T) {
+		testCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer reset()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Run query once to ensure that connection is opened.
+		require.Equal(t, tenant1.SQLAddr(), queryAddr(t, db))
+		require.NotNil(t, connForwarder)
+
+		err = crdb.ExecuteTx(testCtx, db, nil /* txopts */, func(tx *gosql.Tx) error {
+			// TODO(jaylim-crl): Once we have metrics, we can update this
+			// logic to include transfers which didn't go through. For now,
+			// we will just check that we attempted to validate the transfer
+			// state.
+			for i := 0; i < 10; i++ {
+				connForwarder.RequestTransfer()
+				addr := queryAddr(t, tx)
+				if tenant1.SQLAddr() != addr {
+					return errors.Newf("address does not match, expected %s, found %s",
+						tenant1.SQLAddr(), addr)
+				}
+				time.Sleep(50 * time.Millisecond)
+			}
+			return nil
+		})
+
+		require.NoError(t, err)
+		// Just check that we have half of what we requested since we cannot
+		// guarantee that the transfer will run within 50ms.
+		mu.Lock()
+		prev := mu.validateStartTransferStateCount
+		mu.Unlock()
+		require.True(t, prev >= 5)
+
+		// Once the transaction is closed, transfers should work.
+
+		connForwarder.RequestTransfer()
+		require.Eventually(t, func() bool {
+			return tenant2.SQLAddr() == queryAddr(t, db)
+		}, 3*time.Second, 100*time.Millisecond)
+
+		mu.Lock()
+		curr := mu.validateStartTransferStateCount
+		mu.Unlock()
+		require.Equal(t, prev+1, curr)
+	})
+
+	// Transfer timeout caused by dial issues should not close the connection.
+	// We will test this by introducing delays when connecting to the SQL pod.
+	t.Run("transfer_timeout", func(t *testing.T) {
+		defer reset()
+
+		db, err := gosql.Open("postgres", connectionString)
+		db.SetMaxOpenConns(1)
+		defer db.Close()
+		require.NoError(t, err)
+
+		// Run query once to ensure that connection is opened.
+		require.Equal(t, tenant1.SQLAddr(), queryAddr(t, db))
+		require.NotNil(t, connForwarder)
+
+		// Set the delay longer than the timeout.
+		lookupAddrDelayDuration = 6 * time.Second
+		connForwarder.testingKnobs.transferTimeoutDuration = func() time.Duration {
+			return 3 * time.Second
+		}
+
+		connForwarder.RequestTransfer()
+		require.Eventually(t, func() bool {
+			mu.Lock()
+			defer mu.Unlock()
+			return mu.lookupAddrCount >= 1
+		}, 3*time.Second, 100*time.Millisecond)
+		require.Equal(t, tenant1.SQLAddr(), queryAddr(t, db))
 	})
 }
 
