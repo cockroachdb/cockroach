@@ -62,3 +62,25 @@ query T
 SELECT crdb_internal.decode_plan_gist('$gist')
 ----
 • <unknown>
+
+# Regression test for #76800
+statement ok
+CREATE TABLE t2 (a int, b int, c int, d int, e int)
+
+let $gist
+EXPLAIN (GIST) SELECT * FROM t2
+
+# To hit bug requires deleting lots of columns because of hidden columns.
+statement ok
+ALTER TABLE t2 DROP COLUMN b;
+ALTER TABLE t2 DROP COLUMN c;
+ALTER TABLE t2 DROP COLUMN a;
+ALTER TABLE t2 DROP COLUMN d;
+ALTER TABLE t2 DROP COLUMN e
+
+query T
+SELECT crdb_internal.decode_plan_gist('$gist')
+----
+• scan
+  table: t2@t2_pkey
+  spans: FULL SCAN
