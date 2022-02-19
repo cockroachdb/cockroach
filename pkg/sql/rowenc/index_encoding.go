@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -69,16 +68,6 @@ func EncodeIndexKey(
 		keyPrefix,
 	)
 	containsNull = colIDWithNullVal != 0
-	if err == nil && containsNull && index.Primary() {
-		col, findErr := tableDesc.FindColumnWithID(colIDWithNullVal)
-		if findErr != nil {
-			return nil, true, errors.WithAssertionFailure(findErr)
-		}
-		if col.IsNullable() {
-			return nil, true, errors.AssertionFailedf("primary key column %q should not be nullable", col.GetName())
-		}
-		return nil, true, sqlerrors.NewNonNullViolationError(col.GetName())
-	}
 	return key, containsNull, err
 }
 
