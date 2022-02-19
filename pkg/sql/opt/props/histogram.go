@@ -817,9 +817,10 @@ func getRangesBeforeAndAfter(
 	) (rngBefore, rngAfter float64, ok bool) {
 
 		// Utilizes an array to simplify number of repetitive calls.
-		boundArr := []tree.Datum{lowerBoundBefore, upperBoundBefore, lowerBoundAfter,
-			upperBoundAfter}
-		boundArrByte := make([][]byte, 4)
+		boundArr := [4]tree.Datum{
+			lowerBoundBefore, upperBoundBefore, lowerBoundAfter, upperBoundAfter,
+		}
+		var boundArrByte [4][]byte
 
 		for i := range boundArr {
 			var err error
@@ -874,7 +875,7 @@ func isDiscrete(typ *types.T) bool {
 // cockroach db.
 func isNonNumeric(typ *types.T) bool {
 	switch typ.Family() {
-	case types.StringFamily, types.UuidFamily, types.INetFamily:
+	case types.StringFamily, types.BytesFamily, types.UuidFamily, types.INetFamily:
 		return true
 	}
 	return false
@@ -883,12 +884,7 @@ func isNonNumeric(typ *types.T) bool {
 // getCommonPrefix returns the first index where the value at said index differs
 // across all byte arrays in byteArr. byteArr must contain at least one element
 // to compute a common prefix.
-func getCommonPrefix(byteArr [][]byte) int {
-
-	if len(byteArr) <= 0 {
-		panic(errors.AssertionFailedf("byteArr must have at least one element"))
-	}
-
+func getCommonPrefix(byteArr [4][]byte) int {
 	// Checks if the current value at index is the same between all byte arrays.
 	currIndMatching := func(ind int) bool {
 		for i := 0; i < len(byteArr); i++ {
