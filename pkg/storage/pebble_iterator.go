@@ -12,6 +12,7 @@ package storage
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"sync"
 
@@ -48,6 +49,9 @@ type pebbleIterator struct {
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
 	prefix bool
+	// onlyPoints will skip over positions that only have a range key. It's
+	// only effective for MVCCIterator methods.
+	onlyPoints bool
 	// If reusable is true, Close() does not actually close the underlying
 	// iterator, but simply marks it as not inuse. Used by pebbleReadOnly.
 	reusable bool
@@ -167,7 +171,19 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 		panic("min timestamp hint set without max timestamp hint")
 	}
 
-	p.options.KeyTypes = opts.KeyTypes
+	switch opts.KeyTypes {
+	case IterKeyTypePointsOnly:
+		p.options.KeyTypes = pebble.IterKeyTypePointsOnly
+	case IterKeyTypePointsAndRanges:
+		p.options.KeyTypes = pebble.IterKeyTypePointsAndRanges
+	case IterKeyTypePointsWithRanges:
+		p.options.KeyTypes = pebble.IterKeyTypePointsAndRanges
+		p.onlyPoints = true
+	case IterKeyTypeRangesOnly:
+		p.options.KeyTypes = pebble.IterKeyTypeRangesOnly
+	default:
+		panic(fmt.Sprintf("unknown key type %v", opts.KeyTypes))
+	}
 
 	if doClone {
 		var err error
@@ -276,6 +292,7 @@ func (p *pebbleIterator) SeekGE(key MVCCKey) {
 	} else {
 		p.iter.SeekGE(p.keyBuf)
 	}
+	p.maybeSkipRangeKeys()
 }
 
 // SeekIntentGE implements the MVCCIterator interface.
@@ -380,6 +397,7 @@ func (p *pebbleIterator) Next() {
 		return
 	}
 	p.iter.Next()
+	p.maybeSkipRangeKeys()
 }
 
 // NextEngineKey implements the Engineterator interface.
@@ -428,10 +446,12 @@ func (p *pebbleIterator) NextKey() {
 	if !p.iter.Next() {
 		return
 	}
+	p.maybeSkipRangeKeys()
 	if bytes.Equal(p.keyBuf, p.UnsafeKey().Key) {
 		// This is equivalent to:
 		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
 		p.iter.SeekGE(append(p.keyBuf, 0, 0))
+		p.maybeSkipRangeKeys()
 	}
 }
 
@@ -487,6 +507,7 @@ func (p *pebbleIterator) SeekLT(key MVCCKey) {
 	p.mvccDone = false
 	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], key)
 	p.iter.SeekLT(p.keyBuf)
+	p.maybeSkipRangeKeys()
 }
 
 // SeekEngineKeyLT implements the EngineIterator interface.
@@ -528,6 +549,7 @@ func (p *pebbleIterator) Prev() {
 		return
 	}
 	p.iter.Prev()
+	p.maybeSkipRangeKeys()
 }
 
 // PrevEngineKey implements the EngineIterator interface.
@@ -554,6 +576,27 @@ func (p *pebbleIterator) PrevEngineKeyWithLimit(
 		return state, p.iter.Error()
 	}
 	return state, nil
+}
+
+// maybeSkipRangeKeys skips to the next point key if p.onlyPoints is enabled and
+// the current position is not at a point key.
+func (p *pebbleIterator) maybeSkipRangeKeys() {
+	if !p.onlyPoints {
+		return
+	}
+	for {
+		if ok, err := p.Valid(); err != nil || !ok {
+			return
+		}
+		if hasPoint, _ := p.HasPointAndRange(); hasPoint {
+			return
+		}
+		if p.mvccDirIsReverse {
+			p.iter.Prev()
+		} else {
+			p.iter.Next()
+		}
+	}
 }
 
 // Key implements the MVCCIterator interface.
