@@ -354,15 +354,22 @@ type IterOptions struct {
 // IterKeyType configures which types of keys an iterator should surface.
 //
 // TODO(erikgrinaker): Combine this with MVCCIterKind somehow.
-type IterKeyType = pebble.IterKeyType
+type IterKeyType uint8
 
 const (
 	// IterKeyTypePointsOnly iterates over point keys only.
-	IterKeyTypePointsOnly = pebble.IterKeyTypePointsOnly
+	IterKeyTypePointsOnly IterKeyType = iota
 	// IterKeyTypePointsAndRanges iterates over both point and range keys.
-	IterKeyTypePointsAndRanges = pebble.IterKeyTypePointsAndRanges
+	IterKeyTypePointsAndRanges
 	// IterKeyTypeRangesOnly iterates over only range keys.
-	IterKeyTypeRangesOnly = pebble.IterKeyTypeRangesOnly
+	IterKeyTypeRangesOnly
+	// IterKeyTypePointsWithRanges iterates over point keys only, but reveals
+	// range keys overlapping those points. Range keys that do not overlap with
+	// point keys are not surfaced.
+	//
+	// TODO(erikgrinaker): Consider moving this down into Pebble.
+	// TODO(erikgrinaker): This needs tests.
+	IterKeyTypePointsWithRanges
 )
 
 // MVCCIterKind is used to inform Reader about the kind of iteration desired
