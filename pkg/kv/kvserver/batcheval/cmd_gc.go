@@ -44,6 +44,10 @@ func declareKeysGC(
 			latchSpans.AddMVCC(spanset.SpanReadWrite, roachpb.Span{Key: key.Key}, header.Timestamp)
 		}
 	}
+	for _, rangeKey := range gcr.ExperimentalRangeKeys {
+		latchSpans.AddMVCC(spanset.SpanReadWrite,
+			roachpb.Span{Key: rangeKey.StartKey, EndKey: rangeKey.EndKey}, header.Timestamp)
+	}
 	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
 	// send an empty request first to bump the thresholds, and then another one
 	// that actually does work but can avoid declaring these keys below.
@@ -112,9 +116,16 @@ func GC(
 
 	// Garbage collect the specified keys by expiration timestamps.
 	for _, gcKeys := range [][]roachpb.GCRequest_GCKey{localKeys, globalKeys} {
-		if err := storage.MVCCGarbageCollect(
-			ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp,
-		); err != nil {
+		err := storage.MVCCGarbageCollect(ctx, readWriter, cArgs.Stats, gcKeys, h.Timestamp)
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+	// TODO(erikgrinaker): Add end-to-end GC tests for range tombstones.
+	if len(args.ExperimentalRangeKeys) > 0 {
+		err := storage.ExperimentalMVCCGarbageCollectRangeKeys(
+			ctx, readWriter, cArgs.Stats, args.ExperimentalRangeKeys, h.Timestamp)
+		if err != nil {
 			return result.Result{}, err
 		}
 	}

@@ -184,16 +184,18 @@ func BenchmarkRun(b *testing.B) {
 }
 
 type fakeGCer struct {
-	gcKeys     map[string]roachpb.GCRequest_GCKey
-	threshold  Threshold
-	intents    []roachpb.Intent
-	batches    [][]roachpb.Intent
-	txnIntents []txnIntents
+	gcKeys      map[string]roachpb.GCRequest_GCKey
+	gcRangeKeys map[string]roachpb.GCRequest_GCRangeKey
+	threshold   Threshold
+	intents     []roachpb.Intent
+	batches     [][]roachpb.Intent
+	txnIntents  []txnIntents
 }
 
 func makeFakeGCer() fakeGCer {
 	return fakeGCer{
-		gcKeys: make(map[string]roachpb.GCRequest_GCKey),
+		gcKeys:      make(map[string]roachpb.GCRequest_GCKey),
+		gcRangeKeys: make(map[string]roachpb.GCRequest_GCRangeKey),
 	}
 }
 
@@ -204,9 +206,14 @@ func (f *fakeGCer) SetGCThreshold(ctx context.Context, t Threshold) error {
 	return nil
 }
 
-func (f *fakeGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) error {
+func (f *fakeGCer) GC(
+	ctx context.Context, keys []roachpb.GCRequest_GCKey, rangeKeys []roachpb.GCRequest_GCRangeKey,
+) error {
 	for _, k := range keys {
 		f.gcKeys[k.Key.String()] = k
+	}
+	for _, rk := range rangeKeys {
+		f.gcRangeKeys[rk.String()] = rk
 	}
 	return nil
 }

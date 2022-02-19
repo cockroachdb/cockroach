@@ -63,7 +63,7 @@ func TestMVCCKeys(t *testing.T) {
 	}
 }
 
-func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
+func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testcases := map[string]struct {
@@ -102,6 +102,15 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, mvccKey, decoded)
 
+			require.Equal(t, len(encoded), encodedMVCCKeyLength(mvccKey))
+			require.Equal(t, len(encoded),
+				encodedMVCCKeyPrefixLength(mvccKey.Key)+encodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
+
+			// Test encodeMVCCKeyPrefix.
+			expectPrefix, err := hex.DecodeString(tc.encoded[:2*len(tc.key)+2])
+			require.NoError(t, err)
+			require.Equal(t, expectPrefix, encodeMVCCKeyPrefix(roachpb.Key(tc.key)))
+
 			// Test encode/decodeMVCCTimestampSuffix too, since we can trivially do so.
 			expectTS, err := hex.DecodeString(tc.encoded[2*len(tc.key)+2:])
 			require.NoError(t, err)
@@ -116,6 +125,8 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampSuffixLength(tc.ts))
+
 			// Test encode/decodeMVCCTimestamp as well, for completeness.
 			if len(expectTS) > 0 {
 				expectTS = expectTS[:len(expectTS)-1]
@@ -127,6 +138,8 @@ func TestEncodeDecodeMVCCKeyAndTimestamp(t *testing.T) {
 			decodedTS, err = decodeMVCCTimestamp(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
+
+			require.Equal(t, len(encodedTS), encodedMVCCTimestampLength(tc.ts))
 		})
 	}
 }
@@ -292,6 +305,31 @@ func TestMVCCRangeKeyCompare(t *testing.T) {
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, tc.expect, tc.a.Compare(tc.b))
+		})
+	}
+}
+
+func TestMVCCRangeKeyEncodedSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testcases := map[string]struct {
+		rk     MVCCRangeKey
+		expect int
+	}{
+		"empty":         {MVCCRangeKey{}, 2}, // sentinel byte for start and end
+		"only start":    {MVCCRangeKey{StartKey: roachpb.Key("foo")}, 5},
+		"only end":      {MVCCRangeKey{EndKey: roachpb.Key("foo")}, 5},
+		"only walltime": {MVCCRangeKey{Timestamp: hlc.Timestamp{WallTime: 1}}, 11},
+		"only logical":  {MVCCRangeKey{Timestamp: hlc.Timestamp{Logical: 1}}, 15},
+		"all": {MVCCRangeKey{
+			StartKey:  roachpb.Key("start"),
+			EndKey:    roachpb.Key("end"),
+			Timestamp: hlc.Timestamp{WallTime: 1, Logical: 1, Synthetic: true},
+		}, 24},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.rk.EncodedSize())
 		})
 	}
 }

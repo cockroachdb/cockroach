@@ -220,6 +220,9 @@ func encodeMVCCTimestampToBuf(buf []byte, ts hlc.Timestamp) {
 
 // encodedMVCCKeyLength returns the encoded length of the given MVCCKey.
 func encodedMVCCKeyLength(key MVCCKey) int {
+	// NB: We don't call into encodedMVCCKeyPrefixLength() or
+	// encodedMVCCTimestampSuffixLength() here because the additional function
+	// call overhead is significant.
 	keyLen := len(key.Key) + mvccEncodedTimeSentinelLen
 	if !key.Timestamp.IsEmpty() {
 		keyLen += mvccEncodedTimeWallLen + mvccEncodedTimeLengthLen
@@ -231,6 +234,12 @@ func encodedMVCCKeyLength(key MVCCKey) int {
 		}
 	}
 	return keyLen
+}
+
+// encodedMVCCKeyPrefixLength returns the encoded length of a roachpb.Key prefix
+// including the sentinel byte.
+func encodedMVCCKeyPrefixLength(key roachpb.Key) int {
+	return len(key) + mvccEncodedTimeSentinelLen
 }
 
 // encodedMVCCTimestampLength returns the encoded length of the given MVCC
@@ -245,6 +254,14 @@ func encodedMVCCTimestampLength(ts hlc.Timestamp) int {
 		tsLen -= mvccEncodedTimeLengthLen
 	}
 	return tsLen
+}
+
+// encodedMVCCTimestampSuffixLength returns the encoded length of the
+// given MVCC timestamp, including the length suffix. It returns 0
+// if the timestamp is empty.
+func encodedMVCCTimestampSuffixLength(ts hlc.Timestamp) int {
+	// This is backwards, see comment in encodedMVCCTimestampLength() for why.
+	return encodedMVCCKeyLength(MVCCKey{Timestamp: ts}) - mvccEncodedTimeSentinelLen
 }
 
 // TODO(erikgrinaker): merge in the enginepb decoding functions once it can
@@ -325,6 +342,19 @@ func (k MVCCRangeKey) Compare(o MVCCRangeKey) int {
 		return -c // timestamps sort in reverse
 	}
 	return k.EndKey.Compare(o.EndKey)
+}
+
+// EncodedSize returns the encoded size of this range key. This does not
+// accurately reflect the on-disk size of the key, due to Pebble range key
+// stacking and fragmentation.
+//
+// NB: This calculation differs from MVCCKey in that MVCCKey.EncodedSize()
+// incorrectly always uses 13 bytes for the timestamp while this method
+// calculates the actual encoded size.
+func (k MVCCRangeKey) EncodedSize() int {
+	return encodedMVCCKeyPrefixLength(k.StartKey) +
+		encodedMVCCKeyPrefixLength(k.EndKey) +
+		encodedMVCCTimestampSuffixLength(k.Timestamp)
 }
 
 // String formats the range key.
