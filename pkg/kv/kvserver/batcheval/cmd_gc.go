@@ -48,6 +48,9 @@ func declareKeysGC(
 		latchSpans.AddMVCC(spanset.SpanReadWrite,
 			roachpb.Span{Key: rangeKey.StartKey, EndKey: rangeKey.EndKey}, header.Timestamp)
 	}
+	for _, r := range gcr.ExperimentalRanges {
+		latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{Key: r.StartKey, EndKey: r.EndKey})
+	}
 	// Be smart here about blocking on the threshold keys. The MVCC GC queue can
 	// send an empty request first to bump the thresholds, and then another one
 	// that actually does work but can avoid declaring these keys below.
@@ -67,6 +70,7 @@ func GC(
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.GCRequest)
 	h := cArgs.Header
+	maxIntents := storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
 	// We do not allow GC requests to bump the GC threshold at the same time that
 	// they GC individual keys. This is because performing both of these actions
@@ -125,6 +129,14 @@ func GC(
 	if len(args.ExperimentalRangeKeys) > 0 {
 		err := storage.ExperimentalMVCCGarbageCollectRangeKeys(
 			ctx, readWriter, cArgs.Stats, args.ExperimentalRangeKeys, h.Timestamp)
+		if err != nil {
+			return result.Result{}, err
+		}
+	}
+	// TODO(erikgrinaker): Add tests for this.
+	if len(args.ExperimentalRanges) > 0 {
+		err := storage.ExperimentalMVCCGarbageCollectRanges(
+			ctx, readWriter, cArgs.Stats, args.ExperimentalRanges, h.Timestamp, maxIntents)
 		if err != nil {
 			return result.Result{}, err
 		}

@@ -934,6 +934,12 @@ message GCRequest {
     util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
   }
 
+  message GCRange {
+    bytes start_key = 1 [(gogoproto.casttype) = "Key"];
+    bytes end_key = 2 [(gogoproto.casttype) = "Key"];
+    util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  }
+
   // Keys specifies any point keys to GC. Only versions up to and including
   // the given timestamp are GCed.
   repeated GCKey keys = 3 [(gogoproto.nullable) = false];
@@ -946,6 +952,24 @@ message GCRequest {
   // to check this during GC, because if a range key exists to be GCed then it
   // must have been written while the check succeeded.
   repeated GCRangeKey experimental_range_keys = 6 [(gogoproto.nullable) = false];
+
+  // ExperimentalRanges specifies entire key ranges to GC. All versions of point
+  // keys, range keys, and intents will be removed. The timestamp signals the
+  // highest timestamp of any expected key in the range -- if any keys are found
+  // above the timestamp, the request may fail.
+  //
+  // Callers must check the ExperimentalGCRanges cluster versions before using
+  // this parameter, as it was introduced in 22.1.
+  //
+  // This parameter is EXPERIMENTAL: it will not yield correct results e.g. for
+  // MVCCStats, and lacks sufficient safeguards.
+  // 
+  // TODO(erikgrinaker): This is not yet in use, but should be used to GC large
+  // swathes of keys where all versions are being GCed. In particular, it should
+  // be used to GC below an MVCC range tombstone with no visible keys above it
+  // (e.g. after a table deletion). Since MVCC range tombstones are
+  // experimental, this can possibly be added in a 22.1 patch release.
+  repeated GCRange experimental_ranges = 7 [(gogoproto.nullable) = false];
 
   // Threshold is the expiration timestamp.
   util.hlc.Timestamp threshold = 4 [(gogoproto.nullable) = false];

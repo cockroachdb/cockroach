@@ -3737,6 +3737,36 @@ func ExperimentalMVCCGarbageCollectRangeKeys(
 	return nil
 }
 
+// ExperimentalMVCCGarbageCollectRanges garbage collects the given ranges. It
+// clears all versions for all point keys and range keys in the given ranges.
+// Any intents in the ranges will return WriteIntentError to be resolved first.
+//
+// TODO(erikgrinaker): Needs MVCCStats handling.
+// TODO(erikgrinaker): Should verify that there are no versions above the given
+// timestamps, if necessary.
+func ExperimentalMVCCGarbageCollectRanges(
+	ctx context.Context,
+	rw ReadWriter,
+	ms *enginepb.MVCCStats,
+	ranges []roachpb.GCRequest_GCRange,
+	timestamp hlc.Timestamp,
+	maxIntents int64,
+) error {
+	for _, rng := range ranges {
+		if intents, err := ScanIntents(ctx, rw, rng.StartKey, rng.EndKey, maxIntents, 0); err != nil {
+			return err
+		} else if len(intents) > 0 {
+			return &roachpb.WriteIntentError{Intents: intents}
+		}
+	}
+	for _, rng := range ranges {
+		if err := rw.ClearMVCCRangeAndIntents(rng.StartKey, rng.EndKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // MVCCFindSplitKey finds a key from the given span such that the left side of
 // the split is roughly targetSize bytes. The returned key will never be chosen
 // from the key ranges listed in keys.NoSplitSpans.

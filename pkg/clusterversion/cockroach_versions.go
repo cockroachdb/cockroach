@@ -288,6 +288,9 @@ const (
 	// preserving temporary indexes, and a post-backfill merging
 	// processing.
 	MVCCIndexBackfiller
+	// ExperimentalGCRanges is the version where the ExperimentalRanges parameter
+	// for GCRequest was added.
+	ExperimentalGCRanges
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -459,6 +462,10 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     MVCCIndexBackfiller,
 		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 68},
+	},
+	{
+		Key:     ExperimentalGCRanges,
+		Version: roachpb.Version{Major: 21, Minor: 2, Internal: 70},
 	},
 	// *************************************************
 	// Step (2): Add new versions here.
