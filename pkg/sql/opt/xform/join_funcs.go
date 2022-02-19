@@ -341,10 +341,10 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	inputProps := input.Relational()
 
 	leftEq, rightEq := memo.ExtractJoinEqualityColumns(inputProps.OutputCols, rightCols, on)
-	n := len(leftEq)
-	if n == 0 {
+	if len(leftEq) == 0 {
 		return
 	}
+	rightEqSet := rightEq.ToSet()
 
 	// Generate implicit filters from CHECK constraints and computed columns as
 	// optional filters to help generate lookup join keys.
@@ -353,6 +353,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
 	var pkCols opt.ColList
+	var eqColMap opt.ColMap
 	var iter scanIndexIter
 	iter.Init(c.e.evalCtx, c.e.f, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
@@ -374,14 +375,21 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		var constFilters memo.FiltersExpr
 		allFilters := append(onFilters, optionalFilters...)
 
-		// Check if the first column in the index has an equality constraint, or if
-		// it is constrained to a constant value. This check doesn't guarantee that
-		// we will find lookup join key columns, but it avoids the unnecessary work
-		// in most cases.
+		// Check if the first column in the index either:
+		//
+		//   1. Has an equality constraint.
+		//   2. Is a computed column for which an equality constraint can be
+		//      generated.
+		//   3. Is constrained to a constant value or values.
+		//
+		// This check doesn't guarantee that we will find lookup join key
+		// columns, but it avoids unnecessary work in most cases.
 		firstIdxCol := scanPrivate.Table.IndexColumnID(index, 0)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
-			if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
-				return
+			if _, ok := c.findComputedColJoinEquality(scanPrivate.Table, firstIdxCol, rightEqSet); !ok {
+				if _, _, ok := c.findJoinFilterConstants(allFilters, firstIdxCol); !ok {
+					return
+				}
 			}
 		}
 
@@ -393,6 +401,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 
 		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
+		var inputProjections memo.ProjectionsExpr
 
 		shouldBuildMultiSpanLookupJoin := false
 
@@ -402,6 +411,32 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			idxCol := scanPrivate.Table.IndexColumnID(index, j)
 			if eqIdx, ok := rightEq.Find(idxCol); ok {
 				lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
+				rightSideCols = append(rightSideCols, idxCol)
+				continue
+			}
+
+			// If the column is computed and an equality constraint can be
+			// synthesized for it, we can project a column from the join's input
+			// that can be used as a key column. We create the projection here,
+			// and construct a Project expression that wraps the join's input
+			// below. See findComputedColJoinEquality for the requirements to
+			// synthesize a computed column equality constraint.
+			if expr, ok := c.findComputedColJoinEquality(scanPrivate.Table, idxCol, rightEqSet); ok {
+				colMeta := md.ColumnMeta(idxCol)
+				compEqCol := md.AddColumn(fmt.Sprintf("%s_eq", colMeta.Alias), colMeta.Type)
+
+				// Lazily initialize eqColMap.
+				if eqColMap.Empty() {
+					for i := range rightEq {
+						eqColMap.Set(int(rightEq[i]), int(leftEq[i]))
+					}
+				}
+
+				// Project the computed column expression, mapping all columns
+				// in rightEq to corresponding columns in leftEq.
+				projection := c.e.f.ConstructProjectionsItem(c.RemapCols(expr, eqColMap), compEqCol)
+				inputProjections = append(inputProjections, projection)
+				lookupJoin.KeyCols = append(lookupJoin.KeyCols, compEqCol)
 				rightSideCols = append(rightSideCols, idxCol)
 				continue
 			}
@@ -503,6 +538,16 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		if len(lookupJoin.KeyCols) == 0 && len(lookupJoin.LookupExpr) == 0 {
 			// We couldn't find equality columns which we can lookup.
 			return
+		}
+
+		// Wrap the input in a Project if any projections are required. The
+		// lookup join will project away these synthesized columns.
+		if len(inputProjections) > 0 {
+			lookupJoin.Input = c.e.f.ConstructProject(
+				lookupJoin.Input,
+				inputProjections,
+				lookupJoin.Input.Relational().OutputCols,
+			)
 		}
 
 		tableFDs := memo.MakeTableFuncDep(md, scanPrivate.Table)
@@ -1185,6 +1230,76 @@ func (c *CustomFuncs) mapInvertedJoin(
 	invertedJoin.Cols = invertedJoin.Cols.Difference(indexCols).Union(newIndexCols)
 	invertedJoin.ConstFilters = c.MapFilterCols(invertedJoin.ConstFilters, srcCols, dstCols)
 	invertedJoin.On = c.MapFilterCols(invertedJoin.On, srcCols, dstCols)
+}
+
+// findComputedColJoinEquality returns the computed column expression of col and
+// ok=true when a join equality constraint can be generated for the column. This
+// is possible when:
+//
+//   1. col is non-nullable.
+//   2. col is a computed column.
+//   3. Columns referenced in the computed expression are a subset of columns
+//      that already have equality constraints.
+//
+// For example, consider the table and query:
+//
+//   CREATE TABLE a (
+//     a INT
+//   )
+//
+//   CREATE TABLE bc (
+//     b INT,
+//     c INT NOT NULL AS (b + 1) STORED
+//   )
+//
+//   SELECT * FROM a JOIN b ON a = b
+//
+// We can add an equality constraint for c because c is a function of b and b
+// has an equality constraint in the join predicate:
+//
+//   SELECT * FROM a JOIN b ON a = b AND a + 1 = c
+//
+// Condition (1) is required to prevent generating invalid equality constraints
+// for computed column expressions that can evaluate to NULL even when the
+// columns referenced in the expression are non-NULL. For example, consider the
+// table and query:
+//
+//   CREATE TABLE a (
+//     a INT
+//   )
+//
+//   CREATE TABLE bc (
+//     b INT,
+//     c INT AS (CASE WHEN b > 0 THEN NULL ELSE -1 END) STORED
+//   )
+//
+//   SELECT a, b FROM a JOIN b ON a = b
+//
+// The following is an invalid transformation: a row such as (a=1, b=1) would no
+// longer be returned because NULL=NULL is false.
+//
+//   SELECT a, b FROM a JOIN b ON a = b AND (CASE WHEN a > 0 THEN NULL ELSE -1 END) = c
+//
+// TODO(mgartner): We can relax condition (1) to allow nullable columns if it
+// can be proven that the expression will never evaluate to NULL. We can use
+// memo.ExprIsNeverNull to determine this, passing both NOT NULL and equality
+// columns as notNullCols.
+func (c *CustomFuncs) findComputedColJoinEquality(
+	tabID opt.TableID, col opt.ColumnID, eqCols opt.ColSet,
+) (_ opt.ScalarExpr, ok bool) {
+	tabMeta := c.e.mem.Metadata().TableMeta(tabID)
+	tab := c.e.mem.Metadata().Table(tabID)
+	if tab.Column(tabID.ColumnOrdinal(col)).IsNullable() {
+		return nil, false
+	}
+	expr, ok := tabMeta.ComputedColExpr(col)
+	if !ok {
+		return nil, false
+	}
+	if !c.OuterCols(expr).SubsetOf(eqCols) {
+		return nil, false
+	}
+	return expr, true
 }
 
 // findJoinFilterConstants tries to find a filter that is exactly equivalent to
