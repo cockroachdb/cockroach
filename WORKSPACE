@@ -137,15 +137,34 @@ http_archive(
 load(
     "@io_bazel_rules_go//go:deps.bzl",
     "go_download_sdk",
+    "go_host_sdk",
+    "go_local_sdk",
     "go_register_toolchains",
     "go_rules_dependencies",
 )
 
+# To point to a mirrored artifact, use:
+#
 go_download_sdk(
     name = "go_sdk",
     urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/{}"],
     version = "1.17.6",
 )
+
+# To point to a local SDK path, use the following instead. We'll call the
+# directory into which you cloned the Go repository $GODIR[1]. You'll have to
+# first run ./make.bash from $GODIR/src to pick up any custom changes.
+#
+# [1]: https://go.dev/doc/contribute#testing
+#
+#   go_local_sdk(
+#       name = "go_sdk",
+#       path = "<path to $GODIR>",
+#   )
+
+# To use your whatever your local SDK is, use the following instead:
+#
+#   go_host_sdk(name = "go_sdk")
 
 go_rules_dependencies()
 
