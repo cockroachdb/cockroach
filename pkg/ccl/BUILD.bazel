@@ -22,6 +22,5 @@ go_library(
         "//pkg/ccl/streamingccl/streamproducer",
         "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
-        "//pkg/sql/importer",
     ],
 )
