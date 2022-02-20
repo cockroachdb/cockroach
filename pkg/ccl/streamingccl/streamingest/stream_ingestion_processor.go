@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -146,8 +145,10 @@ type partitionEvent struct {
 	partition string
 }
 
-var _ execinfra.Processor = &streamIngestionProcessor{}
-var _ execinfra.RowSource = &streamIngestionProcessor{}
+var (
+	_ execinfra.Processor = &streamIngestionProcessor{}
+	_ execinfra.RowSource = &streamIngestionProcessor{}
+)
 
 const streamIngestionProcessorName = "stream-ingestion-processor"
 
@@ -196,7 +197,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	db := sip.FlowCtx.Cfg.DB
 	var err error
 	sip.batcher, err = bulk.MakeStreamSSTBatcher(ctx, db, evalCtx.Settings,
-		func() int64 { return storageccl.MaxIngestBatchSize(evalCtx.Settings) })
+		func() int64 { return bulk.IngestFileSize(evalCtx.Settings) })
 	if err != nil {
 		sip.MoveToDraining(errors.Wrap(err, "creating stream sst batcher"))
 		return

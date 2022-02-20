@@ -14,8 +14,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -137,8 +137,10 @@ type readImportDataProcessor struct {
 	summary   *roachpb.BulkOpSummary
 }
 
-var _ execinfra.Processor = &readImportDataProcessor{}
-var _ execinfra.RowSource = &readImportDataProcessor{}
+var (
+	_ execinfra.Processor = &readImportDataProcessor{}
+	_ execinfra.RowSource = &readImportDataProcessor{}
+)
 
 func newReadImportDataProcessor(
 	flowCtx *execinfra.FlowCtx,
@@ -165,8 +167,10 @@ func newReadImportDataProcessor(
 	// default expression which uses sequences. In this case we need to update the
 	// job progress within the import processor.
 	if cp.flowCtx.Cfg.JobRegistry != nil {
-		cp.seqChunkProvider = &row.SeqChunkProvider{JobID: cp.spec.Progress.JobID,
-			Registry: cp.flowCtx.Cfg.JobRegistry}
+		cp.seqChunkProvider = &row.SeqChunkProvider{
+			JobID:    cp.spec.Progress.JobID,
+			Registry: cp.flowCtx.Cfg.JobRegistry,
+		}
 	}
 
 	return cp, nil
@@ -337,7 +341,7 @@ func ingestKvs(
 		writeAtRequestTime = false
 	}
 
-	flushSize := func() int64 { return storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings) }
+	flushSize := func() int64 { return bulk.IngestFileSize(flowCtx.Cfg.Settings) }
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and

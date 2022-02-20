@@ -6,6 +6,7 @@ go_library(
         "buffering_adder.go",
         "bulk_metrics.go",
         "kv_buf.go",
+        "setting.go",
         "sst_batcher.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/bulk",
@@ -13,6 +14,7 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/kv/kvclient/rangecache",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/roachpb",
         "//pkg/settings",
