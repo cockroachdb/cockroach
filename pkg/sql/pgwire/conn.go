@@ -836,10 +836,11 @@ func (c *conn) handleSimpleQuery(
 	}
 
 	for i := range stmts {
-		// The CopyFrom statement is special. We need to detect it so we can hand
-		// control of the connection, through the stmtBuf, to a copyMachine, and
-		// block this network routine until control is passed back.
-		if cp, ok := stmts[i].AST.(*tree.CopyFrom); ok {
+		switch stmt := stmts[i].AST.(type) {
+		case *tree.CopyFrom:
+			// The CopyFrom statement is special. We need to detect it so we can hand
+			// control of the connection, through the stmtBuf, to a copyMachine, and
+			// block this network routine until control is passed back.
 			if len(stmts) != 1 {
 				// NOTE(andrei): I don't know if Postgres supports receiving a COPY
 				// together with other statements in the "simple" protocol, but I'd
@@ -854,11 +855,23 @@ func (c *conn) handleSimpleQuery(
 			}
 			copyDone := sync.WaitGroup{}
 			copyDone.Add(1)
-			if err := c.stmtBuf.Push(ctx, sql.CopyIn{Conn: c, Stmt: cp, CopyDone: &copyDone}); err != nil {
+			if err := c.stmtBuf.Push(ctx, sql.CopyIn{Conn: c, Stmt: stmt, CopyDone: &copyDone}); err != nil {
 				return err
 			}
 			copyDone.Wait()
 			return nil
+		case *tree.Backup, *tree.Restore:
+			// BACKUP/RESTORE can't be handled in a batch statement implicit txn,
+			// since they are special and will automatically commit when used in an
+			// implicit txn.
+			if len(stmts) != 1 {
+				return c.stmtBuf.Push(
+					ctx,
+					sql.SendError{
+						Err: pgwirebase.NewProtocolViolationErrorf(
+							"BACKUP/RESTORE together with other statements in a query string is not supported"),
+					})
+			}
 		}
 
 		if err := c.stmtBuf.Push(
@@ -868,6 +881,7 @@ func (c *conn) handleSimpleQuery(
 				TimeReceived: timeReceived,
 				ParseStart:   startParse,
 				ParseEnd:     endParse,
+				LastInBatch:  i == len(stmts)-1,
 			}); err != nil {
 			return err
 		}

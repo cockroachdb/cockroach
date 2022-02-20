@@ -63,6 +63,9 @@ BACKUP INTO 'nodelocal://0/cluster/dropped-database';
 # dropped database 'd'.
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/dropped-database' WITH new_db_name = 'd1';
+----
+
+exec-sql
 USE d1;
 ----
 
@@ -76,6 +79,9 @@ public bar
 # dropped database 'd'.
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://0/cluster/dropped-database' WITH new_db_name = 'd2';
+----
+
+exec-sql
 USE d2;
 ----
 
@@ -158,6 +164,9 @@ WHERE object_name = 's' OR object_name = 'typ';
 # Restore the backups to check they are valid.
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/dropped-schema-in-database' WITH new_db_name = 'd3';
+----
+
+exec-sql
 USE d3;
 ----
 
@@ -180,6 +189,9 @@ public t2
 
 exec-sql
 RESTORE DATABASE d2 FROM LATEST IN 'nodelocal://0/cluster/dropped-schema-in-database' WITH new_db_name ='d4';
+----
+
+exec-sql
 USE d4;
 ----
 
