@@ -57,7 +57,10 @@ func assertEqImpl(
 		keyMin = keys.LocalMax
 		keyMax = roachpb.KeyMax
 	}
-	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: keyMax})
+	it := rw.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		UpperBound: keyMax,
+	})
 	defer it.Close()
 
 	for _, mvccStatsTest := range mvccStatsTests {
@@ -1362,6 +1365,137 @@ func TestMVCCStatsSysPutPut(t *testing.T) {
 	}
 }
 
+func TestMVCCStatsRangeKeysOnly(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// TODO(erikgrinaker): Consider making the global rangeKey() helper use
+	// WallTime rather than Logical, so we don't need this helper.
+	rangeKey := func(start, end string, ts int64) MVCCRangeKey {
+		return MVCCRangeKey{
+			StartKey:  roachpb.Key(start),
+			EndKey:    roachpb.Key(end),
+			Timestamp: hlc.Timestamp{WallTime: ts},
+		}
+	}
+
+	const now = 10 * 1e9
+
+	// All defragmented range keys are counted separately, regardless of overlap.
+	// All range keys are range tombstones, so they do not contribute to
+	// LiveBytes.
+	rangeKeys := []MVCCRangeKey{
+		rangeKey("a", "f", 1e9),     // +1 key +13 bytes +9*13 GC, overlaps exactly with [a-f)@10
+		rangeKey("a", "f", 10e9),    // +1 key +13 bytes +0*13 GC, overlaps exactly with [a-f)@1
+		rangeKey("c", "d", 4e9),     // +1 key +13 bytes +6*13 GC, covered by [a-f)@10
+		rangeKey("bar", "foo", 5e9), // +1 key +17 bytes +5*17 GC, partial overlap with [a-f)
+		rangeKey("k", "m", 7e9),     // +1 key +13 bytes +3*13 GC, merges with two below
+		rangeKey("m", "p", 7e9),     // +0 key +0 bytes +0 GC, merges with above
+		rangeKey("p", "r", 7e9),     // +0 key +0 bytes +0 GC, merges with above
+		rangeKey("p", "r", 8e9),     // +1 key +13 bytes +2*13 GC, overlaps exactly with fragment [p-r)@7
+		rangeKey("k", "r", 10e9),    // +1 key +13 bytes +0*13 GC, overlaps merged [k-r)@7
+	}
+	for _, rk := range rangeKeys {
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rk, nil))
+	}
+
+	start, end := roachpb.Key("a"), roachpb.Key("z")
+	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: start,
+		UpperBound: end,
+		KeyTypes:   IterKeyTypePointsAndRanges,
+	})
+	defer iter.Close()
+	stats, err := ComputeStatsForRange(iter, start, end, now)
+	require.NoError(t, err)
+	require.Equal(t, enginepb.MVCCStats{
+		RangeKeyCount:   7,
+		RangeKeyBytes:   95,
+		GCBytesAge:      345,
+		LastUpdateNanos: now,
+	}, stats)
+}
+
+func TestMVCCStatsRangeKeysAndPointKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	// TODO(erikgrinaker): Consider making the global rangeKey() and pointKV()
+	// helpers use WallTime rather than Logical, so we don't need these helpers.
+	rangeKey := func(start, end string, ts int64) MVCCRangeKey {
+		return MVCCRangeKey{
+			StartKey:  roachpb.Key(start),
+			EndKey:    roachpb.Key(end),
+			Timestamp: hlc.Timestamp{WallTime: ts},
+		}
+	}
+
+	pointKV := func(key string, ts int64, value string) MVCCKeyValue {
+		return MVCCKeyValue{
+			Key:   MVCCKey{Key: roachpb.Key(key), Timestamp: hlc.Timestamp{WallTime: ts}},
+			Value: []byte(value),
+		}
+	}
+
+	const now = 10 * 1e9
+
+	// All range keys are range tombstones.
+	rangeKeys := []MVCCRangeKey{
+		rangeKey("a", "z", 8e9), // RangeKeyCount:1 RangeKeyBytes:13 GCBytesAge:26
+		rangeKey("k", "z", 5e9), // RangeKeyCount:1 RangeKeyBytes:13 GCBytesAge:65
+	}
+	for _, rk := range rangeKeys {
+		require.NoError(t, eng.ExperimentalPutMVCCRangeKey(rk, nil))
+	}
+
+	pointKVs := []MVCCKeyValue{
+		pointKV("a", 9e9, "a9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("b", 5e9, ""),   // KeyCount:1 KeyBytes:14 ValCount:1 GCBytesAge:70
+		pointKV("c", 5e9, "c5"), // KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2 GCBytesAge:32
+		pointKV("d", 7e9, ""),   // KeyCount:1 KeyBytes:14 ValCount:1 GCBytesAge:42
+		pointKV("d", 6e9, "d6"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:42
+		pointKV("d", 5e9, "d5"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:56
+		pointKV("e", 9e9, "e9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("e", 5e9, "e5"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:28
+		pointKV("m", 6e9, "m6"), // KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2 GCBytesAge:32
+		pointKV("m", 3e9, "m3"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:70
+		pointKV("o", 9e9, "o9"), // LiveCount:1 LiveBytes:16 KeyCount:1 KeyBytes:14 ValCount:1 ValBytes:2
+		pointKV("o", 3e9, ""),   // KeyBytes:12 ValCount:1 GCBytesAge:84
+		pointKV("o", 1e9, "o1"), // KeyBytes:12 ValCount:1 ValBytes:2 GCBytesAge:98
+	}
+	for _, kv := range pointKVs {
+		require.NoError(t, eng.PutMVCC(kv.Key, kv.Value))
+	}
+
+	start, end := roachpb.Key("a"), roachpb.Key("z")
+	iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+		LowerBound: start,
+		UpperBound: end,
+		KeyTypes:   IterKeyTypePointsAndRanges,
+	})
+	defer iter.Close()
+	stats, err := ComputeStatsForRange(iter, start, end, now)
+	require.NoError(t, err)
+	require.Equal(t, enginepb.MVCCStats{
+		LiveCount:       3,
+		LiveBytes:       48,
+		KeyCount:        7,
+		KeyBytes:        170,
+		ValCount:        13,
+		ValBytes:        20,
+		RangeKeyCount:   2,
+		RangeKeyBytes:   26,
+		GCBytesAge:      645,
+		LastUpdateNanos: now,
+	}, stats)
+}
+
 var mvccStatsTests = []struct {
 	name string
 	fn   func(MVCCIterator, roachpb.Key, roachpb.Key, int64) (enginepb.MVCCStats, error)
@@ -1480,6 +1614,8 @@ func (s *randomTest) step(t *testing.T) {
 	}
 }
 
+// TODO(erikgrinaker): Add ExperimentalMVCCDeleteRangeUsingTombstone operations
+// once they correctly update MVCCStats.
 func TestMVCCStatsRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1651,7 +1787,10 @@ func TestMVCCComputeStatsError(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+			iter := engine.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+				KeyTypes:   IterKeyTypePointsAndRanges,
+				UpperBound: roachpb.KeyMax,
+			})
 			defer iter.Close()
 			for _, mvccStatsTest := range mvccStatsTests {
 				t.Run(mvccStatsTest.name, func(t *testing.T) {

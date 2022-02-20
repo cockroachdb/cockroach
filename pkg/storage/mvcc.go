@@ -3882,29 +3882,63 @@ func willOverflow(a, b int64) bool {
 	return math.MinInt64-b > a
 }
 
-// ComputeStatsForRange scans the underlying engine from start to end keys and
-// computes stats counters based on the values. This method is used after a
-// range is split to recompute stats for each subrange. The nowNanos arg
-// specifies the wall time in nanoseconds since the epoch and is used to compute
-// the total age of all intents.
+// ComputeStatsForRange scans the iterator from start to end keys and computes
+// stats counters based on the values. This method is used after a range is
+// split to recompute stats for each subrange. The nowNanos arg specifies the
+// wall time in nanoseconds since the epoch and is used to compute the total age
+// of all intents.
 //
-// When optional callbacks are specified, they are invoked for each physical
+// To account for intents and range keys, the iterator must be created with
+// MVCCKeyAndIntentsIterKind and IterKeyTypePointsAndRanges.
+func ComputeStatsForRange(
+	iter SimpleMVCCIterator, start, end roachpb.Key, nowNanos int64,
+) (enginepb.MVCCStats, error) {
+	return ComputeStatsForRangeWithVisitors(iter, start, end, nowNanos, nil, nil)
+}
+
+// ComputeStatsForRangeWithVisitors is like ComputeStatsForRange, but also
+// takes a point and/or range key callback that is invoked for each physical
 // key-value pair (i.e. not for implicit meta records), and iteration is aborted
-// on the first error returned from any of them.
+// on the first error returned from either of them.
 //
 // Callbacks must copy any data they intend to hold on to.
-func ComputeStatsForRange(
+func ComputeStatsForRangeWithVisitors(
 	iter SimpleMVCCIterator,
 	start, end roachpb.Key,
 	nowNanos int64,
-	callbacks ...func(MVCCKey, []byte) error,
+	pointKeyVisitor func(MVCCKey, []byte) error,
+	rangeKeyVisitor func(MVCCRangeKey, []byte) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 	// Only some callers are providing an MVCCIterator. The others don't have
 	// any intents.
 	var meta enginepb.MVCCMetadata
-	var prevKey []byte
+	var prevKey, prevRangeStart []byte
 	first := false
+
+	// Range keys are defragmented during iteration and processed when
+	// fully degragmented.
+	rangeKeyDefrag := NewMVCCRangeKeyDefragmenter()
+
+	addRangeKeyFragments := func(fragments []MVCCRangeKeyValue) error {
+		completed := rangeKeyDefrag.AppendFragments(fragments)
+		for _, rangeKV := range completed {
+			if rangeKeyVisitor != nil {
+				if err := rangeKeyVisitor(rangeKV.Key, rangeKV.Value); err != nil {
+					return err
+				}
+			}
+			// NB: Point keys always use 12 bytes for the key timestamp, even though
+			// it is actually variable-length, likely for historical reasons. But for
+			// range keys we may as well use the actual encoded size including the
+			// variable-length timestamp.
+			keyBytes := int64(rangeKV.Key.EncodedSize())
+			ms.RangeKeyCount++
+			ms.RangeKeyBytes += keyBytes
+			ms.GCBytesAge += keyBytes * (nowNanos/1e9 - rangeKV.Key.Timestamp.WallTime/1e9)
+		}
+		return nil
+	}
 
 	// Values start accruing GCBytesAge at the timestamp at which they
 	// are shadowed (i.e. overwritten) whereas deletion tombstones
@@ -3913,22 +3947,49 @@ func ComputeStatsForRange(
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
 	mvccEndKey := MakeMVCCMetadataKey(end)
+	rangeTombstones := []hlc.Timestamp{}
 
-	iter.SeekGE(MakeMVCCMetadataKey(start))
-	for ; ; iter.Next() {
-		ok, err := iter.Valid()
-		if err != nil {
+	for iter.SeekGE(MakeMVCCMetadataKey(start)); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
 			return ms, err
-		}
-		if !ok || !iter.UnsafeKey().Less(mvccEndKey) {
+		} else if !ok || !iter.UnsafeKey().Less(mvccEndKey) {
 			break
+		}
+
+		hasPoint, hasRange := iter.HasPointAndRange()
+
+		if hasRange {
+			rangeStart, _ := iter.RangeBounds()
+			if !bytes.Equal(rangeStart, prevRangeStart) {
+				prevRangeStart = rangeStart.Clone()
+				rangeKeys := iter.RangeKeys()
+				rangeTombstones = rangeTombstones[:0]
+				for _, rkv := range rangeKeys {
+					// Currently, all range keys are range tombstones. It's unclear how
+					// other range keys should be accounted for considering e.g.
+					// partially overlapping keys, so we reject them for now until we have
+					// an actual use-case for them and know more about their semantics.
+					if len(rkv.Value) > 0 {
+						return enginepb.MVCCStats{}, errors.AssertionFailedf(
+							"unexpected non-tombstone range key %s with value %x", rkv.Key, rkv.Value)
+					}
+					rangeTombstones = append(rangeTombstones, rkv.Key.Timestamp)
+				}
+				if err := addRangeKeyFragments(rangeKeys); err != nil {
+					return enginepb.MVCCStats{}, err
+				}
+			}
+		}
+
+		if !hasPoint {
+			continue
 		}
 
 		unsafeKey := iter.UnsafeKey()
 		unsafeValue := iter.UnsafeValue()
 
-		for _, f := range callbacks {
-			if err := f(unsafeKey, unsafeValue); err != nil {
+		if pointKeyVisitor != nil {
+			if err := pointKeyVisitor(unsafeKey, unsafeValue); err != nil {
 				return enginepb.MVCCStats{}, err
 			}
 		}
@@ -3955,6 +4016,21 @@ func ComputeStatsForRange(
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
 
+		// Range tombstones cannot exist above intents, and are undefined across
+		// inline values, so we only take them into account for versioned values.
+		//
+		// TODO(erikgrinaker): rangeTombstones is sorted, so this can be optimized.
+		var nextRangeTombstone hlc.Timestamp
+		if isValue {
+			for i := len(rangeTombstones) - 1; i >= 0; i-- {
+				rts := rangeTombstones[i]
+				if unsafeKey.Timestamp.LessEq(rts) {
+					nextRangeTombstone = rts
+					break
+				}
+			}
+		}
+
 		if implicitMeta {
 			// No MVCCMetadata entry for this series of keys.
 			meta.Reset()
@@ -3980,18 +4056,23 @@ func ComputeStatsForRange(
 			}
 
 			if isSys {
+				// TODO(erikgrinaker): Do we need to handle MVCC range tombstones here?
 				ms.SysBytes += totalBytes
 				ms.SysCount++
 				if isAbortSpanKey(unsafeKey.Key) {
 					ms.AbortSpanBytes += totalBytes
 				}
 			} else {
-				if !meta.Deleted {
-					ms.LiveBytes += totalBytes
-					ms.LiveCount++
-				} else {
+				if meta.Deleted {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
+				} else if !nextRangeTombstone.IsEmpty() {
+					// First value was deleted by a range tombstone, so it accumulates GC age from
+					// its timestamp.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+				} else {
+					ms.LiveBytes += totalBytes
+					ms.LiveCount++
 				}
 				ms.KeyBytes += metaKeySize
 				ms.ValBytes += metaValSize
@@ -4011,11 +4092,15 @@ func ComputeStatsForRange(
 		} else {
 			if first {
 				first = false
-				if !meta.Deleted {
-					ms.LiveBytes += totalBytes
-				} else {
+				if meta.Deleted {
 					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
+				} else if !nextRangeTombstone.IsEmpty() {
+					// First value was deleted by a range tombstone; add key & value bytes to
+					// age stat from range tombstone onwards.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+				} else {
+					ms.LiveBytes += totalBytes
 				}
 				if meta.Txn != nil {
 					ms.IntentBytes += totalBytes
@@ -4038,6 +4123,10 @@ func ComputeStatsForRange(
 				if isTombstone {
 					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
+				} else if !nextRangeTombstone.IsEmpty() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
+					// The kv pair was deleted by a range tombstone below the next
+					// version, so it accumulates garbage from the range tombstone value.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
 				} else {
 					// The kv pair is an overwritten value, so it became non-live when the closest more
 					// recent value was written.
@@ -4050,6 +4139,11 @@ func ComputeStatsForRange(
 			ms.ValBytes += int64(len(unsafeValue))
 			ms.ValCount++
 		}
+	}
+
+	// Complete any pending defragmented range keys.
+	if err := addRangeKeyFragments(nil); err != nil {
+		return enginepb.MVCCStats{}, err
 	}
 
 	ms.LastUpdateNanos = nowNanos
