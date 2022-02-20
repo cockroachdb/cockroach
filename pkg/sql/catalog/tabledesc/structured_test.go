@@ -723,10 +723,9 @@ func TestKeysPerRow(t *testing.T) {
 
 			desc := desctestutils.TestingGetPublicTableDescriptor(db, keys.SystemSQLCodec, "d", tableName)
 			require.NotNil(t, desc)
-			keys, err := desc.KeysPerRow(test.indexID)
-			if err != nil {
-				t.Fatal(err)
-			}
+			idx, err := desc.FindIndexWithID(test.indexID)
+			require.NoError(t, err)
+			keys := desc.IndexKeysPerRow(idx)
 			if test.expected != keys {
 				t.Errorf("expected %d keys got %d", test.expected, keys)
 			}

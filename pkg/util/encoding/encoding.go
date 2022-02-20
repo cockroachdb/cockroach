@@ -374,6 +374,31 @@ func EncodeUvarintAscending(b []byte, v uint64) []byte {
 	}
 }
 
+// EncodedLengthUvarintAscending returns the length of the variable length
+// representation, i.e. the number of bytes appended by EncodeUvarintAscending.
+func EncodedLengthUvarintAscending(v uint64) int {
+	switch {
+	case v <= intSmall:
+		return 1
+	case v <= 0xff:
+		return 2
+	case v <= 0xffff:
+		return 3
+	case v <= 0xffffff:
+		return 4
+	case v <= 0xffffffff:
+		return 5
+	case v <= 0xffffffffff:
+		return 6
+	case v <= 0xffffffffffff:
+		return 7
+	case v <= 0xffffffffffffff:
+		return 8
+	default:
+		return 9
+	}
+}
+
 // EncodeUvarintDescending encodes the uint64 value so that it sorts in
 // reverse order, from largest to smallest.
 func EncodeUvarintDescending(b []byte, v uint64) []byte {
