@@ -746,12 +746,13 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 }
 
-// TestStoreRangeSplitStats starts by splitting the system keys from user-space
-// keys and verifying that the user space side of the split (which is empty),
-// has all zeros for stats. It then writes random data to the user space side,
-// splits it halfway and verifies the two splits have stats exactly equaling
-// the pre-split.
-func TestStoreRangeSplitStats(t *testing.T) {
+// TestStoreRangeSplitMergeStats starts by splitting the system keys from
+// user-space keys and verifying that the user space side of the split (which is
+// empty), has all zeros for stats. It then writes random data to the user space
+// side, splits it halfway and verifies the two splits have appropriate stats.
+// Finally, it merges the ranges back and asserts that the stats equal the
+// original stats.
+func TestStoreRangeSplitMergeStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -769,61 +770,52 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	store, err := s.Stores().GetStore(s.GetFirstStoreID())
 	require.NoError(t, err)
 
-	start := s.Clock().Now()
-
 	// Split the range after the last table data key.
 	keyPrefix := keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0))
 	args := adminSplitArgs(keyPrefix)
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
+	require.NoError(t, pErr.GoError())
+
 	// Verify empty range has empty stats.
 	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
-	// NOTE that this value is expected to change over time, depending on what
-	// we store in the sys-local keyspace. Update it accordingly for this test.
-	empty := enginepb.MVCCStats{LastUpdateNanos: start.WallTime}
-	if err := verifyRangeStats(store.Engine(), repl.RangeID, empty); err != nil {
-		t.Fatal(err)
-	}
+	assertRangeStats(t, "empty stats", store.Engine(), repl.RangeID, enginepb.MVCCStats{})
 
 	// Write random data.
-	midKey := kvserver.WriteRandomDataToRange(t, store, repl.RangeID, keyPrefix)
+	splitKey := kvserver.WriteRandomDataToRange(t, store, repl.RangeID, keyPrefix)
+
+	start := s.Clock().Now()
 
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	ms, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := verifyRecomputedStats(snap, repl.Desc(), ms, start.WallTime); err != nil {
-		t.Fatalf("failed to verify range's stats before split: %+v", err)
-	}
-	if inMemMS := repl.GetMVCCStats(); inMemMS != ms {
-		t.Fatalf("in-memory and on-disk diverged:\n%+v\n!=\n%+v", inMemMS, ms)
-	}
+	require.NoError(t, err)
+	assertRecomputedStats(t, "before split", snap, repl.Desc(), ms, start.WallTime)
+	require.Equal(t, repl.GetMVCCStats(), ms, "in-memory and on-disk stats diverge")
 
 	// Split the range at approximate halfway point.
-	args = adminSplitArgs(midKey)
-	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
-		RangeID: repl.RangeID,
-	}, args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminSplitArgs(splitKey))
+	require.NoError(t, pErr.GoError())
 
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
-	replRight := store.LookupReplica(midKey)
+	require.NoError(t, err)
+	replRight := store.LookupReplica(splitKey)
 	msRight, err := stateloader.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	// The stats should be exactly equal when added.
+	// Stats should both have the new timestamp.
+	require.Less(t, start.WallTime, msLeft.LastUpdateNanos, "LHS stats have old timestamp")
+	require.Less(t, start.WallTime, msRight.LastUpdateNanos, "RHS stats have old timestamp")
+
+	// We don't care about system data.
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
+
+	// The point key stats should be exactly equal when added.
+	pointMS := ms
+	pointMS.LastUpdateNanos = 0
+	pointMS.RangeKeyCount, pointMS.RangeKeyBytes, pointMS.GCBytesAge = 0, 0, 0
 	expMS := enginepb.MVCCStats{
 		LiveBytes:   msLeft.LiveBytes + msRight.LiveBytes,
 		KeyBytes:    msLeft.KeyBytes + msRight.KeyBytes,
@@ -834,27 +826,33 @@ func TestStoreRangeSplitStats(t *testing.T) {
 		ValCount:    msLeft.ValCount + msRight.ValCount,
 		IntentCount: msLeft.IntentCount + msRight.IntentCount,
 	}
-	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
-	ms.LastUpdateNanos = 0
-	if expMS != ms {
-		t.Errorf("expected left plus right ranges to equal original, but\n %+v\n+\n %+v\n!=\n %+v", msLeft, msRight, ms)
-	}
+	require.Equal(t, expMS, pointMS, "left plus right point key stats does not match original")
 
-	// Stats should both have the new timestamp.
-	if lTs := msLeft.LastUpdateNanos; lTs < start.WallTime {
-		t.Errorf("expected left range stats to have new timestamp, want %d, got %d", start.WallTime, lTs)
-	}
-	if rTs := msRight.LastUpdateNanos; rTs < start.WallTime {
-		t.Errorf("expected right range stats to have new timestamp, want %d, got %d", start.WallTime, rTs)
-	}
+	// The range key stats should be equal or greater.
+	require.GreaterOrEqual(t, msLeft.RangeKeyCount+msRight.RangeKeyCount, ms.RangeKeyCount)
+	require.GreaterOrEqual(t, msLeft.RangeKeyBytes+msRight.RangeKeyBytes, ms.RangeKeyBytes)
+	require.GreaterOrEqual(t, msLeft.GCBytesAge+msRight.GCBytesAge, ms.GCBytesAge)
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, s.Clock().PhysicalNow()); err != nil {
-		t.Fatalf("failed to verify left range's stats after split: %+v", err)
-	}
-	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, s.Clock().PhysicalNow()); err != nil {
-		t.Fatalf("failed to verify right range's stats after split: %+v", err)
-	}
+	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
+
+	// Merge the ranges back together, and assert that the merged stats
+	// agree with the pre-split stats.
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminMergeArgs(repl.Desc().StartKey.AsRawKey()))
+	require.NoError(t, pErr.GoError())
+
+	repl = store.LookupReplica(roachpb.RKey(keyPrefix))
+	snap = store.Engine().NewSnapshot()
+	defer snap.Close()
+
+	msMerged, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
+	require.NoError(t, err)
+	assertRecomputedStats(t, "in-mem after merge", snap, repl.Desc(), msMerged, s.Clock().PhysicalNow())
+
+	msMerged.SysBytes, msMerged.SysCount, msMerged.AbortSpanBytes = 0, 0, 0
+	ms.AgeTo(msMerged.LastUpdateNanos)
+	require.Equal(t, ms, msMerged, "post-merge stats differ from pre-split")
 }
 
 // RaftMessageHandlerInterceptor wraps a storage.RaftMessageHandler. It
@@ -977,56 +975,41 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	// Split the range after the last table data key.
 	keyPrefix := keys.SystemSQLCodec.TablePrefix(bootstrap.TestingUserDescID(0))
 	args := adminSplitArgs(keyPrefix)
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
+	require.NoError(t, pErr.GoError())
+
 	// Verify empty range has empty stats.
 	repl := store.LookupReplica(roachpb.RKey(keyPrefix))
 	// NOTE that this value is expected to change over time, depending on what
 	// we store in the sys-local keyspace. Update it accordingly for this test.
 	empty := enginepb.MVCCStats{LastUpdateNanos: start.WallTime}
-	if err := verifyRangeStats(store.Engine(), repl.RangeID, empty); err != nil {
-		t.Fatal(err)
-	}
+	assertRangeStats(t, "empty stats", store.Engine(), repl.RangeID, empty)
 
 	// Write random TimeSeries data.
 	midKey := writeRandomTimeSeriesDataToRange(t, store, repl.RangeID, keyPrefix)
 
 	// Split the range at approximate halfway point.
 	args = adminSplitArgs(midKey)
-	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 		RangeID: repl.RangeID,
-	}, args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	}, args)
+	require.NoError(t, pErr.GoError())
 
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	msLeft, err := stateloader.Make(repl.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	replRight := store.LookupReplica(midKey)
 	msRight, err := stateloader.Make(replRight.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Stats should both have the new timestamp.
-	if lTs := msLeft.LastUpdateNanos; lTs < start.WallTime {
-		t.Errorf("expected left range stats to have new timestamp, want %d, got %d", start.WallTime, lTs)
-	}
-	if rTs := msRight.LastUpdateNanos; rTs < start.WallTime {
-		t.Errorf("expected right range stats to have new timestamp, want %d, got %d", start.WallTime, rTs)
-	}
+	require.Less(t, start.WallTime, msLeft.LastUpdateNanos, "LHS stats have old timestamp")
+	require.Less(t, start.WallTime, msRight.LastUpdateNanos, "RHS stats have old timestamp")
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, repl.Desc(), msLeft, s.Clock().PhysicalNow()); err != nil {
-		t.Fatalf("failed to verify left range's stats after split: %+v", err)
-	}
-	if err := verifyRecomputedStats(snap, replRight.Desc(), msRight, s.Clock().PhysicalNow()); err != nil {
-		t.Fatalf("failed to verify right range's stats after split: %+v", err)
-	}
+	assertRecomputedStats(t, "LHS after split", snap, repl.Desc(), msLeft, s.Clock().PhysicalNow())
+	assertRecomputedStats(t, "RHS after split", snap, replRight.Desc(), msRight, s.Clock().PhysicalNow())
 }
 
 // fillRange writes keys with the given prefix and associated values

@@ -200,11 +200,14 @@ type MVCCIterator interface {
 	ValueProto(msg protoutil.Message) error
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
-	// range is split to recompute stats for each subrange. The start key is
-	// always adjusted to avoid counting local keys in the event stats are being
-	// recomputed for the first range (i.e. the one with start key == KeyMin).
-	// The nowNanos arg specifies the wall time in nanoseconds since the
-	// epoch and is used to compute the total age of all intents.
+	// range is split to recompute stats for each subrange. The nowNanos arg
+	// specifies the wall time in nanoseconds since the epoch and is used to
+	// compute the total age of intents and garbage.
+	//
+	// To properly account for intents and range keys, the iterator must be
+	// created with MVCCKeyAndIntentsIterKind and IterKeyTypePointsAndRanges,
+	// and the LowerBound and UpperBound must be set equal to start and end
+	// in order for range keys to be truncated to the bounds.
 	ComputeStats(start, end roachpb.Key, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be

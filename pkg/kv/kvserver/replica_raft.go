@@ -2137,6 +2137,7 @@ func ComputeRaftLogSize(
 	prefix := keys.RaftLogPrefix(rangeID)
 	prefixEnd := prefix.PrefixEnd()
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: prefix,
 		UpperBound: prefixEnd,
 	})
