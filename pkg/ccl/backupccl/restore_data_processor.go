@@ -74,8 +74,10 @@ type restoreDataProcessor struct {
 	progCh chan RestoreProgress
 }
 
-var _ execinfra.Processor = &restoreDataProcessor{}
-var _ execinfra.RowSource = &restoreDataProcessor{}
+var (
+	_ execinfra.Processor = &restoreDataProcessor{}
+	_ execinfra.RowSource = &restoreDataProcessor{}
+)
 
 const restoreDataProcName = "restoreDataProcessor"
 
@@ -128,7 +130,7 @@ func newRestoreDataProcessor(
 		progCh:     make(chan RestoreProgress, maxConcurrentRestoreWorkers),
 		metaCh:     make(chan *execinfrapb.ProducerMetadata, 1),
 		numWorkers: int(numRestoreWorkers.Get(sv)),
-		flushBytes: storageccl.MaxIngestBatchSize(flowCtx.Cfg.Settings),
+		flushBytes: bulk.IngestFileSize(flowCtx.Cfg.Settings),
 	}
 
 	if err := rd.Init(rd, post, restoreDataOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
@@ -359,7 +361,6 @@ func (rd *restoreDataProcessor) runRestoreWorkers(ctx context.Context, ssts chan
 
 				return done, nil
 			}()
-
 			if err != nil {
 				return err
 			}
