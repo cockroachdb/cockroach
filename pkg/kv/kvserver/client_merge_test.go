@@ -1310,15 +1310,13 @@ func TestStoreRangeMergeStats(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 		})
-	defer tc.Stopper().Stop(context.Background())
+	defer tc.Stopper().Stop(ctx)
 	scratch := tc.ScratchRange(t)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratch, store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Write some values left and right of the proposed split key.
 	kvserver.WriteRandomDataToRange(t, store, lhsDesc.RangeID, scratchKey("aaa"))
@@ -1329,30 +1327,18 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// tests whether the merge code properly accounts for merging abort span
 	// records for the same transaction.
 	txn1 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
-	if err := txn1.Put(ctx, scratchKey("a-txn1"), "val"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn1.Put(ctx, scratchKey("a-txn1"), "val"))
 	txn2 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
-	if err := txn2.Put(ctx, scratchKey("c-txn2"), "val"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn2.Put(ctx, scratchKey("c-txn2"), "val"))
 	txn3 := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
-	if err := txn3.Put(ctx, scratchKey("a-txn3"), "val"); err != nil {
-		t.Fatal(err)
-	}
-	if err := txn3.Put(ctx, scratchKey("c-txn3"), "val"); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn3.Put(ctx, scratchKey("a-txn3"), "val"))
+	require.NoError(t, txn3.Put(ctx, scratchKey("c-txn3"), "val"))
 	hiPriTxn := kv.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */)
 	hiPriTxn.TestingSetPriority(enginepb.MaxTxnPriority)
 	for _, key := range []string{"a-txn1", "c-txn2", "a-txn3", "c-txn3"} {
-		if err := hiPriTxn.Put(ctx, scratchKey(key), "val"); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, hiPriTxn.Put(ctx, scratchKey(key), "val"))
 	}
-	if err := hiPriTxn.Commit(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, hiPriTxn.Commit(ctx))
 	// Leave txn1-txn3 open so that their abort span records exist during the
 	// merge below.
 
@@ -1360,43 +1346,30 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
 	msA, err := stateloader.Make(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	msB, err := stateloader.Make(rhsDesc.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Stats should agree with recomputation.
-	if err := verifyRecomputedStats(snap, lhsDesc, msA, tc.Servers[0].Clock().Now().WallTime); err != nil {
-		t.Fatalf("failed to verify range A's stats before split: %+v", err)
-	}
-	if err := verifyRecomputedStats(snap, rhsDesc, msB, tc.Servers[0].Clock().Now().WallTime); err != nil {
-		t.Fatalf("failed to verify range B's stats before split: %+v", err)
-	}
+	assertRecomputedStats(t, "range A before split", snap, lhsDesc, msA, store.Clock().PhysicalNow())
+	assertRecomputedStats(t, "range B before split", snap, rhsDesc, msB, store.Clock().PhysicalNow())
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, err := kv.SendWrapped(ctx, store.TestSender(), args); err != nil {
-		t.Fatal(err)
-	}
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(), args)
+	require.NoError(t, pErr.GoError())
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
 	msMerged, err := stateloader.Make(replMerged.RangeID).LoadMVCCStats(ctx, snap)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Merged stats should agree with recomputation.
 	nowNanos := tc.Servers[0].Clock().Now().WallTime
 	msMerged.AgeTo(nowNanos)
-	if err := verifyRecomputedStats(snap, replMerged.Desc(), msMerged, nowNanos); err != nil {
-		t.Errorf("failed to verify range's stats after merge: %+v", err)
-	}
+	assertRecomputedStats(t, "merged range", snap, replMerged.Desc(), msMerged, nowNanos)
 }
 
 func TestStoreRangeMergeInFlightTxns(t *testing.T) {

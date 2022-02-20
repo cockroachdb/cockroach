@@ -1183,3 +1183,112 @@ func TestCommitWaitBeforeIntentResolutionIfCommitTrigger(t *testing.T) {
 		}
 	})
 }
+
+func TestComputeSplitRangeKeyStatsDelta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	storage.SkipIfSimpleValueEncodingDisabled(t)
+
+	emptyValue := func() storage.MVCCValue {
+		return storage.MVCCValue{}
+	}
+
+	localTSValue := func(ts int) storage.MVCCValue {
+		var v storage.MVCCValue
+		v.MVCCValueHeader.LocalTimestamp = hlc.ClockTimestamp{WallTime: int64(ts)}
+		return v
+	}
+
+	rangeKV := func(start, end string, ts int, value storage.MVCCValue) storage.MVCCRangeKeyValue {
+		valueRaw, err := storage.EncodeMVCCValue(value)
+		require.NoError(t, err)
+		return storage.MVCCRangeKeyValue{
+			RangeKey: storage.MVCCRangeKey{
+				StartKey:  roachpb.Key(start),
+				EndKey:    roachpb.Key(end),
+				Timestamp: hlc.Timestamp{WallTime: int64(ts)},
+			},
+			Value: valueRaw,
+		}
+	}
+
+	const nowNanos = 10e9
+	lhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("l")}
+	rhsDesc := roachpb.RangeDescriptor{StartKey: roachpb.RKey("l"), EndKey: roachpb.RKey("z").PrefixEnd()}
+
+	testcases := map[string]struct {
+		rangeKVs []storage.MVCCRangeKeyValue
+		expect   enginepb.MVCCStats
+	}{
+		// Empty stats shouldn't do anything.
+		"empty": {nil, enginepb.MVCCStats{}},
+		// a-z splits into a-l and l-z: simple +1 range key
+		"full": {[]storage.MVCCRangeKeyValue{rangeKV("a", "z", 1e9, emptyValue())}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			GCBytesAge:    117,
+		}},
+		// a-z with local timestamp splits into a-l and l-z: simple +1 range key with value
+		"full value": {[]storage.MVCCRangeKeyValue{rangeKV("a", "z", 2e9, localTSValue(1))}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			RangeValBytes: 9,
+			GCBytesAge:    176,
+		}},
+		// foo-zz splits into foo-l and l-zzzz: contribution is same as for short
+		// keys, because we have to adjust for the change in LHS end key which ends
+		// up only depending on the split key, and that doesn't change.
+		"different key length": {[]storage.MVCCRangeKeyValue{rangeKV("foo", "zzzz", 1e9, emptyValue())}, enginepb.MVCCStats{
+			RangeKeyCount: 1,
+			RangeKeyBytes: 13,
+			RangeValCount: 1,
+			GCBytesAge:    117,
+		}},
+		// Two abutting keys at different timestamps at the split point should not
+		// require a delta.
+		"no straddling, timestamp": {[]storage.MVCCRangeKeyValue{
+			rangeKV("a", "l", 1e9, emptyValue()),
+			rangeKV("l", "z", 2e9, emptyValue()),
+		}, enginepb.MVCCStats{}},
+		// Two abutting keys at different local timestamps (values) at the split
+		// point should not require a delta.
+		"no straddling, value": {[]storage.MVCCRangeKeyValue{
+			rangeKV("a", "l", 2e9, localTSValue(1)),
+			rangeKV("l", "z", 2e9, localTSValue(2)),
+		}, enginepb.MVCCStats{}},
+		// Multiple straddling keys.
+		"multiple": {
+			[]storage.MVCCRangeKeyValue{
+				rangeKV("a", "z", 2e9, localTSValue(1)),
+				rangeKV("k", "p", 3e9, localTSValue(2)),
+				rangeKV("foo", "m", 4e9, emptyValue()),
+			}, enginepb.MVCCStats{
+				RangeKeyCount: 1,
+				RangeKeyBytes: 31,
+				RangeValCount: 3,
+				RangeValBytes: 18,
+				GCBytesAge:    348,
+			}},
+	}
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			for _, rkv := range tc.rangeKVs {
+				value, err := storage.DecodeMVCCValue(rkv.Value)
+				require.NoError(t, err)
+				require.NoError(t, engine.ExperimentalPutMVCCRangeKey(rkv.RangeKey, value))
+			}
+
+			tc.expect.LastUpdateNanos = nowNanos
+
+			msDelta, err := computeSplitRangeKeyStatsDelta(engine, lhsDesc, rhsDesc, nowNanos)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, msDelta)
+		})
+	}
+}

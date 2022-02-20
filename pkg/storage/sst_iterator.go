@@ -56,6 +56,10 @@ func NewSSTIterator(file sstable.ReadableFile) (SimpleMVCCIterator, error) {
 // It's compatible with sstables written by `RocksDBSstFileWriter` and
 // Pebble's `sstable.Writer`, and assumes the keys use Cockroach's MVCC
 // format.
+//
+// TODO(erikgrinaker): When this gets support for iterating over range keys, all
+// call sites that use ComputeStatsForRange() must be updated to enable range
+// keys for the iterators.
 func NewMemSSTIterator(data []byte, verify bool) (SimpleMVCCIterator, error) {
 	sst, err := sstable.NewReader(vfs.NewMemFile(data), sstable.ReaderOptions{
 		Comparer: EngineComparer,
@@ -173,16 +177,18 @@ func (r *sstIterator) verifyValue() {
 }
 
 // HasPointAndRange implements SimpleMVCCIterator.
+//
+// TODO(erikgrinaker): implement range key support.
 func (r *sstIterator) HasPointAndRange() (bool, bool) {
-	panic("not implemented")
+	return true, false
 }
 
 // RangeBounds implements SimpleMVCCIterator.
 func (r *sstIterator) RangeBounds() roachpb.Span {
-	panic("not implemented")
+	return roachpb.Span{}
 }
 
 // RangeKeys implements SimpleMVCCIterator.
 func (r *sstIterator) RangeKeys() []MVCCRangeKeyValue {
-	panic("not implemented")
+	return []MVCCRangeKeyValue{}
 }

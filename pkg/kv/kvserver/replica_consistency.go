@@ -598,7 +598,8 @@ func (*Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
-	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
+	// TODO(erikgrinaker): add a range key visitor to hash range keys.
+	pointKeyVisitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		// Rate Limit the scan through the range
 		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
 			return err
@@ -653,11 +654,13 @@ func (*Replica) sha512(
 		// we will probably not have any interleaved intents so we could stop
 		// using MVCCKeyAndIntentsIterKind and consider all locks here.
 		for _, span := range rditer.MakeReplicatedKeyRangesExceptLockTable(&desc) {
-			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind,
-				storage.IterOptions{UpperBound: span.End})
-			spanMS, err := storage.ComputeStatsForRange(
-				iter, span.Start, span.End, 0 /* nowNanos */, visitor,
-			)
+			iter := snap.NewMVCCIterator(storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{
+				KeyTypes:   storage.IterKeyTypePointsAndRanges,
+				LowerBound: span.Start,
+				UpperBound: span.End,
+			})
+			spanMS, err := storage.ComputeStatsForRangeWithVisitors(
+				iter, span.Start, span.End, 0 /* nowNanos */, pointKeyVisitor, nil /* rangeKeyVisitor */)
 			iter.Close()
 			if err != nil {
 				return nil, err
