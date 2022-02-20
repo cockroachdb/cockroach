@@ -35,10 +35,10 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// RewriteTableDescs mutates tables to match the ID and privilege specified
+// TableDescs mutates tables to match the ID and privilege specified
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
-func RewriteTableDescs(
+func TableDescs(
 	tables []*tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
@@ -393,9 +393,9 @@ func rewriteIDsInTypesT(typ *types.T, descriptorRewrites jobspb.DescRewriteMap) 
 	return nil
 }
 
-// RewriteTypeDescs rewrites all ID's in the input slice of TypeDescriptors
+// TypeDescs rewrites all ID's in the input slice of TypeDescriptors
 // using the input ID rewrite mapping.
-func RewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
+func TypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
 	for _, typ := range types {
 		rewrite, ok := descriptorRewrites[typ.ID]
 		if !ok {
@@ -435,11 +435,9 @@ func RewriteTypeDescs(types []*typedesc.Mutable, descriptorRewrites jobspb.DescR
 	return nil
 }
 
-// RewriteSchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
+// SchemaDescs rewrites all ID's in the input slice of SchemaDescriptors
 // using the input ID rewrite mapping.
-func RewriteSchemaDescs(
-	schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
-) error {
+func SchemaDescs(schemas []*schemadesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
 	for _, sc := range schemas {
 		rewrite, ok := descriptorRewrites[sc.ID]
 		if !ok {
@@ -534,11 +532,9 @@ func rewriteSchemaChangerState(
 	return nil
 }
 
-// RewriteDatabaseDescs rewrites all ID's in the input slice of
+// DatabaseDescs rewrites all ID's in the input slice of
 // DatabaseDescriptors using the input ID rewrite mapping.
-func RewriteDatabaseDescs(
-	databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
-) error {
+func DatabaseDescs(databases []*dbdesc.Mutable, descriptorRewrites jobspb.DescRewriteMap) error {
 	for _, db := range databases {
 		rewrite, ok := descriptorRewrites[db.ID]
 		if !ok {
