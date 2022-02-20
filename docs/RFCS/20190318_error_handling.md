@@ -3122,21 +3122,21 @@ pkg/workload/tpcc/new_order.go: if err == errSimulated {
 
 pkg/acceptance/cluster/docker.go:               if err := binary.Read(rc, binary.BigEndian, &header); err == io.EOF {
 
-pkg/ccl/importccl/load.go:              if err == io.EOF {
-pkg/ccl/importccl/read_import_csv.go:           finished := err == io.EOF
-pkg/ccl/importccl/read_import_mysql.go:         if err == io.EOF {
-pkg/ccl/importccl/read_import_mysql.go:         if err == mysql.ErrEmpty {
-pkg/ccl/importccl/read_import_mysql.go:         if err == io.EOF {
-pkg/ccl/importccl/read_import_mysql.go:         if err == mysql.ErrEmpty {
-pkg/ccl/importccl/read_import_mysqlout.go:              finished := err == io.EOF
-pkg/ccl/importccl/read_import_pgcopy.go:                if err == bufio.ErrTooLong {
-pkg/ccl/importccl/read_import_pgcopy.go:                if err == io.EOF {
-pkg/ccl/importccl/read_import_pgcopy.go:                if err == io.EOF {
-pkg/ccl/importccl/read_import_pgdump.go:                if err == errCopyDone {
-pkg/ccl/importccl/read_import_pgdump.go:                if err == bufio.ErrTooLong {
-pkg/ccl/importccl/read_import_pgdump.go:                if err == io.EOF {
-pkg/ccl/importccl/read_import_pgdump.go:                if err == io.EOF {
-pkg/ccl/importccl/read_import_pgdump.go:                                if err == io.EOF {
+pkg/sql/importer/load.go:              if err == io.EOF {
+pkg/sql/importer/read_import_csv.go:           finished := err == io.EOF
+pkg/sql/importer/read_import_mysql.go:         if err == io.EOF {
+pkg/sql/importer/read_import_mysql.go:         if err == mysql.ErrEmpty {
+pkg/sql/importer/read_import_mysql.go:         if err == io.EOF {
+pkg/sql/importer/read_import_mysql.go:         if err == mysql.ErrEmpty {
+pkg/sql/importer/read_import_mysqlout.go:              finished := err == io.EOF
+pkg/sql/importer/read_import_pgcopy.go:                if err == bufio.ErrTooLong {
+pkg/sql/importer/read_import_pgcopy.go:                if err == io.EOF {
+pkg/sql/importer/read_import_pgcopy.go:                if err == io.EOF {
+pkg/sql/importer/read_import_pgdump.go:                if err == errCopyDone {
+pkg/sql/importer/read_import_pgdump.go:                if err == bufio.ErrTooLong {
+pkg/sql/importer/read_import_pgdump.go:                if err == io.EOF {
+pkg/sql/importer/read_import_pgdump.go:                if err == io.EOF {
+pkg/sql/importer/read_import_pgdump.go:                                if err == io.EOF {
 
 pkg/ccl/workloadccl/fixture.go:                 if err == iterator.Done {
 pkg/ccl/workloadccl/fixture.go:                         if err == iterator.Done {
@@ -3190,8 +3190,8 @@ pkg/ccl/changefeedccl/errors.go:                if _, ok := err.(*retryableError
 pkg/ccl/changefeedccl/errors.go:                if e, ok := err.(interface{ Unwrap() error }); ok {
 pkg/ccl/changefeedccl/errors.go:        if e, ok := err.(*retryableError); ok {
 
-pkg/ccl/importccl/read_import_proc.go:                          if _, ok := err.(storagebase.DuplicateKeyError); ok {
-pkg/ccl/importccl/read_import_proc.go:          if err, ok := err.(storagebase.DuplicateKeyError); ok {
+pkg/sql/importer/read_import_proc.go:                          if _, ok := err.(storagebase.DuplicateKeyError); ok {
+pkg/sql/importer/read_import_proc.go:          if err, ok := err.(storagebase.DuplicateKeyError); ok {
 
 pkg/ccl/storageccl/export_storage.go:           if s3err, ok := err.(s3.RequestFailure); ok {
 
@@ -3600,7 +3600,7 @@ pkg/ccl/cliccl/debug.go:                return "", "", fmt.Errorf("could not unm
 pkg/ccl/cmdccl/enc_utils/main.go:               return nil, errors.Errorf("could not read %s: %v", absPath, err)
 pkg/ccl/cmdccl/enc_utils/main.go:               return nil, errors.Errorf("could not build AES cipher for file %s: %v", absPath, err)
 
-pkg/ccl/importccl/read_import_mysql.go:                         return nil, pgerror.Unimplementedf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+pkg/sql/importer/read_import_mysql.go:                         return nil, pgerror.Unimplementedf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
 
 pkg/cli/debug_synctest.go:                              fmt.Fprintf(stderr, "error after seq %d (trying %d additional writes): %v\n", lastSeq, n, err)
 pkg/cli/debug_synctest.go:                      fmt.Fprintf(stderr, "error after seq %d: %v\n", lastSeq, err)

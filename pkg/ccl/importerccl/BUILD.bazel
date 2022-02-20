@@ -7,13 +7,12 @@ go_test(
         "main_test.go",
     ],
     data = [
-        "//pkg/ccl/importccl:testdata",
+        "//pkg/sql/importer:testdata",
         "@cockroach//c-deps:libgeos",
     ],
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
-        "//pkg/ccl/importccl",
         "//pkg/ccl/kvccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
@@ -27,6 +26,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/importer",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
