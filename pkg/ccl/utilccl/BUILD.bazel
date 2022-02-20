@@ -4,7 +4,6 @@ go_library(
     name = "utilccl",
     srcs = [
         "errors.go",
-        "jobutils.go",
         "license_check.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
