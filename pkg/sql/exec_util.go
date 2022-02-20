@@ -1477,6 +1477,8 @@ type TTLTestingKnobs struct {
 	// MockDescriptorVersionDuringDelete is a version to mock the delete descriptor
 	// as during delete.
 	MockDescriptorVersionDuringDelete *descpb.DescriptorVersion
+	// OnDeleteLoopStart is a hook that executes before the loop for TTL deletes begin.
+	OnDeleteLoopStart func() error
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.

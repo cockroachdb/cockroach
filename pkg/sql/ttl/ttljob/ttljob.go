@@ -40,6 +40,8 @@ import (
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
+const jobEnabledClusterSettingName = "sql.ttl.job.enabled"
+
 var (
 	defaultSelectBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
@@ -68,8 +70,14 @@ var (
 		"default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.",
 		0,
 		settings.NonNegativeInt,
-	).WithPublic()
+	)
 
+	jobEnabled = settings.RegisterBoolSetting(
+		settings.TenantWritable,
+		jobEnabledClusterSettingName,
+		"whether the TTL job is enabled",
+		true,
+	).WithPublic()
 	rangeBatchSize = settings.RegisterIntSetting(
 		settings.TenantWritable,
 		"sql.ttl.range_batch_size",
@@ -211,6 +219,14 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	p := execCtx.(sql.JobExecContext)
 	db := p.ExecCfg().DB
 	descs := p.ExtendedEvalContext().Descs
+
+	if enabled := jobEnabled.Get(p.ExecCfg().SV()); !enabled {
+		return errors.Newf(
+			"ttl jobs are currently disabled by CLUSTER SETTING %s",
+			jobEnabledClusterSettingName,
+		)
+	}
+
 	var knobs sql.TTLTestingKnobs
 	if ttlKnobs := p.ExecCfg().TTLTestingKnobs; ttlKnobs != nil {
 		knobs = *ttlKnobs
@@ -497,6 +513,20 @@ func runTTLOnRange(
 	)
 
 	for {
+		if f := execCfg.TTLTestingKnobs.OnDeleteLoopStart; f != nil {
+			if err := f(); err != nil {
+				return err
+			}
+		}
+
+		// Check the job is enabled on every iteration.
+		if enabled := jobEnabled.Get(execCfg.SV()); !enabled {
+			return errors.Newf(
+				"ttl jobs are currently disabled by CLUSTER SETTING %s",
+				jobEnabledClusterSettingName,
+			)
+		}
+
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
 		var expiredRowsPKs []tree.Datums
