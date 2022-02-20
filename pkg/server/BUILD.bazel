@@ -160,6 +160,7 @@ go_library(
         "//pkg/sql/gcjob",
         "//pkg/sql/gcjob/gcjobnotifier",
         "//pkg/sql/idxusage",
+        "//pkg/sql/importer",
         "//pkg/sql/optionalnodeliveness",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire",
