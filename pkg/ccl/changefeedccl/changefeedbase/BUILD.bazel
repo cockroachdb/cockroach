@@ -12,7 +12,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl",
+        "//pkg/jobs/joberror",
         "//pkg/jobs/jobspb",
         "//pkg/settings",
         "//pkg/sql",

@@ -12,7 +12,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -305,7 +304,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 
 	node := &tree.ScheduledBackup{
 		ScheduleLabelSpec: tree.ScheduleLabelSpec{
-			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel())},
+			IfNotExists: false, Label: tree.NewDString(sj.ScheduleLabel()),
+		},
 		Recurrence:      tree.NewDString(recurrence),
 		FullBackup:      fullBackup,
 		Targets:         redactedBackupNode.Targets,
